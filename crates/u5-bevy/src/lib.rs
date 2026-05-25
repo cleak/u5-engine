@@ -262,20 +262,21 @@ impl IntroDisplayBuffer {
             src.width > 0 && src.height > 0,
             "Return-to-View preview blit requires a non-empty source"
         );
+        let dst_end_x = dst_x
+            .checked_add(src.width)
+            .expect("Return-to-View preview blit x extent overflowed");
+        let dst_end_y = dst_y
+            .checked_add(src.height)
+            .expect("Return-to-View preview blit y extent overflowed");
         assert!(
-            dst_x + src.width <= self.width && dst_y < self.height,
-            "Return-to-View preview blit at ({dst_x}, {dst_y}) with size {}x{} cannot enter framebuffer {}x{}",
+            dst_end_x <= self.width && dst_end_y <= self.height,
+            "Return-to-View preview blit at ({dst_x}, {dst_y}) with size {}x{} exceeds framebuffer {}x{}",
             src.width,
             src.height,
             self.width,
             self.height
         );
-        let visible_height = src.height.min(self.height - dst_y);
-        assert!(
-            visible_height > 0,
-            "Return-to-View preview blit has no visible rows"
-        );
-        for row in 0..visible_height {
+        for row in 0..src.height {
             let src_start = row * src.width;
             let dst_start = (dst_y + row) * self.width + dst_x;
             let src_end = src_start + src.width;
@@ -11593,6 +11594,13 @@ fn visual_return_to_view_summary(
         .first()
         .map(|(_, width, height)| (*width, *height))
         .expect("Return-to-View rendered frame list unexpectedly empty");
+    let available_height = (INTRO_FRAMEBUFFER_HEIGHT as usize)
+        .checked_sub(RETURN_TO_VIEW_PREVIEW_Y)
+        .expect("Return-to-View preview Y exceeds intro framebuffer height");
+    assert!(
+        height <= available_height,
+        "Return-to-View preview geometry is unresolved: rendered {width}x{height} at y={RETURN_TO_VIEW_PREVIEW_Y}, which exceeds the 320x200 intro framebuffer; see cleak/u5-spec#54"
+    );
     let frames = rendered_frames
         .into_iter()
         .map(|(buffer, _, _)| buffer)
@@ -14054,6 +14062,14 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Return-to-View preview blit")]
+    fn intro_display_buffer_rejects_cropped_return_to_view_preview_blit() {
+        let mut buffer = IntroDisplayBuffer::new(8, 5);
+        let source = IntroDisplayBuffer::new(4, 4);
+        buffer.blit_return_to_view_preview_buffer(&source, 2, 2);
+    }
+
+    #[test]
     #[should_panic(
         expected = "intro column reveal requires matching source and destination buffers"
     )]
@@ -14422,7 +14438,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_frame_suite_local_clean_writes_pngs_and_manifest_when_present() {
+    fn visual_frame_suite_local_clean_panics_on_unspecified_return_to_view_geometry_when_present() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if !game_dir.join("CASTLE.DAT").exists()
             || !game_dir.join(TILES_EGA_FILE).exists()
@@ -14433,148 +14449,23 @@ mod tests {
         }
 
         let dir = temp_output_dir("suite");
-        let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
+        }));
 
-        assert_eq!(reports.len(), 163);
-        for report in &reports {
-            assert!(report.path.exists());
-            assert!(report.nonblack_pixels > 0);
-        }
-        for label in [
-            "world-play",
-            "world-after-step",
-            "town-play",
-            "dungeon-play",
-            "dungeon-dark",
-            "world-save-confirmation-prompt",
-            "world-hole-up-watch-prompt",
-            "world-use-item-prompt",
-            "castle-cast-party-prompt",
-            "castle-mix-reagent-prompt",
-            "castle-ready-party-prompt",
-            "castle-talk-keyword-prompt",
-            "dungeon-search-direction-prompt",
-            "dungeon-open-direction-prompt",
-            "combat-play",
-            "combat-status-highlight",
-            "combat-attack-direction-prompt",
-            "combat-cast-party-prompt",
-            "combat-ready-party-prompt",
-            "combat-search-direction-prompt",
-            "surface-view-overlay",
-            "dungeon-view-overlay",
-            "britannia-chunk-map-overlay",
-            "peer-view-overlay",
-            "x-ray-view-overlay",
-            "surface-view-class-gallery",
-            "peer-view-class-gallery",
-            "x-ray-view-class-gallery",
-            "z-stats-modal",
-            "endgame-status",
-            "combat-marker-gallery",
-        ] {
-            let report = reports
-                .iter()
-                .find(|report| report.label == label)
-                .expect("expected visual gameplay report");
-            assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
-            assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
-        }
-        for arena_index in 0..BRIT_CBT_RECORDS {
-            let label = format!("combat-arena-{arena_index:02}");
-            let report = reports
-                .iter()
-                .find(|report| report.label == label)
-                .expect("expected outdoor combat arena gallery report");
-            assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
-            assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
-        }
-        for arena_index in 0..DUNGEON_CBT_RECORDS {
-            let label = format!("dungeon-combat-arena-{arena_index:03}");
-            let report = reports
-                .iter()
-                .find(|report| report.label == label)
-                .expect("expected dungeon combat arena gallery report");
-            assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
-            assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
-        }
-        let intro_labels: &[&str] = &[
-            "intro-menu",
-            "intro-finished-menu",
-            "intro-story-art",
-            "intro-return-to-view",
-        ];
-        for label in intro_labels {
-            let report = reports
-                .iter()
-                .find(|report| report.label == *label)
-                .expect("expected visual intro report");
-            assert_eq!(report.width, INTRO_FRAMEBUFFER_WIDTH);
-            assert_eq!(report.height, INTRO_FRAMEBUFFER_HEIGHT);
-        }
-        let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("world-play"));
-        assert!(manifest.contains("world-after-step"));
-        assert!(manifest.contains("town-play"));
-        assert!(manifest.contains("dungeon-play"));
-        assert!(manifest.contains("dungeon-dark"));
-        assert!(manifest.contains("world-save-confirmation-prompt"));
-        assert!(manifest.contains("world-hole-up-watch-prompt"));
-        assert!(manifest.contains("world-use-item-prompt"));
-        assert!(manifest.contains("castle-cast-party-prompt"));
-        assert!(manifest.contains("castle-mix-reagent-prompt"));
-        assert!(manifest.contains("castle-ready-party-prompt"));
-        assert!(manifest.contains("castle-talk-keyword-prompt"));
-        assert!(manifest.contains("dungeon-search-direction-prompt"));
-        assert!(manifest.contains("dungeon-open-direction-prompt"));
-        assert!(manifest.contains("combat-play"));
-        assert!(manifest.contains("combat-status-highlight"));
-        assert!(manifest.contains("combat-attack-direction-prompt"));
-        assert!(manifest.contains("combat-cast-party-prompt"));
-        assert!(manifest.contains("combat-ready-party-prompt"));
-        assert!(manifest.contains("combat-search-direction-prompt"));
-        assert!(manifest.contains("surface-view-overlay"));
-        assert!(manifest.contains("dungeon-view-overlay"));
-        assert!(manifest.contains("britannia-chunk-map-overlay"));
-        assert!(manifest.contains("peer-view-overlay"));
-        assert!(manifest.contains("x-ray-view-overlay"));
-        assert!(manifest.contains("surface-view-class-gallery"));
-        assert!(manifest.contains("peer-view-class-gallery"));
-        assert!(manifest.contains("x-ray-view-class-gallery"));
-        assert!(manifest.contains("z-stats-modal"));
-        assert!(manifest.contains("endgame-status"));
-        assert!(manifest.contains("combat-arena-00"));
-        assert!(manifest.contains("combat-arena-15"));
-        assert!(manifest.contains("dungeon-combat-arena-000"));
-        assert!(manifest.contains("dungeon-combat-arena-111"));
-        assert!(manifest.contains("intro-menu\t320x200\tintro menu"));
-        assert!(manifest.contains("intro-finished-menu\t320x200\tintro finished menu"));
-        assert!(manifest.contains("intro-return-to-view\t320x200\tintro return-to-view"));
-        assert!(manifest.contains("coverage\ttotal-frames\t"));
-        assert!(manifest.contains("coverage\tcombat-outdoor-arena-gallery\t16/16"));
-        assert!(manifest.contains("coverage\tcombat-dungeon-room-gallery\t112/112"));
-        assert!(manifest.contains("coverage\tsurface-view-class-gallery\t3/3"));
-        assert!(
-            manifest.contains("combat-arena-00\t320x200\tcombat outdoor arena replacement gallery")
+        let payload = result.expect_err(
+            "visual frame suite must fail loudly until Return-to-View geometry is specified",
         );
-        assert!(manifest.contains(
-            "review=gallery/combat/outdoor source=BRIT.CBT arena=00 replacement_tile=0x"
-        ));
-        assert!(manifest.contains(
-            "review=gallery/combat/dungeon-room source=DUNGEON.CBT arena=000 source_scan=disabled"
-        ));
-        assert!(manifest.contains(
-            "surface-view-class-gallery\t320x200\tvisual surface view class gallery frame"
-        ));
-        assert!(manifest.contains("review=gallery/surface-view-class mode=surface-view"));
-        assert!(manifest.contains("combat-marker-gallery"));
-        assert!(manifest.contains("review=gallery/combat/markers"));
-        assert!(manifest.contains("cursor=slot0 secondary=(3,4)"));
-        assert!(manifest.contains("intro-menu"));
-        assert!(manifest.contains("intro-finished-menu"));
-        assert!(manifest.contains("intro-story-art"));
-        assert!(manifest.contains("intro-return-to-view"));
-        assert!(!manifest.contains("Avatar"));
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("Return-to-View geometry panic payload must be a string");
+        assert!(
+            message.contains("Return-to-View preview geometry is unresolved"),
+            "{message}"
+        );
+        assert!(message.contains("cleak/u5-spec#54"), "{message}");
         let _ = fs::remove_dir_all(dir);
     }
 
