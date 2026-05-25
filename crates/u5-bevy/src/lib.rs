@@ -303,6 +303,14 @@ fn new_intro_display_buffer() -> IntroDisplayBuffer {
     )
 }
 
+fn intro_buffer_from_rgba_frame(rgba: &[u8]) -> IntroDisplayBuffer {
+    IntroDisplayBuffer::from_rgba(
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        rgba,
+    )
+}
+
 const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
     ImagePanelSpec {
         stem: "STARTSC",
@@ -7429,8 +7437,8 @@ struct VisualIntroState {
     title_tick_visible_frame: u8,
     surface: IntroDisplayBuffer,
     start_menu_reveal: Option<RectColumnSweepTransition>,
-    start_menu_reveal_backing: Option<Vec<u8>>,
-    modal_backing: Option<Vec<u8>>,
+    start_menu_reveal_backing: Option<IntroDisplayBuffer>,
+    modal_backing: Option<IntroDisplayBuffer>,
     menu_idle_ticks: u16,
     message_waiting_for_key: bool,
     message: String,
@@ -8129,7 +8137,7 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             result,
             message,
         } => {
-            let reveal_backing = render_intro_frame(intro);
+            let reveal_backing = intro_buffer_from_rgba_frame(&render_intro_frame(intro));
             intro.panel = VisualIntroPanel::Menu;
             intro.dispatch.complete_subflow(subflow, result);
             intro.start_menu_reveal =
@@ -8231,7 +8239,7 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         return false;
     };
 
-    let reveal_backing = render_intro_frame(intro);
+    let reveal_backing = intro_buffer_from_rgba_frame(&render_intro_frame(intro));
     intro.panel = VisualIntroPanel::Menu;
     intro.dispatch.complete_subflow(subflow, result);
     intro.start_menu_reveal = Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT));
@@ -8523,7 +8531,7 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
             intro.message.clear();
         }
         IntroSubflow::ReturnToView => {
-            intro.modal_backing = Some(render_intro_frame(intro));
+            intro.modal_backing = Some(intro_buffer_from_rgba_frame(&render_intro_frame(intro)));
             let preview = visual_return_to_view_summary(&intro.game_dir, intro.raster_depth);
             intro.panel = VisualIntroPanel::ReturnToView {
                 summary: preview.summary,
@@ -8981,20 +8989,11 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             overlay_intro_menu_message_rgba(&mut rgba, &intro.game_dir, &intro.message);
         }
         if let Some(reveal) = intro.start_menu_reveal {
-            let source_buffer = IntroDisplayBuffer::from_rgba(
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
-                &rgba,
-            );
-            let backing_rgba = intro
+            let source_buffer = intro_buffer_from_rgba_frame(&rgba);
+            let mut backing_buffer = intro
                 .start_menu_reveal_backing
                 .clone()
-                .unwrap_or_else(|| visual_intro_final_title_backing_rgba(intro));
-            let mut backing_buffer = IntroDisplayBuffer::from_rgba(
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
-                &backing_rgba,
-            );
+                .unwrap_or_else(|| visual_intro_final_title_backing_buffer(intro));
             backing_buffer.copy_revealed_columns_from(&source_buffer, reveal);
             rgba = backing_buffer.to_rgba();
         }
@@ -9340,14 +9339,18 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
 }
 
 fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
-    let mut rgba = intro.modal_backing.clone().unwrap_or_else(|| {
-        render_text_panel_rgba(
-            "Return to View",
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-        )
-        .unwrap_or_else(|_| visual_intro_final_title_backing_rgba(intro))
-    });
+    let mut rgba = intro
+        .modal_backing
+        .as_ref()
+        .map(|backing| backing.to_rgba())
+        .unwrap_or_else(|| {
+            render_text_panel_rgba(
+                "Return to View",
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+            )
+            .unwrap_or_else(|_| visual_intro_final_title_backing_rgba(intro))
+        });
     draw_title_tick_overlay_rgba(
         &mut rgba,
         INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -15614,12 +15617,9 @@ mod tests {
                 preview_height: 1,
             },
         );
-        intro.modal_backing = Some(vec![
-            0x00;
-            (INTRO_FRAMEBUFFER_WIDTH as usize)
-                * (INTRO_FRAMEBUFFER_HEIGHT as usize)
-                * 4
-        ]);
+        let mut backing = new_intro_display_buffer();
+        backing.clear(0);
+        intro.modal_backing = Some(backing);
         intro.title_tick_visible_frame = 0;
 
         let frame = render_intro_frame(&mut intro);
