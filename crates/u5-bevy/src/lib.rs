@@ -198,6 +198,17 @@ impl IntroDisplayBuffer {
         }
     }
 
+    fn fill_rgba_rect_inclusive(
+        &mut self,
+        x0: usize,
+        y0: usize,
+        x1: usize,
+        y1: usize,
+        color: [u8; 4],
+    ) {
+        self.clear_rect_inclusive(x0, y0, x1, y1, ega_palette_index_from_rgba(&color));
+    }
+
     fn blit_rgba(
         &mut self,
         src: &[u8],
@@ -218,6 +229,26 @@ impl IntroDisplayBuffer {
                     continue;
                 };
                 self.pixels[y * self.width + dst_x + col] = ega_palette_index_from_rgba(rgba);
+            }
+        }
+    }
+
+    fn blit_buffer(&mut self, src: &IntroDisplayBuffer, dst_x: usize, dst_y: usize) {
+        for row in 0..src.height {
+            let y = dst_y + row;
+            if y >= self.height {
+                break;
+            }
+            let cols = src.width.min(self.width.saturating_sub(dst_x));
+            let src_start = row * src.width;
+            let dst_start = y * self.width + dst_x;
+            let src_end = src_start + cols;
+            let dst_end = dst_start + cols;
+            if let (Some(src_slice), Some(dst_slice)) = (
+                src.pixels.get(src_start..src_end),
+                self.pixels.get_mut(dst_start..dst_end),
+            ) {
+                dst_slice.copy_from_slice(src_slice);
             }
         }
     }
@@ -657,7 +688,7 @@ pub fn visual_frame_suite(
         "intro return-to-view",
         VisualIntroPanel::ReturnToView {
             summary: preview.summary,
-            preview_frames_rgba: preview.frames_rgba,
+            preview_frames: preview.frames,
             frame_metadata: preview.frame_metadata,
             preview_frame_index: 0,
             preview_width: preview.width,
@@ -7470,7 +7501,7 @@ enum VisualIntroPanel {
     Acknowledgements,
     ReturnToView {
         summary: String,
-        preview_frames_rgba: Vec<Vec<u8>>,
+        preview_frames: Vec<IntroDisplayBuffer>,
         frame_metadata: Vec<VisualReturnToViewFrameMeta>,
         preview_frame_index: usize,
         preview_width: usize,
@@ -7481,7 +7512,7 @@ enum VisualIntroPanel {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct VisualReturnToViewPreview {
     summary: String,
-    frames_rgba: Vec<Vec<u8>>,
+    frames: Vec<IntroDisplayBuffer>,
     frame_metadata: Vec<VisualReturnToViewFrameMeta>,
     width: usize,
     height: usize,
@@ -7956,7 +7987,7 @@ fn advance_visual_intro_return_to_view(
     title_tick_frame: &mut u8,
 ) -> bool {
     let VisualIntroPanel::ReturnToView {
-        preview_frames_rgba,
+        preview_frames,
         preview_frame_index,
         ..
     } = panel
@@ -7964,7 +7995,7 @@ fn advance_visual_intro_return_to_view(
         return false;
     };
     let next_index = preview_frame_index.saturating_add(1);
-    if next_index >= preview_frames_rgba.len() {
+    if next_index >= preview_frames.len() {
         return false;
     }
     *preview_frame_index = next_index;
@@ -7974,14 +8005,14 @@ fn advance_visual_intro_return_to_view(
 
 fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
     let VisualIntroPanel::ReturnToView {
-        preview_frames_rgba,
+        preview_frames,
         preview_frame_index,
         ..
     } = panel
     else {
         return false;
     };
-    preview_frame_index.saturating_add(1) >= preview_frames_rgba.len()
+    preview_frame_index.saturating_add(1) >= preview_frames.len()
 }
 
 fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool {
@@ -8114,11 +8145,11 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             message: "Acknowledgements complete.".to_string(),
         },
         VisualIntroPanel::ReturnToView {
-            preview_frames_rgba,
+            preview_frames,
             preview_frame_index,
             ..
         } => {
-            if preview_frame_index.saturating_add(1) >= preview_frames_rgba.len() {
+            if preview_frame_index.saturating_add(1) >= preview_frames.len() {
                 VisualIntroPanelOutcome::ReturnToMenu {
                     subflow: IntroSubflow::ReturnToView,
                     result: IntroSubflowResult::ReturnedToMenu,
@@ -8535,7 +8566,7 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
             let preview = visual_return_to_view_summary(&intro.game_dir, intro.raster_depth);
             intro.panel = VisualIntroPanel::ReturnToView {
                 summary: preview.summary,
-                preview_frames_rgba: preview.frames_rgba,
+                preview_frames: preview.frames,
                 frame_metadata: preview.frame_metadata,
                 preview_frame_index: 0,
                 preview_width: preview.width,
@@ -8665,18 +8696,18 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         }
         VisualIntroPanel::ReturnToView {
             summary,
-            preview_frames_rgba,
+            preview_frames,
             frame_metadata,
             preview_frame_index,
             ..
         } => {
-            let frame_line = if preview_frames_rgba.is_empty() {
+            let frame_line = if preview_frames.is_empty() {
                 "No rendered playback frames are available.".to_string()
             } else {
                 format!(
                     "Playback frame {} of {}.",
                     preview_frame_index.saturating_add(1),
-                    preview_frames_rgba.len()
+                    preview_frames.len()
                 )
             };
             let frame_detail = frame_metadata
@@ -9008,10 +9039,6 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     }
 }
 
-fn visual_intro_final_title_backing_rgba(intro: &VisualIntroState) -> Vec<u8> {
-    visual_intro_final_title_backing_buffer(intro).to_rgba()
-}
-
 fn visual_intro_final_title_backing_buffer(intro: &VisualIntroState) -> IntroDisplayBuffer {
     let mut buffer = new_intro_display_buffer();
     buffer.clear(0);
@@ -9339,27 +9366,21 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
 }
 
 fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
-    let mut rgba = intro
-        .modal_backing
-        .as_ref()
-        .map(|backing| backing.to_rgba())
-        .unwrap_or_else(|| {
-            render_text_panel_rgba(
-                "Return to View",
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
-            )
-            .unwrap_or_else(|_| visual_intro_final_title_backing_rgba(intro))
-        });
-    draw_title_tick_overlay_rgba(
-        &mut rgba,
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-        intro.title_tick_visible_frame,
-    );
+    let mut buffer = intro.modal_backing.as_ref().cloned().unwrap_or_else(|| {
+        if let Ok(rgba) = render_text_panel_rgba(
+            "Return to View",
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+        ) {
+            intro_buffer_from_rgba_frame(&rgba)
+        } else {
+            visual_intro_final_title_backing_buffer(intro)
+        }
+    });
+    buffer.draw_title_tick(intro.title_tick_visible_frame);
 
     let VisualIntroPanel::ReturnToView {
-        preview_frames_rgba,
+        preview_frames,
         frame_metadata,
         preview_frame_index,
         preview_width,
@@ -9367,13 +9388,14 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         ..
     } = &intro.panel
     else {
-        return rgba;
+        return buffer.to_rgba();
     };
 
     let current_meta = frame_metadata.get(*preview_frame_index);
     let caption = current_meta
         .and_then(|meta| meta.caption)
         .unwrap_or("Return to View");
+    let mut rgba = buffer.to_rgba();
     overlay_centered_text_band_rgba(
         &mut rgba,
         INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -9382,39 +9404,27 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         RETURN_TO_VIEW_CAPTION_Y,
         RETURN_TO_VIEW_CAPTION_HEIGHT,
     );
+    buffer = intro_buffer_from_rgba_frame(&rgba);
 
-    if let Some(preview_rgba) = preview_frames_rgba.get(*preview_frame_index) {
+    if let Some(preview_buffer) = preview_frames.get(*preview_frame_index) {
         let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
-        blit_rgba(
-            &mut rgba,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-            preview_rgba,
-            *preview_width,
-            *preview_height,
-            x,
-            RETURN_TO_VIEW_PREVIEW_Y,
-        );
+        debug_assert_eq!(preview_buffer.width, *preview_width);
+        debug_assert_eq!(preview_buffer.height, *preview_height);
+        buffer.blit_buffer(preview_buffer, x, RETURN_TO_VIEW_PREVIEW_Y);
     }
     if let Some(ReturnToViewFrameKind::FixedWipeRectangle { step }) =
         current_meta.map(|meta| meta.kind)
     {
         if let Some(rects) = return_to_view_fixed_wipe_rectangles(step) {
             let [((x0, y0), (x1, y1)), ((x2, y2), (x3, y3))] = rects;
-            fill_rgba_rect_inclusive(
-                &mut rgba,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
+            buffer.fill_rgba_rect_inclusive(
                 usize::from(x0),
                 usize::from(y0),
                 usize::from(x1),
                 usize::from(y1),
                 RETURN_TO_VIEW_FIXED_WIPE_RGBA,
             );
-            fill_rgba_rect_inclusive(
-                &mut rgba,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
+            buffer.fill_rgba_rect_inclusive(
                 usize::from(x2),
                 usize::from(y2),
                 usize::from(x3),
@@ -9423,7 +9433,7 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
             );
         }
     }
-    rgba
+    buffer.to_rgba()
 }
 
 fn visual_intro_title_surface_visible(intro: &VisualIntroState) -> bool {
@@ -9811,6 +9821,7 @@ fn british_signature_step_count(signature: &BritishPth) -> usize {
     signature.segments.iter().map(Vec::len).sum()
 }
 
+#[cfg(test)]
 fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, frame: u8) {
     // `cleak/u5-spec#65`: the clean replacement is a deterministic,
     // opaque four-frame overlay in the public title-tick rectangle.
@@ -11061,7 +11072,15 @@ fn visual_return_to_view_summary(
                             .map(|frame| {
                                 render_return_to_view_playback_frame_viewport(frame, &atlas, 0).map(
                                     |viewport| {
-                                        (viewport.to_rgba(), viewport.width, viewport.height)
+                                        (
+                                            IntroDisplayBuffer::from_rgba(
+                                                viewport.width,
+                                                viewport.height,
+                                                &viewport.to_rgba(),
+                                            ),
+                                            viewport.width,
+                                            viewport.height,
+                                        )
                                     },
                                 )
                             })
@@ -11077,16 +11096,16 @@ fn visual_return_to_view_summary(
                                 .first()
                                 .map(|(_, width, height)| (*width, *height))
                                 .unwrap_or((0, 0));
-                            let frames_rgba = rendered_frames
+                            let frames = rendered_frames
                                 .into_iter()
-                                .map(|(rgba, _, _)| rgba)
+                                .map(|(buffer, _, _)| buffer)
                                 .collect::<Vec<_>>();
                             VisualReturnToViewPreview {
                                 summary: format!(
                                     "{header} {script_summary} {preview_summary} Rendered {} playback frame(s).",
-                                    frames_rgba.len()
+                                    frames.len()
                                 ),
-                                frames_rgba,
+                                frames,
                                 frame_metadata,
                                 width,
                                 height,
@@ -11843,6 +11862,10 @@ mod tests {
             EGA_PALETTE_RGB[index][2],
             0xff,
         ]
+    }
+
+    fn intro_test_preview_buffer(width: usize, height: usize, rgba: Vec<u8>) -> IntroDisplayBuffer {
+        IntroDisplayBuffer::from_rgba(width, height, &rgba)
     }
 
     fn proportional_test_font() -> ProportionalFont {
@@ -15113,7 +15136,7 @@ mod tests {
         assert!(preview.summary.contains(MISCMAPS_DAT_FILE));
         assert!(preview.summary.contains("128 bytes"));
         assert!(preview.summary.contains("Return-to-View strips"));
-        assert!(preview.frames_rgba.is_empty());
+        assert!(preview.frames.is_empty());
         assert_eq!(preview.width, 0);
         assert_eq!(preview.height, 0);
         let _ = fs::remove_dir_all(dir);
@@ -15456,9 +15479,9 @@ mod tests {
             dir.clone(),
             VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
-                preview_frames_rgba: vec![
-                    vec![0x00, 0x00, 0x00, 0xff],
-                    vec![0xff, 0xff, 0xff, 0xff],
+                preview_frames: vec![
+                    intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
+                    intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
                 ],
                 frame_metadata: vec![
                     VisualReturnToViewFrameMeta {
@@ -15513,7 +15536,11 @@ mod tests {
             dir.clone(),
             VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
-                preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff]],
+                preview_frames: vec![intro_test_preview_buffer(
+                    1,
+                    1,
+                    vec![0x00, 0x00, 0x00, 0xff],
+                )],
                 frame_metadata: vec![VisualReturnToViewFrameMeta {
                     command_index: 0,
                     elapsed_title_ticks: 1,
@@ -15562,7 +15589,7 @@ mod tests {
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
-                preview_frames_rgba: vec![preview_rgba],
+                preview_frames: vec![intro_test_preview_buffer(2, 2, preview_rgba)],
                 frame_metadata: vec![VisualReturnToViewFrameMeta {
                     command_index: 6,
                     elapsed_title_ticks: 12,
@@ -15581,7 +15608,7 @@ mod tests {
         let x = ((INTRO_FRAMEBUFFER_WIDTH as usize) - 2) / 2;
         let offset = ((RETURN_TO_VIEW_PREVIEW_Y * INTRO_FRAMEBUFFER_WIDTH as usize) + x) * 4;
 
-        assert_eq!(&frame[offset..offset + 4], &[0xff, 0x00, 0x00, 0xff]);
+        assert_eq!(&frame[offset..offset + 4], &[0xaa, 0x00, 0x00, 0xff]);
         let caption_start = RETURN_TO_VIEW_CAPTION_Y * INTRO_FRAMEBUFFER_WIDTH as usize * 4;
         let caption_end =
             caption_start + RETURN_TO_VIEW_CAPTION_HEIGHT * INTRO_FRAMEBUFFER_WIDTH as usize * 4;
@@ -15605,7 +15632,11 @@ mod tests {
             debug_game_dir(),
             VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
-                preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff]],
+                preview_frames: vec![intro_test_preview_buffer(
+                    1,
+                    1,
+                    vec![0x00, 0x00, 0x00, 0xff],
+                )],
                 frame_metadata: vec![VisualReturnToViewFrameMeta {
                     command_index: 6,
                     elapsed_title_ticks: 12,
@@ -15624,6 +15655,52 @@ mod tests {
 
         let frame = render_intro_frame(&mut intro);
 
+        assert_eq!(
+            rgba_pixel(
+                &frame,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                54,
+                TITLE_TICK_FRAME_Y as usize + 20
+            ),
+            [0xff, 0xff, 0x55, 0xff]
+        );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_frame_uses_snapshot_buffer_without_mutating_it() {
+        let mut intro = visual_intro_state_with_panel(
+            debug_game_dir(),
+            VisualIntroPanel::ReturnToView {
+                summary: "Preview".to_string(),
+                preview_frames: vec![intro_test_preview_buffer(
+                    1,
+                    1,
+                    vec![0x00, 0x00, 0x00, 0xff],
+                )],
+                frame_metadata: vec![VisualReturnToViewFrameMeta {
+                    command_index: 6,
+                    elapsed_title_ticks: 12,
+                    kind: ReturnToViewFrameKind::PreviewTick,
+                    caption: Some("The Castle of Lord British"),
+                }],
+                preview_frame_index: 0,
+                preview_width: 1,
+                preview_height: 1,
+            },
+        );
+        let mut backing = new_intro_display_buffer();
+        backing.clear(3);
+        intro.modal_backing = Some(backing.clone());
+        intro.title_tick_visible_frame = 0;
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(intro.modal_backing, Some(backing));
+        assert_eq!(
+            rgba_pixel(&frame, INTRO_FRAMEBUFFER_WIDTH as usize, 10, 190),
+            [0x00, 0xaa, 0xaa, 0xff]
+        );
         assert_eq!(
             rgba_pixel(
                 &frame,
@@ -15657,7 +15734,11 @@ mod tests {
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
-                preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff]],
+                preview_frames: vec![intro_test_preview_buffer(
+                    1,
+                    1,
+                    vec![0x00, 0x00, 0x00, 0xff],
+                )],
                 frame_metadata: vec![VisualReturnToViewFrameMeta {
                     command_index: 11,
                     elapsed_title_ticks: 1,
@@ -15688,7 +15769,10 @@ mod tests {
     fn return_to_view_intro_animation_advances_preview_frames_until_final() {
         let mut panel = VisualIntroPanel::ReturnToView {
             summary: "Preview".to_string(),
-            preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff], vec![0xff, 0xff, 0xff, 0xff]],
+            preview_frames: vec![
+                intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
+                intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
+            ],
             frame_metadata: vec![
                 VisualReturnToViewFrameMeta {
                     command_index: 0,
@@ -15756,9 +15840,9 @@ mod tests {
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
-                preview_frames_rgba: vec![
-                    vec![0x00, 0x00, 0x00, 0xff],
-                    vec![0xff, 0xff, 0xff, 0xff],
+                preview_frames: vec![
+                    intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
+                    intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
                 ],
                 frame_metadata: vec![
                     VisualReturnToViewFrameMeta {
