@@ -15468,6 +15468,26 @@ fn quest_graph_node_classes_match_spec_table() {
 #[test]
 fn title_screen_layout_constants_match_spec() {
     // intro.md §3
+    assert_eq!(TITLE_BIT_INITIAL_SOURCE_PLACEMENTS.len(), 7);
+    assert_eq!(
+        TITLE_BIT_INITIAL_SOURCE_PLACEMENTS[0],
+        TitleBitPlacement {
+            asset: TitleBitAsset::Title,
+            slot: 0,
+            top_left_x: 148,
+            top_left_y: 0,
+            width: 24,
+            height: 3
+        }
+    );
+    assert_eq!(TITLE_BIT_INITIAL_SOURCE_PLACEMENTS[6].slot, 6);
+    assert_eq!(TITLE_BIT_INITIAL_SOURCE_PLACEMENTS[6].top_left_x, 20);
+    assert_eq!(TITLE_BIT_INITIAL_SOURCE_PLACEMENTS[6].top_left_y, 118);
+    assert_eq!(TITLE_BIT_INITIAL_SOURCE_PLACEMENTS[6].width, 280);
+    assert_eq!(TITLE_BIT_INITIAL_SOURCE_PLACEMENTS[6].height, 61);
+    for win in TITLE_BIT_INITIAL_SOURCE_PLACEMENTS.windows(2) {
+        assert_eq!(win[1].top_left_y, win[0].top_left_y + win[0].height);
+    }
     assert_eq!(TITLE_BIT_INITIAL_PLACEMENTS.len(), 7);
     assert_eq!(
         TITLE_BIT_INITIAL_PLACEMENTS[0],

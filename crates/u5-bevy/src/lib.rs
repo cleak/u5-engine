@@ -67,11 +67,12 @@ use u5_runtime::{
     TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
     TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
     TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX,
-    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem,
-    TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
+    TITLE_TICK_FRAME_Y, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
     TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
@@ -9745,73 +9746,142 @@ fn blit_intro_title_flourish_step_buffer(
     else {
         panic!("intro title flourish slot {slot} has no published placement");
     };
+    let Some(source_placement) = TITLE_BIT_INITIAL_SOURCE_PLACEMENTS
+        .iter()
+        .copied()
+        .find(|placement| usize::from(placement.slot) == slot)
+    else {
+        panic!("intro title flourish slot {slot} has no hidden source placement");
+    };
+    assert_eq!(
+        (source_placement.width, source_placement.height),
+        (placement.width, placement.height),
+        "intro title flourish slot {slot} source and visible dimensions differ"
+    );
     let Some(groups) = TITLE_FLOURISH_ROW_REVEAL_GROUPS.get(slot) else {
         panic!("intro title flourish slot {slot} has no row reveal groups");
     };
-    let Some(src) = title.blocks.get(slot) else {
-        panic!("TITLE.BIT is missing intro flourish slot {slot}");
-    };
     let draw_height = usize::from(placement.height);
     let draw_width = usize::from(placement.width);
-    assert!(
-        src.width >= draw_width && src.height >= draw_height,
-        "TITLE.BIT flourish slot {slot} is {}x{}, expected at least {draw_width}x{draw_height}",
-        src.width,
-        src.height
-    );
+    let source = compose_intro_title_flourish_source_buffer(title);
     for group in groups.iter().take(group_index + 1) {
         for row in group.iter().copied().map(usize::from) {
             assert!(
                 row < draw_height,
                 "intro title flourish slot {slot} reveal row {row} exceeds height {draw_height}"
             );
-            blit_intro_title_row_buffer(
+            copy_intro_title_flourish_row_from_source(
                 dst,
-                src,
+                &source,
+                usize::from(source_placement.top_left_x),
+                usize::from(source_placement.top_left_y),
                 usize::from(placement.top_left_x),
                 usize::from(placement.top_left_y),
                 draw_width,
                 row,
-                9,
             );
         }
     }
 }
 
-fn blit_intro_title_row_buffer(
+fn compose_intro_title_flourish_source_buffer(title: &TitleBitImages) -> IntroDisplayBuffer {
+    let mut source = new_intro_display_buffer();
+    source.clear(0);
+    for placement in TITLE_BIT_INITIAL_SOURCE_PLACEMENTS {
+        let slot = usize::from(placement.slot);
+        let Some(src) = title.blocks.get(slot) else {
+            panic!("TITLE.BIT is missing intro flourish source slot {slot}");
+        };
+        blit_intro_title_source_placement_buffer(&mut source, src, placement, 9);
+    }
+    source
+}
+
+fn blit_intro_title_source_placement_buffer(
     dst: &mut IntroDisplayBuffer,
     src: &MonochromeBitmap,
-    base_x: usize,
-    base_y: usize,
-    draw_width: usize,
-    source_y: usize,
+    placement: TitleBitPlacement,
     foreground: u8,
 ) {
-    let target_y = base_y + source_y;
+    assert!(
+        matches!(placement.asset, TitleBitAsset::Title),
+        "intro title source placement cannot use {:?}",
+        placement.asset
+    );
+    let draw_width = usize::from(placement.width);
+    let draw_height = usize::from(placement.height);
+    assert!(
+        src.width >= draw_width && src.height >= draw_height,
+        "TITLE.BIT flourish source slot {} is {}x{}, expected at least {draw_width}x{draw_height}",
+        placement.slot,
+        src.width,
+        src.height
+    );
+    let base_x = usize::from(placement.top_left_x);
+    let base_y = usize::from(placement.top_left_y);
+    for y in 0..draw_height {
+        let target_y = base_y + y;
+        assert!(
+            target_y < dst.height,
+            "intro title source slot {} target y {target_y} outside hidden framebuffer height {}",
+            placement.slot,
+            dst.height
+        );
+        for x in 0..draw_width {
+            let target_x = base_x + x;
+            assert!(
+                target_x < dst.width,
+                "intro title source slot {} target x {target_x} outside hidden framebuffer width {}",
+                placement.slot,
+                dst.width
+            );
+            let source_pixel = src.pixels[y * src.width + x];
+            dst.pixels[target_y * dst.width + target_x] = if source_pixel == 0 {
+                0
+            } else {
+                foreground & 0x0f
+            };
+        }
+    }
+}
+
+fn copy_intro_title_flourish_row_from_source(
+    dst: &mut IntroDisplayBuffer,
+    source: &IntroDisplayBuffer,
+    source_base_x: usize,
+    source_base_y: usize,
+    visible_base_x: usize,
+    visible_base_y: usize,
+    draw_width: usize,
+    row: usize,
+) {
+    let source_y = source_base_y + row;
+    let target_y = visible_base_y + row;
+    assert!(
+        source_y < source.height,
+        "intro title source row {source_y} outside hidden framebuffer height {}",
+        source.height
+    );
     assert!(
         target_y < dst.height,
         "intro title row target y {target_y} outside framebuffer height {}",
         dst.height
     );
-    assert!(
-        source_y < src.height && draw_width <= src.width,
-        "intro title row source ({draw_width}x row {source_y}) outside bitmap {}x{}",
-        src.width,
-        src.height
-    );
     for x in 0..draw_width {
-        let target_x = base_x + x;
+        let source_x = source_base_x + x;
+        let target_x = visible_base_x + x;
+        assert!(
+            source_x < source.width,
+            "intro title source x {source_x} outside hidden framebuffer width {}",
+            source.width
+        );
         assert!(
             target_x < dst.width,
             "intro title row target x {target_x} outside framebuffer width {}",
             dst.width
         );
-        let source_pixel = src.pixels[source_y * src.width + x];
-        dst.pixels[target_y * dst.width + target_x] = if source_pixel == 0 {
-            0
-        } else {
-            foreground & 0x0f
-        };
+        dst.pixels[target_y * dst.width + target_x] =
+            source.pixels[source_y * source.width + source_x];
     }
 }
 
@@ -13192,6 +13262,13 @@ mod tests {
         let mut blocks = vec![blank; 10];
         blocks[0] = solid_bitmap(24, 3, 1);
         blocks[1] = solid_bitmap(40, 7, 1);
+        for placement in TITLE_BIT_INITIAL_SOURCE_PLACEMENTS.iter().skip(2) {
+            blocks[usize::from(placement.slot)] = solid_bitmap(
+                usize::from(placement.width),
+                usize::from(placement.height),
+                0,
+            );
+        }
         let title = TitleBitImages { blocks };
         let british = solid_bitmap(1, 1, 0);
 
@@ -13209,6 +13286,28 @@ mod tests {
             [flourish_rgb[0], flourish_rgb[1], flourish_rgb[2], 0xff]
         );
         assert_eq!(rgba_pixel(&rgba, width, 140, 72), [0, 0, 0, 0xff]);
+    }
+
+    #[test]
+    fn intro_title_flourish_builds_hidden_source_stack() {
+        let blank = solid_bitmap(1, 1, 0);
+        let mut blocks = vec![blank; 10];
+        blocks[0] = solid_bitmap(24, 3, 1);
+        blocks[1] = solid_bitmap(40, 7, 1);
+        for placement in TITLE_BIT_INITIAL_SOURCE_PLACEMENTS.iter().skip(2) {
+            blocks[usize::from(placement.slot)] = solid_bitmap(
+                usize::from(placement.width),
+                usize::from(placement.height),
+                0,
+            );
+        }
+        let title = TitleBitImages { blocks };
+
+        let source = compose_intro_title_flourish_source_buffer(&title);
+
+        assert_eq!(source.pixels[148], 9);
+        assert_eq!(source.pixels[3 * source.width + 140], 9);
+        assert_eq!(source.pixels[72 * source.width + 140], 0);
     }
 
     #[test]

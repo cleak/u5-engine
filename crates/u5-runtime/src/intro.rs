@@ -34,9 +34,72 @@ pub enum TitleBitAsset {
     British,
 }
 
+/// `intro.md §3` hidden initial title source placements. `TITLE.BIT`
+/// slots 0..=6 are stacked into this off-screen source surface before
+/// the title animation player reveals selected rows.
+pub const TITLE_BIT_INITIAL_SOURCE_PLACEMENTS: [TitleBitPlacement; 7] = [
+    TitleBitPlacement {
+        asset: TitleBitAsset::Title,
+        slot: 0,
+        top_left_x: 148,
+        top_left_y: 0,
+        width: 24,
+        height: 3,
+    },
+    TitleBitPlacement {
+        asset: TitleBitAsset::Title,
+        slot: 1,
+        top_left_x: 140,
+        top_left_y: 3,
+        width: 40,
+        height: 7,
+    },
+    TitleBitPlacement {
+        asset: TitleBitAsset::Title,
+        slot: 2,
+        top_left_x: 124,
+        top_left_y: 10,
+        width: 72,
+        height: 11,
+    },
+    TitleBitPlacement {
+        asset: TitleBitAsset::Title,
+        slot: 3,
+        top_left_x: 104,
+        top_left_y: 21,
+        width: 112,
+        height: 20,
+    },
+    TitleBitPlacement {
+        asset: TitleBitAsset::Title,
+        slot: 4,
+        top_left_x: 84,
+        top_left_y: 41,
+        width: 152,
+        height: 32,
+    },
+    TitleBitPlacement {
+        asset: TitleBitAsset::Title,
+        slot: 5,
+        top_left_x: 52,
+        top_left_y: 73,
+        width: 216,
+        height: 45,
+    },
+    TitleBitPlacement {
+        asset: TitleBitAsset::Title,
+        slot: 6,
+        top_left_x: 20,
+        top_left_y: 118,
+        width: 280,
+        height: 61,
+    },
+];
+
 /// `intro.md §3` visible initial title mark placements. `TITLE.BIT`
-/// slots 0..=6 are presented one at a time, replacing the previous
-/// visible flourish frame rather than accumulating.
+/// slots 0..=6 are presented one at a time from the hidden source
+/// surface, replacing the previous visible flourish frame rather than
+/// accumulating.
 pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
     TitleBitPlacement {
         asset: TitleBitAsset::Title,
