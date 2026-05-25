@@ -194,6 +194,7 @@ const INTRO_MENU_LABELS: [(usize, usize, &str); 6] = [
     (11, 21, " Acknowledgements "),
     (10, 22, " Return to View "),
 ];
+const INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS: u16 = 200;
 
 const CREATE_OPENING_PANEL: ImagePanelSpec = ImagePanelSpec {
     stem: "CREATE",
@@ -7143,6 +7144,8 @@ fn run_visual_intro_menu_app(
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result,
@@ -7214,7 +7217,7 @@ fn screenshot_system(
         } else if let Some(mut intro) = intro {
             let mut handled = false;
             for ch in &config.preset_keys {
-                handled |= step_visual_intro(&mut intro, *ch, &mut exit);
+                handled |= step_visual_intro(&mut intro, *ch);
             }
             if handled {
                 let rgba = render_intro_frame(&mut intro);
@@ -7275,6 +7278,8 @@ struct VisualIntroState {
     title_signature_complete: bool,
     title_tick_frame: u8,
     start_menu_reveal: Option<RectColumnSweepTransition>,
+    menu_idle_ticks: u16,
+    message_waiting_for_key: bool,
     message: String,
     panel: VisualIntroPanel,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
@@ -7526,7 +7531,7 @@ fn drive_visual_intro(
         let Some(ch) = key_code_to_char(*key, shift_pressed, control_pressed) else {
             continue;
         };
-        if step_visual_intro(&mut intro, ch, &mut exit) {
+        if step_visual_intro(&mut intro, ch) {
             handled = true;
         }
     }
@@ -7573,6 +7578,8 @@ fn transition_visual_intro_to_gameplay(
         Ok(launch) => launch,
         Err(err) => {
             intro.message = format!("Journey Onward failed: {err}");
+            intro.message_waiting_for_key = true;
+            intro.menu_idle_ticks = 0;
             intro
                 .dispatch
                 .complete_subflow(IntroSubflow::JourneyOnward, IntroSubflowResult::Cancelled);
@@ -7581,6 +7588,8 @@ fn transition_visual_intro_to_gameplay(
     };
     let Some(image_handle) = intro.image_handle.clone() else {
         intro.message = "Journey Onward failed: missing visual framebuffer.".to_string();
+        intro.message_waiting_for_key = true;
+        intro.menu_idle_ticks = 0;
         intro
             .dispatch
             .complete_subflow(IntroSubflow::JourneyOnward, IntroSubflowResult::Cancelled);
@@ -7631,10 +7640,14 @@ fn animate_visual_intro_title_effects(
 
         let reveal_advanced = if title_phase {
             false
+        } else if intro.message_waiting_for_key {
+            false
         } else {
             intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
             advance_visual_intro_start_menu_reveal(&mut intro)
         };
+
+        advance_visual_intro_finished_menu_idle(&mut intro);
 
         if title_phase && !intro.title_flourish_complete {
             if intro.title_flourish_step + 1 >= intro_title_flourish_total_steps() {
@@ -7770,11 +7783,30 @@ fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
     preview_frame_index.saturating_add(1) >= preview_frames_rgba.len()
 }
 
-fn step_visual_intro(
-    intro: &mut VisualIntroState,
-    ch: char,
-    exit: &mut EventWriter<AppExit>,
-) -> bool {
+fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool {
+    if !matches!(intro.panel, VisualIntroPanel::Menu)
+        || intro.message_waiting_for_key
+        || visual_intro_start_menu_reveal_active(intro)
+        || matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+    {
+        return false;
+    }
+    intro.menu_idle_ticks = intro.menu_idle_ticks.saturating_add(1);
+    if intro.menu_idle_ticks < INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS {
+        return false;
+    }
+    intro.menu_idle_ticks = 0;
+    if matches!(
+        intro.dispatch.submit_menu_key(b'R'),
+        UnifiedMenuStep::EnteredSubflow(IntroSubflow::ReturnToView)
+    ) {
+        resolve_visual_intro_subflow(intro, IntroSubflow::ReturnToView);
+        return true;
+    }
+    false
+}
+
+fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     if visual_intro_start_menu_reveal_active(intro) {
         return false;
     }
@@ -7789,27 +7821,29 @@ fn step_visual_intro(
         intro.title_signature_progress = 0;
         intro.title_signature_complete = true;
         intro.title_tick_frame = 0;
+        intro.menu_idle_ticks = 0;
+        intro.message_waiting_for_key = false;
         if ch.eq_ignore_ascii_case(&'J') {
-            return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward, exit);
+            return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
         }
         intro.message.clear();
         return true;
     }
 
+    if intro.message_waiting_for_key {
+        intro.message_waiting_for_key = false;
+        intro.message.clear();
+        intro.menu_idle_ticks = 0;
+        return true;
+    }
+
+    intro.menu_idle_ticks = 0;
     let key = if ch == '\r' { b'\r' } else { ch as u8 };
     match intro.dispatch.submit_menu_key(key) {
-        UnifiedMenuStep::EnteredSubflow(subflow) => {
-            resolve_visual_intro_subflow(intro, subflow, exit)
-        }
-        UnifiedMenuStep::Ignored => {
-            intro.message = "Choose J, C, T, U, A, R, or Enter to repeat.".to_string();
-            true
-        }
+        UnifiedMenuStep::EnteredSubflow(subflow) => resolve_visual_intro_subflow(intro, subflow),
+        UnifiedMenuStep::Ignored => true,
         UnifiedMenuStep::PresentMenu | UnifiedMenuStep::ReturnedToMenu => true,
-        UnifiedMenuStep::LaunchGameplay => {
-            exit.write(AppExit::Success);
-            true
-        }
+        UnifiedMenuStep::LaunchGameplay => true,
         UnifiedMenuStep::PresentTitle
         | UnifiedMenuStep::CodexAdvanced(_)
         | UnifiedMenuStep::CodexCompleted
@@ -7900,6 +7934,8 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.dispatch.complete_subflow(subflow, result);
             intro.start_menu_reveal =
                 Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT));
+            intro.menu_idle_ticks = 0;
+            intro.message_waiting_for_key = false;
             intro.message = message;
         }
         VisualIntroPanelOutcome::CommitChargen(result) => {
@@ -7915,6 +7951,8 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
                         IntroSubflow::CharacterCreation,
                         IntroSubflowResult::SaveReady,
                     );
+                    intro.menu_idle_ticks = 0;
+                    intro.message_waiting_for_key = false;
                     intro.message = format!(
                         "Created {}. Choose Journey Onward to load the new save.",
                         display_name_bytes(&avatar.name)
@@ -7926,6 +7964,8 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
                         IntroSubflow::CharacterCreation,
                         IntroSubflowResult::Cancelled,
                     );
+                    intro.menu_idle_ticks = 0;
+                    intro.message_waiting_for_key = false;
                     intro.message = format!("Character creation failed: {err}");
                 }
             }
@@ -7938,6 +7978,8 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
                         IntroSubflow::UltimaIvTransfer,
                         IntroSubflowResult::SaveReady,
                     );
+                    intro.menu_idle_ticks = 0;
+                    intro.message_waiting_for_key = false;
                     intro.message = format!(
                         "Transferred {}. Choose Journey Onward to load the new save.",
                         display_name_bytes(&avatar.name)
@@ -7949,6 +7991,8 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
                         IntroSubflow::UltimaIvTransfer,
                         IntroSubflowResult::Cancelled,
                     );
+                    intro.menu_idle_ticks = 0;
+                    intro.message_waiting_for_key = false;
                     intro.message = format!("Transfer failed: {err}");
                 }
             }
@@ -7987,6 +8031,8 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
 
     intro.panel = VisualIntroPanel::Menu;
     intro.dispatch.complete_subflow(subflow, result);
+    intro.menu_idle_ticks = 0;
+    intro.message_waiting_for_key = false;
     intro.message = message.to_string();
     true
 }
@@ -8137,11 +8183,9 @@ fn yes_no_key(ch: char) -> Option<bool> {
     }
 }
 
-fn resolve_visual_intro_subflow(
-    intro: &mut VisualIntroState,
-    subflow: IntroSubflow,
-    _exit: &mut EventWriter<AppExit>,
-) -> bool {
+fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubflow) -> bool {
+    intro.menu_idle_ticks = 0;
+    intro.message_waiting_for_key = false;
     match subflow {
         IntroSubflow::JourneyOnward => match load_play_options_from_save(&intro.game_dir) {
             Ok(options) => {
@@ -8158,6 +8202,7 @@ fn resolve_visual_intro_subflow(
                     .dispatch
                     .complete_subflow(subflow, IntroSubflowResult::Cancelled);
                 intro.message = visual_intro_load_error_message(&err);
+                intro.message_waiting_for_key = true;
             }
         },
         IntroSubflow::CharacterCreation => match load_question_records(&intro.game_dir) {
@@ -8168,6 +8213,7 @@ fn resolve_visual_intro_subflow(
                             session,
                             input_line: String::new(),
                         };
+                        intro.message_waiting_for_key = false;
                         intro.message.clear();
                     }
                     Err(err) => {
@@ -8175,6 +8221,7 @@ fn resolve_visual_intro_subflow(
                         intro
                             .dispatch
                             .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                        intro.message_waiting_for_key = false;
                         intro.message = format!("QUESTION.DAT could not start chargen: {err}");
                     }
                 }
@@ -8184,6 +8231,7 @@ fn resolve_visual_intro_subflow(
                 intro
                     .dispatch
                     .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                intro.message_waiting_for_key = false;
                 intro.message =
                     "QUESTION.DAT is required for visual character creation.".to_string();
             }
@@ -8192,6 +8240,7 @@ fn resolve_visual_intro_subflow(
                 intro
                     .dispatch
                     .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                intro.message_waiting_for_key = false;
                 intro.message = format!("QUESTION.DAT could not be loaded: {err}");
             }
         },
@@ -8216,6 +8265,7 @@ fn resolve_visual_intro_subflow(
                         stage: VisualU4TransferStage::ConfirmName,
                         input_line: String::new(),
                     };
+                    intro.message_waiting_for_key = false;
                     intro.message.clear();
                 }
                 Err(err) => {
@@ -8223,6 +8273,7 @@ fn resolve_visual_intro_subflow(
                     intro
                         .dispatch
                         .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                    intro.message_waiting_for_key = false;
                     intro.message = format!("Transfer source rejected: {err}");
                 }
             }
@@ -8234,6 +8285,7 @@ fn resolve_visual_intro_subflow(
                     step: 0,
                     transition: None,
                 };
+                intro.message_waiting_for_key = false;
                 intro.message.clear();
             }
             Ok(None) => {
@@ -8241,6 +8293,7 @@ fn resolve_visual_intro_subflow(
                 intro
                     .dispatch
                     .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
+                intro.message_waiting_for_key = false;
                 intro.message = "STORY.DAT is missing; returning to the intro menu.".to_string();
             }
             Err(err) => {
@@ -8248,11 +8301,13 @@ fn resolve_visual_intro_subflow(
                 intro
                     .dispatch
                     .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
+                intro.message_waiting_for_key = false;
                 intro.message = format!("STORY.DAT could not be loaded: {err}");
             }
         },
         IntroSubflow::Acknowledgements => {
             intro.panel = VisualIntroPanel::Acknowledgements;
+            intro.message_waiting_for_key = false;
             intro.message.clear();
         }
         IntroSubflow::ReturnToView => {
@@ -8265,6 +8320,7 @@ fn resolve_visual_intro_subflow(
                 preview_width: preview.width,
                 preview_height: preview.height,
             };
+            intro.message_waiting_for_key = false;
             intro.message.clear();
         }
     }
@@ -10237,6 +10293,8 @@ fn write_visual_intro_report_inner(
         title_signature_complete: static_title,
         title_tick_frame: 0,
         start_menu_reveal: None,
+        menu_idle_ticks: 0,
+        message_waiting_for_key: false,
         message: String::new(),
         panel,
         launch_result: Arc::new(Mutex::new(None)),
@@ -11735,6 +11793,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: "Intro menu smoke".to_string(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -11764,6 +11824,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT)),
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -11903,6 +11965,8 @@ mod tests {
             title_signature_complete: true,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
                 records: StoryRecords {
@@ -11993,6 +12057,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -12031,6 +12097,48 @@ mod tests {
                 .chunks_exact(4)
                 .any(|pixel| pixel == [0x22, 0x22, 0x22, 0xff])
         );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn visual_intro_menu_invalid_key_is_silent() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+
+        assert!(step_visual_intro(&mut intro, 'x'));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
+        assert_eq!(intro.menu_idle_ticks, 0);
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn visual_intro_menu_message_wait_consumes_next_key_without_dispatch() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        intro.message = "No active game".to_string();
+        intro.message_waiting_for_key = true;
+        intro.menu_idle_ticks = 57;
+
+        assert!(step_visual_intro(&mut intro, 'j'));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
+        assert_eq!(intro.menu_idle_ticks, 0);
+        assert!(intro.launch_result.lock().unwrap().is_none());
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn visual_intro_menu_idle_timeout_enters_return_to_view() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        intro.menu_idle_ticks = INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS - 1;
+
+        assert!(advance_visual_intro_finished_menu_idle(&mut intro));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
+        assert_eq!(intro.menu_idle_ticks, 0);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -14460,6 +14568,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -14547,6 +14657,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
                 records: StoryRecords {
@@ -14594,6 +14706,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel,
             launch_result: Arc::new(Mutex::new(None)),
@@ -14895,6 +15009,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
@@ -14947,6 +15063,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
@@ -15040,6 +15158,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
