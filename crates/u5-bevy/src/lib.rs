@@ -7949,8 +7949,10 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
             if intro.title_signature_progress >= total_steps {
                 intro.title_signature_progress = 0;
                 intro.title_signature_complete = true;
-                finish_visual_intro_title_to_menu(intro);
             }
+            advanced = true;
+        } else if title_phase && intro.title_signature_complete {
+            finish_visual_intro_title_to_menu(intro);
             advanced = true;
         }
         return advanced;
@@ -13078,7 +13080,7 @@ mod tests {
     }
 
     #[test]
-    fn intro_signature_completion_loads_start_menu_with_clear_carry_tick() {
+    fn intro_signature_completion_shows_final_title_before_start_menu() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
         let signature = load_british_pth(&dir).unwrap();
@@ -13110,6 +13112,20 @@ mod tests {
 
         assert!(intro.title_signature_complete);
         assert_eq!(intro.title_signature_progress, 0);
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert_eq!(intro.title_tick_visible_frame, 0);
+        assert_eq!(intro.title_tick_frame, 0);
+        let final_title = render_intro_frame(&mut intro);
+        assert_eq!(
+            final_title,
+            visual_intro_title_art_buffer(&dir, None, None).to_rgba()
+        );
+
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+
         assert!(!matches!(
             intro.dispatch.tick_title(),
             UnifiedMenuStep::PresentTitle
@@ -13118,10 +13134,9 @@ mod tests {
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
         assert_eq!(intro.menu_idle_ticks, 0);
         assert!(intro.message.is_empty());
-
-        let frame = render_intro_frame(&mut intro);
-        assert_eq!(frame, intro.surface.to_rgba());
-        assert_nonblack_rgba(&frame);
+        let menu_frame = render_intro_frame(&mut intro);
+        assert_eq!(menu_frame, intro.surface.to_rgba());
+        assert_nonblack_rgba(&menu_frame);
         let _ = fs::remove_dir_all(dir);
     }
 
