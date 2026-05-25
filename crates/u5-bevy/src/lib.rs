@@ -296,6 +296,13 @@ impl IntroDisplayBuffer {
     }
 }
 
+fn new_intro_display_buffer() -> IntroDisplayBuffer {
+    IntroDisplayBuffer::new(
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+    )
+}
+
 const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
     ImagePanelSpec {
         stem: "STARTSC",
@@ -7281,6 +7288,7 @@ fn run_visual_intro_menu_app(
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -7419,6 +7427,7 @@ struct VisualIntroState {
     title_signature_complete: bool,
     title_tick_frame: u8,
     title_tick_visible_frame: u8,
+    surface: IntroDisplayBuffer,
     start_menu_reveal: Option<RectColumnSweepTransition>,
     start_menu_reveal_backing: Option<Vec<u8>>,
     modal_backing: Option<Vec<u8>>,
@@ -8482,6 +8491,7 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
         }
         IntroSubflow::StorySlides => match load_story_records(&intro.game_dir) {
             Ok(Some(records)) => {
+                intro.surface.clear(0);
                 intro.panel = VisualIntroPanel::Story {
                     records,
                     step: 0,
@@ -9113,42 +9123,37 @@ fn draw_intro_menu_labels_intro_buffer(
 }
 
 fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    let mut rgba =
-        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-    }
+    let Some((step, transition, text)) = (match &intro.panel {
+        VisualIntroPanel::Story {
+            records,
+            step,
+            transition,
+        } => Some((
+            *step,
+            *transition,
+            visual_intro_story_text(records, *step).map(str::to_owned),
+        )),
+        _ => None,
+    }) else {
+        return new_intro_display_buffer().to_rgba();
+    };
 
-    let VisualIntroPanel::Story {
-        records,
+    draw_visual_intro_story_art_to_buffer(
+        &mut intro.surface,
+        &intro.game_dir,
+        intro.raster_depth,
         step,
         transition,
-    } = &intro.panel
-    else {
-        return rgba;
-    };
-    for draw in
-        visual_intro_story_art_draws_rgba(&intro.game_dir, intro.raster_depth, *step, *transition)
-    {
-        blit_rgba(
-            &mut rgba,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-            &draw.rgba,
-            draw.width,
-            draw.height,
-            usize::from(draw.top_left_x),
-            usize::from(draw.top_left_y),
-        );
-    }
+    );
 
-    if let Some(text) = visual_intro_story_text(records, *step) {
+    let mut rgba = intro.surface.to_rgba();
+    if let Some(text) = text {
         if overlay_proportional_text_from_assets_rgba(
             &mut rgba,
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
             &intro.game_dir,
-            text,
+            &text,
             ProportionalTextPlacement {
                 x: INTRO_STORY_TEXT_X,
                 y: INTRO_STORY_TEXT_Y,
@@ -10038,6 +10043,24 @@ fn visual_intro_story_art_draws_rgba(
         .collect()
 }
 
+fn draw_visual_intro_story_art_to_buffer(
+    buffer: &mut IntroDisplayBuffer,
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
+    step: usize,
+    transition: Option<RectColumnSweepTransition>,
+) {
+    for draw in visual_intro_story_art_draws_rgba(game_dir, depth, step, transition) {
+        buffer.blit_rgba(
+            &draw.rgba,
+            draw.width,
+            draw.height,
+            usize::from(draw.top_left_x),
+            usize::from(draw.top_left_y),
+        );
+    }
+}
+
 fn intro_story_stem(file: &'static str) -> &'static str {
     match file {
         "STORY1.16" => "STORY1",
@@ -10603,6 +10626,7 @@ fn write_visual_intro_report_inner(
         title_signature_complete: static_title,
         title_tick_frame: 0,
         title_tick_visible_frame: 0,
+        surface: new_intro_display_buffer(),
         start_menu_reveal: None,
         start_menu_reveal_backing: None,
         modal_backing: None,
@@ -12113,6 +12137,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -12147,6 +12172,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT)),
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -12291,6 +12317,7 @@ mod tests {
             title_signature_complete: true,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -12408,6 +12435,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -12479,6 +12507,7 @@ mod tests {
             title_signature_complete: true,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15047,6 +15076,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15128,6 +15158,37 @@ mod tests {
     }
 
     #[test]
+    fn visual_intro_story_render_preserves_intro_surface_pixels() {
+        let mut intro = visual_intro_state_with_panel(
+            debug_game_dir(),
+            VisualIntroPanel::Story {
+                records: StoryRecords { records: vec![] },
+                step: 0,
+                transition: None,
+            },
+        );
+        intro.surface.clear(0x03);
+
+        let frame = render_story_intro_frame(&mut intro);
+
+        assert_eq!(
+            rgba_pixel(
+                &frame,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_WIDTH as usize - 1,
+                0
+            ),
+            [
+                EGA_PALETTE_RGB[3][0],
+                EGA_PALETTE_RGB[3][1],
+                EGA_PALETTE_RGB[3][2],
+                0xff
+            ]
+        );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
     fn visual_intro_story_panel_pages_back_to_menu_after_final_step() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
@@ -15139,6 +15200,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15191,6 +15253,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15497,6 +15560,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15594,6 +15658,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15692,6 +15757,7 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
