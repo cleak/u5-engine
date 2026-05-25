@@ -286,7 +286,9 @@ pub fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8)
                 tongue_taper <= 10,
                 "title-tick flame tongue taper {tongue_taper} exceeds base width"
             );
-            let tongue_width = (10usize - tongue_taper).max(3);
+            let tongue_width = 10usize
+                .checked_sub(tongue_taper)
+                .expect("title-tick flame tongue taper exceeds tongue width");
             if (local_x as isize - tongue_center).unsigned_abs() <= tongue_width {
                 inside = true;
                 break;
@@ -451,17 +453,20 @@ pub const RTV_COMMAND_COUNT: usize = 16;
 pub const ACKNOWLEDGEMENTS_LINES: &[&str] = &[
     "Acknowledgements",
     "",
-    "Ultima V is a trademark of its rights holders.",
-    "This clean-room recreation reads local game data at",
-    "runtime and ships no original game content.",
+    "Ultima V is a trademark of its",
+    "rights holders.",
+    "This clean-room recreation reads",
+    "local game data at runtime and",
+    "ships no original game content.",
     "",
-    "Behavior derived from the published clean-room",
-    "specification in the u5-spec repository, the engine",
-    "implementation in u5-engine, and locally available",
-    "game assets. No private decompilation, disassembly,",
-    "or copyrighted source has been consulted.",
+    "Behavior is derived from the",
+    "published clean-room specification,",
+    "this engine, and local game assets.",
+    "No private decompilation,",
+    "disassembly, or copyrighted source",
+    "has been consulted.",
     "",
-    "Press any key to return to the intro menu.",
+    "Key: return to the intro menu.",
 ];
 
 /// `intro.md §6`: the six accepted intro-menu actions.
@@ -554,8 +559,8 @@ mod tests {
             "acknowledgements text should describe its clean-room provenance"
         );
         assert!(
-            ACKNOWLEDGEMENTS_LINES.iter().all(|line| line.len() <= 60),
-            "every acknowledgement line must fit a 60-column 320x200 layout"
+            ACKNOWLEDGEMENTS_LINES.iter().all(|line| line.len() <= 36),
+            "every acknowledgement line must fit the 36-column intro box"
         );
     }
 

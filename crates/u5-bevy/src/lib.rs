@@ -9339,13 +9339,12 @@ fn render_acknowledgements_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> 
         load_ibm_ch_font(&intro.game_dir).expect("acknowledgements requires IBM fixed-cell font");
     draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 1, 1, 38, 23);
     for (row, line) in u5_runtime::ACKNOWLEDGEMENTS_LINES.iter().enumerate() {
-        let text = line.chars().take(36).collect::<String>();
-        let x = if text.len() >= 36 {
-            2
-        } else {
-            2 + (36usize.saturating_sub(text.len())) / 2
-        };
-        overlay_fixed_cell_text_intro_buffer(&mut intro.surface, &font, &text, x, 3 + row, false);
+        assert!(
+            line.len() <= 36,
+            "acknowledgements line {row} exceeds the 36-column intro box: {line}"
+        );
+        let x = 2 + (36usize - line.len()) / 2;
+        overlay_fixed_cell_text_intro_buffer(&mut intro.surface, &font, line, x, 3 + row, false);
     }
     intro.surface.to_rgba()
 }
@@ -10293,8 +10292,7 @@ fn visual_intro_story_art_draws_rgba(
                         spec.stem, spec.subimage
                     )
                 });
-            let width = spec.clip_width.map(usize::from).unwrap_or(image.width);
-            let height = spec.clip_height.map(usize::from).unwrap_or(image.height);
+            let (width, height, clipped) = intro_story_draw_dimensions(&spec, image);
             assert!(
                 image.width >= width && image.height >= height,
                 "intro story asset {} subimage {} is {}x{}, expected at least {width}x{height}",
@@ -10303,7 +10301,7 @@ fn visual_intro_story_art_draws_rgba(
                 image.width,
                 image.height
             );
-            let rgba = if spec.clip_width.is_some() || spec.clip_height.is_some() {
+            let rgba = if clipped {
                 graphic_image_to_rgba_clipped(image, depth, width, height)
             } else {
                 graphic_image_to_rgba(image, depth)
@@ -10317,6 +10315,32 @@ fn visual_intro_story_art_draws_rgba(
             }
         })
         .collect()
+}
+
+fn intro_story_draw_dimensions(
+    spec: &IntroStoryDrawSpec,
+    image: &GraphicImage,
+) -> (usize, usize, bool) {
+    match (spec.clip_width, spec.clip_height) {
+        (None, None) => (image.width, image.height, false),
+        (Some(width), Some(height)) => {
+            assert!(
+                width > 0 && height > 0,
+                "intro story clipped draw for {} subimage {} must be non-empty, got {}x{}",
+                spec.stem,
+                spec.subimage,
+                width,
+                height
+            );
+            (usize::from(width), usize::from(height), true)
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            panic!(
+                "intro story clipped draw for {} subimage {} requires both clip width and clip height",
+                spec.stem, spec.subimage
+            )
+        }
+    }
 }
 
 fn draw_visual_intro_story_art_to_buffer(
@@ -11617,12 +11641,11 @@ fn visual_return_to_view_summary(
 }
 
 fn visual_chargen_rng_pool() -> Vec<u8> {
-    let offset = std::time::SystemTime::now()
+    let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_nanos() as u64)
-        .unwrap_or(0)
-        .to_le_bytes()[0]
-        & 0x07;
+        .expect("visual chargen RNG requires system time after UNIX_EPOCH")
+        .as_nanos() as u64;
+    let offset = seed.to_le_bytes()[0] & 0x07;
     (0u8..128).map(|byte| byte.wrapping_add(offset)).collect()
 }
 
@@ -11644,7 +11667,7 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
             {
                 rgba
             } else {
-                center_rgba_on_viewport(rgba, viewport.width, viewport.height)
+                require_exact_viewport_rgba(rgba, viewport.width, viewport.height)
             }
         }
         Ok(None) => render_text_panel_rgba(
@@ -11666,7 +11689,7 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
             {
                 rgba
             } else {
-                center_rgba_on_viewport(rgba, viewport.width, viewport.height)
+                require_exact_viewport_rgba(rgba, viewport.width, viewport.height)
             }
         }
         Ok(None) => render_text_panel_rgba(
@@ -11702,31 +11725,20 @@ fn blit_active_view_overlay_rgba(
     );
 }
 
-fn center_rgba_on_viewport(src: Vec<u8>, src_width: usize, src_height: usize) -> Vec<u8> {
+fn require_exact_viewport_rgba(src: Vec<u8>, src_width: usize, src_height: usize) -> Vec<u8> {
     let dst_width = VIEWPORT_SIZE_PX as usize;
     let dst_height = VIEWPORT_SIZE_PX as usize;
-    let mut dst = vec![0; dst_width * dst_height * 4];
-    for pixel in dst.chunks_exact_mut(4) {
-        pixel[3] = 0xff;
-    }
-    let copy_width = src_width.min(dst_width);
-    let copy_height = src_height.min(dst_height);
-    let src_x = src_width.saturating_sub(copy_width) / 2;
-    let src_y = src_height.saturating_sub(copy_height) / 2;
-    let dst_x = dst_width.saturating_sub(copy_width) / 2;
-    let dst_y = dst_height.saturating_sub(copy_height) / 2;
-    for row in 0..copy_height {
-        let src_row = ((src_y + row) * src_width + src_x) * 4;
-        let dst_row = ((dst_y + row) * dst_width + dst_x) * 4;
-        let bytes = copy_width * 4;
-        if let (Some(src_slice), Some(dst_slice)) = (
-            src.get(src_row..src_row + bytes),
-            dst.get_mut(dst_row..dst_row + bytes),
-        ) {
-            dst_slice.copy_from_slice(src_slice);
-        }
-    }
-    dst
+    assert_eq!(
+        (src_width, src_height),
+        (dst_width, dst_height),
+        "visual viewport source must exactly match destination size"
+    );
+    assert_eq!(
+        src.len(),
+        dst_width * dst_height * 4,
+        "visual viewport source length must match exact RGBA geometry"
+    );
+    src
 }
 
 #[allow(dead_code)]
@@ -12996,6 +13008,67 @@ mod tests {
             .unwrap();
         assert_eq!(extra.clip_width, Some(36));
         assert_eq!(extra.clip_height, Some(35));
+    }
+
+    #[test]
+    fn intro_story_draw_dimensions_rejects_unpaired_clip() {
+        let spec = IntroStoryDrawSpec {
+            stem: "STORY1",
+            subimage: 2,
+            top_left_x: 40,
+            top_left_y: 86,
+            clip_width: Some(1),
+            clip_height: None,
+        };
+        let image = GraphicImage {
+            width: 36,
+            height: 35,
+            pixels: vec![0; 36 * 35],
+        };
+
+        let result = std::panic::catch_unwind(|| {
+            let _ = intro_story_draw_dimensions(&spec, &image);
+        });
+
+        let payload = result.expect_err("unpaired intro story clip must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("story clip panic payload must be a string");
+        assert!(
+            message.contains("requires both clip width and clip height"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn intro_story_draw_dimensions_rejects_empty_clip() {
+        let spec = IntroStoryDrawSpec {
+            stem: "STORY1",
+            subimage: 2,
+            top_left_x: 40,
+            top_left_y: 86,
+            clip_width: Some(0),
+            clip_height: Some(35),
+        };
+        let image = GraphicImage {
+            width: 36,
+            height: 35,
+            pixels: vec![0; 36 * 35],
+        };
+
+        let result = std::panic::catch_unwind(|| {
+            let _ = intro_story_draw_dimensions(&spec, &image);
+        });
+
+        let payload = result.expect_err("empty intro story clip must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("story clip panic payload must be a string");
+        assert!(message.contains("must be non-empty"), "{message}");
     }
 
     #[test]
@@ -14418,13 +14491,34 @@ mod tests {
     }
 
     #[test]
-    fn centered_overlay_framebuffer_preserves_fixed_bevy_texture_size() {
-        let mut src = vec![0; 2 * 2 * 4];
+    fn viewport_framebuffer_rejects_implicit_centering_or_cropping() {
+        let src = vec![0; 2 * 2 * 4];
+
+        let result = std::panic::catch_unwind(|| {
+            let _ = require_exact_viewport_rgba(src, 2, 2);
+        });
+
+        let payload = result.expect_err("viewport helper must reject mismatched source geometry");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("viewport geometry panic payload must be a string");
+        assert!(
+            message.contains("visual viewport source must exactly match destination size"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn viewport_framebuffer_accepts_exact_rgba_geometry() {
+        let mut src = vec![0; (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4];
         for pixel in src.chunks_exact_mut(4) {
             pixel.copy_from_slice(&[0xaa, 0xbb, 0xcc, 0xff]);
         }
 
-        let rgba = center_rgba_on_viewport(src, 2, 2);
+        let rgba =
+            require_exact_viewport_rgba(src, VIEWPORT_SIZE_PX as usize, VIEWPORT_SIZE_PX as usize);
 
         assert_eq!(
             rgba.len(),
