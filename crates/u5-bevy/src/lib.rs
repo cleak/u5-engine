@@ -434,6 +434,7 @@ const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
     (IntroSubflow::Acknowledgements, 11, 21, " Acknowledgements "),
     (IntroSubflow::ReturnToView, 10, 22, " Return to View "),
 ];
+const STARTSC_PANEL_HEIGHT: usize = 137;
 const INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS: u16 = 200;
 
 const CREATE_OPENING_PANEL: ImagePanelSpec = ImagePanelSpec {
@@ -9058,7 +9059,7 @@ fn draw_visual_intro_start_menu_art_to_buffer(
     blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &STARTSC_PANEL_SPECS);
     buffer.clear_rect_inclusive(
         0,
-        136,
+        STARTSC_PANEL_HEIGHT,
         INTRO_FRAMEBUFFER_WIDTH as usize - 1,
         INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
         0,
@@ -12596,6 +12597,38 @@ mod tests {
         assert_eq!(intro.surface, expected_surface);
         assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_start_menu_art_preserves_full_137_pixel_startsc_height() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut expected_panels = new_intro_display_buffer();
+        blit_image_panel_specs_intro_buffer(
+            &mut expected_panels,
+            &dir,
+            TileGraphicsDepth::Ega16,
+            &STARTSC_PANEL_SPECS,
+        );
+        let mut actual = new_intro_display_buffer();
+
+        draw_visual_intro_start_menu_art_to_buffer(&mut actual, &dir, TileGraphicsDepth::Ega16);
+
+        let last_panel_row = STARTSC_PANEL_HEIGHT - 1;
+        let first_lower_row = STARTSC_PANEL_HEIGHT;
+        for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
+            assert_eq!(
+                actual.pixels[last_panel_row * actual.width + x],
+                expected_panels.pixels[last_panel_row * expected_panels.width + x],
+                "STARTSC panel row {last_panel_row} must remain visible at x={x}"
+            );
+            assert_eq!(
+                actual.pixels[first_lower_row * actual.width + x],
+                0,
+                "lower intro menu area must begin cleared at row {first_lower_row}, x={x}"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
