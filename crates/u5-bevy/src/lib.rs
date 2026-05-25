@@ -7949,6 +7949,7 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
             if intro.title_signature_progress >= total_steps {
                 intro.title_signature_progress = 0;
                 intro.title_signature_complete = true;
+                finish_visual_intro_title_to_menu(intro);
             }
             advanced = true;
         }
@@ -7968,6 +7969,17 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
 fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
     intro.title_tick_visible_frame = intro.title_tick_frame;
     intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+}
+
+fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
+    intro.dispatch.dismiss_title();
+    clear_carry_visual_intro_title_tick(intro);
+    intro.menu_idle_ticks = 0;
+    intro.start_menu_reveal = None;
+    intro.start_menu_reveal_backing = None;
+    intro.modal_backing = None;
+    intro.message_waiting_for_key = false;
+    intro.message.clear();
 }
 
 fn advance_visual_intro_panel_animation(
@@ -8107,23 +8119,16 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     }
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
-        intro.dispatch.dismiss_title();
         intro.title_flourish_step = 0;
         intro.title_flourish_complete = true;
         intro.title_signature_progress = 0;
         intro.title_signature_complete = true;
         intro.title_tick_frame = 0;
         intro.title_tick_visible_frame = 0;
-        clear_carry_visual_intro_title_tick(intro);
-        intro.menu_idle_ticks = 0;
-        intro.start_menu_reveal = None;
-        intro.start_menu_reveal_backing = None;
-        intro.modal_backing = None;
-        intro.message_waiting_for_key = false;
+        finish_visual_intro_title_to_menu(intro);
         if ch.eq_ignore_ascii_case(&'J') {
             return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
         }
-        intro.message.clear();
         return true;
     }
 
@@ -13069,6 +13074,54 @@ mod tests {
 
         assert_eq!(intro.title_signature_progress, 1);
         assert!(!intro.title_signature_complete);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn intro_signature_completion_loads_start_menu_with_clear_carry_tick() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let signature = load_british_pth(&dir).unwrap();
+        let total_steps = british_signature_step_count(&signature);
+        assert!(total_steps > 0);
+        let mut intro = VisualIntroState {
+            game_dir: dir.clone(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
+            title_signature_progress: total_steps - 1,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 17,
+            message_waiting_for_key: false,
+            message: "stale title message".to_string(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+
+        assert!(intro.title_signature_complete);
+        assert_eq!(intro.title_signature_progress, 0);
+        assert!(!matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert_eq!(intro.title_tick_visible_frame, 0);
+        assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
+        assert_eq!(intro.menu_idle_ticks, 0);
+        assert!(intro.message.is_empty());
+
+        let frame = render_intro_frame(&mut intro);
+        assert_eq!(frame, intro.surface.to_rgba());
+        assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(dir);
     }
 
