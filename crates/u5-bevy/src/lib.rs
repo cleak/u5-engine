@@ -7636,14 +7636,12 @@ impl Default for AnimationPump {
 
 #[derive(Resource)]
 struct VisualIntroAnimationPump {
-    accumulator: f32,
     interval: f32,
 }
 
 impl Default for VisualIntroAnimationPump {
     fn default() -> Self {
         Self {
-            accumulator: 0.0,
             interval: INTRO_ANIMATION_TICK_INTERVAL_SECS,
         }
     }
@@ -7930,12 +7928,9 @@ fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32)
         delta.is_finite() && delta >= 0.0,
         "intro animation delta must be non-negative and finite, got {delta}"
     );
-    pump.accumulator += delta;
-    if pump.accumulator < pump.interval {
-        return false;
-    }
-    pump.accumulator %= pump.interval;
-    true
+    panic!(
+        "visual intro animation pump requires published phase-specific wall-clock cadence and host catch-up behavior; the previous 18.2 Hz/clamped catch-up assumption is a forbidden fallback; see cleak/u5-spec#68"
+    );
 }
 
 fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
@@ -8186,6 +8181,7 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     }
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
+        require_published_initial_title_rune_screen(intro);
         if ch.eq_ignore_ascii_case(&'J') {
             intro.title_flourish_step = 0;
             intro.title_flourish_complete = true;
@@ -11085,19 +11081,14 @@ fn write_visual_intro_report_inner(
     raster_depth: TileGraphicsDepth,
     title_dismissed: bool,
 ) -> io::Result<VisualFrameReport> {
-    let static_title = matches!(panel, VisualIntroPanel::Menu) && !title_dismissed;
     let mut intro = VisualIntroState {
         game_dir: game_dir.to_path_buf(),
         raster_depth,
         dispatch: UnifiedMenuDispatch::new(),
-        title_flourish_step: if static_title {
-            intro_title_flourish_total_steps()
-        } else {
-            0
-        },
-        title_flourish_complete: static_title || title_dismissed,
+        title_flourish_step: 0,
+        title_flourish_complete: title_dismissed,
         title_signature_progress: 0,
-        title_signature_complete: static_title,
+        title_signature_complete: title_dismissed,
         title_tick_frame: 0,
         title_tick_visible_frame: 0,
         surface: new_intro_display_buffer(),
@@ -12809,26 +12800,21 @@ mod tests {
     }
 
     #[test]
-    fn intro_animation_pump_never_catches_up_missed_host_frames() {
+    fn intro_animation_pump_rejects_unpublished_cadence_fallback() {
         let mut pump = VisualIntroAnimationPump::default();
 
-        assert!(!advance_intro_animation_pump(
-            &mut pump,
-            INTRO_ANIMATION_TICK_INTERVAL_SECS * 0.5
-        ));
-        assert!(advance_intro_animation_pump(
-            &mut pump,
-            INTRO_ANIMATION_TICK_INTERVAL_SECS * 0.5
-        ));
-
-        let mut missed = VisualIntroAnimationPump::default();
-        assert!(advance_intro_animation_pump(
-            &mut missed,
-            INTRO_ANIMATION_TICK_INTERVAL_SECS * 2.0
-        ));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ =
+                advance_intro_animation_pump(&mut pump, INTRO_ANIMATION_TICK_INTERVAL_SECS * 0.5);
+        }));
+        let message = panic_message(result.expect_err("unpublished intro cadence must panic"));
         assert!(
-            missed.accumulator < missed.interval,
-            "intro pump must not retain enough accumulated time for an immediate catch-up tick"
+            message.contains("phase-specific wall-clock cadence"),
+            "{message}"
+        );
+        assert!(
+            message.contains("forbidden fallback") && message.contains("cleak/u5-spec#68"),
+            "{message}"
         );
     }
 
@@ -13571,7 +13557,47 @@ mod tests {
             "{tick_message}"
         );
         assert!(tick_message.contains("cleak/u5-spec#71"), "{tick_message}");
+
+        for key in ['J', 'x'] {
+            let key_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = step_visual_intro(&mut intro, key);
+            }));
+            let key_message =
+                panic_message(key_result.expect_err("initial title key skip must panic"));
+            assert!(
+                key_message.contains("skipping it is a forbidden fallback"),
+                "{key_message}"
+            );
+            assert!(key_message.contains("cleak/u5-spec#71"), "{key_message}");
+        }
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_report_rejects_synthesized_static_title() {
+        let game_dir = debug_game_dir();
+        let out_dir = temp_output_dir("intro-report-title-gap");
+        fs::create_dir_all(&out_dir).unwrap();
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = write_visual_intro_report(
+                &out_dir,
+                "intro-menu",
+                "intro menu",
+                VisualIntroPanel::Menu,
+                &game_dir,
+                TileGraphicsDepth::Ega16,
+            );
+        }));
+
+        let message = panic_message(result.expect_err("initial title report must panic"));
+        assert!(
+            message.contains("skipping it is a forbidden fallback"),
+            "{message}"
+        );
+        assert!(message.contains("cleak/u5-spec#71"), "{message}");
+        let _ = fs::remove_dir_all(game_dir);
+        let _ = fs::remove_dir_all(out_dir);
     }
 
     #[test]
@@ -14622,13 +14648,15 @@ mod tests {
                 .contains("visual proportional text requires the published resident width table")
                 || message.contains("sparse strip")
                 || message
-                    .contains("title-tick animation requires published authored frame pixels"),
+                    .contains("title-tick animation requires published authored frame pixels")
+                || message.contains("initial title/rune text screen contract"),
             "{message}"
         );
         assert!(
             message.contains("cleak/u5-spec#70")
                 || message.contains("TITLE.BIT")
-                || message.contains("cleak/u5-spec#65"),
+                || message.contains("cleak/u5-spec#65")
+                || message.contains("cleak/u5-spec#71"),
             "{message}"
         );
         let _ = fs::remove_dir_all(dir);
