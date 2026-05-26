@@ -115,7 +115,7 @@ use u5_runtime::{
 #[cfg(test)]
 use u5_runtime::{
     TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y,
-    title_tick_palette_index,
+    title_tick_palette_indices,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -315,7 +315,7 @@ impl IntroDisplayBuffer {
                 for x in start_x..end_x {
                     let local_x = x - start_x;
                     self.pixels[y * self.width + x] =
-                        title_tick_palette_index(local_x, local_y, frame);
+                        test_title_tick_palette_index(local_x, local_y, frame);
                 }
             }
         }
@@ -10109,11 +10109,79 @@ fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: us
         for x in start_x..end_x {
             let local_x = x - start_x;
             let offset = (y * dst_width + x) * 4;
-            let palette_index = title_tick_palette_index(local_x, local_y, frame);
+            let palette_index = test_title_tick_palette_index(local_x, local_y, frame);
             let rgb = EGA_PALETTE_RGB[usize::from(palette_index)];
             dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
         }
     }
+}
+
+#[cfg(test)]
+fn test_title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8) -> Option<u8> {
+    let band_width = TITLE_TICK_FRAME_WIDTH as usize;
+    let band_height = TITLE_TICK_FRAME_HEIGHT as usize;
+    if local_x >= band_width || local_y >= band_height {
+        return None;
+    }
+
+    let flame_height = 34usize;
+    assert!(
+        band_height >= flame_height,
+        "title-tick test flame height {flame_height} exceeds band height {band_height}"
+    );
+    let flame_top = band_height - flame_height;
+    if local_y < flame_top {
+        return None;
+    }
+
+    let from_base = band_height - 1 - local_y;
+    let frame = usize::from(frame % u5_runtime::TITLE_TICK_FRAME_COUNT);
+    let mut inside = false;
+    for center in [54isize, 160, 266] {
+        let wave = ((local_y * 3 + frame * 5) % 11) as isize - 5;
+        let taper = from_base * 34 / flame_height;
+        assert!(
+            taper <= 42,
+            "title-tick test flame taper {taper} exceeds base half-width"
+        );
+        let half_width = 42usize - taper;
+        let dx = (local_x as isize - (center + wave)).unsigned_abs();
+        if dx <= half_width {
+            inside = true;
+            break;
+        }
+
+        if from_base > 16 {
+            let tongue_center = center + ((frame as isize - 1) * 5);
+            let tongue_taper = (from_base - 16) / 2;
+            assert!(
+                tongue_taper <= 10,
+                "title-tick test flame tongue taper {tongue_taper} exceeds base width"
+            );
+            let tongue_width = 10usize
+                .checked_sub(tongue_taper)
+                .expect("title-tick test flame tongue taper exceeds tongue width");
+            if (local_x as isize - tongue_center).unsigned_abs() <= tongue_width {
+                inside = true;
+                break;
+            }
+        }
+    }
+    if !inside {
+        return None;
+    }
+
+    let (bright, dim) = title_tick_palette_indices(frame as u8);
+    if local_y < band_height / 2 {
+        Some(bright)
+    } else {
+        Some(dim)
+    }
+}
+
+#[cfg(test)]
+fn test_title_tick_palette_index(local_x: usize, local_y: usize, frame: u8) -> u8 {
+    test_title_tick_flame_palette_index(local_x, local_y, frame).unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -14257,7 +14325,7 @@ mod tests {
         );
         assert_eq!(
             buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 54],
-            title_tick_palette_index(54, 20, 0)
+            test_title_tick_palette_index(54, 20, 0)
         );
         assert_eq!(
             buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 120],
@@ -14303,35 +14371,17 @@ mod tests {
         // `cleak/u5-spec#65`: the clean replacement keeps the
         // independently-authored flame silhouette and treats non-flame
         // pixels as opaque black inside the title-tick rectangle.
-        assert_eq!(u5_runtime::title_tick_flame_palette_index(54, 8, 0), None);
-        assert_eq!(
-            u5_runtime::title_tick_flame_palette_index(54, 20, 0),
-            Some(0x0E)
-        );
-        assert_eq!(
-            u5_runtime::title_tick_flame_palette_index(54, 40, 0),
-            Some(0x06)
-        );
-        assert_eq!(
-            u5_runtime::title_tick_flame_palette_index(160, 20, 1),
-            Some(0x0C)
-        );
-        assert_eq!(
-            u5_runtime::title_tick_flame_palette_index(160, 40, 1),
-            Some(0x04)
-        );
-        assert_eq!(
-            u5_runtime::title_tick_flame_palette_index(266, 20, 2),
-            Some(0x0E)
-        );
-        assert_eq!(
-            u5_runtime::title_tick_flame_palette_index(266, 40, 3),
-            Some(0x06)
-        );
-        assert_eq!(u5_runtime::title_tick_flame_palette_index(120, 20, 0), None);
-        assert_eq!(title_tick_palette_index(54, 8, 0), 0x00);
-        assert_eq!(title_tick_palette_index(120, 20, 0), 0x00);
-        assert_eq!(title_tick_palette_index(54, 20, 0), 0x0E);
+        assert_eq!(test_title_tick_flame_palette_index(54, 8, 0), None);
+        assert_eq!(test_title_tick_flame_palette_index(54, 20, 0), Some(0x0E));
+        assert_eq!(test_title_tick_flame_palette_index(54, 40, 0), Some(0x06));
+        assert_eq!(test_title_tick_flame_palette_index(160, 20, 1), Some(0x0C));
+        assert_eq!(test_title_tick_flame_palette_index(160, 40, 1), Some(0x04));
+        assert_eq!(test_title_tick_flame_palette_index(266, 20, 2), Some(0x0E));
+        assert_eq!(test_title_tick_flame_palette_index(266, 40, 3), Some(0x06));
+        assert_eq!(test_title_tick_flame_palette_index(120, 20, 0), None);
+        assert_eq!(test_title_tick_palette_index(54, 8, 0), 0x00);
+        assert_eq!(test_title_tick_palette_index(120, 20, 0), 0x00);
+        assert_eq!(test_title_tick_palette_index(54, 20, 0), 0x0E);
     }
 
     #[test]

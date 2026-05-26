@@ -5333,7 +5333,7 @@ fn display_surface_draws_tiles_and_fixed_glyphs_to_front_buffer() {
 }
 
 #[test]
-fn display_surface_title_tick_touches_only_published_rectangle_and_presents_explicitly() {
+fn display_surface_title_tick_panics_without_authored_frames() {
     let mut surface = EgaDisplaySurface::new();
     surface.set_current_color(0x03);
     surface.plot_pixel(54, 64);
@@ -5341,24 +5341,21 @@ fn display_surface_title_tick_touches_only_published_rectangle_and_presents_expl
     surface.plot_pixel(120, 85);
     surface.plot_pixel(54, 114);
 
-    let rect = surface.advance_title_tick();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        surface.advance_title_tick();
+    }));
+    let payload = result.expect_err("title tick must panic until authored frames exist");
+    let message = payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
+        .expect("title tick panic payload must be a string");
+    assert!(message.contains("generated animation fallback"), "{message}");
 
-    assert_eq!(
-        rect,
-        DisplayPixelRect {
-            x0: TITLE_TICK_FRAME_X as usize,
-            y0: TITLE_TICK_FRAME_Y as usize,
-            x1: (TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1) as usize,
-            y1: (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize
-        }
-    );
-    let (bright, dim) = title_tick_palette_indices(0);
-    assert_eq!(surface.title_tick_frame(), 1);
+    assert_eq!(surface.title_tick_frame(), 0);
     assert_eq!(surface.read_pixel(54, 64), Some(0x03));
-    assert_eq!(surface.read_pixel(54, 65), Some(0x00));
-    assert_eq!(surface.read_pixel(54, 85), Some(bright));
-    assert_eq!(surface.read_pixel(54, 105), Some(dim));
-    assert_eq!(surface.read_pixel(120, 85), Some(0x00));
+    assert_eq!(surface.read_pixel(54, 65), Some(0x03));
+    assert_eq!(surface.read_pixel(120, 85), Some(0x03));
     assert_eq!(surface.read_pixel(54, 114), Some(0x03));
     assert_eq!(surface.presented_frames(), 0);
 
@@ -5539,10 +5536,17 @@ fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
         EgaDispatchResult::Pixel(0x0f)
     );
 
-    let title_rect = surface
-        .execute(EgaDisplayOperation::AdvanceTitleTick)
-        .unwrap();
-    assert!(matches!(title_rect, EgaDispatchResult::Rect(_)));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        surface.execute(EgaDisplayOperation::AdvanceTitleTick).unwrap();
+    }));
+    let payload = result.expect_err("title tick dispatch must reject missing authored frames");
+    let message = payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
+        .expect("title tick dispatch panic payload must be a string");
+    assert!(message.contains("generated animation fallback"), "{message}");
+
     surface.execute(EgaDisplayOperation::PresentFrame).unwrap();
     assert_eq!(surface.presented_frames(), 1);
 }

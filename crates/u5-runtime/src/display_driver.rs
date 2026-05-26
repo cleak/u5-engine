@@ -546,23 +546,9 @@ impl EgaDisplaySurface {
     }
 
     pub fn advance_title_tick(&mut self) -> DisplayPixelRect {
-        let rect = normalize_clamp_pixel_rect(
-            i32::from(TITLE_TICK_FRAME_X),
-            i32::from(TITLE_TICK_FRAME_Y),
-            i32::from(TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1),
-            i32::from(TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1),
-        )
-        .expect("title tick rectangle is inside the display surface");
-        for y in rect.y0..=rect.y1 {
-            let local_y = y - rect.y0;
-            for x in rect.x0..=rect.x1 {
-                let index = y * DISPLAY_SURFACE_WIDTH + x;
-                self.front_pixels[index] =
-                    title_tick_palette_index(x - rect.x0, local_y, self.title_tick_frame);
-            }
-        }
-        self.title_tick_frame = title_tick_next_frame(self.title_tick_frame);
-        rect
+        panic!(
+            "strict display-driver title tick refuses generated animation fallback; provide authored 320x49 title-tick frames before advancing this renderer; see cleak/u5-spec#52 and cleak/u5-spec#65"
+        );
     }
 
     pub fn present_frame(&mut self) {

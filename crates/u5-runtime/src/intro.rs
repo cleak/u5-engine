@@ -243,6 +243,7 @@ pub const fn title_tick_palette_indices(frame: u8) -> (u8, u8) {
     TITLE_TICK_PALETTE_CYCLE[frame]
 }
 
+#[cfg(test)]
 pub fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8) -> Option<u8> {
     let band_width = TITLE_TICK_FRAME_WIDTH as usize;
     let band_height = TITLE_TICK_FRAME_HEIGHT as usize;
@@ -311,6 +312,7 @@ pub fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8)
 /// inside the published title-tick rectangle. Pixels outside the authored
 /// flame silhouette are explicitly palette index 0 because the driver-owned
 /// title tick overwrites the whole rectangle, including black pixels.
+#[cfg(test)]
 pub fn title_tick_palette_index(local_x: usize, local_y: usize, frame: u8) -> u8 {
     match title_tick_flame_palette_index(local_x, local_y, frame) {
         Some(index) => index,
