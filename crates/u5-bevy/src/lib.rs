@@ -8247,11 +8247,7 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
                 }
             }
         }
-        VisualIntroPanel::Acknowledgements => VisualIntroPanelOutcome::ReturnToMenu {
-            subflow: IntroSubflow::Acknowledgements,
-            result: IntroSubflowResult::ReturnedToMenu,
-            message: "Acknowledgements complete.".to_string(),
-        },
+        VisualIntroPanel::Acknowledgements => u5_runtime::require_acknowledgements_contract(),
         VisualIntroPanel::ReturnToView {
             preview_frames,
             preview_frame_index,
@@ -8329,6 +8325,10 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
 }
 
 fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
+    if matches!(intro.panel, VisualIntroPanel::Acknowledgements) {
+        u5_runtime::require_acknowledgements_contract();
+    }
+
     let Some((subflow, result, message)) = (match intro.panel {
         VisualIntroPanel::Menu => None,
         VisualIntroPanel::CharacterCreation { .. } => Some((
@@ -8346,11 +8346,7 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
             IntroSubflowResult::ReturnedToMenu,
             "Ultima V Introduction cancelled; returning to the intro menu.",
         )),
-        VisualIntroPanel::Acknowledgements => Some((
-            IntroSubflow::Acknowledgements,
-            IntroSubflowResult::ReturnedToMenu,
-            "Acknowledgements cancelled; returning to the intro menu.",
-        )),
+        VisualIntroPanel::Acknowledgements => unreachable!("acknowledgements contract panics"),
         VisualIntroPanel::ReturnToView { .. } => None,
     }) else {
         return false;
@@ -16580,6 +16576,44 @@ mod tests {
         }));
 
         let message = panic_message(result.expect_err("acknowledgements render must panic"));
+        assert!(
+            message.contains("placeholder credits are a forbidden fallback"),
+            "{message}"
+        );
+        assert!(message.contains("cleak/u5-spec#72"), "{message}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_acknowledgements_input_refuses_placeholder_skip() {
+        let dir = debug_game_dir();
+        let mut intro =
+            visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = step_visual_intro_panel(&mut intro, ' ');
+        }));
+
+        let message = panic_message(result.expect_err("acknowledgements input must panic"));
+        assert!(
+            message.contains("placeholder credits are a forbidden fallback"),
+            "{message}"
+        );
+        assert!(message.contains("cleak/u5-spec#72"), "{message}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_acknowledgements_cancel_refuses_placeholder_skip() {
+        let dir = debug_game_dir();
+        let mut intro =
+            visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = cancel_visual_intro_panel(&mut intro);
+        }));
+
+        let message = panic_message(result.expect_err("acknowledgements cancel must panic"));
         assert!(
             message.contains("placeholder credits are a forbidden fallback"),
             "{message}"
