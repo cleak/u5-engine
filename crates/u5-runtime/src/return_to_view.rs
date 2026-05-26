@@ -18,11 +18,11 @@ use crate::{
 pub const RTV_PREVIEW_SIDE: usize = 32;
 pub const RTV_PREVIEW_CELLS: usize = RTV_PREVIEW_SIDE * RTV_PREVIEW_SIDE;
 pub const RTV_ACTOR_SLOTS: usize = 32;
-pub const RTV_STRIP_SOURCE_COLUMNS: usize = 19;
-pub const RTV_STRIP_SOURCE_ROWS: usize = 4;
+pub const RTV_STRIP_SOURCE_COLUMNS: usize = 4;
+pub const RTV_STRIP_SOURCE_ROWS: usize = 19;
 pub const RTV_STRIP_VISIBLE_COLUMNS: usize = 4;
 pub const RTV_STRIP_VISIBLE_ROWS: usize = 19;
-pub const RTV_STRIP_RECORD_BYTES: usize = MISCMAPS_RTV_STRIP_ROW_STRIDE * RTV_STRIP_SOURCE_ROWS;
+pub const RTV_STRIP_RECORD_BYTES: usize = MISCMAPS_RTV_STRIP_ROW_STRIDE * RTV_STRIP_SOURCE_COLUMNS;
 pub const RTV_STRIP_TILE_COUNT: usize = RTV_STRIP_VISIBLE_COLUMNS * RTV_STRIP_VISIBLE_ROWS;
 pub const RTV_EFFECT_SENTINEL_TILE: u8 = 0xfe;
 pub const RTV_OPEN_EFFECT_FINAL_TILE: u8 = 0xdc;
@@ -633,11 +633,11 @@ pub fn parse_return_to_view_map_strips(bytes: &[u8]) -> io::Result<ReturnToViewM
     let mut strips = [[0u8; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT];
     for (strip_index, strip) in strips.iter_mut().enumerate() {
         let base = strip_index * RTV_STRIP_RECORD_BYTES;
-        for row in 0..RTV_STRIP_SOURCE_ROWS {
-            let row_start = base + row * MISCMAPS_RTV_STRIP_ROW_STRIDE;
-            let source = &bytes[row_start..row_start + RTV_STRIP_SOURCE_COLUMNS];
-            for (col, tile) in source.iter().copied().enumerate() {
-                strip[col * RTV_STRIP_VISIBLE_COLUMNS + row] = tile;
+        for source_col in 0..RTV_STRIP_SOURCE_COLUMNS {
+            let column_start = base + source_col * MISCMAPS_RTV_STRIP_ROW_STRIDE;
+            let source_column = &bytes[column_start..column_start + RTV_STRIP_SOURCE_ROWS];
+            for (source_row, tile) in source_column.iter().copied().enumerate() {
+                strip[source_row * RTV_STRIP_VISIBLE_COLUMNS + source_col] = tile;
             }
         }
     }
@@ -1324,7 +1324,7 @@ fn render_return_to_view_state_viewport(
     }
     for actor in state.actors.iter().filter(|actor| actor.drawable) {
         let x = usize::from(actor.x);
-        let y = usize::from(actor.y);
+        let y = usize::from(return_to_view_actor_screen_y(actor.y));
         if x < RTV_STRIP_VISIBLE_COLUMNS && y < RTV_STRIP_VISIBLE_ROWS {
             blit_return_to_view_actor_to_viewport(&mut viewport, atlas, actor.tile0, x, y)?;
         }
@@ -1506,11 +1506,12 @@ mod tests {
     fn parse_return_to_view_map_strips_extracts_visible_cells_and_skips_padding() {
         let mut bytes = vec![0xee; MISCMAPS_RTV_STRIP_SECTION_BYTES];
         for strip in 0..RTV_STRIP_COUNT {
-            for row in 0..RTV_STRIP_SOURCE_ROWS {
-                let row_start =
-                    strip * RTV_STRIP_RECORD_BYTES + row * MISCMAPS_RTV_STRIP_ROW_STRIDE;
-                for col in 0..RTV_STRIP_SOURCE_COLUMNS {
-                    bytes[row_start + col] = (strip * 100 + row * 19 + col) as u8;
+            for source_col in 0..RTV_STRIP_SOURCE_COLUMNS {
+                let column_start =
+                    strip * RTV_STRIP_RECORD_BYTES + source_col * MISCMAPS_RTV_STRIP_ROW_STRIDE;
+                for source_row in 0..RTV_STRIP_SOURCE_ROWS {
+                    bytes[column_start + source_row] =
+                        (strip * 100 + source_col * 19 + source_row) as u8;
                 }
             }
         }
@@ -2083,7 +2084,11 @@ mod tests {
         assert_eq!(viewport.cells_wide, RTV_STRIP_VISIBLE_COLUMNS);
         assert_eq!(viewport.cells_high, RTV_STRIP_VISIBLE_ROWS);
         assert_eq!(viewport.pixel(0, 0), Some(1));
-        assert_eq!(viewport.pixel(TILE_ATLAS_SIDE, 0), Some(3));
+        assert_eq!(viewport.pixel(TILE_ATLAS_SIDE, 0), Some(2));
+        assert_eq!(
+            viewport.pixel(TILE_ATLAS_SIDE, 7 * TILE_ATLAS_SIDE),
+            Some(3)
+        );
         assert_eq!(report.drawable_actor_count, 1);
         assert!(report.restart_seen);
     }
@@ -2094,6 +2099,7 @@ mod tests {
             strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
         };
         strips.strips[0][0] = 1;
+        strips.strips[0][7 * RTV_STRIP_VISIBLE_COLUMNS] = 1;
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
@@ -2121,7 +2127,8 @@ mod tests {
         let (viewport, _report) =
             render_return_to_view_preview_viewport(&strips, &script, &atlas).unwrap();
 
-        assert_eq!(viewport.pixel(0, 0), Some(7));
-        assert_eq!(viewport.pixel(1, 0), Some(5));
+        assert_eq!(viewport.pixel(0, 0), Some(5));
+        assert_eq!(viewport.pixel(0, 7 * TILE_ATLAS_SIDE), Some(7));
+        assert_eq!(viewport.pixel(1, 7 * TILE_ATLAS_SIDE), Some(5));
     }
 }
