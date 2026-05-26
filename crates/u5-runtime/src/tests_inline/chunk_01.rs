@@ -542,6 +542,8 @@
         let legacy_title = parse_legacy_lzw_title_bit(&wrapped_title).unwrap();
         assert_eq!(legacy_title.blocks.len(), 1);
         assert_eq!(legacy_title.blocks[0].pixels, vec![1, 0, 1, 0, 0, 0, 0, 0]);
+        let loaded_title = parse_title_bit_loaded_resource(&wrapped_title).unwrap();
+        assert_eq!(loaded_title.blocks[0].pixels, legacy_title.blocks[0].pixels);
 
         let mut british_body = Vec::new();
         british_body.extend_from_slice(&SINGLE_IMAGE_BIT_FORMAT_MARKER.to_le_bytes());
@@ -554,6 +556,8 @@
         assert!(parse_british_bit(&wrapped_british).is_err());
         let legacy_british = parse_legacy_lzw_british_bit(&wrapped_british).unwrap();
         assert_eq!(legacy_british.pixels, vec![1, 1, 0, 0, 0, 0, 0, 0]);
+        let loaded_british = parse_british_bit_loaded_resource(&wrapped_british).unwrap();
+        assert_eq!(loaded_british.pixels, legacy_british.pixels);
     }
 
     #[test]
@@ -587,57 +591,39 @@
     fn bit_graphics_local_clean_bitmaps_decode_when_present() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if game_dir.join(TITLE_BIT_FILE).exists() {
-            match load_title_bit(game_dir) {
-                Ok(title) => {
-                    assert_eq!(title.blocks.len(), 10);
-                    assert_eq!(
-                        title
-                            .blocks
-                            .iter()
-                            .map(|bitmap| (bitmap.width, bitmap.height))
-                            .collect::<Vec<_>>(),
-                        vec![
-                            (24, 3),
-                            (40, 7),
-                            (72, 11),
-                            (112, 20),
-                            (152, 32),
-                            (216, 45),
-                            (280, 61),
-                            (104, 33),
-                            (16, 15),
-                            (112, 33),
-                        ]
-                    );
-                    assert!(
-                        title
-                            .blocks
-                            .iter()
-                            .all(|bitmap| bitmap.pixels.iter().all(|pixel| *pixel <= 1))
-                    );
-                }
-                Err(err) => {
-                    assert!(
-                        err.to_string().contains("sparse strip"),
-                        "strict TITLE.BIT loader must fail loudly on noncanonical assets: {err}"
-                    );
-                }
-            }
+            let title = load_title_bit(game_dir).unwrap();
+            assert_eq!(title.blocks.len(), 10);
+            assert_eq!(
+                title
+                    .blocks
+                    .iter()
+                    .map(|bitmap| (bitmap.width, bitmap.height))
+                    .collect::<Vec<_>>(),
+                vec![
+                    (24, 3),
+                    (40, 7),
+                    (72, 11),
+                    (112, 20),
+                    (152, 32),
+                    (216, 45),
+                    (280, 61),
+                    (104, 33),
+                    (16, 15),
+                    (112, 33),
+                ]
+            );
+            assert!(
+                title
+                    .blocks
+                    .iter()
+                    .all(|bitmap| bitmap.pixels.iter().all(|pixel| *pixel <= 1))
+            );
         }
         if game_dir.join(BRITISH_BIT_FILE).exists() {
-            match load_british_bit(game_dir) {
-                Ok(british) => {
-                    assert_eq!((british.width, british.height), (272, 62));
-                    assert_eq!(british.pixels.len(), 272 * 62);
-                    assert!(british.pixels.iter().all(|pixel| *pixel <= 1));
-                }
-                Err(err) => {
-                    assert!(
-                        err.to_string().contains("sparse strip"),
-                        "strict BRITISH.BIT loader must fail loudly on noncanonical assets: {err}"
-                    );
-                }
-            }
+            let british = load_british_bit(game_dir).unwrap();
+            assert_eq!((british.width, british.height), (272, 62));
+            assert_eq!(british.pixels.len(), 272 * 62);
+            assert!(british.pixels.iter().all(|pixel| *pixel <= 1));
         }
         if game_dir.join(WD_BIT_FILE).exists() {
             let wd = load_wd_bit(game_dir).unwrap();

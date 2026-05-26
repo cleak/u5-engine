@@ -5,11 +5,30 @@ use std::{io, path::Path};
 use crate::*;
 
 pub fn load_title_bit(game_dir: &Path) -> io::Result<TitleBitImages> {
-    parse_title_bit(&read_disk_file(&game_dir.join(TITLE_BIT_FILE))?)
+    parse_title_bit_loaded_resource(&read_disk_file(&game_dir.join(TITLE_BIT_FILE))?)
 }
 
 pub fn parse_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
     parse_sparse_bit_images(bytes, TITLE_BIT_FILE)
+}
+
+pub fn parse_title_bit_loaded_resource(bytes: &[u8]) -> io::Result<TitleBitImages> {
+    let sparse = parse_title_bit(bytes);
+    let packaged = parse_legacy_lzw_title_bit(bytes);
+    match (sparse, packaged) {
+        (Ok(title), Err(_)) => Ok(title),
+        (Err(_), Ok(title)) => Ok(title),
+        (Ok(_), Ok(_)) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{TITLE_BIT_FILE} matches both sparse and local packaged BIT encodings"),
+        )),
+        (Err(sparse_err), Err(packaged_err)) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{TITLE_BIT_FILE} is neither sparse BIT data ({sparse_err}) nor local packaged BIT data ({packaged_err})"
+            ),
+        )),
+    }
 }
 
 /// Compatibility parser for local preprocessed asset sets. The public
@@ -68,11 +87,30 @@ pub fn parse_title_bit_body(body: &[u8], resource_name: &str) -> io::Result<Titl
 }
 
 pub fn load_british_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
-    parse_british_bit(&read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?)
+    parse_british_bit_loaded_resource(&read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?)
 }
 
 pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
     parse_single_sparse_bit_image(bytes, BRITISH_BIT_FILE)
+}
+
+pub fn parse_british_bit_loaded_resource(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
+    let sparse = parse_british_bit(bytes);
+    let packaged = parse_legacy_lzw_british_bit(bytes);
+    match (sparse, packaged) {
+        (Ok(british), Err(_)) => Ok(british),
+        (Err(_), Ok(british)) => Ok(british),
+        (Ok(_), Ok(_)) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{BRITISH_BIT_FILE} matches both sparse and local packaged BIT encodings"),
+        )),
+        (Err(sparse_err), Err(packaged_err)) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{BRITISH_BIT_FILE} is neither sparse BIT data ({sparse_err}) nor local packaged BIT data ({packaged_err})"
+            ),
+        )),
+    }
 }
 
 /// Compatibility parser for local preprocessed asset sets. The public

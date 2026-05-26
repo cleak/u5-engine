@@ -7931,16 +7931,10 @@ fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32)
         "intro animation delta must be non-negative and finite, got {delta}"
     );
     pump.accumulator += delta;
-    assert!(
-        pump.accumulator < pump.interval * 2.0,
-        "intro animation missed at least one pump tick: accumulator {} interval {}",
-        pump.accumulator,
-        pump.interval
-    );
     if pump.accumulator < pump.interval {
         return false;
     }
-    pump.accumulator -= pump.interval;
+    pump.accumulator %= pump.interval;
     true
 }
 
@@ -12799,7 +12793,7 @@ mod tests {
     }
 
     #[test]
-    fn intro_animation_pump_panics_instead_of_dropping_missed_ticks() {
+    fn intro_animation_pump_never_catches_up_missed_host_frames() {
         let mut pump = VisualIntroAnimationPump::default();
 
         assert!(!advance_intro_animation_pump(
@@ -12812,10 +12806,14 @@ mod tests {
         ));
 
         let mut missed = VisualIntroAnimationPump::default();
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            advance_intro_animation_pump(&mut missed, INTRO_ANIMATION_TICK_INTERVAL_SECS * 2.0);
-        }));
-        assert!(result.is_err());
+        assert!(advance_intro_animation_pump(
+            &mut missed,
+            INTRO_ANIMATION_TICK_INTERVAL_SECS * 2.0
+        ));
+        assert!(
+            missed.accumulator < missed.interval,
+            "intro pump must not retain enough accumulated time for an immediate catch-up tick"
+        );
     }
 
     #[test]
