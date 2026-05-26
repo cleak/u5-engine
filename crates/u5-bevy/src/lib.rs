@@ -9497,8 +9497,6 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         .as_ref()
         .cloned()
         .expect("Return-to-View requires preserved intro backing surface");
-    let title_tick_frames = authored_title_tick_frames();
-    buffer.draw_authored_title_tick(&title_tick_frames, intro.title_tick_visible_frame);
 
     let VisualIntroPanel::ReturnToView {
         preview_frames,
@@ -9523,6 +9521,9 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
     let caption = current_meta
         .caption
         .expect("Return-to-View current frame is missing its caption");
+    require_published_return_to_view_caption_renderer(caption);
+    let title_tick_frames = authored_title_tick_frames();
+    buffer.draw_authored_title_tick(&title_tick_frames, intro.title_tick_visible_frame);
     let mut rgba = buffer.to_rgba();
     overlay_centered_text_band_rgba(
         &mut rgba,
@@ -9568,6 +9569,12 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         );
     }
     buffer.to_rgba()
+}
+
+fn require_published_return_to_view_caption_renderer(_caption: &str) {
+    panic!(
+        "Return-to-View captions require the published proportional font width and centering contract; drawing a fixed centered text band is a forbidden fallback; see cleak/u5-spec#70"
+    )
 }
 
 fn visual_intro_title_surface_visible(intro: &VisualIntroState) -> bool {
@@ -12310,6 +12317,18 @@ mod tests {
             message.contains("plain black band")
                 && message.contains("forbidden fallback")
                 && message.contains("cleak/u5-spec#63"),
+            "{message}"
+        );
+    }
+
+    fn assert_return_to_view_caption_gap_panic(result: std::thread::Result<()>) {
+        let payload = result.expect_err("unpublished Return-to-View caption renderer must fail");
+        let message = panic_message(payload);
+        assert!(
+            message.contains("Return-to-View captions")
+                && message.contains("fixed centered text band")
+                && message.contains("forbidden fallback")
+                && message.contains("cleak/u5-spec#70"),
             "{message}"
         );
     }
@@ -17113,7 +17132,7 @@ mod tests {
     }
 
     #[test]
-    fn return_to_view_intro_frame_refuses_missing_title_tick_frames_before_preview_overlay() {
+    fn return_to_view_intro_frame_refuses_fixed_caption_text_fallback_before_preview_overlay() {
         let preview_rgba = vec![
             0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff,
@@ -17159,12 +17178,12 @@ mod tests {
             let _ = render_intro_frame(&mut intro);
         }));
 
-        assert_title_tick_gap_panic(result);
+        assert_return_to_view_caption_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn return_to_view_intro_frame_requires_title_tick_frames_over_preserved_backing() {
+    fn return_to_view_intro_frame_refuses_fixed_caption_text_fallback_over_preserved_backing() {
         let mut intro = visual_intro_state_with_panel(
             debug_game_dir(),
             VisualIntroPanel::ReturnToView {
@@ -17194,7 +17213,7 @@ mod tests {
             let _ = render_intro_frame(&mut intro);
         }));
 
-        assert_title_tick_gap_panic(result);
+        assert_return_to_view_caption_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -17230,12 +17249,12 @@ mod tests {
         }));
 
         assert_eq!(intro.modal_backing, Some(backing));
-        assert_title_tick_gap_panic(result);
+        assert_return_to_view_caption_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
     #[test]
-    fn return_to_view_intro_frame_refuses_missing_title_tick_frames_before_fixed_wipe() {
+    fn return_to_view_intro_frame_refuses_fixed_caption_text_fallback_before_fixed_wipe() {
         let dir = debug_game_dir();
         let mut backing = new_intro_display_buffer();
         backing.clear(3);
@@ -17281,7 +17300,7 @@ mod tests {
             let _ = render_intro_frame(&mut intro);
         }));
 
-        assert_title_tick_gap_panic(result);
+        assert_return_to_view_caption_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
