@@ -11,11 +11,9 @@ use std::path::Path;
 
 use u5_runtime::intro_menu::{IntroSubflow, IntroSubflowResult};
 use u5_runtime::menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep};
-use u5_runtime::u4_transfer_session::u4_transfer_preview_from_u4_values;
 use u5_runtime::{
-    MISCMAPS_DAT_FILE, SAVED_GAM_FILENAME, STORY_DAT_FILE, TileGraphicsDepth, U4TransferOverrides,
-    commit_u4_transfer_save, disk_io_error_message, load_play_options_from_save,
-    read_u4_transfer_source_from_party_sav,
+    MISCMAPS_DAT_FILE, SAVED_GAM_FILENAME, STORY_DAT_FILE, TileGraphicsDepth,
+    disk_io_error_message, load_play_options_from_save, read_u4_transfer_source_from_party_sav,
 };
 
 use crate::cli::run_interactive_create_character;
@@ -203,115 +201,20 @@ fn require_terminal_return_to_view_renderer_contract() -> ! {
     )
 }
 
-fn run_manual_u4_transfer(game_dir: &Path) -> io::Result<bool> {
-    println!("Transfer from Ultima IV");
-    println!(
-        "Reading PARTY.SAV. This writes a U5 save from BRIT.GAM/BRIT.OOL and returns to the intro menu."
-    );
+fn require_terminal_u4_transfer_renderer_contract() -> ! {
+    panic!(
+        "terminal Ultima IV transfer preview is a forbidden fallback; U4 transfer requires the graphical roster/status preview, prompt window, redraw timing, and confirmation input contract before a transfer can advance; see cleak/u5-spec#73"
+    )
+}
 
-    let source = match read_u4_transfer_source_from_party_sav(game_dir) {
-        Ok(source) => source,
+fn run_manual_u4_transfer(game_dir: &Path) -> io::Result<bool> {
+    match read_u4_transfer_source_from_party_sav(game_dir) {
+        Ok(_) => require_terminal_u4_transfer_renderer_contract(),
         Err(err) => {
             println!("Transfer source rejected: {err}");
-            return Ok(false);
-        }
-    };
-    let preview = u4_transfer_preview_from_u4_values(
-        u4_transfer_display_name(&source.name),
-        source.class_index,
-        source.strength,
-        source.dexterity,
-        source.intelligence,
-        0,
-    );
-    let mut overrides = U4TransferOverrides {
-        name: None,
-        male: None,
-    };
-    println!(
-        "Preview: {} class {}, {}, STR {}, DEX {}, INT {}, XP {}.",
-        preview.name,
-        preview.class_index,
-        if source.male { "male" } else { "female" },
-        preview.strength,
-        preview.dexterity,
-        preview.intelligence,
-        source.experience / 10
-    );
-    if !prompt_yes_no(&format!("Use imported name {}? (Y/N): ", preview.name))? {
-        let Some(name) = prompt_nonblank_name("Replacement name: ")? else {
-            return Ok(false);
-        };
-        overrides.name = Some(name);
-    }
-    if !prompt_yes_no(&format!(
-        "Use imported gender {}? (Y/N): ",
-        if source.male { "M" } else { "F" }
-    ))? {
-        let Some(male) = prompt_gender("Replacement gender M/F: ")? else {
-            return Ok(false);
-        };
-        overrides.male = Some(male);
-    }
-    if !prompt_yes_no("Commit transfer save? (Y/N): ")? {
-        return Ok(false);
-    }
-
-    let avatar = commit_u4_transfer_save(game_dir, &source, Some(&overrides))?;
-    let end = avatar
-        .name
-        .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or(avatar.name.len());
-    println!(
-        "Transferred {}. Choose Journey Onward to load the new save.",
-        String::from_utf8_lossy(&avatar.name[..end])
-    );
-    Ok(true)
-}
-
-fn u4_transfer_display_name(name: &[u8]) -> String {
-    let end = name
-        .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or(name.len());
-    String::from_utf8_lossy(&name[..end]).trim_end().to_string()
-}
-
-fn prompt_nonblank_name(prompt: &str) -> io::Result<Option<Vec<u8>>> {
-    loop {
-        let Some(value) = prompt_line(prompt)? else {
-            return Ok(None);
-        };
-        if value.trim().is_empty() {
-            println!("Name may not be blank.");
-        } else {
-            return Ok(Some(value.trim().as_bytes().to_vec()));
+            Ok(false)
         }
     }
-}
-
-fn prompt_gender(prompt: &str) -> io::Result<Option<bool>> {
-    loop {
-        let Some(value) = prompt_line(prompt)? else {
-            return Ok(None);
-        };
-        match value.bytes().next().map(|byte| byte.to_ascii_uppercase()) {
-            Some(b'M') => return Ok(Some(true)),
-            Some(b'F') => return Ok(Some(false)),
-            _ => println!("Press M or F."),
-        }
-    }
-}
-
-fn prompt_line(prompt: &str) -> io::Result<Option<String>> {
-    print!("{prompt}");
-    io::stdout().flush()?;
-    let mut input = String::new();
-    if io::stdin().read_line(&mut input)? == 0 {
-        return Ok(None);
-    }
-    Ok(Some(input.trim_end_matches(['\r', '\n']).to_string()))
 }
 
 fn read_menu_key() -> io::Result<Option<u8>> {
@@ -328,19 +231,6 @@ fn prompt_continue() -> io::Result<()> {
     let mut input = String::new();
     let _ = io::stdin().read_line(&mut input)?;
     Ok(())
-}
-
-fn prompt_yes_no(prompt: &str) -> io::Result<bool> {
-    loop {
-        let Some(value) = prompt_line(prompt)? else {
-            return Ok(false);
-        };
-        match value.bytes().next().map(|byte| byte.to_ascii_uppercase()) {
-            Some(b'Y') => return Ok(true),
-            Some(b'N') | None => return Ok(false),
-            _ => println!("Press Y or N."),
-        }
-    }
 }
 
 #[cfg(test)]
