@@ -8033,6 +8033,12 @@ fn require_published_initial_title_rune_screen(intro: &VisualIntroState) {
     }
 }
 
+fn require_published_intro_menu_text_window_contract() {
+    panic!(
+        "intro menu lower text-window frame requires a published frame/border contract; drawing a plain black band with fixed-cell menu labels is a forbidden fallback; see cleak/u5-spec#63"
+    )
+}
+
 fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
     intro.dispatch.dismiss_title();
     clear_carry_visual_intro_title_tick(intro);
@@ -9129,6 +9135,7 @@ fn draw_visual_intro_start_menu_to_buffer(
     highlighted: Option<IntroSubflow>,
 ) {
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
+    require_published_intro_menu_text_window_contract();
     let title_tick_frames = authored_title_tick_frames();
     buffer.draw_authored_title_tick(&title_tick_frames, title_tick_frame);
     let font = load_ibm_ch_font(game_dir).expect("intro menu requires IBM fixed-cell font");
@@ -12296,6 +12303,17 @@ mod tests {
         );
     }
 
+    fn assert_menu_text_window_gap_panic(result: std::thread::Result<()>) {
+        let payload = result.expect_err("unpublished intro menu text-window contract must fail");
+        let message = panic_message(payload);
+        assert!(
+            message.contains("plain black band")
+                && message.contains("forbidden fallback")
+                && message.contains("cleak/u5-spec#63"),
+            "{message}"
+        );
+    }
+
     fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
         payload
             .downcast_ref::<String>()
@@ -12856,7 +12874,7 @@ mod tests {
     }
 
     #[test]
-    fn intro_menu_render_refuses_missing_authored_title_tick_frames() {
+    fn intro_menu_render_refuses_unpublished_text_window_frame() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         intro.title_tick_visible_frame = 2;
 
@@ -12864,7 +12882,7 @@ mod tests {
             let _ = render_intro_frame(&mut intro);
         }));
 
-        assert_title_tick_gap_panic(result);
+        assert_menu_text_window_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -13771,7 +13789,7 @@ mod tests {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = render_intro_frame(&mut intro);
         }));
-        assert_title_tick_gap_panic(result);
+        assert_menu_text_window_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
