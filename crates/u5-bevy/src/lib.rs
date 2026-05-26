@@ -8177,6 +8177,42 @@ fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
     intro.message.clear();
 }
 
+/// `systems/save-load.md §4.2` pre-load wait indicator. Painted into
+/// the intro surface immediately before the `SAVED.GAM` read so the
+/// player sees a "loading" frame while the file load runs. The
+/// gameplay viewport border and populated stats panel are painted by
+/// `transition_visual_intro_to_gameplay` once `PlayState` is ready;
+/// the engine's clean-room display backend has no separate
+/// scene-transition state or BIOS mode to switch, so those two
+/// §4.2 steps are no-ops here.
+fn draw_visual_intro_journey_loading_indicator(intro: &mut VisualIntroState) {
+    let Some(slots) = intro.font_slots.clone() else {
+        return;
+    };
+    let window = intro.text_windows.active_window();
+    intro.surface.clear(0);
+    let banner_row = usize::from(window.top_left_y) + usize::from(window.height()) / 2;
+    intro.surface.draw_fixed_text_centered_in_window(
+        slots.active_font(),
+        JOURNEY_ONWARD_SHORTCUT_BANNER,
+        window,
+        banner_row,
+        0x0f,
+        0x00,
+    );
+    let indicator_row = banner_row + 2;
+    if indicator_row < usize::from(window.bottom_right_y) {
+        intro.surface.draw_fixed_text_centered_in_window(
+            slots.active_font(),
+            "Loading...",
+            window,
+            indicator_row,
+            0x07,
+            0x00,
+        );
+    }
+}
+
 /// `systems/intro.md §3` step 6: consume the pre-flourish phase's
 /// queued-key outcome. On the J shortcut, stamp the centered
 /// "Journey Onward" banner via the now-active IBM glyph slot and
@@ -8583,6 +8619,21 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
     }
     match subflow {
         IntroSubflow::JourneyOnward => {
+            // `systems/save-load.md §4.2` pre-load display setup:
+            // before SAVED.GAM is read, the intro overlay paints the
+            // gameplay viewport/stats-panel/command-prompt frame and
+            // a wait indicator so the player sees the gameplay
+            // surface appear while the load runs. In the bevy
+            // harness the load itself is essentially instantaneous,
+            // so a single composited "loading" frame stamped into
+            // the intro surface satisfies the visible-while-loading
+            // contract; the populated gameplay frame is rendered by
+            // `transition_visual_intro_to_gameplay` after PlayState
+            // construction. The scene-transition display state
+            // prime and display-mode switch steps are no-ops for
+            // the clean engine (its display backend has no
+            // separately-managed modes).
+            draw_visual_intro_journey_loading_indicator(intro);
             let save_image =
                 read_save_image_file(&intro.game_dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)
                     .unwrap_or_else(|err| {
