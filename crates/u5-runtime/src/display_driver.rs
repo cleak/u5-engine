@@ -358,12 +358,16 @@ impl EgaDisplaySurface {
 
     pub fn plot_pixel(&mut self, x: usize, y: usize) {
         if x >= DISPLAY_SURFACE_WIDTH || y >= DISPLAY_SURFACE_HEIGHT {
-            return;
+            panic!(
+                "display pixel plot at ({x}, {y}) exceeds {DISPLAY_SURFACE_WIDTH}x{DISPLAY_SURFACE_HEIGHT}; clipping is a forbidden fallback"
+            );
         }
         self.front_pixels[y * DISPLAY_SURFACE_WIDTH + x] = self.current_color;
     }
 
     pub fn draw_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
+        assert_display_point_in_bounds(x0, y0, "display line start");
+        assert_display_point_in_bounds(x1, y1, "display line end");
         let mut x = x0;
         let mut y = y0;
         let dx = (x1 - x0).abs();
@@ -373,7 +377,7 @@ impl EgaDisplaySurface {
         let mut err = dx + dy;
 
         loop {
-            self.plot_pixel_checked(x, y);
+            self.front_pixels[y as usize * DISPLAY_SURFACE_WIDTH + x as usize] = self.current_color;
             if x == x1 && y == y1 {
                 break;
             }
@@ -386,14 +390,6 @@ impl EgaDisplaySurface {
                 err += dx;
                 y += sy;
             }
-        }
-    }
-
-    fn plot_pixel_checked(&mut self, x: i32, y: i32) {
-        if (0..DISPLAY_SURFACE_WIDTH as i32).contains(&x)
-            && (0..DISPLAY_SURFACE_HEIGHT as i32).contains(&y)
-        {
-            self.front_pixels[y as usize * DISPLAY_SURFACE_WIDTH + x as usize] = self.current_color;
         }
     }
 
@@ -597,12 +593,28 @@ impl EgaDisplaySurface {
                 Ok(EgaDispatchResult::None)
             }
             EgaDisplayOperation::ReadPixel { x, y } => {
-                Ok(EgaDispatchResult::Pixel(self.read_pixel(x, y).unwrap_or(0)))
+                let pixel = self.read_pixel(x, y).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "display pixel read at ({x}, {y}) exceeds {DISPLAY_SURFACE_WIDTH}x{DISPLAY_SURFACE_HEIGHT}; defaulting to black is a forbidden fallback"
+                        ),
+                    )
+                })?;
+                Ok(EgaDispatchResult::Pixel(pixel))
             }
             EgaDisplayOperation::PlotPixel { x, y } => {
+                if x >= DISPLAY_SURFACE_WIDTH || y >= DISPLAY_SURFACE_HEIGHT {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "display pixel plot at ({x}, {y}) exceeds {DISPLAY_SURFACE_WIDTH}x{DISPLAY_SURFACE_HEIGHT}; clipping is a forbidden fallback"
+                        ),
+                    ));
+                }
                 if self.render_target == DisplayRenderTarget::Front {
                     self.plot_pixel(x, y);
-                } else if x < DISPLAY_SURFACE_WIDTH && y < DISPLAY_SURFACE_HEIGHT {
+                } else {
                     self.back_pixels[y * DISPLAY_SURFACE_WIDTH + x] = self.current_color;
                 }
                 Ok(EgaDispatchResult::None)
@@ -704,6 +716,14 @@ fn copy_rect_between_buffers(src: &[u8], dst: &mut [u8], rect: DisplayPixelRect)
         let end = start + rect.width();
         dst[start..end].copy_from_slice(&src[start..end]);
     }
+}
+
+fn assert_display_point_in_bounds(x: i32, y: i32, context: &str) {
+    assert!(
+        (0..DISPLAY_SURFACE_WIDTH as i32).contains(&x)
+            && (0..DISPLAY_SURFACE_HEIGHT as i32).contains(&y),
+        "{context} ({x}, {y}) exceeds {DISPLAY_SURFACE_WIDTH}x{DISPLAY_SURFACE_HEIGHT}; clipping is a forbidden fallback"
+    );
 }
 
 fn dissolve_stride(total: usize) -> usize {

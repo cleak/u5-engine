@@ -5539,7 +5539,7 @@ fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
         .unwrap();
     surface
         .execute(EgaDisplayOperation::DrawLine {
-            x0: -2,
+            x0: 0,
             y0: 4,
             x1: 2,
             y1: 4
@@ -5572,6 +5572,62 @@ fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
 
     surface.execute(EgaDisplayOperation::PresentFrame).unwrap();
     assert_eq!(surface.presented_frames(), 1);
+}
+
+#[test]
+fn display_driver_rejects_cropped_pixel_and_line_primitives() {
+    let mut surface = EgaDisplaySurface::new();
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        surface.plot_pixel(DISPLAY_SURFACE_WIDTH, 0);
+    }));
+    let payload = result.expect_err("out-of-bounds direct pixel plot must panic");
+    let message = payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
+        .expect("pixel plot panic payload must be a string");
+    assert!(message.contains("forbidden fallback"), "{message}");
+
+    let err = surface
+        .execute(EgaDisplayOperation::ReadPixel {
+            x: DISPLAY_SURFACE_WIDTH,
+            y: 0,
+        })
+        .expect_err("out-of-bounds dispatch read must fail");
+    assert!(
+        err.to_string().contains("forbidden fallback"),
+        "unexpected error: {err}"
+    );
+
+    let err = surface
+        .execute(EgaDisplayOperation::PlotPixel {
+            x: DISPLAY_SURFACE_WIDTH,
+            y: 0,
+        })
+        .expect_err("out-of-bounds dispatch pixel plot must fail");
+    assert!(
+        err.to_string().contains("forbidden fallback"),
+        "unexpected error: {err}"
+    );
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        surface
+            .execute(EgaDisplayOperation::DrawLine {
+                x0: -2,
+                y0: 4,
+                x1: 2,
+                y1: 4,
+            })
+            .unwrap();
+    }));
+    let payload = result.expect_err("cropped display line must panic");
+    let message = payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
+        .expect("line panic payload must be a string");
+    assert!(message.contains("forbidden fallback"), "{message}");
 }
 
 #[test]
