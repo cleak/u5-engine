@@ -473,6 +473,18 @@ impl EgaDisplaySurface {
         dst_x: i32,
         dst_y: i32,
     ) -> io::Result<()> {
+        if dst_x < 0
+            || dst_y < 0
+            || dst_x + TILE_ATLAS_SIDE as i32 > DISPLAY_SURFACE_WIDTH as i32
+            || dst_y + TILE_ATLAS_SIDE as i32 > DISPLAY_SURFACE_HEIGHT as i32
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "display tile blit at ({dst_x}, {dst_y}) with size {TILE_ATLAS_SIDE}x{TILE_ATLAS_SIDE} would clip against {DISPLAY_SURFACE_WIDTH}x{DISPLAY_SURFACE_HEIGHT}; clipping is a forbidden fallback"
+                ),
+            ));
+        }
         let pixels = atlas.tile_pixels(tile).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -481,14 +493,8 @@ impl EgaDisplaySurface {
         })?;
         for row in 0..TILE_ATLAS_SIDE {
             let y = dst_y + row as i32;
-            if !(0..DISPLAY_SURFACE_HEIGHT as i32).contains(&y) {
-                continue;
-            }
             for col in 0..TILE_ATLAS_SIDE {
                 let x = dst_x + col as i32;
-                if !(0..DISPLAY_SURFACE_WIDTH as i32).contains(&x) {
-                    continue;
-                }
                 self.front_pixels[y as usize * DISPLAY_SURFACE_WIDTH + x as usize] =
                     pixels[row * TILE_ATLAS_SIDE + col] & 0x0f;
             }
@@ -522,6 +528,14 @@ impl EgaDisplaySurface {
     ) -> io::Result<()> {
         let dst_x = cell_x * CH_CELL_SIDE;
         let dst_y = cell_y * CH_CELL_SIDE;
+        if cell_x >= DISPLAY_TEXT_COLUMNS || cell_y >= DISPLAY_TEXT_ROWS {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "display fixed glyph at cell ({cell_x}, {cell_y}) would clip against {DISPLAY_TEXT_COLUMNS}x{DISPLAY_TEXT_ROWS} text cells; clipping is a forbidden fallback"
+                ),
+            ));
+        }
         for glyph_y in 0..CH_CELL_SIDE {
             let row_bits = font.glyph_row(code & 0x7f, glyph_y).ok_or_else(|| {
                 io::Error::new(
@@ -537,9 +551,7 @@ impl EgaDisplaySurface {
                 } & 0x0f;
                 let x = dst_x + glyph_x;
                 let y = dst_y + glyph_y;
-                if x < DISPLAY_SURFACE_WIDTH && y < DISPLAY_SURFACE_HEIGHT {
-                    self.front_pixels[y * DISPLAY_SURFACE_WIDTH + x] = color;
-                }
+                self.front_pixels[y * DISPLAY_SURFACE_WIDTH + x] = color;
             }
         }
         Ok(())

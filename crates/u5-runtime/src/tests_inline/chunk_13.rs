@@ -5315,9 +5315,9 @@ fn display_surface_scrolls_rect_up_one_text_row_and_blanks_exposed_band() {
 fn display_surface_draws_tiles_and_fixed_glyphs_to_front_buffer() {
     let mut surface = EgaDisplaySurface::new();
     let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
-    surface.blit_tile_at_pixel(&atlas, 3, 318, 198).unwrap();
+    surface.blit_tile_at_pixel(&atlas, 3, 304, 184).unwrap();
 
-    assert_eq!(surface.read_pixel(318, 198), Some(3));
+    assert_eq!(surface.read_pixel(304, 184), Some(3));
     assert_eq!(surface.read_pixel(319, 199), Some(3));
 
     let mut font_bytes = vec![0u8; CH_FONT_LEN];
@@ -5330,6 +5330,29 @@ fn display_surface_draws_tiles_and_fixed_glyphs_to_front_buffer() {
     assert_eq!(surface.read_pixel(8, 8), Some(0x0e));
     assert_eq!(surface.read_pixel(9, 8), Some(0x01));
     assert_eq!(surface.read_pixel(9, 9), Some(0x0e));
+}
+
+#[test]
+fn display_surface_rejects_cropped_tile_and_glyph_draws() {
+    let mut surface = EgaDisplaySurface::new();
+    let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+    let err = surface
+        .blit_tile_at_pixel(&atlas, 3, 318, 198)
+        .expect_err("cropped tile blit must fail");
+    assert!(
+        err.to_string().contains("forbidden fallback"),
+        "unexpected error: {err}"
+    );
+
+    let font = parse_ch_font(&vec![0u8; CH_FONT_LEN], "fixture").unwrap();
+    let err = surface
+        .draw_fixed_glyph_cell(&font, b'A', DISPLAY_TEXT_COLUMNS, 0, 0x0e, 0x01)
+        .expect_err("cropped glyph draw must fail");
+    assert!(
+        err.to_string().contains("forbidden fallback"),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]
