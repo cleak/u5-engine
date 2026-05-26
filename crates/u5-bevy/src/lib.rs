@@ -8984,7 +8984,9 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
         ));
     }
     if step == INTRO_INLINE_DOORWAY_STEP {
-        lines.push("Inline doorway transition text.".to_string());
+        panic!(
+            "intro story step {step} requires published inline doorway text; see cleak/u5-spec#69"
+        );
     } else {
         let record_index = if step < INTRO_INLINE_DOORWAY_STEP {
             step
@@ -16401,6 +16403,28 @@ mod tests {
             "{message}"
         );
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn visual_intro_story_step_six_summary_panics_until_inline_text_is_specified() {
+        let records = StoryRecords {
+            records: (0..20).map(|i| format!("Story record {i}")).collect(),
+        };
+
+        let result = std::panic::catch_unwind(|| {
+            let _ = summarize_intro_story(&records, INTRO_INLINE_DOORWAY_STEP);
+        });
+
+        let payload = result.expect_err("step 6 summary must panic until inline text is specified");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("step 6 summary panic payload must be a string");
+        assert!(
+            message.contains("intro story step 6 requires published inline doorway text"),
+            "{message}"
+        );
     }
 
     #[test]
