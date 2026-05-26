@@ -13,16 +13,9 @@ use u5_runtime::intro_menu::{IntroSubflow, IntroSubflowResult};
 use u5_runtime::menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep};
 use u5_runtime::u4_transfer_session::u4_transfer_preview_from_u4_values;
 use u5_runtime::{
-    INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES, ReturnToViewFrameKind,
-    SAVED_GAM_FILENAME, TileGraphicsDepth, U4TransferOverrides, commit_u4_transfer_save,
-    disk_io_error_message, intro_step_has_story6_secondary_pass, intro_step_transition_strips,
-    intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
-    load_return_to_view_assets, load_story_records, read_u4_transfer_source_from_party_sav,
-    run_return_to_view_playback_until_restart, summarize_return_to_view_preview,
-    summarize_return_to_view_script,
+    MISCMAPS_DAT_FILE, SAVED_GAM_FILENAME, STORY_DAT_FILE, TileGraphicsDepth, U4TransferOverrides,
+    commit_u4_transfer_save, disk_io_error_message, load_play_options_from_save,
+    read_u4_transfer_source_from_party_sav,
 };
 
 use crate::cli::run_interactive_create_character;
@@ -175,132 +168,39 @@ fn print_intro_menu() {
 }
 
 fn run_story_slides(game_dir: &Path) -> io::Result<()> {
-    println!("Ultima V Introduction");
-    let records = load_story_records(game_dir)?.ok_or_else(|| {
-        io::Error::new(
+    let path = game_dir.join(STORY_DAT_FILE);
+    match fs::metadata(&path) {
+        Ok(_) => require_terminal_story_renderer_contract(),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Err(io::Error::new(
             io::ErrorKind::NotFound,
             "intro story requires STORY.DAT; silently returning to the menu is a forbidden fallback",
-        )
-    })?;
-
-    for step in 0..INTRO_STORY_STEP_COUNT {
-        println!();
-        println!("Story step {} of {}", step + 1, INTRO_STORY_STEP_COUNT);
-        let file = intro_story_art_file_for_step(step)
-            .unwrap_or_else(|| panic!("intro story step {step} has no published art file"));
-        let placement = intro_story_art_placement_for_step(step)
-            .unwrap_or_else(|| panic!("intro story step {step} has no published art placement"));
-        println!(
-            "Art {file} subimage {} at ({}, {}).",
-            placement.subimage, placement.top_left_x, placement.top_left_y
-        );
-        if let Some(strips) = intro_step_transition_strips(step) {
-            println!(
-                "Transition strips: #{}, ({}, {}); #{}, ({}, {}).",
-                strips[0].0, strips[0].1, strips[0].2, strips[1].0, strips[1].1, strips[1].2
-            );
-        }
-        if step == INTRO_INLINE_DOORWAY_STEP {
-            panic!(
-                "terminal intro story step {step} requires published inline doorway text; placeholder text is a forbidden fallback; see cleak/u5-spec#69"
-            );
-        } else {
-            let record_index = if step < INTRO_INLINE_DOORWAY_STEP {
-                step
-            } else {
-                step - 1
-            };
-            let text = records.record(record_index).unwrap_or_else(|| {
-                panic!("terminal intro story step {step} requires STORY.DAT record {record_index}")
-            });
-            println!("{text}");
-        }
-        if intro_step_has_story6_secondary_pass(step) {
-            let subimage = intro_story6_secondary_subimage(step).unwrap_or_else(|| {
-                panic!("intro story step {step} requires a published STORY6 secondary subimage")
-            });
-            println!("Secondary STORY6.16 subimage {subimage}.");
-        }
-        if intro_story_step_waits_for_input(step) {
-            prompt_continue()?;
-        }
+        )),
+        Err(err) => Err(err),
     }
-    Ok(())
 }
 
 fn run_return_to_view_preview(game_dir: &Path) -> io::Result<()> {
-    println!("Return to View");
     let path = game_dir.join(MISCMAPS_DAT_FILE);
-    let metadata = match fs::metadata(&path) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Return-to-View requires MISCMAPS.DAT; returning to the menu is a forbidden fallback",
-            ));
-        }
-        Err(err) => return Err(err),
-    };
-    println!(
-        "{} found ({} bytes). Return-to-View strips start at byte {}, span {} bytes; command stream starts at byte {} and spans {} bytes.",
-        MISCMAPS_DAT_FILE,
-        metadata.len(),
-        MISCMAPS_RTV_STRIP_SECTION_OFFSET,
-        MISCMAPS_RTV_STRIP_SECTION_BYTES,
-        MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
-        RTV_COMMAND_STREAM_BYTES
-    );
-    let assets = load_return_to_view_assets(game_dir)?.ok_or_else(|| {
-        io::Error::new(
+    match fs::metadata(&path) {
+        Ok(_) => require_terminal_return_to_view_renderer_contract(),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Err(io::Error::new(
             io::ErrorKind::NotFound,
             "Return-to-View requires MISCMAPS.DAT; returning to the menu is a forbidden fallback",
-        )
-    })?;
-    println!("{}", summarize_return_to_view_script(&assets.script));
-    let summary = summarize_return_to_view_preview(&assets.strips, &assets.script)?;
-    println!("{summary}");
-    let playback = run_return_to_view_playback_until_restart(&assets.strips, &assets.script, 4096)?;
-    println!(
-        "Playback metadata: {} frame(s), final caption {:?}, final strip {:?}.",
-        playback.frames.len(),
-        playback.run.state.current_caption,
-        playback.run.state.current_strip
-    );
-    if let Some(first) = playback.frames.first() {
-        println!(
-            "First frame: {}; command {}; title tick {}; caption {:?}.",
-            return_to_view_frame_kind_label(first.kind),
-            first.command_index,
-            first.elapsed_title_ticks,
-            first.state.current_caption
-        );
+        )),
+        Err(err) => Err(err),
     }
-    if let Some(last) = playback.frames.last() {
-        println!(
-            "Last frame: {}; command {}; title tick {}; caption {:?}.",
-            return_to_view_frame_kind_label(last.kind),
-            last.command_index,
-            last.elapsed_title_ticks,
-            last.state.current_caption
-        );
-    }
-    println!("The terminal harness reports the clean preview layout and returns to the menu.");
-    Ok(())
 }
 
-fn return_to_view_frame_kind_label(kind: ReturnToViewFrameKind) -> &'static str {
-    match kind {
-        ReturnToViewFrameKind::PreviewTick => "preview title tick",
-        ReturnToViewFrameKind::CellEffectStep { .. } => "local cell-effect step",
-        ReturnToViewFrameKind::CellEffectFinalTick { .. } => "local cell-effect final tick",
-        ReturnToViewFrameKind::TemporaryActorDraw => "temporary actor draw",
-        ReturnToViewFrameKind::TemporaryActorDrawOverBacking => "temporary actor backing draw",
-        ReturnToViewFrameKind::FixedWipeRectangle { .. } => "fixed wipe rectangle",
-        ReturnToViewFrameKind::FixedWipeActorDraw => "fixed wipe actor draw",
-        ReturnToViewFrameKind::FixedWait { .. } => "fixed wait tick",
-        ReturnToViewFrameKind::FixedWipeTrailingTick { .. } => "fixed wipe trailing tick",
-        ReturnToViewFrameKind::MoveActorTick => "actor movement tick",
-    }
+fn require_terminal_story_renderer_contract() -> ! {
+    panic!(
+        "terminal intro story diagnostics are a forbidden fallback; story slides require the graphical intro renderer, published proportional width table, and inline doorway text before playback can advance; see cleak/u5-spec#69 and cleak/u5-spec#70"
+    )
+}
+
+fn require_terminal_return_to_view_renderer_contract() -> ! {
+    panic!(
+        "terminal Return-to-View diagnostics are a forbidden fallback; Return-to-View requires the graphical preview pixel geometry and caption renderer before playback can advance; see cleak/u5-spec#54 and cleak/u5-spec#70"
+    )
 }
 
 fn run_manual_u4_transfer(game_dir: &Path) -> io::Result<bool> {
@@ -468,6 +368,26 @@ mod tests {
     }
 
     #[test]
+    fn terminal_story_refuses_text_diagnostic_fallback_when_story_dat_exists() {
+        let dir = temp_intro_dir("present-story");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(STORY_DAT_FILE), b"placeholder").unwrap();
+
+        let result = std::panic::catch_unwind(|| {
+            let _ = run_story_slides(&dir);
+        });
+
+        let message = panic_message(result.expect_err("terminal story diagnostics must panic"));
+        assert!(
+            message.contains("terminal intro story diagnostics are a forbidden fallback"),
+            "{message}"
+        );
+        assert!(message.contains("cleak/u5-spec#69"), "{message}");
+        assert!(message.contains("cleak/u5-spec#70"), "{message}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn terminal_return_to_view_requires_miscmaps_instead_of_returning_to_menu() {
         let dir = temp_intro_dir("missing-miscmaps");
         fs::create_dir_all(&dir).unwrap();
@@ -478,5 +398,38 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
         assert!(err.to_string().contains("forbidden fallback"), "{}", err);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn terminal_return_to_view_refuses_text_diagnostic_fallback_when_miscmaps_exists() {
+        let dir = temp_intro_dir("present-miscmaps");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(MISCMAPS_DAT_FILE), [0u8]).unwrap();
+
+        let result = std::panic::catch_unwind(|| {
+            let _ = run_return_to_view_preview(&dir);
+        });
+
+        let message =
+            panic_message(result.expect_err("terminal Return-to-View diagnostics must panic"));
+        assert!(
+            message.contains("terminal Return-to-View diagnostics are a forbidden fallback"),
+            "{message}"
+        );
+        assert!(message.contains("cleak/u5-spec#54"), "{message}");
+        assert!(message.contains("cleak/u5-spec#70"), "{message}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+        payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| {
+                payload
+                    .downcast_ref::<&str>()
+                    .map(|message| message.to_string())
+            })
+            .expect("panic payload must be a string")
     }
 }
