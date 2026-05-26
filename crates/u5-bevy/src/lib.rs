@@ -9282,8 +9282,7 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
 }
 
 fn render_u4_transfer_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    intro.surface.clear(0);
-    let Some((source, preview, overrides, stage, input_line)) = (match &intro.panel {
+    let Some((_source, _preview, _overrides, _stage, _input_line)) = (match &intro.panel {
         VisualIntroPanel::U4Transfer {
             source,
             preview,
@@ -9296,63 +9295,13 @@ fn render_u4_transfer_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         unreachable!("U4 transfer intro panel match must either produce data or panic");
     };
 
-    let font =
-        load_ibm_ch_font(&intro.game_dir).expect("U4 transfer intro requires IBM fixed-cell font");
+    require_published_u4_transfer_preview_presentation();
+}
 
-    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 0, 0, 40, 25);
-    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 0, 2, 20, 16);
-    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 21, 2, 19, 16);
-    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 0, 20, 40, 5);
-    overlay_fixed_cell_text_intro_buffer(
-        &mut intro.surface,
-        &font,
-        "Transfer from Ultima IV",
-        8,
-        1,
-        false,
-    );
-    draw_u4_transfer_details_intro_buffer(
-        &mut intro.surface,
-        &font,
-        2,
-        4,
-        "Imported",
-        &preview.name,
-        source.male,
-        preview.class_index,
-        preview.strength,
-        preview.dexterity,
-        preview.intelligence,
-        source.experience / 10,
-    );
-    let selected_name = overrides
-        .name
-        .as_deref()
-        .map(display_name_bytes)
-        .unwrap_or_else(|| preview.name.clone());
-    draw_u4_transfer_details_intro_buffer(
-        &mut intro.surface,
-        &font,
-        23,
-        4,
-        "Selected",
-        &selected_name,
-        overrides.male.unwrap_or(source.male),
-        preview.class_index,
-        preview.strength,
-        preview.dexterity,
-        preview.intelligence,
-        source.experience / 10,
-    );
-    draw_u4_transfer_prompt_intro_buffer(
-        &mut intro.surface,
-        &font,
-        preview,
-        source,
-        stage,
-        input_line,
-    );
-    intro.surface.to_rgba()
+fn require_published_u4_transfer_preview_presentation() -> ! {
+    panic!(
+        "visual U4 transfer preview requires the published slot-heading strip, prompt window, paired character-info panels, prompt text, and redraw timing; drawing a simplified boxed text comparison is a forbidden fallback; see cleak/u5-spec#73"
+    )
 }
 
 fn render_acknowledgements_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
@@ -10557,123 +10506,6 @@ fn overlay_fixed_cell_text_intro_buffer(
             }
         }
     }
-}
-
-fn draw_fixed_cell_box_intro_buffer(
-    dst: &mut IntroDisplayBuffer,
-    font: &FixedCellFont,
-    cell_x: usize,
-    cell_y: usize,
-    cells_w: usize,
-    cells_h: usize,
-) {
-    assert!(
-        cells_w >= 2 && cells_h >= 2,
-        "intro fixed-cell box requires at least 2x2 cells, got {cells_w}x{cells_h}"
-    );
-    assert!(
-        cell_x + cells_w <= dst.width / CH_CELL_SIDE
-            && cell_y + cells_h <= dst.height / CH_CELL_SIDE,
-        "intro fixed-cell box at cell ({cell_x}, {cell_y}) with size {cells_w}x{cells_h} exceeds framebuffer {}x{}",
-        dst.width,
-        dst.height
-    );
-    let horizontal = "-".repeat(cells_w - 2);
-    overlay_fixed_cell_text_intro_buffer(
-        dst,
-        font,
-        &format!("+{horizontal}+"),
-        cell_x,
-        cell_y,
-        false,
-    );
-    for row in 1..cells_h - 1 {
-        overlay_fixed_cell_text_intro_buffer(dst, font, "|", cell_x, cell_y + row, false);
-        overlay_fixed_cell_text_intro_buffer(
-            dst,
-            font,
-            "|",
-            cell_x + cells_w - 1,
-            cell_y + row,
-            false,
-        );
-    }
-    overlay_fixed_cell_text_intro_buffer(
-        dst,
-        font,
-        &format!("+{horizontal}+"),
-        cell_x,
-        cell_y + cells_h - 1,
-        false,
-    );
-}
-
-fn draw_u4_transfer_details_intro_buffer(
-    dst: &mut IntroDisplayBuffer,
-    font: &FixedCellFont,
-    cell_x: usize,
-    cell_y: usize,
-    title: &str,
-    name: &str,
-    male: bool,
-    class_index: u8,
-    strength: u8,
-    dexterity: u8,
-    intelligence: u8,
-    experience: u32,
-) {
-    let rows = [
-        title.to_string(),
-        format!("Name {name}"),
-        format!("Sex  {}", if male { "Male" } else { "Female" }),
-        format!("Class {class_index}"),
-        format!("Str  {strength:>3}"),
-        format!("Dex  {dexterity:>3}"),
-        format!("Int  {intelligence:>3}"),
-        format!("Exp  {experience:>4}"),
-    ];
-    for (index, row) in rows.iter().enumerate() {
-        overlay_fixed_cell_text_intro_buffer(
-            dst,
-            font,
-            &row.chars().take(16).collect::<String>(),
-            cell_x,
-            cell_y + index,
-            false,
-        );
-    }
-}
-
-fn draw_u4_transfer_prompt_intro_buffer(
-    dst: &mut IntroDisplayBuffer,
-    font: &FixedCellFont,
-    preview: &U4TransferPreview,
-    source: &U4TransferSource,
-    stage: VisualU4TransferStage,
-    input_line: &str,
-) {
-    let prompt = match stage {
-        VisualU4TransferStage::ConfirmName => {
-            format!("Use name {}?  Y/N", preview.name)
-        }
-        VisualU4TransferStage::ReplacementName => {
-            format!("Name: {input_line}")
-        }
-        VisualU4TransferStage::ConfirmGender => {
-            format!("Use gender {}?  Y/N", if source.male { "M" } else { "F" })
-        }
-        VisualU4TransferStage::ReplacementGender => "Gender: M or F".to_string(),
-        VisualU4TransferStage::ConfirmCommit => "Write transfer save?  Y/N".to_string(),
-    };
-    overlay_fixed_cell_text_intro_buffer(
-        dst,
-        font,
-        &prompt.chars().take(36).collect::<String>(),
-        2,
-        21,
-        false,
-    );
-    overlay_fixed_cell_text_intro_buffer(dst, font, "Esc returns to menu", 2, 23, false);
 }
 
 fn overlay_fixed_cell_text_rgba(
@@ -12329,6 +12161,18 @@ mod tests {
                 && message.contains("fixed centered text band")
                 && message.contains("forbidden fallback")
                 && message.contains("cleak/u5-spec#70"),
+            "{message}"
+        );
+    }
+
+    fn assert_u4_transfer_preview_gap_panic(result: std::thread::Result<()>) {
+        let payload = result.expect_err("unpublished U4 transfer preview renderer must fail");
+        let message = panic_message(payload);
+        assert!(
+            message.contains("visual U4 transfer preview")
+                && message.contains("simplified boxed text comparison")
+                && message.contains("forbidden fallback")
+                && message.contains("cleak/u5-spec#73"),
             "{message}"
         );
     }
@@ -16855,7 +16699,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_u4_transfer_renders_from_display_buffer() {
+    fn visual_intro_u4_transfer_refuses_boxed_text_preview_fallback() {
         let dir = debug_game_dir();
         let source = U4TransferSource {
             name: b"OLDNAME\0\0".to_vec(),
@@ -16888,13 +16732,11 @@ mod tests {
             },
         );
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_eq!(frame, intro.surface.to_rgba());
-        assert!(
-            intro.surface.pixels.iter().any(|pixel| *pixel != 0),
-            "U4 transfer should render into the intro display buffer"
-        );
+        assert_u4_transfer_preview_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
