@@ -176,22 +176,24 @@ fn print_intro_menu() {
 
 fn run_story_slides(game_dir: &Path) -> io::Result<()> {
     println!("Ultima V Introduction");
-    let Some(records) = load_story_records(game_dir)? else {
-        println!("STORY.DAT is missing; returning to the intro menu.");
-        return Ok(());
-    };
+    let records = load_story_records(game_dir)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "intro story requires STORY.DAT; silently returning to the menu is a forbidden fallback",
+        )
+    })?;
 
     for step in 0..INTRO_STORY_STEP_COUNT {
         println!();
         println!("Story step {} of {}", step + 1, INTRO_STORY_STEP_COUNT);
-        if let Some(file) = intro_story_art_file_for_step(step) {
-            if let Some(placement) = intro_story_art_placement_for_step(step) {
-                println!(
-                    "Art {file} subimage {} at ({}, {}).",
-                    placement.subimage, placement.top_left_x, placement.top_left_y
-                );
-            }
-        }
+        let file = intro_story_art_file_for_step(step)
+            .unwrap_or_else(|| panic!("intro story step {step} has no published art file"));
+        let placement = intro_story_art_placement_for_step(step)
+            .unwrap_or_else(|| panic!("intro story step {step} has no published art placement"));
+        println!(
+            "Art {file} subimage {} at ({}, {}).",
+            placement.subimage, placement.top_left_x, placement.top_left_y
+        );
         if let Some(strips) = intro_step_transition_strips(step) {
             println!(
                 "Transition strips: #{}, ({}, {}); #{}, ({}, {}).",
@@ -199,21 +201,25 @@ fn run_story_slides(game_dir: &Path) -> io::Result<()> {
             );
         }
         if step == INTRO_INLINE_DOORWAY_STEP {
-            println!("[Inline doorway transition text]");
+            panic!(
+                "terminal intro story step {step} requires published inline doorway text; placeholder text is a forbidden fallback; see cleak/u5-spec#69"
+            );
         } else {
             let record_index = if step < INTRO_INLINE_DOORWAY_STEP {
                 step
             } else {
                 step - 1
             };
-            if let Some(text) = records.record(record_index) {
-                println!("{text}");
-            }
+            let text = records.record(record_index).unwrap_or_else(|| {
+                panic!("terminal intro story step {step} requires STORY.DAT record {record_index}")
+            });
+            println!("{text}");
         }
         if intro_step_has_story6_secondary_pass(step) {
-            if let Some(subimage) = intro_story6_secondary_subimage(step) {
-                println!("Secondary STORY6.16 subimage {subimage}.");
-            }
+            let subimage = intro_story6_secondary_subimage(step).unwrap_or_else(|| {
+                panic!("intro story step {step} requires a published STORY6 secondary subimage")
+            });
+            println!("Secondary STORY6.16 subimage {subimage}.");
         }
         if intro_story_step_waits_for_input(step) {
             prompt_continue()?;
@@ -442,5 +448,30 @@ fn prompt_yes_no(prompt: &str) -> io::Result<bool> {
             Some(b'N') | None => return Ok(false),
             _ => println!("Press Y or N."),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_intro_dir(name: &str) -> std::path::PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("u5-tui-intro-{name}-{nonce}"))
+    }
+
+    #[test]
+    fn terminal_story_requires_story_dat_instead_of_returning_to_menu() {
+        let dir = temp_intro_dir("missing-story");
+        fs::create_dir_all(&dir).unwrap();
+
+        let err = run_story_slides(&dir).expect_err("missing STORY.DAT must fail loudly");
+
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        assert!(err.to_string().contains("forbidden fallback"), "{}", err);
+        let _ = fs::remove_dir_all(dir);
     }
 }
