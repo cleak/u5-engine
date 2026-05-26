@@ -8831,8 +8831,9 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
     }
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
-        return "Ultima V\n\nPress any key for the main menu\nPress J to journey onward"
-            .to_string();
+        panic!(
+            "intro title summary requires the published initial title/rune text screen contract; text fallback is forbidden; see cleak/u5-spec#71"
+        );
     }
 
     let mut lines = vec![
@@ -9051,7 +9052,6 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         return render_acknowledgements_intro_frame(intro);
     }
 
-    let summary = summarize_intro(intro);
     let menu_panel = visual_intro_title_surface_visible(intro);
     let title_phase =
         menu_panel && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
@@ -9100,6 +9100,7 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         }
         rgba
     } else {
+        let summary = summarize_intro(intro);
         panic!("unhandled visual intro panel fell through renderer: {summary}")
     }
 }
@@ -16254,7 +16255,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_summary_switches_from_title_to_menu() {
+    fn visual_intro_summary_rejects_title_text_fallback_then_shows_menu() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
@@ -16277,9 +16278,17 @@ mod tests {
             image_handle: None,
         };
 
-        let title = summarize_intro(&mut intro);
-        assert!(title.contains("Press any key"));
-        assert!(!title.contains("Create New Character"));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = summarize_intro(&mut intro);
+        }));
+        let payload = result.expect_err("title summary text fallback must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("title summary panic payload must be a string");
+        assert!(message.contains("text fallback is forbidden"), "{message}");
+        assert!(message.contains("cleak/u5-spec#71"), "{message}");
 
         intro.dispatch.dismiss_title();
         intro.message = "Choose a path.".to_string();
