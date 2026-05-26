@@ -243,83 +243,6 @@ pub const fn title_tick_palette_indices(frame: u8) -> (u8, u8) {
     TITLE_TICK_PALETTE_CYCLE[frame]
 }
 
-#[cfg(test)]
-pub fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8) -> Option<u8> {
-    let band_width = TITLE_TICK_FRAME_WIDTH as usize;
-    let band_height = TITLE_TICK_FRAME_HEIGHT as usize;
-    if local_x >= band_width || local_y >= band_height {
-        return None;
-    }
-
-    let flame_height = 34usize;
-    assert!(
-        band_height >= flame_height,
-        "title-tick flame height {flame_height} exceeds band height {band_height}"
-    );
-    let flame_top = band_height - flame_height;
-    if local_y < flame_top {
-        return None;
-    }
-
-    let from_base = band_height - 1 - local_y;
-    let frame = usize::from(frame % TITLE_TICK_FRAME_COUNT);
-    let mut inside = false;
-    for center in [54isize, 160, 266] {
-        let wave = ((local_y * 3 + frame * 5) % 11) as isize - 5;
-        let taper = from_base * 34 / flame_height;
-        assert!(
-            taper <= 42,
-            "title-tick flame taper {taper} exceeds base half-width"
-        );
-        let half_width = 42usize - taper;
-        let dx = (local_x as isize - (center + wave)).unsigned_abs();
-        if dx <= half_width {
-            inside = true;
-            break;
-        }
-
-        // Add a narrow upper tongue so the stripe reads as flame rather than
-        // as three static wedges.
-        if from_base > 16 {
-            let tongue_center = center + ((frame as isize - 1) * 5);
-            let tongue_taper = (from_base - 16) / 2;
-            assert!(
-                tongue_taper <= 10,
-                "title-tick flame tongue taper {tongue_taper} exceeds base width"
-            );
-            let tongue_width = 10usize
-                .checked_sub(tongue_taper)
-                .expect("title-tick flame tongue taper exceeds tongue width");
-            if (local_x as isize - tongue_center).unsigned_abs() <= tongue_width {
-                inside = true;
-                break;
-            }
-        }
-    }
-    if !inside {
-        return None;
-    }
-
-    let (bright, dim) = title_tick_palette_indices(frame as u8);
-    if local_y < band_height / 2 {
-        Some(bright)
-    } else {
-        Some(dim)
-    }
-}
-
-/// `intro.md §5`: opaque title-tick replacement pixel for every position
-/// inside the published title-tick rectangle. Pixels outside the authored
-/// flame silhouette are explicitly palette index 0 because the driver-owned
-/// title tick overwrites the whole rectangle, including black pixels.
-#[cfg(test)]
-pub fn title_tick_palette_index(local_x: usize, local_y: usize, frame: u8) -> u8 {
-    match title_tick_flame_palette_index(local_x, local_y, frame) {
-        Some(index) => index,
-        None => 0,
-    }
-}
-
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
 /// four records are shown as 4-by-19 map strips, followed by a
 /// 655-byte command stream driving preview actors and animation beats.
@@ -564,25 +487,5 @@ mod tests {
             ACKNOWLEDGEMENTS_LINES.iter().all(|line| line.len() <= 36),
             "every acknowledgement line must fit the 36-column intro box"
         );
-    }
-
-    #[test]
-    fn title_tick_palette_index_is_opaque_across_entire_rect() {
-        assert_eq!(title_tick_flame_palette_index(54, 8, 0), None);
-        assert_eq!(title_tick_palette_index(54, 8, 0), 0x00);
-        assert_eq!(title_tick_palette_index(120, 20, 0), 0x00);
-        assert_eq!(title_tick_palette_index(54, 20, 0), 0x0E);
-        assert_eq!(title_tick_palette_index(54, 40, 0), 0x06);
-    }
-
-    #[test]
-    fn title_tick_flame_generator_covers_published_rect_without_internal_clamps() {
-        for frame in 0..TITLE_TICK_FRAME_COUNT {
-            for y in 0..TITLE_TICK_FRAME_HEIGHT as usize {
-                for x in 0..TITLE_TICK_FRAME_WIDTH as usize {
-                    let _ = title_tick_palette_index(x, y, frame);
-                }
-            }
-        }
     }
 }

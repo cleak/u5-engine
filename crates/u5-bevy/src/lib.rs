@@ -16,6 +16,8 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
+#[cfg(test)]
+use u5_runtime::TITLE_TICK_FRAME_Y;
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
     BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT,
@@ -111,11 +113,6 @@ use u5_runtime::{
     terrain_combat_tile_for_spawn_index, title_tick_next_frame, town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
-};
-#[cfg(test)]
-use u5_runtime::{
-    TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y,
-    title_tick_palette_indices,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -287,38 +284,10 @@ impl IntroDisplayBuffer {
     }
 
     fn draw_title_tick(&mut self, frame: u8) {
-        #[cfg(not(test))]
-        {
-            let _ = frame;
-            panic!(
-                "strict intro rendering refuses the generated title-tick animation fallback; publish or provide four authored 320x49 title-tick frames before drawing this animation; see cleak/u5-spec#52 and cleak/u5-spec#65"
-            );
-        }
-
-        #[cfg(test)]
-        {
-            let start_x = TITLE_TICK_FRAME_X as usize;
-            let start_y = TITLE_TICK_FRAME_Y as usize;
-            let end_x = start_x + TITLE_TICK_FRAME_WIDTH as usize;
-            let end_y = start_y + TITLE_TICK_FRAME_HEIGHT as usize;
-            assert!(
-                end_x <= self.width && end_y <= self.height,
-                "intro title tick rectangle ({start_x}, {start_y}) size {}x{} exceeds framebuffer {}x{}",
-                TITLE_TICK_FRAME_WIDTH,
-                TITLE_TICK_FRAME_HEIGHT,
-                self.width,
-                self.height
-            );
-
-            for y in start_y..end_y {
-                let local_y = y - start_y;
-                for x in start_x..end_x {
-                    let local_x = x - start_x;
-                    self.pixels[y * self.width + x] =
-                        test_title_tick_palette_index(local_x, local_y, frame);
-                }
-            }
-        }
+        let _ = frame;
+        panic!(
+            "strict intro rendering refuses the generated title-tick animation fallback; publish or provide four authored 320x49 title-tick frames before drawing this animation; see cleak/u5-spec#52 and cleak/u5-spec#65"
+        );
     }
 
     fn copy_revealed_columns_from(
@@ -10084,107 +10053,6 @@ fn british_signature_step_count(signature: &BritishPth) -> usize {
 }
 
 #[cfg(test)]
-fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, frame: u8) {
-    // `cleak/u5-spec#65`: the clean replacement is a deterministic,
-    // opaque four-frame overlay in the public title-tick rectangle.
-    let start_x = TITLE_TICK_FRAME_X as usize;
-    let start_y = TITLE_TICK_FRAME_Y as usize;
-    let end_x = start_x + TITLE_TICK_FRAME_WIDTH as usize;
-    let end_y = start_y + TITLE_TICK_FRAME_HEIGHT as usize;
-    assert!(
-        end_x <= dst_width && end_y <= dst_height,
-        "intro title tick RGBA rectangle ({start_x}, {start_y}) size {}x{} exceeds target {dst_width}x{dst_height}",
-        TITLE_TICK_FRAME_WIDTH,
-        TITLE_TICK_FRAME_HEIGHT
-    );
-    assert!(
-        dst.len() >= dst_width * dst_height * 4,
-        "intro title tick RGBA target has {} byte(s), expected at least {}",
-        dst.len(),
-        dst_width * dst_height * 4
-    );
-
-    for y in start_y..end_y {
-        let local_y = y - start_y;
-        for x in start_x..end_x {
-            let local_x = x - start_x;
-            let offset = (y * dst_width + x) * 4;
-            let palette_index = test_title_tick_palette_index(local_x, local_y, frame);
-            let rgb = EGA_PALETTE_RGB[usize::from(palette_index)];
-            dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
-        }
-    }
-}
-
-#[cfg(test)]
-fn test_title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8) -> Option<u8> {
-    let band_width = TITLE_TICK_FRAME_WIDTH as usize;
-    let band_height = TITLE_TICK_FRAME_HEIGHT as usize;
-    if local_x >= band_width || local_y >= band_height {
-        return None;
-    }
-
-    let flame_height = 34usize;
-    assert!(
-        band_height >= flame_height,
-        "title-tick test flame height {flame_height} exceeds band height {band_height}"
-    );
-    let flame_top = band_height - flame_height;
-    if local_y < flame_top {
-        return None;
-    }
-
-    let from_base = band_height - 1 - local_y;
-    let frame = usize::from(frame % u5_runtime::TITLE_TICK_FRAME_COUNT);
-    let mut inside = false;
-    for center in [54isize, 160, 266] {
-        let wave = ((local_y * 3 + frame * 5) % 11) as isize - 5;
-        let taper = from_base * 34 / flame_height;
-        assert!(
-            taper <= 42,
-            "title-tick test flame taper {taper} exceeds base half-width"
-        );
-        let half_width = 42usize - taper;
-        let dx = (local_x as isize - (center + wave)).unsigned_abs();
-        if dx <= half_width {
-            inside = true;
-            break;
-        }
-
-        if from_base > 16 {
-            let tongue_center = center + ((frame as isize - 1) * 5);
-            let tongue_taper = (from_base - 16) / 2;
-            assert!(
-                tongue_taper <= 10,
-                "title-tick test flame tongue taper {tongue_taper} exceeds base width"
-            );
-            let tongue_width = 10usize
-                .checked_sub(tongue_taper)
-                .expect("title-tick test flame tongue taper exceeds tongue width");
-            if (local_x as isize - tongue_center).unsigned_abs() <= tongue_width {
-                inside = true;
-                break;
-            }
-        }
-    }
-    if !inside {
-        return None;
-    }
-
-    let (bright, dim) = title_tick_palette_indices(frame as u8);
-    if local_y < band_height / 2 {
-        Some(bright)
-    } else {
-        Some(dim)
-    }
-}
-
-#[cfg(test)]
-fn test_title_tick_palette_index(local_x: usize, local_y: usize, frame: u8) -> u8 {
-    test_title_tick_flame_palette_index(local_x, local_y, frame).unwrap_or(0)
-}
-
-#[cfg(test)]
 fn paint_signature_pixel_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, x: i16, y: i16) {
     let x = usize::try_from(x).expect("intro signature pen moved to a negative x coordinate");
     let y = usize::try_from(y).expect("intro signature pen moved to a negative y coordinate");
@@ -12405,6 +12273,19 @@ mod tests {
         std::env::temp_dir().join(format!("u5-bevy-frame-suite-{name}-{nonce}"))
     }
 
+    fn assert_title_tick_gap_panic(result: std::thread::Result<()>) {
+        let payload = result.expect_err("title tick must fail until authored frames exist");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("title tick panic payload must be a string");
+        assert!(
+            message.contains("generated title-tick animation fallback"),
+            "{message}"
+        );
+    }
+
     fn install_intro_assets(dir: &Path) {
         let source_dir = Path::new(DEFAULT_GAME_DIR);
         for file_name in [
@@ -12954,22 +12835,14 @@ mod tests {
     }
 
     #[test]
-    fn intro_menu_render_updates_persistent_surface() {
+    fn intro_menu_render_rejects_missing_authored_title_tick_frames() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
-        let mut expected_surface = new_intro_display_buffer();
-        draw_visual_intro_start_menu_to_buffer(
-            &mut expected_surface,
-            &intro.game_dir,
-            intro.raster_depth,
-            intro.title_tick_visible_frame,
-            intro.dispatch.intro.cached_selection,
-        );
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_eq!(frame, intro.surface.to_rgba());
-        assert_eq!(intro.surface, expected_surface);
-        assert_nonblack_rgba(&frame);
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -13781,9 +13654,10 @@ mod tests {
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
         assert_eq!(intro.menu_idle_ticks, 0);
         assert!(intro.message.is_empty());
-        let menu_frame = render_intro_frame(&mut intro);
-        assert_eq!(menu_frame, intro.surface.to_rgba());
-        assert_nonblack_rgba(&menu_frame);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -14006,12 +13880,16 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Return-to-View requires MISCMAPS.DAT")]
-    fn visual_intro_menu_idle_timeout_requires_return_to_view_assets() {
+    fn visual_intro_menu_idle_timeout_rejects_missing_title_tick_art_first() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         intro.menu_idle_ticks = INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS - 1;
 
-        advance_visual_intro_finished_menu_idle(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            advance_visual_intro_finished_menu_idle(&mut intro);
+        }));
+
+        assert_title_tick_gap_panic(result);
+        let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
     #[test]
@@ -14263,74 +14141,18 @@ mod tests {
     }
 
     #[test]
-    fn title_tick_overlay_stays_inside_spec_strip_and_overwrites_title_pixels() {
-        let width = TITLE_SURFACE_WIDTH as usize;
-        let height = TITLE_SURFACE_HEIGHT as usize;
-        let mut frame0 = vec![0; width * height * 4];
-        for pixel in frame0.chunks_exact_mut(4) {
-            pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-        }
-        let preserved_x = 16usize;
-        let preserved_y = TITLE_TICK_FRAME_Y as usize + 2;
-        let preserved_offset = (preserved_y * width + preserved_x) * 4;
-        frame0[preserved_offset..preserved_offset + 4].copy_from_slice(&[0xff, 0xff, 0xff, 0xff]);
-        let mut frame1 = frame0.clone();
-
-        draw_title_tick_overlay_rgba(&mut frame0, width, height, 0);
-        draw_title_tick_overlay_rgba(&mut frame1, width, height, 1);
-
-        assert_eq!(
-            rgba_pixel(&frame0, width, preserved_x, preserved_y),
-            [0, 0, 0, 0xff]
-        );
-        assert!(frame0.chunks_exact(4).enumerate().any(|(index, pixel)| {
-            let x = index % width;
-            let y = index / width;
-            y >= TITLE_TICK_FRAME_Y as usize
-                && y < (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT) as usize
-                && x < TITLE_TICK_FRAME_WIDTH as usize
-                && (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
-        }));
-        assert!(
-            frame0
-                .chunks_exact(4)
-                .enumerate()
-                .filter(|(index, _)| {
-                    let y = index / width;
-                    y < TITLE_TICK_FRAME_Y as usize
-                        || y >= (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT) as usize
-                })
-                .all(|(_, pixel)| pixel == [0x00, 0x00, 0x00, 0xff])
-        );
-        assert_ne!(frame0, frame1);
-    }
-
-    #[test]
-    fn intro_display_title_tick_overwrites_full_spec_strip() {
+    fn intro_display_title_tick_rejects_generated_fallback_in_tests() {
         let mut buffer = IntroDisplayBuffer::new(
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
         );
         buffer.clear(0x03);
 
-        buffer.draw_title_tick(0);
-
-        assert_eq!(
-            buffer.pixels[(TITLE_TICK_FRAME_Y as usize - 1) * buffer.width + 54],
-            0x03
-        );
-        assert_eq!(
-            buffer.pixels[TITLE_TICK_FRAME_Y as usize * buffer.width + 54],
-            0x00
-        );
-        assert_eq!(
-            buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 54],
-            test_title_tick_palette_index(54, 20, 0)
-        );
-        assert_eq!(
-            buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 120],
-            0x00
-        );
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            buffer.draw_title_tick(0);
+        }));
+        assert_title_tick_gap_panic(result);
+        assert!(buffer.pixels.iter().all(|pixel| *pixel == 0x03));
     }
 
     #[test]
@@ -14364,59 +14186,6 @@ mod tests {
         let mut buffer = IntroDisplayBuffer::new(8, 8);
         let source = IntroDisplayBuffer::new(7, 8);
         buffer.copy_revealed_columns_from(&source, RectColumnSweepTransition::new((0, 0, 1, 1)));
-    }
-
-    #[test]
-    fn title_tick_flame_stripe_uses_published_palette_cycle() {
-        // `cleak/u5-spec#65`: the clean replacement keeps the
-        // independently-authored flame silhouette and treats non-flame
-        // pixels as opaque black inside the title-tick rectangle.
-        assert_eq!(test_title_tick_flame_palette_index(54, 8, 0), None);
-        assert_eq!(test_title_tick_flame_palette_index(54, 20, 0), Some(0x0E));
-        assert_eq!(test_title_tick_flame_palette_index(54, 40, 0), Some(0x06));
-        assert_eq!(test_title_tick_flame_palette_index(160, 20, 1), Some(0x0C));
-        assert_eq!(test_title_tick_flame_palette_index(160, 40, 1), Some(0x04));
-        assert_eq!(test_title_tick_flame_palette_index(266, 20, 2), Some(0x0E));
-        assert_eq!(test_title_tick_flame_palette_index(266, 40, 3), Some(0x06));
-        assert_eq!(test_title_tick_flame_palette_index(120, 20, 0), None);
-        assert_eq!(test_title_tick_palette_index(54, 8, 0), 0x00);
-        assert_eq!(test_title_tick_palette_index(120, 20, 0), 0x00);
-        assert_eq!(test_title_tick_palette_index(54, 20, 0), 0x0E);
-    }
-
-    #[test]
-    fn title_tick_overlay_draws_dense_wavy_flame_band() {
-        let width = TITLE_SURFACE_WIDTH as usize;
-        let height = TITLE_SURFACE_HEIGHT as usize;
-        let mut rgba = vec![0; width * height * 4];
-        for pixel in rgba.chunks_exact_mut(4) {
-            pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-        }
-
-        draw_title_tick_overlay_rgba(&mut rgba, width, height, 0);
-
-        let lit_in_band = rgba
-            .chunks_exact(4)
-            .enumerate()
-            .filter(|(index, pixel)| {
-                let y = index / width;
-                y >= TITLE_TICK_FRAME_Y as usize
-                    && y < (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT) as usize
-                    && (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
-            })
-            .count();
-        assert!(
-            lit_in_band > 2_000,
-            "procedural flame stripe should be a dense band, got {lit_in_band} lit pixels"
-        );
-        assert_eq!(
-            rgba_pixel(&rgba, width, 54, TITLE_TICK_FRAME_Y as usize + 20),
-            [0xff, 0xff, 0x55, 0xff]
-        );
-        assert_eq!(
-            rgba_pixel(&rgba, width, 54, TITLE_TICK_FRAME_Y as usize + 40),
-            [0xaa, 0x55, 0x00, 0xff]
-        );
     }
 
     #[test]
@@ -17192,7 +16961,7 @@ mod tests {
     }
 
     #[test]
-    fn return_to_view_intro_frame_overlays_preview_rgba() {
+    fn return_to_view_intro_frame_rejects_missing_title_tick_art_before_preview_overlay() {
         let preview_rgba = vec![
             0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff,
@@ -17234,25 +17003,11 @@ mod tests {
             image_handle: None,
         };
 
-        let frame = render_intro_frame(&mut intro);
-        let x = ((INTRO_FRAMEBUFFER_WIDTH as usize) - 2) / 2;
-        let offset = ((RETURN_TO_VIEW_PREVIEW_Y * INTRO_FRAMEBUFFER_WIDTH as usize) + x) * 4;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_eq!(&frame[offset..offset + 4], &[0xaa, 0x00, 0x00, 0xff]);
-        let caption_start = RETURN_TO_VIEW_CAPTION_Y * INTRO_FRAMEBUFFER_WIDTH as usize * 4;
-        let caption_end =
-            caption_start + RETURN_TO_VIEW_CAPTION_HEIGHT * INTRO_FRAMEBUFFER_WIDTH as usize * 4;
-        assert!(
-            frame[caption_start..caption_end]
-                .chunks_exact(4)
-                .any(|pixel| { pixel == [0x55, 0xff, 0xff, 0xff] })
-        );
-        assert!(
-            frame[..caption_start]
-                .chunks_exact(4)
-                .any(|pixel| { pixel != [0x00, 0x00, 0x00, 0xff] }),
-            "Return-to-View should preserve or synthesize a visible intro backing surface"
-        );
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -17283,17 +17038,11 @@ mod tests {
         intro.modal_backing = Some(backing);
         intro.title_tick_visible_frame = 0;
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_eq!(
-            rgba_pixel(
-                &frame,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                54,
-                TITLE_TICK_FRAME_Y as usize + 20
-            ),
-            [0xff, 0xff, 0x55, 0xff]
-        );
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -17324,27 +17073,17 @@ mod tests {
         intro.modal_backing = Some(backing.clone());
         intro.title_tick_visible_frame = 0;
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
+        assert_title_tick_gap_panic(result);
         assert_eq!(intro.modal_backing, Some(backing));
-        assert_eq!(
-            rgba_pixel(&frame, INTRO_FRAMEBUFFER_WIDTH as usize, 10, 190),
-            [0x00, 0xaa, 0xaa, 0xff]
-        );
-        assert_eq!(
-            rgba_pixel(
-                &frame,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                54,
-                TITLE_TICK_FRAME_Y as usize + 20
-            ),
-            [0xff, 0xff, 0x55, 0xff]
-        );
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
     #[test]
-    fn return_to_view_intro_frame_draws_fixed_wipe_rectangles() {
+    fn return_to_view_intro_frame_rejects_missing_title_tick_art_before_fixed_wipe() {
         let dir = debug_game_dir();
         let mut backing = new_intro_display_buffer();
         backing.clear(3);
@@ -17386,15 +17125,11 @@ mod tests {
             image_handle: None,
         };
 
-        let frame = render_intro_frame(&mut intro);
-        let pixel = |x: usize, y: usize| -> &[u8] {
-            let offset = (y * INTRO_FRAMEBUFFER_WIDTH as usize + x) * 4;
-            &frame[offset..offset + 4]
-        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_eq!(pixel(128, 152), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
-        assert_eq!(pixel(137, 156), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
-        assert_ne!(pixel(127, 152), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
