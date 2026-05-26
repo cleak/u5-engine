@@ -298,10 +298,10 @@ pub use intro::{
     TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
     TITLE_TICK_FRAME_SET_BYTES, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y,
     TITLE_TICK_PALETTE_CYCLE, TitleBitAsset, TitleBitPlacement, TitleTickFrameSet,
-    authored_title_tick_frames, intro_menu_action, load_miscmaps_cutscene_map,
-    parse_ega_drv_title_tick_frames, parse_miscmaps_cutscene_map_file, placeholder_title_tick_frames,
-    require_acknowledgements_contract, require_miscmaps_cutscene_map, title_tick_next_frame,
-    title_tick_palette_indices,
+    authored_title_tick_frames, clean_room_authored_title_tick_frames, intro_menu_action,
+    load_miscmaps_cutscene_map, parse_ega_drv_title_tick_frames, parse_miscmaps_cutscene_map_file,
+    placeholder_title_tick_frames, require_acknowledgements_contract,
+    require_miscmaps_cutscene_map, title_tick_next_frame, title_tick_palette_indices,
 };
 pub use intro_preflourish::{
     IntroFontSlot, IntroFontSlots, JOURNEY_ONWARD_SHORTCUT_BANNER, PRE_FLOURISH_TEXT_WINDOW_INDEX,

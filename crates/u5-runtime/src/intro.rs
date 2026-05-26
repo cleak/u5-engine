@@ -432,6 +432,60 @@ pub fn placeholder_title_tick_frames() -> TitleTickFrameSet {
     .expect("placeholder title-tick frame set is well-formed by construction")
 }
 
+/// `systems/display-driver.md §5` + `cleak/u5-spec#52` clean-room
+/// authored title-tick strip. Produces four 320×49 frames whose
+/// silhouette is a procedurally-generated wavering flame band
+/// (deterministic, independently authored) and whose pixel palette
+/// follows the published palette cycle exactly: bright index on the
+/// upper half of the silhouette, dim index on the lower half, black
+/// elsewhere. This is NOT pixel-identical to the historical
+/// `EGA.DRV` frames — the spec explicitly says "exact reuse of the
+/// historical driver-resident pixels is a driver-binary parity
+/// issue, not an asset-format requirement" — but it satisfies every
+/// public contract the spec ratifies: destination rectangle,
+/// four-frame cadence, palette cycle, opaque overwrite, and visible
+/// wavering effect.
+///
+/// The four silhouettes differ by phase so the eye sees motion in
+/// the band, matching the §5 "wavering flame stripe perceived
+/// effect" description.
+pub fn clean_room_authored_title_tick_frames() -> TitleTickFrameSet {
+    let width = TITLE_TICK_FRAME_WIDTH as usize;
+    let height = TITLE_TICK_FRAME_HEIGHT as usize;
+    let mut pixels = Vec::with_capacity(TITLE_TICK_FRAME_SET_BYTES);
+    for frame in 0..TITLE_TICK_FRAME_COUNT as usize {
+        let (bright, dim) = TITLE_TICK_PALETTE_CYCLE[frame];
+        // Per-column flame height profile. Use a simple deterministic
+        // multi-frequency sum to get a wavering crest that varies by
+        // frame phase. Phase shifts in 1/4-cycle steps across the
+        // four-frame loop so the silhouette appears to move with the
+        // palette swap.
+        let phase = frame as f32 * 0.5;
+        let upper_split = height / 2;
+        for row in 0..height {
+            for col in 0..width {
+                // Flame "tip" height varies sinusoidally per column.
+                let crest_factor = 0.55
+                    + 0.25 * ((col as f32) * 0.045 + phase).sin()
+                    + 0.20 * ((col as f32) * 0.013 - phase * 1.7).sin()
+                    + 0.10 * ((col as f32) * 0.085 + phase * 2.3).cos();
+                let crest_row = (height as f32 * crest_factor.clamp(0.15, 0.95)) as usize;
+                let lit = row >= crest_row;
+                let pixel = if !lit {
+                    0
+                } else if row < upper_split {
+                    bright & 0x0f
+                } else {
+                    dim & 0x0f
+                };
+                pixels.push(pixel);
+            }
+        }
+    }
+    TitleTickFrameSet::from_palette_indices(pixels, "clean-room authored title-tick frames")
+        .expect("clean-room authored title-tick frame set is well-formed by construction")
+}
+
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
 /// four records are shown as 4-by-19 map strips, followed by a
 /// 655-byte command stream driving preview actors and animation beats.

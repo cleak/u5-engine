@@ -88,8 +88,8 @@ use u5_runtime::{
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     DisplayDriverFamily, EgaTitleTickLayout, IntroFontSlots, JOURNEY_ONWARD_SHORTCUT_BANNER,
     PreFlourishOutcome, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TitleTickFrameSet, parse_ega_drv_title_tick_frames,
-    placeholder_title_tick_frames,
+    TITLE_TICK_FRAME_X, TitleTickFrameSet, clean_room_authored_title_tick_frames,
+    parse_ega_drv_title_tick_frames, placeholder_title_tick_frames,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -8980,12 +8980,17 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             let game_dir = intro.game_dir.clone();
             let raster_depth = intro.raster_depth;
             let frames = ensure_title_tick_frames(&mut *intro).clone();
+            let font = intro
+                .font_slots
+                .as_ref()
+                .map(|slots| slots.active_font().clone());
             draw_visual_intro_start_menu_to_buffer(
                 &mut intro.surface,
                 &game_dir,
                 raster_depth,
                 title_tick_frame,
                 &frames,
+                font.as_ref(),
                 cached_selection,
             );
         }
@@ -9028,41 +9033,102 @@ fn draw_visual_intro_start_menu_to_buffer(
     depth: TileGraphicsDepth,
     title_tick_frame: u8,
     title_tick_frames: &TitleTickFrameSet,
+    font: Option<&FixedCellFont>,
     highlighted: Option<IntroSubflow>,
 ) {
-    let _ = highlighted;
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
     buffer.draw_title_tick(title_tick_frame, title_tick_frames);
     draw_visual_intro_menu_text_window_frame_placeholder(buffer);
+    if let Some(font) = font {
+        draw_visual_intro_menu_labels(buffer, font, highlighted);
+    }
+}
+
+/// `systems/intro.md §6` published menu labels at the published
+/// text-cell origins. Labels are stamped through the IBM glyph slot;
+/// the highlight (inverse-video toggle) wraps the highlighted row's
+/// label per the §6 contract.
+fn draw_visual_intro_menu_labels(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    highlighted: Option<IntroSubflow>,
+) {
+    const ROWS: [(IntroSubflow, &str, u8, u8); 6] = [
+        (IntroSubflow::JourneyOnward, "Journey Onward", 12, 17),
+        (IntroSubflow::CharacterCreation, "Create New Char.", 9, 18),
+        (IntroSubflow::UltimaIvTransfer, "Transfer from U4", 8, 19),
+        (IntroSubflow::StorySlides, "Ultima V Intro.", 9, 20),
+        (IntroSubflow::Acknowledgements, "Acknowledgements", 11, 21),
+        (IntroSubflow::ReturnToView, "Return to View", 10, 22),
+    ];
+    let fg = 0x0f;
+    let bg = 0x00;
+    for (subflow, label, col, row) in ROWS.iter().copied() {
+        let highlighted_row = highlighted == Some(subflow);
+        let (cell_fg, cell_bg) = if highlighted_row { (bg, fg) } else { (fg, bg) };
+        for (offset, byte) in label.as_bytes().iter().enumerate() {
+            buffer.draw_fixed_glyph_cell(
+                font,
+                *byte,
+                usize::from(col) + offset,
+                usize::from(row),
+                cell_fg,
+                cell_bg,
+            );
+        }
+    }
 }
 
 /// `cleak/u5-spec#63` placeholder for the lower intro menu/text-window
-/// frame contract while the published border geometry is pending.
-/// Draws a single-pixel rectangle outline in EGA-white (palette index
-/// 15) around the menu cell range (rows 17..22, full screen width)
-/// so the bevy intro renders end-to-end. The "TODO: real frame"
-/// shape is intentional and obvious; it will be replaced the moment
-/// the spec contract lands.
+/// frame while the published border contract is pending. Draws a
+/// two-pixel double-line border (an EGA-white outer rule + EGA-blue
+/// inner rule) around the §6 menu cell range, plus the six menu
+/// labels per the published cell origins. The DOS-era convention for
+/// intro/menu boxes is a CP437 single/double-line drawing, but those
+/// glyphs live outside IBM.CH's 0..127 catalog; until the spec
+/// publishes either the exact border source (line primitives /
+/// box-drawing glyphs / asset blit) or the menu label rendering
+/// path, this gives the bevy intro a visibly framed menu that
+/// preserves the §6 text-cell origins exactly. The frame style is
+/// authored, not derived from private analysis.
 fn draw_visual_intro_menu_text_window_frame_placeholder(buffer: &mut IntroDisplayBuffer) {
-    // The §6 menu labels sit on text rows 17-22 (24 pixels above the
-    // bottom of the 320x200 surface, eight-pixel cells). Frame the
-    // band from y=136 to y=199 inclusive.
+    // The §6 menu labels sit on text rows 17-22 of a 25-row screen.
+    // Frame the band from the top of row 17 to the bottom of row 24,
+    // covering the full screen width.
+    let cell = 8usize; // CH_CELL_SIDE
     let x0: usize = 0;
     let x1: usize = INTRO_FRAMEBUFFER_WIDTH as usize - 1;
-    let y0: usize = STARTSC_PANEL_HEIGHT.min(buffer.height - 1);
-    let y1: usize = (buffer.height - 1).min(buffer.height - 1);
-    if y0 >= buffer.height || y1 >= buffer.height {
+    let y0: usize = 17 * cell - 4; // a few pixels above row 17 baseline
+    let y1: usize = (buffer.height - 1).min(25 * cell - 1);
+    if y0 >= buffer.height || y1 >= buffer.height || y0 >= y1 || x0 >= x1 {
         return;
     }
-    let outline_color = 0x0f;
     let width = buffer.width;
+    let outer = 0x0f; // EGA bright white
+    let inner = 0x09; // EGA bright blue (matches the §3 flourish palette)
+    // Outer rule (top/bottom rows).
     for x in x0..=x1 {
-        buffer.pixels[y0 * width + x] = outline_color;
-        buffer.pixels[y1 * width + x] = outline_color;
+        buffer.pixels[y0 * width + x] = outer;
+        buffer.pixels[y1 * width + x] = outer;
     }
     for y in y0..=y1 {
-        buffer.pixels[y * width + x0] = outline_color;
-        buffer.pixels[y * width + x1] = outline_color;
+        buffer.pixels[y * width + x0] = outer;
+        buffer.pixels[y * width + x1] = outer;
+    }
+    // Inner rule, one pixel inside the outer rule.
+    if y0 + 2 < y1 && x0 + 2 < x1 {
+        let iy0 = y0 + 1;
+        let iy1 = y1 - 1;
+        let ix0 = x0 + 1;
+        let ix1 = x1 - 1;
+        for x in ix0..=ix1 {
+            buffer.pixels[iy0 * width + x] = inner;
+            buffer.pixels[iy1 * width + x] = inner;
+        }
+        for y in iy0..=iy1 {
+            buffer.pixels[y * width + ix0] = inner;
+            buffer.pixels[y * width + ix1] = inner;
+        }
     }
 }
 
@@ -9083,6 +9149,17 @@ fn ensure_title_tick_frames(intro: &mut VisualIntroState) -> &TitleTickFrameSet 
 }
 
 fn load_or_placeholder_title_tick_frames(game_dir: &Path) -> TitleTickFrameSet {
+    // `cleak/u5-spec#74` (pending publication) will give a
+    // clean-room-safe offset+packing locator for the original
+    // `EGA.DRV` title-tick strip. While that's pending, the env var
+    // lets a developer override locally. Otherwise the engine ships
+    // an independently-authored four-frame strip that uses the
+    // published palette cycle (`cleak/u5-spec#52`) on a
+    // procedurally-generated flame silhouette — visibly the
+    // "wavering flame stripe" effect §5 describes, drawn through
+    // the published EGA palette indices. The spec explicitly
+    // sanctions independently-authored replacements; this is the
+    // sanctioned path until the original-frame locator lands.
     if let Ok(value) = std::env::var("U5_EGA_DRV_TITLE_TICK_OFFSET") {
         if let Ok(offset) = value.parse::<usize>() {
             let drv_path = game_dir.join("EGA.DRV");
@@ -9093,19 +9170,20 @@ fn load_or_placeholder_title_tick_frames(game_dir: &Path) -> TitleTickFrameSet {
                     Err(err) => {
                         eprintln!(
                             "warning: U5_EGA_DRV_TITLE_TICK_OFFSET set but parse failed: {err}; \
-                             falling back to placeholder black title-tick band"
+                             falling back to clean-room authored title-tick frames"
                         );
                     }
                 }
             } else {
                 eprintln!(
                     "warning: U5_EGA_DRV_TITLE_TICK_OFFSET set but {drv_path:?} not readable; \
-                     falling back to placeholder black title-tick band"
+                     falling back to clean-room authored title-tick frames"
                 );
             }
         }
     }
-    placeholder_title_tick_frames()
+    let _ = game_dir;
+    clean_room_authored_title_tick_frames()
 }
 
 fn draw_visual_intro_start_menu_art_to_buffer(
