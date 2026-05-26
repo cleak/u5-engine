@@ -276,7 +276,7 @@ pub struct EgaDisplaySurface {
     back_pixels: Vec<u8>,
     current_color: u8,
     title_tick_frame: u8,
-    title_tick_frames: TitleTickFrameSet,
+    title_tick_frames: Option<TitleTickFrameSet>,
     presented_frames: u64,
     render_target: DisplayRenderTarget,
     back_buffer_active: bool,
@@ -295,7 +295,7 @@ impl EgaDisplaySurface {
             back_pixels: vec![0; DISPLAY_SURFACE_PIXELS],
             current_color: 0,
             title_tick_frame: 0,
-            title_tick_frames: authored_title_tick_frames().clone(),
+            title_tick_frames: None,
             presented_frames: 0,
             render_target: DisplayRenderTarget::Front,
             back_buffer_active: false,
@@ -304,7 +304,7 @@ impl EgaDisplaySurface {
 
     pub fn with_title_tick_frames(frames: TitleTickFrameSet) -> Self {
         let mut surface = Self::new();
-        surface.title_tick_frames = frames;
+        surface.title_tick_frames = Some(frames);
         surface
     }
 
@@ -325,7 +325,7 @@ impl EgaDisplaySurface {
     }
 
     pub fn set_title_tick_frames(&mut self, frames: TitleTickFrameSet) {
-        self.title_tick_frames = frames;
+        self.title_tick_frames = Some(frames);
     }
 
     pub fn presented_frames(&self) -> u64 {
@@ -574,6 +574,10 @@ impl EgaDisplaySurface {
         };
         for (row, src) in self
             .title_tick_frames
+            .as_ref()
+            .expect(
+                "display title-tick operation requires injected authored frame pixels; generated clean-room frames are a forbidden fallback; see cleak/u5-spec#65",
+            )
             .frame_pixels(self.title_tick_frame)
             .chunks_exact(TITLE_TICK_FRAME_WIDTH as usize)
             .enumerate()

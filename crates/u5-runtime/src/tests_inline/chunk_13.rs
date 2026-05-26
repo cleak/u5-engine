@@ -5356,7 +5356,7 @@ fn display_surface_rejects_cropped_tile_and_glyph_draws() {
 }
 
 #[test]
-fn display_surface_title_tick_draws_default_authored_frames() {
+fn display_surface_title_tick_requires_injected_authored_frames() {
     let mut surface = EgaDisplaySurface::new();
     surface.set_current_color(0x03);
     surface.plot_pixel(54, 64);
@@ -5364,28 +5364,21 @@ fn display_surface_title_tick_draws_default_authored_frames() {
     surface.plot_pixel(120, 85);
     surface.plot_pixel(54, 114);
 
-    let frames = authored_title_tick_frames();
-    let rect = surface.advance_title_tick();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        surface.advance_title_tick();
+    }));
 
-    assert_eq!(
-        rect,
-        DisplayPixelRect {
-            x0: TITLE_TICK_FRAME_X as usize,
-            y0: TITLE_TICK_FRAME_Y as usize,
-            x1: (TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1) as usize,
-            y1: (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize,
-        }
-    );
-    assert_eq!(surface.title_tick_frame(), 1);
+    let payload = result.expect_err("missing title-tick frames must panic");
+    let message = payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
+        .expect("title-tick panic payload must be a string");
+    assert!(message.contains("forbidden fallback"), "{message}");
+    assert_eq!(surface.title_tick_frame(), 0);
     assert_eq!(surface.read_pixel(54, 64), Some(0x03));
-    assert_eq!(
-        surface.read_pixel(54, 65),
-        Some(frames.frame_pixels(0)[54])
-    );
-    assert_eq!(
-        surface.read_pixel(120, 85),
-        Some(frames.frame_pixels(0)[20 * TITLE_TICK_FRAME_WIDTH as usize + 120])
-    );
+    assert_eq!(surface.read_pixel(54, 65), Some(0x03));
+    assert_eq!(surface.read_pixel(120, 85), Some(0x03));
     assert_eq!(surface.read_pixel(54, 114), Some(0x03));
     assert_eq!(surface.presented_frames(), 0);
 
@@ -5493,6 +5486,10 @@ fn display_driver_dissolve_progresses_in_deterministic_partial_order() {
 #[test]
 fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
     let mut surface = EgaDisplaySurface::new();
+    let frames =
+        TitleTickFrameSet::from_palette_indices(vec![0x0d; TITLE_TICK_FRAME_SET_BYTES], "fixture")
+            .unwrap();
+    surface.set_title_tick_frames(frames);
     let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
     surface
         .execute(EgaDisplayOperation::SetRenderTarget(
@@ -8229,29 +8226,18 @@ fn title_tick_frame_set_requires_complete_ega_palette_frames() {
 }
 
 #[test]
-fn authored_title_tick_frames_are_dense_ega_frames() {
-    let frames = authored_title_tick_frames();
-    for frame in 0..TITLE_TICK_FRAME_COUNT {
-        let (bright, dim) = title_tick_palette_indices(frame);
-        let pixels = frames.frame_pixels(frame);
-        assert_eq!(pixels.len(), TITLE_TICK_FRAME_PIXELS);
-        assert!(pixels.iter().all(|pixel| *pixel <= 0x0f));
-        assert!(
-            pixels.iter().any(|pixel| *pixel == 0),
-            "authored title-tick frame {frame} must include opaque black pixels"
-        );
-        assert!(
-            pixels.iter().any(|pixel| *pixel == bright),
-            "authored title-tick frame {frame} must include the published bright palette index"
-        );
-        assert!(
-            pixels.iter().any(|pixel| *pixel == dim),
-            "authored title-tick frame {frame} must include the published dim palette index"
-        );
-    }
-    assert_ne!(frames.frame_pixels(0), frames.frame_pixels(1));
-    assert_ne!(frames.frame_pixels(1), frames.frame_pixels(2));
-    assert_ne!(frames.frame_pixels(2), frames.frame_pixels(3));
+fn authored_title_tick_frames_refuse_generated_clean_room_fallback() {
+    let result = std::panic::catch_unwind(|| {
+        let _ = authored_title_tick_frames();
+    });
+
+    let payload = result.expect_err("generated title-tick frames must panic");
+    let message = payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
+        .expect("title-tick panic payload must be a string");
+    assert!(message.contains("forbidden fallback"), "{message}");
 }
 
 #[test]

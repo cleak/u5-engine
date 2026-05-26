@@ -2,7 +2,6 @@
 
 use std::io;
 use std::path::Path;
-use std::sync::OnceLock;
 
 use crate::{input_case_fold, read_optional_disk_file};
 
@@ -290,56 +289,10 @@ impl TitleTickFrameSet {
     }
 }
 
-static AUTHORED_TITLE_TICK_FRAMES: OnceLock<TitleTickFrameSet> = OnceLock::new();
-
 pub fn authored_title_tick_frames() -> &'static TitleTickFrameSet {
-    AUTHORED_TITLE_TICK_FRAMES.get_or_init(build_authored_title_tick_frames)
-}
-
-fn build_authored_title_tick_frames() -> TitleTickFrameSet {
-    let mut pixels = vec![0; TITLE_TICK_FRAME_SET_BYTES];
-    for frame in 0..TITLE_TICK_FRAME_COUNT {
-        let (bright, dim) = title_tick_palette_indices(frame);
-        let frame_start = usize::from(frame) * TITLE_TICK_FRAME_PIXELS;
-        for x in 0..TITLE_TICK_FRAME_WIDTH as usize {
-            let crest = title_tick_authored_wave_height(x, frame);
-            let top = TITLE_TICK_FRAME_HEIGHT as usize - crest;
-            for y in top..TITLE_TICK_FRAME_HEIGHT as usize {
-                let local_y = y - top;
-                let color = if local_y <= 7 || title_tick_authored_highlight(x, y, frame) {
-                    bright
-                } else {
-                    dim
-                };
-                pixels[frame_start + y * TITLE_TICK_FRAME_WIDTH as usize + x] = color;
-            }
-        }
-    }
-    TitleTickFrameSet::from_palette_indices(pixels, "authored clean-room title tick frames")
-        .expect("authored title-tick frame generator emitted invalid EGA palette data")
-}
-
-fn title_tick_authored_wave_height(x: usize, frame: u8) -> usize {
-    let phase = usize::from(frame);
-    let broad = triangle_wave((x + phase * 13) % 96, 96);
-    let fine = triangle_wave((x * 3 + phase * 17) % 47, 47);
-    let notch = triangle_wave((x * 5 + phase * 11) % 31, 31);
-    let height = 12 + broad / 3 + fine / 5 - notch / 10;
-    height.clamp(8, TITLE_TICK_FRAME_HEIGHT as usize)
-}
-
-fn title_tick_authored_highlight(x: usize, y: usize, frame: u8) -> bool {
-    ((x + y * 2 + usize::from(frame) * 9) % 23) <= 2
-}
-
-fn triangle_wave(position: usize, period: usize) -> usize {
-    assert!(period >= 2, "triangle wave period must be at least two");
-    let half = period / 2;
-    if position <= half {
-        position
-    } else {
-        period - position
-    }
+    panic!(
+        "title-tick animation requires published authored frame pixels; generated clean-room frames are a forbidden fallback; see cleak/u5-spec#65"
+    )
 }
 
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first

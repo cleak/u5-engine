@@ -12269,10 +12269,10 @@ mod tests {
         SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
         SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN, SAVED_OOL_FILENAME,
         SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
-        SurfaceChestVerb, TILES_EGA_FILE, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, Tavern,
-        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
-        dungeon_cell_index, parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit,
-        parse_legacy_lzw_title_bit, parse_title_bit, world_cell_index, wrap_text_panel_lines,
+        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
+        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
+        parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit, parse_legacy_lzw_title_bit,
+        parse_title_bit, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -12296,6 +12296,8 @@ mod tests {
             .expect("title tick panic payload must be a string");
         assert!(
             message.contains("authored title-tick frames")
+                || message.contains("published authored frame pixels")
+                || message.contains("requires injected authored frame pixels")
                 || message.contains("generated title-tick animation fallback"),
             "{message}"
         );
@@ -12854,37 +12856,15 @@ mod tests {
     }
 
     #[test]
-    fn intro_menu_render_uses_authored_title_tick_frames() {
+    fn intro_menu_render_refuses_missing_authored_title_tick_frames() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         intro.title_tick_visible_frame = 2;
-        let frames = authored_title_tick_frames();
-        let sample_x = 20usize;
-        let sample_y = (TITLE_TICK_FRAME_HEIGHT - 1) as usize;
-        let expected_index =
-            frames.frame_pixels(2)[sample_y * TITLE_TICK_FRAME_WIDTH as usize + sample_x];
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_eq!(
-            intro.surface.pixels
-                [(TITLE_TICK_FRAME_Y as usize + sample_y) * intro.surface.width + sample_x],
-            expected_index
-        );
-        assert_eq!(
-            rgba_pixel(
-                &frame,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                sample_x,
-                TITLE_TICK_FRAME_Y as usize + sample_y
-            ),
-            [
-                EGA_PALETTE_RGB[usize::from(expected_index)][0],
-                EGA_PALETTE_RGB[usize::from(expected_index)][1],
-                EGA_PALETTE_RGB[usize::from(expected_index)][2],
-                0xff
-            ]
-        );
-        assert_nonblack_rgba(&frame);
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -13696,8 +13676,10 @@ mod tests {
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
         assert_eq!(intro.menu_idle_ticks, 0);
         assert!(intro.message.is_empty());
-        let menu_frame = render_intro_frame(&mut intro);
-        assert_nonblack_rgba(&menu_frame);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -14572,11 +14554,15 @@ mod tests {
         assert!(
             message
                 .contains("visual proportional text requires the published resident width table")
-                || message.contains("sparse strip"),
+                || message.contains("sparse strip")
+                || message
+                    .contains("title-tick animation requires published authored frame pixels"),
             "{message}"
         );
         assert!(
-            message.contains("cleak/u5-spec#70") || message.contains("TITLE.BIT"),
+            message.contains("cleak/u5-spec#70")
+                || message.contains("TITLE.BIT")
+                || message.contains("cleak/u5-spec#65"),
             "{message}"
         );
         let _ = fs::remove_dir_all(dir);
@@ -17004,7 +16990,7 @@ mod tests {
     }
 
     #[test]
-    fn return_to_view_intro_frame_draws_authored_title_tick_before_preview_overlay() {
+    fn return_to_view_intro_frame_refuses_missing_title_tick_frames_before_preview_overlay() {
         let preview_rgba = vec![
             0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff,
@@ -17046,14 +17032,16 @@ mod tests {
             image_handle: None,
         };
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_nonblack_rgba(&frame);
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn return_to_view_intro_frame_ticks_over_preserved_backing() {
+    fn return_to_view_intro_frame_requires_title_tick_frames_over_preserved_backing() {
         let mut intro = visual_intro_state_with_panel(
             debug_game_dir(),
             VisualIntroPanel::ReturnToView {
@@ -17079,9 +17067,11 @@ mod tests {
         intro.modal_backing = Some(backing);
         intro.title_tick_visible_frame = 0;
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_nonblack_rgba(&frame);
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -17112,15 +17102,17 @@ mod tests {
         intro.modal_backing = Some(backing.clone());
         intro.title_tick_visible_frame = 0;
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
         assert_eq!(intro.modal_backing, Some(backing));
-        assert_nonblack_rgba(&frame);
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
     #[test]
-    fn return_to_view_intro_frame_draws_authored_title_tick_before_fixed_wipe() {
+    fn return_to_view_intro_frame_refuses_missing_title_tick_frames_before_fixed_wipe() {
         let dir = debug_game_dir();
         let mut backing = new_intro_display_buffer();
         backing.clear(3);
@@ -17162,9 +17154,11 @@ mod tests {
             image_handle: None,
         };
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_nonblack_rgba(&frame);
+        assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(dir);
     }
 
