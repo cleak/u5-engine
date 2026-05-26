@@ -77,8 +77,7 @@ use u5_runtime::{
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
     X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
-    combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
-    configure_talk_shop_text_window,
+    combat_class_stats, commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -732,7 +731,6 @@ pub fn visual_frame_suite(
         "intro-return-to-view",
         "intro return-to-view",
         VisualIntroPanel::ReturnToView {
-            summary: preview.summary,
             preview_frames: preview.frames,
             frame_metadata: preview.frame_metadata,
             preview_frame_index: 0,
@@ -7547,7 +7545,6 @@ enum VisualIntroPanel {
     },
     Acknowledgements,
     ReturnToView {
-        summary: String,
         preview_frames: Vec<IntroDisplayBuffer>,
         frame_metadata: Vec<VisualReturnToViewFrameMeta>,
         preview_frame_index: usize,
@@ -7572,10 +7569,6 @@ struct VisualReturnToViewFrameMeta {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum VisualU4TransferStage {
     ConfirmName,
-    ReplacementName,
-    ConfirmGender,
-    ReplacementGender,
-    ConfirmCommit,
 }
 
 /// Drives the static-tile animator (water cycle) at a fixed wall-clock
@@ -8081,23 +8074,11 @@ fn advance_visual_intro_return_to_view(
     panel: &mut VisualIntroPanel,
     title_tick_frame: &mut u8,
 ) -> bool {
-    let VisualIntroPanel::ReturnToView {
-        preview_frames,
-        preview_frame_index,
-        ..
-    } = panel
-    else {
+    let VisualIntroPanel::ReturnToView { preview_frames, .. } = panel else {
         return false;
     };
-    let next_index = preview_frame_index
-        .checked_add(1)
-        .expect("Return-to-View preview frame index overflowed");
-    if next_index >= preview_frames.len() {
-        return false;
-    }
-    *preview_frame_index = next_index;
-    *title_tick_frame = title_tick_next_frame(*title_tick_frame);
-    true
+    let _ = title_tick_frame;
+    require_published_return_to_view_preview_pixel_geometry_for_frame_count(preview_frames.len())
 }
 
 fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
@@ -8204,10 +8185,6 @@ enum VisualIntroPanelOutcome {
         message: String,
     },
     CommitChargen(ChargenSessionResult),
-    CommitU4Transfer {
-        source: U4TransferSource,
-        overrides: U4TransferOverrides,
-    },
 }
 
 fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
@@ -8217,16 +8194,15 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             session,
             input_line,
         } => step_visual_chargen_panel(session, input_line, ch),
-        VisualIntroPanel::U4Transfer {
-            source,
-            overrides,
-            stage,
-            input_line,
-            ..
-        } => step_visual_u4_transfer_panel(source, overrides, stage, input_line, ch),
+        VisualIntroPanel::U4Transfer { .. } => require_published_u4_transfer_preview_presentation(),
         VisualIntroPanel::Story {
             step, transition, ..
         } => {
+            if *step == INTRO_INLINE_DOORWAY_STEP {
+                panic!(
+                    "intro story step {step} requires published inline doorway text; skipping it with input is a forbidden fallback; see cleak/u5-spec#69"
+                );
+            }
             if !intro_story_step_waits_for_input(*step) {
                 return false;
             }
@@ -8248,24 +8224,10 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             }
         }
         VisualIntroPanel::Acknowledgements => u5_runtime::require_acknowledgements_contract(),
-        VisualIntroPanel::ReturnToView {
-            preview_frames,
-            preview_frame_index,
-            ..
-        } => {
-            if preview_frame_index
-                .checked_add(1)
-                .expect("Return-to-View preview frame index overflowed")
-                >= preview_frames.len()
-            {
-                VisualIntroPanelOutcome::ReturnToMenu {
-                    subflow: IntroSubflow::ReturnToView,
-                    result: IntroSubflowResult::ReturnedToMenu,
-                    message: "Return-to-View preview complete.".to_string(),
-                }
-            } else {
-                VisualIntroPanelOutcome::Stay
-            }
+        VisualIntroPanel::ReturnToView { preview_frames, .. } => {
+            require_published_return_to_view_preview_pixel_geometry_for_frame_count(
+                preview_frames.len(),
+            )
         }
     };
 
@@ -8305,21 +8267,6 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
                 display_name_bytes(&avatar.name)
             );
         }
-        VisualIntroPanelOutcome::CommitU4Transfer { source, overrides } => {
-            let avatar = commit_u4_transfer_save(&intro.game_dir, &source, Some(&overrides))
-                .unwrap_or_else(|err| panic!("Ultima IV transfer save commit failed: {err}"));
-            intro.panel = VisualIntroPanel::Menu;
-            intro.dispatch.complete_subflow(
-                IntroSubflow::UltimaIvTransfer,
-                IntroSubflowResult::SaveReady,
-            );
-            intro.menu_idle_ticks = 0;
-            intro.message_waiting_for_key = false;
-            intro.message = format!(
-                "Transferred {}. Choose Journey Onward to load the new save.",
-                display_name_bytes(&avatar.name)
-            );
-        }
     }
     true
 }
@@ -8327,6 +8274,16 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
 fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     if matches!(intro.panel, VisualIntroPanel::Acknowledgements) {
         u5_runtime::require_acknowledgements_contract();
+    }
+    if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
+        require_published_u4_transfer_preview_presentation();
+    }
+    if let VisualIntroPanel::Story { step, .. } = &intro.panel {
+        if *step == INTRO_INLINE_DOORWAY_STEP {
+            panic!(
+                "intro story step {step} requires published inline doorway text; cancelling past it is a forbidden fallback; see cleak/u5-spec#69"
+            );
+        }
     }
 
     let Some((subflow, result, message)) = (match intro.panel {
@@ -8336,11 +8293,7 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
             IntroSubflowResult::Cancelled,
             "Character creation cancelled; returning to the intro menu.",
         )),
-        VisualIntroPanel::U4Transfer { .. } => Some((
-            IntroSubflow::UltimaIvTransfer,
-            IntroSubflowResult::Cancelled,
-            "Transfer cancelled; returning to the intro menu.",
-        )),
+        VisualIntroPanel::U4Transfer { .. } => unreachable!("U4 transfer contract panics"),
         VisualIntroPanel::Story { .. } => Some((
             IntroSubflow::StorySlides,
             IntroSubflowResult::ReturnedToMenu,
@@ -8420,94 +8373,6 @@ fn step_visual_chargen_panel(
         ChargenSessionStep::Ignored => {
             panic!("character creation ignored state is not a renderable panel step")
         }
-    }
-}
-
-fn step_visual_u4_transfer_panel(
-    source: &U4TransferSource,
-    overrides: &mut U4TransferOverrides,
-    stage: &mut VisualU4TransferStage,
-    input_line: &mut String,
-    ch: char,
-) -> VisualIntroPanelOutcome {
-    match *stage {
-        VisualU4TransferStage::ConfirmName => match yes_no_key(ch) {
-            Some(true) => {
-                *stage = VisualU4TransferStage::ConfirmGender;
-                VisualIntroPanelOutcome::Stay
-            }
-            Some(false) => {
-                input_line.clear();
-                *stage = VisualU4TransferStage::ReplacementName;
-                VisualIntroPanelOutcome::Stay
-            }
-            None => VisualIntroPanelOutcome::Stay,
-        },
-        VisualU4TransferStage::ReplacementName => match ch {
-            '\r' | '\n' => {
-                if !input_line.trim().is_empty() {
-                    overrides.name = Some(input_line.trim().as_bytes().to_vec());
-                    input_line.clear();
-                    *stage = VisualU4TransferStage::ConfirmGender;
-                }
-                VisualIntroPanelOutcome::Stay
-            }
-            '\u{8}' => {
-                input_line.pop();
-                VisualIntroPanelOutcome::Stay
-            }
-            _ if ch.is_ascii_graphic() || ch == ' ' => {
-                if input_line.len() < u5_runtime::CHARGEN_NAME_INPUT_LIMIT {
-                    input_line.push(ch);
-                }
-                VisualIntroPanelOutcome::Stay
-            }
-            _ => VisualIntroPanelOutcome::Stay,
-        },
-        VisualU4TransferStage::ConfirmGender => match yes_no_key(ch) {
-            Some(true) => {
-                *stage = VisualU4TransferStage::ConfirmCommit;
-                VisualIntroPanelOutcome::Stay
-            }
-            Some(false) => {
-                *stage = VisualU4TransferStage::ReplacementGender;
-                VisualIntroPanelOutcome::Stay
-            }
-            None => VisualIntroPanelOutcome::Stay,
-        },
-        VisualU4TransferStage::ReplacementGender => match ch.to_ascii_uppercase() {
-            'M' => {
-                overrides.male = Some(true);
-                *stage = VisualU4TransferStage::ConfirmCommit;
-                VisualIntroPanelOutcome::Stay
-            }
-            'F' => {
-                overrides.male = Some(false);
-                *stage = VisualU4TransferStage::ConfirmCommit;
-                VisualIntroPanelOutcome::Stay
-            }
-            _ => VisualIntroPanelOutcome::Stay,
-        },
-        VisualU4TransferStage::ConfirmCommit => match yes_no_key(ch) {
-            Some(true) => VisualIntroPanelOutcome::CommitU4Transfer {
-                source: source.clone(),
-                overrides: overrides.clone(),
-            },
-            Some(false) => VisualIntroPanelOutcome::ReturnToMenu {
-                subflow: IntroSubflow::UltimaIvTransfer,
-                result: IntroSubflowResult::Cancelled,
-                message: "Transfer aborted; returning to the intro menu.".to_string(),
-            },
-            None => VisualIntroPanelOutcome::Stay,
-        },
-    }
-}
-
-fn yes_no_key(ch: char) -> Option<bool> {
-    match ch.to_ascii_uppercase() {
-        'Y' => Some(true),
-        'N' => Some(false),
-        _ => None,
     }
 }
 
@@ -8616,7 +8481,6 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
                 "Return-to-View rendered frame count must match metadata count"
             );
             intro.panel = VisualIntroPanel::ReturnToView {
-                summary: preview.summary,
                 preview_frames: preview.frames,
                 frame_metadata: preview.frame_metadata,
                 preview_frame_index: 0,
@@ -8727,14 +8591,8 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         } => {
             return summarize_visual_chargen(session, input_line);
         }
-        VisualIntroPanel::U4Transfer {
-            source,
-            preview,
-            overrides,
-            stage,
-            input_line,
-        } => {
-            return summarize_visual_u4_transfer(source, preview, overrides, *stage, input_line);
+        VisualIntroPanel::U4Transfer { .. } => {
+            require_published_u4_transfer_preview_presentation();
         }
         VisualIntroPanel::Story { records, step, .. } => {
             return summarize_intro_story(records, *step);
@@ -8742,61 +8600,10 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         VisualIntroPanel::Acknowledgements => {
             u5_runtime::require_acknowledgements_contract();
         }
-        VisualIntroPanel::ReturnToView {
-            summary,
-            preview_frames,
-            frame_metadata,
-            preview_frame_index,
-            ..
-        } => {
-            assert!(
-                !preview_frames.is_empty(),
-                "Return-to-View summary requires rendered playback frames"
-            );
-            assert_eq!(
+        VisualIntroPanel::ReturnToView { preview_frames, .. } => {
+            require_published_return_to_view_preview_pixel_geometry_for_frame_count(
                 preview_frames.len(),
-                frame_metadata.len(),
-                "Return-to-View summary frame metadata count must match rendered frames"
             );
-            let frame_line = format!(
-                "Playback frame {} of {}.",
-                preview_frame_index + 1,
-                preview_frames.len()
-            );
-            let meta = frame_metadata
-                .get(*preview_frame_index)
-                .expect("Return-to-View summary requires current frame metadata");
-            let caption = meta
-                .caption
-                .expect("Return-to-View summary requires current frame caption");
-            let frame_detail = format!(
-                "{}; command {}; title tick {}; caption: {}.",
-                visual_return_to_view_frame_kind_label(meta.kind),
-                meta.command_index,
-                meta.elapsed_title_ticks,
-                caption
-            );
-            return [
-                "Return to View".to_string(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                summary.clone(),
-                String::new(),
-                frame_line,
-                frame_detail,
-                "Press any key after playback completes.".to_string(),
-            ]
-            .join("\n");
         }
     }
 
@@ -8882,60 +8689,6 @@ fn summarize_visual_chargen(session: &ChargenSession, input_line: &str) -> Strin
     }
 }
 
-fn summarize_visual_u4_transfer(
-    source: &U4TransferSource,
-    preview: &U4TransferPreview,
-    overrides: &U4TransferOverrides,
-    stage: VisualU4TransferStage,
-    input_line: &str,
-) -> String {
-    let selected_name = overrides
-        .name
-        .as_deref()
-        .map(display_name_bytes)
-        .unwrap_or_else(|| preview.name.clone());
-    let selected_gender = overrides.male.unwrap_or(source.male);
-    let mut lines = vec![
-        "Transfer from Ultima IV".to_string(),
-        String::new(),
-        format!(
-            "Preview: {} class {}, {}, STR {}, DEX {}, INT {}, XP {}.",
-            selected_name,
-            preview.class_index,
-            if selected_gender { "male" } else { "female" },
-            preview.strength,
-            preview.dexterity,
-            preview.intelligence,
-            source.experience / 10
-        ),
-        String::new(),
-    ];
-    match stage {
-        VisualU4TransferStage::ConfirmName => {
-            lines.push(format!("Use imported name {}? Press Y or N.", preview.name));
-        }
-        VisualU4TransferStage::ReplacementName => {
-            lines.push("Replacement name:".to_string());
-            lines.push(format!("> {input_line}"));
-        }
-        VisualU4TransferStage::ConfirmGender => {
-            lines.push(format!(
-                "Use imported gender {}? Press Y or N.",
-                if source.male { "M" } else { "F" }
-            ));
-        }
-        VisualU4TransferStage::ReplacementGender => {
-            lines.push("Replacement gender: press M or F.".to_string());
-        }
-        VisualU4TransferStage::ConfirmCommit => {
-            lines.push("Commit transfer save? Press Y or N.".to_string());
-        }
-    }
-    lines.push(String::new());
-    lines.push("Esc cancels to the intro menu.".to_string());
-    lines.join("\n")
-}
-
 fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
     let mut lines = vec![
         "Ultima V Introduction".to_string(),
@@ -8981,21 +8734,6 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
         lines.push("Opening transition step; press any key to continue.".to_string());
     }
     lines.join("\n")
-}
-
-fn visual_return_to_view_frame_kind_label(kind: ReturnToViewFrameKind) -> &'static str {
-    match kind {
-        ReturnToViewFrameKind::PreviewTick => "Preview title tick",
-        ReturnToViewFrameKind::CellEffectStep { .. } => "Local cell-effect step",
-        ReturnToViewFrameKind::CellEffectFinalTick { .. } => "Local cell-effect final tick",
-        ReturnToViewFrameKind::TemporaryActorDraw => "Temporary actor draw",
-        ReturnToViewFrameKind::TemporaryActorDrawOverBacking => "Temporary actor backing draw",
-        ReturnToViewFrameKind::FixedWipeRectangle { .. } => "Fixed wipe rectangle",
-        ReturnToViewFrameKind::FixedWipeActorDraw => "Fixed wipe actor draw",
-        ReturnToViewFrameKind::FixedWait { .. } => "Fixed wait tick",
-        ReturnToViewFrameKind::FixedWipeTrailingTick { .. } => "Fixed wipe trailing tick",
-        ReturnToViewFrameKind::MoveActorTick => "Actor movement tick",
-    }
 }
 
 fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> String {
@@ -11289,6 +11027,22 @@ fn visual_return_to_view_summary(
         predicted_width,
         predicted_height,
     );
+}
+
+fn require_published_return_to_view_preview_pixel_geometry_for_frame_count(
+    playback_frame_count: usize,
+) -> ! {
+    let full_tile_width = RTV_STRIP_VISIBLE_COLUMNS
+        .checked_mul(TILE_ATLAS_SIDE)
+        .expect("Return-to-View full-tile preview width overflows");
+    let full_tile_height = RTV_STRIP_VISIBLE_ROWS
+        .checked_mul(TILE_ATLAS_SIDE)
+        .expect("Return-to-View full-tile preview height overflows");
+    require_published_return_to_view_preview_pixel_geometry(
+        playback_frame_count,
+        full_tile_width,
+        full_tile_height,
+    )
 }
 
 fn require_published_return_to_view_preview_pixel_geometry(
@@ -16309,6 +16063,31 @@ mod tests {
     }
 
     #[test]
+    fn visual_intro_story_step_six_input_panics_instead_of_skipping_gap() {
+        let mut intro = visual_intro_state_with_panel(
+            debug_game_dir(),
+            VisualIntroPanel::Story {
+                records: StoryRecords {
+                    records: (0..20)
+                        .map(|index| format!("Story record {index}"))
+                        .collect(),
+                },
+                step: INTRO_INLINE_DOORWAY_STEP,
+                transition: None,
+            },
+        );
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = step_visual_intro_panel(&mut intro, ' ');
+        }));
+
+        let message = panic_message(result.expect_err("step 6 input must panic"));
+        assert!(message.contains("skipping it with input"), "{message}");
+        assert!(message.contains("cleak/u5-spec#69"), "{message}");
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
     fn visual_intro_story_render_clears_text_band_before_new_paragraph() {
         let mut intro = visual_intro_state_with_panel(
             debug_game_dir(),
@@ -16692,7 +16471,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_u4_transfer_accepts_overrides_and_writes_save() {
+    fn visual_intro_u4_transfer_input_refuses_unpublished_preview() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(U4_TRANSFER_U5_SEED_GAM_FILENAME),
@@ -16731,35 +16510,17 @@ mod tests {
             },
         );
 
-        step_visual_intro_panel(&mut intro, 'N');
-        for ch in "New".chars() {
-            step_visual_intro_panel(&mut intro, ch);
-        }
-        step_visual_intro_panel(&mut intro, '\r');
-        step_visual_intro_panel(&mut intro, 'N');
-        step_visual_intro_panel(&mut intro, 'F');
-        step_visual_intro_panel(&mut intro, 'Y');
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = step_visual_intro_panel(&mut intro, 'N');
+        }));
 
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Transferred New"));
-        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
-        assert_eq!(
-            &saved[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + SAVE_CHARACTER_NAME_LEN - 1],
-            b"New\0\0\0\0\0"
-        );
-        assert_eq!(
-            saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_GENDER_OFFSET],
-            0x0c
-        );
-        assert_eq!(
-            fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap(),
-            [vec![0u8; OOL_PLANE_LEN], vec![0x55; OOL_PLANE_LEN]].concat()
-        );
+        assert_u4_transfer_preview_gap_panic(result);
+        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn visual_intro_u4_transfer_escape_returns_to_menu_without_save() {
+    fn visual_intro_u4_transfer_escape_refuses_unpublished_preview() {
         let dir = debug_game_dir();
         let source = U4TransferSource {
             name: b"OLDNAME\0\0".to_vec(),
@@ -16787,31 +16548,28 @@ mod tests {
                     name: Some(b"New".to_vec()),
                     male: None,
                 },
-                stage: VisualU4TransferStage::ConfirmGender,
+                stage: VisualU4TransferStage::ConfirmName,
                 input_line: String::new(),
             },
         );
         intro.dispatch.submit_menu_key(b'T');
 
-        assert!(cancel_visual_intro_panel(&mut intro));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = cancel_visual_intro_panel(&mut intro);
+        }));
 
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Transfer cancelled"));
+        assert_u4_transfer_preview_gap_panic(result);
+        assert!(matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }));
         assert!(!dir.join(SAVED_GAM_FILENAME).exists());
-        assert!(matches!(
-            intro.dispatch.submit_menu_key(b'A'),
-            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
-        ));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn return_to_view_intro_input_waits_until_final_frame() {
+    fn return_to_view_intro_input_refuses_preview_geometry_fallback() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(
             dir.clone(),
             VisualIntroPanel::ReturnToView {
-                summary: "Preview".to_string(),
                 preview_frames: vec![
                     intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
                     intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
@@ -16835,28 +16593,13 @@ mod tests {
         );
         intro.dispatch.submit_menu_key(b'R');
 
-        assert!(step_visual_intro_panel(&mut intro, 'x'));
-        assert!(matches!(
-            intro.panel,
-            VisualIntroPanel::ReturnToView {
-                preview_frame_index: 0,
-                ..
-            }
-        ));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = step_visual_intro_panel(&mut intro, 'x');
+        }));
+
+        assert_return_to_view_preview_geometry_gap_panic(result);
+        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
         assert!(intro.message.is_empty());
-
-        assert!(advance_visual_intro_panel_animation(
-            &mut intro.panel,
-            &mut intro.title_tick_frame
-        ));
-        assert!(step_visual_intro_panel(&mut intro, 'x'));
-
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Return-to-View preview complete"));
-        assert!(matches!(
-            intro.dispatch.submit_menu_key(b'A'),
-            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
-        ));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -16866,7 +16609,6 @@ mod tests {
         let mut intro = visual_intro_state_with_panel(
             dir.clone(),
             VisualIntroPanel::ReturnToView {
-                summary: "Preview".to_string(),
                 preview_frames: vec![intro_test_preview_buffer(
                     1,
                     1,
@@ -16920,7 +16662,6 @@ mod tests {
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
-                summary: "Preview".to_string(),
                 preview_frames: vec![intro_test_preview_buffer(2, 2, preview_rgba)],
                 frame_metadata: vec![VisualReturnToViewFrameMeta {
                     command_index: 6,
@@ -16947,7 +16688,6 @@ mod tests {
         let mut intro = visual_intro_state_with_panel(
             debug_game_dir(),
             VisualIntroPanel::ReturnToView {
-                summary: "Preview".to_string(),
                 preview_frames: vec![intro_test_preview_buffer(
                     1,
                     1,
@@ -16980,7 +16720,6 @@ mod tests {
         let mut intro = visual_intro_state_with_panel(
             debug_game_dir(),
             VisualIntroPanel::ReturnToView {
-                summary: "Preview".to_string(),
                 preview_frames: vec![intro_test_preview_buffer(
                     1,
                     1,
@@ -17032,7 +16771,6 @@ mod tests {
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
-                summary: "Preview".to_string(),
                 preview_frames: vec![intro_test_preview_buffer(
                     1,
                     1,
@@ -17059,9 +16797,8 @@ mod tests {
     }
 
     #[test]
-    fn return_to_view_intro_animation_advances_preview_frames_until_final() {
+    fn return_to_view_intro_animation_refuses_preview_geometry_fallback() {
         let mut panel = VisualIntroPanel::ReturnToView {
-            summary: "Preview".to_string(),
             preview_frames: vec![
                 intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
                 intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
@@ -17084,34 +16821,23 @@ mod tests {
         };
         let mut title_tick_frame = 0;
 
-        assert!(advance_visual_intro_panel_animation(
-            &mut panel,
-            &mut title_tick_frame
-        ));
-        assert_eq!(title_tick_frame, title_tick_next_frame(0));
-        assert!(matches!(
-            panel,
-            VisualIntroPanel::ReturnToView {
-                preview_frame_index: 1,
-                ..
-            }
-        ));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = advance_visual_intro_panel_animation(&mut panel, &mut title_tick_frame);
+        }));
 
-        assert!(!advance_visual_intro_panel_animation(
-            &mut panel,
-            &mut title_tick_frame
-        ));
+        assert_return_to_view_preview_geometry_gap_panic(result);
+        assert_eq!(title_tick_frame, 0);
         assert!(matches!(
             panel,
             VisualIntroPanel::ReturnToView {
-                preview_frame_index: 1,
+                preview_frame_index: 0,
                 ..
             }
         ));
     }
 
     #[test]
-    fn return_to_view_intro_summary_reports_current_caption_and_frame_kind() {
+    fn return_to_view_intro_summary_refuses_preview_geometry_fallback() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
@@ -17130,7 +16856,6 @@ mod tests {
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
-                summary: "Preview".to_string(),
                 preview_frames: vec![
                     intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
                     intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
@@ -17155,12 +16880,11 @@ mod tests {
             image_handle: None,
         };
 
-        let summary = summarize_intro(&mut intro);
-        assert!(summary.contains("Playback frame 2 of 2"));
-        assert!(summary.contains("Temporary actor draw"));
-        assert!(summary.contains("command 3"));
-        assert!(summary.contains("title tick 10"));
-        assert!(summary.contains("The Keep of Lord Blackthorn"));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = summarize_intro(&mut intro);
+        }));
+
+        assert_return_to_view_preview_geometry_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 }
