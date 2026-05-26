@@ -45,6 +45,7 @@ pub mod input_codes;
 pub mod input_dispatch;
 pub mod intro;
 pub mod intro_menu;
+pub mod intro_preflourish;
 pub mod jimmy;
 pub mod karma;
 pub mod lighting;
@@ -300,6 +301,10 @@ pub use intro::{
     authored_title_tick_frames, intro_menu_action, load_miscmaps_cutscene_map,
     parse_miscmaps_cutscene_map_file, require_acknowledgements_contract,
     require_miscmaps_cutscene_map, title_tick_next_frame, title_tick_palette_indices,
+};
+pub use intro_preflourish::{
+    IntroFontSlot, IntroFontSlots, JOURNEY_ONWARD_SHORTCUT_BANNER, PRE_FLOURISH_TEXT_WINDOW_INDEX,
+    PreFlourishOutcome, load_intro_font_slots, run_intro_pre_flourish_phase,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, DoorAutoCloseTick, JIMMY_CHEST_THRESHOLD_BIAS,

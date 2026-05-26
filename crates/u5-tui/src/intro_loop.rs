@@ -12,8 +12,10 @@ use std::path::Path;
 use u5_runtime::intro_menu::{IntroSubflow, IntroSubflowResult};
 use u5_runtime::menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep};
 use u5_runtime::{
-    MISCMAPS_DAT_FILE, SAVED_GAM_FILENAME, STORY_DAT_FILE, TileGraphicsDepth,
+    DisplayDriverFamily, JOURNEY_ONWARD_SHORTCUT_BANNER, MISCMAPS_DAT_FILE,
+    PreFlourishOutcome, SAVED_GAM_FILENAME, STORY_DAT_FILE, TextWindowSystem, TileGraphicsDepth,
     disk_io_error_message, load_play_options_from_save, read_u4_transfer_source_from_party_sav,
+    run_intro_pre_flourish_phase,
 };
 
 use crate::cli::run_interactive_create_character;
@@ -29,15 +31,31 @@ pub fn run_intro_menu_loop(
     raster_diagnostics: bool,
     raster_depth: TileGraphicsDepth,
 ) -> io::Result<()> {
-    let mut dispatch = UnifiedMenuDispatch::new();
-
     println!("Ultima V");
     println!("Terminal title/menu flow. Press any key to continue, or J for Journey Onward.");
     let Some(first_key) = read_menu_key()? else {
         return Ok(());
     };
+
+    // `systems/intro.md §3` step 2: pre-flourish phase. The terminal
+    // harness has no asynchronous key buffer, so the first stdin
+    // byte above stands in for the spec's "key queued at boot"
+    // poll. The phase loads IBM.CH/RUNES.CH into the resident
+    // font-slot table, resets the primary text window to the full
+    // 40x25 rectangle, selects descriptor index 0, and consults the
+    // queued byte for the early J shortcut.
+    let mut text_windows = TextWindowSystem::new();
+    let (_font_slots, pre_flourish_outcome) = run_intro_pre_flourish_phase(
+        game_dir,
+        DisplayDriverFamily::Ega,
+        &mut text_windows,
+        Some(first_key),
+    )?;
+
+    let mut dispatch = UnifiedMenuDispatch::new();
     dispatch.dismiss_title();
-    if first_key.eq_ignore_ascii_case(&b'J') {
+    if matches!(pre_flourish_outcome, PreFlourishOutcome::JourneyOnwardShortcut) {
+        println!("{JOURNEY_ONWARD_SHORTCUT_BANNER}");
         if let IntroLoopControl::Launched = drive_intro_subflow(
             &mut dispatch,
             IntroSubflow::JourneyOnward,

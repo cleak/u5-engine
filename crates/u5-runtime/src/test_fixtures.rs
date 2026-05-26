@@ -488,6 +488,21 @@ pub fn debug_game_dir() -> PathBuf {
     fs::write(dir.join("CASTLE.TLK"), [1, 0, 0, 0]).unwrap();
     fs::write(dir.join("DUNGEON.DAT"), vec![0; DUNGEON_DAT_LEN]).unwrap();
     fs::write(dir.join("UNDER.DAT"), vec![5; UNDER_DAT_LEN]).unwrap();
+    // `systems/intro.md §3` step 2: the intro pre-flourish phase
+    // loads IBM.CH and RUNES.CH into the resident font-slot table
+    // before the title flourish. The terminal harness depends on
+    // these files existing in the game directory; populate them
+    // here with well-formed 1024-byte glyph tables of solid 0xFF
+    // bytes so every glyph renders as a visible 8x8 block. A
+    // blank (all-zero) fixture would silently pass the size check
+    // but produce empty rendered pixels, breaking downstream
+    // tests that assert on visible chargen / menu output.
+    fs::write(dir.join(crate::IBM_CH_FILE), vec![0xffu8; crate::CH_FONT_LEN]).unwrap();
+    fs::write(
+        dir.join(crate::RUNES_CH_FILE),
+        vec![0xffu8; crate::CH_FONT_LEN],
+    )
+    .unwrap();
     write_britannia_world_files(&dir, 5);
     dir
 }

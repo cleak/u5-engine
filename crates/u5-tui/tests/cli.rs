@@ -776,6 +776,68 @@ fn cli_intro_journey_onward_without_active_save_returns_to_menu() {
     let _ = fs::remove_dir_all(dir);
 }
 
+#[test]
+fn cli_intro_pre_flourish_fails_loudly_when_ibm_ch_is_missing() {
+    // `systems/intro.md §3` step 2 requires loading IBM.CH and
+    // RUNES.CH before the title flourish. If the game directory is
+    // missing these files, the intro must surface a NotFound IO
+    // error instead of silently skipping the load. Removing IBM.CH
+    // after `debug_game_dir` populates the standard fixture
+    // simulates a partial install or a deleted asset.
+    let dir = debug_game_dir();
+    let _ = fs::remove_file(dir.join(IBM_CH_FILE));
+    let mut child = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .arg("--intro")
+        .arg(dir.to_str().unwrap())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.as_mut().unwrap().write_all(b"\n").unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success(), "missing IBM.CH must fail loudly");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains(IBM_CH_FILE), "{stderr}");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn cli_intro_non_j_first_key_does_not_take_journey_onward_path() {
+    // `systems/intro.md §3` step 2 step 6: the pre-flourish poll
+    // takes the Journey Onward shortcut only when the queued key
+    // folds to `J`. A queued ` ` (space) must fall through to the
+    // menu without printing the centered banner or attempting to
+    // load the save. The X that follows is an invalid menu key
+    // that the menu silently ignores; the second \n exits stdin.
+    let dir = debug_game_dir();
+    fs::write(dir.join(SAVED_GAM_FILENAME), vec![0; SAVED_GAM_LEN]).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .arg("--intro")
+        .arg(dir.to_str().unwrap())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.as_mut().unwrap().write_all(b" \nX\n").unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Intro Menu"), "menu must follow non-J first key");
+    assert!(
+        !stdout.contains("Disk read failed for SAVED.GAM"),
+        "non-J first key must not attempt the Journey Onward load: {stdout}"
+    );
+    assert!(
+        !stdout.contains("No active game"),
+        "non-J first key must not surface the empty-save message: {stdout}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 // from chunk_02
 #[test]
 fn cli_parser_help_short_circuits_save_init_conflict() {
