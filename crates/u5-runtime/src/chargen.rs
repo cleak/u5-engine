@@ -162,15 +162,15 @@ impl ChargenSession {
                 record: 1,
                 text: self.records[1].clone(),
             },
-            ChargenSessionPhase::AwaitingAnswer => self
-                .current_question
-                .clone()
-                .map(ChargenSessionStep::PresentQuestion)
-                .unwrap_or(ChargenSessionStep::Ignored),
-            ChargenSessionPhase::Completed => self
-                .result()
-                .map(ChargenSessionStep::Completed)
-                .unwrap_or(ChargenSessionStep::Ignored),
+            ChargenSessionPhase::AwaitingAnswer => ChargenSessionStep::PresentQuestion(
+                self.current_question
+                    .clone()
+                    .expect("chargen AwaitingAnswer phase requires a current question"),
+            ),
+            ChargenSessionPhase::Completed => ChargenSessionStep::Completed(
+                self.result()
+                    .expect("chargen Completed phase requires a complete session result"),
+            ),
             ChargenSessionPhase::Aborted => ChargenSessionStep::Aborted,
         }
     }
@@ -229,9 +229,10 @@ impl ChargenSession {
         let Some(chose_a) = chargen_answer_key(key) else {
             return ChargenSessionStep::Ignored;
         };
-        let Some(current) = self.current_question.take() else {
-            return ChargenSessionStep::Ignored;
-        };
+        let current = self
+            .current_question
+            .take()
+            .expect("chargen answer handling requires a current question");
         let winner = if chose_a {
             current.option_a
         } else {
@@ -287,31 +288,21 @@ impl ChargenSession {
     }
 
     fn prepare_next_question(&mut self) -> ChargenSessionStep {
-        let first_idx = match draw_virtue(
+        let first_idx = draw_virtue(
             &self.rng_bytes,
             &mut self.rng_cursor,
             &self.selected_this_round,
             &self.lost_forever,
-        ) {
-            Some(idx) => idx,
-            None => {
-                self.phase = ChargenSessionPhase::Aborted;
-                return ChargenSessionStep::Aborted;
-            }
-        };
+        )
+        .expect("chargen RNG exhausted while drawing the first virtue");
         self.selected_this_round[first_idx] = true;
-        let second_idx = match draw_virtue(
+        let second_idx = draw_virtue(
             &self.rng_bytes,
             &mut self.rng_cursor,
             &self.selected_this_round,
             &self.lost_forever,
-        ) {
-            Some(idx) => idx,
-            None => {
-                self.phase = ChargenSessionPhase::Aborted;
-                return ChargenSessionStep::Aborted;
-            }
-        };
+        )
+        .expect("chargen RNG exhausted while drawing the second virtue");
         self.selected_this_round[second_idx] = true;
 
         let (a_idx, b_idx) = if first_idx < second_idx {
@@ -811,6 +802,24 @@ mod tests {
             session.submit_gender_key(b'f'),
             ChargenSessionStep::PresentIntro { record: 0, .. }
         ));
+    }
+
+    #[test]
+    #[should_panic(expected = "chargen RNG exhausted while drawing the first virtue")]
+    fn chargen_session_panics_when_question_rng_is_exhausted() {
+        let mut session = ChargenSession::new(question_records(), Vec::new()).unwrap();
+        session.submit_name("Avatar");
+        session.submit_gender_key(b'M');
+        session.advance_intro();
+    }
+
+    #[test]
+    #[should_panic(expected = "chargen AwaitingAnswer phase requires a current question")]
+    fn chargen_session_panics_when_awaiting_answer_has_no_question() {
+        let mut session = ChargenSession::new(question_records(), rng_pool().to_vec()).unwrap();
+        session.phase = ChargenSessionPhase::AwaitingAnswer;
+        session.current_question = None;
+        let _ = session.current_step();
     }
 
     #[test]

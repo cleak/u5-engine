@@ -8443,7 +8443,9 @@ fn step_visual_chargen_panel(
             result: IntroSubflowResult::Cancelled,
             message: "Character creation aborted; returning to the intro menu.".to_string(),
         },
-        ChargenSessionStep::Ignored => VisualIntroPanelOutcome::Stay,
+        ChargenSessionStep::Ignored => {
+            panic!("character creation ignored state is not a renderable panel step")
+        }
     }
 }
 
@@ -8909,7 +8911,9 @@ fn summarize_visual_chargen(session: &ChargenSession, input_line: &str) -> Strin
         ]
         .join("\n"),
         ChargenSessionStep::Aborted => "Character creation aborted.".to_string(),
-        ChargenSessionStep::Ignored => "Character creation is waiting.".to_string(),
+        ChargenSessionStep::Ignored => {
+            panic!("character creation ignored state has no summary text")
+        }
     }
 }
 
@@ -8972,11 +8976,11 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
         "Ultima V Introduction".to_string(),
         format!("Story step {} of {}", step + 1, INTRO_STORY_STEP_COUNT),
     ];
-    if let Some(file) = intro_story_art_file_for_step(step) {
-        if let Some(placement) = intro_story_art_placement_for_step(step) {
-            lines.push(format_story_art_line(file, placement));
-        }
-    }
+    let file = intro_story_art_file_for_step(step)
+        .unwrap_or_else(|| panic!("intro story step {step} has no published art file"));
+    let placement = intro_story_art_placement_for_step(step)
+        .unwrap_or_else(|| panic!("intro story step {step} has no published art placement"));
+    lines.push(format_story_art_line(file, placement));
     if let Some(strips) = intro_step_transition_strips(step) {
         lines.push(format!(
             "Transition strips: #{}, ({}, {}); #{}, ({}, {}).",
@@ -9000,9 +9004,10 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
         lines.push(text.to_string());
     }
     if intro_step_has_story6_secondary_pass(step) {
-        if let Some(subimage) = intro_story6_secondary_subimage(step) {
-            lines.push(format!("Secondary STORY6.16 subimage {subimage}."));
-        }
+        let subimage = intro_story6_secondary_subimage(step).unwrap_or_else(|| {
+            panic!("intro story step {step} requires a published STORY6 secondary subimage")
+        });
+        lines.push(format!("Secondary STORY6.16 subimage {subimage}."));
     }
     lines.push(String::new());
     if intro_story_step_waits_for_input(step) {
@@ -10442,9 +10447,10 @@ fn blit_image_panel_specs_intro_buffer(
                     spec.stem, spec.subimage
                 )
             });
-        assert!(
-            image.width >= spec.width && image.height >= spec.height,
-            "intro panel {} subimage {} is {}x{}, expected at least {}x{}",
+        assert_eq!(
+            (image.width, image.height),
+            (spec.width, spec.height),
+            "intro panel {} subimage {} is {}x{}, expected exactly {}x{}",
             spec.stem,
             spec.subimage,
             image.width,
@@ -10465,10 +10471,14 @@ fn blit_image_panel_specs_intro_buffer(
             dst.width,
             dst.height
         );
-        let width = spec.width;
-        let height = spec.height;
-        let rgba = graphic_image_to_rgba_clipped(image, depth, width, height);
-        dst.blit_rgba(&rgba, width, height, spec.top_left_x, spec.top_left_y);
+        let rgba = graphic_image_to_rgba(image, depth);
+        dst.blit_rgba(
+            &rgba,
+            image.width,
+            image.height,
+            spec.top_left_x,
+            spec.top_left_y,
+        );
     }
 }
 
