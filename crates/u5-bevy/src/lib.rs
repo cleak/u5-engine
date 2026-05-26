@@ -77,9 +77,9 @@ use u5_runtime::{
     TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
-    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
-    combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
-    configure_talk_shop_text_window,
+    X_RAY_COST, X_RAY_SPELL_INDEX, authored_title_tick_frames, blit_tile_id_to_viewport,
+    combat_actor_is_active_not_dead, combat_class_stats, commit_chargen_save,
+    commit_u4_transfer_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -99,8 +99,8 @@ use u5_runtime::{
     paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
     render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
-    require_title_tick_frames, return_to_view_fixed_wipe_rectangles,
-    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
+    return_to_view_fixed_wipe_rectangles, run_return_to_view_playback_until_restart,
+    save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -9122,8 +9122,7 @@ fn draw_visual_intro_start_menu_to_buffer(
     highlighted: Option<IntroSubflow>,
 ) {
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
-    let title_tick_frames = require_title_tick_frames(game_dir)
-        .unwrap_or_else(|err| panic!("intro menu requires authored title-tick frames: {err}"));
+    let title_tick_frames = authored_title_tick_frames();
     buffer.draw_authored_title_tick(&title_tick_frames, title_tick_frame);
     let font = load_ibm_ch_font(game_dir).expect("intro menu requires IBM fixed-cell font");
     draw_intro_menu_labels_intro_buffer(buffer, &font, highlighted);
@@ -9495,8 +9494,7 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         .as_ref()
         .cloned()
         .expect("Return-to-View requires preserved intro backing surface");
-    let title_tick_frames = require_title_tick_frames(&intro.game_dir)
-        .unwrap_or_else(|err| panic!("Return-to-View requires authored title-tick frames: {err}"));
+    let title_tick_frames = authored_title_tick_frames();
     buffer.draw_authored_title_tick(&title_tick_frames, intro.title_tick_visible_frame);
 
     let VisualIntroPanel::ReturnToView {
@@ -12277,10 +12275,10 @@ mod tests {
         SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
         SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN, SAVED_OOL_FILENAME,
         SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
-        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
-        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
-        parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit, parse_legacy_lzw_title_bit,
-        parse_title_bit, world_cell_index, wrap_text_panel_lines,
+        SurfaceChestVerb, TILES_EGA_FILE, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, Tavern,
+        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
+        dungeon_cell_index, parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit,
+        parse_legacy_lzw_title_bit, parse_title_bit, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -12296,7 +12294,7 @@ mod tests {
     }
 
     fn assert_title_tick_gap_panic(result: std::thread::Result<()>) {
-        let payload = result.expect_err("title tick must fail until authored frames exist");
+        let payload = result.expect_err("generated title-tick helper must fail");
         let message = payload
             .downcast_ref::<String>()
             .map(String::as_str)
@@ -12390,16 +12388,6 @@ mod tests {
         fn into_bitmaps(self) -> Vec<MonochromeBitmap> {
             self.blocks
         }
-    }
-
-    fn install_title_tick_frame_file(dir: &Path) {
-        let mut bytes = vec![0; u5_runtime::TITLE_TICK_FRAME_SET_BYTES];
-        for frame in 0..u5_runtime::TITLE_TICK_FRAME_COUNT as usize {
-            let start = frame * u5_runtime::TITLE_TICK_FRAME_PIXELS;
-            bytes[start..start + u5_runtime::TITLE_TICK_FRAME_PIXELS].fill(frame as u8 + 1);
-        }
-        fs::write(dir.join(u5_runtime::TITLE_TICK_FRAMESET_FILE), bytes)
-            .expect("failed to write synthetic title-tick frame fixture");
     }
 
     impl IntoCanonicalBitmaps for MonochromeBitmap {
@@ -12868,40 +12856,33 @@ mod tests {
     }
 
     #[test]
-    fn intro_menu_render_rejects_missing_authored_title_tick_frames() {
-        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
-
-        assert_title_tick_gap_panic(result);
-        let _ = fs::remove_dir_all(&intro.game_dir);
-    }
-
-    #[test]
     fn intro_menu_render_uses_authored_title_tick_frames() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
-        install_title_tick_frame_file(&intro.game_dir);
         intro.title_tick_visible_frame = 2;
+        let frames = authored_title_tick_frames();
+        let sample_x = 20usize;
+        let sample_y = (TITLE_TICK_FRAME_HEIGHT - 1) as usize;
+        let expected_index =
+            frames.frame_pixels(2)[sample_y * TITLE_TICK_FRAME_WIDTH as usize + sample_x];
 
         let frame = render_intro_frame(&mut intro);
 
         assert_eq!(
-            intro.surface.pixels[TITLE_TICK_FRAME_Y as usize * intro.surface.width],
-            3
+            intro.surface.pixels
+                [(TITLE_TICK_FRAME_Y as usize + sample_y) * intro.surface.width + sample_x],
+            expected_index
         );
         assert_eq!(
             rgba_pixel(
                 &frame,
                 INTRO_FRAMEBUFFER_WIDTH as usize,
-                0,
-                TITLE_TICK_FRAME_Y as usize
+                sample_x,
+                TITLE_TICK_FRAME_Y as usize + sample_y
             ),
             [
-                EGA_PALETTE_RGB[3][0],
-                EGA_PALETTE_RGB[3][1],
-                EGA_PALETTE_RGB[3][2],
+                EGA_PALETTE_RGB[usize::from(expected_index)][0],
+                EGA_PALETTE_RGB[usize::from(expected_index)][1],
+                EGA_PALETTE_RGB[usize::from(expected_index)][2],
                 0xff
             ]
         );
@@ -13717,10 +13698,8 @@ mod tests {
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
         assert_eq!(intro.menu_idle_ticks, 0);
         assert!(intro.message.is_empty());
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
-        assert_title_tick_gap_panic(result);
+        let menu_frame = render_intro_frame(&mut intro);
+        assert_nonblack_rgba(&menu_frame);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -13943,15 +13922,18 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_menu_idle_timeout_rejects_missing_title_tick_art_first() {
+    fn visual_intro_menu_idle_tick_uses_authored_title_art_without_fallback() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
-        intro.menu_idle_ticks = INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS - 1;
+        intro.menu_idle_ticks = INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS - 2;
+        intro.title_tick_frame = 2;
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            advance_visual_intro_finished_menu_idle(&mut intro);
-        }));
+        assert!(!advance_visual_intro_finished_menu_idle(&mut intro));
 
-        assert_title_tick_gap_panic(result);
+        assert_eq!(
+            intro.menu_idle_ticks,
+            INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS - 1
+        );
+        assert_eq!(intro.title_tick_frame, 2);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -17024,7 +17006,7 @@ mod tests {
     }
 
     #[test]
-    fn return_to_view_intro_frame_rejects_missing_title_tick_art_before_preview_overlay() {
+    fn return_to_view_intro_frame_draws_authored_title_tick_before_preview_overlay() {
         let preview_rgba = vec![
             0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff,
@@ -17066,11 +17048,9 @@ mod tests {
             image_handle: None,
         };
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
+        let frame = render_intro_frame(&mut intro);
 
-        assert_title_tick_gap_panic(result);
+        assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -17101,11 +17081,9 @@ mod tests {
         intro.modal_backing = Some(backing);
         intro.title_tick_visible_frame = 0;
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
+        let frame = render_intro_frame(&mut intro);
 
-        assert_title_tick_gap_panic(result);
+        assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -17136,17 +17114,15 @@ mod tests {
         intro.modal_backing = Some(backing.clone());
         intro.title_tick_visible_frame = 0;
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
+        let frame = render_intro_frame(&mut intro);
 
-        assert_title_tick_gap_panic(result);
         assert_eq!(intro.modal_backing, Some(backing));
+        assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
     #[test]
-    fn return_to_view_intro_frame_rejects_missing_title_tick_art_before_fixed_wipe() {
+    fn return_to_view_intro_frame_draws_authored_title_tick_before_fixed_wipe() {
         let dir = debug_game_dir();
         let mut backing = new_intro_display_buffer();
         backing.clear(3);
@@ -17188,11 +17164,9 @@ mod tests {
             image_handle: None,
         };
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
+        let frame = render_intro_frame(&mut intro);
 
-        assert_title_tick_gap_panic(result);
+        assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(dir);
     }
 

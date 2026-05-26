@@ -276,7 +276,7 @@ pub struct EgaDisplaySurface {
     back_pixels: Vec<u8>,
     current_color: u8,
     title_tick_frame: u8,
-    title_tick_frames: Option<TitleTickFrameSet>,
+    title_tick_frames: TitleTickFrameSet,
     presented_frames: u64,
     render_target: DisplayRenderTarget,
     back_buffer_active: bool,
@@ -295,7 +295,7 @@ impl EgaDisplaySurface {
             back_pixels: vec![0; DISPLAY_SURFACE_PIXELS],
             current_color: 0,
             title_tick_frame: 0,
-            title_tick_frames: None,
+            title_tick_frames: authored_title_tick_frames().clone(),
             presented_frames: 0,
             render_target: DisplayRenderTarget::Front,
             back_buffer_active: false,
@@ -304,7 +304,7 @@ impl EgaDisplaySurface {
 
     pub fn with_title_tick_frames(frames: TitleTickFrameSet) -> Self {
         let mut surface = Self::new();
-        surface.title_tick_frames = Some(frames);
+        surface.title_tick_frames = frames;
         surface
     }
 
@@ -324,12 +324,8 @@ impl EgaDisplaySurface {
         self.title_tick_frame
     }
 
-    pub fn has_title_tick_frames(&self) -> bool {
-        self.title_tick_frames.is_some()
-    }
-
     pub fn set_title_tick_frames(&mut self, frames: TitleTickFrameSet) {
-        self.title_tick_frames = Some(frames);
+        self.title_tick_frames = frames;
     }
 
     pub fn presented_frames(&self) -> u64 {
@@ -570,18 +566,14 @@ impl EgaDisplaySurface {
     }
 
     pub fn advance_title_tick(&mut self) -> DisplayPixelRect {
-        let frames = self.title_tick_frames.as_ref().unwrap_or_else(|| {
-            panic!(
-                "strict display-driver title tick requires authored 320x49 title-tick frames; generated animation fallback is forbidden; see cleak/u5-spec#52 and cleak/u5-spec#65"
-            )
-        });
         let rect = DisplayPixelRect {
             x0: TITLE_TICK_FRAME_X as usize,
             y0: TITLE_TICK_FRAME_Y as usize,
             x1: (TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1) as usize,
             y1: (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize,
         };
-        for (row, src) in frames
+        for (row, src) in self
+            .title_tick_frames
             .frame_pixels(self.title_tick_frame)
             .chunks_exact(TITLE_TICK_FRAME_WIDTH as usize)
             .enumerate()
