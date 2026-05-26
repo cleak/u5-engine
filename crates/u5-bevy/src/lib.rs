@@ -393,6 +393,7 @@ const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
     },
 ];
 
+#[cfg(test)]
 const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
     (IntroSubflow::JourneyOnward, 12, 17, " Journey Onward "),
     (IntroSubflow::CharacterCreation, 9, 18, " Create New Char. "),
@@ -402,7 +403,6 @@ const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
     (IntroSubflow::ReturnToView, 10, 22, " Return to View "),
 ];
 const STARTSC_PANEL_HEIGHT: usize = 137;
-const INTRO_MENU_TEXT_WINDOW_TOP_CELL: usize = 17;
 const INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS: u16 = 200;
 
 const CREATE_OPENING_PANEL: ImagePanelSpec = ImagePanelSpec {
@@ -7996,6 +7996,12 @@ fn require_published_initial_title_rune_screen(intro: &VisualIntroState) {
     }
 }
 
+fn require_published_intro_menu_text_window_contract() -> ! {
+    panic!(
+        "intro menu lower text-window frame requires a published frame/border contract; drawing a plain black band with fixed-cell menu labels is a forbidden fallback; see cleak/u5-spec#63"
+    )
+}
+
 fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
     intro.dispatch.dismiss_title();
     clear_carry_visual_intro_title_tick(intro);
@@ -9085,9 +9091,10 @@ fn draw_visual_intro_start_menu_to_buffer(
     title_tick_frame: u8,
     highlighted: Option<IntroSubflow>,
 ) {
+    let _ = highlighted;
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
     buffer.draw_title_tick(title_tick_frame);
-    draw_intro_menu_text_window_to_buffer(buffer, game_dir, highlighted);
+    require_published_intro_menu_text_window_contract();
 }
 
 fn draw_visual_intro_start_menu_art_to_buffer(
@@ -9104,34 +9111,6 @@ fn draw_visual_intro_start_menu_art_to_buffer(
         INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
         0,
     );
-}
-
-fn draw_intro_menu_text_window_to_buffer(
-    buffer: &mut IntroDisplayBuffer,
-    game_dir: &Path,
-    highlighted: Option<IntroSubflow>,
-) {
-    let window_top_y = INTRO_MENU_TEXT_WINDOW_TOP_CELL * CH_CELL_SIDE;
-    buffer.clear_rect_inclusive(0, window_top_y, buffer.width - 1, buffer.height - 1, 0);
-    let font = load_ibm_ch_font(game_dir).expect("intro menu text window requires IBM.CH");
-    draw_intro_menu_labels_intro_buffer(buffer, &font, highlighted);
-}
-
-fn draw_intro_menu_labels_intro_buffer(
-    buffer: &mut IntroDisplayBuffer,
-    font: &FixedCellFont,
-    highlighted: Option<IntroSubflow>,
-) {
-    for (subflow, col, row, label) in INTRO_MENU_LABELS {
-        overlay_fixed_cell_text_intro_buffer(
-            buffer,
-            font,
-            label,
-            col,
-            row,
-            highlighted == Some(subflow),
-        );
-    }
 }
 
 #[cfg(test)]
@@ -12010,6 +11989,17 @@ mod tests {
         );
     }
 
+    fn assert_menu_text_window_gap_panic(result: std::thread::Result<()>) {
+        let payload = result.expect_err("unpublished intro menu text-window contract must fail");
+        let message = panic_message(payload);
+        assert!(
+            message.contains("plain black band")
+                && message.contains("forbidden fallback")
+                && message.contains("cleak/u5-spec#63"),
+            "{message}"
+        );
+    }
+
     fn assert_return_to_view_caption_gap_panic(result: std::thread::Result<()>) {
         let payload = result.expect_err("unpublished Return-to-View caption renderer must fail");
         let message = panic_message(payload);
@@ -12617,6 +12607,15 @@ mod tests {
 
         assert_title_tick_gap_panic(result);
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_text_window_frame_contract_remains_noisy_after_title_tick() {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            require_published_intro_menu_text_window_contract();
+        }));
+
+        assert_menu_text_window_gap_panic(result);
     }
 
     #[test]
