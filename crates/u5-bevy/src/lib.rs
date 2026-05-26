@@ -40,17 +40,17 @@ use u5_runtime::{
     GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
     HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
     IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
-    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
-    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
-    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
-    LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST,
-    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap,
-    MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE,
-    NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST,
-    OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY,
-    PLAYER_SPRITE_TILE, PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
-    POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
-    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
+    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_6_EXTRA_ART_X,
+    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
+    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, LOAD_EMPTY_SAVE_LINE_1,
+    LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX,
+    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot,
+    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
+    NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
+    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
+    PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
+    PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
+    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
     QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX,
     RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
     RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
@@ -8195,9 +8195,7 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             input_line,
         } => step_visual_chargen_panel(session, input_line, ch),
         VisualIntroPanel::U4Transfer { .. } => require_published_u4_transfer_preview_presentation(),
-        VisualIntroPanel::Story {
-            step, transition, ..
-        } => {
+        VisualIntroPanel::Story { records, step, .. } => {
             if *step == INTRO_INLINE_DOORWAY_STEP {
                 panic!(
                     "intro story step {step} requires published inline doorway text; skipping it with input is a forbidden fallback; see cleak/u5-spec#69"
@@ -8206,22 +8204,10 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             if !intro_story_step_waits_for_input(*step) {
                 return false;
             }
-            if *step == 1 {
-                if transition.is_none() {
-                    *transition =
-                        Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION));
-                }
-                VisualIntroPanelOutcome::Stay
-            } else if *step + 1 < INTRO_STORY_STEP_COUNT {
-                *step += 1;
-                VisualIntroPanelOutcome::Stay
-            } else {
-                VisualIntroPanelOutcome::ReturnToMenu {
-                    subflow: IntroSubflow::StorySlides,
-                    result: IntroSubflowResult::ReturnedToMenu,
-                    message: "Ultima V Introduction complete.".to_string(),
-                }
+            if visual_intro_story_text(records, *step).is_some() {
+                require_published_intro_story_proportional_text_contract(*step);
             }
+            panic!("intro story step {step} has no renderable published text contract")
         }
         VisualIntroPanel::Acknowledgements => u5_runtime::require_acknowledgements_contract(),
         VisualIntroPanel::ReturnToView { preview_frames, .. } => {
@@ -8284,6 +8270,7 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
                 "intro story step {step} requires published inline doorway text; cancelling past it is a forbidden fallback; see cleak/u5-spec#69"
             );
         }
+        require_published_intro_story_proportional_text_contract(*step);
     }
 
     let Some((subflow, result, message)) = (match intro.panel {
@@ -10254,8 +10241,17 @@ fn overlay_proportional_text_from_assets_buffer(
     placement: ProportionalTextPlacement,
 ) -> io::Result<()> {
     let _ = (dst, game_dir, text, placement);
+    require_published_intro_story_proportional_text_contract(usize::MAX)
+}
+
+fn require_published_intro_story_proportional_text_contract(step: usize) -> ! {
+    let step_detail = if step == usize::MAX {
+        "visual proportional text".to_string()
+    } else {
+        format!("intro story step {step}")
+    };
     panic!(
-        "visual proportional text requires the published resident width table; deriving widths from PROPORT.PCS is a forbidden fallback; see cleak/u5-spec#70"
+        "{step_detail} requires the published resident proportional width table before rendering or skipping text; deriving widths from PROPORT.PCS or advancing past unreadable text is a forbidden fallback; see cleak/u5-spec#70"
     );
 }
 
@@ -11703,16 +11699,16 @@ mod tests {
     use u5_runtime::{
         Area, ArmsShop, BRIT_OOL_FILENAME, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE,
         DEFAULT_GAME_DIR, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE,
-        INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT, OOL_PLANE_LEN,
-        PenStroke, ProportionalFont, ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT,
-        REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
-        SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
-        SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN, SAVED_OOL_FILENAME,
-        SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
-        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
-        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
-        parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit, parse_legacy_lzw_title_bit,
-        parse_title_bit, world_cell_index, wrap_text_panel_lines,
+        INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT,
+        INTRO_STEP_1_RECT_TRANSITION, OOL_PLANE_LEN, PenStroke, ProportionalFont,
+        ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT, REAGENT_SPIDER_SILK,
+        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
+        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
+        SAVED_GAM_LEN, SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
+        SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
+        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
+        dungeon_cell_index, parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit,
+        parse_legacy_lzw_title_bit, parse_title_bit, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -11783,6 +11779,18 @@ mod tests {
                 && message.contains("simplified boxed text comparison")
                 && message.contains("forbidden fallback")
                 && message.contains("cleak/u5-spec#73"),
+            "{message}"
+        );
+    }
+
+    fn assert_intro_story_proportional_gap_panic(result: std::thread::Result<()>) {
+        let payload = result.expect_err("unpublished intro story proportional text must fail");
+        let message = panic_message(payload);
+        assert!(
+            message.contains("published resident proportional width table")
+                && message.contains("advancing past unreadable text")
+                && message.contains("forbidden fallback")
+                && message.contains("cleak/u5-spec#70"),
             "{message}"
         );
     }
@@ -12755,20 +12763,19 @@ mod tests {
             image_handle: None,
         };
 
-        assert!(step_visual_intro_panel(&mut intro, ' '));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = step_visual_intro_panel(&mut intro, ' ');
+        }));
 
-        match &intro.panel {
+        assert_intro_story_proportional_gap_panic(result);
+        assert!(matches!(
+            intro.panel,
             VisualIntroPanel::Story {
-                step, transition, ..
-            } => {
-                assert_eq!(*step, 1);
-                assert_eq!(
-                    *transition,
-                    Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION))
-                );
+                step: 1,
+                transition: None,
+                ..
             }
-            _ => panic!("story panel should remain active"),
-        }
+        ));
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -15984,8 +15991,7 @@ mod tests {
             .or_else(|| payload.downcast_ref::<&str>().copied())
             .expect("proportional width-table panic payload must be a string");
         assert!(
-            message
-                .contains("visual proportional text requires the published resident width table"),
+            message.contains("published resident proportional width table"),
             "{message}"
         );
         assert!(message.contains("cleak/u5-spec#70"), "{message}");
@@ -16114,8 +16120,7 @@ mod tests {
             .or_else(|| payload.downcast_ref::<&str>().copied())
             .expect("proportional width-table panic payload must be a string");
         assert!(
-            message
-                .contains("visual proportional text requires the published resident width table"),
+            message.contains("published resident proportional width table"),
             "{message}"
         );
         assert!(message.contains("cleak/u5-spec#70"), "{message}");
@@ -16176,16 +16181,15 @@ mod tests {
         intro.dispatch.dismiss_title();
         intro.dispatch.submit_menu_key(b'U');
 
-        assert!(step_visual_intro_panel(&mut intro, ' '));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = step_visual_intro_panel(&mut intro, ' ');
+        }));
 
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Introduction complete"));
+        assert_intro_story_proportional_gap_panic(result);
+        assert!(matches!(intro.panel, VisualIntroPanel::Story { .. }));
+        assert!(intro.message.is_empty());
         assert_eq!(intro.start_menu_reveal, None);
         assert_eq!(intro.start_menu_reveal_backing, None);
-        assert!(matches!(
-            intro.dispatch.submit_menu_key(b'A'),
-            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
-        ));
         let _ = fs::remove_dir_all(dir);
     }
 
