@@ -69,8 +69,7 @@ use u5_runtime::{
     TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
-    TITLE_TICK_FRAME_Y, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TITLE_SURFACE_WIDTH, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
     TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas,
     TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
     TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
@@ -109,10 +108,14 @@ use u5_runtime::{
     summarize_return_to_view_preview, summarize_return_to_view_script,
     summoned_active_object_record, terrain_combat_instance_from_setup,
     terrain_combat_raw_replacement_tile_for_arena, terrain_combat_setup_from_record,
-    terrain_combat_tile_for_spawn_index, title_tick_next_frame, title_tick_palette_index,
-    town_resident_name,
+    terrain_combat_tile_for_spawn_index, title_tick_next_frame, town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
+};
+#[cfg(test)]
+use u5_runtime::{
+    TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y,
+    title_tick_palette_index,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -284,24 +287,36 @@ impl IntroDisplayBuffer {
     }
 
     fn draw_title_tick(&mut self, frame: u8) {
-        let start_x = TITLE_TICK_FRAME_X as usize;
-        let start_y = TITLE_TICK_FRAME_Y as usize;
-        let end_x = start_x + TITLE_TICK_FRAME_WIDTH as usize;
-        let end_y = start_y + TITLE_TICK_FRAME_HEIGHT as usize;
-        assert!(
-            end_x <= self.width && end_y <= self.height,
-            "intro title tick rectangle ({start_x}, {start_y}) size {}x{} exceeds framebuffer {}x{}",
-            TITLE_TICK_FRAME_WIDTH,
-            TITLE_TICK_FRAME_HEIGHT,
-            self.width,
-            self.height
-        );
+        #[cfg(not(test))]
+        {
+            let _ = frame;
+            panic!(
+                "strict intro rendering refuses the generated title-tick animation fallback; publish or provide four authored 320x49 title-tick frames before drawing this animation; see cleak/u5-spec#52 and cleak/u5-spec#65"
+            );
+        }
 
-        for y in start_y..end_y {
-            let local_y = y - start_y;
-            for x in start_x..end_x {
-                let local_x = x - start_x;
-                self.pixels[y * self.width + x] = title_tick_palette_index(local_x, local_y, frame);
+        #[cfg(test)]
+        {
+            let start_x = TITLE_TICK_FRAME_X as usize;
+            let start_y = TITLE_TICK_FRAME_Y as usize;
+            let end_x = start_x + TITLE_TICK_FRAME_WIDTH as usize;
+            let end_y = start_y + TITLE_TICK_FRAME_HEIGHT as usize;
+            assert!(
+                end_x <= self.width && end_y <= self.height,
+                "intro title tick rectangle ({start_x}, {start_y}) size {}x{} exceeds framebuffer {}x{}",
+                TITLE_TICK_FRAME_WIDTH,
+                TITLE_TICK_FRAME_HEIGHT,
+                self.width,
+                self.height
+            );
+
+            for y in start_y..end_y {
+                let local_y = y - start_y;
+                for x in start_x..end_x {
+                    let local_x = x - start_x;
+                    self.pixels[y * self.width + x] =
+                        title_tick_palette_index(local_x, local_y, frame);
+                }
             }
         }
     }

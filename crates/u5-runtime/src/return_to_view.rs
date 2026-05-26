@@ -1325,9 +1325,15 @@ fn render_return_to_view_state_viewport(
     for actor in state.actors.iter().filter(|actor| actor.drawable) {
         let x = usize::from(actor.x);
         let y = usize::from(return_to_view_actor_screen_y(actor.y));
-        if x < RTV_STRIP_VISIBLE_COLUMNS && y < RTV_STRIP_VISIBLE_ROWS {
-            blit_return_to_view_actor_to_viewport(&mut viewport, atlas, actor.tile0, x, y)?;
+        if x >= RTV_STRIP_VISIBLE_COLUMNS || y >= RTV_STRIP_VISIBLE_ROWS {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Return-to-View actor draw at screen cell ({x}, {y}) falls outside rendered 4x19 preview; clipping was a forbidden fallback"
+                ),
+            ));
         }
+        blit_return_to_view_actor_to_viewport(&mut viewport, atlas, actor.tile0, x, y)?;
     }
     Ok(viewport)
 }
@@ -2091,6 +2097,38 @@ mod tests {
         );
         assert_eq!(report.drawable_actor_count, 1);
         assert!(report.restart_seen);
+    }
+
+    #[test]
+    fn render_return_to_view_preview_rejects_silent_actor_clipping() {
+        let strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::SetActor {
+                    slot: 0,
+                    tile: 1,
+                    x: RTV_STRIP_VISIBLE_COLUMNS as u8,
+                    y: 0,
+                },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+        let pixels = vec![0; 2 * TILE_ATLAS_SIDE * TILE_ATLAS_SIDE];
+        let atlas = TileAtlas {
+            depth: crate::TileGraphicsDepth::Ega16,
+            pixels,
+        };
+
+        let err = render_return_to_view_preview_viewport(&strips, &script, &atlas)
+            .expect_err("off-preview actor draw must fail instead of clipping");
+
+        assert!(
+            err.to_string().contains("forbidden fallback"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
