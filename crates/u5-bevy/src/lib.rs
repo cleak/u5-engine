@@ -66,12 +66,14 @@ use u5_runtime::{
     STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
     SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
     TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
-    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
+    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT,
     TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
     TITLE_SURFACE_WIDTH, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor,
+    TextWindowSystem, TileAtlas,
     TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
     TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
@@ -84,12 +86,14 @@ use u5_runtime::{
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
+    DisplayDriverFamily, IntroFontSlots, JOURNEY_ONWARD_SHORTCUT_BANNER, PreFlourishOutcome,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_brit_cbt,
     load_british_bit, load_british_pth, load_dungeon_cbt, load_graphic_image_directory,
     load_ibm_ch_font, load_play_options_from_save, load_question_records,
+    run_intro_pre_flourish_phase,
     load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_inn_pickup_register_text_window, paint_message_text_window,
@@ -273,6 +277,77 @@ impl IntroDisplayBuffer {
         panic!(
             "strict intro rendering refuses the generated title-tick animation fallback; publish or provide four authored 320x49 title-tick frames before drawing this animation; see cleak/u5-spec#52 and cleak/u5-spec#65"
         );
+    }
+
+    /// `formats/font-ch.md` 8x8 fixed-cell glyph stamp into this
+    /// framebuffer, used by the intro pre-flourish "Journey Onward"
+    /// banner. Each set bit in the glyph row writes the foreground
+    /// EGA index; each cleared bit writes the background index.
+    fn draw_fixed_glyph_cell(
+        &mut self,
+        font: &FixedCellFont,
+        code: u8,
+        cell_x: usize,
+        cell_y: usize,
+        foreground: u8,
+        background: u8,
+    ) {
+        let dst_x = cell_x * CH_CELL_SIDE;
+        let dst_y = cell_y * CH_CELL_SIDE;
+        assert!(
+            dst_x + CH_CELL_SIDE <= self.width && dst_y + CH_CELL_SIDE <= self.height,
+            "intro glyph blit at cell ({cell_x}, {cell_y}) exceeds framebuffer {}x{}",
+            self.width,
+            self.height
+        );
+        for glyph_y in 0..CH_CELL_SIDE {
+            let row_bits = font.glyph_row(code & 0x7f, glyph_y).unwrap_or_else(|| {
+                panic!(
+                    "fixed font glyph {} is missing row {glyph_y}",
+                    code & 0x7f
+                )
+            });
+            for glyph_x in 0..CH_CELL_SIDE {
+                let color = if row_bits & (1 << (7 - glyph_x)) != 0 {
+                    foreground & 0x0f
+                } else {
+                    background & 0x0f
+                };
+                let x = dst_x + glyph_x;
+                let y = dst_y + glyph_y;
+                self.pixels[y * self.width + x] = color;
+            }
+        }
+    }
+
+    /// `systems/intro.md §3` step 6: stamp a string centered inside
+    /// a text-window descriptor's column range, on a single row. Used
+    /// by the pre-flourish phase to draw the "Journey Onward" banner
+    /// via the active IBM glyph slot.
+    fn draw_fixed_text_centered_in_window(
+        &mut self,
+        font: &FixedCellFont,
+        text: &str,
+        window: TextWindowDescriptor,
+        cell_y: usize,
+        foreground: u8,
+        background: u8,
+    ) {
+        let bytes = text.as_bytes();
+        let inner_width = usize::from(window.inner_width());
+        let text_width = bytes.len().min(inner_width);
+        let left_pad = inner_width.saturating_sub(text_width) / 2;
+        let start_cell_x = usize::from(window.top_left_x) + left_pad;
+        for (offset, byte) in bytes.iter().take(text_width).enumerate() {
+            self.draw_fixed_glyph_cell(
+                font,
+                *byte,
+                start_cell_x + offset,
+                cell_y,
+                foreground,
+                background,
+            );
+        }
     }
 
     fn copy_revealed_columns_from(
@@ -7340,6 +7415,24 @@ fn run_visual_intro_menu_app(
     let screenshot_delay: u32 = screenshot_delay_from_env();
     let preset_keys: Vec<char> = preset_keys_from_env();
 
+    // `systems/intro.md §3` step 2: run the pre-flourish phase
+    // before the bevy app loop starts. The phase loads IBM.CH +
+    // RUNES.CH into the resident slot table, resets the primary
+    // text window to 40x25, selects descriptor index 0, and
+    // consults the queued key for the early Journey Onward
+    // shortcut. The bevy harness exposes its queued-at-boot keys
+    // through `U5_BEVY_PRESS`; the first character (case-folded
+    // upstream by `run_intro_pre_flourish_phase`) drives the poll.
+    let queued_key = preset_keys.first().map(|ch| *ch as u8);
+    let mut text_windows = TextWindowSystem::new();
+    let (font_slots, pre_flourish_outcome) = run_intro_pre_flourish_phase(
+        &game_dir,
+        DisplayDriverFamily::Ega,
+        &mut text_windows,
+        queued_key,
+    )
+    .unwrap_or_else(|err| panic!("intro pre-flourish phase failed: {err}"));
+
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -7371,6 +7464,9 @@ fn run_visual_intro_menu_app(
             panel: VisualIntroPanel::Menu,
             launch_result,
             image_handle: None,
+            font_slots: Some(font_slots),
+            text_windows,
+            pending_pre_flourish_outcome: Some(pre_flourish_outcome),
         })
         .insert_resource(VisualIntroAnimationPump::default())
         .insert_resource(ScreenshotConfig {
@@ -7521,6 +7617,20 @@ struct VisualIntroState {
     panel: VisualIntroPanel,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
     image_handle: Option<Handle<Image>>,
+    /// `systems/intro.md §3` step 2: resident font-slot table loaded
+    /// by the pre-flourish phase. `Some` in the production setup; test
+    /// fixtures may leave it `None` when they don't exercise the
+    /// pre-flourish-owned text rendering paths.
+    font_slots: Option<IntroFontSlots>,
+    /// `systems/intro.md §3` step 4: primary text-window descriptor
+    /// table reset to a 40x25 rectangle by the pre-flourish phase.
+    text_windows: TextWindowSystem,
+    /// `systems/intro.md §3` step 6: outcome of the single
+    /// non-blocking keyboard poll at the end of the pre-flourish
+    /// phase. The first `drive_visual_intro` tick consumes this and
+    /// either takes the Journey Onward shortcut or falls through to
+    /// the title flourish; it is then cleared.
+    pending_pre_flourish_outcome: Option<PreFlourishOutcome>,
 }
 
 #[derive(Debug, Default)]
@@ -7699,6 +7809,7 @@ fn setup_intro(
     mut intro: ResMut<VisualIntroState>,
 ) {
     commands.spawn(Camera2d);
+    apply_pre_flourish_outcome(&mut intro);
     let rgba = render_intro_frame(&mut intro);
     let mut image = Image::new(
         Extent3d {
@@ -7896,8 +8007,6 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         let mut advanced = false;
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
-        require_published_initial_title_rune_screen(intro);
-
         if !title_phase && !intro.message_waiting_for_key {
             clear_carry_visual_intro_title_tick(intro);
             advanced = true;
@@ -7972,22 +8081,12 @@ fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
     intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
 }
 
-fn initial_title_rune_screen_is_pending(intro: &VisualIntroState) -> bool {
-    matches!(intro.panel, VisualIntroPanel::Menu)
-        && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
-        && !intro.title_flourish_complete
-        && intro.title_flourish_step == 0
-        && !intro.title_signature_complete
-        && intro.title_signature_progress == 0
-}
-
-fn require_published_initial_title_rune_screen(intro: &VisualIntroState) {
-    if initial_title_rune_screen_is_pending(intro) {
-        panic!(
-            "intro title phase requires the published initial title/rune text screen contract before TITLE.BIT flourish playback; skipping it is a forbidden fallback; see cleak/u5-spec#71"
-        );
-    }
-}
+// `cleak/u5-spec#71` was resolved by `u5-spec` commit `6f9132f`: the
+// "initial title/rune text" phase is now specified as the non-visual
+// pre-flourish preparation pass (`systems/intro.md §3` step 2). The
+// engine runs `run_intro_pre_flourish_phase` before the bevy app
+// starts (`crates/u5-runtime/src/intro_preflourish.rs`); the formerly
+// required panic gate is no longer needed.
 
 fn require_published_intro_menu_text_window_contract() -> ! {
     panic!(
@@ -8004,6 +8103,46 @@ fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
     intro.modal_backing = None;
     intro.message_waiting_for_key = false;
     intro.message.clear();
+}
+
+/// `systems/intro.md §3` step 6: consume the pre-flourish phase's
+/// queued-key outcome. On the J shortcut, stamp the centered
+/// "Journey Onward" banner via the now-active IBM glyph slot and
+/// dispatch the Journey Onward subflow (which reads `SAVED.GAM`,
+/// validates it, and either launches gameplay through
+/// `transition_visual_intro_to_gameplay` or surfaces the empty-save
+/// message and falls back to the menu). On any other outcome the
+/// title flourish runs as normal.
+fn apply_pre_flourish_outcome(intro: &mut VisualIntroState) {
+    let Some(outcome) = intro.pending_pre_flourish_outcome.take() else {
+        return;
+    };
+    if !matches!(outcome, PreFlourishOutcome::JourneyOnwardShortcut) {
+        return;
+    }
+    let Some(slots) = intro.font_slots.clone() else {
+        // No resident slot table — the pre-flourish phase did not
+        // populate one (test-fixture path). Fall through to the
+        // normal title flow rather than panicking.
+        return;
+    };
+    let window = intro.text_windows.active_window();
+    intro.surface.clear(0);
+    let banner_row = usize::from(window.top_left_y)
+        + usize::from(window.height()) / 2;
+    intro.surface.draw_fixed_text_centered_in_window(
+        slots.active_font(),
+        JOURNEY_ONWARD_SHORTCUT_BANNER,
+        window,
+        banner_row,
+        0x0f,
+        0x00,
+    );
+    // The intro menu state machine starts at `Title`. Dismiss it
+    // before dispatching so the Journey Onward subflow runs from
+    // the `AwaitingSelection` phase the menu state machine expects.
+    intro.dispatch.dismiss_title();
+    resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
 }
 
 fn advance_visual_intro_panel_animation(
@@ -8131,7 +8270,6 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     }
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
-        require_published_initial_title_rune_screen(intro);
         if ch.eq_ignore_ascii_case(&'J') {
             intro.title_flourish_step = 0;
             intro.title_flourish_complete = true;
@@ -8757,7 +8895,6 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         let signature_progress = (title_phase && !intro.title_signature_complete)
             .then_some(intro.title_signature_progress);
         if title_phase {
-            require_published_initial_title_rune_screen(intro);
             intro.surface = visual_intro_title_art_buffer(
                 &intro.game_dir,
                 title_flourish_step,
@@ -10566,6 +10703,9 @@ fn write_visual_intro_report_inner(
         panel,
         launch_result: Arc::new(Mutex::new(None)),
         image_handle: None,
+        font_slots: None,
+        text_windows: TextWindowSystem::new(),
+        pending_pre_flourish_outcome: None,
     };
     if title_dismissed {
         intro.dispatch.dismiss_title();
@@ -12341,6 +12481,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let frame = render_intro_frame(&mut intro);
@@ -12374,6 +12517,124 @@ mod tests {
         }));
 
         assert_menu_text_window_gap_panic(result);
+    }
+
+    #[test]
+    fn apply_pre_flourish_outcome_journey_shortcut_stamps_banner_and_loads_save() {
+        // `systems/intro.md §3` step 6 J shortcut: the banner stamps
+        // through the IBM slot, the dispatch advances to the load
+        // handler, and a valid `SAVED.GAM` (the clean-room fixture
+        // provided by `debug_game_dir` is intentionally empty, so
+        // the path surfaces the empty-save message and returns to
+        // the menu rather than entering gameplay).
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        fs::write(dir.join(SAVED_GAM_FILENAME), vec![0u8; SAVED_GAM_LEN]).unwrap();
+        let ibm_font = load_ibm_ch_font(&dir).unwrap();
+        // Build a slot table the same way the pre-flourish phase
+        // would (slot 0 IBM, slot 1 runes); test passes the IBM
+        // font as both since the runes path isn't exercised here.
+        let slots = IntroFontSlots::new(ibm_font.clone(), ibm_font);
+        let mut text_windows = TextWindowSystem::new();
+        text_windows.set_window_rect(0, 0, 0, TEXT_SCREEN_COLUMNS - 1, TEXT_SCREEN_ROWS - 1);
+        text_windows.set_active_window(0);
+        let mut intro = VisualIntroState {
+            game_dir: dir.clone(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+            font_slots: Some(slots),
+            text_windows,
+            pending_pre_flourish_outcome: Some(PreFlourishOutcome::JourneyOnwardShortcut),
+        };
+
+        apply_pre_flourish_outcome(&mut intro);
+
+        // The banner left visible pixels in the framebuffer.
+        assert!(
+            intro.surface.pixels.iter().any(|pixel| *pixel != 0),
+            "Journey Onward banner must leave visible pixels in the intro surface"
+        );
+        // The shortcut consumed the pending outcome.
+        assert_eq!(intro.pending_pre_flourish_outcome, None);
+        // The empty save fixture means the dispatch returned to the
+        // menu with the empty-save message queued for keypress.
+        assert!(
+            intro.message_waiting_for_key,
+            "empty-save load through the J shortcut must queue the empty-save message"
+        );
+        assert!(
+            intro
+                .launch_result
+                .lock()
+                .expect("launch lock poisoned")
+                .is_none(),
+            "empty-save load must not hand a PlayOptions to the gameplay transition"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn apply_pre_flourish_outcome_continue_leaves_state_unchanged() {
+        // No queued key (or non-J): the shortcut is not taken,
+        // nothing is rendered, no dispatch transition occurs.
+        let dir = debug_game_dir();
+        let mut intro = VisualIntroState {
+            game_dir: dir.clone(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: Some(PreFlourishOutcome::ContinueToFlourish),
+        };
+        let baseline_surface = intro.surface.clone();
+
+        apply_pre_flourish_outcome(&mut intro);
+
+        assert_eq!(
+            intro.pending_pre_flourish_outcome, None,
+            "outcome must be consumed even on the continue path"
+        );
+        assert_eq!(
+            intro.surface, baseline_surface,
+            "continue path must not stamp the banner"
+        );
+        assert!(
+            !intro.message_waiting_for_key,
+            "continue path must not surface any message"
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -12430,6 +12691,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
         assert_eq!(INTRO_START_MENU_REVEAL_RECT, (0, 0, 319, 100));
         assert!(visual_intro_start_menu_reveal_active(&intro));
@@ -12482,6 +12746,9 @@ mod tests {
                 panel: VisualIntroPanel::Menu,
                 launch_result: Arc::new(Mutex::new(None)),
                 image_handle: None,
+                font_slots: None,
+                text_windows: TextWindowSystem::new(),
+                pending_pre_flourish_outcome: None,
             }
         }
 
@@ -12761,6 +13028,9 @@ mod tests {
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -12829,6 +13099,9 @@ mod tests {
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         assert!(!step_visual_intro_panel(&mut intro, ' '));
@@ -12916,6 +13189,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
         assert!(visual_intro_title_surface_visible(&intro));
         assert!(matches!(
@@ -12968,6 +13244,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         assert!(step_visual_intro(&mut intro, 'x'));
@@ -12999,6 +13278,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -13015,97 +13297,21 @@ mod tests {
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
-    #[test]
-    fn initial_title_rune_screen_gap_blocks_render_and_animation_tick() {
-        let dir = debug_game_dir();
-        install_intro_assets(&dir);
-        let mut intro = VisualIntroState {
-            game_dir: dir.clone(),
-            raster_depth: TileGraphicsDepth::Ega16,
-            dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: 0,
-            title_flourish_complete: false,
-            title_signature_progress: 0,
-            title_signature_complete: false,
-            title_tick_frame: 0,
-            title_tick_visible_frame: 0,
-            surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
-            modal_backing: None,
-            menu_idle_ticks: 0,
-            message_waiting_for_key: false,
-            message: String::new(),
-            panel: VisualIntroPanel::Menu,
-            launch_result: Arc::new(Mutex::new(None)),
-            image_handle: None,
-        };
+    // `cleak/u5-spec#71` was resolved in u5-spec `6f9132f`: the
+    // initial-title/rune phase is now the non-visual pre-flourish
+    // preparation pass owned by `run_intro_pre_flourish_phase`. The
+    // panic gate this test previously pinned no longer exists; the
+    // contract is exercised by `intro_preflourish::tests` in
+    // `u5-runtime` (slot table, text-window reset, single
+    // non-blocking poll) plus the bevy-side integration test below.
 
-        let render_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
-        let render_message =
-            panic_message(render_result.expect_err("initial title render must panic"));
-        assert!(
-            render_message.contains("skipping it is a forbidden fallback"),
-            "{render_message}"
-        );
-        assert!(
-            render_message.contains("cleak/u5-spec#71"),
-            "{render_message}"
-        );
-
-        let tick_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = advance_visual_intro_animation_tick(&mut intro);
-        }));
-        let tick_message = panic_message(tick_result.expect_err("initial title tick must panic"));
-        assert!(
-            tick_message.contains("skipping it is a forbidden fallback"),
-            "{tick_message}"
-        );
-        assert!(tick_message.contains("cleak/u5-spec#71"), "{tick_message}");
-
-        for key in ['J', 'x'] {
-            let key_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let _ = step_visual_intro(&mut intro, key);
-            }));
-            let key_message =
-                panic_message(key_result.expect_err("initial title key skip must panic"));
-            assert!(
-                key_message.contains("skipping it is a forbidden fallback"),
-                "{key_message}"
-            );
-            assert!(key_message.contains("cleak/u5-spec#71"), "{key_message}");
-        }
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn visual_intro_report_rejects_synthesized_static_title() {
-        let game_dir = debug_game_dir();
-        let out_dir = temp_output_dir("intro-report-title-gap");
-        fs::create_dir_all(&out_dir).unwrap();
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = write_visual_intro_report(
-                &out_dir,
-                "intro-menu",
-                "intro menu",
-                VisualIntroPanel::Menu,
-                &game_dir,
-                TileGraphicsDepth::Ega16,
-            );
-        }));
-
-        let message = panic_message(result.expect_err("initial title report must panic"));
-        assert!(
-            message.contains("skipping it is a forbidden fallback"),
-            "{message}"
-        );
-        assert!(message.contains("cleak/u5-spec#71"), "{message}");
-        let _ = fs::remove_dir_all(game_dir);
-        let _ = fs::remove_dir_all(out_dir);
-    }
+    // `cleak/u5-spec#71` resolved (u5-spec `6f9132f`): the
+    // pre-flourish preparation pass now owns what was formerly the
+    // unresolved "initial title/rune text screen". The panic gate
+    // this test pinned no longer fires; later spec gaps (title-tick
+    // frames `cleak/u5-spec#65`, etc.) keep the visual frame report
+    // honest through their own panics, exercised by
+    // `visual_frame_suite_local_clean_panics_on_strict_intro_asset_gap_when_present`.
 
     #[test]
     fn intro_title_flourish_ignores_non_j_keys_until_signature_phase() {
@@ -13129,6 +13335,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         assert!(!step_visual_intro(&mut intro, 'x'));
@@ -13167,6 +13376,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         assert!(step_visual_intro(&mut intro, 'x'));
@@ -13211,6 +13423,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
@@ -13247,6 +13462,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
@@ -13309,6 +13527,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -13352,6 +13573,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let frame = render_intro_frame(&mut intro);
@@ -14155,15 +14379,16 @@ mod tests {
                 .contains("visual proportional text requires the published resident width table")
                 || message.contains("sparse strip")
                 || message
-                    .contains("title-tick animation requires published authored frame pixels")
-                || message.contains("initial title/rune text screen contract"),
+                    .contains("refuses the generated title-tick animation fallback")
+                || message
+                    .contains("title-tick animation requires published authored frame pixels"),
             "{message}"
         );
         assert!(
             message.contains("cleak/u5-spec#70")
                 || message.contains("TITLE.BIT")
                 || message.contains("cleak/u5-spec#65")
-                || message.contains("cleak/u5-spec#71"),
+                || message.contains("cleak/u5-spec#52"),
             "{message}"
         );
         let _ = fs::remove_dir_all(dir);
@@ -15876,6 +16101,9 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -16177,6 +16405,9 @@ mod tests {
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
         intro.dispatch.dismiss_title();
         intro.dispatch.submit_menu_key(b'U');
@@ -16226,6 +16457,9 @@ mod tests {
             panel,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
         if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
             intro.modal_backing = Some(visual_intro_final_title_backing_buffer(&intro));
@@ -16677,6 +16911,9 @@ mod tests {
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -16790,6 +17027,9 @@ mod tests {
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -16882,6 +17122,9 @@ mod tests {
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
