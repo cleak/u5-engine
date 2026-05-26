@@ -73,12 +73,12 @@ use u5_runtime::{
     TITLE_SURFACE_WIDTH, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
     TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas,
     TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
+    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
-    X_RAY_COST, X_RAY_SPELL_INDEX, authored_title_tick_frames, blit_tile_id_to_viewport,
-    combat_actor_is_active_not_dead, combat_class_stats, commit_chargen_save,
-    commit_u4_transfer_save, configure_talk_shop_text_window,
+    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
+    combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
+    configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -97,8 +97,8 @@ use u5_runtime::{
     paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system, render_text_panel_rgba,
-    render_text_window_rgba, return_to_view_fixed_wipe_rectangles,
-    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
+    render_text_window_rgba, run_return_to_view_playback_until_restart,
+    save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -128,10 +128,7 @@ const READY_HINT: &str =
 const INTRO_FRAMEBUFFER_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
 const INTRO_FRAMEBUFFER_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
 const INTRO_DISPLAY_SCALE: f32 = 2.5;
-const RETURN_TO_VIEW_CAPTION_Y: usize = 4;
-const RETURN_TO_VIEW_CAPTION_HEIGHT: usize = 14;
 const RETURN_TO_VIEW_PREVIEW_Y: usize = 18;
-const RETURN_TO_VIEW_FIXED_WIPE_RGBA: [u8; 4] = [0xff, 0x55, 0xff, 0xff];
 const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = 1.0 / 18.2;
 const PROPORTIONAL_TEXT_LINE_HEIGHT: usize = PCS_GLYPH_HEIGHT + 2;
 const INTRO_STORY_TEXT_X: usize = 10;
@@ -204,17 +201,6 @@ impl IntroDisplayBuffer {
         }
     }
 
-    fn fill_rgba_rect_inclusive(
-        &mut self,
-        x0: usize,
-        y0: usize,
-        x1: usize,
-        y1: usize,
-        color: [u8; 4],
-    ) {
-        self.clear_rect_inclusive(x0, y0, x1, y1, ega_palette_index_from_rgba(&color));
-    }
-
     fn blit_rgba(
         &mut self,
         src: &[u8],
@@ -249,6 +235,7 @@ impl IntroDisplayBuffer {
         }
     }
 
+    #[cfg(test)]
     fn blit_return_to_view_preview_buffer(
         &mut self,
         src: &IntroDisplayBuffer,
@@ -288,23 +275,6 @@ impl IntroDisplayBuffer {
         panic!(
             "strict intro rendering refuses the generated title-tick animation fallback; publish or provide four authored 320x49 title-tick frames before drawing this animation; see cleak/u5-spec#52 and cleak/u5-spec#65"
         );
-    }
-
-    fn draw_authored_title_tick(&mut self, frames: &TitleTickFrameSet, frame: u8) {
-        let start_x = u5_runtime::TITLE_TICK_FRAME_X as usize;
-        let start_y = u5_runtime::TITLE_TICK_FRAME_Y as usize;
-        let width = u5_runtime::TITLE_TICK_FRAME_WIDTH as usize;
-        let height = u5_runtime::TITLE_TICK_FRAME_HEIGHT as usize;
-        assert!(
-            start_x + width <= self.width && start_y + height <= self.height,
-            "authored intro title tick rectangle ({start_x}, {start_y}) size {width}x{height} exceeds framebuffer {}x{}",
-            self.width,
-            self.height
-        );
-        for (row, src) in frames.frame_pixels(frame).chunks_exact(width).enumerate() {
-            let dst_start = (start_y + row) * self.width + start_x;
-            self.pixels[dst_start..dst_start + width].copy_from_slice(src);
-        }
     }
 
     fn copy_revealed_columns_from(
@@ -424,6 +394,7 @@ const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
     },
 ];
 
+#[cfg(test)]
 const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
     (IntroSubflow::JourneyOnward, 12, 17, " Journey Onward "),
     (IntroSubflow::CharacterCreation, 9, 18, " Create New Char. "),
@@ -766,8 +737,6 @@ pub fn visual_frame_suite(
             preview_frames: preview.frames,
             frame_metadata: preview.frame_metadata,
             preview_frame_index: 0,
-            preview_width: preview.width,
-            preview_height: preview.height,
         },
         game_dir,
         raster_depth,
@@ -7583,8 +7552,6 @@ enum VisualIntroPanel {
         preview_frames: Vec<IntroDisplayBuffer>,
         frame_metadata: Vec<VisualReturnToViewFrameMeta>,
         preview_frame_index: usize,
-        preview_width: usize,
-        preview_height: usize,
     },
 }
 
@@ -7593,8 +7560,6 @@ struct VisualReturnToViewPreview {
     summary: String,
     frames: Vec<IntroDisplayBuffer>,
     frame_metadata: Vec<VisualReturnToViewFrameMeta>,
-    width: usize,
-    height: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -8032,7 +7997,7 @@ fn require_published_initial_title_rune_screen(intro: &VisualIntroState) {
     }
 }
 
-fn require_published_intro_menu_text_window_contract() {
+fn require_published_intro_menu_text_window_contract() -> ! {
     panic!(
         "intro menu lower text-window frame requires a published frame/border contract; drawing a plain black band with fixed-cell menu labels is a forbidden fallback; see cleak/u5-spec#63"
     )
@@ -8655,17 +8620,11 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
                 preview.frame_metadata.len(),
                 "Return-to-View rendered frame count must match metadata count"
             );
-            assert!(
-                preview.width > 0 && preview.height > 0,
-                "Return-to-View preview dimensions must be non-zero"
-            );
             intro.panel = VisualIntroPanel::ReturnToView {
                 summary: preview.summary,
                 preview_frames: preview.frames,
                 frame_metadata: preview.frame_metadata,
                 preview_frame_index: 0,
-                preview_width: preview.width,
-                preview_height: preview.height,
             };
             intro.message_waiting_for_key = false;
             intro.message.clear();
@@ -9130,15 +9089,11 @@ fn draw_visual_intro_start_menu_to_buffer(
     buffer: &mut IntroDisplayBuffer,
     game_dir: &Path,
     depth: TileGraphicsDepth,
-    title_tick_frame: u8,
-    highlighted: Option<IntroSubflow>,
+    _title_tick_frame: u8,
+    _highlighted: Option<IntroSubflow>,
 ) {
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
     require_published_intro_menu_text_window_contract();
-    let title_tick_frames = authored_title_tick_frames();
-    buffer.draw_authored_title_tick(&title_tick_frames, title_tick_frame);
-    let font = load_ibm_ch_font(game_dir).expect("intro menu requires IBM fixed-cell font");
-    draw_intro_menu_labels_intro_buffer(buffer, &font, highlighted);
 }
 
 fn draw_visual_intro_start_menu_art_to_buffer(
@@ -9168,23 +9123,6 @@ fn draw_intro_menu_labels_rgba(
             rgba,
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
-            font,
-            label,
-            col,
-            row,
-            highlighted == Some(subflow),
-        );
-    }
-}
-
-fn draw_intro_menu_labels_intro_buffer(
-    buffer: &mut IntroDisplayBuffer,
-    font: &FixedCellFont,
-    highlighted: Option<IntroSubflow>,
-) {
-    for (subflow, col, row, label) in INTRO_MENU_LABELS {
-        overlay_fixed_cell_text_intro_buffer(
-            buffer,
             font,
             label,
             col,
@@ -9440,18 +9378,15 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
 }
 
 fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
-    let mut buffer = intro
+    let _backing = intro
         .modal_backing
         .as_ref()
-        .cloned()
         .expect("Return-to-View requires preserved intro backing surface");
 
     let VisualIntroPanel::ReturnToView {
         preview_frames,
         frame_metadata,
         preview_frame_index,
-        preview_width,
-        preview_height,
         ..
     } = &intro.panel
     else {
@@ -9470,56 +9405,9 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         .caption
         .expect("Return-to-View current frame is missing its caption");
     require_published_return_to_view_caption_renderer(caption);
-    let title_tick_frames = authored_title_tick_frames();
-    buffer.draw_authored_title_tick(&title_tick_frames, intro.title_tick_visible_frame);
-    let mut rgba = buffer.to_rgba();
-    overlay_centered_text_band_rgba(
-        &mut rgba,
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-        caption,
-        RETURN_TO_VIEW_CAPTION_Y,
-        RETURN_TO_VIEW_CAPTION_HEIGHT,
-    );
-    buffer = intro_buffer_from_rgba_frame(&rgba);
-
-    let preview_buffer = preview_frames
-        .get(*preview_frame_index)
-        .expect("Return-to-View current preview frame is missing");
-    assert!(
-        *preview_width <= INTRO_FRAMEBUFFER_WIDTH as usize,
-        "Return-to-View preview width {} exceeds intro framebuffer width {}",
-        preview_width,
-        INTRO_FRAMEBUFFER_WIDTH
-    );
-    let x = ((INTRO_FRAMEBUFFER_WIDTH as usize) - *preview_width) / 2;
-    assert_eq!(preview_buffer.width, *preview_width);
-    assert_eq!(preview_buffer.height, *preview_height);
-    buffer.blit_return_to_view_preview_buffer(preview_buffer, x, RETURN_TO_VIEW_PREVIEW_Y);
-
-    if let ReturnToViewFrameKind::FixedWipeRectangle { step } = current_meta.kind {
-        let rects = return_to_view_fixed_wipe_rectangles(step)
-            .expect("Return-to-View fixed wipe rectangle step is outside the published range");
-        let [((x0, y0), (x1, y1)), ((x2, y2), (x3, y3))] = rects;
-        buffer.fill_rgba_rect_inclusive(
-            usize::from(x0),
-            usize::from(y0),
-            usize::from(x1),
-            usize::from(y1),
-            RETURN_TO_VIEW_FIXED_WIPE_RGBA,
-        );
-        buffer.fill_rgba_rect_inclusive(
-            usize::from(x2),
-            usize::from(y2),
-            usize::from(x3),
-            usize::from(y3),
-            RETURN_TO_VIEW_FIXED_WIPE_RGBA,
-        );
-    }
-    buffer.to_rgba()
 }
 
-fn require_published_return_to_view_caption_renderer(_caption: &str) {
+fn require_published_return_to_view_caption_renderer(_caption: &str) -> ! {
     panic!(
         "Return-to-View captions require the published proportional font width and centering contract; drawing a fixed centered text band is a forbidden fallback; see cleak/u5-spec#70"
     )
@@ -10789,6 +10677,7 @@ fn overlay_monochrome_bitmap_buffer(
     }
 }
 
+#[cfg(test)]
 fn overlay_centered_text_band_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -16898,8 +16787,6 @@ mod tests {
                     },
                 ],
                 preview_frame_index: 0,
-                preview_width: 1,
-                preview_height: 1,
             },
         );
         intro.dispatch.submit_menu_key(b'R');
@@ -16948,8 +16835,6 @@ mod tests {
                     caption: Some("The Castle of Lord British"),
                 }],
                 preview_frame_index: 0,
-                preview_width: 1,
-                preview_height: 1,
             },
         );
         intro.dispatch.submit_menu_key(b'R');
@@ -17000,8 +16885,6 @@ mod tests {
                     caption: Some("The Castle of Lord British"),
                 }],
                 preview_frame_index: 0,
-                preview_width: 2,
-                preview_height: 2,
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
@@ -17033,8 +16916,6 @@ mod tests {
                     caption: Some("The Castle of Lord British"),
                 }],
                 preview_frame_index: 0,
-                preview_width: 1,
-                preview_height: 1,
             },
         );
         let mut backing = new_intro_display_buffer();
@@ -17068,8 +16949,6 @@ mod tests {
                     caption: Some("The Castle of Lord British"),
                 }],
                 preview_frame_index: 0,
-                preview_width: 1,
-                preview_height: 1,
             },
         );
         let mut backing = new_intro_display_buffer();
@@ -17122,8 +17001,6 @@ mod tests {
                     caption: Some("The Summoning"),
                 }],
                 preview_frame_index: 0,
-                preview_width: 1,
-                preview_height: 1,
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
@@ -17160,8 +17037,6 @@ mod tests {
                 },
             ],
             preview_frame_index: 0,
-            preview_width: 1,
-            preview_height: 1,
         };
         let mut title_tick_frame = 0;
 
@@ -17231,8 +17106,6 @@ mod tests {
                     },
                 ],
                 preview_frame_index: 1,
-                preview_width: 1,
-                preview_height: 1,
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
