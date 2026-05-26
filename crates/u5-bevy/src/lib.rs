@@ -50,17 +50,16 @@ use u5_runtime::{
     PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PLAYER_TILE,
     POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX,
     PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions,
-    PlayState, PlayTarget, ProportionalFont, ProportionalWidthTable, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX,
-    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
-    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
-    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    PlayState, PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
+    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
+    RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME,
+    SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
+    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
+    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
+    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
+    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
     STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
@@ -91,17 +90,16 @@ use u5_runtime::{
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_brit_cbt,
     load_british_bit, load_british_pth, load_dungeon_cbt, load_graphic_image_directory,
-    load_ibm_ch_font, load_legacy_proportional_font, load_play_options_from_save,
-    load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
-    load_title_bit,
+    load_ibm_ch_font, load_play_options_from_save, load_question_records,
+    load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_inn_pickup_register_text_window, paint_message_text_window,
     paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
-    paint_talk_shop_text_window, published_world_location_entries,
-    rasterize_proportional_paragraph, read_save_image_file, read_u4_transfer_source_from_party_sav,
-    render_play_text_window_system, render_return_to_view_playback_frame_viewport,
-    render_text_panel_rgba, render_text_window_rgba, return_to_view_fixed_wipe_rectangles,
-    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
+    paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
+    read_u4_transfer_source_from_party_sav, render_play_text_window_system,
+    render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
+    return_to_view_fixed_wipe_rectangles, run_return_to_view_playback_until_restart,
+    save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -10820,8 +10818,10 @@ fn overlay_proportional_text_from_assets_buffer(
     text: &str,
     placement: ProportionalTextPlacement,
 ) -> io::Result<()> {
-    let font = load_legacy_proportional_font(game_dir)?;
-    overlay_proportional_text_buffer(dst, &font, text, placement)
+    let _ = (dst, game_dir, text, placement);
+    panic!(
+        "visual proportional text requires the published resident width table; deriving widths from PROPORT.PCS is a forbidden fallback; see cleak/u5-spec#70"
+    );
 }
 
 #[cfg(test)]
@@ -10829,14 +10829,14 @@ fn overlay_proportional_text_rgba(
     dst: &mut [u8],
     dst_width: usize,
     dst_height: usize,
-    font: &ProportionalFont,
+    font: &u5_runtime::ProportionalFont,
+    widths: &u5_runtime::ProportionalWidthTable,
     text: &str,
     placement: ProportionalTextPlacement,
 ) -> io::Result<()> {
-    let widths = visual_proportional_width_table(font);
-    let bitmap = rasterize_proportional_paragraph(
+    let bitmap = u5_runtime::rasterize_proportional_paragraph(
         font,
-        &widths,
+        widths,
         text.as_bytes(),
         placement.width,
         placement.line_height,
@@ -10872,16 +10872,17 @@ fn overlay_proportional_text_rgba(
     Ok(())
 }
 
+#[cfg(test)]
 fn overlay_proportional_text_buffer(
     dst: &mut IntroDisplayBuffer,
-    font: &ProportionalFont,
+    font: &u5_runtime::ProportionalFont,
+    widths: &u5_runtime::ProportionalWidthTable,
     text: &str,
     placement: ProportionalTextPlacement,
 ) -> io::Result<()> {
-    let widths = visual_proportional_width_table(font);
-    let bitmap = rasterize_proportional_paragraph(
+    let bitmap = u5_runtime::rasterize_proportional_paragraph(
         font,
-        &widths,
+        widths,
         text.as_bytes(),
         placement.width,
         placement.line_height,
@@ -10911,10 +10912,6 @@ fn overlay_proportional_text_buffer(
         ega_palette_index_from_rgba(&placement.color),
     );
     Ok(())
-}
-
-fn visual_proportional_width_table(font: &ProportionalFont) -> ProportionalWidthTable {
-    ProportionalWidthTable::from_font_advances(font)
 }
 
 #[cfg(test)]
@@ -10952,6 +10949,7 @@ fn overlay_monochrome_bitmap_rgba(
     }
 }
 
+#[cfg(test)]
 fn overlay_monochrome_bitmap_buffer(
     dst: &mut IntroDisplayBuffer,
     bitmap: &MonochromeBitmap,
@@ -12301,13 +12299,15 @@ mod tests {
         Area, ArmsShop, BRIT_OOL_FILENAME, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE,
         DEFAULT_GAME_DIR, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE,
         INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT, OOL_PLANE_LEN,
-        PenStroke, ProportionalGlyph, REAGENT_COUNT, REAGENT_SPIDER_SILK,
-        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
-        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
-        SAVED_GAM_LEN, SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
-        SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
-        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
-        dungeon_cell_index, parse_ch_font, world_cell_index, wrap_text_panel_lines,
+        PenStroke, ProportionalFont, ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT,
+        REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
+        SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
+        SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN, SAVED_OOL_FILENAME,
+        SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
+        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
+        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
+        parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit, parse_legacy_lzw_title_bit,
+        parse_title_bit, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -12352,6 +12352,109 @@ mod tests {
                 });
             }
         }
+        install_canonical_intro_bit_asset(
+            source_dir,
+            dir,
+            "TITLE.BIT",
+            |bytes| parse_title_bit(bytes).map(|title| title.blocks),
+            parse_legacy_lzw_title_bit,
+        );
+        install_canonical_intro_bit_asset(
+            source_dir,
+            dir,
+            "BRITISH.BIT",
+            |bytes| parse_british_bit(bytes).map(|bitmap| vec![bitmap]),
+            parse_legacy_lzw_british_bit,
+        );
+    }
+
+    fn install_canonical_intro_bit_asset<T, FC, FV>(
+        source_dir: &Path,
+        dir: &Path,
+        file_name: &str,
+        parse_canonical: FC,
+        parse_local_variant: FV,
+    ) where
+        T: IntoCanonicalBitmaps,
+        FC: Fn(&[u8]) -> std::io::Result<Vec<MonochromeBitmap>>,
+        FV: Fn(&[u8]) -> std::io::Result<T>,
+    {
+        let bytes = fs::read(source_dir.join(file_name))
+            .unwrap_or_else(|err| panic!("failed to read intro test asset {file_name}: {err}"));
+        let bitmaps = parse_canonical(&bytes).unwrap_or_else(|canonical_err| {
+            parse_local_variant(&bytes)
+                .map(IntoCanonicalBitmaps::into_bitmaps)
+                .unwrap_or_else(|variant_err| {
+                    panic!(
+                        "{file_name} is neither canonical sparse BIT data ({canonical_err}) nor an explicit local test variant ({variant_err})"
+                    )
+                })
+        });
+        fs::write(dir.join(file_name), encode_sparse_bit_resource(&bitmaps)).unwrap_or_else(
+            |err| panic!("failed to write canonical intro test asset {file_name}: {err}"),
+        );
+    }
+
+    trait IntoCanonicalBitmaps {
+        fn into_bitmaps(self) -> Vec<MonochromeBitmap>;
+    }
+
+    impl IntoCanonicalBitmaps for u5_runtime::TitleBitImages {
+        fn into_bitmaps(self) -> Vec<MonochromeBitmap> {
+            self.blocks
+        }
+    }
+
+    impl IntoCanonicalBitmaps for MonochromeBitmap {
+        fn into_bitmaps(self) -> Vec<MonochromeBitmap> {
+            vec![self]
+        }
+    }
+
+    fn encode_sparse_bit_resource(bitmaps: &[MonochromeBitmap]) -> Vec<u8> {
+        assert!(
+            bitmaps.len() <= usize::from(u16::MAX),
+            "test sparse BIT resource has too many entries"
+        );
+        let header_len = 2 + bitmaps.len() * 4;
+        assert!(
+            header_len <= usize::from(u16::MAX),
+            "test sparse BIT pointer table is too large"
+        );
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&(bitmaps.len() as u16).to_le_bytes());
+        let mut body_offset = header_len;
+        for bitmap in bitmaps {
+            assert!(
+                body_offset <= usize::from(u16::MAX),
+                "test sparse BIT body offset exceeds u16 pointer range"
+            );
+            bytes.extend_from_slice(&(body_offset as u16).to_le_bytes());
+            bytes.extend_from_slice(&0u16.to_le_bytes());
+            body_offset += encoded_monochrome_bitmap_len(bitmap);
+        }
+        for bitmap in bitmaps {
+            encode_monochrome_bitmap(bitmap, &mut bytes);
+        }
+        bytes
+    }
+
+    fn encoded_monochrome_bitmap_len(bitmap: &MonochromeBitmap) -> usize {
+        4 + ((bitmap.width * bitmap.height + 7) / 8)
+    }
+
+    fn encode_monochrome_bitmap(bitmap: &MonochromeBitmap, bytes: &mut Vec<u8>) {
+        assert!(bitmap.width <= usize::from(u16::MAX));
+        assert!(bitmap.height <= usize::from(u16::MAX));
+        assert_eq!(bitmap.pixels.len(), bitmap.width * bitmap.height);
+        bytes.extend_from_slice(&(bitmap.width as u16).to_le_bytes());
+        bytes.extend_from_slice(&(bitmap.height as u16).to_le_bytes());
+        let mut packed = vec![0u8; (bitmap.pixels.len() + 7) / 8];
+        for (index, pixel) in bitmap.pixels.iter().enumerate() {
+            assert!(*pixel <= 1, "test monochrome bitmap contains pixel {pixel}");
+            packed[index / 8] |= *pixel << (7 - (index % 8));
+        }
+        bytes.extend_from_slice(&packed);
     }
 
     fn install_test_conversation(state: &mut PlayState) {
@@ -12447,9 +12550,22 @@ mod tests {
         }
     }
 
+    fn proportional_test_widths() -> ProportionalWidthTable {
+        let mut widths = [0u8; u5_runtime::PROPORTIONAL_WIDTH_TABLE_LEN];
+        for byte in b'A'..=b'Z' {
+            widths[usize::from(byte)] = 5;
+        }
+        for byte in b'a'..=b'z' {
+            widths[usize::from(byte)] = 5;
+        }
+        widths[usize::from(b' ')] = 3;
+        ProportionalWidthTable::new(widths)
+    }
+
     #[test]
     fn proportional_intro_overlay_draws_glyphs_and_shadow() {
         let font = proportional_test_font();
+        let widths = proportional_test_widths();
         let mut rgba = vec![0; 40 * 30 * 4];
         for pixel in rgba.chunks_exact_mut(4) {
             pixel.copy_from_slice(&[0x11, 0x11, 0x11, 0xff]);
@@ -12460,6 +12576,7 @@ mod tests {
             40,
             30,
             &font,
+            &widths,
             "AB",
             ProportionalTextPlacement {
                 x: 4,
@@ -12480,12 +12597,14 @@ mod tests {
     #[test]
     fn proportional_intro_overlay_draws_into_display_buffer() {
         let font = proportional_test_font();
+        let widths = proportional_test_widths();
         let mut buffer = IntroDisplayBuffer::new(40, 30);
         buffer.clear(8);
 
         overlay_proportional_text_buffer(
             &mut buffer,
             &font,
+            &widths,
             "AB",
             ProportionalTextPlacement {
                 x: 4,
@@ -14551,7 +14670,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_frame_suite_local_clean_panics_on_unspecified_return_to_view_geometry_when_present() {
+    fn visual_frame_suite_local_clean_panics_on_strict_intro_asset_gap_when_present() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if !game_dir.join("CASTLE.DAT").exists()
             || !game_dir.join(TILES_EGA_FILE).exists()
@@ -14566,19 +14685,23 @@ mod tests {
             visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
         }));
 
-        let payload = result.expect_err(
-            "visual frame suite must fail loudly until Return-to-View geometry is specified",
-        );
+        let payload =
+            result.expect_err("visual frame suite must fail loudly on unresolved intro assets");
         let message = payload
             .downcast_ref::<String>()
             .map(String::as_str)
             .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("Return-to-View geometry panic payload must be a string");
+            .expect("strict intro asset panic payload must be a string");
         assert!(
-            message.contains("Return-to-View preview geometry is unresolved"),
+            message
+                .contains("visual proportional text requires the published resident width table")
+                || message.contains("sparse strip"),
             "{message}"
         );
-        assert!(message.contains("cleak/u5-spec#54"), "{message}");
+        assert!(
+            message.contains("cleak/u5-spec#70") || message.contains("TITLE.BIT"),
+            "{message}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -16364,7 +16487,23 @@ mod tests {
         );
         intro.surface.clear(0x03);
 
-        let frame = render_story_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_story_intro_frame(&mut intro);
+        }));
+        let payload =
+            result.expect_err("story rendering must fail until resident widths are published");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("proportional width-table panic payload must be a string");
+        assert!(
+            message
+                .contains("visual proportional text requires the published resident width table"),
+            "{message}"
+        );
+        assert!(message.contains("cleak/u5-spec#70"), "{message}");
+        let frame = intro.surface.to_rgba();
 
         assert_eq!(
             rgba_pixel(
@@ -16453,7 +16592,23 @@ mod tests {
         );
         intro.surface.clear(0x03);
 
-        let frame = render_story_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_story_intro_frame(&mut intro);
+        }));
+        let payload =
+            result.expect_err("story rendering must fail until resident widths are published");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("proportional width-table panic payload must be a string");
+        assert!(
+            message
+                .contains("visual proportional text requires the published resident width table"),
+            "{message}"
+        );
+        assert!(message.contains("cleak/u5-spec#70"), "{message}");
+        let frame = intro.surface.to_rgba();
 
         assert_eq!(
             rgba_pixel(

@@ -587,39 +587,57 @@
     fn bit_graphics_local_clean_bitmaps_decode_when_present() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if game_dir.join(TITLE_BIT_FILE).exists() {
-            let title = load_title_bit(game_dir).unwrap();
-            assert_eq!(title.blocks.len(), 10);
-            assert_eq!(
-                title
-                    .blocks
-                    .iter()
-                    .map(|bitmap| (bitmap.width, bitmap.height))
-                    .collect::<Vec<_>>(),
-                vec![
-                    (24, 3),
-                    (40, 7),
-                    (72, 11),
-                    (112, 20),
-                    (152, 32),
-                    (216, 45),
-                    (280, 61),
-                    (104, 33),
-                    (16, 15),
-                    (112, 33),
-                ]
-            );
-            assert!(
-                title
-                    .blocks
-                    .iter()
-                    .all(|bitmap| bitmap.pixels.iter().all(|pixel| *pixel <= 1))
-            );
+            match load_title_bit(game_dir) {
+                Ok(title) => {
+                    assert_eq!(title.blocks.len(), 10);
+                    assert_eq!(
+                        title
+                            .blocks
+                            .iter()
+                            .map(|bitmap| (bitmap.width, bitmap.height))
+                            .collect::<Vec<_>>(),
+                        vec![
+                            (24, 3),
+                            (40, 7),
+                            (72, 11),
+                            (112, 20),
+                            (152, 32),
+                            (216, 45),
+                            (280, 61),
+                            (104, 33),
+                            (16, 15),
+                            (112, 33),
+                        ]
+                    );
+                    assert!(
+                        title
+                            .blocks
+                            .iter()
+                            .all(|bitmap| bitmap.pixels.iter().all(|pixel| *pixel <= 1))
+                    );
+                }
+                Err(err) => {
+                    assert!(
+                        err.to_string().contains("sparse strip"),
+                        "strict TITLE.BIT loader must fail loudly on noncanonical assets: {err}"
+                    );
+                }
+            }
         }
         if game_dir.join(BRITISH_BIT_FILE).exists() {
-            let british = load_british_bit(game_dir).unwrap();
-            assert_eq!((british.width, british.height), (272, 62));
-            assert_eq!(british.pixels.len(), 272 * 62);
-            assert!(british.pixels.iter().all(|pixel| *pixel <= 1));
+            match load_british_bit(game_dir) {
+                Ok(british) => {
+                    assert_eq!((british.width, british.height), (272, 62));
+                    assert_eq!(british.pixels.len(), 272 * 62);
+                    assert!(british.pixels.iter().all(|pixel| *pixel <= 1));
+                }
+                Err(err) => {
+                    assert!(
+                        err.to_string().contains("sparse strip"),
+                        "strict BRITISH.BIT loader must fail loudly on noncanonical assets: {err}"
+                    );
+                }
+            }
         }
         if game_dir.join(WD_BIT_FILE).exists() {
             let wd = load_wd_bit(game_dir).unwrap();
@@ -934,31 +952,21 @@
             assert_eq!(line.pixels.len(), 32 * 12);
         }
         if game_dir.join(PROPORT_PCS_FILE).exists() {
-            let resource = load_proportional_font_resource(game_dir).unwrap();
-            assert!(resource.strips.iter().all(|strip| {
-                strip.width > 0
-                    && strip.height > 0
-                    && strip.pixels.len() == strip.width * strip.height
-                    && strip.pixels.iter().all(|pixel| *pixel <= 1)
-            }));
-            if let Ok(font) = load_legacy_proportional_font(game_dir) {
-                assert_eq!(font.first_code, PCS_FIRST_CODE);
-                assert_eq!(font.glyphs.len(), 91);
-                assert!(font.glyph_for_code(0x7a).is_some());
-                assert!(font.glyph_for_code(0x7b).is_none());
-                assert!(measure_proportional_text(&font, b"Ultima").is_ok());
-                assert!(font.glyphs.iter().all(|glyph| {
-                    glyph.advance_width as usize <= PCS_GLYPH_BITMAP_WIDTH
-                        && glyph.bitmap.width == PCS_GLYPH_BITMAP_WIDTH
-                        && glyph.bitmap.height == PCS_GLYPH_HEIGHT
-                        && glyph.bitmap.pixels.len() == PCS_GLYPH_BITMAP_WIDTH * PCS_GLYPH_HEIGHT
-                        && glyph.bitmap.pixels.iter().all(|pixel| *pixel <= 1)
-                }));
-                let space = font.glyph_for_code(0x20).unwrap();
-                assert_eq!(space.advance_width, 0);
-                let line = rasterize_proportional_text_line(&font, b"Ultima").unwrap();
-                assert_eq!(line.height, PCS_GLYPH_HEIGHT);
-                assert_eq!(line.pixels.len(), line.width * line.height);
+            match load_proportional_font_resource(game_dir) {
+                Ok(resource) => {
+                    assert!(resource.strips.iter().all(|strip| {
+                        strip.width > 0
+                            && strip.height > 0
+                            && strip.pixels.len() == strip.width * strip.height
+                            && strip.pixels.iter().all(|pixel| *pixel <= 1)
+                    }));
+                }
+                Err(err) => {
+                    assert!(
+                        err.to_string().contains("sparse strip"),
+                        "strict PROPORT.PCS loader must fail loudly on noncanonical assets: {err}"
+                    );
+                }
             }
         }
     }

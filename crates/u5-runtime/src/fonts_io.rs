@@ -5,17 +5,7 @@ use std::{io, path::Path};
 use crate::*;
 
 pub fn load_title_bit(game_dir: &Path) -> io::Result<TitleBitImages> {
-    let bytes = read_disk_file(&game_dir.join(TITLE_BIT_FILE))?;
-    parse_title_bit(&bytes).or_else(|sparse_err| {
-        parse_legacy_lzw_title_bit(&bytes).map_err(|legacy_err| {
-            io::Error::new(
-                legacy_err.kind(),
-                format!(
-                    "{TITLE_BIT_FILE} is neither a canonical sparse strip resource ({sparse_err}) nor a legacy local LZW-wrapped bitmap directory ({legacy_err})"
-                ),
-            )
-        })
-    })
+    parse_title_bit(&read_disk_file(&game_dir.join(TITLE_BIT_FILE))?)
 }
 
 pub fn parse_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
@@ -78,17 +68,7 @@ pub fn parse_title_bit_body(body: &[u8], resource_name: &str) -> io::Result<Titl
 }
 
 pub fn load_british_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
-    let bytes = read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?;
-    parse_british_bit(&bytes).or_else(|sparse_err| {
-        parse_legacy_lzw_british_bit(&bytes).map_err(|legacy_err| {
-            io::Error::new(
-                legacy_err.kind(),
-                format!(
-                    "{BRITISH_BIT_FILE} is neither a canonical sparse strip resource ({sparse_err}) nor a legacy local LZW-wrapped bitmap ({legacy_err})"
-                ),
-            )
-        })
-    })
+    parse_british_bit(&read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?)
 }
 
 pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
@@ -410,18 +390,21 @@ pub fn parse_fixed_font_body(
 }
 
 pub fn load_proportional_font(game_dir: &Path) -> io::Result<ProportionalFont> {
-    load_legacy_proportional_font(game_dir)
+    let _ = game_dir;
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        "strict PROPORT.PCS loading does not expose a ProportionalFont glyph-directory; legacy LZW fallback was removed",
+    ))
 }
 
-/// Compatibility parser for local preprocessed glyph-directory assets. The
-/// public `PROPORT.PCS` resource envelope is parsed by
-/// [`parse_proportional_font_resource`].
+/// Explicit parser for local preprocessed glyph-directory assets. This is not
+/// used by the production loader.
 pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
-    parse_legacy_lzw_proportional_font(bytes)
-}
-
-pub fn load_legacy_proportional_font(game_dir: &Path) -> io::Result<ProportionalFont> {
-    parse_legacy_lzw_proportional_font(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
+    let _ = bytes;
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        "parse_proportional_font has no strict canonical glyph-directory form; use parse_proportional_font_resource",
+    ))
 }
 
 pub fn parse_legacy_lzw_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
@@ -430,17 +413,7 @@ pub fn parse_legacy_lzw_proportional_font(bytes: &[u8]) -> io::Result<Proportion
 }
 
 pub fn load_proportional_font_resource(game_dir: &Path) -> io::Result<ProportionalFontResource> {
-    let bytes = read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?;
-    parse_proportional_font_resource(&bytes).or_else(|sparse_err| {
-        parse_legacy_lzw_proportional_font_resource(&bytes).map_err(|legacy_err| {
-            io::Error::new(
-                legacy_err.kind(),
-                format!(
-                    "{PROPORT_PCS_FILE} is neither a canonical sparse strip resource ({sparse_err}) nor a legacy local LZW-wrapped proportional font ({legacy_err})"
-                ),
-            )
-        })
-    })
+    parse_proportional_font_resource(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
 }
 
 pub fn parse_proportional_font_resource(bytes: &[u8]) -> io::Result<ProportionalFontResource> {
@@ -693,20 +666,6 @@ pub struct ProportionalWidthTable {
 
 impl ProportionalWidthTable {
     pub const fn new(widths: [u8; PROPORTIONAL_WIDTH_TABLE_LEN]) -> Self {
-        Self { widths }
-    }
-
-    pub fn from_font_advances(font: &ProportionalFont) -> Self {
-        let mut widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
-        for (slot, glyph) in font.glyphs.iter().enumerate() {
-            let Some(code) = usize::from(font.first_code).checked_add(slot) else {
-                break;
-            };
-            if code >= widths.len() {
-                break;
-            }
-            widths[code] = glyph.advance_width;
-        }
         Self { widths }
     }
 
