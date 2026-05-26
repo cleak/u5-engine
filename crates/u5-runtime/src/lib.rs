@@ -286,7 +286,7 @@ pub use input_codes::{
 };
 pub use input_dispatch::{PlayInputDisposition, handle_play_key_input};
 pub use intro::{
-    BRITISH_PTH_PEN_ORIGINS, IntroMenuAction, MISCMAPS_CUTSCENE_RECORD_BYTES,
+    BRITISH_PTH_PEN_ORIGINS, EgaTitleTickLayout, IntroMenuAction, MISCMAPS_CUTSCENE_RECORD_BYTES,
     MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE, MISCMAPS_CUTSCENE_ROWS,
     MISCMAPS_CUTSCENE_SECTION_BYTES, MISCMAPS_CUTSCENE_SECTION_OFFSET,
     MISCMAPS_CUTSCENE_VISIBLE_COLUMNS, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
@@ -299,8 +299,9 @@ pub use intro::{
     TITLE_TICK_FRAME_SET_BYTES, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y,
     TITLE_TICK_PALETTE_CYCLE, TitleBitAsset, TitleBitPlacement, TitleTickFrameSet,
     authored_title_tick_frames, intro_menu_action, load_miscmaps_cutscene_map,
-    parse_miscmaps_cutscene_map_file, require_acknowledgements_contract,
-    require_miscmaps_cutscene_map, title_tick_next_frame, title_tick_palette_indices,
+    parse_ega_drv_title_tick_frames, parse_miscmaps_cutscene_map_file, placeholder_title_tick_frames,
+    require_acknowledgements_contract, require_miscmaps_cutscene_map, title_tick_next_frame,
+    title_tick_palette_indices,
 };
 pub use intro_preflourish::{
     IntroFontSlot, IntroFontSlots, JOURNEY_ONWARD_SHORTCUT_BANNER, PRE_FLOURISH_TEXT_WINDOW_INDEX,

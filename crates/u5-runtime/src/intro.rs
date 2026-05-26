@@ -295,6 +295,143 @@ pub fn authored_title_tick_frames() -> &'static TitleTickFrameSet {
     )
 }
 
+/// `systems/display-driver.md §5` source layout for the EGA driver's
+/// title-tick frame strip. The spec publishes the band geometry — four
+/// 320-pixel-wide bands at a 50-row source stride, with each tick
+/// copying the upper 49 rows — but the exact byte offset within
+/// `EGA.DRV` is a driver-revision-dependent locator that has not been
+/// published clean-room-safely yet (tracked upstream as a follow-up
+/// to `cleak/u5-spec#65`).
+///
+/// Callers parameterise the parser with this descriptor so the engine
+/// can adopt the published locator immediately when the spec adds
+/// one, without restructuring the extraction code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EgaTitleTickLayout {
+    /// Byte offset within `EGA.DRV` where band 0 begins.
+    pub start_offset: usize,
+    /// Bytes per source row across all four EGA planes. The standard
+    /// 320-pixel 4-plane packed layout is 40 bytes per plane × 4
+    /// planes = 160 bytes per row.
+    pub bytes_per_row: usize,
+    /// Per-plane byte stride within a row (40 bytes for a
+    /// 320-pixel-wide row at 1 bit per pixel per plane).
+    pub plane_stride_bytes: usize,
+    /// Total source rows per band (50, with the upper 49 copied to
+    /// the destination rectangle and the bottom row discarded per
+    /// the published §5 contract).
+    pub source_rows_per_band: usize,
+}
+
+impl EgaTitleTickLayout {
+    /// Standard 320-pixel-wide 4-plane EGA packed-row layout: 40
+    /// bytes per plane × 4 planes = 160 bytes per row, with planes
+    /// stored sequentially within each row (P0 P1 P2 P3). The
+    /// `start_offset` is caller-supplied since the published
+    /// `EGA.DRV` locator is still pending.
+    pub const fn standard_4_plane(start_offset: usize) -> Self {
+        Self {
+            start_offset,
+            bytes_per_row: 160,
+            plane_stride_bytes: 40,
+            source_rows_per_band: 50,
+        }
+    }
+
+    pub const fn band_stride_bytes(&self) -> usize {
+        self.bytes_per_row * self.source_rows_per_band
+    }
+}
+
+/// `systems/display-driver.md §5` clean-room-safe extractor for the
+/// title-tick four-frame strip from a runtime `EGA.DRV` image. The
+/// caller supplies the layout descriptor; this function performs no
+/// disassembly or address-derived reading and operates only on the
+/// caller-provided byte range. Plane bytes are unpacked into per-pixel
+/// EGA palette indices and the upper [`TITLE_TICK_FRAME_HEIGHT`] rows
+/// of each band are emitted in band-major order to the returned
+/// `TitleTickFrameSet`.
+pub fn parse_ega_drv_title_tick_frames(
+    bytes: &[u8],
+    layout: EgaTitleTickLayout,
+) -> io::Result<TitleTickFrameSet> {
+    let total_bands = TITLE_TICK_FRAME_COUNT as usize;
+    let band_stride = layout.band_stride_bytes();
+    let required = layout
+        .start_offset
+        .checked_add(band_stride.checked_mul(total_bands).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "EGA.DRV title-tick layout overflows: 4 * band_stride exceeds usize",
+            )
+        })?)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "EGA.DRV title-tick layout overflows: start_offset + 4 * band_stride exceeds usize",
+            )
+        })?;
+    if bytes.len() < required {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!(
+                "EGA.DRV title-tick parser needs at least {required} bytes from offset {} (have {})",
+                layout.start_offset,
+                bytes.len()
+            ),
+        ));
+    }
+    if layout.plane_stride_bytes * 4 != layout.bytes_per_row {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "EGA.DRV title-tick layout invalid: plane_stride_bytes * 4 ({}) must equal bytes_per_row ({})",
+                layout.plane_stride_bytes * 4,
+                layout.bytes_per_row,
+            ),
+        ));
+    }
+    let width = TITLE_TICK_FRAME_WIDTH as usize;
+    let height = TITLE_TICK_FRAME_HEIGHT as usize;
+
+    let mut pixels = Vec::with_capacity(TITLE_TICK_FRAME_SET_BYTES);
+    for band in 0..total_bands {
+        let band_offset = layout.start_offset + band * band_stride;
+        // §5: the destination receives the upper `height` rows of
+        // the `source_rows_per_band`-row source band.
+        for row in 0..height {
+            let row_offset = band_offset + row * layout.bytes_per_row;
+            for x in 0..width {
+                let byte_index = x / 8;
+                let bit_index = 7 - (x % 8);
+                let plane_base = row_offset + byte_index;
+                let p0 = (bytes[plane_base] >> bit_index) & 1;
+                let p1 = (bytes[plane_base + layout.plane_stride_bytes] >> bit_index) & 1;
+                let p2 = (bytes[plane_base + layout.plane_stride_bytes * 2] >> bit_index) & 1;
+                let p3 = (bytes[plane_base + layout.plane_stride_bytes * 3] >> bit_index) & 1;
+                pixels.push(p0 | (p1 << 1) | (p2 << 2) | (p3 << 3));
+            }
+        }
+    }
+    TitleTickFrameSet::from_palette_indices(pixels, "EGA.DRV title-tick strip")
+}
+
+/// `systems/display-driver.md §5` development placeholder. Returns a
+/// four-frame strip of all-zero (black) pixels that satisfies the
+/// public destination contract (320×49 per frame, four frames,
+/// in-range EGA palette indices) without claiming any visual fidelity
+/// to the original `EGA.DRV` frames. Use this only when the published
+/// `EGA.DRV` locator is not yet wired up; the visible result is an
+/// honest black band that surfaces the missing asset rather than a
+/// synthesised animation that hides it.
+pub fn placeholder_title_tick_frames() -> TitleTickFrameSet {
+    TitleTickFrameSet::from_palette_indices(
+        vec![0u8; TITLE_TICK_FRAME_SET_BYTES],
+        "placeholder title-tick frames",
+    )
+    .expect("placeholder title-tick frame set is well-formed by construction")
+}
+
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
 /// four records are shown as 4-by-19 map strips, followed by a
 /// 655-byte command stream driving preview actors and animation beats.
@@ -498,5 +635,91 @@ mod tests {
     #[should_panic(expected = "forbidden fallback")]
     fn acknowledgements_contract_refuses_placeholder_lines() {
         require_acknowledgements_contract();
+    }
+
+    #[test]
+    fn placeholder_title_tick_frames_satisfy_destination_contract() {
+        let frames = placeholder_title_tick_frames();
+        for frame in 0..TITLE_TICK_FRAME_COUNT {
+            let pixels = frames.frame_pixels(frame);
+            assert_eq!(pixels.len(), TITLE_TICK_FRAME_PIXELS);
+            assert!(pixels.iter().all(|p| *p == 0));
+        }
+    }
+
+    #[test]
+    fn ega_drv_title_tick_parser_round_trips_synthesised_bands() {
+        // Build a synthetic EGA.DRV-style buffer where each band's
+        // first row sets every plane to 0xff (producing palette
+        // index 15 across the whole row) and every other row is
+        // zero. Parsing the four bands then asserts that:
+        //   - row 0 of each frame is palette 15 everywhere,
+        //   - rows 1..48 are palette 0 everywhere,
+        //   - row 49 of the source band is *not* copied (only the
+        //     upper 49 rows are taken per §5).
+        let layout = EgaTitleTickLayout::standard_4_plane(0);
+        let band_stride = layout.band_stride_bytes();
+        let mut bytes = vec![0u8; band_stride * TITLE_TICK_FRAME_COUNT as usize];
+        for band in 0..TITLE_TICK_FRAME_COUNT as usize {
+            let band_base = band * band_stride;
+            // Row 0: all planes set across all 40 bytes.
+            for plane in 0..4 {
+                let plane_base = band_base + plane * layout.plane_stride_bytes;
+                for col in 0..layout.plane_stride_bytes {
+                    bytes[plane_base + col] = 0xff;
+                }
+            }
+            // Row 49 (the row §5 says is discarded): set a sentinel
+            // pattern that should *not* show up in the parsed
+            // frame pixels.
+            let row49_base = band_base + 49 * layout.bytes_per_row;
+            for plane in 0..4 {
+                let plane_base = row49_base + plane * layout.plane_stride_bytes;
+                for col in 0..layout.plane_stride_bytes {
+                    bytes[plane_base + col] = 0xaa;
+                }
+            }
+        }
+
+        let frames =
+            parse_ega_drv_title_tick_frames(&bytes, layout).expect("synthesised EGA.DRV decodes");
+        for frame in 0..TITLE_TICK_FRAME_COUNT {
+            let pixels = frames.frame_pixels(frame);
+            let width = TITLE_TICK_FRAME_WIDTH as usize;
+            for col in 0..width {
+                assert_eq!(pixels[col], 0x0f, "frame {frame} row 0 col {col}");
+            }
+            for row in 1..TITLE_TICK_FRAME_HEIGHT as usize {
+                for col in 0..width {
+                    assert_eq!(
+                        pixels[row * width + col],
+                        0,
+                        "frame {frame} row {row} col {col}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ega_drv_title_tick_parser_rejects_truncated_input() {
+        let layout = EgaTitleTickLayout::standard_4_plane(0);
+        let err = parse_ega_drv_title_tick_frames(&[], layout)
+            .expect_err("empty buffer must fail the parser");
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+    }
+
+    #[test]
+    fn ega_drv_title_tick_parser_rejects_invalid_layout() {
+        let layout = EgaTitleTickLayout {
+            start_offset: 0,
+            bytes_per_row: 160,
+            plane_stride_bytes: 50, // 50 * 4 != 160 -> invalid
+            source_rows_per_band: 50,
+        };
+        let buffer = vec![0u8; layout.band_stride_bytes() * 4];
+        let err = parse_ega_drv_title_tick_frames(&buffer, layout)
+            .expect_err("inconsistent layout must fail the parser");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 }
