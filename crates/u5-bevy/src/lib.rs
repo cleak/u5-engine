@@ -7945,6 +7945,8 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         let mut advanced = false;
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
+        require_published_initial_title_rune_screen(intro);
+
         if !title_phase && !intro.message_waiting_for_key {
             clear_carry_visual_intro_title_tick(intro);
             advanced = true;
@@ -8017,6 +8019,23 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
 fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
     intro.title_tick_visible_frame = intro.title_tick_frame;
     intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+}
+
+fn initial_title_rune_screen_is_pending(intro: &VisualIntroState) -> bool {
+    matches!(intro.panel, VisualIntroPanel::Menu)
+        && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+        && !intro.title_flourish_complete
+        && intro.title_flourish_step == 0
+        && !intro.title_signature_complete
+        && intro.title_signature_progress == 0
+}
+
+fn require_published_initial_title_rune_screen(intro: &VisualIntroState) {
+    if initial_title_rune_screen_is_pending(intro) {
+        panic!(
+            "intro title phase requires the published initial title/rune text screen contract before TITLE.BIT flourish playback; skipping it is a forbidden fallback; see cleak/u5-spec#71"
+        );
+    }
 }
 
 fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
@@ -9062,6 +9081,7 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         let signature_progress = (title_phase && !intro.title_signature_complete)
             .then_some(intro.title_signature_progress);
         if title_phase {
+            require_published_initial_title_rune_screen(intro);
             intro.surface = visual_intro_title_art_buffer(
                 &intro.game_dir,
                 title_flourish_step,
@@ -12290,11 +12310,7 @@ mod tests {
 
     fn assert_title_tick_gap_panic(result: std::thread::Result<()>) {
         let payload = result.expect_err("generated title-tick helper must fail");
-        let message = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("title tick panic payload must be a string");
+        let message = panic_message(payload);
         assert!(
             message.contains("authored title-tick frames")
                 || message.contains("published authored frame pixels")
@@ -12302,6 +12318,18 @@ mod tests {
                 || message.contains("generated title-tick animation fallback"),
             "{message}"
         );
+    }
+
+    fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+        payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| {
+                payload
+                    .downcast_ref::<&str>()
+                    .map(|message| message.to_string())
+            })
+            .expect("panic payload must be a string")
     }
 
     fn install_intro_assets(dir: &Path) {
@@ -13507,6 +13535,58 @@ mod tests {
             .expect("title flourish panic payload must be a string");
         assert!(message.contains("outside the published range"), "{message}");
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn initial_title_rune_screen_gap_blocks_render_and_animation_tick() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut intro = VisualIntroState {
+            game_dir: dir.clone(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let render_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
+        let render_message =
+            panic_message(render_result.expect_err("initial title render must panic"));
+        assert!(
+            render_message.contains("skipping it is a forbidden fallback"),
+            "{render_message}"
+        );
+        assert!(
+            render_message.contains("cleak/u5-spec#71"),
+            "{render_message}"
+        );
+
+        let tick_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = advance_visual_intro_animation_tick(&mut intro);
+        }));
+        let tick_message = panic_message(tick_result.expect_err("initial title tick must panic"));
+        assert!(
+            tick_message.contains("skipping it is a forbidden fallback"),
+            "{tick_message}"
+        );
+        assert!(tick_message.contains("cleak/u5-spec#71"), "{tick_message}");
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
