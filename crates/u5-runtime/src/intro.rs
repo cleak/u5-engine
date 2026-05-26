@@ -420,31 +420,11 @@ pub const MISCMAPS_RTV_COMMAND_SECTION_OFFSET: usize =
 /// 16-command preview bytecode, not the gameplay TLK runner.
 pub const RTV_COMMAND_COUNT: usize = 16;
 
-/// `intro.md §11`: lines shown by the Acknowledgements (`A`) submenu.
-///
-/// The public spec calls out acknowledgement-screen content as
-/// clean-room authored: "Its exact text and pagination are left to a
-/// source-free content transcription rather than copied binary text
-/// dumps." This is original prose authored for the clean-room
-/// implementation; it does not transcribe any historical credit text.
-pub const ACKNOWLEDGEMENTS_LINES: &[&str] = &[
-    "Acknowledgements",
-    "",
-    "Ultima V is a trademark of its",
-    "rights holders.",
-    "This clean-room recreation reads",
-    "local game data at runtime and",
-    "ships no original game content.",
-    "",
-    "Behavior is derived from the",
-    "published clean-room specification,",
-    "this engine, and local game assets.",
-    "No private decompilation,",
-    "disassembly, or copyrighted source",
-    "has been consulted.",
-    "",
-    "Key: return to the intro menu.",
-];
+pub fn require_acknowledgements_contract() -> ! {
+    panic!(
+        "intro acknowledgements require published original text, pagination, and layout; clean-room-authored placeholder credits are a forbidden fallback; see cleak/u5-spec#72"
+    )
+}
 
 /// `intro.md §6`: the six accepted intro-menu actions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -515,29 +495,8 @@ mod tests {
     }
 
     #[test]
-    fn acknowledgements_lines_are_clean_room_authored() {
-        let header = ACKNOWLEDGEMENTS_LINES
-            .first()
-            .copied()
-            .expect("acknowledgements has at least a header line");
-        assert_eq!(header, "Acknowledgements");
-        let last = ACKNOWLEDGEMENTS_LINES
-            .last()
-            .copied()
-            .expect("acknowledgements has a closing prompt");
-        assert!(
-            last.contains("return to the intro menu"),
-            "closing line should prompt return to the intro menu, got `{last}`"
-        );
-        assert!(
-            ACKNOWLEDGEMENTS_LINES
-                .iter()
-                .any(|line| line.contains("clean-room")),
-            "acknowledgements text should describe its clean-room provenance"
-        );
-        assert!(
-            ACKNOWLEDGEMENTS_LINES.iter().all(|line| line.len() <= 36),
-            "every acknowledgement line must fit the 36-column intro box"
-        );
+    #[should_panic(expected = "forbidden fallback")]
+    fn acknowledgements_contract_refuses_placeholder_lines() {
+        require_acknowledgements_contract();
     }
 }

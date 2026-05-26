@@ -8785,11 +8785,7 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
             return summarize_intro_story(records, *step);
         }
         VisualIntroPanel::Acknowledgements => {
-            return u5_runtime::ACKNOWLEDGEMENTS_LINES
-                .iter()
-                .map(|line| (*line).to_string())
-                .collect::<Vec<_>>()
-                .join("\n");
+            u5_runtime::require_acknowledgements_contract();
         }
         VisualIntroPanel::ReturnToView {
             summary,
@@ -9357,19 +9353,8 @@ fn render_u4_transfer_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
 }
 
 fn render_acknowledgements_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    intro.surface.clear(0);
-    let font =
-        load_ibm_ch_font(&intro.game_dir).expect("acknowledgements requires IBM fixed-cell font");
-    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 1, 1, 38, 23);
-    for (row, line) in u5_runtime::ACKNOWLEDGEMENTS_LINES.iter().enumerate() {
-        assert!(
-            line.len() <= 36,
-            "acknowledgements line {row} exceeds the 36-column intro box: {line}"
-        );
-        let x = 2 + (36usize - line.len()) / 2;
-        overlay_fixed_cell_text_intro_buffer(&mut intro.surface, &font, line, x, 3 + row, false);
-    }
-    intro.surface.to_rgba()
+    let _ = intro;
+    u5_runtime::require_acknowledgements_contract();
 }
 
 fn render_chargen_intro_graphics(
@@ -16786,18 +16771,21 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_acknowledgements_render_from_display_buffer() {
+    fn visual_intro_acknowledgements_refuses_placeholder_render() {
         let dir = debug_game_dir();
         let mut intro =
             visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
 
-        let frame = render_intro_frame(&mut intro);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_intro_frame(&mut intro);
+        }));
 
-        assert_eq!(frame, intro.surface.to_rgba());
+        let message = panic_message(result.expect_err("acknowledgements render must panic"));
         assert!(
-            intro.surface.pixels.iter().any(|pixel| *pixel != 0),
-            "acknowledgements should render into the intro display buffer"
+            message.contains("placeholder credits are a forbidden fallback"),
+            "{message}"
         );
+        assert!(message.contains("cleak/u5-spec#72"), "{message}");
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -150,11 +150,7 @@ fn drive_intro_subflow(
             prompt_continue()?;
         }
         IntroSubflow::Acknowledgements => {
-            for line in u5_runtime::ACKNOWLEDGEMENTS_LINES {
-                println!("{line}");
-            }
-            dispatch.complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
-            prompt_continue()?;
+            u5_runtime::require_acknowledgements_contract();
         }
         IntroSubflow::ReturnToView => {
             run_return_to_view_preview(game_dir)?;
