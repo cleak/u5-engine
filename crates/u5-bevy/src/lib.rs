@@ -44,24 +44,23 @@ use u5_runtime::{
     INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
     INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
     LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST,
-    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
-    NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
-    NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PLAYER_TILE,
-    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX,
-    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions,
-    PlayState, PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
-    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME,
-    SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
-    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
-    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
-    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap,
+    MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE,
+    NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST,
+    OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY,
+    PLAYER_SPRITE_TILE, PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
+    POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
+    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
+    QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX,
+    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
+    RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
+    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
     STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
@@ -97,23 +96,23 @@ use u5_runtime::{
     paint_inn_pickup_register_text_window, paint_message_text_window,
     paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
-    read_u4_transfer_source_from_party_sav, render_play_text_window_system,
-    render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
-    return_to_view_fixed_wipe_rectangles, run_return_to_view_playback_until_restart,
-    save_image_has_active_avatar,
+    read_u4_transfer_source_from_party_sav, render_play_text_window_system, render_text_panel_rgba,
+    render_text_window_rgba, return_to_view_fixed_wipe_rectangles,
+    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
     spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_visible,
-    summarize_return_to_view_preview, summarize_return_to_view_script,
     summoned_active_object_record, terrain_combat_instance_from_setup,
     terrain_combat_raw_replacement_tile_for_arena, terrain_combat_setup_from_record,
     terrain_combat_tile_for_spawn_index, title_tick_next_frame, town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
 };
+#[cfg(test)]
+use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
 
 const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
@@ -11376,86 +11375,44 @@ fn visual_return_to_view_summary(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
 ) -> VisualReturnToViewPreview {
+    let _ = raster_depth;
     let path = game_dir.join(MISCMAPS_DAT_FILE);
     let metadata = std::fs::metadata(&path)
         .unwrap_or_else(|err| panic!("Return-to-View requires {MISCMAPS_DAT_FILE}: {err}"));
-    let header = format!(
-        "{} found ({} bytes). Return-to-View strips start at byte {}, span {} bytes; command stream starts at byte {} and spans {} bytes.",
-        MISCMAPS_DAT_FILE,
-        metadata.len(),
-        MISCMAPS_RTV_STRIP_SECTION_OFFSET,
-        MISCMAPS_RTV_STRIP_SECTION_BYTES,
-        MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
-        RTV_COMMAND_STREAM_BYTES
+    assert!(
+        metadata.len() > 0,
+        "Return-to-View requires non-empty {MISCMAPS_DAT_FILE}"
     );
     let assets = load_return_to_view_assets(game_dir)
         .unwrap_or_else(|err| panic!("Return-to-View requires readable assets: {err}"))
         .expect("Return-to-View asset loader returned no assets after metadata succeeded");
-    let script_summary = summarize_return_to_view_script(&assets.script);
-    let preview_summary = summarize_return_to_view_preview(&assets.strips, &assets.script)
-        .unwrap_or_else(|err| panic!("Return-to-View preview dry-run failed: {err}"));
     let playback = run_return_to_view_playback_until_restart(&assets.strips, &assets.script, 4096)
         .unwrap_or_else(|err| panic!("Return-to-View playback failed: {err}"));
     assert!(
         !playback.frames.is_empty(),
         "Return-to-View playback emitted no frames"
     );
-    let atlas = load_tile_atlas(game_dir, raster_depth)
-        .unwrap_or_else(|err| panic!("Return-to-View requires tile atlas: {err}"));
-    let frame_metadata = playback
-        .frames
-        .iter()
-        .map(|frame| VisualReturnToViewFrameMeta {
-            command_index: frame.command_index,
-            elapsed_title_ticks: frame.elapsed_title_ticks,
-            kind: frame.kind,
-            caption: frame.state.current_caption,
-        })
-        .collect::<Vec<_>>();
-    let rendered_frames = playback
-        .frames
-        .iter()
-        .map(|frame| {
-            render_return_to_view_playback_frame_viewport(frame, &atlas, 0).unwrap_or_else(|err| {
-                panic!(
-                    "Return-to-View frame {} at title tick {} failed to render: {err}",
-                    frame.command_index, frame.elapsed_title_ticks
-                )
-            })
-        })
-        .map(|viewport| {
-            (
-                IntroDisplayBuffer::from_rgba(viewport.width, viewport.height, &viewport.to_rgba()),
-                viewport.width,
-                viewport.height,
-            )
-        })
-        .collect::<Vec<_>>();
-    let (width, height) = rendered_frames
-        .first()
-        .map(|(_, width, height)| (*width, *height))
-        .expect("Return-to-View rendered frame list unexpectedly empty");
-    let available_height = (INTRO_FRAMEBUFFER_HEIGHT as usize)
-        .checked_sub(RETURN_TO_VIEW_PREVIEW_Y)
-        .expect("Return-to-View preview Y exceeds intro framebuffer height");
-    assert!(
-        height <= available_height,
-        "Return-to-View preview geometry is unresolved: rendered {width}x{height} at y={RETURN_TO_VIEW_PREVIEW_Y}, which exceeds the 320x200 intro framebuffer; see cleak/u5-spec#54"
+    let predicted_width = RTV_STRIP_VISIBLE_COLUMNS
+        .checked_mul(TILE_ATLAS_SIDE)
+        .expect("Return-to-View full-tile preview width overflows");
+    let predicted_height = RTV_STRIP_VISIBLE_ROWS
+        .checked_mul(TILE_ATLAS_SIDE)
+        .expect("Return-to-View full-tile preview height overflows");
+    require_published_return_to_view_preview_pixel_geometry(
+        playback.frames.len(),
+        predicted_width,
+        predicted_height,
     );
-    let frames = rendered_frames
-        .into_iter()
-        .map(|(buffer, _, _)| buffer)
-        .collect::<Vec<_>>();
-    VisualReturnToViewPreview {
-        summary: format!(
-            "{header} {script_summary} {preview_summary} Rendered {} playback frame(s).",
-            frames.len()
-        ),
-        frames,
-        frame_metadata,
-        width,
-        height,
-    }
+}
+
+fn require_published_return_to_view_preview_pixel_geometry(
+    playback_frame_count: usize,
+    full_tile_width: usize,
+    full_tile_height: usize,
+) -> ! {
+    panic!(
+        "Return-to-View preview pixel geometry is unpublished: the current full TILES.16 4x19 render would synthesize {playback_frame_count} {full_tile_width}x{full_tile_height} preview frame(s) and overflow the 320x200 intro framebuffer at y={RETURN_TO_VIEW_PREVIEW_Y}; cropping, scaling, or partial blitting is a forbidden fallback; see cleak/u5-spec#54"
+    )
 }
 
 fn visual_chargen_rng_pool() -> Vec<u8> {
@@ -12161,6 +12118,19 @@ mod tests {
                 && message.contains("fixed centered text band")
                 && message.contains("forbidden fallback")
                 && message.contains("cleak/u5-spec#70"),
+            "{message}"
+        );
+    }
+
+    fn assert_return_to_view_preview_geometry_gap_panic(result: std::thread::Result<()>) {
+        let payload =
+            result.expect_err("unpublished Return-to-View preview pixel geometry must fail");
+        let message = panic_message(payload);
+        assert!(
+            message.contains("Return-to-View preview pixel geometry")
+                && message.contains("full TILES.16 4x19 render")
+                && message.contains("forbidden fallback")
+                && message.contains("cleak/u5-spec#54"),
             "{message}"
         );
     }
@@ -16280,6 +16250,27 @@ mod tests {
         fs::write(dir.join(MISCMAPS_DAT_FILE), vec![0u8; 128]).unwrap();
 
         visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
+    }
+
+    #[test]
+    fn visual_return_to_view_summary_refuses_full_tile_preview_geometry_fallback() {
+        let dir = debug_game_dir();
+        let mut bytes = vec![0u8; MISCMAPS_RTV_COMMAND_SECTION_OFFSET + RTV_COMMAND_STREAM_BYTES];
+        let stream_start = MISCMAPS_RTV_COMMAND_SECTION_OFFSET;
+        bytes[stream_start..stream_start + RTV_COMMAND_STREAM_BYTES].fill(0x09);
+        bytes[stream_start] = 0x06;
+        bytes[stream_start + 1] = 0;
+        bytes[stream_start + 2] = 0x03;
+        bytes[stream_start + 3] = 1;
+        bytes[stream_start + 4] = 0x09;
+        fs::write(dir.join(MISCMAPS_DAT_FILE), bytes).unwrap();
+
+        let result = std::panic::catch_unwind(|| {
+            let _ = visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
+        });
+
+        assert_return_to_view_preview_geometry_gap_panic(result);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
