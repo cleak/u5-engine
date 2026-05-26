@@ -231,66 +231,58 @@ fn run_story_slides(game_dir: &Path) -> io::Result<()> {
 fn run_return_to_view_preview(game_dir: &Path) -> io::Result<()> {
     println!("Return to View");
     let path = game_dir.join(MISCMAPS_DAT_FILE);
-    match fs::metadata(&path) {
-        Ok(metadata) => {
-            println!(
-                "{} found ({} bytes). Return-to-View strips start at byte {}, span {} bytes; command stream starts at byte {} and spans {} bytes.",
-                MISCMAPS_DAT_FILE,
-                metadata.len(),
-                MISCMAPS_RTV_STRIP_SECTION_OFFSET,
-                MISCMAPS_RTV_STRIP_SECTION_BYTES,
-                MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
-                RTV_COMMAND_STREAM_BYTES
-            );
-            match load_return_to_view_assets(game_dir) {
-                Ok(Some(assets)) => {
-                    println!("{}", summarize_return_to_view_script(&assets.script));
-                    match summarize_return_to_view_preview(&assets.strips, &assets.script) {
-                        Ok(summary) => println!("{summary}"),
-                        Err(err) => println!("Return-to-View dry-run error: {err}"),
-                    }
-                    match run_return_to_view_playback_until_restart(
-                        &assets.strips,
-                        &assets.script,
-                        4096,
-                    ) {
-                        Ok(playback) => {
-                            println!(
-                                "Playback metadata: {} frame(s), final caption {:?}, final strip {:?}.",
-                                playback.frames.len(),
-                                playback.run.state.current_caption,
-                                playback.run.state.current_strip
-                            );
-                            if let Some(first) = playback.frames.first() {
-                                println!(
-                                    "First frame: {}; command {}; title tick {}; caption {:?}.",
-                                    return_to_view_frame_kind_label(first.kind),
-                                    first.command_index,
-                                    first.elapsed_title_ticks,
-                                    first.state.current_caption
-                                );
-                            }
-                            if let Some(last) = playback.frames.last() {
-                                println!(
-                                    "Last frame: {}; command {}; title tick {}; caption {:?}.",
-                                    return_to_view_frame_kind_label(last.kind),
-                                    last.command_index,
-                                    last.elapsed_title_ticks,
-                                    last.state.current_caption
-                                );
-                            }
-                        }
-                        Err(err) => println!("Return-to-View playback metadata error: {err}"),
-                    }
-                }
-                Ok(None) => println!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
-                Err(err) => println!("Return-to-View script error: {err}"),
-            }
-        }
+    let metadata = match fs::metadata(&path) {
+        Ok(metadata) => metadata,
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            println!("{MISCMAPS_DAT_FILE} is missing; preview cannot run.");
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Return-to-View requires MISCMAPS.DAT; returning to the menu is a forbidden fallback",
+            ));
         }
         Err(err) => return Err(err),
+    };
+    println!(
+        "{} found ({} bytes). Return-to-View strips start at byte {}, span {} bytes; command stream starts at byte {} and spans {} bytes.",
+        MISCMAPS_DAT_FILE,
+        metadata.len(),
+        MISCMAPS_RTV_STRIP_SECTION_OFFSET,
+        MISCMAPS_RTV_STRIP_SECTION_BYTES,
+        MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
+        RTV_COMMAND_STREAM_BYTES
+    );
+    let assets = load_return_to_view_assets(game_dir)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "Return-to-View requires MISCMAPS.DAT; returning to the menu is a forbidden fallback",
+        )
+    })?;
+    println!("{}", summarize_return_to_view_script(&assets.script));
+    let summary = summarize_return_to_view_preview(&assets.strips, &assets.script)?;
+    println!("{summary}");
+    let playback = run_return_to_view_playback_until_restart(&assets.strips, &assets.script, 4096)?;
+    println!(
+        "Playback metadata: {} frame(s), final caption {:?}, final strip {:?}.",
+        playback.frames.len(),
+        playback.run.state.current_caption,
+        playback.run.state.current_strip
+    );
+    if let Some(first) = playback.frames.first() {
+        println!(
+            "First frame: {}; command {}; title tick {}; caption {:?}.",
+            return_to_view_frame_kind_label(first.kind),
+            first.command_index,
+            first.elapsed_title_ticks,
+            first.state.current_caption
+        );
+    }
+    if let Some(last) = playback.frames.last() {
+        println!(
+            "Last frame: {}; command {}; title tick {}; caption {:?}.",
+            return_to_view_frame_kind_label(last.kind),
+            last.command_index,
+            last.elapsed_title_ticks,
+            last.state.current_caption
+        );
     }
     println!("The terminal harness reports the clean preview layout and returns to the menu.");
     Ok(())
@@ -469,6 +461,19 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
 
         let err = run_story_slides(&dir).expect_err("missing STORY.DAT must fail loudly");
+
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        assert!(err.to_string().contains("forbidden fallback"), "{}", err);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn terminal_return_to_view_requires_miscmaps_instead_of_returning_to_menu() {
+        let dir = temp_intro_dir("missing-miscmaps");
+        fs::create_dir_all(&dir).unwrap();
+
+        let err =
+            run_return_to_view_preview(&dir).expect_err("missing MISCMAPS.DAT must fail loudly");
 
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
         assert!(err.to_string().contains("forbidden fallback"), "{}", err);
