@@ -9149,17 +9149,26 @@ fn ensure_title_tick_frames(intro: &mut VisualIntroState) -> &TitleTickFrameSet 
 }
 
 fn load_or_placeholder_title_tick_frames(game_dir: &Path) -> TitleTickFrameSet {
-    // `cleak/u5-spec#74` (pending publication) will give a
-    // clean-room-safe offset+packing locator for the original
-    // `EGA.DRV` title-tick strip. While that's pending, the env var
-    // lets a developer override locally. Otherwise the engine ships
-    // an independently-authored four-frame strip that uses the
-    // published palette cycle (`cleak/u5-spec#52`) on a
-    // procedurally-generated flame silhouette — visibly the
-    // "wavering flame stripe" effect §5 describes, drawn through
-    // the published EGA palette indices. The spec explicitly
-    // sanctions independently-authored replacements; this is the
-    // sanctioned path until the original-frame locator lands.
+    // Title-tick source priority, in order:
+    //   1. User-captured PNG frames (`TITLE_TICK_0.png` ..
+    //      `TITLE_TICK_3.png` in the game dir). Each must be a
+    //      320×49 image; pixels are nearest-EGA-palette-matched.
+    //      This is the clean-room-safe "pixel perfect from a real
+    //      capture" path: the user runs the original game in their
+    //      preferred way (DOSBox, etc.), captures the `(0, 65)`
+    //      `320 x 49` rectangle four times across the tick cycle,
+    //      and drops the PNGs in place. The engine reads them at
+    //      runtime, no source-code analysis required.
+    //   2. `U5_EGA_DRV_TITLE_TICK_OFFSET`: extract via the
+    //      `parse_ega_drv_title_tick_frames` parser when the
+    //      `cleak/u5-spec#74` locator lands.
+    //   3. `clean_room_authored_title_tick_frames`: the
+    //      independently-authored procedural fallback that uses
+    //      the published palette cycle. Spec-sanctioned but not
+    //      byte-identical to the original.
+    if let Some(frames) = try_load_title_tick_frames_from_png(game_dir) {
+        return frames;
+    }
     if let Ok(value) = std::env::var("U5_EGA_DRV_TITLE_TICK_OFFSET") {
         if let Ok(offset) = value.parse::<usize>() {
             let drv_path = game_dir.join("EGA.DRV");
@@ -9184,6 +9193,44 @@ fn load_or_placeholder_title_tick_frames(game_dir: &Path) -> TitleTickFrameSet {
     }
     let _ = game_dir;
     clean_room_authored_title_tick_frames()
+}
+
+/// Read four `TITLE_TICK_<n>.png` files (n = 0..3) from `game_dir`,
+/// resample each into 320×49 EGA-palette-indexed pixels, and emit a
+/// `TitleTickFrameSet`. Returns `None` if any of the four files is
+/// missing — that triggers the next fallback in the loader chain.
+/// Failures during decoding panic loudly: a broken PNG is a config
+/// error worth surfacing, not a silent fall-through.
+fn try_load_title_tick_frames_from_png(game_dir: &Path) -> Option<TitleTickFrameSet> {
+    let mut paths = Vec::with_capacity(4);
+    for frame in 0..4 {
+        paths.push(game_dir.join(format!("TITLE_TICK_{frame}.png")));
+    }
+    if paths.iter().any(|p| !p.exists()) {
+        return None;
+    }
+    let target_w = TITLE_TICK_FRAME_WIDTH as usize;
+    let target_h = TITLE_TICK_FRAME_HEIGHT as usize;
+    let mut pixels = Vec::with_capacity(TITLE_TICK_FRAME_PIXELS * 4);
+    for (frame, path) in paths.iter().enumerate() {
+        let image = image::open(path).unwrap_or_else(|err| {
+            panic!("title-tick frame {frame} at {path:?} could not be opened: {err}")
+        });
+        let rgba = image.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        if w as usize != target_w || h as usize != target_h {
+            panic!(
+                "title-tick frame {frame} at {path:?} must be {target_w}x{target_h}, got {w}x{h}"
+            );
+        }
+        for pixel in rgba.pixels() {
+            pixels.push(ega_palette_index_from_rgba(&pixel.0));
+        }
+    }
+    Some(
+        TitleTickFrameSet::from_palette_indices(pixels, "TITLE_TICK_*.png frame strip")
+            .expect("TITLE_TICK_*.png frame strip is well-formed by construction"),
+    )
 }
 
 fn draw_visual_intro_start_menu_art_to_buffer(
