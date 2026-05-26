@@ -74,7 +74,7 @@ use u5_runtime::{
     TITLE_SURFACE_WIDTH, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
     TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas,
     TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
+    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
     X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
@@ -99,8 +99,8 @@ use u5_runtime::{
     paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
     render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
-    return_to_view_fixed_wipe_rectangles, run_return_to_view_playback_until_restart,
-    save_image_has_active_avatar,
+    require_title_tick_frames, return_to_view_fixed_wipe_rectangles,
+    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -283,11 +283,29 @@ impl IntroDisplayBuffer {
         }
     }
 
+    #[cfg(test)]
     fn draw_title_tick(&mut self, frame: u8) {
         let _ = frame;
         panic!(
             "strict intro rendering refuses the generated title-tick animation fallback; publish or provide four authored 320x49 title-tick frames before drawing this animation; see cleak/u5-spec#52 and cleak/u5-spec#65"
         );
+    }
+
+    fn draw_authored_title_tick(&mut self, frames: &TitleTickFrameSet, frame: u8) {
+        let start_x = u5_runtime::TITLE_TICK_FRAME_X as usize;
+        let start_y = u5_runtime::TITLE_TICK_FRAME_Y as usize;
+        let width = u5_runtime::TITLE_TICK_FRAME_WIDTH as usize;
+        let height = u5_runtime::TITLE_TICK_FRAME_HEIGHT as usize;
+        assert!(
+            start_x + width <= self.width && start_y + height <= self.height,
+            "authored intro title tick rectangle ({start_x}, {start_y}) size {width}x{height} exceeds framebuffer {}x{}",
+            self.width,
+            self.height
+        );
+        for (row, src) in frames.frame_pixels(frame).chunks_exact(width).enumerate() {
+            let dst_start = (start_y + row) * self.width + start_x;
+            self.pixels[dst_start..dst_start + width].copy_from_slice(src);
+        }
     }
 
     fn copy_revealed_columns_from(
@@ -9104,7 +9122,9 @@ fn draw_visual_intro_start_menu_to_buffer(
     highlighted: Option<IntroSubflow>,
 ) {
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
-    buffer.draw_title_tick(title_tick_frame);
+    let title_tick_frames = require_title_tick_frames(game_dir)
+        .unwrap_or_else(|err| panic!("intro menu requires authored title-tick frames: {err}"));
+    buffer.draw_authored_title_tick(&title_tick_frames, title_tick_frame);
     let font = load_ibm_ch_font(game_dir).expect("intro menu requires IBM fixed-cell font");
     draw_intro_menu_labels_intro_buffer(buffer, &font, highlighted);
 }
@@ -9475,7 +9495,9 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         .as_ref()
         .cloned()
         .expect("Return-to-View requires preserved intro backing surface");
-    buffer.draw_title_tick(intro.title_tick_visible_frame);
+    let title_tick_frames = require_title_tick_frames(&intro.game_dir)
+        .unwrap_or_else(|err| panic!("Return-to-View requires authored title-tick frames: {err}"));
+    buffer.draw_authored_title_tick(&title_tick_frames, intro.title_tick_visible_frame);
 
     let VisualIntroPanel::ReturnToView {
         preview_frames,
@@ -12281,7 +12303,8 @@ mod tests {
             .or_else(|| payload.downcast_ref::<&str>().copied())
             .expect("title tick panic payload must be a string");
         assert!(
-            message.contains("generated title-tick animation fallback"),
+            message.contains("authored title-tick frames")
+                || message.contains("generated title-tick animation fallback"),
             "{message}"
         );
     }
@@ -12367,6 +12390,16 @@ mod tests {
         fn into_bitmaps(self) -> Vec<MonochromeBitmap> {
             self.blocks
         }
+    }
+
+    fn install_title_tick_frame_file(dir: &Path) {
+        let mut bytes = vec![0; u5_runtime::TITLE_TICK_FRAME_SET_BYTES];
+        for frame in 0..u5_runtime::TITLE_TICK_FRAME_COUNT as usize {
+            let start = frame * u5_runtime::TITLE_TICK_FRAME_PIXELS;
+            bytes[start..start + u5_runtime::TITLE_TICK_FRAME_PIXELS].fill(frame as u8 + 1);
+        }
+        fs::write(dir.join(u5_runtime::TITLE_TICK_FRAMESET_FILE), bytes)
+            .expect("failed to write synthetic title-tick frame fixture");
     }
 
     impl IntoCanonicalBitmaps for MonochromeBitmap {
@@ -12843,6 +12876,36 @@ mod tests {
         }));
 
         assert_title_tick_gap_panic(result);
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_render_uses_authored_title_tick_frames() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        install_title_tick_frame_file(&intro.game_dir);
+        intro.title_tick_visible_frame = 2;
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(
+            intro.surface.pixels[TITLE_TICK_FRAME_Y as usize * intro.surface.width],
+            3
+        );
+        assert_eq!(
+            rgba_pixel(
+                &frame,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                0,
+                TITLE_TICK_FRAME_Y as usize
+            ),
+            [
+                EGA_PALETTE_RGB[3][0],
+                EGA_PALETTE_RGB[3][1],
+                EGA_PALETTE_RGB[3][2],
+                0xff
+            ]
+        );
+        assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 

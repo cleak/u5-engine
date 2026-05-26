@@ -8199,6 +8199,72 @@ fn title_tick_palette_cycle_matches_published_per_frame_colors() {
 }
 
 #[test]
+fn title_tick_frame_set_requires_complete_ega_palette_frames() {
+    let short = TitleTickFrameSet::from_palette_indices(
+        vec![0; TITLE_TICK_FRAME_SET_BYTES - 1],
+        TITLE_TICK_FRAMESET_FILE,
+    )
+    .expect_err("short title-tick frame set must fail");
+    assert!(
+        short.to_string().contains("exactly"),
+        "unexpected error: {short}"
+    );
+
+    let mut invalid = vec![0; TITLE_TICK_FRAME_SET_BYTES];
+    invalid[TITLE_TICK_FRAME_PIXELS] = 0x10;
+    let err = TitleTickFrameSet::from_palette_indices(invalid, TITLE_TICK_FRAMESET_FILE)
+        .expect_err("non-EGA palette index must fail");
+    assert!(
+        err.to_string().contains("0x00..0x0f"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn display_surface_title_tick_draws_authored_frame_and_advances() {
+    let mut bytes = vec![0; TITLE_TICK_FRAME_SET_BYTES];
+    for frame in 0..TITLE_TICK_FRAME_COUNT as usize {
+        let start = frame * TITLE_TICK_FRAME_PIXELS;
+        bytes[start..start + TITLE_TICK_FRAME_PIXELS].fill(frame as u8 + 1);
+    }
+    let frames = TitleTickFrameSet::from_palette_indices(bytes, "fixture").unwrap();
+    let mut surface = EgaDisplaySurface::with_title_tick_frames(frames);
+    surface.set_current_color(0x03);
+    surface.plot_pixel(54, TITLE_TICK_FRAME_Y as usize - 1);
+    surface.plot_pixel(54, TITLE_TICK_FRAME_Y as usize);
+
+    let rect = surface.advance_title_tick();
+
+    assert_eq!(
+        rect,
+        DisplayPixelRect {
+            x0: TITLE_TICK_FRAME_X as usize,
+            y0: TITLE_TICK_FRAME_Y as usize,
+            x1: (TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1) as usize,
+            y1: (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize,
+        }
+    );
+    assert_eq!(
+        surface.read_pixel(54, TITLE_TICK_FRAME_Y as usize - 1),
+        Some(0x03)
+    );
+    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(1));
+    assert_eq!(
+        surface.read_pixel(
+            319,
+            (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize
+        ),
+        Some(1)
+    );
+    assert_eq!(surface.title_tick_frame(), 1);
+
+    surface.advance_title_tick();
+
+    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(2));
+    assert_eq!(surface.title_tick_frame(), 2);
+}
+
+#[test]
 fn intro_rect_transition_column_sweep_matches_published_schedule() {
     // `cleak/u5-spec#53`: left-to-right column sweep at one pixel
     // column per title tick over the inclusive step-1 rectangle

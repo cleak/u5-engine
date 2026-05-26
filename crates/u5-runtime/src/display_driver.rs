@@ -276,6 +276,7 @@ pub struct EgaDisplaySurface {
     back_pixels: Vec<u8>,
     current_color: u8,
     title_tick_frame: u8,
+    title_tick_frames: Option<TitleTickFrameSet>,
     presented_frames: u64,
     render_target: DisplayRenderTarget,
     back_buffer_active: bool,
@@ -294,10 +295,17 @@ impl EgaDisplaySurface {
             back_pixels: vec![0; DISPLAY_SURFACE_PIXELS],
             current_color: 0,
             title_tick_frame: 0,
+            title_tick_frames: None,
             presented_frames: 0,
             render_target: DisplayRenderTarget::Front,
             back_buffer_active: false,
         }
+    }
+
+    pub fn with_title_tick_frames(frames: TitleTickFrameSet) -> Self {
+        let mut surface = Self::new();
+        surface.title_tick_frames = Some(frames);
+        surface
     }
 
     pub fn front_pixels(&self) -> &[u8] {
@@ -314,6 +322,14 @@ impl EgaDisplaySurface {
 
     pub fn title_tick_frame(&self) -> u8 {
         self.title_tick_frame
+    }
+
+    pub fn has_title_tick_frames(&self) -> bool {
+        self.title_tick_frames.is_some()
+    }
+
+    pub fn set_title_tick_frames(&mut self, frames: TitleTickFrameSet) {
+        self.title_tick_frames = Some(frames);
     }
 
     pub fn presented_frames(&self) -> u64 {
@@ -554,9 +570,28 @@ impl EgaDisplaySurface {
     }
 
     pub fn advance_title_tick(&mut self) -> DisplayPixelRect {
-        panic!(
-            "strict display-driver title tick refuses generated animation fallback; provide authored 320x49 title-tick frames before advancing this renderer; see cleak/u5-spec#52 and cleak/u5-spec#65"
-        );
+        let frames = self.title_tick_frames.as_ref().unwrap_or_else(|| {
+            panic!(
+                "strict display-driver title tick requires authored 320x49 title-tick frames; generated animation fallback is forbidden; see cleak/u5-spec#52 and cleak/u5-spec#65"
+            )
+        });
+        let rect = DisplayPixelRect {
+            x0: TITLE_TICK_FRAME_X as usize,
+            y0: TITLE_TICK_FRAME_Y as usize,
+            x1: (TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1) as usize,
+            y1: (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize,
+        };
+        for (row, src) in frames
+            .frame_pixels(self.title_tick_frame)
+            .chunks_exact(TITLE_TICK_FRAME_WIDTH as usize)
+            .enumerate()
+        {
+            let dst_start = (rect.y0 + row) * DISPLAY_SURFACE_WIDTH + rect.x0;
+            self.front_pixels[dst_start..dst_start + TITLE_TICK_FRAME_WIDTH as usize]
+                .copy_from_slice(src);
+        }
+        self.title_tick_frame = title_tick_next_frame(self.title_tick_frame);
+        rect
     }
 
     pub fn present_frame(&mut self) {

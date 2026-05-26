@@ -294,11 +294,12 @@ pub use intro::{
     RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COLUMNS, RTV_STRIP_COUNT, RTV_STRIP_ROWS,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TITLE_TICK_PALETTE_CYCLE, TitleBitAsset,
-    TitleBitPlacement, intro_menu_action, load_miscmaps_cutscene_map,
-    parse_miscmaps_cutscene_map_file, require_miscmaps_cutscene_map, title_tick_next_frame,
-    title_tick_palette_indices,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
+    TITLE_TICK_FRAME_SET_BYTES, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y,
+    TITLE_TICK_FRAMESET_FILE, TITLE_TICK_PALETTE_CYCLE, TitleBitAsset, TitleBitPlacement,
+    TitleTickFrameSet, intro_menu_action, load_miscmaps_cutscene_map, load_title_tick_frames,
+    parse_miscmaps_cutscene_map_file, require_miscmaps_cutscene_map, require_title_tick_frames,
+    title_tick_next_frame, title_tick_palette_indices,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, DoorAutoCloseTick, JIMMY_CHEST_THRESHOLD_BIAS,

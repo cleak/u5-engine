@@ -217,6 +217,11 @@ pub const TITLE_TICK_FRAME_Y: u16 = 65;
 pub const TITLE_TICK_FRAME_WIDTH: u16 = TITLE_SURFACE_WIDTH;
 pub const TITLE_TICK_FRAME_HEIGHT: u16 = 49;
 pub const TITLE_TICK_FRAME_COUNT: u8 = 4;
+pub const TITLE_TICK_FRAME_PIXELS: usize =
+    TITLE_TICK_FRAME_WIDTH as usize * TITLE_TICK_FRAME_HEIGHT as usize;
+pub const TITLE_TICK_FRAME_SET_BYTES: usize =
+    TITLE_TICK_FRAME_PIXELS * TITLE_TICK_FRAME_COUNT as usize;
+pub const TITLE_TICK_FRAMESET_FILE: &str = "TITLETIC.EGA";
 
 /// `intro.md §5`: advance the title-tick frame index modulo four.
 pub const fn title_tick_next_frame(current_frame: u8) -> u8 {
@@ -241,6 +246,67 @@ pub const TITLE_TICK_PALETTE_CYCLE: [(u8, u8); TITLE_TICK_FRAME_COUNT as usize] 
 pub const fn title_tick_palette_indices(frame: u8) -> (u8, u8) {
     let frame = (frame % TITLE_TICK_FRAME_COUNT) as usize;
     TITLE_TICK_PALETTE_CYCLE[frame]
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TitleTickFrameSet {
+    pixels: Vec<u8>,
+}
+
+impl TitleTickFrameSet {
+    pub fn from_palette_indices(pixels: Vec<u8>, source: &str) -> io::Result<Self> {
+        if pixels.len() != TITLE_TICK_FRAME_SET_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{source}: authored title-tick frame set must be exactly {TITLE_TICK_FRAME_SET_BYTES} bytes ({} frames of {}x{}), found {}",
+                    TITLE_TICK_FRAME_COUNT,
+                    TITLE_TICK_FRAME_WIDTH,
+                    TITLE_TICK_FRAME_HEIGHT,
+                    pixels.len()
+                ),
+            ));
+        }
+        if let Some((index, value)) = pixels
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, value)| *value > 0x0f)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{source}: authored title-tick frame byte {index} has palette index 0x{value:02x}; expected EGA index 0x00..0x0f"
+                ),
+            ));
+        }
+        Ok(Self { pixels })
+    }
+
+    pub fn frame_pixels(&self, frame: u8) -> &[u8] {
+        let frame = usize::from(frame % TITLE_TICK_FRAME_COUNT);
+        let start = frame * TITLE_TICK_FRAME_PIXELS;
+        &self.pixels[start..start + TITLE_TICK_FRAME_PIXELS]
+    }
+}
+
+pub fn load_title_tick_frames(game_dir: &Path) -> io::Result<Option<TitleTickFrameSet>> {
+    let path = game_dir.join(TITLE_TICK_FRAMESET_FILE);
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
+    };
+    TitleTickFrameSet::from_palette_indices(bytes, TITLE_TICK_FRAMESET_FILE).map(Some)
+}
+
+pub fn require_title_tick_frames(game_dir: &Path) -> io::Result<TitleTickFrameSet> {
+    load_title_tick_frames(game_dir)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "{TITLE_TICK_FRAMESET_FILE}: required authored 4-frame title-tick replacement is missing; generated animation fallback is forbidden"
+            ),
+        )
+    })
 }
 
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
