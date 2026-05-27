@@ -10029,11 +10029,18 @@ fn blit_intro_title_placement_buffer_with_color(
                 dst.width
             );
             let source_pixel = src.pixels[y * src.width + x];
-            dst.pixels[target_y * dst.width + target_x] = if source_pixel == 0 {
-                0
-            } else {
-                foreground & 0x0f
-            };
+            // `intro.md §3`: TITLE.BIT slot 7/8/9 and BRITISH.BIT
+            // slot 0 are overlays — only the set source pixels write
+            // to the destination so the underlying TITLE.BIT slot 6
+            // (ORIGIN logo) shows through where the overlay is
+            // background. Slot 6 itself is drawn into a fresh black
+            // buffer first, so transparent-vs-opaque is identical
+            // for that initial draw; the case that *requires*
+            // transparency is BRITISH.BIT slot 0 sitting on top of
+            // slot 6's pixels.
+            if source_pixel != 0 {
+                dst.pixels[target_y * dst.width + target_x] = foreground & 0x0f;
+            }
         }
     }
 }
@@ -12879,6 +12886,44 @@ mod tests {
             "intro menu render must produce visible pixels with the placeholder title-tick strip"
         );
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_title_signature_dump_pngs_for_visual_inspection() {
+        // Dump three snapshots of the title sequence so we can
+        // visually verify the signature animation matches the
+        // intended Lord British strokes:
+        //   - 25% progress
+        //   - 100% progress, before BRITISH.BIT overlay
+        //   - 100% progress, after BRITISH.BIT overlay
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let signature = load_british_pth(&dir).unwrap();
+        let total_steps = british_signature_step_count(&signature);
+        let out_dir = std::env::temp_dir().join("u5-intro-shots");
+        fs::create_dir_all(&out_dir).unwrap();
+        let width = INTRO_FRAMEBUFFER_WIDTH;
+        let height = INTRO_FRAMEBUFFER_HEIGHT;
+
+        for (label, progress, completed) in [
+            ("signature-25", Some(total_steps / 4), false),
+            ("signature-100-no-overlay", Some(total_steps - 1), false),
+            ("signature-100-with-overlay", None, true),
+        ] {
+            let buffer = if completed {
+                visual_intro_title_art_buffer(&dir, None, None)
+            } else {
+                visual_intro_title_art_buffer(&dir, None, progress)
+            };
+            let rgba = buffer.to_rgba();
+            let img =
+                image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba).unwrap();
+            let out_path = out_dir.join(format!("intro-{label}.png"));
+            img.save(&out_path).unwrap();
+            eprintln!("wrote {}", out_path.display());
+        }
+
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
