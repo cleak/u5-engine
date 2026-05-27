@@ -12882,6 +12882,62 @@ mod tests {
     }
 
     #[test]
+    fn intro_menu_dump_png_for_visual_inspection() {
+        // Renders a complete menu frame (STARTSC + title tick +
+        // §6.1 frame + §6.2 labels) and dumps the RGBA as a PNG to
+        // a known temp path so the work can be visually inspected
+        // without waiting for the full title flourish + signature
+        // animation. The path is `%TEMP%/u5-intro-shots/intro-menu-direct.png`.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let ibm = load_ibm_ch_font(&dir).unwrap();
+        let slots = IntroFontSlots::new(ibm.clone(), ibm);
+        let mut text_windows = TextWindowSystem::new();
+        text_windows.set_window_rect(0, 0, 0, TEXT_SCREEN_COLUMNS - 1, TEXT_SCREEN_ROWS - 1);
+        text_windows.set_active_window(0);
+        let mut intro = VisualIntroState {
+            game_dir: dir.clone(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
+            title_signature_progress: 0,
+            title_signature_complete: true,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+            font_slots: Some(slots),
+            text_windows,
+            pending_pre_flourish_outcome: None,
+            title_tick_frames: None,
+        };
+        intro.dispatch.dismiss_title();
+
+        let rgba = render_intro_frame(&mut intro);
+
+        let out_dir = std::env::temp_dir().join("u5-intro-shots");
+        fs::create_dir_all(&out_dir).unwrap();
+        let out_path = out_dir.join("intro-menu-direct.png");
+        let width = INTRO_FRAMEBUFFER_WIDTH;
+        let height = INTRO_FRAMEBUFFER_HEIGHT;
+        let img = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba)
+            .expect("rgba buffer must be 320×200×4 bytes");
+        img.save(&out_path).expect("PNG save");
+        eprintln!("intro menu PNG written: {}", out_path.display());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn intro_menu_text_window_frame_uses_published_box_glyphs() {
         // `systems/intro.md §6.1` published frame contract: 40-cell
         // by 10-cell rectangle anchored at (0, 15), composed from
