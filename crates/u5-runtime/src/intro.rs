@@ -163,6 +163,33 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
 /// path walker is called.
 pub const BRITISH_PTH_PEN_ORIGINS: [(u8, u8); 4] = [(68, 44), (94, 64), (78, 143), (105, 167)];
 
+/// `intro.md §6.1` lower intro menu/text-window frame: anchor cell
+/// (column, row) where the 40-wide × 10-tall rectangle begins.
+pub const INTRO_MENU_FRAME_ANCHOR_COLUMN: u8 = 0;
+pub const INTRO_MENU_FRAME_ANCHOR_ROW: u8 = 15;
+pub const INTRO_MENU_FRAME_WIDTH_CELLS: u8 = 40;
+pub const INTRO_MENU_FRAME_HEIGHT_CELLS: u8 = 10;
+/// `intro.md §6.1` horizontal-rule pixel coordinates drawn through
+/// the display-driver line primitive immediately under the top-edge
+/// row.
+pub const INTRO_MENU_FRAME_RULE_Y: u16 = 127;
+pub const INTRO_MENU_FRAME_RULE_X0: u16 = 7;
+pub const INTRO_MENU_FRAME_RULE_X1: u16 = 312;
+/// `intro.md §6.1`: the five-glyph reserved corner/edge set the
+/// fixed-cell font carries for boxed intro text. Per the published
+/// IBM.CH glyph shapes at codes 0x7B-0x7F, the assignments are:
+/// 0x7E = top-left (top + left solid, curve carved at bottom-right);
+/// 0x7D = top-right (top + right solid, curve at bottom-left);
+/// 0x7C = bottom-left (bottom + left solid, curve at top-right);
+/// 0x7B = bottom-right (bottom + right solid, curve at top-left);
+/// 0x7F = shared edge (solid 8×8 block, used for both horizontal
+/// and vertical edges).
+pub const INTRO_MENU_FRAME_GLYPH_TOP_LEFT: u8 = 0x7E;
+pub const INTRO_MENU_FRAME_GLYPH_TOP_RIGHT: u8 = 0x7D;
+pub const INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT: u8 = 0x7C;
+pub const INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT: u8 = 0x7B;
+pub const INTRO_MENU_FRAME_GLYPH_EDGE: u8 = 0x7F;
+
 /// `intro.md §3` remaining title-sequence bitmap placements drawn
 /// after the seven-slot initial title mark. Order is `TITLE.BIT` 7,
 /// `TITLE.BIT` 8, `BRITISH.BIT` 0, `TITLE.BIT` 9. The lower-band

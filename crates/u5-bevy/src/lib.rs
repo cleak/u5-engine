@@ -18,7 +18,7 @@ use image::{ImageBuffer, Rgba};
 
 use u5_runtime::TITLE_TICK_FRAME_Y;
 #[cfg(test)]
-use u5_runtime::TEXT_SCREEN_COLUMNS;
+use u5_runtime::{TEXT_SCREEN_COLUMNS, placeholder_title_tick_frames};
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
     BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT,
@@ -86,10 +86,14 @@ use u5_runtime::{
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
-    DisplayDriverFamily, EgaTitleTickLayout, IntroFontSlots, JOURNEY_ONWARD_SHORTCUT_BANNER,
-    PreFlourishOutcome, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TitleTickFrameSet, clean_room_authored_title_tick_frames,
-    parse_ega_drv_title_tick_frames, placeholder_title_tick_frames,
+    DisplayDriverFamily, INTRO_MENU_FRAME_ANCHOR_COLUMN, INTRO_MENU_FRAME_ANCHOR_ROW,
+    INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT, INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT,
+    INTRO_MENU_FRAME_GLYPH_EDGE, INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
+    INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
+    INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, IntroFontSlots,
+    JOURNEY_ONWARD_SHORTCUT_BANNER, PreFlourishOutcome, TITLE_TICK_FRAME_HEIGHT,
+    TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TitleTickFrameSet,
+    clean_room_authored_title_tick_frames,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -9089,8 +9093,8 @@ fn draw_visual_intro_start_menu_to_buffer(
 ) {
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
     buffer.draw_title_tick(title_tick_frame, title_tick_frames);
-    draw_visual_intro_menu_text_window_frame_placeholder(buffer);
     if let Some(font) = font {
+        draw_visual_intro_menu_text_window_frame(buffer, font);
         draw_visual_intro_menu_labels(buffer, font, highlighted);
     }
 }
@@ -9130,55 +9134,90 @@ fn draw_visual_intro_menu_labels(
     }
 }
 
-/// `cleak/u5-spec#63` placeholder for the lower intro menu/text-window
-/// frame while the published border contract is pending. Draws a
-/// two-pixel double-line border (an EGA-white outer rule + EGA-blue
-/// inner rule) around the §6 menu cell range, plus the six menu
-/// labels per the published cell origins. The DOS-era convention for
-/// intro/menu boxes is a CP437 single/double-line drawing, but those
-/// glyphs live outside IBM.CH's 0..127 catalog; until the spec
-/// publishes either the exact border source (line primitives /
-/// box-drawing glyphs / asset blit) or the menu label rendering
-/// path, this gives the bevy intro a visibly framed menu that
-/// preserves the §6 text-cell origins exactly. The frame style is
-/// authored, not derived from private analysis.
-fn draw_visual_intro_menu_text_window_frame_placeholder(buffer: &mut IntroDisplayBuffer) {
-    // The §6 menu labels sit on text rows 17-22 of a 25-row screen.
-    // Frame the band from the top of row 17 to the bottom of row 24,
-    // covering the full screen width.
-    let cell = 8usize; // CH_CELL_SIDE
-    let x0: usize = 0;
-    let x1: usize = INTRO_FRAMEBUFFER_WIDTH as usize - 1;
-    let y0: usize = 17 * cell - 4; // a few pixels above row 17 baseline
-    let y1: usize = (buffer.height - 1).min(25 * cell - 1);
-    if y0 >= buffer.height || y1 >= buffer.height || y0 >= y1 || x0 >= x1 {
-        return;
+/// `systems/intro.md §6.1` lower intro menu/text-window frame. Draws
+/// a 40-cell × 10-cell single-line rectangle anchored at the
+/// published cell `(0, 15)` using the fixed-cell font's reserved
+/// five-glyph corner/edge set, plus a thin horizontal rule at pixel
+/// `y = 127` via a direct line draw through the framebuffer. The
+/// frame does not clear the interior — STARTSC paint + title tick
+/// already established those pixels.
+fn draw_visual_intro_menu_text_window_frame(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+) {
+    let fg = 0x0f;
+    let bg = 0x00;
+    let anchor_col = usize::from(INTRO_MENU_FRAME_ANCHOR_COLUMN);
+    let anchor_row = usize::from(INTRO_MENU_FRAME_ANCHOR_ROW);
+    let width_cells = usize::from(INTRO_MENU_FRAME_WIDTH_CELLS);
+    let height_cells = usize::from(INTRO_MENU_FRAME_HEIGHT_CELLS);
+    let last_col = anchor_col + width_cells - 1;
+    let last_row = anchor_row + height_cells - 1;
+
+    // Top row: top-left corner + 38 top-edge glyphs + top-right corner.
+    buffer.draw_fixed_glyph_cell(
+        font,
+        INTRO_MENU_FRAME_GLYPH_TOP_LEFT,
+        anchor_col,
+        anchor_row,
+        fg,
+        bg,
+    );
+    for col in (anchor_col + 1)..last_col {
+        buffer.draw_fixed_glyph_cell(font, INTRO_MENU_FRAME_GLYPH_EDGE, col, anchor_row, fg, bg);
     }
-    let width = buffer.width;
-    let outer = 0x0f; // EGA bright white
-    let inner = 0x09; // EGA bright blue (matches the §3 flourish palette)
-    // Outer rule (top/bottom rows).
-    for x in x0..=x1 {
-        buffer.pixels[y0 * width + x] = outer;
-        buffer.pixels[y1 * width + x] = outer;
+    buffer.draw_fixed_glyph_cell(
+        font,
+        INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
+        last_col,
+        anchor_row,
+        fg,
+        bg,
+    );
+
+    // Side rows: shared edge glyph at column 0 and column 39.
+    for row in (anchor_row + 1)..last_row {
+        buffer.draw_fixed_glyph_cell(font, INTRO_MENU_FRAME_GLYPH_EDGE, anchor_col, row, fg, bg);
+        buffer.draw_fixed_glyph_cell(font, INTRO_MENU_FRAME_GLYPH_EDGE, last_col, row, fg, bg);
     }
-    for y in y0..=y1 {
-        buffer.pixels[y * width + x0] = outer;
-        buffer.pixels[y * width + x1] = outer;
+
+    // Bottom row: bottom-left corner + 38 bottom-edge glyphs +
+    // bottom-right corner. §6.1 calls out that the bottom-right
+    // corner is emitted with the text-attribute inverse flag briefly
+    // cleared; the engine renders the corner as plain foreground (the
+    // attribute toggle would otherwise come from the wrapping
+    // text-output path, which isn't routed through this direct
+    // glyph blit).
+    buffer.draw_fixed_glyph_cell(
+        font,
+        INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT,
+        anchor_col,
+        last_row,
+        fg,
+        bg,
+    );
+    for col in (anchor_col + 1)..last_col {
+        buffer.draw_fixed_glyph_cell(font, INTRO_MENU_FRAME_GLYPH_EDGE, col, last_row, fg, bg);
     }
-    // Inner rule, one pixel inside the outer rule.
-    if y0 + 2 < y1 && x0 + 2 < x1 {
-        let iy0 = y0 + 1;
-        let iy1 = y1 - 1;
-        let ix0 = x0 + 1;
-        let ix1 = x1 - 1;
-        for x in ix0..=ix1 {
-            buffer.pixels[iy0 * width + x] = inner;
-            buffer.pixels[iy1 * width + x] = inner;
-        }
-        for y in iy0..=iy1 {
-            buffer.pixels[y * width + ix0] = inner;
-            buffer.pixels[y * width + ix1] = inner;
+    buffer.draw_fixed_glyph_cell(
+        font,
+        INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT,
+        last_col,
+        last_row,
+        fg,
+        bg,
+    );
+
+    // Horizontal rule at pixel y = 127, columns 7..312 inclusive.
+    // §6.1 says the rule lies inside the top border row's eight-pixel
+    // cell, immediately under the top-edge glyph row.
+    let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
+    let rule_x0 = usize::from(INTRO_MENU_FRAME_RULE_X0);
+    let rule_x1 = usize::from(INTRO_MENU_FRAME_RULE_X1);
+    if rule_y < buffer.height && rule_x0 <= rule_x1 && rule_x1 < buffer.width {
+        let stride = buffer.width;
+        for x in rule_x0..=rule_x1 {
+            buffer.pixels[rule_y * stride + x] = fg;
         }
     }
 }
@@ -9200,47 +9239,23 @@ fn ensure_title_tick_frames(intro: &mut VisualIntroState) -> &TitleTickFrameSet 
 }
 
 fn load_or_placeholder_title_tick_frames(game_dir: &Path) -> TitleTickFrameSet {
-    // Title-tick source priority, in order:
+    // `cleak/u5-spec#74` (resolved against spec head `a885a12`): the
+    // original title-tick frames come from the EGA driver's runtime
+    // back-buffer, not a passive byte offset inside `EGA.DRV`. The
+    // file-locator parser path is therefore unimplementable as a
+    // byte-offset extraction. Two clean-room-safe paths remain:
     //   1. User-captured PNG frames (`TITLE_TICK_0.png` ..
     //      `TITLE_TICK_3.png` in the game dir). Each must be a
     //      320×49 image; pixels are nearest-EGA-palette-matched.
-    //      This is the clean-room-safe "pixel perfect from a real
-    //      capture" path: the user runs the original game in their
-    //      preferred way (DOSBox, etc.), captures the `(0, 65)`
-    //      `320 x 49` rectangle four times across the tick cycle,
-    //      and drops the PNGs in place. The engine reads them at
-    //      runtime, no source-code analysis required.
-    //   2. `U5_EGA_DRV_TITLE_TICK_OFFSET`: extract via the
-    //      `parse_ega_drv_title_tick_frames` parser when the
-    //      `cleak/u5-spec#74` locator lands.
-    //   3. `clean_room_authored_title_tick_frames`: the
+    //      This is the byte-identical path: the user captures the
+    //      `(0, 65)` `320 x 49` rectangle from the original game
+    //      and drops the PNGs in place.
+    //   2. `clean_room_authored_title_tick_frames`: the
     //      independently-authored procedural fallback that uses
-    //      the published palette cycle. Spec-sanctioned but not
-    //      byte-identical to the original.
+    //      the published palette cycle (`cleak/u5-spec#52`).
+    //      Spec-sanctioned; not byte-identical to the original.
     if let Some(frames) = try_load_title_tick_frames_from_png(game_dir) {
         return frames;
-    }
-    if let Ok(value) = std::env::var("U5_EGA_DRV_TITLE_TICK_OFFSET") {
-        if let Ok(offset) = value.parse::<usize>() {
-            let drv_path = game_dir.join("EGA.DRV");
-            if let Ok(bytes) = std::fs::read(&drv_path) {
-                let layout = EgaTitleTickLayout::standard_4_plane(offset);
-                match parse_ega_drv_title_tick_frames(&bytes, layout) {
-                    Ok(frames) => return frames,
-                    Err(err) => {
-                        eprintln!(
-                            "warning: U5_EGA_DRV_TITLE_TICK_OFFSET set but parse failed: {err}; \
-                             falling back to clean-room authored title-tick frames"
-                        );
-                    }
-                }
-            } else {
-                eprintln!(
-                    "warning: U5_EGA_DRV_TITLE_TICK_OFFSET set but {drv_path:?} not readable; \
-                     falling back to clean-room authored title-tick frames"
-                );
-            }
-        }
     }
     let _ = game_dir;
     clean_room_authored_title_tick_frames()
@@ -12864,6 +12879,63 @@ mod tests {
             "intro menu render must produce visible pixels with the placeholder title-tick strip"
         );
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_text_window_frame_uses_published_box_glyphs() {
+        // `systems/intro.md §6.1` published frame contract: 40-cell
+        // by 10-cell rectangle anchored at (0, 15), composed from
+        // the IBM.CH reserved corner/edge glyph set (0x7B..0x7F).
+        // Each frame cell must contain the pixel pattern of the
+        // corresponding glyph. The interior is preserved by the
+        // STARTSC paint, so this test seeds a known interior color
+        // and confirms the frame draws only the border cells.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let font = load_ibm_ch_font(&dir).unwrap();
+        let mut buffer = new_intro_display_buffer();
+        buffer.clear(0x03); // sentinel interior color
+
+        draw_visual_intro_menu_text_window_frame(&mut buffer, &font);
+
+        // Check the four corners contain the published glyph
+        // shapes' first row.
+        let cell = CH_CELL_SIDE;
+        let top_left_pixel = buffer.pixels[15 * cell * buffer.width + 0];
+        let top_right_pixel = buffer.pixels[15 * cell * buffer.width + (39 * cell + 7)];
+        let bottom_left_pixel = buffer.pixels[24 * cell * buffer.width + 0];
+        let bottom_right_pixel = buffer.pixels[(25 * cell - 1) * buffer.width + (39 * cell + 7)];
+        // Top-left and bottom-right corner glyphs have a fully
+        // solid pixel at the outer corner; bottom-left and
+        // top-right have the same.
+        assert_eq!(top_left_pixel, 0x0f, "top-left outer corner pixel");
+        assert_eq!(top_right_pixel, 0x0f, "top-right outer corner pixel");
+        assert_eq!(bottom_left_pixel, 0x0f, "bottom-left outer corner pixel");
+        assert_eq!(bottom_right_pixel, 0x0f, "bottom-right outer corner pixel");
+
+        // Horizontal rule at y = 127, columns 7..312 inclusive.
+        let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
+        for x in
+            usize::from(INTRO_MENU_FRAME_RULE_X0)..=usize::from(INTRO_MENU_FRAME_RULE_X1)
+        {
+            assert_eq!(
+                buffer.pixels[rule_y * buffer.width + x],
+                0x0f,
+                "rule pixel at ({x}, {rule_y})"
+            );
+        }
+
+        // Interior cells (row 17..22, cols 1..38) should preserve
+        // the sentinel.
+        let interior_y = 18 * cell + 3;
+        let interior_x = 20 * cell + 3;
+        assert_eq!(
+            buffer.pixels[interior_y * buffer.width + interior_x],
+            0x03,
+            "frame must not clear interior"
+        );
+
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
