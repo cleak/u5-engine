@@ -8081,14 +8081,14 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
     // by "keyboard polling and real-time delay ticks" inside the path
     // walker, distinct from the 18.2 Hz title-tick cadence; the
     // per-stroke real-time delay is NOT published in the spec.
-    // `cleak/u5-spec#75` requests publication. Until that ships,
-    // this engine ticks one stroke per animation-pump pulse as the
-    // most conservative "no-guess" interpretation — that runs the
-    // signature very slowly compared to the original game, which is
-    // the correct user-visible signal that the rate is not yet
-    // published. The same applies to the TITLE.BIT slot 0..6
-    // row-reveal cadence below (one group per pump tick), pending
-    // the same spec issue.
+    // `cleak/u5-spec#76` requests publication of the signature
+    // per-stroke cadence; `cleak/u5-spec#77` requests publication of
+    // the TITLE.BIT slot 0..6 row-reveal cadence used below. Until
+    // those ship, this engine ticks one stroke / one row-reveal
+    // group per animation-pump pulse as the most conservative
+    // "no-guess" interpretation — that runs the signature very
+    // slowly compared to the original game, which is the correct
+    // user-visible signal that the rate is not yet published.
     const SIGNATURE_STEPS_PER_TICK: usize = 1;
 
     if matches!(intro.panel, VisualIntroPanel::Menu) {
