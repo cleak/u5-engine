@@ -8076,7 +8076,18 @@ fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32)
 }
 
 fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
-    const SIGNATURE_STEPS_PER_TICK: usize = 1;
+    // `systems/intro.md §5` says the Lord British signature is paced
+    // by "keyboard polling and real-time delay ticks" inside the path
+    // walker, not by the 18.2 Hz title-tick cadence. The published
+    // rate is not in the spec; empirically the original game's
+    // signature animation completes in ~10-20 seconds, which on a
+    // ~2,779-stroke path needs roughly ~140-280 strokes/sec.
+    // Advancing 10 strokes per 18.2 Hz pump tick gives ~182 strokes/
+    // sec → ~15 s for the full signature, matching the perceived
+    // pace. Keyboard input is checked every Bevy update (60 Hz)
+    // independently of the pump cadence, so input responsiveness is
+    // unchanged.
+    const SIGNATURE_STEPS_PER_TICK: usize = 10;
 
     if matches!(intro.panel, VisualIntroPanel::Menu) {
         let mut advanced = false;
@@ -8120,14 +8131,9 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
             let next_progress = intro
                 .title_signature_progress
                 .checked_add(SIGNATURE_STEPS_PER_TICK)
-                .expect("intro signature progress counter overflowed");
-            assert!(
-                next_progress <= total_steps,
-                "intro signature progress advanced past BRITISH.PTH path length: {} + {} > {total_steps}",
-                intro.title_signature_progress,
-                SIGNATURE_STEPS_PER_TICK
-            );
-            if next_progress == total_steps {
+                .expect("intro signature progress counter overflowed")
+                .min(total_steps);
+            if next_progress >= total_steps {
                 intro.title_signature_progress = 0;
                 intro.title_signature_complete = true;
             } else {
@@ -14042,7 +14048,11 @@ mod tests {
     }
 
     #[test]
-    fn intro_signature_tick_rejects_progress_past_path_length() {
+    fn intro_signature_tick_saturates_at_path_length_and_completes() {
+        // With SIGNATURE_STEPS_PER_TICK > 1, an in-progress signature
+        // tick can land past the path's final byte on the last tick.
+        // The advancer saturates progress at total_steps and marks
+        // the signature complete; it should not panic.
         let dir = debug_game_dir();
         install_intro_assets(&dir);
         let signature = load_british_pth(&dir).unwrap();
@@ -14054,7 +14064,9 @@ mod tests {
             dispatch: UnifiedMenuDispatch::new(),
             title_flourish_step: intro_title_flourish_total_steps(),
             title_flourish_complete: true,
-            title_signature_progress: total_steps,
+            // Start one stroke shy of the path length so the next
+            // tick (which adds SIGNATURE_STEPS_PER_TICK) saturates.
+            title_signature_progress: total_steps - 1,
             title_signature_complete: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
@@ -14074,20 +14086,11 @@ mod tests {
             title_tick_frames: None,
         };
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = advance_visual_intro_animation_tick(&mut intro);
-        }));
+        let advanced = advance_visual_intro_animation_tick(&mut intro);
 
-        let payload = result.expect_err("signature tick beyond path length must panic");
-        let message = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("signature tick panic payload must be a string");
-        assert!(
-            message.contains("advanced past BRITISH.PTH path length"),
-            "{message}"
-        );
+        assert!(advanced, "saturating tick should still report progress");
+        assert!(intro.title_signature_complete);
+        assert_eq!(intro.title_signature_progress, 0);
         let _ = fs::remove_dir_all(dir);
     }
 
