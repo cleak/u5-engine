@@ -8076,18 +8076,20 @@ fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32)
 }
 
 fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
+    // PLACEHOLDER — DO NOT GUESS.
     // `systems/intro.md §5` says the Lord British signature is paced
     // by "keyboard polling and real-time delay ticks" inside the path
-    // walker, not by the 18.2 Hz title-tick cadence. The published
-    // rate is not in the spec; empirically the original game's
-    // signature animation completes in ~10-20 seconds, which on a
-    // ~2,779-stroke path needs roughly ~140-280 strokes/sec.
-    // Advancing 10 strokes per 18.2 Hz pump tick gives ~182 strokes/
-    // sec → ~15 s for the full signature, matching the perceived
-    // pace. Keyboard input is checked every Bevy update (60 Hz)
-    // independently of the pump cadence, so input responsiveness is
-    // unchanged.
-    const SIGNATURE_STEPS_PER_TICK: usize = 10;
+    // walker, distinct from the 18.2 Hz title-tick cadence; the
+    // per-stroke real-time delay is NOT published in the spec.
+    // `cleak/u5-spec#75` requests publication. Until that ships,
+    // this engine ticks one stroke per animation-pump pulse as the
+    // most conservative "no-guess" interpretation — that runs the
+    // signature very slowly compared to the original game, which is
+    // the correct user-visible signal that the rate is not yet
+    // published. The same applies to the TITLE.BIT slot 0..6
+    // row-reveal cadence below (one group per pump tick), pending
+    // the same spec issue.
+    const SIGNATURE_STEPS_PER_TICK: usize = 1;
 
     if matches!(intro.panel, VisualIntroPanel::Menu) {
         let mut advanced = false;
