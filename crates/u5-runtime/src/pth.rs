@@ -18,6 +18,11 @@ pub const BRITISH_PTH_LEN: usize = 2_783;
 /// `formats/pth.md §2`: number of segments the four NUL terminators
 /// divide the stream into.
 pub const BRITISH_PTH_SEGMENT_COUNT: usize = 4;
+/// `systems/timing.md §5.1`: the title-screen signature walker emits
+/// one ~55 ms BIOS-tick wait per 32 consumed path bytes, so 32
+/// strokes are walked and painted per tick. The chunk counter
+/// resets per segment (see [`BritishPth::next_signature_progress`]).
+pub const BRITISH_PTH_STROKES_PER_TICK: usize = 32;
 
 /// `formats/pth.md §5` action the pen-stroke walker takes for one
 /// non-zero byte.
@@ -43,6 +48,44 @@ pub struct BritishPth {
 impl BritishPth {
     pub fn segment(&self, index: usize) -> Option<&[PenStroke]> {
         self.segments.get(index).map(Vec::as_slice)
+    }
+
+    /// Total decoded pen strokes (non-NUL bytes) across all four
+    /// segments.
+    pub fn total_strokes(&self) -> usize {
+        self.segments.iter().map(Vec::len).sum()
+    }
+
+    /// `systems/timing.md §5.1`: advance the signature reveal by one
+    /// ~55 ms BIOS-tick chunk. The original walker emits one
+    /// hardware-tick wait per 32 consumed path bytes
+    /// (`(byte_index & 0x1F) == 0`), and `byte_index` is local to
+    /// each per-segment walker call, so the 32-stroke chunk
+    /// alignment resets at every segment boundary.
+    ///
+    /// Given the current cumulative stroke `progress`, returns the
+    /// progress after one more tick: the next 32-stroke boundary
+    /// within the segment that `progress` falls in, clamped to that
+    /// segment's end. Once `progress` reaches a segment boundary the
+    /// next tick begins the following segment's first chunk. At or
+    /// past the final stroke the value is unchanged (caller treats
+    /// reaching `total_strokes()` as completion).
+    pub fn next_signature_progress(&self, progress: usize) -> usize {
+        let mut base = 0;
+        for segment in &self.segments {
+            let seg_len = segment.len();
+            if progress < base + seg_len {
+                let within = progress - base;
+                let next_within = within
+                    .checked_div(BRITISH_PTH_STROKES_PER_TICK)
+                    .map(|chunks| (chunks + 1) * BRITISH_PTH_STROKES_PER_TICK)
+                    .unwrap_or(BRITISH_PTH_STROKES_PER_TICK)
+                    .min(seg_len);
+                return base + next_within;
+            }
+            base += seg_len;
+        }
+        base
     }
 }
 
@@ -167,6 +210,40 @@ mod tests {
             }
         );
         assert!(pth.segment(4).is_none());
+    }
+
+    #[test]
+    fn next_signature_progress_chunks_32_per_tick_resetting_per_segment() {
+        // `systems/timing.md §5.1`: 32 strokes per BIOS tick, chunk
+        // counter resets per segment. The shipped path has segments
+        // of 856 / 548 / 411 / 964 strokes.
+        let pth = parse_british_pth(&synthetic_british_pth_bytes()).unwrap();
+        assert_eq!(pth.total_strokes(), 856 + 548 + 411 + 964);
+
+        // Within segment 1: 0 -> 32 -> 64 ...
+        assert_eq!(pth.next_signature_progress(0), 32);
+        assert_eq!(pth.next_signature_progress(32), 64);
+        assert_eq!(pth.next_signature_progress(64), 96);
+
+        // Segment 1 tail: 856 = 26*32 + 24. From 832 the next chunk
+        // clamps to the segment end (856), not 864.
+        assert_eq!(pth.next_signature_progress(832), 856);
+        // At the segment-1 boundary, the next tick starts segment 2's
+        // first 32-stroke chunk (856 -> 856 + 32 = 888).
+        assert_eq!(pth.next_signature_progress(856), 888);
+
+        // Count the ticks to fully reveal the signature; per-segment
+        // chunking gives ceil(856/32)+ceil(548/32)+ceil(411/32)+
+        // ceil(964/32) = 27 + 18 + 13 + 31 = 89 ticks.
+        let total = pth.total_strokes();
+        let mut progress = 0;
+        let mut ticks = 0;
+        while progress < total {
+            progress = pth.next_signature_progress(progress);
+            ticks += 1;
+            assert!(ticks <= total, "tick loop must terminate");
+        }
+        assert_eq!(ticks, 27 + 18 + 13 + 31);
     }
 
     #[test]

@@ -139,7 +139,12 @@ const INTRO_FRAMEBUFFER_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
 const INTRO_FRAMEBUFFER_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
 const INTRO_DISPLAY_SCALE: f32 = 2.5;
 const RETURN_TO_VIEW_PREVIEW_Y: usize = 18;
-const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = 1.0 / 18.2;
+// `systems/timing.md §5`: every intro animation step is driven by
+// the DOS BIOS user-tick interrupt at ~18.2065 Hz (the standard PC
+// rate 1_193_182 / 65_536), i.e. ~54.945 ms per tick. The pump
+// produces one such tick per advance and drops accumulated time
+// beyond one slot (§5.3, no catch-up).
+const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = 65_536.0 / 1_193_182.0;
 const PROPORTIONAL_TEXT_LINE_HEIGHT: usize = PCS_GLYPH_HEIGHT + 2;
 const INTRO_STORY_TEXT_X: usize = 10;
 const INTRO_STORY_TEXT_Y: usize = 138;
@@ -8076,21 +8081,17 @@ fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32)
 }
 
 fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
-    // PLACEHOLDER — DO NOT GUESS.
-    // `systems/intro.md §5` says the Lord British signature is paced
-    // by "keyboard polling and real-time delay ticks" inside the path
-    // walker, distinct from the 18.2 Hz title-tick cadence; the
-    // per-stroke real-time delay is NOT published in the spec.
-    // `cleak/u5-spec#76` requests publication of the signature
-    // per-stroke cadence; `cleak/u5-spec#77` requests publication of
-    // the TITLE.BIT slot 0..6 row-reveal cadence used below. Until
-    // those ship, this engine ticks one stroke / one row-reveal
-    // group per animation-pump pulse as the most conservative
-    // "no-guess" interpretation — that runs the signature very
-    // slowly compared to the original game, which is the correct
-    // user-visible signal that the rate is not yet published.
-    const SIGNATURE_STEPS_PER_TICK: usize = 1;
-
+    // Per-phase cadences are published in `systems/timing.md §5.1`
+    // (every intro animation step is driven by the ~18.2065 Hz DOS
+    // BIOS user-tick, ~54.945 ms per tick; the animation pump
+    // produces one such tick per call):
+    //   - TITLE.BIT slot 0..6 flourish: one row-reveal group per
+    //     tick (cleak/u5-spec#77).
+    //   - BRITISH.PTH signature: one tick per 32 consumed path bytes,
+    //     chunk counter resetting per segment (cleak/u5-spec#76);
+    //     see `BritishPth::next_signature_progress`.
+    // §5.3 catch-up policy (at most one step per tick, no
+    // accumulation) is enforced by `advance_intro_animation_pump`.
     if matches!(intro.panel, VisualIntroPanel::Menu) {
         let mut advanced = false;
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
@@ -8130,11 +8131,9 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
                 "intro signature path has no drawable steps"
             );
 
-            let next_progress = intro
-                .title_signature_progress
-                .checked_add(SIGNATURE_STEPS_PER_TICK)
-                .expect("intro signature progress counter overflowed")
-                .min(total_steps);
+            // `timing.md §5.1`: advance one 32-stroke chunk per tick,
+            // chunk counter resetting per segment.
+            let next_progress = signature.next_signature_progress(intro.title_signature_progress);
             if next_progress >= total_steps {
                 intro.title_signature_progress = 0;
                 intro.title_signature_complete = true;
@@ -12799,12 +12798,15 @@ mod tests {
     }
 
     #[test]
-    fn intro_animation_pump_advances_on_18_2_hz_cadence_pending_spec_68() {
-        // `cleak/u5-spec#68` is still open upstream; the v1
-        // placeholder cadence is the DOS BIOS 18.2 Hz baseline
-        // (`INTRO_ANIMATION_TICK_INTERVAL_SECS = 1.0 / 18.2`). Two
-        // sub-interval calls should not fire a tick; the moment
-        // accumulated delta crosses one interval, a tick fires.
+    fn intro_animation_pump_advances_on_bios_user_tick_cadence() {
+        // `systems/timing.md §5`: the intro animation pump fires at
+        // the ~18.2065 Hz DOS BIOS user-tick rate (~54.945 ms per
+        // tick). Two sub-interval calls should not fire a tick; the
+        // moment accumulated delta crosses one interval, a tick
+        // fires.
+        let expected_interval = 65_536.0_f32 / 1_193_182.0;
+        assert!((INTRO_ANIMATION_TICK_INTERVAL_SECS - expected_interval).abs() < 1e-9);
+        assert!((INTRO_ANIMATION_TICK_INTERVAL_SECS - 0.054_945).abs() < 1e-4);
         let mut pump = VisualIntroAnimationPump::default();
         assert!(!advance_intro_animation_pump(
             &mut pump,
@@ -12822,9 +12824,9 @@ mod tests {
 
     #[test]
     fn intro_animation_pump_caps_burst_catch_up_when_host_stalls() {
-        // §68 placeholder catch-up policy: a long stall should not
-        // produce a burst of ticks; only one tick fires per
-        // pump-step regardless of accumulated delta.
+        // `systems/timing.md §5.3` catch-up policy: at most one step
+        // per BIOS-tick interval; a long stall must not produce a
+        // burst of ticks.
         let mut pump = VisualIntroAnimationPump::default();
         assert!(advance_intro_animation_pump(
             &mut pump,
