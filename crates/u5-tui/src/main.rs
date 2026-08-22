@@ -7,7 +7,7 @@ use u5_runtime::{audit_location_dat_files, location_audit_report_text, run_repor
 use u5_tui::{
     CLI_USAGE, CliArgs, compare_manifest_files, parse_cli_args, run_create_character_command,
     run_interactive_create_character, run_intro_menu_loop, run_play_loop, run_route_smoke,
-    run_save_frame, run_save_frame_suite,
+    run_save_frame, run_save_frame_suite, run_save_screen,
 };
 
 fn main() -> io::Result<()> {
@@ -54,6 +54,15 @@ fn main() -> io::Result<()> {
     }
     if let Some(out) = args.save_frame.as_deref() {
         return run_save_frame(
+            &args.game_dir,
+            args.play_options,
+            args.raster_depth,
+            args.play_script,
+            out,
+        );
+    }
+    if let Some(out) = args.save_screen.as_deref() {
+        return run_save_screen(
             &args.game_dir,
             args.play_options,
             args.raster_depth,

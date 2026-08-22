@@ -453,6 +453,18 @@ fn read_story_record(
     Ok((record, end + 1))
 }
 
+/// Strips the layout markers (`formats/story-dat.md` section 3) from a
+/// decoded story record, leaving the prose a plain-text consumer wants.
+/// The proportional paragraph renderer uses the marked-up record instead.
+pub fn story_record_display_text(record: &str) -> String {
+    record
+        .chars()
+        .filter(|ch| {
+            *ch != STORY_PARAGRAPH_START_MARKER as char && *ch != STORY_SOFT_BREAK_MARKER as char
+        })
+        .collect()
+}
+
 fn validate_story_tail(bytes: &[u8], mut start: usize) -> io::Result<()> {
     while start < bytes.len() {
         let end = bytes[start..]
@@ -481,8 +493,11 @@ fn decode_story_record(record_index: usize, bytes: &[u8]) -> io::Result<String> 
         match byte {
             0x0a | 0x0d => out.push('\n'),
             // formats/story-dat.md §3: `{` paragraph marker and `_` soft
-            // hyphen are layout markup, not visible glyphs.
-            b'{' | b'_' => {}
+            // hyphen are layout markup rather than visible glyphs.
+            // They are preserved rather than dropped because the
+            // proportional paragraph layout consumes them: `{` sets the
+            // paragraph indent and `_` marks a legal hyphenation point.
+            // Plain-text consumers use `story_record_display_text`.
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
             _ => {
                 return Err(io::Error::new(
