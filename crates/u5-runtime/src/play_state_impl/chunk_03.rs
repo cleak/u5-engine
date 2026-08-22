@@ -14,7 +14,112 @@ fn cardinal_direction_key(direction: Direction) -> char {
     }
 }
 
+/// `inventory.md §4` + observation: the party-member selector's
+/// message-window prompt.
+///
+/// cleak/u5-spec#81 asks for the published literal; the form below is the
+/// one observed in the original's message window (`Player:` followed by
+/// the selection, `Player: None!` on cancel).
+pub const PARTY_SELECTOR_PROMPT_MESSAGE: &str = "Player:";
+/// The cancel result printed on Escape or Space.
+pub const PARTY_SELECTOR_CANCELLED_MESSAGE: &str = "Player: None!";
+/// `stats-panel.md §4` + observation: the party-roster box's border label
+/// while the party-member selector is live.
+pub const PARTY_SELECTOR_ROSTER_BOX_LABEL: &str = "Select:";
+/// The same border-label slot while a U-Use item picker owns the box.
+pub const USE_PICKER_ROSTER_BOX_LABEL: &str = "Items:";
+
 impl PlayState {
+    /// The roster row the stats panel must draw in inverse video, if any.
+    ///
+    /// `stats-panel.md §4` owns the inverse-video row bracketing; this is
+    /// the runtime half of it for the non-combat party-member selector.
+    /// The stats-panel renderer reads this instead of tracking selector
+    /// state of its own.
+    pub fn selector_highlight(&self) -> Option<usize> {
+        self.active_party_selector
+            .as_ref()
+            .map(|session| session.highlight)
+    }
+
+    /// The party-roster box's border label for the current modal, if any.
+    ///
+    /// Observed: `Select:` while the party-member selector is live and
+    /// `Items:` while a U-Use picker owns the box. `None` means the box
+    /// keeps its ordinary border. The stats-panel renderer consumes this.
+    pub fn roster_box_label(&self) -> Option<&'static str> {
+        if self.active_party_selector.is_some() {
+            return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL);
+        }
+        if self.active_use.is_some() {
+            return Some(USE_PICKER_ROSTER_BOX_LABEL);
+        }
+        None
+    }
+
+    /// `inventory.md §4`: the `Z` command's entry point. In combat it
+    /// binds straight to the active living combat actor's party slot
+    /// (`combat.md §8`); outside combat it opens the normal party-member
+    /// selector first.
+    pub fn z_stats_command(&mut self) -> MoveOutcome {
+        if self.party.is_empty() {
+            self.message = "No party members are available.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if self.combat_active {
+            return self.z_stats();
+        }
+        self.start_party_selector(PartySelectorTarget::ZStats)
+    }
+
+    /// Open the shared party-member selector. The caller has already
+    /// emitted its verb echo, so this only prints the prompt.
+    pub fn start_party_selector(&mut self, target: PartySelectorTarget) -> MoveOutcome {
+        if self.party.is_empty() {
+            self.message = "No party members are available.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let highlight = self.z_stats_initial_party_index().min(self.party.len() - 1);
+        self.active_party_selector = Some(PartySelectorSession::new(target, highlight));
+        self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+        MoveOutcome::Observed
+    }
+
+    /// Feed one key to a live party-member selector.
+    ///
+    /// `inventory.md §4`: number keys `1..6` pick the matching active
+    /// party slot, jumps beyond the active party size are rejected, and
+    /// Escape cancels the selector.
+    pub fn step_active_party_selector(&mut self, key: char, suffix: &str) -> bool {
+        let Some(session) = self.active_party_selector else {
+            return false;
+        };
+        let key = z_stats_first_input_key(key, suffix);
+        if matches!(key, '\u{1b}' | ' ' | '0') {
+            self.active_party_selector = None;
+            self.message = PARTY_SELECTOR_CANCELLED_MESSAGE.to_string();
+            return true;
+        }
+        let Some(digit) = key.to_digit(10) else {
+            // Any other key redraws the prompt; the selector stays live.
+            self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+            return true;
+        };
+        let index = digit as usize - 1;
+        if index >= self.party.len() {
+            // "Jumps beyond the active party size are rejected."
+            self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+            return true;
+        }
+        self.active_party_selector = None;
+        match session.target {
+            PartySelectorTarget::ZStats => {
+                self.z_stats_for_party(index);
+            }
+        }
+        true
+    }
+
     pub fn z_stats(&mut self) -> MoveOutcome {
         let selected = self.z_stats_initial_party_index();
         self.z_stats_for_party(selected)
@@ -981,30 +1086,28 @@ impl PlayState {
             .map(|session| match session.kind {
                 DirectionPromptKind::Attack => "Attack where?".to_string(),
                 DirectionPromptKind::DungeonLook {
-                    party_index: None,
-                    ..
+                    party_index: None, ..
                 } => {
                     let last = self.party.len().max(1);
-                    format!("Look: choose party member (1-{last}); Space/Esc cancels.")
+                    format!("Look: choose party member (1-{last}).")
                 }
                 DirectionPromptKind::DungeonLook {
                     party_index: Some(index),
                     ..
                 } => format!(
-                    "Look: party member {}. Choose A-head, R-ight, L-eft, or H-ere; Space/Esc cancels.",
+                    "Look: party member {}. Choose A-head, R-ight, L-eft, or H-ere.",
                     index + 1
                 ),
                 DirectionPromptKind::SurfaceFountainDrink { .. } => {
                     let last = self.party.len().max(1);
-                    format!("Look: choose fountain drinker (1-{last}); Space/Esc cancels.")
+                    format!("Look: choose fountain drinker (1-{last}).")
                 }
                 DirectionPromptKind::SurfaceDeathVision { .. } => {
                     let last = self.party.len().max(1);
-                    format!("Look: choose death-vision member (1-{last}); Space/Esc cancels.")
+                    format!("Look: choose death-vision member (1-{last}).")
                 }
                 DirectionPromptKind::DungeonSearch => {
-                    "Search: choose A-head, R-ight, L-eft, or H-ere; Space/Esc cancels."
-                        .to_string()
+                    "Search: choose A-head, R-ight, L-eft, or H-ere.".to_string()
                 }
                 DirectionPromptKind::Klimb => "Klimb-".to_string(),
                 DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
@@ -1328,7 +1431,6 @@ impl PlayState {
             session.selected_party_index + 1,
             self.party.len()
         )];
-        lines.push(self.z_stats_navigation_hint());
         match session.page {
             ZStatsPage::Stats => self.render_z_stats_character_page(session, &mut lines),
             ZStatsPage::Equipment => self.render_z_stats_equipment_page(session, &mut lines),
@@ -1466,10 +1568,10 @@ impl PlayState {
             );
         }
 
-        let mut lines = vec![format!(
-            "Ready: party member {}. Enter equips/unequips; </> move; [] page; 1-6 party; Space/Esc exits.",
-            party_index + 1
-        )];
+        // cleak/u5-spec#81: inventory.md §5 gives the R-Ready picker's
+        // behaviour but not its literals. The invented keybinding help
+        // suffix has no counterpart in the original and is removed.
+        let mut lines = vec![format!("Ready: party member {}.", party_index + 1)];
         let visible = self.ready_visible_items_for_party(party_index);
         if visible.is_empty() {
             lines.push("Nothing to ready.".to_string());
@@ -1491,18 +1593,11 @@ impl PlayState {
             .take(READY_PICKER_PANEL_ROWS)
         {
             let marker = if item_id == cursor { ">" } else { " " };
-            let stock = self.equipment_stock[item_id];
-            let readied = self
-                .party_equipment
-                .get(party_index)
-                .is_some_and(|equipment| character_has_readied(equipment, item_id as u8));
-            let state = match (stock, readied) {
-                (0, true) => "readied".to_string(),
-                (count, true) => format!("stock {count}, readied"),
-                (count, false) => format!("stock {count}"),
-            };
+            // inventory.md §4: "Ordinary item names print verbatim." The
+            // invented `(stock N)` / `(readied)` annotations have no
+            // counterpart in the original and are removed.
             lines.push(format!(
-                "{marker} {item_id:02}: {} ({state})",
+                "{marker} {item_id:02}: {}",
                 equipment_name(item_id)
             ));
         }
@@ -1670,10 +1765,6 @@ impl PlayState {
         session.cursor = visible[next];
     }
 
-    fn z_stats_navigation_hint(&self) -> String {
-        "Use </> for pages, [] for inventory rows, 1-6 for party, Space/Esc to exit.".to_string()
-    }
-
     fn move_z_stats_inventory_cursor(&self, session: &mut ZStatsSession, delta: isize) {
         let Some(row_count) = self.z_stats_inventory_row_count(session) else {
             session.inventory_cursor = 0;
@@ -1774,17 +1865,19 @@ impl PlayState {
             .get(session.selected_party_index)
             .copied()
             .unwrap_or(0);
-        lines.push(format!("Name: {name}"));
-        lines.push(format!("Class: {class}"));
-        lines.push(format!("Status: {status}"));
-        lines.push(format!("Level: {}", member.level));
-        lines.push(format!(
-            "STR {strength:>2} DEX {dexterity:>2} INT {intellect:>2}"
+        lines.push(z_stats_stat_row("", &name));
+        lines.push(z_stats_stat_row("", &class.to_string()));
+        lines.push(z_stats_stat_row("", status));
+        lines.push(z_stats_stat_row("Level", &member.level.to_string()));
+        lines.push(z_stats_stat_row("Strength", &strength.to_string()));
+        lines.push(z_stats_stat_row("Dexterity", &dexterity.to_string()));
+        lines.push(z_stats_stat_row("Intellect", &intellect.to_string()));
+        lines.push(z_stats_stat_row(
+            "HP",
+            &format!("{}/{}", member.hp, member.max_hp),
         ));
-        lines.push(format!(
-            "HP {}/{} MP {} XP {}",
-            member.hp, member.max_hp, member.mana, experience
-        ));
+        lines.push(z_stats_stat_row("MP", &member.mana.to_string()));
+        lines.push(z_stats_stat_row("Exp", &experience.to_string()));
     }
 
     fn render_z_stats_equipment_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
@@ -2040,7 +2133,9 @@ impl PlayState {
     pub fn area_status_label(&self) -> String {
         match self.area {
             Area::Town { scene, floor } => format!("{} floor {floor}", scene.key()),
-            Area::Dungeon { scene, level } => format!("{} level {level}", scene.key()),
+            Area::Dungeon { scene, level } => {
+                format!("{} level {}", scene.key(), dungeon_display_level(level))
+            }
             Area::World { plane } => plane.key().to_string(),
         }
     }
@@ -2824,7 +2919,7 @@ impl PlayState {
                     "Peer view of {} ({}) level {} (spell; centered flood map)",
                     scene.key(),
                     scene.name(),
-                    level
+                    dungeon_display_level(level)
                 ),
                 text_map: self.dungeon_vision_map(level),
                 kind: ViewOverlayKind::Dungeon { level },
@@ -3036,9 +3131,10 @@ impl PlayState {
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = format!(
-            "{label}! Changed to {} ({}) level {next_level}.",
+            "{label}! Changed to {} ({}) level {}.",
             scene.key(),
-            scene.name()
+            scene.name(),
+            dungeon_display_level(next_level)
         );
         MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel {
             scene,
@@ -3351,7 +3447,9 @@ impl PlayState {
         match self.area {
             Area::World { plane } => plane.key().to_string(),
             Area::Town { scene, floor } => format!("{} floor {floor}", scene.key()),
-            Area::Dungeon { scene, level } => format!("{} level {level}", scene.key()),
+            Area::Dungeon { scene, level } => {
+                format!("{} level {}", scene.key(), dungeon_display_level(level))
+            }
         }
     }
 
@@ -3526,4 +3624,30 @@ fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usi
     if total > start + shown {
         lines.push(format!("... {} more", total - start - shown));
     }
+}
+
+/// `inventory.md §4` Z-stats stats page: "Shows class, status, level,
+/// Strength, Dexterity, Intellect, current and maximum hit points, magic
+/// points, and experience for the selected character. Class and status
+/// are looked up through label tables rather than printed from the raw
+/// record byte. Numeric fields use the resident number printer."
+///
+/// The page's visible width, matching the party-roster rows it replaces.
+///
+/// cleak/u5-spec#81: the page's literal row labels and per-field column
+/// offsets are not published. Until they are, each §4 field takes one row
+/// with its §4 field name at the left and the value right-justified into
+/// the visible cells; class and status are bare label-table values with
+/// no invented field name in front of them.
+pub const Z_STATS_PAGE_ROW_WIDTH: usize = 15;
+
+/// One `label` + right-justified `value` row of the Z-stats stats page.
+pub fn z_stats_stat_row(label: &str, value: &str) -> String {
+    if label.is_empty() {
+        // Bare label-table values (name, class, status) print verbatim.
+        return value.to_string();
+    }
+    let used = label.chars().count() + value.chars().count();
+    let pad = Z_STATS_PAGE_ROW_WIDTH.saturating_sub(used).max(1);
+    format!("{label}{}{value}", " ".repeat(pad))
 }

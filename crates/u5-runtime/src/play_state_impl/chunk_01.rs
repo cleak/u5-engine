@@ -479,6 +479,9 @@ impl PlayState {
             sail_stall_pending: false,
             turn: 0,
             message: format!("Entered {} at ({x}, {y}).", scene.key()),
+            message_transcript: Vec::new(),
+            message_transcript_revision: 0,
+            pending_command_echo: None,
             pending_hourly_status_message: None,
             debug_enter: options.debug_enter,
             return_world: None,
@@ -497,6 +500,7 @@ impl PlayState {
             active_conversation: None,
             active_conversation_join_candidate: None,
             active_z_stats: None,
+            active_party_selector: None,
             active_ready: None,
             active_use: None,
             active_cast: None,
@@ -713,11 +717,14 @@ impl PlayState {
             sail_cadence: 0,
             sail_stall_pending: false,
             turn: 0,
-            message: format!(
-                "Entered {} ({}) level {level} at ({x}, {y}).",
-                scene.key(),
-                scene.name()
-            ),
+            // cleak/u5-spec#81: dungeon-mode.md publishes no entry
+            // narration, so nothing player-facing is printed here. The
+            // coordinate report the frame/route suites used lives on the
+            // debug-only `debug_dungeon_entry_report` helper instead.
+            message: String::new(),
+            message_transcript: Vec::new(),
+            message_transcript_revision: 0,
+            pending_command_echo: None,
             pending_hourly_status_message: None,
             debug_enter: options.debug_enter,
             return_world: None,
@@ -736,6 +743,7 @@ impl PlayState {
             active_conversation: None,
             active_conversation_join_candidate: None,
             active_z_stats: None,
+            active_party_selector: None,
             active_ready: None,
             active_use: None,
             active_cast: None,
@@ -965,6 +973,9 @@ impl PlayState {
                 plane.key(),
                 wind_status_message_from_state_and_save_byte(options.wind, options.wind_save_byte)
             ),
+            message_transcript: Vec::new(),
+            message_transcript_revision: 0,
+            pending_command_echo: None,
             pending_hourly_status_message: None,
             debug_enter: options.debug_enter,
             return_world: None,
@@ -983,6 +994,7 @@ impl PlayState {
             active_conversation: None,
             active_conversation_join_candidate: None,
             active_z_stats: None,
+            active_party_selector: None,
             active_ready: None,
             active_use: None,
             active_cast: None,
