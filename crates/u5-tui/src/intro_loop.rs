@@ -217,8 +217,12 @@ fn require_terminal_story_renderer_contract() -> ! {
 }
 
 fn require_terminal_return_to_view_renderer_contract() -> ! {
+    // `cleak/u5-spec#54` is published and the preview is implemented in
+    // the graphical shell: nineteen 16x16 cells across by four down at
+    // (8, 128). The terminal harness has no pixel surface to blit that
+    // strip onto, so a text transcript of it stays a forbidden fallback.
     panic!(
-        "terminal Return-to-View diagnostics are a forbidden fallback; Return-to-View requires the graphical preview pixel geometry and caption renderer before playback can advance; see cleak/u5-spec#54 and cleak/u5-spec#70"
+        "terminal Return-to-View diagnostics are a forbidden fallback; the preview is a 304x64 tile strip and must run in the graphical shell; see cleak/u5-spec#54"
     )
 }
 
@@ -327,8 +331,8 @@ mod tests {
             message.contains("terminal Return-to-View diagnostics are a forbidden fallback"),
             "{message}"
         );
+        assert!(message.contains("304x64 tile strip"), "{message}");
         assert!(message.contains("cleak/u5-spec#54"), "{message}");
-        assert!(message.contains("cleak/u5-spec#70"), "{message}");
         let _ = fs::remove_dir_all(dir);
     }
 

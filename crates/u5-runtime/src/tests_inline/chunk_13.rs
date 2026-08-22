@@ -8164,16 +8164,97 @@ fn toll_progress_counter_increments_per_payment_and_bumps_standing_at_milestone(
 }
 
 #[test]
+fn shipped_return_to_view_strips_are_nineteen_across_by_four_down() {
+    // `cleak/u5-spec#54` retraction 1: each record is four 32-byte rows,
+    // nineteen tile bytes then thirteen bytes of padding. Verified
+    // structurally against the shipped `MISCMAPS.DAT`: every visible
+    // cell of every strip carries a real terrain byte and every padding
+    // byte is zero, which is what makes the terrain-first cell rule
+    // total for a loaded strip.
+    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join(MISCMAPS_DAT_FILE).exists() {
+        return;
+    }
+    let strips = load_return_to_view_map_strips(game_dir)
+        .expect("shipped MISCMAPS.DAT parses")
+        .expect("shipped MISCMAPS.DAT is present");
+
+    for strip in 0..RTV_STRIP_COUNT {
+        let cells = &strips.strips[strip];
+        assert_eq!(cells.len(), RTV_STRIP_VISIBLE_COLUMNS * RTV_STRIP_VISIBLE_ROWS);
+        assert!(
+            cells.iter().all(|tile| *tile != 0),
+            "strip {strip} has an empty cell; the terrain-first draw rule assumes none"
+        );
+        assert!(
+            cells.iter().all(|tile| *tile != RTV_TERRAIN_HELPER_OWNED),
+            "strip {strip} ships a reserved helper-owned terrain byte"
+        );
+    }
+
+    // The padding never reaches the preview: a transposed read would
+    // have pulled it in.
+    let bytes = std::fs::read(game_dir.join(MISCMAPS_DAT_FILE)).expect("MISCMAPS.DAT reads");
+    for strip in 0..RTV_STRIP_COUNT {
+        for row in 0..RTV_STRIP_VISIBLE_ROWS {
+            let row_start = MISCMAPS_RTV_STRIP_SECTION_OFFSET
+                + strip * RTV_STRIP_RECORD_BYTES
+                + row * MISCMAPS_RTV_STRIP_ROW_STRIDE;
+            let padding = &bytes[row_start + RTV_STRIP_VISIBLE_COLUMNS
+                ..row_start + MISCMAPS_RTV_STRIP_ROW_STRIDE];
+            assert!(
+                padding.iter().all(|byte| *byte == 0),
+                "strip {strip} row {row} padding is not zero"
+            );
+        }
+    }
+}
+
+#[test]
+fn shipped_return_to_view_script_keeps_every_placed_actor_inside_the_strip() {
+    // `#54`: "script coordinates never leave `x = 0..18` / `y = 0..3`,
+    // so nothing is clipped and no clipping rule is needed". Replaying
+    // the shipped stream must therefore never fail on a bounds check.
+    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join(MISCMAPS_DAT_FILE).exists() {
+        return;
+    }
+    let assets = load_return_to_view_assets(game_dir)
+        .expect("shipped MISCMAPS.DAT parses")
+        .expect("shipped MISCMAPS.DAT is present");
+
+    let playback = run_return_to_view_playback_until_restart(&assets.strips, &assets.script, 4096)
+        .expect("the shipped Return-to-View stream replays without leaving the strip");
+
+    assert!(playback.run.report.restart_seen);
+    assert!(!playback.frames.is_empty());
+    for frame in &playback.frames {
+        for actor in frame.state.actors.iter().filter(|actor| actor.drawable) {
+            assert!(
+                usize::from(actor.x) < RTV_STRIP_VISIBLE_COLUMNS
+                    && usize::from(actor.y) < RTV_STRIP_VISIBLE_ROWS,
+                "actor at ({}, {}) left the strip",
+                actor.x,
+                actor.y
+            );
+        }
+    }
+}
+
+#[test]
 fn return_to_view_published_wait_cadence_constants() {
-    // `cleak/u5-spec#54`: the published WAIT beat pauses for
-    // exactly eight title ticks (~1.1s at 30fps), and any keypress
-    // observed during the wait exits the preview.
-    assert_eq!(RTV_WAIT_FIXED_TICKS, 8);
+    // `cleak/u5-spec#54` (2026-08-22 resolution) retraction 2: there is
+    // no fixed eight-tick wait. `0x03` runs its own argument byte,
+    // `0x04`/`0x05` run 2 at their tails, `0x0B` runs 3 and `0x0D` runs
+    // 7. Retraction 3: every preview tick polls the keyboard and any
+    // pending key aborts immediately — there is no uninterruptible
+    // phase and no ESC special case.
     assert_eq!(RTV_CELL_EFFECT_STEPS, 15);
     assert_eq!(RTV_CELL_EFFECT_FINAL_TICKS, 2);
     assert_eq!(RTV_FIXED_WIPE_STEPS, 5);
     assert_eq!(RTV_FIXED_WIPE_TRAILING_TICKS, 3);
-    assert_eq!(RTV_FIXED_WIPE_TOTAL_TICKS, 16);
+    assert_eq!(RTV_FIXED_WIPE_TOTAL_TICKS, 8);
+    assert_eq!(RTV_MOVE_ACTOR_AND_TICK_TICKS, 7);
     assert!(RTV_WAIT_EXITS_ON_KEYPRESS);
 }
 

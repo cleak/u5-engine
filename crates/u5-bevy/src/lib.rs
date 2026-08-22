@@ -66,28 +66,30 @@ use u5_runtime::{
     PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome,
     ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
     REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectangleDissolve, ReturnToViewFrameKind,
-    SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
-    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
-    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
-    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED,
-    SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
-    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
-    STATS_PANEL_TEXT_LEFT, STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright,
-    ShrineVirtue, Stable, StoryRecords, TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING,
-    TALK_STATUS_TILE_SLEEPING, TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_SOURCE_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
-    TITLE_FLOURISH_FRAME_COUNT, TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
-    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX,
-    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor,
-    TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages,
-    TitleBitPlacement, TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource,
-    ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST,
+    RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
+    RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectangleDissolve,
+    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_LEFT,
+    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable,
+    StoryRecords, TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH,
+    TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_FLOURISH_FRAME_COUNT,
+    TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem,
+    TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, ULTIMA_LOGO_HEIGHT,
+    ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
     X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
@@ -112,20 +114,21 @@ use u5_runtime::{
     paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
     paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
     published_world_location_entries, read_save_image_file, read_u4_transfer_source_from_party_sav,
-    render_play_text_window_system, render_text_panel_rgba, render_text_window_rgba,
-    run_intro_pre_flourish_phase, run_return_to_view_playback_until_restart,
-    save_image_has_active_avatar,
+    render_play_text_window_system, render_return_to_view_playback_frame_over,
+    render_text_panel_rgba, render_text_window_rgba, return_to_view_caption_start_column,
+    return_to_view_fixed_wipe_rectangles, run_intro_pre_flourish_phase,
+    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
     spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_visible,
-    summoned_active_object_record, terrain_combat_instance_from_setup,
-    terrain_combat_raw_replacement_tile_for_arena, terrain_combat_setup_from_record,
-    terrain_combat_tile_for_spawn_index, title_flourish_band, title_flourish_content_row,
-    title_flourish_step_state, title_flourish_total_steps, title_flourish_visible_rows,
-    title_tick_next_frame, town_resident_name,
+    summarize_return_to_view_preview, summoned_active_object_record,
+    terrain_combat_instance_from_setup, terrain_combat_raw_replacement_tile_for_arena,
+    terrain_combat_setup_from_record, terrain_combat_tile_for_spawn_index, title_flourish_band,
+    title_flourish_content_row, title_flourish_step_state, title_flourish_total_steps,
+    title_flourish_visible_rows, title_tick_next_frame, town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
 };
@@ -162,7 +165,6 @@ const READY_HINT: &str =
 const INTRO_FRAMEBUFFER_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
 const INTRO_FRAMEBUFFER_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
 const INTRO_DISPLAY_SCALE: f32 = 2.5;
-const RETURN_TO_VIEW_PREVIEW_Y: usize = 18;
 // `systems/timing.md §5`: every intro animation step is driven by
 // the DOS BIOS user-tick interrupt at ~18.2065 Hz (the standard PC
 // rate 1_193_182 / 65_536), i.e. ~54.945 ms per tick. The pump
@@ -285,7 +287,6 @@ impl IntroDisplayBuffer {
         }
     }
 
-    #[cfg(test)]
     fn blit_return_to_view_preview_buffer(
         &mut self,
         src: &IntroDisplayBuffer,
@@ -8799,11 +8800,27 @@ fn advance_visual_intro_return_to_view(
     panel: &mut VisualIntroPanel,
     title_tick_frame: &mut u8,
 ) -> bool {
-    let VisualIntroPanel::ReturnToView { preview_frames, .. } = panel else {
+    let VisualIntroPanel::ReturnToView {
+        preview_frames,
+        preview_frame_index,
+        ..
+    } = panel
+    else {
         return false;
     };
-    let _ = title_tick_frame;
-    require_published_return_to_view_preview_pixel_geometry_for_frame_count(preview_frames.len())
+    // `cleak/u5-spec#54` preview tick: one shared routine per tick, which
+    // includes firing one intro title tick. The rendered playback has
+    // already expanded every timed command into per-tick frames, so
+    // advancing the preview is stepping to the next one.
+    let next = preview_frame_index
+        .checked_add(1)
+        .expect("Return-to-View preview frame index overflowed");
+    if next >= preview_frames.len() {
+        return false;
+    }
+    *preview_frame_index = next;
+    *title_tick_frame = title_tick_frame.wrapping_add(1) % u5_runtime::TITLE_TICK_FRAME_COUNT;
+    true
 }
 
 fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
@@ -8977,11 +8994,15 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             result: IntroSubflowResult::ReturnedToMenu,
             message: String::new(),
         },
-        VisualIntroPanel::ReturnToView { preview_frames, .. } => {
-            require_published_return_to_view_preview_pixel_geometry_for_frame_count(
-                preview_frames.len(),
-            )
-        }
+        // `#54` retraction 3: "every preview tick polls the keyboard
+        // once, and any pending key aborts the preview immediately", at
+        // which point the saved title/menu image is restored. There is
+        // no uninterruptible phase and no ESC special case.
+        VisualIntroPanel::ReturnToView { .. } => VisualIntroPanelOutcome::ReturnToMenu {
+            subflow: IntroSubflow::ReturnToView,
+            result: IntroSubflowResult::ReturnedToMenu,
+            message: String::new(),
+        },
     };
 
     match outcome {
@@ -9044,7 +9065,14 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
             IntroSubflowResult::ReturnedToMenu,
             "",
         )),
-        VisualIntroPanel::ReturnToView { .. } => None,
+        // `cleak/u5-spec#54` retraction 3: any pending key aborts the
+        // preview immediately and restores the saved title/menu image.
+        // Escape is an ordinary key here, not a special case.
+        VisualIntroPanel::ReturnToView { .. } => Some((
+            IntroSubflow::ReturnToView,
+            IntroSubflowResult::ReturnedToMenu,
+            "",
+        )),
     }) else {
         return false;
     };
@@ -9417,9 +9445,23 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         VisualIntroPanel::Acknowledgements => {
             return "Acknowledgements: STARTSC credits parchment at (0, 63).".to_string();
         }
-        VisualIntroPanel::ReturnToView { preview_frames, .. } => {
-            require_published_return_to_view_preview_pixel_geometry_for_frame_count(
+        VisualIntroPanel::ReturnToView {
+            preview_frames,
+            frame_metadata,
+            preview_frame_index,
+        } => {
+            let caption = frame_metadata
+                .get(*preview_frame_index)
+                .and_then(|meta| meta.caption)
+                .unwrap_or("");
+            return format!(
+                "Return-to-View: frame {} of {}, chapter {caption:?}, strip {}x{} at ({}, {}).",
+                preview_frame_index + 1,
                 preview_frames.len(),
+                RTV_STRIP_VISIBLE_COLUMNS,
+                RTV_STRIP_VISIBLE_ROWS,
+                RTV_PREVIEW_PIXEL_X,
+                RTV_PREVIEW_PIXEL_Y,
             );
         }
     }
@@ -10318,11 +10360,97 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
     records.record(record_index)
 }
 
-fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
-    let _backing = intro
+/// `cleak/u5-spec#54`: the fixed-wipe rectangles are drawn in
+/// user-interface colour slot 1, and the menu's `Select:` caption is
+/// painted out with a filled rectangle in slot 2 plus a one-pixel run in
+/// slot 1 beneath.
+///
+/// The issue names the two slots without giving their EGA indices. The
+/// menu chrome those calls act on is observed white-on-blue
+/// (`cleak/u5-spec#78`), and the paint-out only makes sense as "restore
+/// the blue border, then restore the white rule", so slot 1 binds to the
+/// chrome's rule colour and slot 2 to its border colour.
+const RTV_UI_COLOUR_SLOT_1: u8 = INTRO_MENU_FRAME_OUTLINE_COLOR;
+const RTV_UI_COLOUR_SLOT_2: u8 = INTRO_MENU_FRAME_BORDER_COLOR;
+
+fn visual_return_to_view_summary(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+) -> VisualReturnToViewPreview {
+    let path = game_dir.join(MISCMAPS_DAT_FILE);
+    let metadata = std::fs::metadata(&path)
+        .unwrap_or_else(|err| panic!("Return-to-View requires {MISCMAPS_DAT_FILE}: {err}"));
+    assert!(
+        metadata.len() > 0,
+        "Return-to-View requires non-empty {MISCMAPS_DAT_FILE}"
+    );
+    let assets = load_return_to_view_assets(game_dir)
+        .unwrap_or_else(|err| panic!("Return-to-View requires readable assets: {err}"))
+        .expect("Return-to-View asset loader returned no assets after metadata succeeded");
+    let atlas = load_tile_atlas(game_dir, raster_depth)
+        .unwrap_or_else(|err| panic!("Return-to-View requires a readable tile atlas: {err}"));
+    let playback = run_return_to_view_playback_until_restart(&assets.strips, &assets.script, 4096)
+        .unwrap_or_else(|err| panic!("Return-to-View playback failed: {err}"));
+    assert!(
+        !playback.frames.is_empty(),
+        "Return-to-View playback emitted no frames"
+    );
+
+    // `#54`: painting is cell-granular over preserved backing, so each
+    // frame is rendered on top of the previous frame's raster.
+    let mut frames = Vec::with_capacity(playback.frames.len());
+    let mut frame_metadata = Vec::with_capacity(playback.frames.len());
+    let mut previous: Option<TileViewport> = None;
+    for frame in &playback.frames {
+        let viewport =
+            render_return_to_view_playback_frame_over(frame, &atlas, 0, previous.as_ref())
+                .unwrap_or_else(|err| panic!("Return-to-View frame render failed: {err}"));
+        frames.push(intro_buffer_from_return_to_view_viewport(&viewport));
+        frame_metadata.push(VisualReturnToViewFrameMeta {
+            command_index: frame.command_index,
+            elapsed_title_ticks: frame.elapsed_title_ticks,
+            kind: frame.kind,
+            caption: frame.state.current_caption,
+        });
+        previous = Some(viewport);
+    }
+
+    let summary = summarize_return_to_view_preview(&assets.strips, &assets.script)
+        .unwrap_or_else(|err| panic!("Return-to-View summary failed: {err}"));
+    VisualReturnToViewPreview {
+        summary,
+        frames,
+        frame_metadata,
+    }
+}
+
+/// Wrap a rendered `304 x 64` strip raster as an intro display buffer.
+fn intro_buffer_from_return_to_view_viewport(viewport: &TileViewport) -> IntroDisplayBuffer {
+    assert_eq!(
+        (viewport.width, viewport.height),
+        (RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_HEIGHT),
+        "Return-to-View strip raster must be the published 304x64 rectangle"
+    );
+    IntroDisplayBuffer {
+        width: viewport.width,
+        height: viewport.height,
+        pixels: viewport.pixels.clone(),
+    }
+}
+
+/// `cleak/u5-spec#54` + `systems/intro.md §12`: compose one preview
+/// frame over the preserved title/menu image.
+///
+/// Preview entry does exactly two things beyond the strip itself: it
+/// raises the viewport origin to `(8, 16)`, and it paints out the menu's
+/// top-border `Select:` caption. There is no clear and no full repaint —
+/// everything outside the strip keeps the preserved menu image.
+fn render_return_to_view_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    let backing = intro
         .modal_backing
         .as_ref()
-        .expect("Return-to-View requires preserved intro backing surface");
+        .expect("Return-to-View requires preserved intro backing surface")
+        .clone();
 
     let VisualIntroPanel::ReturnToView {
         preview_frames,
@@ -10339,19 +10467,101 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         frame_metadata.len(),
         "Return-to-View frame metadata count must match rendered frame count"
     );
-    let current_meta = frame_metadata
-        .get(*preview_frame_index)
+    let index = *preview_frame_index;
+    let strip = preview_frames
+        .get(index)
+        .expect("Return-to-View current preview frame is missing");
+    let current_meta = *frame_metadata
+        .get(index)
         .expect("Return-to-View current frame metadata is missing");
     let caption = current_meta
         .caption
         .expect("Return-to-View current frame is missing its caption");
-    require_published_return_to_view_caption_renderer(caption);
+
+    // The pre-flourish phase normally leaves the slot table behind; the
+    // frame suite renders the panel directly, so load the same `IBM.CH`
+    // it would have installed.
+    let font = match intro.font_slots.as_ref() {
+        Some(slots) => slots.active_font().clone(),
+        None => u5_runtime::load_intro_font_slots(&intro.game_dir, DisplayDriverFamily::Ega)
+            .unwrap_or_else(|err| {
+                panic!("Return-to-View caption requires a readable intro font: {err}")
+            })
+            .active_font()
+            .clone(),
+    };
+
+    let mut buffer = backing;
+    paint_out_intro_menu_select_caption(&mut buffer);
+    buffer.blit_return_to_view_preview_buffer(strip, RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y);
+    if let ReturnToViewFrameKind::FixedWipeRectangle { step } = current_meta.kind {
+        draw_return_to_view_fixed_wipe_rectangles(&mut buffer, step);
+    }
+    draw_return_to_view_caption(&mut buffer, &font, caption);
+
+    intro.surface = buffer;
+    intro.surface.to_rgba()
 }
 
-fn require_published_return_to_view_caption_renderer(_caption: &str) -> ! {
-    panic!(
-        "Return-to-View captions require the published proportional font width and centering contract; drawing a fixed centered text band is a forbidden fallback; see cleak/u5-spec#70"
-    )
+/// `#54`: "on preview entry the menu's top-border `Select:` caption is
+/// painted out (a filled rectangle in user-interface colour slot 2 over
+/// its cells, plus a one-pixel run in slot 1 beneath)".
+fn paint_out_intro_menu_select_caption(buffer: &mut IntroDisplayBuffer) {
+    let cells = INTRO_MENU_SELECT_CAPTION_PREFIX.len() + 1 + INTRO_MENU_SELECT_CAPTION_SUFFIX.len();
+    let first_column = usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN);
+    let row = usize::from(INTRO_MENU_SELECT_CAPTION_ROW);
+    let x0 = first_column * CH_CELL_SIDE;
+    let x1 = (first_column + cells) * CH_CELL_SIDE - 1;
+    let y0 = row * CH_CELL_SIDE;
+    let y1 = y0 + CH_CELL_SIDE - 1;
+    buffer.clear_rect_inclusive(x0, y0, x1, y1, RTV_UI_COLOUR_SLOT_2);
+    // The caption interrupts the frame's one-pixel rule; restoring it is
+    // the second half of the paint-out.
+    let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
+    buffer.clear_rect_inclusive(x0, rule_y, x1, rule_y, RTV_UI_COLOUR_SLOT_1);
+}
+
+/// `#54` / `systems/intro.md §12.1`: the chapter caption is fixed-cell
+/// text on text row 24 in the window's bottom border, starting at column
+/// `18 - floor(len / 2)`, and it interrupts the one-pixel rule at
+/// `y = 192`. It is emitted once per chapter, not redrawn per frame, so
+/// this simply keeps it painted for every frame of the chapter.
+fn draw_return_to_view_caption(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    caption: &str,
+) {
+    let bytes = caption.as_bytes();
+    let start_column = return_to_view_caption_start_column(bytes.len());
+    for (offset, byte) in bytes.iter().enumerate() {
+        buffer.draw_fixed_glyph_cell(
+            font,
+            *byte,
+            start_column + offset,
+            RTV_CAPTION_TEXT_ROW,
+            RTV_UI_COLOUR_SLOT_1,
+            RTV_UI_COLOUR_SLOT_2,
+        );
+    }
+}
+
+/// `#54`: the two `0x0B` rectangle pairs are absolute framebuffer pixel
+/// rectangles drawn in user-interface colour slot 1. They deliberately
+/// do not align to cell boundaries, and they are the only rectangle
+/// operation in the preview path.
+fn draw_return_to_view_fixed_wipe_rectangles(buffer: &mut IntroDisplayBuffer, step: u8) {
+    let Some(rectangles) = return_to_view_fixed_wipe_rectangles(step) else {
+        return;
+    };
+    for ((x0, y0), (x1, y1)) in rectangles {
+        buffer.clear_rect_inclusive(
+            usize::from(x0),
+            usize::from(y0),
+            usize::from(x1),
+            usize::from(y1),
+            RTV_UI_COLOUR_SLOT_1,
+        );
+    }
 }
 
 fn visual_intro_title_surface_visible(intro: &VisualIntroState) -> bool {
@@ -12391,66 +12601,6 @@ fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Res
     Ok(())
 }
 
-fn visual_return_to_view_summary(
-    game_dir: &Path,
-    raster_depth: TileGraphicsDepth,
-) -> VisualReturnToViewPreview {
-    let _ = raster_depth;
-    let path = game_dir.join(MISCMAPS_DAT_FILE);
-    let metadata = std::fs::metadata(&path)
-        .unwrap_or_else(|err| panic!("Return-to-View requires {MISCMAPS_DAT_FILE}: {err}"));
-    assert!(
-        metadata.len() > 0,
-        "Return-to-View requires non-empty {MISCMAPS_DAT_FILE}"
-    );
-    let assets = load_return_to_view_assets(game_dir)
-        .unwrap_or_else(|err| panic!("Return-to-View requires readable assets: {err}"))
-        .expect("Return-to-View asset loader returned no assets after metadata succeeded");
-    let playback = run_return_to_view_playback_until_restart(&assets.strips, &assets.script, 4096)
-        .unwrap_or_else(|err| panic!("Return-to-View playback failed: {err}"));
-    assert!(
-        !playback.frames.is_empty(),
-        "Return-to-View playback emitted no frames"
-    );
-    let predicted_width = RTV_STRIP_VISIBLE_COLUMNS
-        .checked_mul(TILE_ATLAS_SIDE)
-        .expect("Return-to-View full-tile preview width overflows");
-    let predicted_height = RTV_STRIP_VISIBLE_ROWS
-        .checked_mul(TILE_ATLAS_SIDE)
-        .expect("Return-to-View full-tile preview height overflows");
-    require_published_return_to_view_preview_pixel_geometry(
-        playback.frames.len(),
-        predicted_width,
-        predicted_height,
-    );
-}
-
-fn require_published_return_to_view_preview_pixel_geometry_for_frame_count(
-    playback_frame_count: usize,
-) -> ! {
-    let full_tile_width = RTV_STRIP_VISIBLE_COLUMNS
-        .checked_mul(TILE_ATLAS_SIDE)
-        .expect("Return-to-View full-tile preview width overflows");
-    let full_tile_height = RTV_STRIP_VISIBLE_ROWS
-        .checked_mul(TILE_ATLAS_SIDE)
-        .expect("Return-to-View full-tile preview height overflows");
-    require_published_return_to_view_preview_pixel_geometry(
-        playback_frame_count,
-        full_tile_width,
-        full_tile_height,
-    )
-}
-
-fn require_published_return_to_view_preview_pixel_geometry(
-    playback_frame_count: usize,
-    full_tile_width: usize,
-    full_tile_height: usize,
-) -> ! {
-    panic!(
-        "Return-to-View preview pixel geometry is unpublished: the current full TILES.16 4x19 render would synthesize {playback_frame_count} {full_tile_width}x{full_tile_height} preview frame(s) and overflow the 320x200 intro framebuffer at y={RETURN_TO_VIEW_PREVIEW_Y}; cropping, scaling, or partial blitting is a forbidden fallback; see cleak/u5-spec#54"
-    )
-}
-
 fn visual_chargen_rng_pool() -> Vec<u8> {
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -13163,27 +13313,25 @@ mod tests {
         std::env::temp_dir().join(format!("u5-bevy-frame-suite-{name}-{nonce}"))
     }
 
-    fn assert_return_to_view_caption_gap_panic(result: std::thread::Result<()>) {
-        let payload = result.expect_err("unpublished Return-to-View caption renderer must fail");
+    fn assert_title_tick_gap_panic(result: std::thread::Result<()>) {
+        let payload = result.expect_err("generated title-tick helper must fail");
         let message = panic_message(payload);
         assert!(
-            message.contains("Return-to-View captions")
-                && message.contains("fixed centered text band")
-                && message.contains("forbidden fallback")
-                && message.contains("cleak/u5-spec#70"),
+            message.contains("authored title-tick frames")
+                || message.contains("published authored frame pixels")
+                || message.contains("requires injected authored frame pixels")
+                || message.contains("generated title-tick animation fallback"),
             "{message}"
         );
     }
 
-    fn assert_return_to_view_preview_geometry_gap_panic(result: std::thread::Result<()>) {
-        let payload =
-            result.expect_err("unpublished Return-to-View preview pixel geometry must fail");
+    fn assert_menu_text_window_gap_panic(result: std::thread::Result<()>) {
+        let payload = result.expect_err("unpublished intro menu text-window contract must fail");
         let message = panic_message(payload);
         assert!(
-            message.contains("Return-to-View preview pixel geometry")
-                && message.contains("full TILES.16 4x19 render")
+            message.contains("plain black band")
                 && message.contains("forbidden fallback")
-                && message.contains("cleak/u5-spec#54"),
+                && message.contains("cleak/u5-spec#63"),
             "{message}"
         );
     }
@@ -16584,43 +16732,42 @@ mod tests {
     }
 
     #[test]
-    fn visual_frame_suite_local_clean_panics_on_strict_intro_asset_gap_when_present() {
+    fn visual_frame_suite_local_clean_renders_the_return_to_view_preview_when_present() {
+        // `cleak/u5-spec#54` is published and implemented, so the suite
+        // no longer refuses at the Return-to-View preview: the frame is
+        // rendered from the shipped `MISCMAPS.DAT` and is not blank.
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if !game_dir.join("CASTLE.DAT").exists()
             || !game_dir.join(TILES_EGA_FILE).exists()
             || !game_dir.join(IBM_CH_FILE).exists()
             || !game_dir.join(STORY_DAT_FILE).exists()
+            || !game_dir.join(MISCMAPS_DAT_FILE).exists()
         {
             return;
         }
 
         let dir = temp_output_dir("suite");
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
-        }));
+        let result = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir);
 
-        let payload =
-            result.expect_err("visual frame suite must fail loudly on unresolved intro assets");
-        let message = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("strict intro asset panic payload must be a string");
+        let preview = dir.join("intro-return-to-view.png");
         assert!(
-            message.contains("Return-to-View preview pixel geometry")
-                || message.contains("sparse strip")
-                || message.contains("refuses the generated title-tick animation fallback")
-                || message
-                    .contains("title-tick animation requires published authored frame pixels"),
-            "{message}"
+            preview.exists(),
+            "the suite stopped before the Return-to-View frame"
         );
         assert!(
-            message.contains("cleak/u5-spec#54")
-                || message.contains("TITLE.BIT")
-                || message.contains("cleak/u5-spec#65")
-                || message.contains("cleak/u5-spec#52"),
-            "{message}"
+            fs::metadata(&preview)
+                .expect("Return-to-View frame metadata")
+                .len()
+                > 2_000,
+            "the Return-to-View frame is blank"
         );
+        if let Err(err) = result {
+            let message = err.to_string();
+            assert!(
+                !message.contains("Return-to-View"),
+                "the suite still fails inside Return-to-View: {message}"
+            );
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -18419,9 +18566,26 @@ mod tests {
     }
 
     #[test]
-    fn visual_return_to_view_summary_refuses_full_tile_preview_geometry_fallback() {
+    fn visual_return_to_view_summary_renders_the_published_strip_rectangle() {
+        // `cleak/u5-spec#54`: nineteen 16x16 cells across by four down,
+        // rendered through the ordinary viewport tile entry, giving the
+        // 304x64 strip that lands at (8, 128).
+        let source_dir = Path::new(DEFAULT_GAME_DIR);
+        if !source_dir.join(TILES_EGA_FILE).exists() {
+            return;
+        }
         let dir = debug_game_dir();
+        fs::copy(source_dir.join(TILES_EGA_FILE), dir.join(TILES_EGA_FILE))
+            .expect("clean tile atlas copies into the fixture");
         let mut bytes = vec![0u8; MISCMAPS_RTV_COMMAND_SECTION_OFFSET + RTV_COMMAND_STREAM_BYTES];
+        // A strip of ordinary non-zero terrain, matching the shipped
+        // records (none of which has an empty cell).
+        for byte in bytes
+            [u5_runtime::MISCMAPS_RTV_STRIP_SECTION_OFFSET..MISCMAPS_RTV_COMMAND_SECTION_OFFSET]
+            .iter_mut()
+        {
+            *byte = 0x44;
+        }
         let stream_start = MISCMAPS_RTV_COMMAND_SECTION_OFFSET;
         bytes[stream_start..stream_start + RTV_COMMAND_STREAM_BYTES].fill(0x09);
         bytes[stream_start] = 0x06;
@@ -18431,11 +18595,14 @@ mod tests {
         bytes[stream_start + 4] = 0x09;
         fs::write(dir.join(MISCMAPS_DAT_FILE), bytes).unwrap();
 
-        let result = std::panic::catch_unwind(|| {
-            let _ = visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
-        });
+        let preview = visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
 
-        assert_return_to_view_preview_geometry_gap_panic(result);
+        assert_eq!(preview.frames.len(), preview.frame_metadata.len());
+        assert!(!preview.frames.is_empty());
+        for frame in &preview.frames {
+            assert_eq!(frame.width, RTV_PREVIEW_PIXEL_WIDTH);
+            assert_eq!(frame.height, RTV_PREVIEW_PIXEL_HEIGHT);
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -19151,248 +19318,203 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// A Return-to-View intro state with the IBM font slot loaded, which
+    /// the chapter caption needs.
+    fn return_to_view_intro_state(
+        dir: PathBuf,
+        panel: VisualIntroPanel,
+        backing: u8,
+    ) -> VisualIntroState {
+        let mut intro = visual_intro_state_with_panel(dir, panel);
+        let font = load_ibm_ch_font(&intro.game_dir).expect("debug game dir writes IBM.CH");
+        intro.font_slots = Some(IntroFontSlots::new(font.clone(), font));
+        let mut surface = new_intro_display_buffer();
+        surface.clear(backing);
+        intro.modal_backing = Some(surface);
+        intro.title_tick_visible_frame = 0;
+        intro
+    }
+
+    fn return_to_view_test_panel(kind: ReturnToViewFrameKind) -> VisualIntroPanel {
+        VisualIntroPanel::ReturnToView {
+            preview_frames: vec![intro_test_preview_buffer(
+                2,
+                2,
+                vec![
+                    0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff,
+                ],
+            )],
+            frame_metadata: vec![VisualReturnToViewFrameMeta {
+                command_index: 6,
+                elapsed_title_ticks: 12,
+                kind,
+                caption: Some("The Summoning"),
+            }],
+            preview_frame_index: 0,
+        }
+    }
+
     #[test]
-    fn return_to_view_intro_input_refuses_preview_geometry_fallback() {
+    fn return_to_view_intro_input_aborts_the_preview_immediately() {
+        // `cleak/u5-spec#54` retraction 3: "every preview tick polls the
+        // keyboard once, and any pending key aborts the preview
+        // immediately", restoring the saved title/menu image. The old
+        // "non-interruptible cinematic" wording was withdrawn.
         let dir = debug_game_dir();
-        let mut intro = visual_intro_state_with_panel(
+        let mut intro = return_to_view_intro_state(
             dir.clone(),
-            VisualIntroPanel::ReturnToView {
-                preview_frames: vec![
-                    intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
-                    intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
-                ],
-                frame_metadata: vec![
-                    VisualReturnToViewFrameMeta {
-                        command_index: 0,
-                        elapsed_title_ticks: 1,
-                        kind: ReturnToViewFrameKind::PreviewTick,
-                        caption: Some("The Castle of Lord British"),
-                    },
-                    VisualReturnToViewFrameMeta {
-                        command_index: 1,
-                        elapsed_title_ticks: 2,
-                        kind: ReturnToViewFrameKind::FixedWait { tick: 0 },
-                        caption: Some("The Keep of Lord Blackthorn"),
-                    },
-                ],
-                preview_frame_index: 0,
-            },
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
         );
         intro.dispatch.submit_menu_key(b'R');
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = step_visual_intro_panel(&mut intro, 'x');
-        }));
+        let _ = step_visual_intro_panel(&mut intro, 'x');
 
-        assert_return_to_view_preview_geometry_gap_panic(result);
-        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
-        assert!(intro.message.is_empty());
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn return_to_view_intro_escape_cancel_is_not_available() {
+    fn return_to_view_intro_escape_is_an_ordinary_aborting_key() {
+        // `#54` retraction 3: there is no ESC special case.
         let dir = debug_game_dir();
-        let mut intro = visual_intro_state_with_panel(
+        let mut intro = return_to_view_intro_state(
             dir.clone(),
-            VisualIntroPanel::ReturnToView {
-                preview_frames: vec![intro_test_preview_buffer(
-                    1,
-                    1,
-                    vec![0x00, 0x00, 0x00, 0xff],
-                )],
-                frame_metadata: vec![VisualReturnToViewFrameMeta {
-                    command_index: 0,
-                    elapsed_title_ticks: 1,
-                    kind: ReturnToViewFrameKind::PreviewTick,
-                    caption: Some("The Castle of Lord British"),
-                }],
-                preview_frame_index: 0,
-            },
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
         );
         intro.dispatch.submit_menu_key(b'R');
 
-        assert!(!cancel_visual_intro_panel(&mut intro));
-        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
-        assert!(intro.message.is_empty());
-        assert!(matches!(
-            intro.dispatch.submit_menu_key(b'A'),
-            UnifiedMenuStep::Ignored
-        ));
+        assert!(cancel_visual_intro_panel(&mut intro));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn return_to_view_intro_frame_refuses_fixed_caption_text_fallback_before_preview_overlay() {
-        let preview_rgba = vec![
-            0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
-            0xff, 0xff,
-        ];
+    fn return_to_view_intro_frame_blits_the_strip_at_the_published_origin() {
+        // `#54`: the preview's top-left pixel is `(8, 128)`, and there is
+        // no clear and no full repaint — everything outside the strip
+        // keeps the preserved menu image.
         let dir = debug_game_dir();
-        let mut backing = new_intro_display_buffer();
-        backing.clear(3);
-        let mut intro = VisualIntroState {
-            game_dir: dir.clone(),
-            raster_depth: TileGraphicsDepth::Ega16,
-            dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: 0,
-            title_flourish_complete: false,
-            title_signature_progress: 0,
-            title_signature_complete: false,
-            title_presents_hold_ticks: 0,
-            title_tick_frame: 0,
-            title_tick_visible_frame: 0,
-            surface: new_intro_display_buffer(),
-            modal_backing: Some(backing),
-            menu_idle_ticks: 0,
-            menu_idle_bios_ticks: 0,
-            message_waiting_for_key: false,
-            message: String::new(),
-            panel: VisualIntroPanel::ReturnToView {
-                preview_frames: vec![intro_test_preview_buffer(2, 2, preview_rgba)],
-                frame_metadata: vec![VisualReturnToViewFrameMeta {
-                    command_index: 6,
-                    elapsed_title_ticks: 12,
-                    kind: ReturnToViewFrameKind::PreviewTick,
-                    caption: Some("The Castle of Lord British"),
-                }],
-                preview_frame_index: 0,
-            },
-            launch_result: Arc::new(Mutex::new(None)),
-            image_handle: None,
-            font_slots: None,
-            text_windows: TextWindowSystem::new(),
-            pending_pre_flourish_outcome: None,
-            title_tick_frames: None,
-        };
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
+        let _ = render_intro_frame(&mut intro);
 
-        assert_return_to_view_caption_gap_panic(result);
+        let surface = &intro.surface;
+        let at = |x: usize, y: usize| surface.pixels[y * surface.width + x];
+        // The 2x2 test strip lands at the published origin.
+        assert_eq!(at(RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y), 4);
+        assert_eq!(at(RTV_PREVIEW_PIXEL_X + 1, RTV_PREVIEW_PIXEL_Y), 2);
+        // The pixel just outside the strip still carries the backing.
+        assert_eq!(at(RTV_PREVIEW_PIXEL_X - 1, RTV_PREVIEW_PIXEL_Y), 3);
+        assert_eq!(at(0, 0), 3);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn return_to_view_intro_frame_refuses_fixed_caption_text_fallback_over_preserved_backing() {
-        let mut intro = visual_intro_state_with_panel(
-            debug_game_dir(),
-            VisualIntroPanel::ReturnToView {
-                preview_frames: vec![intro_test_preview_buffer(
-                    1,
-                    1,
-                    vec![0x00, 0x00, 0x00, 0xff],
-                )],
-                frame_metadata: vec![VisualReturnToViewFrameMeta {
-                    command_index: 6,
-                    elapsed_title_ticks: 12,
-                    kind: ReturnToViewFrameKind::PreviewTick,
-                    caption: Some("The Castle of Lord British"),
-                }],
-                preview_frame_index: 0,
-            },
-        );
-        let mut backing = new_intro_display_buffer();
-        backing.clear(0);
-        intro.modal_backing = Some(backing);
-        intro.title_tick_visible_frame = 0;
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
-
-        assert_return_to_view_caption_gap_panic(result);
-        let _ = fs::remove_dir_all(&intro.game_dir);
-    }
-
-    #[test]
-    fn return_to_view_intro_frame_uses_snapshot_buffer_without_mutating_it() {
-        let mut intro = visual_intro_state_with_panel(
-            debug_game_dir(),
-            VisualIntroPanel::ReturnToView {
-                preview_frames: vec![intro_test_preview_buffer(
-                    1,
-                    1,
-                    vec![0x00, 0x00, 0x00, 0xff],
-                )],
-                frame_metadata: vec![VisualReturnToViewFrameMeta {
-                    command_index: 6,
-                    elapsed_title_ticks: 12,
-                    kind: ReturnToViewFrameKind::PreviewTick,
-                    caption: Some("The Castle of Lord British"),
-                }],
-                preview_frame_index: 0,
-            },
-        );
-        let mut backing = new_intro_display_buffer();
-        backing.clear(3);
-        intro.modal_backing = Some(backing.clone());
-        intro.title_tick_visible_frame = 0;
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
-
-        assert_eq!(intro.modal_backing, Some(backing));
-        assert_return_to_view_caption_gap_panic(result);
-        let _ = fs::remove_dir_all(&intro.game_dir);
-    }
-
-    #[test]
-    fn return_to_view_intro_frame_refuses_fixed_caption_text_fallback_before_fixed_wipe() {
+    fn return_to_view_intro_frame_draws_the_chapter_caption_in_the_bottom_border() {
+        // `#54` / `systems/intro.md §12.1`: fixed-cell text on text row
+        // 24 starting at column `18 - floor(len / 2)`.
         let dir = debug_game_dir();
-        let mut backing = new_intro_display_buffer();
-        backing.clear(3);
-        let mut intro = VisualIntroState {
-            game_dir: dir.clone(),
-            raster_depth: TileGraphicsDepth::Ega16,
-            dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: 0,
-            title_flourish_complete: false,
-            title_signature_progress: 0,
-            title_signature_complete: false,
-            title_presents_hold_ticks: 0,
-            title_tick_frame: 0,
-            title_tick_visible_frame: 0,
-            surface: new_intro_display_buffer(),
-            modal_backing: Some(backing),
-            menu_idle_ticks: 0,
-            menu_idle_bios_ticks: 0,
-            message_waiting_for_key: false,
-            message: String::new(),
-            panel: VisualIntroPanel::ReturnToView {
-                preview_frames: vec![intro_test_preview_buffer(
-                    1,
-                    1,
-                    vec![0x00, 0x00, 0x00, 0xff],
-                )],
-                frame_metadata: vec![VisualReturnToViewFrameMeta {
-                    command_index: 11,
-                    elapsed_title_ticks: 1,
-                    kind: ReturnToViewFrameKind::FixedWipeRectangle { step: 0 },
-                    caption: Some("The Summoning"),
-                }],
-                preview_frame_index: 0,
-            },
-            launch_result: Arc::new(Mutex::new(None)),
-            image_handle: None,
-            font_slots: None,
-            text_windows: TextWindowSystem::new(),
-            pending_pre_flourish_outcome: None,
-            title_tick_frames: None,
-        };
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
+        let _ = render_intro_frame(&mut intro);
 
-        assert_return_to_view_caption_gap_panic(result);
+        let caption = "The Summoning";
+        let start_column = return_to_view_caption_start_column(caption.len());
+        assert_eq!(start_column, 18 - caption.len() / 2);
+        let surface = &intro.surface;
+        let row_y = RTV_CAPTION_TEXT_ROW * CH_CELL_SIDE;
+        let caption_pixels: Vec<u8> = (0..caption.len() * CH_CELL_SIDE)
+            .map(|offset| {
+                surface.pixels[row_y * surface.width + start_column * CH_CELL_SIDE + offset]
+            })
+            .collect();
+        // The debug fixture font is solid, so every caption cell paints
+        // the slot-1 foreground rather than leaving the backing behind.
+        assert!(
+            caption_pixels.iter().any(|pixel| *pixel != 3),
+            "caption row was not painted"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn return_to_view_intro_animation_refuses_preview_geometry_fallback() {
+    fn return_to_view_intro_frame_leaves_the_preserved_backing_unmutated() {
+        let dir = debug_game_dir();
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
+        let backing = intro.modal_backing.clone();
+
+        let _ = render_intro_frame(&mut intro);
+
+        assert_eq!(intro.modal_backing, backing);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_frame_draws_the_fixed_wipe_rectangles() {
+        // `#54`: the `0x0B` pairs are absolute framebuffer pixel
+        // rectangles in user-interface colour slot 1, deliberately not
+        // cell-aligned, and they are the only rectangle op in the path.
+        let dir = debug_game_dir();
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::FixedWipeRectangle { step: 0 }),
+            3,
+        );
+
+        let _ = render_intro_frame(&mut intro);
+
+        let surface = &intro.surface;
+        let at = |x: usize, y: usize| surface.pixels[y * surface.width + x];
+        // `(128, 152)..(137, 155)` and `(128, 153)..(137, 156)`.
+        assert_eq!(at(128, 152), RTV_UI_COLOUR_SLOT_1);
+        assert_eq!(at(137, 156), RTV_UI_COLOUR_SLOT_1);
+        assert_ne!(at(127, 152), RTV_UI_COLOUR_SLOT_1);
+        assert_ne!(at(138, 156), RTV_UI_COLOUR_SLOT_1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_frame_paints_out_the_menu_select_caption() {
+        // `#54`: on preview entry the menu's top-border `Select:`
+        // caption is painted out.
+        let dir = debug_game_dir();
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
+
+        let _ = render_intro_frame(&mut intro);
+
+        let surface = &intro.surface;
+        let x = usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN) * CH_CELL_SIDE;
+        let y = usize::from(INTRO_MENU_SELECT_CAPTION_ROW) * CH_CELL_SIDE;
+        assert_eq!(surface.pixels[y * surface.width + x], RTV_UI_COLOUR_SLOT_2);
+        let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
+        assert_eq!(
+            surface.pixels[rule_y * surface.width + x],
+            RTV_UI_COLOUR_SLOT_1
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_animation_steps_one_playback_frame_per_tick() {
         let mut panel = VisualIntroPanel::ReturnToView {
             preview_frames: vec![
                 intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
@@ -19403,87 +19525,81 @@ mod tests {
                     command_index: 0,
                     elapsed_title_ticks: 1,
                     kind: ReturnToViewFrameKind::PreviewTick,
-                    caption: Some("The Castle of Lord British"),
+                    caption: Some("The Summoning"),
                 },
                 VisualReturnToViewFrameMeta {
                     command_index: 1,
                     elapsed_title_ticks: 2,
-                    kind: ReturnToViewFrameKind::FixedWait { tick: 0 },
-                    caption: Some("The Keep of Lord Blackthorn"),
+                    kind: ReturnToViewFrameKind::PreviewTick,
+                    caption: Some("The Summoning"),
                 },
             ],
             preview_frame_index: 0,
         };
         let mut title_tick_frame = 0;
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = advance_visual_intro_panel_animation(&mut panel, &mut title_tick_frame);
-        }));
-
-        assert_return_to_view_preview_geometry_gap_panic(result);
-        assert_eq!(title_tick_frame, 0);
+        // `#54` preview tick: the shared routine fires one intro title
+        // tick and advances the playback by one frame.
+        assert!(advance_visual_intro_panel_animation(
+            &mut panel,
+            &mut title_tick_frame
+        ));
+        assert_eq!(title_tick_frame, 1);
         assert!(matches!(
             panel,
             VisualIntroPanel::ReturnToView {
-                preview_frame_index: 0,
+                preview_frame_index: 1,
                 ..
             }
+        ));
+        // The last frame does not advance further.
+        assert!(!advance_visual_intro_panel_animation(
+            &mut panel,
+            &mut title_tick_frame
         ));
     }
 
     #[test]
-    fn return_to_view_intro_summary_refuses_preview_geometry_fallback() {
-        let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
-            raster_depth: TileGraphicsDepth::Ega16,
-            dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: 0,
-            title_flourish_complete: false,
-            title_signature_progress: 0,
-            title_signature_complete: false,
-            title_presents_hold_ticks: 0,
-            title_tick_frame: 0,
-            title_tick_visible_frame: 0,
-            surface: new_intro_display_buffer(),
-            modal_backing: None,
-            menu_idle_ticks: 0,
-            menu_idle_bios_ticks: 0,
-            message_waiting_for_key: false,
-            message: String::new(),
-            panel: VisualIntroPanel::ReturnToView {
-                preview_frames: vec![
-                    intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
-                    intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
-                ],
-                frame_metadata: vec![
-                    VisualReturnToViewFrameMeta {
-                        command_index: 2,
-                        elapsed_title_ticks: 9,
-                        kind: ReturnToViewFrameKind::CellEffectStep { step: 4 },
-                        caption: Some("The Castle of Lord British"),
-                    },
-                    VisualReturnToViewFrameMeta {
-                        command_index: 3,
-                        elapsed_title_ticks: 10,
-                        kind: ReturnToViewFrameKind::TemporaryActorDraw,
-                        caption: Some("The Keep of Lord Blackthorn"),
-                    },
-                ],
-                preview_frame_index: 1,
-            },
-            launch_result: Arc::new(Mutex::new(None)),
-            image_handle: None,
-            font_slots: None,
-            text_windows: TextWindowSystem::new(),
-            pending_pre_flourish_outcome: None,
-            title_tick_frames: None,
-        };
+    fn return_to_view_intro_summary_reports_the_published_geometry() {
+        let dir = debug_game_dir();
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = summarize_intro(&mut intro);
-        }));
+        let summary = summarize_intro(&mut intro);
 
-        assert_return_to_view_preview_geometry_gap_panic(result);
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        assert!(summary.contains("Return-to-View"), "{summary}");
+        assert!(summary.contains("19x4"), "{summary}");
+        assert!(summary.contains("(8, 128)"), "{summary}");
+        assert!(summary.contains("The Summoning"), "{summary}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_return_to_view_summary_renders_the_shipped_preview_when_present() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(MISCMAPS_DAT_FILE).exists() || !game_dir.join(TILES_EGA_FILE).exists() {
+            return;
+        }
+
+        let preview = visual_return_to_view_summary(game_dir, TileGraphicsDepth::Ega16);
+
+        assert!(!preview.frames.is_empty());
+        assert_eq!(preview.frames.len(), preview.frame_metadata.len());
+        for frame in &preview.frames {
+            assert_eq!(frame.width, RTV_PREVIEW_PIXEL_WIDTH);
+            assert_eq!(frame.height, RTV_PREVIEW_PIXEL_HEIGHT);
+        }
+        // The reveal cursor opens on the centre column, so the very
+        // first frame must have painted something.
+        assert!(
+            preview
+                .frames
+                .iter()
+                .any(|frame| frame.pixels.iter().any(|pixel| *pixel != 0)),
+            "no Return-to-View frame painted any pixels"
+        );
     }
 }

@@ -123,7 +123,9 @@ pub mod world_tables_io_locations;
 pub mod z_stats;
 
 pub use active_object_io::*;
-pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
+pub use animation::{
+    ActiveObject, ActiveShipWind, AnimationClock, PhaseTick, STATIC_TILE_ANIMATION_FRAME_WRAP,
+};
 pub use blackthorn::{
     BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
     BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y,
@@ -492,22 +494,30 @@ pub use question_io::{
 };
 pub use report::run_report;
 pub use return_to_view::{
-    RTV_ACTOR_SLOTS, RTV_ACTOR_TRANSPARENT_PIXEL, RTV_CELL_EFFECT_FINAL_TICKS,
-    RTV_CELL_EFFECT_STEPS, RTV_CLOSE_EFFECT_FINAL_TILE, RTV_EFFECT_SENTINEL_TILE,
-    RTV_FIXED_WIPE_STEPS, RTV_FIXED_WIPE_TOTAL_TICKS, RTV_FIXED_WIPE_TRAILING_TICKS,
-    RTV_OPEN_EFFECT_FINAL_TILE, RTV_PREVIEW_CELLS, RTV_PREVIEW_SIDE, RTV_STRIP_RECORD_BYTES,
-    RTV_STRIP_TILE_COUNT, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
-    RTV_TEMPORARY_ACTOR_TILE, RTV_WAIT_EXITS_ON_KEYPRESS, RTV_WAIT_FIXED_TICKS, ReturnToViewActor,
-    ReturnToViewAssets, ReturnToViewCommand, ReturnToViewControl, ReturnToViewFrameKind,
-    ReturnToViewMapStrips, ReturnToViewPlayback, ReturnToViewPlaybackFrame,
-    ReturnToViewPreviewReport, ReturnToViewPreviewRun, ReturnToViewPreviewState,
-    ReturnToViewScript, load_return_to_view_assets, load_return_to_view_map_strips,
-    load_return_to_view_script, parse_return_to_view_commands, parse_return_to_view_map_strips,
+    RTV_ACTOR_SLOTS, RTV_ACTOR_TRANSPARENT_PIXEL, RTV_CAPTION_CENTRE_COLUMN, RTV_CAPTION_TEXT_ROW,
+    RTV_CELL_EFFECT_FINAL_TICKS, RTV_CELL_EFFECT_STEPS, RTV_CLOSE_EFFECT_FINAL_TILE,
+    RTV_EFFECT_SENTINEL_TILE, RTV_FIXED_WIPE_COLOUR_SLOT, RTV_FIXED_WIPE_STEPS,
+    RTV_FIXED_WIPE_TOTAL_TICKS, RTV_FIXED_WIPE_TRAILING_TICKS, RTV_MOVE_ACTOR_AND_TICK_TICKS,
+    RTV_OPEN_EFFECT_FINAL_TILE, RTV_OVERLAY_HELPER_OWNED, RTV_OVERLAY_TILE_BASE, RTV_PREVIEW_CELLS,
+    RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y,
+    RTV_REVEAL_CENTRE_COLUMN, RTV_REVEAL_FULL_EXPOSURE_TICKS, RTV_REVEAL_TICKS_PER_STEP,
+    RTV_SCREEN_ROW_OFFSET, RTV_STRIP_RECORD_BYTES, RTV_STRIP_TILE_COUNT, RTV_STRIP_VISIBLE_COLUMNS,
+    RTV_STRIP_VISIBLE_ROWS, RTV_TEMPORARY_ACTOR_TILE, RTV_TERRAIN_HELPER_OWNED,
+    RTV_VIEWPORT_ORIGIN_X, RTV_VIEWPORT_ORIGIN_Y_NORMAL, RTV_VIEWPORT_ORIGIN_Y_PREVIEW,
+    RTV_WAIT_EXITS_ON_KEYPRESS, ReturnToViewActor, ReturnToViewAssets, ReturnToViewCellSource,
+    ReturnToViewCommand, ReturnToViewControl, ReturnToViewFrameKind, ReturnToViewMapStrips,
+    ReturnToViewPlayback, ReturnToViewPlaybackFrame, ReturnToViewPreviewReport,
+    ReturnToViewPreviewRun, ReturnToViewPreviewState, ReturnToViewScript,
+    load_return_to_view_assets, load_return_to_view_map_strips, load_return_to_view_script,
+    parse_return_to_view_commands, parse_return_to_view_map_strips,
     parse_return_to_view_map_strips_file, parse_return_to_view_script_file,
-    render_return_to_view_playback_frame_viewport, render_return_to_view_preview_viewport,
-    render_return_to_view_preview_viewport_at_title_tick, return_to_view_command_histogram,
-    return_to_view_command_name, return_to_view_fixed_wipe_rectangles,
-    return_to_view_tile_for_title_tick, run_return_to_view_playback_until_restart,
+    render_return_to_view_playback_frame_over, render_return_to_view_playback_frame_viewport,
+    render_return_to_view_preview_viewport, render_return_to_view_preview_viewport_at_title_tick,
+    return_to_view_animation_frame, return_to_view_caption_start_column,
+    return_to_view_cell_pixel_rect, return_to_view_cell_source, return_to_view_cell_tile_index,
+    return_to_view_command_histogram, return_to_view_command_name,
+    return_to_view_fixed_wipe_rectangles, return_to_view_revealed_columns,
+    return_to_view_terrain_tile_for_frame, run_return_to_view_playback_until_restart,
     run_return_to_view_preview_state_until_restart, run_return_to_view_preview_until_restart,
     summarize_return_to_view_preview, summarize_return_to_view_script,
 };
