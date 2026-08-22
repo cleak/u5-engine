@@ -49,149 +49,215 @@
     }
 
     #[test]
-    fn fonts_proportional_advance_table_matches_shipped_font() {
+    fn fonts_proportional_width_table_matches_shipped_font() {
         let Some(dir) = local_clean_assets() else {
             return;
         };
         let font = load_proportional_font(&dir).expect("PROPORT.PCS glyph directory loads");
 
-        // `cleak/u5-spec#70`: the checked-in observation-derived advance table
-        // must equal the fitted rule applied to the shipped glyph strips.
+        // `font-pcs.md` section 4.1: entries 0x20..=0x7A are byte-identical to
+        // the per-glyph widths stored in PROPORT.PCS.
         assert_eq!(
-            proportional_advance_table_from_font(&font),
-            PROPORTIONAL_ADVANCE_TABLE
-        );
-        assert_eq!(
-            PROPORTIONAL_ADVANCE_TABLE.width_for_byte(b' ').unwrap(),
-            usize::from(PCS_SPACE_ADVANCE)
+            proportional_width_table_from_font(&font),
+            PROPORTIONAL_WIDTH_TABLE
         );
         for code in PCS_FIRST_CODE..=b'z' {
             let glyph = font.glyph_for_code(code).expect("shipped glyph");
-            let expected = if code == b' ' {
-                usize::from(PCS_SPACE_ADVANCE)
-            } else {
-                usize::from(glyph.advance_width) + usize::from(PCS_GLYPH_ADVANCE_GAP)
-            };
             assert_eq!(
-                PROPORTIONAL_ADVANCE_TABLE.width_for_byte(code).unwrap(),
-                expected,
-                "advance for code {code}"
+                PROPORTIONAL_WIDTH_TABLE.width_for_byte(code).unwrap(),
+                usize::from(glyph.advance_width),
+                "width for code {code}"
             );
         }
-        // Codes with no glyph in the shipped directory stay at zero rather
-        // than being guessed; the layout engine rejects them.
+        // Space's own entry is zero: the space advance is descriptor state,
+        // not font metrics. `{` is zero too and is intercepted anyway.
+        assert_eq!(PROPORTIONAL_WIDTH_TABLE.width_for_byte(b' ').unwrap(), 0);
+        assert_eq!(
+            PROPORTIONAL_WIDTH_TABLE
+                .width_for_byte(STORY_PARAGRAPH_START_MARKER)
+                .unwrap(),
+            0
+        );
+        // The hyphen entry the wrap test reads is 3.
+        assert_eq!(PROPORTIONAL_WIDTH_TABLE.width_for_byte(b'-').unwrap(), 3);
+        // 0x7B..=0x7F are zero; below 0x20 is not width data and stays zero.
         for code in 0..PCS_FIRST_CODE {
-            assert_eq!(PROPORTIONAL_ADVANCE_TABLE.width_for_byte(code).unwrap(), 0);
+            assert_eq!(PROPORTIONAL_WIDTH_TABLE.width_for_byte(code).unwrap(), 0);
         }
         for code in (b'z' + 1)..(PROPORTIONAL_WIDTH_TABLE_LEN as u8) {
-            assert_eq!(PROPORTIONAL_ADVANCE_TABLE.width_for_byte(code).unwrap(), 0);
+            assert_eq!(PROPORTIONAL_WIDTH_TABLE.width_for_byte(code).unwrap(), 0);
         }
     }
 
     #[test]
-    fn story_layout_publishes_a_region_for_every_text_consuming_step() {
-        assert!(intro_story_text_region(INTRO_INLINE_DOORWAY_STEP).is_none());
-        assert!(intro_story_text_region(INTRO_STORY_STEP_COUNT).is_none());
+    fn story_layout_publishes_a_paragraph_box_for_every_intro_step() {
+        assert!(intro_story_paragraph_box(INTRO_STORY_STEP_COUNT).is_none());
         for step in 0..INTRO_STORY_STEP_COUNT {
-            if step == INTRO_INLINE_DOORWAY_STEP {
-                continue;
-            }
-            let region = intro_story_text_region(step)
-                .unwrap_or_else(|| panic!("intro story step {step} needs a text region"));
-            assert_eq!(region.left, INTRO_STORY_TEXT_LEFT);
-            assert_eq!(region.right, INTRO_STORY_TEXT_RIGHT);
-            assert!(region.top_y < 200, "step {step} text top {}", region.top_y);
-            if let Some(gutter) = region.gutter {
-                assert!(gutter.top_y <= gutter.bottom_y, "step {step} gutter rows");
-                assert!(gutter.left < gutter.right, "step {step} gutter columns");
-                assert!(gutter.right <= INTRO_STORY_TEXT_RIGHT, "step {step} gutter right");
-            }
+            let boxed = intro_story_paragraph_box(step)
+                .unwrap_or_else(|| panic!("intro story step {step} needs a paragraph box"));
+            assert!(boxed.left_a < boxed.right_a, "step {step} pair A");
+            assert!(boxed.left_b < boxed.right_b, "step {step} pair B");
+            assert!(boxed.right_a <= 320 && boxed.right_b <= 320, "step {step} right");
+            assert!(boxed.band_low <= boxed.band_high, "step {step} band");
+            assert_eq!(
+                boxed.space_advance, PROPORTIONAL_DEFAULT_SPACE_ADVANCE,
+                "step {step} keeps the shipped space advance"
+            );
+            assert!(boxed.pen_y < 200, "step {step} pen origin row");
         }
+        // Step 6 has an ordinary paragraph box like every other step; it just
+        // renders the inline doorway lines instead of a STORY.DAT record.
+        let doorway = intro_story_paragraph_box(INTRO_INLINE_DOORWAY_STEP).unwrap();
+        assert_eq!((doorway.pen_x, doorway.pen_y), (32, 9));
+        assert_eq!((doorway.left_a, doorway.right_a), (0, 320));
+        assert_eq!(doorway.band_low, doorway.band_high);
     }
 
     #[test]
-    fn story_layout_line_bounds_narrow_only_inside_the_gutter() {
-        // Step 13 draws STORY6.16 #0 at (176, 0); the measured text is
-        // narrowed to x 0..168 through line y=108 and runs full width from
-        // line y=117.
-        let region = intro_story_text_region(13).unwrap();
-        assert_eq!(region.line_bounds(0), (0, 168));
-        assert_eq!(region.line_bounds(108), (0, 168));
-        assert_eq!(
-            region.line_bounds(117),
-            (INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT)
-        );
+    fn story_layout_selects_margin_pair_b_strictly_inside_the_band() {
+        // `text-output.md` section 8.1: pair B while band_low < pen_y <
+        // band_high, pair A otherwise. Step 13's art column is on the right,
+        // so pair A is the narrow one and the band starts below the art.
+        let boxed = intro_story_paragraph_box(13).unwrap();
+        assert_eq!(boxed.margins_for(0), (0, 170));
+        assert_eq!(boxed.margins_for(108), (0, 170));
+        assert_eq!(boxed.margins_for(114), (0, 170), "band ends are excluded");
+        assert_eq!(boxed.margins_for(117), (0, 320));
         // Step 3 narrows in the middle: full width above and below the art.
-        let region = intro_story_text_region(3).unwrap();
-        assert_eq!(
-            region.line_bounds(27),
-            (INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT)
-        );
-        assert_eq!(region.line_bounds(36), (210, 318));
-        assert_eq!(region.line_bounds(153), (210, 318));
-        assert_eq!(
-            region.line_bounds(162),
-            (INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT)
-        );
+        let boxed = intro_story_paragraph_box(3).unwrap();
+        assert_eq!(boxed.margins_for(27), (0, 320));
+        assert_eq!(boxed.margins_for(36), (210, 320));
+        assert_eq!(boxed.margins_for(153), (210, 320));
+        assert_eq!(boxed.margins_for(162), (0, 320));
+        // A 200..200 band can never match.
+        let boxed = intro_story_paragraph_box(9).unwrap();
+        assert_eq!(boxed.margins_for(199), (0, 320));
     }
 
-    fn uniform_advance_table(advance: u8) -> ProportionalWidthTable {
-        let mut widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
-        for code in PCS_FIRST_CODE..=b'z' {
-            widths[usize::from(code)] = advance;
+    #[test]
+    fn story_layout_publishes_the_inline_doorway_lines_and_their_origins() {
+        // `systems/intro.md` section 10.1, answering `cleak/u5-spec#69`.
+        assert_eq!(INTRO_DOORWAY_LINES.len(), 2);
+        for line in INTRO_DOORWAY_LINES {
+            assert_eq!(line.len(), 45, "each doorway line is 45 characters");
+            assert!(
+                !line.contains(STORY_PARAGRAPH_START_MARKER as char)
+                    && !line.contains(STORY_SOFT_BREAK_MARKER as char)
+                    && !line.contains(STORY_HARD_NEWLINE_MARKER as char),
+                "the doorway lines carry none of the STORY.DAT markers"
+            );
         }
-        widths[usize::from(b' ')] = PCS_SPACE_ADVANCE;
+        let [first, second] = intro_doorway_paragraph_boxes();
+        assert_eq!((first.pen_x, first.pen_y), (32, 9));
+        assert_eq!((second.pen_x, second.pen_y), (32, INTRO_DOORWAY_SECOND_LINE_PEN_Y));
+        // Explicit origins, not the renderer's line advance.
+        assert_ne!(second.pen_y - first.pen_y, PROPORTIONAL_LINE_STRIDE);
+        // Neither line wraps or is justified: each ends at its terminator.
+        for (boxed, line) in intro_doorway_paragraph_boxes().iter().zip(INTRO_DOORWAY_LINES) {
+            let mut text = line.as_bytes().to_vec();
+            text.push(0);
+            let placed =
+                layout_proportional_paragraph_glyphs(&PROPORTIONAL_WIDTH_TABLE, boxed, &text, 200)
+                    .unwrap();
+            assert!(
+                placed.iter().all(|glyph| glyph.y == boxed.pen_y),
+                "a doorway line must not wrap"
+            );
+            assert_eq!(placed[0].x, 32);
+            // Natural, unjustified spacing: every gap is the plain advance.
+            let spaces = line.matches(' ').count();
+            let measured: usize = line
+                .bytes()
+                .map(|byte| {
+                    if byte == b' ' {
+                        usize::from(PROPORTIONAL_DEFAULT_SPACE_ADVANCE)
+                    } else {
+                        PROPORTIONAL_WIDTH_TABLE.width_for_byte(byte).unwrap() + 1
+                    }
+                })
+                .sum();
+            assert!(spaces > 0);
+            let last = placed.last().unwrap();
+            let last_width = PROPORTIONAL_WIDTH_TABLE.width_for_byte(last.code).unwrap();
+            assert_eq!(usize::from(last.x) + last_width + 1, 32 + measured);
+        }
+    }
+
+    /// A table where every drawable code has the same width, so the layout
+    /// units in these unit tests are easy to reason about.
+    fn uniform_width_table(width: u8) -> ProportionalWidthTable {
+        let mut widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
+        for code in (PCS_FIRST_CODE + 1)..=b'z' {
+            widths[usize::from(code)] = width;
+        }
+        // Space's own entry is zero, as in the shipped table.
+        widths[usize::from(b' ')] = 0;
         ProportionalWidthTable::new(widths)
     }
 
     #[test]
-    fn story_layout_indents_paragraphs_and_starts_at_the_region_top() {
-        let widths = uniform_advance_table(5);
-        let region = ProportionalTextRegion::full_width(20);
+    fn story_layout_indents_with_the_brace_and_starts_at_the_pen_origin() {
+        let widths = uniform_width_table(4);
+        let boxed = ProportionalLayoutDescriptor::full_width(0, 20);
         let placed =
-            layout_proportional_justified_paragraph(&widths, &region, b"\n{ab cd\0", 200).unwrap();
-        // The leading hard newline costs one line, then `{` indents by 15.
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"
+{ab cd ", 200).unwrap();
+        // The leading line feed ends an empty line and is consumed, so the
+        // text lands one stride down; `{` then advances a flat 15 and draws
+        // nothing.
         assert_eq!(placed[0].y, 20 + PROPORTIONAL_LINE_STRIDE);
-        assert_eq!(placed[0].x, PROPORTIONAL_PARAGRAPH_INDENT);
+        assert_eq!(placed[0].x, PROPORTIONAL_BRACE_INDENT);
         assert_eq!(placed[0].code, b'a');
-        // The final line of a paragraph keeps natural 5-pixel spaces.
+        // The final line of a paragraph keeps the natural space advance and
+        // no plus-one is added to it.
         let space_gap = placed[2].x - placed[1].x;
-        assert_eq!(space_gap, 5 + u16::from(PCS_SPACE_ADVANCE));
+        assert_eq!(space_gap, 5 + u16::from(PROPORTIONAL_DEFAULT_SPACE_ADVANCE));
+    }
+
+    #[test]
+    fn story_layout_needs_two_line_feeds_for_a_blank_line() {
+        // `text-output.md` section 8.3: exactly one break byte is skipped, so
+        // one line feed just ends the line.
+        let widths = uniform_width_table(4);
+        let boxed = ProportionalLayoutDescriptor::full_width(0, 0);
+        let single = layout_proportional_paragraph_glyphs(&widths, &boxed, b"a
+b ", 200).unwrap();
+        assert_eq!(single[1].y, PROPORTIONAL_LINE_STRIDE);
+        let double = layout_proportional_paragraph_glyphs(&widths, &boxed, b"a
+
+b ", 200).unwrap();
+        assert_eq!(double[1].y, 2 * PROPORTIONAL_LINE_STRIDE);
     }
 
     #[test]
     fn story_layout_justifies_every_line_but_the_last_of_a_paragraph() {
-        let widths = uniform_advance_table(5);
-        // Each glyph advances 5 px (4 px of ink plus the separator column),
-        // so four two-glyph words plus three natural 5 px spaces measure
-        // 53 px of ink. A rectangle ending at column 58 cannot take the fifth
-        // word, and justifying the first line spreads 5 extra pixels over its
-        // three spaces as 6, 7 and 7.
-        let region = ProportionalTextRegion {
-            top_y: 0,
-            left: 0,
-            right: 58,
-            gutter: None,
-            first_line_left: None,
-            space_advance: PCS_SPACE_ADVANCE,
+        let widths = uniform_width_table(4);
+        // Each glyph advances 5 (width 4 plus the inter-glyph gap), so four
+        // two-glyph words plus three 5-pixel spaces measure 55. With an
+        // available width of 60 the fifth word cannot join, and the first
+        // line's 5 pixels of slack spread over its three spaces as 1, 2, 2.
+        let boxed = ProportionalLayoutDescriptor {
+            right_a: 60,
+            right_b: 60,
+            ..ProportionalLayoutDescriptor::full_width(0, 0)
         };
         let placed =
-            layout_proportional_justified_paragraph(&widths, &region, b"aa bb cc dd ee\0", 200)
-                .unwrap();
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb cc dd ee ", 200).unwrap();
         let first_line: Vec<_> = placed.iter().filter(|glyph| glyph.y == 0).collect();
         assert_eq!(first_line.len(), 8);
-        // Justified: the last glyph's rightmost ink column lands on `right`.
+        // Justified: the pen ends exactly on the exclusive right margin, so
+        // the last glyph's rightmost ink column is two short of it.
         let last = first_line.last().unwrap();
-        let ink_width = 5 - usize::from(PCS_GLYPH_ADVANCE_GAP);
-        assert_eq!(
-            usize::from(last.x) + ink_width - 1,
-            usize::from(region.right)
-        );
+        assert_eq!(usize::from(last.x) + 4, usize::from(boxed.right_a) - 2 + 1);
         let gaps: Vec<u16> = (0..3)
             .map(|word| first_line[word * 2 + 2].x - first_line[word * 2 + 1].x - 5)
             .collect();
-        assert_eq!(gaps, vec![6, 7, 7], "extra pixels go to the rightmost spaces");
-        // The paragraph's last line is left-aligned with natural spacing.
+        assert_eq!(
+            gaps,
+            vec![6, 7, 7],
+            "the truncating division's remainder lands on the last spaces"
+        );
+        // The paragraph's last line is ragged-right with natural spacing.
         let second_line: Vec<_> = placed
             .iter()
             .filter(|glyph| glyph.y == PROPORTIONAL_LINE_STRIDE)
@@ -201,19 +267,19 @@
     }
 
     #[test]
-    fn story_layout_breaks_words_at_soft_hyphens_and_draws_the_hyphen() {
-        let widths = uniform_advance_table(5);
-        let region = ProportionalTextRegion {
-            top_y: 0,
-            left: 0,
-            right: 39,
-            gutter: None,
-            first_line_left: None,
-            space_advance: PCS_SPACE_ADVANCE,
+    fn story_layout_breaks_at_a_soft_hyphen_that_fits_and_draws_the_hyphen() {
+        let widths = uniform_width_table(4);
+        // With a uniform width of 4 every glyph advances 5 and the hyphen
+        // costs 5 too, so at an available width of 40 the later soft hyphen
+        // fails the `hyphen + accumulated + 1 < available` test and the
+        // earlier one is taken.
+        let boxed = ProportionalLayoutDescriptor {
+            right_a: 40,
+            right_b: 40,
+            ..ProportionalLayoutDescriptor::full_width(0, 0)
         };
         let placed =
-            layout_proportional_justified_paragraph(&widths, &region, b"aa bb_cc_dd\0", 200)
-                .unwrap();
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb_cc_dd ", 200).unwrap();
         let first: String = placed
             .iter()
             .filter(|glyph| glyph.y == 0)
@@ -224,9 +290,9 @@
             .filter(|glyph| glyph.y == PROPORTIONAL_LINE_STRIDE)
             .map(|glyph| glyph.code as char)
             .collect();
-        assert_eq!(first, "aabbcc-");
-        assert_eq!(second, "dd");
-        // The soft-break marker itself never reaches the framebuffer.
+        assert_eq!(first, "aabb-");
+        assert_eq!(second, "ccdd");
+        // The marker itself never reaches the framebuffer.
         assert!(
             placed
                 .iter()
@@ -235,12 +301,48 @@
     }
 
     #[test]
-    fn story_layout_rejects_codes_the_advance_table_never_measured() {
-        let widths = uniform_advance_table(5);
-        let region = ProportionalTextRegion::full_width(0);
-        assert!(
-            layout_proportional_justified_paragraph(&widths, &region, b"a\x01b\0", 200).is_err()
+    fn story_layout_emits_an_unbreakable_token_one_byte_per_line() {
+        // `text-output.md` section 8.3's degenerate case: no space and no
+        // soft hyphen to back up to, so the walk consumes one byte and the
+        // line ends rather than looping forever.
+        let widths = uniform_width_table(4);
+        let boxed = ProportionalLayoutDescriptor {
+            right_a: 6,
+            right_b: 6,
+            ..ProportionalLayoutDescriptor::full_width(0, 0)
+        };
+        let placed =
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"abcd ", 200).unwrap();
+        assert_eq!(placed.len(), 4);
+        // One byte per line while the walk keeps overflowing...
+        assert_eq!((placed[0].code, placed[0].x, placed[0].y), (b'a', 0, 0));
+        assert_eq!(
+            (placed[1].code, placed[1].x, placed[1].y),
+            (b'b', 0, PROPORTIONAL_LINE_STRIDE)
         );
+        // ...and the final line is the one that reaches NUL, which ends the
+        // line cleanly and is never backtracked, so it may overrun the margin.
+        assert_eq!(placed[2].y, 2 * PROPORTIONAL_LINE_STRIDE);
+        assert_eq!(placed[3].y, 2 * PROPORTIONAL_LINE_STRIDE);
+    }
+
+    #[test]
+    fn story_layout_treats_a_pen_right_of_the_margin_as_consumed_width() {
+        // `text-output.md` section 8.1, and the reason step 18's pen X is 174
+        // while its left margin is 148: the pen resets to the margin at the
+        // first line break.
+        let widths = uniform_width_table(4);
+        let boxed = ProportionalLayoutDescriptor {
+            pen_x: 20,
+            right_a: 45,
+            right_b: 45,
+            ..ProportionalLayoutDescriptor::full_width(0, 0)
+        };
+        let placed =
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb cc ", 200).unwrap();
+        assert_eq!(placed[0].x, 20, "the first line starts at the pen");
+        let wrapped = placed.iter().find(|glyph| glyph.y > 0).unwrap();
+        assert_eq!(wrapped.x, 0, "later lines start at the margin");
     }
 
     /// Golden geometry for the twenty text-consuming intro story steps,
@@ -293,10 +395,10 @@
             let text = records
                 .record(record_index)
                 .unwrap_or_else(|| panic!("STORY.DAT record {record_index}"));
-            let region = intro_story_text_region(step).unwrap();
-            let placed = layout_proportional_justified_paragraph(
-                &PROPORTIONAL_ADVANCE_TABLE,
-                &region,
+            let boxed = intro_story_paragraph_box(step).unwrap();
+            let placed = layout_proportional_paragraph_glyphs(
+                &PROPORTIONAL_WIDTH_TABLE,
+                &boxed,
                 text.as_bytes(),
                 200,
             )
@@ -307,8 +409,7 @@
             assert_eq!(placed[0].x, first_x, "step {step} first glyph column");
             let last = placed.last().unwrap();
             assert_eq!(last.y, last_y, "step {step} last line row");
-            let last_width = PROPORTIONAL_ADVANCE_TABLE.width_for_byte(last.code).unwrap()
-                - usize::from(PCS_GLYPH_ADVANCE_GAP);
+            let last_width = PROPORTIONAL_WIDTH_TABLE.width_for_byte(last.code).unwrap();
             assert_eq!(
                 usize::from(last.x) + last_width - 1,
                 usize::from(last_right),
@@ -326,19 +427,21 @@
                     "step {step} row {row} is off the 9-pixel line grid"
                 );
             }
-            // Every glyph must sit inside its line's measured bounds.
+            // Every glyph must sit inside its line's selected margins. The
+            // record's first line may start right of the margin when the pen
+            // origin does (step 18).
             for glyph in &placed {
-                let (left, right) = region.line_bounds(glyph.y);
-                let left = match region.first_line_left {
-                    Some(first_left) if glyph.y == first_y => first_left,
-                    _ => left,
+                let (left, right) = boxed.margins_for(glyph.y);
+                let left = if glyph.y == first_y {
+                    left.max(boxed.pen_x)
+                } else {
+                    left
                 };
-                let width = PROPORTIONAL_ADVANCE_TABLE.width_for_byte(glyph.code).unwrap()
-                    - usize::from(PCS_GLYPH_ADVANCE_GAP);
-                assert!(glyph.x >= left, "step {step} glyph left of its band");
+                let width = PROPORTIONAL_WIDTH_TABLE.width_for_byte(glyph.code).unwrap();
+                assert!(glyph.x >= left, "step {step} glyph left of its margin");
                 assert!(
-                    usize::from(glyph.x) + width - 1 <= usize::from(right),
-                    "step {step} glyph past its band right edge"
+                    usize::from(glyph.x) + width <= usize::from(right),
+                    "step {step} glyph past its right margin"
                 );
             }
         }
@@ -371,18 +474,18 @@
         for (record, first_y, first_x, last_y, last_right, line_count, glyph_count) in
             CHARGEN_MEASURED_GEOMETRY
         {
-            let region = match record {
-                0 => CHARGEN_GYPSY_TEXT_REGION,
-                1 => CHARGEN_RESULT_TEXT_REGION,
-                _ => CHARGEN_QUESTION_TEXT_REGION,
+            let boxed = match record {
+                0 => CHARGEN_GYPSY_PARAGRAPH_BOX,
+                1 => CHARGEN_RESULT_PARAGRAPH_BOX,
+                _ => CHARGEN_QUESTION_PARAGRAPH_BOX,
             };
             let text = records
                 .records
                 .get(record)
                 .unwrap_or_else(|| panic!("QUESTION.DAT record {record}"));
-            let placed = layout_proportional_justified_paragraph(
-                &PROPORTIONAL_ADVANCE_TABLE,
-                &region,
+            let placed = layout_proportional_paragraph_glyphs(
+                &PROPORTIONAL_WIDTH_TABLE,
+                &boxed,
                 text.as_bytes(),
                 200,
             )
@@ -393,8 +496,7 @@
             assert_eq!(placed[0].x, first_x, "record {record} first glyph column");
             let last = placed.last().unwrap();
             assert_eq!(last.y, last_y, "record {record} last line row");
-            let last_width = PROPORTIONAL_ADVANCE_TABLE.width_for_byte(last.code).unwrap()
-                - usize::from(PCS_GLYPH_ADVANCE_GAP);
+            let last_width = PROPORTIONAL_WIDTH_TABLE.width_for_byte(last.code).unwrap();
             assert_eq!(
                 usize::from(last.x) + last_width - 1,
                 usize::from(last_right),
@@ -406,4 +508,84 @@
                 .collect::<std::collections::BTreeSet<_>>();
             assert_eq!(rows.len(), line_count, "record {record} line count");
         }
+    }
+
+
+
+    #[test]
+    fn dissolve_visits_every_pixel_of_the_rectangle_exactly_once() {
+        // `display-driver-abi.md` section 9.6 bullets 1 and 3.
+        for rect in [
+            (40u16, 86u16, 75u16, 120u16),
+            (0, 0, 319, 100),
+            (0, 0, 319, 199),
+            (8, 8, 183, 183),
+            (5, 7, 5, 7),
+        ] {
+            let mut dissolve = RectangleDissolve::new(rect).unwrap();
+            let count = dissolve.pixel_count() as usize;
+            let mut seen = std::collections::HashSet::with_capacity(count);
+            while let Some(pixel) = dissolve.next_pixel() {
+                assert!(pixel.0 >= rect.0 && pixel.0 <= rect.2, "x inside {rect:?}");
+                assert!(pixel.1 >= rect.1 && pixel.1 <= rect.3, "y inside {rect:?}");
+                assert!(seen.insert(pixel), "{pixel:?} visited twice in {rect:?}");
+            }
+            assert_eq!(seen.len(), count, "every pixel of {rect:?} is visited");
+            assert!(dissolve.is_complete());
+
+            // Deterministic and reproducible across calls.
+            let mut again = RectangleDissolve::new(rect).unwrap();
+            let mut first = RectangleDissolve::new(rect).unwrap();
+            for _ in 0..count.min(64) {
+                assert_eq!(first.next_pixel(), again.next_pixel());
+            }
+        }
+    }
+
+    #[test]
+    fn dissolve_order_is_scattered_not_row_or_column_major() {
+        // `display-driver-abi.md` section 9.6 bullet 4.
+        let rect = (0u16, 0u16, 63u16, 63u16);
+        let mut dissolve = RectangleDissolve::new(rect).unwrap();
+        let order: Vec<(u16, u16)> = std::iter::from_fn(|| dissolve.next_pixel())
+            .take(256)
+            .collect();
+        let row_major: Vec<(u16, u16)> = (0..256u16).map(|i| (i % 64, i / 64)).collect();
+        let column_major: Vec<(u16, u16)> = (0..256u16).map(|i| (i / 64, i % 64)).collect();
+        assert_ne!(order, row_major);
+        assert_ne!(order, column_major);
+        // Consecutive visits jump around rather than stepping by one cell.
+        let adjacent = order
+            .windows(2)
+            .filter(|pair| {
+                pair[0].0.abs_diff(pair[1].0) <= 1 && pair[0].1.abs_diff(pair[1].1) <= 1
+            })
+            .count();
+        assert!(
+            adjacent * 4 < order.len(),
+            "{adjacent} of {} visits were to an adjacent pixel",
+            order.len()
+        );
+    }
+
+    #[test]
+    fn dissolve_abort_gate_clears_permanently_on_the_first_glyph() {
+        // `display-driver-abi.md` section 9.6: enabled at driver load, cleared
+        // permanently the first time a character is drawn through the
+        // fixed-cell glyph entry, and never re-enabled.
+        let mut gate = DissolveAbortGate::on_driver_load();
+        assert!(gate.is_armed());
+        assert!(gate.samples_input_at(0), "every second visited pixel");
+        assert!(!gate.samples_input_at(1));
+        gate.note_fixed_cell_glyph_drawn();
+        assert!(!gate.is_armed());
+        gate.note_fixed_cell_glyph_drawn();
+        assert!(!gate.is_armed());
+        assert!(!gate.samples_input_at(0), "a cleared gate never polls");
+    }
+
+    #[test]
+    fn dissolve_rejects_an_inverted_rectangle() {
+        assert!(RectangleDissolve::new((10, 10, 9, 20)).is_err());
+        assert!(RectangleDissolve::new((10, 10, 20, 9)).is_err());
     }

@@ -741,54 +741,53 @@ impl ProportionalWidthTable {
     }
 }
 
-/// Observation-derived resident proportional advance table
-/// (`cleak/u5-spec#70`).
+/// The resident 128-entry proportional advance table
+/// (`formats/font-pcs.md` section 4.1, published in answer to
+/// `cleak/u5-spec#70`).
 ///
-/// `formats/font-pcs.md §4` says the paragraph renderer advances by a
-/// "resident 128-entry width table" that is deliberately not stored inside
-/// `PROPORT.PCS`, but neither the values nor a shipped record holding them
-/// are published. These 128 bytes were recovered by black-box measurement
-/// of the original's twenty intro story slides: every glyph placement in
-/// those slides was matched against the decoded `PROPORT.PCS` glyph bitmaps
-/// and the pixel delta to the next glyph recorded. Over 8,995 measured
-/// placements the delta is always the glyph's stored ink width plus exactly
-/// one blank separator column ([`PCS_GLYPH_ADVANCE_GAP`]), and a natural
-/// (unjustified) space always advances [`PCS_SPACE_ADVANCE`] = 5 pixels even
-/// though the space glyph's stored ink width is 0.
+/// Entries `0x20..=0x7A` are byte-identical to the per-glyph widths stored in
+/// `PROPORT.PCS` itself, so [`proportional_width_table_from_font`] rebuilds
+/// this constant from any loaded font;
+/// `fonts_proportional_width_table_matches_shipped_font` asserts that equality
+/// against the local asset set. Entries `0x7B..=0x7F` are zero.
 ///
-/// The fitted rule is therefore
-/// `advance(code) = if code == b' ' { 5 } else { ink_width(code) + 1 }`,
-/// and [`proportional_advance_table_from_font`] reproduces this constant
-/// from any loaded `PROPORT.PCS`; `fonts_proportional_advance_table_matches_shipped_font`
-/// asserts that equality against the local asset set.
+/// The 32 entries below `0x20` are **not** width data - that part of the
+/// resident image overlaps unrelated resident text - and they are unreachable,
+/// because the renderer handles every byte at or below `0x20` as a space and
+/// only ever draws bytes above `0x20`. They are listed as zero and must not be
+/// given invented values.
 ///
-/// Codes 0..31 and 123..127 have no glyph in the shipped 91-glyph directory
-/// (`0x20..=0x7a`) and were never observed in narrative text; they are
-/// listed as 0 rather than guessed, and the renderer rejects them.
-pub const PROPORTIONAL_ADVANCE_TABLE: ProportionalWidthTable = ProportionalWidthTable::new([
-    // 0x00..0x1f: no glyph in the shipped directory.
+/// Two entries are present but never consulted for their face value: space
+/// (`0x20`) is zero because the space advance is layout-descriptor state, not
+/// font metrics, and `{` (`0x7B`) is zero because the renderer intercepts it
+/// and measures a flat 15 pixels. `_` (`0x5F`) holds 8 but is intercepted as
+/// the soft-hyphen marker and measured as zero; what the renderer uses is the
+/// hyphen's own entry (`0x2D`, 3).
+///
+/// These are widths, not advances: a drawn glyph advances the pen by its entry
+/// plus [`PCS_GLYPH_ADVANCE_GAP`] (`font-pcs.md` section 4.2).
+pub const PROPORTIONAL_WIDTH_TABLE: ProportionalWidthTable = ProportionalWidthTable::new([
+    // 0x00..0x1F: not width data, unreachable, deliberately unpublished.
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
-    // 0x20 ' '..0x2f '/'
-    5, 3, 7, 8, 8, 8, 8, 4, 5, 5, 6, 7, 4, 4, 3, 8, //
-    // 0x30 '0'..0x3f '?'
-    7, 6, 7, 7, 7, 7, 7, 7, 7, 7, 3, 4, 6, 6, 6, 7, //
-    // 0x40 '@'..0x4f 'O'
-    8, 8, 7, 7, 7, 7, 7, 7, 7, 5, 8, 8, 7, 8, 7, 7, //
-    // 0x50 'P'..0x5f '_'
-    8, 7, 8, 7, 7, 7, 7, 8, 7, 7, 7, 4, 8, 4, 8, 9, //
-    // 0x60 '`'..0x6f 'o'
-    4, 6, 6, 5, 6, 6, 6, 6, 6, 3, 4, 6, 3, 8, 7, 6, //
-    // 0x70 'p'..0x7a 'z', then 0x7b..0x7f with no glyph.
-    6, 6, 5, 5, 5, 6, 6, 8, 6, 6, 5, 0, 0, 0, 0, 0,
+    // 0x20 ' '..0x2F '/'
+    0, 2, 6, 7, 7, 7, 7, 3, 4, 4, 5, 6, 3, 3, 2, 7, //
+    // 0x30 '0'..0x3F '?'
+    6, 5, 6, 6, 6, 6, 6, 6, 6, 6, 2, 3, 5, 5, 5, 6, //
+    // 0x40 '@'..0x4F 'O'
+    7, 7, 6, 6, 6, 6, 6, 6, 6, 4, 7, 7, 6, 7, 6, 6, //
+    // 0x50 'P'..0x5F '_'
+    7, 6, 7, 6, 6, 6, 6, 7, 6, 6, 6, 3, 7, 3, 7, 8, //
+    // 0x60 '`'..0x6F 'o'
+    3, 5, 5, 4, 5, 5, 5, 5, 5, 2, 3, 5, 2, 7, 6, 5, //
+    // 0x70 'p'..0x7A 'z', then 0x7B..0x7F.
+    5, 5, 4, 4, 4, 5, 5, 7, 5, 5, 4, 0, 0, 0, 0, 0,
 ]);
 
-/// Rebuilds [`PROPORTIONAL_ADVANCE_TABLE`] from a loaded `PROPORT.PCS`
-/// glyph directory using the observation-derived rule
-/// (`cleak/u5-spec#70`): a printable glyph advances by its stored ink width
-/// plus one separator column, and the space advances
-/// [`PCS_SPACE_ADVANCE`].
-pub fn proportional_advance_table_from_font(font: &ProportionalFont) -> ProportionalWidthTable {
+/// Rebuilds [`PROPORTIONAL_WIDTH_TABLE`] from a loaded `PROPORT.PCS` glyph
+/// directory. `formats/font-pcs.md` section 4.1 states the two are identical
+/// over `0x20..=0x7A`, so either source reproduces the original exactly.
+pub fn proportional_width_table_from_font(font: &ProportionalFont) -> ProportionalWidthTable {
     let mut widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
     for (slot, glyph) in font.glyphs.iter().enumerate() {
         let Some(code) = u8::try_from(slot)
@@ -800,11 +799,7 @@ pub fn proportional_advance_table_from_font(font: &ProportionalFont) -> Proporti
         if usize::from(code) >= PROPORTIONAL_WIDTH_TABLE_LEN {
             break;
         }
-        widths[usize::from(code)] = if code == b' ' {
-            PCS_SPACE_ADVANCE
-        } else {
-            glyph.advance_width.saturating_add(PCS_GLYPH_ADVANCE_GAP)
-        };
+        widths[usize::from(code)] = glyph.advance_width;
     }
     ProportionalWidthTable::new(widths)
 }

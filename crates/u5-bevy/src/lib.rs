@@ -22,8 +22,8 @@ use u5_runtime::placeholder_title_tick_frames;
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
     BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT,
-    CGA_PALETTE_RGB, CH_CELL_SIDE, CHARGEN_GYPSY_TEXT_REGION, CHARGEN_QUESTION_TEXT_REGION,
-    CHARGEN_RESULT_TEXT_REGION, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+    CGA_PALETTE_RGB, CH_CELL_SIDE, CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX,
+    CHARGEN_RESULT_PARAGRAPH_BOX, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
     COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE,
     COMBAT_FIELD_KIND_POISON, COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
@@ -41,35 +41,35 @@ use u5_runtime::{
     FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
     GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
     HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
-    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_MENU_COPYRIGHT_CAPTION,
-    INTRO_MENU_COPYRIGHT_CAPTION_COLUMN, INTRO_MENU_COPYRIGHT_CAPTION_ROW,
-    INTRO_MENU_FRAME_BORDER_COLOR, INTRO_MENU_FRAME_BOTTOM_RULE_Y, INTRO_MENU_FRAME_BOTTOM_Y,
-    INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y, INTRO_MENU_FRAME_INTERIOR_COLOR,
-    INTRO_MENU_FRAME_INTERIOR_LEFT_X, INTRO_MENU_FRAME_INTERIOR_RIGHT_X,
-    INTRO_MENU_FRAME_INTERIOR_TOP_Y, INTRO_MENU_FRAME_OUTLINE_COLOR,
-    INTRO_MENU_FRAME_OUTLINE_LEFT_X, INTRO_MENU_FRAME_OUTLINE_RIGHT_X, INTRO_MENU_FRAME_RULE_X0,
-    INTRO_MENU_FRAME_RULE_X1, INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_TOP_Y,
-    INTRO_MENU_SELECT_CAPTION_COLUMN, INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH,
-    INTRO_MENU_SELECT_CAPTION_PREFIX, INTRO_MENU_SELECT_CAPTION_ROW,
-    INTRO_MENU_SELECT_CAPTION_SUFFIX, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
-    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
-    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
-    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots, IntroStoryArtPlacement,
-    JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2,
-    LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX,
-    MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
-    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS,
-    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_ADVANCE_GAP, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PLAYER_TILE,
-    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROPORTIONAL_ADVANCE_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
+    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_DOORWAY_LINES, INTRO_DOORWAY_SECOND_LINE_PEN_Y,
+    INTRO_INLINE_DOORWAY_STEP, INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,
+    INTRO_MENU_COPYRIGHT_CAPTION_ROW, INTRO_MENU_FRAME_BORDER_COLOR,
+    INTRO_MENU_FRAME_BOTTOM_RULE_Y, INTRO_MENU_FRAME_BOTTOM_Y, INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y,
+    INTRO_MENU_FRAME_INTERIOR_COLOR, INTRO_MENU_FRAME_INTERIOR_LEFT_X,
+    INTRO_MENU_FRAME_INTERIOR_RIGHT_X, INTRO_MENU_FRAME_INTERIOR_TOP_Y,
+    INTRO_MENU_FRAME_OUTLINE_COLOR, INTRO_MENU_FRAME_OUTLINE_LEFT_X,
+    INTRO_MENU_FRAME_OUTLINE_RIGHT_X, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
+    INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_TOP_Y, INTRO_MENU_SELECT_CAPTION_COLUMN,
+    INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH, INTRO_MENU_SELECT_CAPTION_PREFIX,
+    INTRO_MENU_SELECT_CAPTION_ROW, INTRO_MENU_SELECT_CAPTION_SUFFIX, INTRO_STEP_1_EXTRA_ART_X,
+    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
+    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
+    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots,
+    IntroStoryArtPlacement, JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1,
+    LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX,
+    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot,
+    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
+    NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
+    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
+    PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
+    PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
     PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome,
-    ProportionalTextRegion, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
+    ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
     REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
     RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectColumnSweepTransition,
-    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    RectangleDissolve, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
+    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
     SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
     SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
@@ -99,15 +99,16 @@ use u5_runtime::{
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
+    intro_doorway_paragraph_boxes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_menu_frame_border_start_column, intro_step_has_story6_secondary_pass,
     intro_step_transition_strips, intro_story_art_file_for_step,
-    intro_story_art_placement_for_step, intro_story_step_waits_for_input, intro_story_text_region,
-    intro_story6_secondary_subimage, layout_proportional_justified_paragraph, load_brit_cbt,
-    load_british_bit, load_british_pth, load_dungeon_cbt, load_graphic_image_directory,
-    load_ibm_ch_font, load_play_options_from_save, load_proportional_font, load_question_records,
-    load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
-    load_ultima_title_tick_frames,
+    intro_story_art_placement_for_step, intro_story_paragraph_box,
+    intro_story_step_waits_for_input, intro_story6_secondary_subimage,
+    layout_proportional_paragraph_glyphs, load_brit_cbt, load_british_bit, load_british_pth,
+    load_dungeon_cbt, load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
+    load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
+    load_tile_atlas, load_title_bit, load_ultima_title_tick_frames,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
     paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
@@ -937,14 +938,11 @@ pub fn visual_frame_suite(
 
     let records = load_story_records(game_dir)?
         .ok_or_else(|| io::Error::other("visual frame suite requires STORY.DAT"))?;
-    // One PNG per text-consuming intro story step, so the observation-derived
-    // paragraph layout in `u5_runtime::story_layout` can be compared against
-    // captures of the original slide by slide. Step 6 renders the unpublished
-    // inline doorway lines (`cleak/u5-spec#69`) and has no frame.
+    // One PNG per intro story step, so the published paragraph layout can be
+    // compared against captures of the original slide by slide. Step 6 is
+    // included: it renders the published inline doorway lines
+    // (`systems/intro.md §10.1`) instead of a STORY.DAT record.
     for step in 0..INTRO_STORY_STEP_COUNT {
-        if step == INTRO_INLINE_DOORWAY_STEP {
-            continue;
-        }
         reports.push(write_visual_intro_report(
             out_dir,
             &format!("intro-story-{step:02}"),
@@ -8039,7 +8037,9 @@ enum VisualIntroPanel {
     Story {
         records: StoryRecords,
         step: usize,
-        transition: Option<RectColumnSweepTransition>,
+        /// `cleak/u5-spec#53`: step 1's post-wait reveal is the driver's
+        /// rectangle dissolve, not the withdrawn column sweep.
+        transition: Option<RectangleDissolve>,
     },
     Acknowledgements,
     ReturnToView {
@@ -8625,20 +8625,23 @@ fn apply_pre_flourish_outcome(intro: &mut VisualIntroState) {
 }
 
 /// `systems/intro.md §10`: steps 1 through 20 block on a keyboard poll. The
-/// key that leaves step 1 starts that step's published rectangle transition
-/// instead of advancing directly; the wipe's own tick handler advances the
-/// step when it completes. The key that leaves step 20 ends the sequence and
-/// returns to the intro menu.
+/// key that leaves step 1 issues that step's rectangle dissolve instead of
+/// advancing directly; the dissolve's own tick handler advances the step once
+/// the transfer has completed. The key that leaves step 20 ends the sequence
+/// and returns to the intro menu.
 fn step_visual_intro_story_panel(
     step: &mut usize,
-    transition: &mut Option<RectColumnSweepTransition>,
+    transition: &mut Option<RectangleDissolve>,
 ) -> VisualIntroPanelOutcome {
     if transition.is_some() {
-        // A running transition is a blocking local visual effect.
+        // `cleak/u5-spec#53`: the dissolve is a blocking local visual effect.
         return VisualIntroPanelOutcome::Stay;
     }
     if *step == 1 {
-        *transition = Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION));
+        *transition = Some(
+            RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION)
+                .expect("published step-1 dissolve rectangle is well-formed"),
+        );
         return VisualIntroPanelOutcome::Stay;
     }
     if *step + 1 >= INTRO_STORY_STEP_COUNT {
@@ -8657,7 +8660,7 @@ fn advance_visual_intro_panel_animation(
     title_tick_frame: &mut u8,
 ) -> bool {
     advance_visual_intro_story_auto_step(panel)
-        || advance_visual_intro_story_wipe(panel, title_tick_frame)
+        || advance_visual_intro_story_dissolve(panel)
         || advance_visual_intro_return_to_view(panel, title_tick_frame)
 }
 
@@ -8689,30 +8692,26 @@ fn advance_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool 
     true
 }
 
-fn advance_visual_intro_story_wipe(
-    panel: &mut VisualIntroPanel,
-    title_tick_frame: &mut u8,
-) -> bool {
+/// `cleak/u5-spec#53`: the step-1 dissolve is issued as one blocking call, so
+/// it is complete by the time the frame that carries it has been presented and
+/// the loop moves straight on to step 2. It is deliberately not paced by the
+/// title tick - the withdrawn contract's per-column tick schedule was the only
+/// thing that ever paced it, and no wall-clock duration is published for any
+/// rectangle, so there is no rate to spread it over frames with.
+fn advance_visual_intro_story_dissolve(panel: &mut VisualIntroPanel) -> bool {
     let VisualIntroPanel::Story {
         step, transition, ..
     } = panel
     else {
         return false;
     };
-    if *step != 1 {
+    if *step != 1 || transition.is_none() {
         return false;
     }
-    let Some(active_transition) = transition.as_mut() else {
-        return false;
-    };
-
-    *title_tick_frame = title_tick_next_frame(*title_tick_frame);
-    if active_transition.advance_title_tick() {
-        *step = step
-            .checked_add(1)
-            .expect("intro story wipe step counter overflowed");
-        *transition = None;
-    }
+    *step = step
+        .checked_add(1)
+        .expect("intro story dissolve step counter overflowed");
+    *transition = None;
     true
 }
 
@@ -8888,11 +8887,6 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             step,
             transition,
         } => {
-            if *step == INTRO_INLINE_DOORWAY_STEP {
-                panic!(
-                    "intro story step {step} requires published inline doorway text; skipping it with input is a forbidden fallback; see cleak/u5-spec#69"
-                );
-            }
             if !intro_story_step_waits_for_input(*step) {
                 return false;
             }
@@ -8958,14 +8952,6 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
         require_published_u4_transfer_preview_presentation();
     }
-    if let VisualIntroPanel::Story { step, .. } = &intro.panel {
-        if *step == INTRO_INLINE_DOORWAY_STEP {
-            panic!(
-                "intro story step {step} requires published inline doorway text; cancelling past it is a forbidden fallback; see cleak/u5-spec#69"
-            );
-        }
-    }
-
     let Some((subflow, result, message)) = (match intro.panel {
         VisualIntroPanel::Menu => None,
         VisualIntroPanel::CharacterCreation { .. } => Some((
@@ -9466,9 +9452,11 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
         ));
     }
     if step == INTRO_INLINE_DOORWAY_STEP {
-        panic!(
-            "intro story step {step} requires published inline doorway text; see cleak/u5-spec#69"
-        );
+        // `systems/intro.md §10.1`: step 6 reads no STORY.DAT record at all.
+        lines.push(String::new());
+        for line in INTRO_DOORWAY_LINES {
+            lines.push(line.to_string());
+        }
     } else {
         let record_index = if step < INTRO_INLINE_DOORWAY_STEP {
             step
@@ -9807,7 +9795,7 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             transition,
         } => Some((
             *step,
-            *transition,
+            transition.clone(),
             visual_intro_story_text(records, *step).map(str::to_owned),
         )),
         _ => panic!("render_story_intro_frame called for non-story intro panel"),
@@ -9815,37 +9803,76 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         unreachable!("story intro panel match must either produce data or panic");
     };
 
-    if step == INTRO_INLINE_DOORWAY_STEP {
-        panic!(
-            "intro story step {step} requires published inline doorway text; see cleak/u5-spec#69"
-        );
-    }
-
-    // Observation: every captured story slide shows only that step's own art
-    // and text over black, so the slide loop repaints the screen per step.
-    intro.surface.clear(0);
+    // `cleak/u5-spec#53`: the step composes on the hidden surface - a
+    // whole-page clear, then the art - and the dissolve is what makes it
+    // visible. The whole-page clear is also why no earlier step's text
+    // survives (`systems/intro.md §10`).
+    let dissolving = transition.is_some();
+    let mut hidden = new_intro_display_buffer();
+    hidden.clear(0);
     draw_visual_intro_story_art_to_buffer(
-        &mut intro.surface,
+        &mut hidden,
         &intro.game_dir,
         intro.raster_depth,
         step,
-        transition,
+        dissolving,
     );
 
-    let Some(text) = text else {
-        panic!("intro story step {step} requires a STORY.DAT record");
-    };
-    let region = intro_story_text_region(step).unwrap_or_else(|| {
-        panic!("intro story step {step} has no observation-derived text region")
-    });
-    draw_proportional_paragraph_to_buffer(
-        &mut intro.surface,
-        &intro.game_dir,
-        &region,
-        &text,
-        INTRO_STORY_TEXT_COLOR,
-    )
-    .unwrap_or_else(|err| panic!("intro story step {step} proportional text: {err}"));
+    let descriptor = intro_story_paragraph_box(step)
+        .unwrap_or_else(|| panic!("intro story step {step} has no published paragraph box"));
+    let font = load_proportional_font(&intro.game_dir)
+        .unwrap_or_else(|err| panic!("intro story requires PROPORT.PCS: {err}"));
+
+    if step == INTRO_INLINE_DOORWAY_STEP {
+        // `systems/intro.md §10.1` (`cleak/u5-spec#69`): step 6 renders two
+        // published inline lines instead of a STORY.DAT record, each as its
+        // own paragraph at its own explicit pen origin, after the art.
+        for (line_descriptor, line) in intro_doorway_paragraph_boxes()
+            .iter()
+            .zip(INTRO_DOORWAY_LINES)
+        {
+            let mut bytes = line.as_bytes().to_vec();
+            bytes.push(0);
+            draw_proportional_paragraph_with_font(
+                &mut hidden,
+                &font,
+                line_descriptor,
+                &bytes,
+                INTRO_STORY_TEXT_COLOR,
+            )
+            .unwrap_or_else(|err| panic!("intro story doorway text: {err}"));
+        }
+    } else {
+        let Some(text) = text else {
+            panic!("intro story step {step} requires a STORY.DAT record");
+        };
+        let mut bytes = text.into_bytes();
+        bytes.push(0);
+        draw_proportional_paragraph_with_font(
+            &mut hidden,
+            &font,
+            &descriptor,
+            &bytes,
+            INTRO_STORY_TEXT_COLOR,
+        )
+        .unwrap_or_else(|err| panic!("intro story step {step} proportional text: {err}"));
+    }
+
+    match transition {
+        // `cleak/u5-spec#53`: one blocking call that copies the rectangle
+        // from the hidden surface to the visible page, visiting every pixel
+        // exactly once in the driver's pseudo-random order. Outside the
+        // rectangle the visible page already holds the same composition.
+        Some(mut dissolve) => {
+            dissolve.run_to_completion(|x, y| {
+                let (x, y) = (usize::from(x), usize::from(y));
+                intro.surface.pixels[y * intro.surface.width + x] =
+                    hidden.pixels[y * hidden.width + x];
+            });
+        }
+        // The ordinary page present at the end of a step.
+        None => intro.surface.pixels.copy_from_slice(&hidden.pixels),
+    }
 
     intro.surface.to_rgba()
 }
@@ -10080,9 +10107,9 @@ fn render_chargen_intro_graphics(
             };
             blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &[panel]);
             let region = if record == 0 {
-                CHARGEN_GYPSY_TEXT_REGION
+                CHARGEN_GYPSY_PARAGRAPH_BOX
             } else {
-                CHARGEN_RESULT_TEXT_REGION
+                CHARGEN_RESULT_PARAGRAPH_BOX
             };
             draw_proportional_paragraph_to_buffer(
                 buffer,
@@ -10119,7 +10146,7 @@ fn render_chargen_intro_graphics(
             draw_proportional_paragraph_to_buffer(
                 buffer,
                 game_dir,
-                &CHARGEN_QUESTION_TEXT_REGION,
+                &CHARGEN_QUESTION_PARAGRAPH_BOX,
                 &question.text,
                 INTRO_STORY_TEXT_COLOR,
             )
@@ -10826,60 +10853,36 @@ fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
     specs
 }
 
+/// `systems/intro.md §10` with `cleak/u5-spec#53`: step 1's extra art is
+/// hidden until the player advances the step, then composed on the hidden
+/// surface in full and revealed by the rectangle dissolve. The art is never
+/// clipped - the withdrawn column sweep was the only thing that clipped it.
 fn visual_intro_story_draw_specs_for_active_panel(
     step: usize,
-    transition: Option<RectColumnSweepTransition>,
+    dissolving: bool,
 ) -> Vec<IntroStoryDrawSpec> {
     let mut specs = visual_intro_story_draw_specs(step);
     if step != 1 {
         assert!(
-            transition.is_none(),
-            "intro story transition state is only published for step 1, got step {step}"
+            !dissolving,
+            "intro story dissolve state is only published for step 1, got step {step}"
         );
         return specs;
     }
-
-    let Some(transition) = transition else {
-        let original_len = specs.len();
-        specs.retain(|spec| {
-            !(spec.stem == "STORY1"
-                && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
-                && spec.top_left_x == INTRO_STEP_1_EXTRA_ART_X
-                && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y)
-        });
-        assert_eq!(
-            original_len - specs.len(),
-            1,
-            "intro story step 1 hidden extra art spec must exist exactly once before transition"
-        );
+    if dissolving {
         return specs;
-    };
-
-    let (start_x, end_x) = transition.revealed_columns();
-    let (_rect_x0, rect_y0, _rect_x1, rect_y1) = transition.rect;
-    let clip_width = end_x
-        .checked_sub(start_x)
-        .and_then(|width| width.checked_add(1))
-        .expect("intro story transition revealed columns are invalid");
-    let clip_height = rect_y1
-        .checked_sub(rect_y0)
-        .and_then(|height| height.checked_add(1))
-        .expect("intro story transition rectangle rows are invalid");
-    let mut matched_extra_art = 0usize;
-    for spec in &mut specs {
-        if spec.stem == "STORY1"
+    }
+    let original_len = specs.len();
+    specs.retain(|spec| {
+        !(spec.stem == "STORY1"
             && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
             && spec.top_left_x == INTRO_STEP_1_EXTRA_ART_X
-            && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y
-        {
-            matched_extra_art += 1;
-            spec.clip_width = Some(clip_width);
-            spec.clip_height = Some(clip_height);
-        }
-    }
+            && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y)
+    });
     assert_eq!(
-        matched_extra_art, 1,
-        "intro story step 1 transition must clip exactly one extra art spec"
+        original_len - specs.len(),
+        1,
+        "intro story step 1 hidden extra art spec must exist exactly once before the dissolve"
     );
     specs
 }
@@ -10888,9 +10891,9 @@ fn visual_intro_story_art_draws_rgba(
     game_dir: &Path,
     depth: TileGraphicsDepth,
     step: usize,
-    transition: Option<RectColumnSweepTransition>,
+    dissolving: bool,
 ) -> Vec<IntroStoryDrawRgba> {
-    visual_intro_story_draw_specs_for_active_panel(step, transition)
+    visual_intro_story_draw_specs_for_active_panel(step, dissolving)
         .into_iter()
         .map(|spec| {
             let directory = load_graphic_image_directory(game_dir, spec.stem, depth)
@@ -10961,9 +10964,9 @@ fn draw_visual_intro_story_art_to_buffer(
     game_dir: &Path,
     depth: TileGraphicsDepth,
     step: usize,
-    transition: Option<RectColumnSweepTransition>,
+    dissolving: bool,
 ) {
-    for draw in visual_intro_story_art_draws_rgba(game_dir, depth, step, transition) {
+    for draw in visual_intro_story_art_draws_rgba(game_dir, depth, step, dissolving) {
         assert!(
             usize::from(draw.top_left_x) + draw.width <= buffer.width
                 && usize::from(draw.top_left_y) + draw.height <= buffer.height,
@@ -11317,20 +11320,29 @@ const INTRO_STORY_TEXT_COLOR: u8 = 15;
 fn draw_proportional_paragraph_to_buffer(
     dst: &mut IntroDisplayBuffer,
     game_dir: &Path,
-    region: &ProportionalTextRegion,
+    descriptor: &ProportionalLayoutDescriptor,
     text: &str,
     color: u8,
 ) -> io::Result<()> {
     let font = load_proportional_font(game_dir)?;
-    let placed = layout_proportional_justified_paragraph(
-        &PROPORTIONAL_ADVANCE_TABLE,
-        region,
-        text.as_bytes(),
+    draw_proportional_paragraph_with_font(dst, &font, descriptor, text.as_bytes(), color)
+}
+
+fn draw_proportional_paragraph_with_font(
+    dst: &mut IntroDisplayBuffer,
+    font: &u5_runtime::ProportionalFont,
+    descriptor: &ProportionalLayoutDescriptor,
+    text: &[u8],
+    color: u8,
+) -> io::Result<()> {
+    let placed = layout_proportional_paragraph_glyphs(
+        &PROPORTIONAL_WIDTH_TABLE,
+        descriptor,
+        text,
         u16::try_from(dst.height).unwrap_or(u16::MAX),
     )?;
     for glyph in placed {
-        let advance = PROPORTIONAL_ADVANCE_TABLE.width_for_byte(glyph.code)?;
-        let ink_width = advance - usize::from(PCS_GLYPH_ADVANCE_GAP);
+        let ink_width = PROPORTIONAL_WIDTH_TABLE.width_for_byte(glyph.code)?;
         let bitmap = font.glyph_for_code(glyph.code).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -14418,8 +14430,12 @@ mod tests {
     }
 
     #[test]
-    fn intro_story_step_one_extra_art_is_column_wiped_after_keypress() {
-        let hidden = visual_intro_story_draw_specs_for_active_panel(1, None);
+    fn intro_story_step_one_extra_art_is_composed_whole_for_the_dissolve() {
+        // `cleak/u5-spec#53`: the extra art is hidden until the step is
+        // advanced, then composed on the hidden surface **in full** - the
+        // dissolve is what reveals it. The withdrawn column sweep was the only
+        // thing that ever clipped it.
+        let hidden = visual_intro_story_draw_specs_for_active_panel(1, false);
         assert!(!hidden.iter().any(|spec| {
             spec.stem == "STORY1"
                 && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
@@ -14427,30 +14443,15 @@ mod tests {
                 && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y
         }));
 
-        let tick0 = visual_intro_story_draw_specs_for_active_panel(
-            1,
-            Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION)),
-        );
-        let extra = tick0
+        let composed = visual_intro_story_draw_specs_for_active_panel(1, true);
+        let extra = composed
             .iter()
             .find(|spec| spec.stem == "STORY1" && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE)
-            .unwrap();
-        assert_eq!(extra.clip_width, Some(1));
-        assert_eq!(extra.clip_height, Some(35));
-
-        let tick35 = visual_intro_story_draw_specs_for_active_panel(
-            1,
-            Some(RectColumnSweepTransition {
-                rect: INTRO_STEP_1_RECT_TRANSITION,
-                tick: 35,
-            }),
-        );
-        let extra = tick35
-            .iter()
-            .find(|spec| spec.stem == "STORY1" && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE)
-            .unwrap();
-        assert_eq!(extra.clip_width, Some(36));
-        assert_eq!(extra.clip_height, Some(35));
+            .expect("the dissolve composes the extra art");
+        assert_eq!(extra.top_left_x, INTRO_STEP_1_EXTRA_ART_X);
+        assert_eq!(extra.top_left_y, INTRO_STEP_1_EXTRA_ART_Y);
+        assert_eq!(extra.clip_width, None, "the art is never clipped");
+        assert_eq!(extra.clip_height, None);
     }
 
     #[test]
@@ -14517,10 +14518,7 @@ mod tests {
     #[test]
     fn intro_story_transition_rejects_unpublished_step() {
         let result = std::panic::catch_unwind(|| {
-            let _ = visual_intro_story_draw_specs_for_active_panel(
-                2,
-                Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION)),
-            );
+            let _ = visual_intro_story_draw_specs_for_active_panel(2, true);
         });
 
         let payload = result.expect_err("transition on an unpublished story step must panic");
@@ -14530,33 +14528,18 @@ mod tests {
             .or_else(|| payload.downcast_ref::<&str>().copied())
             .expect("transition panic payload must be a string");
         assert!(
-            message.contains("transition state is only published for step 1"),
+            message.contains("dissolve state is only published for step 1"),
             "{message}"
         );
     }
 
     #[test]
-    fn intro_story_step_one_transition_rejects_invalid_reveal_rect() {
-        let result = std::panic::catch_unwind(|| {
-            let _ = visual_intro_story_draw_specs_for_active_panel(
-                1,
-                Some(RectColumnSweepTransition {
-                    rect: (75, 86, 40, 120),
-                    tick: 0,
-                }),
-            );
-        });
-
-        let payload = result.expect_err("invalid story transition rect must panic");
-        let message = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("transition panic payload must be a string");
-        assert!(
-            message.contains("intro rectangle transition has inverted X bounds"),
-            "{message}"
-        );
+    fn intro_story_step_one_dissolve_rejects_an_inverted_rectangle() {
+        // `display-driver-abi.md` section 9.6: the caller-side wrapper
+        // normalises and clamps the rectangle before the driver sees it, so an
+        // inverted one is rejected rather than silently walking nothing.
+        assert!(RectangleDissolve::new((75, 86, 40, 120)).is_err());
+        assert!(RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION).is_ok());
     }
 
     #[test]
@@ -14595,19 +14578,19 @@ mod tests {
 
         assert!(step_visual_intro_panel(&mut intro, ' '));
 
-        // `systems/intro.md` section 10: the key that leaves step 1 starts the
-        // published rectangle transition; the step only advances when the
-        // wipe's own tick handler finishes it.
+        // `systems/intro.md` section 10 with `cleak/u5-spec#53`: the key that
+        // leaves step 1 issues the published rectangle dissolve; the step only
+        // advances once the transfer has been made.
         let VisualIntroPanel::Story {
             step, transition, ..
         } = &intro.panel
         else {
-            panic!("story panel must stay active while the step-1 wipe runs");
+            panic!("story panel must stay active while the step-1 dissolve runs");
         };
         assert_eq!(*step, 1);
         assert_eq!(
             *transition,
-            Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION))
+            Some(RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION).unwrap())
         );
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
@@ -14683,52 +14666,31 @@ mod tests {
     }
 
     #[test]
-    fn intro_story_step_one_wipe_advances_on_title_ticks_then_enters_step_two() {
+    fn intro_story_step_one_dissolve_completes_then_enters_step_two() {
+        // `cleak/u5-spec#53`: the dissolve is one blocking call, so the step
+        // advances as soon as the frame carrying it has been presented. There
+        // is no per-column tick schedule any more, and no published duration
+        // to pace it with.
         let mut panel = VisualIntroPanel::Story {
             records: StoryRecords {
                 records: (0..20).map(|i| format!("Story record {i}")).collect(),
             },
             step: 1,
-            transition: Some(RectColumnSweepTransition {
-                rect: INTRO_STEP_1_RECT_TRANSITION,
-                tick: 34,
-            }),
+            transition: Some(RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION).unwrap()),
         };
-        let mut title_tick_frame = 0;
 
-        assert!(advance_visual_intro_story_wipe(
-            &mut panel,
-            &mut title_tick_frame
-        ));
+        assert!(advance_visual_intro_story_dissolve(&mut panel));
         match &panel {
             VisualIntroPanel::Story {
                 step, transition, ..
             } => {
-                assert_eq!(*step, 1);
-                assert_eq!(
-                    *transition,
-                    Some(RectColumnSweepTransition {
-                        rect: INTRO_STEP_1_RECT_TRANSITION,
-                        tick: 35,
-                    })
-                );
+                assert_eq!(*step, 2);
+                assert_eq!(*transition, None);
             }
             _ => panic!("story panel should remain active"),
         }
-
-        assert!(advance_visual_intro_story_wipe(
-            &mut panel,
-            &mut title_tick_frame
-        ));
-        match panel {
-            VisualIntroPanel::Story {
-                step, transition, ..
-            } => {
-                assert_eq!(step, 2);
-                assert_eq!(transition, None);
-            }
-            _ => panic!("story panel should remain active"),
-        }
+        // Nothing left to advance once the dissolve has been consumed.
+        assert!(!advance_visual_intro_story_dissolve(&mut panel));
     }
 
     #[test]
@@ -18322,9 +18284,17 @@ mod tests {
         // Never delete it from a test.
     }
     #[test]
-    fn visual_intro_story_step_six_panics_until_inline_text_is_specified() {
-        let mut intro = visual_intro_state_with_panel(
-            debug_game_dir(),
+    fn visual_intro_story_step_six_renders_the_published_doorway_lines() {
+        // `systems/intro.md` section 10.1 (`cleak/u5-spec#69`): step 6 renders
+        // two published inline lines instead of a STORY.DAT record, at pen
+        // origins (32, 9) and (32, 180), after its art. Needs the local assets
+        // for the art and the font.
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join("PROPORT.PCS").exists() || !game_dir.join("STORY2.16").exists() {
+            return;
+        }
+        let mut intro = read_only_intro_state_for_local_assets(
+            game_dir,
             VisualIntroPanel::Story {
                 records: StoryRecords {
                     records: (0..20)
@@ -18336,47 +18306,57 @@ mod tests {
             },
         );
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_story_intro_frame(&mut intro);
-        }));
-
-        let payload = result.expect_err("step 6 render must panic until inline text is specified");
-        let message = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("step 6 panic payload must be a string");
+        let frame = render_story_intro_frame(&mut intro);
+        let width = INTRO_FRAMEBUFFER_WIDTH as usize;
+        let lit_in_band = |top: usize| {
+            (top..top + 8)
+                .flat_map(|row| (32..280).map(move |col| (col, row)))
+                .filter(|(col, row)| {
+                    rgba_pixel(&frame, width, *col, *row) == [0xff, 0xff, 0xff, 0xff]
+                })
+                .count()
+        };
         assert!(
-            message.contains("intro story step 6 requires published inline doorway text"),
-            "{message}"
+            lit_in_band(9) > 100,
+            "the first doorway line is drawn at y=9"
         );
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        assert!(
+            lit_in_band(usize::from(INTRO_DOORWAY_SECOND_LINE_PEN_Y)) > 100,
+            "the second doorway line is drawn at y=180"
+        );
+        // Nothing sits left of the pen origin on either line.
+        for top in [9usize, usize::from(INTRO_DOORWAY_SECOND_LINE_PEN_Y)] {
+            for row in top..top + 8 {
+                for col in 0..32 {
+                    assert_eq!(
+                        rgba_pixel(&frame, width, col, row),
+                        [0x00, 0x00, 0x00, 0xff],
+                        "doorway line at {top} starts at pen x = 32"
+                    );
+                }
+            }
+        }
+        // NOTE: `game_dir` here is the player's real clean asset folder.
+        // Never delete it from a test.
     }
 
     #[test]
-    fn visual_intro_story_step_six_summary_panics_until_inline_text_is_specified() {
+    fn visual_intro_story_step_six_summary_lists_the_published_doorway_lines() {
+        // `systems/intro.md` section 10.1: step 6 performs no STORY.DAT read.
         let records = StoryRecords {
             records: (0..20).map(|i| format!("Story record {i}")).collect(),
         };
 
-        let result = std::panic::catch_unwind(|| {
-            let _ = summarize_intro_story(&records, INTRO_INLINE_DOORWAY_STEP);
-        });
+        let summary = summarize_intro_story(&records, INTRO_INLINE_DOORWAY_STEP);
 
-        let payload = result.expect_err("step 6 summary must panic until inline text is specified");
-        let message = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("step 6 summary panic payload must be a string");
-        assert!(
-            message.contains("intro story step 6 requires published inline doorway text"),
-            "{message}"
-        );
+        for line in INTRO_DOORWAY_LINES {
+            assert!(summary.contains(line), "{summary}");
+        }
+        assert!(!summary.contains("Story record"), "{summary}");
     }
 
     #[test]
-    fn visual_intro_story_step_six_input_panics_instead_of_skipping_gap() {
+    fn visual_intro_story_step_six_advances_on_input_like_any_other_step() {
         let mut intro = visual_intro_state_with_panel(
             debug_game_dir(),
             VisualIntroPanel::Story {
@@ -18390,13 +18370,16 @@ mod tests {
             },
         );
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = step_visual_intro_panel(&mut intro, ' ');
-        }));
+        assert!(step_visual_intro_panel(&mut intro, ' '));
 
-        let message = panic_message(result.expect_err("step 6 input must panic"));
-        assert!(message.contains("skipping it with input"), "{message}");
-        assert!(message.contains("cleak/u5-spec#69"), "{message}");
+        // `systems/intro.md` section 10.1: the ordinary non-automatic path -
+        // flush type-ahead, wait for any key, present, and on to step 7.
+        match &intro.panel {
+            VisualIntroPanel::Story { step, .. } => {
+                assert_eq!(*step, INTRO_INLINE_DOORWAY_STEP + 1)
+            }
+            _ => panic!("story panel should remain active"),
+        }
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
