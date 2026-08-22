@@ -17226,7 +17226,15 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         .all(|slot| state.active_objects[slot].type_byte == 0
             && state.active_objects[slot].tile == 0));
 
+    // `§7.1`: leaving the tableau runs the fade to black, which takes
+    // no keystroke and publishes window one when it completes.
     state.resolve_endgame_confirmation(true);
+    assert_eq!(
+        state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+        Some(crate::endgame_cinematic::EndgameCinematicStep::FadeToBlack)
+    );
+    assert_eq!(state.message, "");
+    assert!(state.advance_endgame_display_frame());
     assert_eq!(state.message, "Window one");
 
     for expected in [
@@ -17239,14 +17247,12 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         state.resolve_endgame_confirmation(true);
         assert_eq!(state.message, expected);
     }
-    state.resolve_endgame_confirmation(true);
     {
+        // Advance the cinematic directly: routing this through
+        // `resolve_endgame_confirmation` would publish the certificate
+        // text, which is a loud cleak/u5-spec#82 gate.
         let endgame = state.endgame.as_mut().unwrap();
-        assert_eq!(
-            endgame.cinematic.step,
-            crate::endgame_cinematic::EndgameCinematicStep::CertificateRectOperation
-        );
-        assert!(endgame.advance_cinematic_frame_operation());
+        endgame.advance_cinematic();
         assert_eq!(
             endgame.cinematic.step,
             crate::endgame_cinematic::EndgameCinematicStep::Certificate
@@ -17266,6 +17272,31 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     }
 }
 
+/// `endgame.md §7.1`/`§8`: walk a terminal victory cinematic to the
+/// certificate. The fade to black runs once, leaving the throne
+/// tableau, and consumes no keystroke; the six `END.DAT` windows then
+/// page through to the certificate.
+fn walk_endgame_cinematic_to_certificate(endgame: &mut EndgameState) {
+    endgame.cinematic.advance();
+    assert_eq!(
+        endgame.cinematic.step,
+        crate::endgame_cinematic::EndgameCinematicStep::FadeToBlack
+    );
+    assert!(endgame.advance_cinematic_frame_operation());
+    assert_eq!(
+        endgame.cinematic.step,
+        crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0)
+    );
+    for _ in 1..crate::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT {
+        endgame.cinematic.advance();
+    }
+    endgame.cinematic.advance();
+    assert_eq!(
+        endgame.cinematic.step,
+        crate::endgame_cinematic::EndgameCinematicStep::Certificate
+    );
+}
+
 #[test]
 #[should_panic(expected = "cleak/u5-spec#82")]
 fn endgame_certificate_beat_is_a_loud_unpublished_prose_gate() {
@@ -17280,10 +17311,7 @@ fn endgame_certificate_beat_is_a_loud_unpublished_prose_gate() {
         None,
         Some(synthetic_end_narrative()),
     );
-    for _ in 0..(1 + crate::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT) {
-        endgame.cinematic.advance();
-    }
-    assert!(endgame.advance_cinematic_frame_operation());
+    walk_endgame_cinematic_to_certificate(&mut endgame);
     let _ = endgame.current_cinematic_text();
 }
 
@@ -17301,10 +17329,7 @@ fn endgame_final_report_beat_is_a_loud_unpublished_prose_gate() {
         None,
         Some(synthetic_end_narrative()),
     );
-    for _ in 0..(1 + crate::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT) {
-        endgame.cinematic.advance();
-    }
-    assert!(endgame.advance_cinematic_frame_operation());
+    walk_endgame_cinematic_to_certificate(&mut endgame);
     endgame.cinematic.advance();
     assert_eq!(
         endgame.cinematic.step,
@@ -17328,6 +17353,7 @@ fn endgame_narrative_window_without_end_dat_text_fails_loudly() {
         None,
     );
     endgame.cinematic.advance();
+    assert!(endgame.advance_cinematic_frame_operation());
     assert_eq!(
         endgame.cinematic.step,
         crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0)
@@ -21031,9 +21057,12 @@ fn end_narrative_window_ranges_select_pages_for_cinematic() {
         None,
         Some(narrative),
     );
-    // The throne tableau beat carries no prose of its own.
+    // The throne tableau beat carries no prose of its own, and neither
+    // does the `§7.1` fade to black that follows it.
     assert_eq!(endgame.current_cinematic_text(), "");
     endgame.advance_cinematic();
+    assert_eq!(endgame.current_cinematic_text(), "");
+    assert!(endgame.advance_cinematic_frame_operation());
     assert_eq!(endgame.current_cinematic_text(), "Window one");
     endgame.advance_cinematic();
     assert_eq!(endgame.current_cinematic_text(), "Window two");
