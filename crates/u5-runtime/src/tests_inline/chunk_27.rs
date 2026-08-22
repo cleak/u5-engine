@@ -454,3 +454,50 @@ fn chrome_paint_takes_its_two_colours_as_parameters() {
     assert_eq!(ChromePalette::EGA.chrome, CHROME_RIBBON_INDEX);
     assert_eq!(ChromePalette::EGA.accent, CHROME_RULE_INDEX);
 }
+
+#[test]
+fn shipped_palette_is_stock_except_dark_yellow_at_index_six() {
+    // `formats/tiles.md` section 7: the palette shipped in the resident
+    // screen descriptor is the stock set for the mode with exactly one
+    // substitution - index six is dark yellow, not brown. Rendering it
+    // as brown gets the game's dark-yellow tones wrong everywhere they
+    // appear, so this guards against anyone "restoring" the stock
+    // hardware default.
+    const STOCK: [[u8; 3]; 16] = [
+        [0x00, 0x00, 0x00],
+        [0x00, 0x00, 0xaa],
+        [0x00, 0xaa, 0x00],
+        [0x00, 0xaa, 0xaa],
+        [0xaa, 0x00, 0x00],
+        [0xaa, 0x00, 0xaa],
+        STOCK_EGA_BROWN,
+        [0xaa, 0xaa, 0xaa],
+        [0x55, 0x55, 0x55],
+        [0x55, 0x55, 0xff],
+        [0x55, 0xff, 0x55],
+        [0x55, 0xff, 0xff],
+        [0xff, 0x55, 0x55],
+        [0xff, 0x55, 0xff],
+        [0xff, 0xff, 0x55],
+        [0xff, 0xff, 0xff],
+    ];
+
+    assert_eq!(
+        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX],
+        SHIPPED_PALETTE_DARK_YELLOW,
+        "index six must be dark yellow"
+    );
+    assert_ne!(
+        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX],
+        STOCK_EGA_BROWN,
+        "index six must not be the stock brown"
+    );
+
+    // Every other entry matches stock, and index six is the only
+    // deviation - "that single substitution is the only way the game's
+    // palette differs from the hardware default".
+    let deviations: Vec<usize> = (0..16)
+        .filter(|index| EGA_PALETTE_RGB[*index] != STOCK[*index])
+        .collect();
+    assert_eq!(deviations, vec![SHIPPED_PALETTE_DEVIATING_INDEX]);
+}
