@@ -12406,7 +12406,33 @@ mod tests {
             .expect("panic payload must be a string")
     }
 
+    /// Copy one clean local asset into a throwaway fixture directory.
+    ///
+    /// The local asset directory is expected to be read-only (it is the
+    /// user's game install, and these tests must never write to it).
+    /// `fs::copy` carries the read-only attribute across on Windows, so
+    /// the copy is explicitly made writable: the fixture directory is
+    /// scratch space that later fixture steps overwrite in place, and
+    /// inheriting the source's attribute would make those steps fail
+    /// with "Access is denied".
+    fn install_writable_asset_copy(src: &Path, dst: &Path, file_name: &str) {
+        fs::copy(src, dst)
+            .unwrap_or_else(|err| panic!("failed to install intro test asset {file_name}: {err}"));
+        let mut permissions = fs::metadata(dst)
+            .unwrap_or_else(|err| {
+                panic!("failed to stat installed intro test asset {file_name}: {err}")
+            })
+            .permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        fs::set_permissions(dst, permissions).unwrap_or_else(|err| {
+            panic!("failed to clear read-only on intro test asset {file_name}: {err}")
+        });
+    }
+
     fn install_intro_assets(dir: &Path) {
+        // Read-only source: these tests only ever read `DEFAULT_GAME_DIR`
+        // and write into the caller's throwaway `debug_game_dir()`.
         let source_dir = Path::new(DEFAULT_GAME_DIR);
         for file_name in [
             "IBM.CH",
@@ -12432,9 +12458,7 @@ mod tests {
             );
             let dst = dir.join(file_name);
             if !dst.exists() {
-                fs::copy(&src, &dst).unwrap_or_else(|err| {
-                    panic!("failed to install intro test asset {file_name}: {err}")
-                });
+                install_writable_asset_copy(&src, &dst, file_name);
             }
         }
         install_canonical_intro_bit_asset(
