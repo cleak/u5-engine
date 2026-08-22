@@ -1292,8 +1292,25 @@ pub const DUNGEON_TORCH_DURATION_MIN: u8 = crate::DUNGEON_TORCH_INCREMENT_MIN;
 pub const FULL_DAYLIGHT: u8 = 50;
 pub const FULL_DARKNESS: u8 = 2;
 pub const DAYLIGHT_SENTINEL_MIN: u8 = FULL_DAYLIGHT + 1;
-pub const TORCH_LIGHT_FLOOR: u8 = 18;
-pub const LIGHT_SPELL_FLOOR: u8 = 10;
+/// `lighting.md §4` / `time.md §6`: personal-light floors, as
+/// squared-distance thresholds on the same scale as the ambient byte.
+/// Magic light is the *brighter* of the two: a torch alone lights 37
+/// cells reaching 3 tiles, a light spell alone lights 61 cells reaching
+/// 4.
+///
+/// These were inverted here (torch 18, spell 10) until
+/// `cleak/u5-spec#83` traced the counter writers: the counter that
+/// I-Ignite writes carries the floor of 10, and the counter that
+/// *In Lor*, *Vas Lor* and the Light scroll write carries the floor of
+/// 18. The issue text that reported them the other way round was itself
+/// wrong; `lighting.md §4` and `time.md §6` always had this pairing
+/// right.
+///
+/// The numeric match between `TORCH_LIGHT_FLOOR` and
+/// `LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD` is a coincidence
+/// (`visibility.md §12.2`); do not couple them.
+pub const TORCH_LIGHT_FLOOR: u8 = 10;
+pub const LIGHT_SPELL_FLOOR: u8 = 18;
 /// `lighting.md §3`: dawn/dusk light ramp values. The ramp starts
 /// at FULL_DARKNESS and ends one step below FULL_DAYLIGHT (the
 /// next step jumps to full daylight). Anchor the first and last

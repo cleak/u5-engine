@@ -1475,33 +1475,307 @@
 
     /// INTERIM — spec gap `cleak/u5-spec#80`.
     ///
-    /// `formats/location-dat.md §4` forbids deriving the active floor page
-    /// as `location_index * 2 + floor` and points at a resident per-scene
-    /// base-page table that the spec does not publish yet. For scene 13
-    /// (Iolo's Hut, where the shipped SAVED.GAM starts) the derivation
-    /// gives `DWELLING.DAT` page 8, but black-box observation of the
-    /// original shows page 12. Until the table lands the observed page is
-    /// pinned, and a supplied `location_floor_pages.tsv` still wins.
-    #[test]
-    fn iolos_hut_resolves_to_the_observed_dwelling_base_page() {
+    /// A directory with game data but deliberately no
+    /// `location_floor_pages.tsv`, so the published
+    /// `formats/location-dat.md` §4.1 table is what answers.
+    fn game_dir_without_floor_table() -> std::path::PathBuf {
         let dir = debug_game_dir();
-        let scene = Scene::new(13).unwrap();
-
-        assert_eq!(scene.block * 2, 8, "the derivation §4 forbids");
-        assert_eq!(resolve_location_base_page(&dir, scene).unwrap(), 12);
-        assert_eq!(resolve_location_floor_page(&dir, scene, 0).unwrap(), 12);
-        assert_eq!(resolve_location_floor_page(&dir, scene, 1).unwrap(), 13);
-
-        std::fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "0x0d 4\n").unwrap();
-        assert_eq!(resolve_location_base_page(&dir, scene).unwrap(), 4);
-
-        // Scenes with no observed page still use the derivation.
         std::fs::remove_file(dir.join(LOCATION_FLOOR_TABLE_FILE)).unwrap();
-        let castle = Scene::new(17).unwrap();
-        assert_eq!(
-            resolve_location_base_page(&dir, castle).unwrap(),
-            castle.block * 2
+        dir
+    }
+
+    /// `formats/location-dat.md` §4.1 / `cleak/u5-spec#80`: the four rows
+    /// most likely to expose a `2 * index` implementation. With the
+    /// withdrawn derivation Yew renders its jail instead of its town,
+    /// Iolo's Hut renders a lighthouse lantern room from a different
+    /// dwelling, Lord British's Castle renders its own basement, and Lord
+    /// Blackthorn's Castle renders a floor of Lord British's Castle.
+    #[test]
+    fn location_base_pages_match_the_published_table() {
+        let dir = game_dir_without_floor_table();
+
+        for (scene_byte, base_page) in [(4u8, 7usize), (13, 12), (17, 1), (18, 6), (32, 14)] {
+            let scene = Scene::new(scene_byte).unwrap();
+            assert_eq!(
+                resolve_location_base_page(&dir, scene).unwrap(),
+                base_page,
+                "scene {scene_byte} base page"
+            );
+        }
+
+        // Four of those five have a base page the withdrawn derivation
+        // gets wrong outright.
+        for scene_byte in [4u8, 13, 17, 18] {
+            let scene = Scene::new(scene_byte).unwrap();
+            assert_ne!(location_page_run(scene).base_page, scene.block * 2);
+        }
+
+        // Serpent's Hold is the subtler trap: its base page *does* land on
+        // `2n`, but its run is 13..=15, so it enters on the middle page of
+        // three and reaches a basement at floor -1. "The pages are right"
+        // is not the same check as "the entry page is right".
+        let serpents_hold = Scene::new(32).unwrap();
+        let run = location_page_run(serpents_hold);
+        assert_eq!(run.base_page, serpents_hold.block * 2);
+        assert_eq!((run.first_page, run.last_page), (13, 15));
+        assert_eq!(run.floor_range(), (-1, 1));
+
+        // Iolo's Hut is the shipped save's start and owns exactly one page.
+        let iolo = Scene::new(13).unwrap();
+        assert_eq!(resolve_location_floor_page(&dir, iolo, 0).unwrap(), 12);
+        assert!(resolve_location_floor_page(&dir, iolo, 1).is_err());
+        assert!(resolve_location_floor_page(&dir, iolo, -1).is_err());
+
+        // An explicit asset override still wins over the published table.
+        std::fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "0x0d 4\n").unwrap();
+        assert_eq!(resolve_location_base_page(&dir, iolo).unwrap(), 4);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// `formats/location-dat.md` §4.1: "the sixty-four pages partition
+    /// exactly" — every page of all four class files is claimed by exactly
+    /// one location, with no gaps and no overlaps. The spec offers this as
+    /// a self-check that a wrong table cannot pass silently.
+    #[test]
+    fn location_page_runs_partition_every_class_file() {
+        for (family_first, family_name) in [(1u8, "TOWNE"), (9, "DWELLING"), (17, "CASTLE"), (25, "KEEP")]
+        {
+            let mut owner = [None::<u8>; 16];
+            for scene_byte in family_first..family_first + 8 {
+                let scene = Scene::new(scene_byte).unwrap();
+                let run = location_page_run(scene);
+                assert!(run.contains_page(run.base_page), "{family_name} base in run");
+                for page in run.first_page..=run.last_page {
+                    assert!(
+                        owner[page].is_none(),
+                        "{family_name} page {page} claimed by scenes {:?} and {scene_byte}",
+                        owner[page]
+                    );
+                    owner[page] = Some(scene_byte);
+                }
+            }
+            assert!(
+                owner.iter().all(|slot| slot.is_some()),
+                "{family_name} has an unowned page: {owner:?}"
+            );
+        }
+    }
+
+    /// `formats/location-dat.md` §4.1 / §9: exactly four locations enter
+    /// above the bottom of their run, which is what makes negative floor
+    /// bytes ordinary. `catalogs/gazetteer.md` §5.2 publishes the floor
+    /// count distribution, which is an independent check on the runs.
+    #[test]
+    fn location_floor_ranges_match_the_published_runs() {
+        let mut enter_above_bottom = Vec::new();
+        let mut floor_counts = [0usize; 6];
+
+        for scene_byte in 1..=32u8 {
+            let scene = Scene::new(scene_byte).unwrap();
+            let run = location_page_run(scene);
+            let (lowest, highest) = run.floor_range();
+
+            assert_eq!(run.base_page + highest as usize, run.last_page);
+            assert_eq!(highest as isize - lowest as isize + 1, run.floor_count() as isize);
+            if lowest < 0 {
+                enter_above_bottom.push(scene_byte);
+            }
+            floor_counts[run.floor_count()] += 1;
+        }
+
+        // Yew, both large castles, Serpent's Hold.
+        assert_eq!(enter_above_bottom, vec![4, 17, 18, 32]);
+        // `catalogs/gazetteer.md` §5.2: thirteen one-floor, ten two-floor,
+        // seven three-floor, two five-floor.
+        assert_eq!(floor_counts[1], 13);
+        assert_eq!(floor_counts[2], 10);
+        assert_eq!(floor_counts[3], 7);
+        assert_eq!(floor_counts[5], 2);
+        assert_eq!(floor_counts[4], 0);
+    }
+
+    /// `cleak/u5-spec#80`: the withdrawn `sub_map_index * 2` model is
+    /// right for ten locations and wrong for twenty-two, which is exactly
+    /// why it survived. Pinning both counts keeps anyone from
+    /// reintroducing it as "close enough".
+    #[test]
+    fn withdrawn_index_times_two_model_fails_for_most_locations() {
+        let mut base_matches = 0;
+        let mut run_matches = 0;
+
+        for scene_byte in 1..=32u8 {
+            let scene = Scene::new(scene_byte).unwrap();
+            let run = location_page_run(scene);
+            if run.base_page == scene.block * 2 {
+                base_matches += 1;
+            }
+            if run.first_page == scene.block * 2 && run.last_page == scene.block * 2 + 1 {
+                run_matches += 1;
+            }
+        }
+
+        assert_eq!(base_matches, 12, "base page lands on 2n for twelve rows");
+        assert_eq!(run_matches, 10, "the page run is the pair {{2n, 2n+1}} for ten");
+    }
+
+    /// `lighting.md §3` / `visibility.md §5`, the headline consequence of
+    /// the influence mask: "interiors that look lit at night are lit by
+    /// the local-light mask, not a different ambient". There is no
+    /// per-location ambient override — a walled room at full darkness
+    /// carries the same threshold of 2 as the open field outside, and the
+    /// difference on screen is entirely its own lamps.
+    ///
+    /// This is what the two headless captures show: Britannia at 02:00
+    /// collapses to the bare 9-cell neighbourhood, while Iolo's Hut at
+    /// 02:00 stays fully lit by its four wall sconces.
+    #[test]
+    fn influence_mask_lights_a_walled_room_at_night() {
+        // A 7x7 room of open floor ringed by 0x4D, lamps in two corners,
+        // party in the middle.
+        let mut grid = open_grid();
+        for y in 11..=19usize {
+            for x in 11..=19usize {
+                if x == 11 || x == 19 || y == 11 || y == 19 {
+                    grid[y * TOWN_GRID_SIDE + x] = 0x4D;
+                }
+            }
+        }
+        let unlit_room = grid.clone();
+        grid[13 * TOWN_GRID_SIDE + 13] = 0xB1;
+        grid[17 * TOWN_GRID_SIDE + 17] = 0xB0;
+
+        let mut state = test_state(grid, 15, 15);
+        state.ambient_light = FULL_DARKNESS;
+        let threshold = state.surface_visibility_light_threshold();
+        assert_eq!(threshold, 2, "no per-location ambient override");
+
+        let lamplit = state.surface_visibility_carve_with_light_threshold(15, 15, 5, threshold, false);
+        let lamplit_count = lamplit.iter().filter(|lit| **lit).count();
+
+        // The same room with no lamps sees only the party's own
+        // neighbourhood — the ambient threshold alone.
+        let mut dark = test_state(unlit_room, 15, 15);
+        dark.ambient_light = FULL_DARKNESS;
+        let unlit = dark.surface_visibility_carve_with_light_threshold(15, 15, 5, threshold, false);
+        assert_eq!(unlit.iter().filter(|lit| **lit).count(), 9);
+
+        assert!(
+            lamplit_count > 9,
+            "the lamps must reveal cells the threshold alone cannot: got {lamplit_count}"
         );
+        // Floor beside the far lamp, squared distance 8 from the party —
+        // far outside the threshold of 2, inside the lamp's disc.
+        assert!(state.town_cell_visible_with_light_threshold(15, 15, 17, 16, 5, threshold));
+        // The room's own wall beside that lit floor is shown too.
+        assert!(state.town_cell_visible_with_light_threshold(15, 15, 19, 17, 5, threshold));
+        // Nothing outside the sealed ring is.
+        assert!(!state.town_cell_visible_with_light_threshold(15, 15, 20, 17, 5, threshold));
+    }
+
+    /// `visibility.md §5` / `cleak/u5-spec#83`: cells beyond the light
+    /// threshold are NOT unconditionally dark. A **sight-transparent**
+    /// cell out there is shown when its own influence-mask coverage is
+    /// nonzero, and is enqueued either way — so the flood can cross
+    /// unlit ground and reach lit ground further out. Without this an
+    /// engine blacks out lamp-lit streets at night.
+    #[test]
+    fn influence_mask_reveals_lit_ground_across_unlit_dark_space() {
+        let mut grid = open_grid();
+        // Lamp far to the south, well past the player's own light.
+        grid[18 * TOWN_GRID_SIDE + 10] = 0xDC;
+        let mut state = test_state(grid, 10, 10);
+        state.ambient_light = FULL_DARKNESS;
+        let threshold = state.surface_visibility_light_threshold();
+
+        // The lamp and the ground it lights are visible...
+        assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 18, 10, threshold));
+        assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 17, 10, threshold));
+        // ...while the unlit ground the flood crossed to get there is not.
+        assert!(!state.town_cell_visible_with_light_threshold(10, 10, 10, 14, 10, threshold));
+        // The player's own 3x3 neighbourhood is still lit by the threshold.
+        assert!(state.town_cell_visible_with_light_threshold(10, 10, 11, 11, 10, threshold));
+    }
+
+    /// `visibility.md §5` / `cleak/u5-spec#83`: a **sight-blocking** cell
+    /// beyond the threshold is shown only when the cell the carve arrived
+    /// from was visible and both it and the candidate carry mask
+    /// coverage, and it never expands. A lit wall beside a lit floor cell
+    /// shows; the same wall reached across dark ground does not.
+    #[test]
+    fn influence_mask_shows_a_lit_blocker_only_from_a_lit_visible_parent() {
+        // Lamp at (10,18) with a blocker immediately north of it: the
+        // blocker and the cell the carve arrives from are both inside the
+        // lamp's disc, and that parent is itself painted.
+        let mut lit = open_grid();
+        lit[18 * TOWN_GRID_SIDE + 10] = 0xDC;
+        lit[16 * TOWN_GRID_SIDE + 10] = 0x4D;
+        let mut state = test_state(lit, 10, 10);
+        state.ambient_light = FULL_DARKNESS;
+        let threshold = state.surface_visibility_light_threshold();
+
+        assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 17, 10, threshold));
+        assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 16, 10, threshold));
+
+        // Move the blocker one cell further out, so the carve reaches it
+        // from unlit ground: the parent has no mask coverage, so the
+        // blocker stays hidden even though it is adjacent to lit cells.
+        let mut dark = open_grid();
+        dark[18 * TOWN_GRID_SIDE + 10] = 0xDC;
+        dark[14 * TOWN_GRID_SIDE + 10] = 0x4D;
+        let mut state = test_state(dark, 10, 10);
+        state.ambient_light = FULL_DARKNESS;
+
+        assert!(!state.town_cell_visible_with_light_threshold(10, 10, 10, 14, 10, threshold));
+    }
+
+    /// `visibility.md §3`/`§5`: opacity governs propagation *past* a
+    /// cell, never visibility of the cell itself. A sight-blocker inside
+    /// the threshold is painted; what it hides is whatever is behind it.
+    #[test]
+    fn blocker_inside_the_threshold_is_itself_visible() {
+        let mut grid = open_grid();
+        grid[10 * TOWN_GRID_SIDE + 11] = 0x4D;
+        grid[10 * TOWN_GRID_SIDE + 12] = 0x4D;
+        let mut state = test_state(grid, 10, 10);
+        state.ambient_light = FULL_DARKNESS;
+        let threshold = state.surface_visibility_light_threshold();
+
+        assert!(state.town_cell_visible_with_light_threshold(10, 10, 11, 10, 10, threshold));
+        assert!(!state.town_cell_visible_with_light_threshold(10, 10, 12, 10, 10, threshold));
+    }
+
+    /// `lighting.md §4` / `cleak/u5-spec#83` measurement 6: the two
+    /// personal-light floors were published inverted in the issue text.
+    /// Magic light is the brighter one — a torch alone reaches 3 tiles
+    /// (37 cells), a light spell alone reaches 4 (61 cells).
+    #[test]
+    fn personal_light_floors_give_the_published_reach() {
+        let mut state = britannia_state(open_world_grid(), 100, 100);
+
+        // Apply the floors to a full-dark ambient directly; recomputing
+        // from the clock would just return daylight and mask the floors.
+        state.ambient_light = apply_personal_light(FULL_DARKNESS, 1, 0);
+        assert_eq!(state.ambient_light, TORCH_LIGHT_FLOOR);
+        let torch = state.surface_visibility_carve_with_light_threshold(
+            100,
+            100,
+            5,
+            state.surface_visibility_light_threshold(),
+            true,
+        );
+        assert_eq!(torch.iter().filter(|lit| **lit).count(), 37);
+
+        state.ambient_light = apply_personal_light(FULL_DARKNESS, 0, 1);
+        assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
+        let spell = state.surface_visibility_carve_with_light_threshold(
+            100,
+            100,
+            5,
+            state.surface_visibility_light_threshold(),
+            true,
+        );
+        assert_eq!(spell.iter().filter(|lit| **lit).count(), 61);
     }
 
     #[test]

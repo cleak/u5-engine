@@ -226,7 +226,8 @@
         assert_eq!(state.clock, GameClock::new(12, 58).unwrap());
         assert_eq!(state.torch_counter, 5);
         assert_eq!(state.light_spell_counter, 4);
-        assert_eq!(state.ambient_light, TORCH_LIGHT_FLOOR);
+        // Both counters burn, so the brighter spell floor wins (#83).
+        assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
         assert!(state.visibility_dirty);
         assert_eq!(state.animation.frame, 1);
         assert_eq!(state.turn, 1);

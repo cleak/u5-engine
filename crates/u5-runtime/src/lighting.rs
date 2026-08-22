@@ -5,16 +5,22 @@
 
 use crate::*;
 
-/// `lighting.md §4`: raise `ambient` to the brightest active personal-light
-/// floor. When both counters are nonzero, the torch floor (18) dominates
-/// the spell-light floor (10); zero counters contribute nothing.
+/// `lighting.md §4`: personal light combines as a maximum, expressed as
+/// two ordered floors — ambient first, then the spell raises it to at
+/// least [`LIGHT_SPELL_FLOOR`] (18), then the torch raises it to at least
+/// [`TORCH_LIGHT_FLOOR`] (10). Neither floor ever *lowers* ambient, so
+/// neither does anything in daylight, and the torch floor is a complete
+/// no-op while a light spell burns.
+///
+/// Both counters are read as booleans: a torch with one minute left
+/// lights exactly as far as a fresh one.
 pub const fn apply_personal_light(ambient: u8, torch_counter: u8, light_spell_counter: u8) -> u8 {
     let mut value = ambient;
-    if torch_counter != 0 && value < TORCH_LIGHT_FLOOR {
-        value = TORCH_LIGHT_FLOOR;
-    }
     if light_spell_counter != 0 && value < LIGHT_SPELL_FLOOR {
         value = LIGHT_SPELL_FLOOR;
+    }
+    if torch_counter != 0 && value < TORCH_LIGHT_FLOOR {
+        value = TORCH_LIGHT_FLOOR;
     }
     value
 }
