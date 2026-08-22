@@ -458,8 +458,15 @@ pub fn wind_banner_text(direction_name: Option<&str>) -> String {
 }
 
 /// Dungeon-class replacement for the sky strip: the current level.
+///
+/// `dungeon-mode.md §4.1` (`cleak/u5-spec#81`): the level is stored
+/// zero-based and **displayed one-based**, range one through eight, and
+/// the rendered label is always exactly four cells — right cap, `L`,
+/// digit, left cap. (The stored literal is `L` plus a placeholder space
+/// that the status redraw seeks back over and prints the digit into,
+/// which is why the digit sits immediately after the letter.)
 pub fn dungeon_level_label(level: u8) -> String {
-    format!("L{level}")
+    format!("L{}", crate::dungeon_display_level(level))
 }
 
 /// Dungeon-class replacement for the wind banner: the party facing.

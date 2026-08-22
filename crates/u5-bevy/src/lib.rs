@@ -10545,28 +10545,44 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
 /// painted out with a filled rectangle in slot 2 plus a one-pixel run in
 /// slot 1 beneath.
 ///
-/// The issue names the two slots without giving their EGA indices. The
-/// menu chrome those calls act on is observed white-on-blue
-/// (`cleak/u5-spec#78`), and the paint-out only makes sense as "restore
-/// the blue border, then restore the white rule", so slot 1 binds to the
-/// chrome's rule colour and slot 2 to its border colour.
-const RTV_UI_COLOUR_SLOT_1: u8 = INTRO_MENU_FRAME_OUTLINE_COLOR;
+/// The published text names the two slots but not their EGA indices.
+/// What *is* structural, and is what this binding rests on: the
+/// paint-out only makes sense as "restore the band fill, then restore
+/// the one-pixel rule", and `§12.1`'s flanking repaint is likewise a
+/// slot 2 band with a slot 1 rule. So slot 1 is the chrome's rule
+/// colour and slot 2 its band colour, whatever indices those turn out
+/// to be.
+///
+/// PROVENANCE: these alias the gameplay chrome's own two constants
+/// rather than naming raw indices, so if the palette audit moves either
+/// colour both this path and the chrome follow it in one edit. Colour
+/// indices quoted anywhere in the #78-#83 spec pass are provisional —
+/// several were capture-derived and the capture pipeline shifts colour —
+/// so nothing here should be read as an independent colour claim.
+const RTV_UI_COLOUR_SLOT_1: u8 = CHROME_RULE_INDEX;
 /// `systems/intro.md §12.1`: the caption helper repaints the window's
 /// bottom border either side of the caption in user-interface colour
-/// slot 2 — the same dark-blue border fill the §6.1 frame uses.
-const RTV_UI_COLOUR_SLOT_2: u8 = INTRO_MENU_FRAME_BORDER_COLOR;
+/// slot 2 — the same band fill the §6.1 frame uses.
+const RTV_UI_COLOUR_SLOT_2: u8 = CHROME_RIBBON_INDEX;
 
-/// `cleak/u5-spec#78`: the intro's border captions are "ordinary
-/// white-on-black fixed cells over the blue border rows" that visibly
-/// interrupt the white rules — the caption punches its own black cells
-/// into the band rather than sitting on the band's blue.
+/// The caption's own cells are **not** the band: `#54`'s follow-up says
+/// the colour is "the fixed-cell printer's active window colour, not a
+/// caption-specific attribute", and `cleak/u5-spec#78` describes the
+/// intro's border captions as fixed cells that "visibly interrupt" the
+/// rules — the caption punches its own cells into the band rather than
+/// sitting on the band's fill.
 ///
-/// Measured on the original's Return-to-View attract capture
-/// (`refs/dos-menu-settled.png`): across the thirteen caption cells of
-/// `The Summoning` the bottom border row is black plus white glyph
-/// pixels, while the same rows immediately left of the caption are the
-/// border blue with the white rule. So the caption's background is the
-/// frame interior colour, not the border colour.
+/// The structural claim, which is what this rests on, is that the
+/// caption cells differ from the flanking band and match the intro text
+/// window's ordinary ink-on-ground pair. A capture of the original's
+/// attract state corroborates it: across the thirteen caption cells of
+/// `The Summoning` the row is ground plus 252 ink pixels, while the same
+/// rows immediately left of the caption are band fill plus the rule.
+///
+/// PROVENANCE: the *counts* above are load-bearing, the *colours* are
+/// not — the capture pipeline shifts colour and the #78-#83 palette
+/// claims are being audited. These alias the intro frame's own named
+/// colours so a palette correction lands in one place.
 const RTV_CAPTION_FOREGROUND: u8 = INTRO_MENU_FRAME_OUTLINE_COLOR;
 const RTV_CAPTION_BACKGROUND: u8 = INTRO_MENU_FRAME_INTERIOR_COLOR;
 
@@ -10789,7 +10805,20 @@ fn draw_return_to_view_caption(
         );
     }
 
-    draw_intro_ribbon_cap(buffer, font, RibbonCapDirection::Right, start_col, row);
+    // The flanking rectangles stop at the caption's span — the
+    // published right-hand rectangle begins at `end_col * 8`, which is
+    // precisely why the caption helper itself must cover the two wedge
+    // cells. Without clearing them the §6.1 frame's
+    // `>Copyright 1988 Lord British<` glyphs show through the cap
+    // sprite's transparent pixels.
+    draw_intro_ribbon_cap(
+        buffer,
+        font,
+        RibbonCapDirection::Right,
+        start_col,
+        row,
+        RTV_CAPTION_BACKGROUND,
+    );
     for (offset, byte) in bytes.iter().enumerate() {
         buffer.draw_fixed_glyph_cell(
             font,
@@ -10806,6 +10835,7 @@ fn draw_return_to_view_caption(
         RibbonCapDirection::Left,
         start_col + len + 1,
         row,
+        RTV_CAPTION_BACKGROUND,
     );
 }
 
@@ -10813,15 +10843,23 @@ fn draw_return_to_view_caption(
 ///
 /// `cleak/u5-spec#78` / `#81`: the cap is a two-pass composite — the
 /// solid triangle glyph in the ribbon colour, then the accent strokes
-/// along its diagonal in the rule colour. [`ribbon_cap_sprite`] is the
-/// shared primitive that builds both masks, so the RTV caption's wedges
-/// are the same glyph every other ribbon interruption uses.
+/// along its diagonal in the rule colour.
+///
+/// The composite itself is **not** duplicated here: [`ribbon_cap_sprite`]
+/// is the build's single source for both masks, and this is only the
+/// blit that puts them on the intro surface. The gameplay chrome's
+/// [`paint_ribbon_cap`] is the other blit; the two differ solely because
+/// the intro framebuffer holds palette indices while the gameplay
+/// surface holds RGBA. Every ribbon interruption — this caption's
+/// wedges, the chrome's band labels and the message window's per-line
+/// prompt — therefore draws the same glyph.
 fn draw_intro_ribbon_cap(
     buffer: &mut IntroDisplayBuffer,
     font: &FixedCellFont,
     direction: RibbonCapDirection,
     cell_x: usize,
     cell_y: usize,
+    ground: u8,
 ) {
     let sprite = ribbon_cap_sprite(font, direction);
     let dst_x = cell_x * CH_CELL_SIDE;
@@ -10836,6 +10874,9 @@ fn draw_intro_ribbon_cap(
         for col in 0..CH_CELL_SIDE {
             let bit = 1u8 << (7 - col);
             let index = (dst_y + row) * buffer.width + dst_x + col;
+            // The cap is stamped opaquely: its own ground first, so
+            // nothing underneath shows through the transparent pixels.
+            buffer.pixels[index] = ground & 0x0f;
             if sprite.ribbon[row] & bit != 0 {
                 buffer.pixels[index] = CHROME_RIBBON_INDEX;
             }

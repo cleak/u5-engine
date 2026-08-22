@@ -276,7 +276,14 @@ fn gameplay_chrome_content_follows_the_scene_family() {
         panic!("dungeon fixture must be a dungeon scene");
     };
     let below = gameplay_chrome_content(&dungeon);
-    assert_eq!(below.top, ChromeGap::Label(format!("L{level}")));
+    // `dungeon-mode.md §4.1` (cleak/u5-spec#81): the level is stored
+    // zero-based and displayed one-based, so the fixture's level 0
+    // renders as `L1` — matching the original's `>L1<` on the first
+    // floor of Deceit.
+    assert_eq!(level, 0);
+    assert_eq!(below.top, ChromeGap::Label("L1".to_string()));
+    // East carries its own leading space inside the five-cell field, so
+    // the label reads `Dir:` plus two spaces.
     assert_eq!(below.bottom, ChromeGap::Label("Dir:  East".to_string()));
 }
 
