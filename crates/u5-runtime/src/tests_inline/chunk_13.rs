@@ -20877,7 +20877,7 @@ fn parse_end_narrative_rejects_bad_or_blank_text() {
 }
 
 #[test]
-fn parse_story_records_walks_twenty_records_and_strips_markup() {
+fn parse_story_records_walks_twenty_records_and_keeps_layout_markup() {
     // formats/story-dat.md §2-§3: 20 NUL-terminated records driving the
     // intro story sequence; `{` and `_` are layout markup.
     let mut bytes = Vec::new();
@@ -20891,8 +20891,12 @@ fn parse_story_records_walks_twenty_records_and_strips_markup() {
     let records = parse_story_records(&bytes).expect("20 records should parse");
 
     assert_eq!(records.records.len(), 20);
-    assert_eq!(records.record(0), Some("Page0break"));
-    assert_eq!(records.record(19), Some("Page19break"));
+    assert_eq!(records.record(0), Some("{Page0_break"));
+    assert_eq!(records.record(19), Some("{Page19_break"));
+    assert_eq!(
+        story_record_display_text(records.record(0).unwrap()),
+        "Page0break"
+    );
     assert_eq!(records.record(20), None);
 }
 
@@ -20929,7 +20933,7 @@ fn parse_story_records_rejects_empty_or_bad_required_record() {
 }
 
 #[test]
-fn parse_question_records_walks_thirty_records_and_strips_markup() {
+fn parse_question_records_walks_thirty_records_and_keeps_layout_markup() {
     // formats/question-dat.md §2-§3: 30 NUL-terminated records;
     // record 0 = gypsy arrival, 1 = gypsy invitation, 2..=29 = dilemmas.
     // `{` is a paragraph marker and `_` is a soft hyphen; both stripped.
@@ -20946,7 +20950,11 @@ fn parse_question_records_walks_thirty_records_and_strips_markup() {
     let records = parse_question_records(&bytes).expect("30 records should parse");
 
     assert_eq!(records.records.len(), 30);
-    assert_eq!(records.gypsy_arrival(), Some("Arrivaltext"));
+    assert_eq!(records.gypsy_arrival(), Some("{Arrival_text"));
+    assert_eq!(
+        question_record_display_text(records.gypsy_arrival().unwrap()),
+        "Arrivaltext"
+    );
     assert_eq!(records.gypsy_invitation(), Some("Invitation"));
     // Dilemma records start at ordinal 2.
     assert_eq!(records.dilemma(2), Some("Dilemma"));

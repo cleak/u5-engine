@@ -17,12 +17,11 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
 use u5_runtime::TITLE_TICK_FRAME_Y;
-#[cfg(test)]
-use u5_runtime::{TEXT_SCREEN_COLUMNS, placeholder_title_tick_frames};
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
     BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT,
-    CGA_PALETTE_RGB, CH_CELL_SIDE, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+    CGA_PALETTE_RGB, CH_CELL_SIDE, CHARGEN_GYPSY_TEXT_REGION, CHARGEN_QUESTION_TEXT_REGION,
+    CHARGEN_RESULT_TEXT_REGION, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
     COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE,
     COMBAT_FIELD_KIND_POISON, COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
@@ -32,28 +31,35 @@ use u5_runtime::{
     CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
     DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
     DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, Direction,
-    DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
-    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING,
-    EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
+    DisplayDriverFamily, DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB,
+    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
+    EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
     FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
     FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
     GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
     HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
-    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
-    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_6_EXTRA_ART_X,
-    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
-    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, LOAD_EMPTY_SAVE_LINE_1,
+    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_MENU_FRAME_ANCHOR_COLUMN,
+    INTRO_MENU_FRAME_ANCHOR_ROW, INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT,
+    INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT, INTRO_MENU_FRAME_GLYPH_EDGE,
+    INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
+    INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
+    INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, INTRO_STEP_1_EXTRA_ART_X,
+    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
+    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
+    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots,
+    IntroStoryArtPlacement, JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1,
     LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX,
     MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot,
     NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
     NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
-    PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX,
-    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
+    PCS_GLYPH_ADVANCE_GAP, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY,
+    PLAYER_SPRITE_TILE, PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
+    POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROPORTIONAL_ADVANCE_TABLE, PROTECTION_COST,
+    PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
+    PreFlourishOutcome, ProportionalTextRegion, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
+    REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
     RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
     SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
     SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
@@ -71,44 +77,37 @@ use u5_runtime::{
     TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor,
-    TextWindowSystem, TileAtlas,
-    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem,
+    TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
-    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
-    combat_class_stats, commit_chargen_save, configure_talk_shop_text_window,
+    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, clean_room_authored_title_tick_frames,
+    combat_actor_is_active_not_dead, combat_class_stats, commit_chargen_save,
+    configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
-    DisplayDriverFamily, INTRO_MENU_FRAME_ANCHOR_COLUMN, INTRO_MENU_FRAME_ANCHOR_ROW,
-    INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT, INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT,
-    INTRO_MENU_FRAME_GLYPH_EDGE, INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
-    INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
-    INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, IntroFontSlots,
-    JOURNEY_ONWARD_SHORTCUT_BANNER, PreFlourishOutcome, TITLE_TICK_FRAME_HEIGHT,
-    TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TitleTickFrameSet,
-    clean_room_authored_title_tick_frames,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_brit_cbt,
-    load_british_bit, load_british_pth, load_dungeon_cbt, load_graphic_image_directory,
-    load_ibm_ch_font, load_play_options_from_save, load_question_records,
-    run_intro_pre_flourish_phase,
-    load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
+    intro_story_step_waits_for_input, intro_story_text_region, intro_story6_secondary_subimage,
+    layout_proportional_justified_paragraph, load_brit_cbt, load_british_bit, load_british_pth,
+    load_dungeon_cbt, load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
+    load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
+    load_tile_atlas, load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_inn_pickup_register_text_window, paint_message_text_window,
     paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system, render_text_panel_rgba,
-    render_text_window_rgba, run_return_to_view_playback_until_restart,
-    save_image_has_active_avatar,
+    render_text_window_rgba, run_intro_pre_flourish_phase,
+    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -123,6 +122,8 @@ use u5_runtime::{
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
+#[cfg(test)]
+use u5_runtime::{TEXT_SCREEN_COLUMNS, placeholder_title_tick_frames};
 
 const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
@@ -145,20 +146,16 @@ const RETURN_TO_VIEW_PREVIEW_Y: usize = 18;
 // produces one such tick per advance and drops accumulated time
 // beyond one slot (§5.3, no catch-up).
 const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = 65_536.0 / 1_193_182.0;
-const PROPORTIONAL_TEXT_LINE_HEIGHT: usize = PCS_GLYPH_HEIGHT + 2;
-const INTRO_STORY_TEXT_X: usize = 10;
-const INTRO_STORY_TEXT_Y: usize = 138;
-const INTRO_STORY_TEXT_WIDTH: usize = 300;
-const INTRO_STORY_TEXT_CLEAR_Y0: usize = 136;
-const CHARGEN_PROPORTIONAL_TEXT_X: usize = 16;
-const CHARGEN_PROPORTIONAL_TEXT_Y: usize = 34;
-const CHARGEN_PROPORTIONAL_TEXT_WIDTH: usize = 288;
-const CHARGEN_QUESTION_TEXT_X: usize = 8;
-const CHARGEN_QUESTION_TEXT_Y: usize = 150;
-const CHARGEN_QUESTION_TEXT_WIDTH: usize = 304;
-const CHARGEN_RESULT_TEXT_X: usize = 16;
-const CHARGEN_RESULT_TEXT_Y: usize = 24;
-const CHARGEN_RESULT_TEXT_WIDTH: usize = 292;
+/// Observation-derived (`cleak/u5-spec#70`): proportional text lines are 9
+/// pixel rows apart. Anchored to the runtime's measured stride.
+#[cfg(test)]
+const PROPORTIONAL_TEXT_LINE_HEIGHT: usize = u5_runtime::PROPORTIONAL_LINE_STRIDE as usize;
+// The character-creation paragraph rectangles that used to live here
+// (CHARGEN_PROPORTIONAL_TEXT_*, CHARGEN_QUESTION_TEXT_*, CHARGEN_RESULT_TEXT_*)
+// were invented placeholders with no spec or observation behind them. They are
+// deleted rather than shipped; the chargen render paths now fail loudly through
+// `require_published_chargen_proportional_text_rectangle` until the rectangles
+// are derived the same way the intro story regions were.
 const PROMPT_CURSOR_GLYPH: u8 = 4;
 
 #[derive(Clone, Copy)]
@@ -335,10 +332,7 @@ impl IntroDisplayBuffer {
         );
         for glyph_y in 0..CH_CELL_SIDE {
             let row_bits = font.glyph_row(code & 0x7f, glyph_y).unwrap_or_else(|| {
-                panic!(
-                    "fixed font glyph {} is missing row {glyph_y}",
-                    code & 0x7f
-                )
+                panic!("fixed font glyph {} is missing row {glyph_y}", code & 0x7f)
             });
             for glyph_x in 0..CH_CELL_SIDE {
                 let color = if row_bits & (1 << (7 - glyph_x)) != 0 {
@@ -821,18 +815,27 @@ pub fn visual_frame_suite(
     )?);
     let records = load_story_records(game_dir)?
         .ok_or_else(|| io::Error::other("visual frame suite requires STORY.DAT"))?;
-    reports.push(write_visual_intro_report(
-        out_dir,
-        "intro-story-art",
-        "intro story art",
-        VisualIntroPanel::Story {
-            records,
-            step: 7,
-            transition: None,
-        },
-        game_dir,
-        raster_depth,
-    )?);
+    // One PNG per text-consuming intro story step, so the observation-derived
+    // paragraph layout in `u5_runtime::story_layout` can be compared against
+    // captures of the original slide by slide. Step 6 renders the unpublished
+    // inline doorway lines (`cleak/u5-spec#69`) and has no frame.
+    for step in 0..INTRO_STORY_STEP_COUNT {
+        if step == INTRO_INLINE_DOORWAY_STEP {
+            continue;
+        }
+        reports.push(write_visual_intro_report(
+            out_dir,
+            &format!("intro-story-{step:02}"),
+            "intro story step",
+            VisualIntroPanel::Story {
+                records: records.clone(),
+                step,
+                transition: None,
+            },
+            game_dir,
+            raster_depth,
+        )?);
+    }
     let preview = visual_return_to_view_summary(game_dir, raster_depth);
     reports.push(write_visual_intro_report(
         out_dir,
@@ -8247,8 +8250,7 @@ fn apply_pre_flourish_outcome(intro: &mut VisualIntroState) {
     };
     let window = intro.text_windows.active_window();
     intro.surface.clear(0);
-    let banner_row = usize::from(window.top_left_y)
-        + usize::from(window.height()) / 2;
+    let banner_row = usize::from(window.top_left_y) + usize::from(window.height()) / 2;
     intro.surface.draw_fixed_text_centered_in_window(
         slots.active_font(),
         JOURNEY_ONWARD_SHORTCUT_BANNER,
@@ -8262,6 +8264,34 @@ fn apply_pre_flourish_outcome(intro: &mut VisualIntroState) {
     // the `AwaitingSelection` phase the menu state machine expects.
     intro.dispatch.dismiss_title();
     resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
+}
+
+/// `systems/intro.md §10`: steps 1 through 20 block on a keyboard poll. The
+/// key that leaves step 1 starts that step's published rectangle transition
+/// instead of advancing directly; the wipe's own tick handler advances the
+/// step when it completes. The key that leaves step 20 ends the sequence and
+/// returns to the intro menu.
+fn step_visual_intro_story_panel(
+    step: &mut usize,
+    transition: &mut Option<RectColumnSweepTransition>,
+) -> VisualIntroPanelOutcome {
+    if transition.is_some() {
+        // A running transition is a blocking local visual effect.
+        return VisualIntroPanelOutcome::Stay;
+    }
+    if *step == 1 {
+        *transition = Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION));
+        return VisualIntroPanelOutcome::Stay;
+    }
+    if *step + 1 >= INTRO_STORY_STEP_COUNT {
+        return VisualIntroPanelOutcome::ReturnToMenu {
+            subflow: IntroSubflow::StorySlides,
+            result: IntroSubflowResult::ReturnedToMenu,
+            message: "Ultima V Introduction finished; returning to the intro menu.".to_string(),
+        };
+    }
+    *step += 1;
+    VisualIntroPanelOutcome::Stay
 }
 
 fn advance_visual_intro_panel_animation(
@@ -8452,7 +8482,11 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             input_line,
         } => step_visual_chargen_panel(session, input_line, ch),
         VisualIntroPanel::U4Transfer { .. } => require_published_u4_transfer_preview_presentation(),
-        VisualIntroPanel::Story { records, step, .. } => {
+        VisualIntroPanel::Story {
+            records,
+            step,
+            transition,
+        } => {
             if *step == INTRO_INLINE_DOORWAY_STEP {
                 panic!(
                     "intro story step {step} requires published inline doorway text; skipping it with input is a forbidden fallback; see cleak/u5-spec#69"
@@ -8461,10 +8495,8 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             if !intro_story_step_waits_for_input(*step) {
                 return false;
             }
-            if visual_intro_story_text(records, *step).is_some() {
-                require_published_intro_story_proportional_text_contract(*step);
-            }
-            panic!("intro story step {step} has no renderable published text contract")
+            let _ = records;
+            step_visual_intro_story_panel(step, transition)
         }
         VisualIntroPanel::Acknowledgements => u5_runtime::require_acknowledgements_contract(),
         VisualIntroPanel::ReturnToView { preview_frames, .. } => {
@@ -8527,7 +8559,6 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
                 "intro story step {step} requires published inline doorway text; cancelling past it is a forbidden fallback; see cleak/u5-spec#69"
             );
         }
-        require_published_intro_story_proportional_text_contract(*step);
     }
 
     let Some((subflow, result, message)) = (match intro.panel {
@@ -9148,10 +9179,7 @@ fn draw_visual_intro_menu_labels(
 /// `y = 127` via a direct line draw through the framebuffer. The
 /// frame does not clear the interior — STARTSC paint + title tick
 /// already established those pixels.
-fn draw_visual_intro_menu_text_window_frame(
-    buffer: &mut IntroDisplayBuffer,
-    font: &FixedCellFont,
-) {
+fn draw_visual_intro_menu_text_window_frame(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont) {
     let fg = 0x0f;
     let bg = 0x00;
     let anchor_col = usize::from(INTRO_MENU_FRAME_ANCHOR_COLUMN);
@@ -9364,6 +9392,9 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         );
     }
 
+    // Observation: every captured story slide shows only that step's own art
+    // and text over black, so the slide loop repaints the screen per step.
+    intro.surface.clear(0);
     draw_visual_intro_story_art_to_buffer(
         &mut intro.surface,
         &intro.game_dir,
@@ -9372,39 +9403,22 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         transition,
     );
 
-    if text.is_none() {
+    let Some(text) = text else {
         panic!("intro story step {step} requires a STORY.DAT record");
-    }
-
-    if let Some(text) = text {
-        clear_intro_story_text_band(&mut intro.surface);
-        overlay_proportional_text_from_assets_buffer(
-            &mut intro.surface,
-            &intro.game_dir,
-            &text,
-            ProportionalTextPlacement {
-                x: INTRO_STORY_TEXT_X,
-                y: INTRO_STORY_TEXT_Y,
-                width: INTRO_STORY_TEXT_WIDTH,
-                line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
-                color: [0xff, 0xff, 0xff, 0xff],
-                shadow: true,
-            },
-        )
-        .expect("intro story requires proportional font");
-    }
+    };
+    let region = intro_story_text_region(step).unwrap_or_else(|| {
+        panic!("intro story step {step} has no observation-derived text region")
+    });
+    draw_proportional_paragraph_to_buffer(
+        &mut intro.surface,
+        &intro.game_dir,
+        &region,
+        &text,
+        INTRO_STORY_TEXT_COLOR,
+    )
+    .unwrap_or_else(|err| panic!("intro story step {step} proportional text: {err}"));
 
     intro.surface.to_rgba()
-}
-
-fn clear_intro_story_text_band(buffer: &mut IntroDisplayBuffer) {
-    buffer.clear_rect_inclusive(
-        0,
-        INTRO_STORY_TEXT_CLEAR_Y0,
-        INTRO_FRAMEBUFFER_WIDTH as usize - 1,
-        INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
-        0,
-    );
 }
 
 fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
@@ -9497,27 +9511,21 @@ fn render_chargen_intro_graphics(
                 ),
             };
             blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &[panel]);
-            let placement = if record == 0 {
-                ProportionalTextPlacement {
-                    x: CHARGEN_PROPORTIONAL_TEXT_X,
-                    y: CHARGEN_PROPORTIONAL_TEXT_Y,
-                    width: CHARGEN_PROPORTIONAL_TEXT_WIDTH,
-                    line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
-                    color: [0xff, 0xff, 0xff, 0xff],
-                    shadow: true,
-                }
+            let region = if record == 0 {
+                CHARGEN_GYPSY_TEXT_REGION
             } else {
-                ProportionalTextPlacement {
-                    x: CHARGEN_RESULT_TEXT_X,
-                    y: CHARGEN_RESULT_TEXT_Y,
-                    width: CHARGEN_RESULT_TEXT_WIDTH,
-                    line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
-                    color: [0xff, 0xff, 0xff, 0xff],
-                    shadow: true,
-                }
+                CHARGEN_RESULT_TEXT_REGION
             };
-            overlay_proportional_text_from_assets_buffer(buffer, game_dir, &text, placement)
-                .expect("character creation requires proportional font");
+            draw_proportional_paragraph_to_buffer(
+                buffer,
+                game_dir,
+                &region,
+                &text,
+                INTRO_STORY_TEXT_COLOR,
+            )
+            .unwrap_or_else(|err| {
+                panic!("character creation record {record} proportional text: {err}")
+            });
             buffer.to_rgba()
         }
         ChargenSessionStep::PresentQuestion(question) => {
@@ -9536,20 +9544,14 @@ fn render_chargen_intro_graphics(
             );
             overlay_fixed_cell_text_intro_buffer(buffer, &font, "A", 3, 2, false);
             overlay_fixed_cell_text_intro_buffer(buffer, &font, "B", 26, 2, false);
-            overlay_proportional_text_from_assets_buffer(
+            draw_proportional_paragraph_to_buffer(
                 buffer,
                 game_dir,
+                &CHARGEN_QUESTION_TEXT_REGION,
                 &question.text,
-                ProportionalTextPlacement {
-                    x: CHARGEN_QUESTION_TEXT_X,
-                    y: CHARGEN_QUESTION_TEXT_Y,
-                    width: CHARGEN_QUESTION_TEXT_WIDTH,
-                    line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
-                    color: [0xff, 0xff, 0xff, 0xff],
-                    shadow: true,
-                },
+                INTRO_STORY_TEXT_COLOR,
             )
-            .expect("character creation question requires proportional font");
+            .expect("character creation question prompt proportional text");
             buffer.to_rgba()
         }
         ChargenSessionStep::Completed(_) => {
@@ -10720,6 +10722,7 @@ fn fill_rgba_rect_inclusive(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg(test)]
 struct ProportionalTextPlacement {
     x: usize,
     y: usize,
@@ -10729,25 +10732,51 @@ struct ProportionalTextPlacement {
     shadow: bool,
 }
 
-fn overlay_proportional_text_from_assets_buffer(
+/// `cleak/u5-spec#70`: the intro story text is drawn as plain EGA-white
+/// glyphs with no shadow pass. Confirmed on the one slide where narrative
+/// text overlaps coloured art (step 0's last two lines run over the bottom of
+/// the STORY1.16 window frame): none of the 85 pixels a one-pixel drop shadow
+/// would have blackened is black in the capture.
+const INTRO_STORY_TEXT_COLOR: u8 = 15;
+
+/// Draws one NUL-terminated proportional paragraph into the intro
+/// framebuffer using the observation-derived layout in
+/// `u5_runtime::story_layout`.
+fn draw_proportional_paragraph_to_buffer(
     dst: &mut IntroDisplayBuffer,
     game_dir: &Path,
+    region: &ProportionalTextRegion,
     text: &str,
-    placement: ProportionalTextPlacement,
+    color: u8,
 ) -> io::Result<()> {
-    let _ = (dst, game_dir, text, placement);
-    require_published_intro_story_proportional_text_contract(usize::MAX)
-}
-
-fn require_published_intro_story_proportional_text_contract(step: usize) -> ! {
-    let step_detail = if step == usize::MAX {
-        "visual proportional text".to_string()
-    } else {
-        format!("intro story step {step}")
-    };
-    panic!(
-        "{step_detail} requires the published resident proportional width table before rendering or skipping text; deriving widths from PROPORT.PCS or advancing past unreadable text is a forbidden fallback; see cleak/u5-spec#70"
-    );
+    let font = load_proportional_font(game_dir)?;
+    let placed = layout_proportional_justified_paragraph(
+        &PROPORTIONAL_ADVANCE_TABLE,
+        region,
+        text.as_bytes(),
+        u16::try_from(dst.height).unwrap_or(u16::MAX),
+    )?;
+    for glyph in placed {
+        let advance = PROPORTIONAL_ADVANCE_TABLE.width_for_byte(glyph.code)?;
+        let ink_width = advance - usize::from(PCS_GLYPH_ADVANCE_GAP);
+        let bitmap = font.glyph_for_code(glyph.code).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("PROPORT.PCS has no glyph for code {}", glyph.code),
+            )
+        })?;
+        let x = usize::from(glyph.x);
+        let y = usize::from(glyph.y);
+        let glyph_rows = bitmap.bitmap.height.min(PCS_GLYPH_HEIGHT);
+        for row in 0..glyph_rows.min(dst.height.saturating_sub(y)) {
+            for col in 0..ink_width.min(dst.width.saturating_sub(x)) {
+                if bitmap.bitmap.pixel(col, row) == Some(1) {
+                    dst.pixels[(y + row) * dst.width + x + col] = color & 0x0f;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -12282,18 +12311,6 @@ mod tests {
         );
     }
 
-    fn assert_intro_story_proportional_gap_panic(result: std::thread::Result<()>) {
-        let payload = result.expect_err("unpublished intro story proportional text must fail");
-        let message = panic_message(payload);
-        assert!(
-            message.contains("published resident proportional width table")
-                && message.contains("advancing past unreadable text")
-                && message.contains("forbidden fallback")
-                && message.contains("cleak/u5-spec#70"),
-            "{message}"
-        );
-    }
-
     fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
         payload
             .downcast_ref::<String>()
@@ -13026,9 +13043,7 @@ mod tests {
 
         // Horizontal rule at y = 127, columns 7..312 inclusive.
         let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
-        for x in
-            usize::from(INTRO_MENU_FRAME_RULE_X0)..=usize::from(INTRO_MENU_FRAME_RULE_X1)
-        {
+        for x in usize::from(INTRO_MENU_FRAME_RULE_X0)..=usize::from(INTRO_MENU_FRAME_RULE_X1) {
             assert_eq!(
                 buffer.pixels[rule_y * buffer.width + x],
                 0x0f,
@@ -13568,19 +13583,22 @@ mod tests {
             title_tick_frames: None,
         };
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = step_visual_intro_panel(&mut intro, ' ');
-        }));
+        assert!(step_visual_intro_panel(&mut intro, ' '));
 
-        assert_intro_story_proportional_gap_panic(result);
-        assert!(matches!(
-            intro.panel,
-            VisualIntroPanel::Story {
-                step: 1,
-                transition: None,
-                ..
-            }
-        ));
+        // `systems/intro.md` section 10: the key that leaves step 1 starts the
+        // published rectangle transition; the step only advances when the
+        // wipe's own tick handler finishes it.
+        let VisualIntroPanel::Story {
+            step, transition, ..
+        } = &intro.panel
+        else {
+            panic!("story panel must stay active while the step-1 wipe runs");
+        };
+        assert_eq!(*step, 1);
+        assert_eq!(
+            *transition,
+            Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION))
+        );
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -14940,16 +14958,15 @@ mod tests {
             .or_else(|| payload.downcast_ref::<&str>().copied())
             .expect("strict intro asset panic payload must be a string");
         assert!(
-            message.contains("visual proportional text requires")
+            message.contains("Return-to-View preview pixel geometry")
                 || message.contains("sparse strip")
-                || message
-                    .contains("refuses the generated title-tick animation fallback")
+                || message.contains("refuses the generated title-tick animation fallback")
                 || message
                     .contains("title-tick animation requires published authored frame pixels"),
             "{message}"
         );
         assert!(
-            message.contains("cleak/u5-spec#70")
+            message.contains("cleak/u5-spec#54")
                 || message.contains("TITLE.BIT")
                 || message.contains("cleak/u5-spec#65")
                 || message.contains("cleak/u5-spec#52"),
@@ -16758,38 +16775,37 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_story_render_preserves_intro_surface_pixels() {
+    fn visual_intro_story_render_repaints_the_whole_slide() {
+        // Observation (`cleak/u5-spec#70`): every captured story slide shows
+        // only that step's own art and text over black, so the slide loop
+        // repaints the screen rather than compositing over the previous one.
+        // Assets are needed to draw the art; skip without them.
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(STORY_DAT_FILE).exists()
+            || !game_dir.join("PROPORT.PCS").exists()
+            || !game_dir.join("STORY1.16").exists()
+            || !game_dir.join("TEXT.16").exists()
+        {
+            return;
+        }
+        let records = load_story_records(game_dir)
+            .expect("STORY.DAT loads")
+            .expect("STORY.DAT present");
         let mut intro = visual_intro_state_with_panel(
-            debug_game_dir(),
+            game_dir.to_path_buf(),
             VisualIntroPanel::Story {
-                records: StoryRecords {
-                    records: (0..20)
-                        .map(|index| format!("Story record {index}"))
-                        .collect(),
-                },
+                records,
                 step: 0,
                 transition: None,
             },
         );
         intro.surface.clear(0x03);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_story_intro_frame(&mut intro);
-        }));
-        let payload =
-            result.expect_err("story rendering must fail until resident widths are published");
-        let message = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("proportional width-table panic payload must be a string");
-        assert!(
-            message.contains("published resident proportional width table"),
-            "{message}"
-        );
-        assert!(message.contains("cleak/u5-spec#70"), "{message}");
-        let frame = intro.surface.to_rgba();
+        let frame = render_story_intro_frame(&mut intro);
 
+        // Step 0 draws STORY1.16 #0 at (0, 0) plus two TEXT.16 strips on the
+        // right; the top-right corner is covered by neither, so the stale
+        // cyan must be gone.
         assert_eq!(
             rgba_pixel(
                 &frame,
@@ -16797,16 +16813,11 @@ mod tests {
                 INTRO_FRAMEBUFFER_WIDTH as usize - 1,
                 0
             ),
-            [
-                EGA_PALETTE_RGB[3][0],
-                EGA_PALETTE_RGB[3][1],
-                EGA_PALETTE_RGB[3][2],
-                0xff
-            ]
+            [0x00, 0x00, 0x00, 0xff]
         );
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        // NOTE: `game_dir` here is the player's real clean asset folder.
+        // Never delete it from a test.
     }
-
     #[test]
     fn visual_intro_story_step_six_panics_until_inline_text_is_specified() {
         let mut intro = visual_intro_state_with_panel(
@@ -16887,59 +16898,52 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_story_render_clears_text_band_before_new_paragraph() {
+    fn visual_intro_story_render_repaints_the_slide_and_draws_measured_text() {
+        // `cleak/u5-spec#70`: the story slide loop repaints the screen per
+        // step and draws the record through the observation-derived
+        // proportional layout. Needs the local clean asset set.
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(STORY_DAT_FILE).exists()
+            || !game_dir.join("PROPORT.PCS").exists()
+            || !game_dir.join("STORY6.16").exists()
+        {
+            return;
+        }
+        let records = load_story_records(game_dir)
+            .expect("STORY.DAT loads")
+            .expect("STORY.DAT present");
         let mut intro = visual_intro_state_with_panel(
-            debug_game_dir(),
+            game_dir.to_path_buf(),
             VisualIntroPanel::Story {
-                records: StoryRecords {
-                    records: (0..20)
-                        .map(|index| format!("Story record {index}"))
-                        .collect(),
-                },
-                step: 2,
+                records,
+                step: 13,
                 transition: None,
             },
         );
         intro.surface.clear(0x03);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_story_intro_frame(&mut intro);
-        }));
-        let payload =
-            result.expect_err("story rendering must fail until resident widths are published");
-        let message = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .expect("proportional width-table panic payload must be a string");
+        let frame = render_story_intro_frame(&mut intro);
+        let width = INTRO_FRAMEBUFFER_WIDTH as usize;
+
+        // Step 13's art is STORY6.16 #0 at (176, 0); the measured text starts
+        // at line y=0 indented 15 pixels into the x 0..168 gutter. Nothing
+        // else may survive the repaint.
+        assert_eq!(rgba_pixel(&frame, width, 0, 190), [0x00, 0x00, 0x00, 0xff]);
+        assert_eq!(rgba_pixel(&frame, width, 170, 40), [0x00, 0x00, 0x00, 0xff]);
+        let first_line_ink = (0..8)
+            .flat_map(|row| (15..169).map(move |col| (col, row)))
+            .filter(|(col, row)| rgba_pixel(&frame, width, *col, *row) == [0xff, 0xff, 0xff, 0xff])
+            .count();
         assert!(
-            message.contains("published resident proportional width table"),
-            "{message}"
+            first_line_ink > 100,
+            "first measured text line should be drawn, got {first_line_ink} lit pixels"
         );
-        assert!(message.contains("cleak/u5-spec#70"), "{message}");
-        let frame = intro.surface.to_rgba();
-
-        assert_eq!(
-            rgba_pixel(
-                &frame,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                0,
-                INTRO_STORY_TEXT_CLEAR_Y0
-            ),
-            [0x00, 0x00, 0x00, 0xff]
+        assert!(
+            (0..15).all(|col| (0..8)
+                .all(|row| rgba_pixel(&frame, width, col, row) == [0x00, 0x00, 0x00, 0xff])),
+            "the paragraph indent must stay blank"
         );
-        assert_eq!(
-            rgba_pixel(
-                &frame,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                0,
-                INTRO_STORY_TEXT_Y
-            ),
-            [0x00, 0x00, 0x00, 0xff]
-        );
-        let _ = fs::remove_dir_all(&intro.game_dir);
     }
-
     #[test]
     fn visual_intro_story_panel_pages_back_to_menu_after_final_step() {
         let dir = debug_game_dir();
@@ -16978,13 +16982,12 @@ mod tests {
         intro.dispatch.dismiss_title();
         intro.dispatch.submit_menu_key(b'U');
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = step_visual_intro_panel(&mut intro, ' ');
-        }));
+        assert!(step_visual_intro_panel(&mut intro, ' '));
 
-        assert_intro_story_proportional_gap_panic(result);
-        assert!(matches!(intro.panel, VisualIntroPanel::Story { .. }));
-        assert!(intro.message.is_empty());
+        // `systems/intro.md` section 10: the sequence returns to the intro
+        // menu once the final story step is advanced.
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.contains("Ultima V Introduction"));
         assert_eq!(intro.start_menu_reveal, None);
         assert_eq!(intro.start_menu_reveal_backing, None);
         let _ = fs::remove_dir_all(dir);

@@ -169,14 +169,30 @@ fn validate_question_tail(bytes: &[u8], mut start: usize) -> io::Result<()> {
     Ok(())
 }
 
+/// Strips the layout markers (`formats/question-dat.md` section 3) from a
+/// decoded questionnaire record, leaving the prose a plain-text consumer
+/// wants. The proportional paragraph renderer uses the marked-up record.
+pub fn question_record_display_text(record: &str) -> String {
+    record
+        .chars()
+        .filter(|ch| {
+            *ch != QUESTION_PARAGRAPH_START_MARKER as char
+                && *ch != QUESTION_SOFT_BREAK_MARKER as char
+        })
+        .collect()
+}
+
 fn decode_question_record(record_index: usize, bytes: &[u8]) -> io::Result<String> {
     let mut out = String::with_capacity(bytes.len());
     for &byte in bytes {
         match byte {
             0x0a | 0x0d => out.push('\n'),
             // formats/question-dat.md §3: paragraph-start and soft-hyphen
-            // markers are layout markup, not visible glyphs.
-            QUESTION_PARAGRAPH_START_MARKER | QUESTION_SOFT_BREAK_MARKER => {}
+            // markers are layout markup rather than visible glyphs.
+            // They are preserved rather than dropped because the shared
+            // proportional paragraph layout consumes them: `{` sets the
+            // paragraph indent and `_` marks a legal hyphenation point.
+            // Plain-text consumers use `question_record_display_text`.
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
             _ => {
                 return Err(io::Error::new(

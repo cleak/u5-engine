@@ -89,6 +89,7 @@ pub mod start_validation;
 pub mod stat_arithmetic;
 pub mod stats_panel;
 pub mod story_io;
+pub mod story_layout;
 pub mod test_fixtures;
 pub mod text_wrap;
 pub mod tile_classes;
@@ -292,9 +293,8 @@ pub use intro::{
     INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
     INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
     INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, IntroMenuAction,
-    MISCMAPS_CUTSCENE_RECORD_BYTES,
-    MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE, MISCMAPS_CUTSCENE_ROWS,
-    MISCMAPS_CUTSCENE_SECTION_BYTES, MISCMAPS_CUTSCENE_SECTION_OFFSET,
+    MISCMAPS_CUTSCENE_RECORD_BYTES, MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE,
+    MISCMAPS_CUTSCENE_ROWS, MISCMAPS_CUTSCENE_SECTION_BYTES, MISCMAPS_CUTSCENE_SECTION_OFFSET,
     MISCMAPS_CUTSCENE_VISIBLE_COLUMNS, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
     MISCMAPS_RTV_STRIP_ROW_STRIDE, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MiscmapsCutsceneMap, RTV_COMMAND_COUNT,
@@ -465,7 +465,7 @@ pub use question_io::{
     QUESTION_DAT_DILEMMA_COUNT, QUESTION_DAT_FILE, QUESTION_DAT_FIRST_DILEMMA_RECORD,
     QUESTION_DAT_LEN, QUESTION_DAT_RECORDS, QUESTION_PARAGRAPH_START_MARKER,
     QUESTION_SOFT_BREAK_MARKER, QuestionRecords, load_question_records, parse_question_records,
-    question_dat_dilemma_record_for_pair,
+    question_dat_dilemma_record_for_pair, question_record_display_text,
 };
 pub use report::run_report;
 pub use return_to_view::{
@@ -538,7 +538,14 @@ pub use story_io::{
     intro_step_has_story6_secondary_pass, intro_step_has_transition_strip,
     intro_step_transition_strips, intro_story_art_file_for_step,
     intro_story_art_placement_for_step, intro_story_step_waits_for_input,
-    intro_story6_secondary_subimage, load_story_records, parse_story_records, story_text_marker,
+    intro_story6_secondary_subimage, load_story_records, parse_story_records,
+    story_record_display_text, story_text_marker,
+};
+pub use story_layout::{
+    CHARGEN_GYPSY_TEXT_REGION, CHARGEN_QUESTION_TEXT_REGION, CHARGEN_RESULT_TEXT_REGION,
+    INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT, PROPORTIONAL_LINE_STRIDE,
+    PROPORTIONAL_PARAGRAPH_INDENT, PlacedProportionalGlyph, ProportionalTextGutter,
+    ProportionalTextRegion, intro_story_text_region, layout_proportional_justified_paragraph,
 };
 pub use text_wrap::{
     EmitterByteKind, ParagraphByteKind, ProportionalRendererByteKind, TEXT_COLOR_BACKGROUND_SHIFT,
@@ -716,4 +723,5 @@ mod tests {
     include!("tests_inline/chunk_24.rs");
     include!("tests_inline/chunk_25.rs");
     include!("tests_inline/chunk_26.rs");
+    include!("tests_inline/chunk_27.rs");
 }

@@ -428,21 +428,32 @@ pub fn parse_fixed_font_body(
 }
 
 pub fn load_proportional_font(game_dir: &Path) -> io::Result<ProportionalFont> {
-    let _ = game_dir;
-    Err(io::Error::new(
-        io::ErrorKind::InvalidData,
-        "strict PROPORT.PCS loading does not expose a ProportionalFont glyph-directory; legacy LZW fallback was removed",
-    ))
+    parse_proportional_font(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
 }
 
-/// Explicit parser for local preprocessed glyph-directory assets. This is not
-/// used by the production loader.
+/// Loads the glyph directory a proportional paragraph renderer needs.
+///
+/// `formats/font-pcs.md §3` describes the canonical on-disk envelope as a
+/// driver-compressed sparse strip resource and explicitly leaves
+/// "pre-decoded local packaging variants" outside the v1 contract. The
+/// shipped local asset set carries the LZW-enveloped glyph-directory
+/// packaging, which is the only form that exposes per-glyph widths and
+/// bitmaps, so this accepts the LZW envelope first and falls back to a raw
+/// glyph directory.
 pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
-    let _ = bytes;
-    Err(io::Error::new(
-        io::ErrorKind::InvalidData,
-        "parse_proportional_font has no strict canonical glyph-directory form; use parse_proportional_font_resource",
-    ))
+    match decode_lzw_envelope(bytes, PROPORT_PCS_FILE) {
+        Ok(body) => parse_proportional_font_body(&body, PROPORT_PCS_FILE),
+        Err(envelope_err) => parse_proportional_font_body(bytes, PROPORT_PCS_FILE).map_err(
+            |raw_err| {
+                io::Error::new(
+                    raw_err.kind(),
+                    format!(
+                        "{PROPORT_PCS_FILE} is neither an LZW-enveloped glyph directory ({envelope_err}) nor a raw glyph directory ({raw_err})"
+                    ),
+                )
+            },
+        ),
+    }
 }
 
 pub fn parse_legacy_lzw_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
@@ -544,22 +555,31 @@ pub fn parse_proportional_font_body(
                 format!("{resource_name} glyph slot {slot} has invalid offset {offset}"),
             ));
         }
-        let advance_width = body[offset];
-        if advance_width as usize > PCS_GLYPH_BITMAP_WIDTH {
+        let ink_width = u16_at(body, offset) as usize;
+        let glyph_height = u16_at(body, offset + 2) as usize;
+        if ink_width > PCS_GLYPH_BITMAP_WIDTH {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "{resource_name} glyph slot {slot} advance width {advance_width} exceeds bitmap width"
+                    "{resource_name} glyph slot {slot} ink width {ink_width} exceeds bitmap width"
+                ),
+            ));
+        }
+        if glyph_height != PCS_GLYPH_HEIGHT {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{resource_name} glyph slot {slot} height {glyph_height} is not the proportional cell height {PCS_GLYPH_HEIGHT}"
                 ),
             ));
         }
         glyphs.push(ProportionalGlyph {
-            advance_width,
+            advance_width: ink_width as u8,
             bitmap: MonochromeBitmap {
                 width: PCS_GLYPH_BITMAP_WIDTH,
                 height: PCS_GLYPH_HEIGHT,
                 pixels: unpack_monochrome_rows(
-                    &body[offset + 1..end],
+                    &body[offset + PCS_GLYPH_BLOCK_HEADER_LEN..end],
                     PCS_GLYPH_BITMAP_WIDTH,
                     PCS_GLYPH_HEIGHT,
                     1,
@@ -719,6 +739,74 @@ impl ProportionalWidthTable {
                 )
             })
     }
+}
+
+/// Observation-derived resident proportional advance table
+/// (`cleak/u5-spec#70`).
+///
+/// `formats/font-pcs.md §4` says the paragraph renderer advances by a
+/// "resident 128-entry width table" that is deliberately not stored inside
+/// `PROPORT.PCS`, but neither the values nor a shipped record holding them
+/// are published. These 128 bytes were recovered by black-box measurement
+/// of the original's twenty intro story slides: every glyph placement in
+/// those slides was matched against the decoded `PROPORT.PCS` glyph bitmaps
+/// and the pixel delta to the next glyph recorded. Over 8,995 measured
+/// placements the delta is always the glyph's stored ink width plus exactly
+/// one blank separator column ([`PCS_GLYPH_ADVANCE_GAP`]), and a natural
+/// (unjustified) space always advances [`PCS_SPACE_ADVANCE`] = 5 pixels even
+/// though the space glyph's stored ink width is 0.
+///
+/// The fitted rule is therefore
+/// `advance(code) = if code == b' ' { 5 } else { ink_width(code) + 1 }`,
+/// and [`proportional_advance_table_from_font`] reproduces this constant
+/// from any loaded `PROPORT.PCS`; `fonts_proportional_advance_table_matches_shipped_font`
+/// asserts that equality against the local asset set.
+///
+/// Codes 0..31 and 123..127 have no glyph in the shipped 91-glyph directory
+/// (`0x20..=0x7a`) and were never observed in narrative text; they are
+/// listed as 0 rather than guessed, and the renderer rejects them.
+pub const PROPORTIONAL_ADVANCE_TABLE: ProportionalWidthTable = ProportionalWidthTable::new([
+    // 0x00..0x1f: no glyph in the shipped directory.
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
+    // 0x20 ' '..0x2f '/'
+    5, 3, 7, 8, 8, 8, 8, 4, 5, 5, 6, 7, 4, 4, 3, 8, //
+    // 0x30 '0'..0x3f '?'
+    7, 6, 7, 7, 7, 7, 7, 7, 7, 7, 3, 4, 6, 6, 6, 7, //
+    // 0x40 '@'..0x4f 'O'
+    8, 8, 7, 7, 7, 7, 7, 7, 7, 5, 8, 8, 7, 8, 7, 7, //
+    // 0x50 'P'..0x5f '_'
+    8, 7, 8, 7, 7, 7, 7, 8, 7, 7, 7, 4, 8, 4, 8, 9, //
+    // 0x60 '`'..0x6f 'o'
+    4, 6, 6, 5, 6, 6, 6, 6, 6, 3, 4, 6, 3, 8, 7, 6, //
+    // 0x70 'p'..0x7a 'z', then 0x7b..0x7f with no glyph.
+    6, 6, 5, 5, 5, 6, 6, 8, 6, 6, 5, 0, 0, 0, 0, 0,
+]);
+
+/// Rebuilds [`PROPORTIONAL_ADVANCE_TABLE`] from a loaded `PROPORT.PCS`
+/// glyph directory using the observation-derived rule
+/// (`cleak/u5-spec#70`): a printable glyph advances by its stored ink width
+/// plus one separator column, and the space advances
+/// [`PCS_SPACE_ADVANCE`].
+pub fn proportional_advance_table_from_font(font: &ProportionalFont) -> ProportionalWidthTable {
+    let mut widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
+    for (slot, glyph) in font.glyphs.iter().enumerate() {
+        let Some(code) = u8::try_from(slot)
+            .ok()
+            .and_then(|slot| font.first_code.checked_add(slot))
+        else {
+            break;
+        };
+        if usize::from(code) >= PROPORTIONAL_WIDTH_TABLE_LEN {
+            break;
+        }
+        widths[usize::from(code)] = if code == b' ' {
+            PCS_SPACE_ADVANCE
+        } else {
+            glyph.advance_width.saturating_add(PCS_GLYPH_ADVANCE_GAP)
+        };
+    }
+    ProportionalWidthTable::new(widths)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
