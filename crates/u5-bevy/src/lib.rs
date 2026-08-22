@@ -1086,7 +1086,8 @@ pub fn visual_route_suite(
     push_visual_key_route_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
 
     for report in &reports {
-        if report.nonblack_pixels == 0 {
+        if report.nonblack_pixels == 0 && !visual_route_frame_is_intentionally_black(&report.label)
+        {
             return Err(io::Error::other(format!(
                 "visual route suite `{}` produced an all-black PNG",
                 report.label
@@ -5375,9 +5376,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-endgame-box-full-victory-cinematic",
             frame_kind: "visual route endgame frame",
             options: PlayOptions::default(),
-            script: &[
-                "Y", "Y", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
-            ],
+            // Long enough to walk the tableau exit, the `§7.1` fade to
+            // black, and the first `END.DAT` windows behind it.
+            script: &ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT,
             configure: Some(seed_visual_route_endgame_victory),
         },
         VisualRouteSuiteCase {
@@ -7537,6 +7538,16 @@ fn seed_visual_route_underworld_word_of_power(state: &mut PlayState) {
     seed_visual_route_word_of_power(state, "VERAMOCOR");
 }
 
+/// `Y`, `Y`, then keystrokes enough to page the victory rite, the
+/// tableau exit, the `endgame.md §7.1` fade to black and the first
+/// `END.DAT` narrative windows.
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 23] = {
+    let mut script = [""; 23];
+    script[0] = "Y";
+    script[1] = "Y";
+    script
+};
+
 /// One `endgame:frame` per owed entry-presentation frame: one
 /// restoration beat for the seeded dead party member plus the 22
 /// single-cell steps that carry six party actors from (5,9) to the
@@ -7733,6 +7744,19 @@ fn visual_route_step_label(route_label: &str, step: usize, command: &str) -> Str
     format!("{route_label}-{step:02}-{command_label}")
 }
 
+/// `endgame.md §7.1` (`cleak/u5-spec#53`): the fade-to-black beat is
+/// *supposed* to leave a completely black screen, so the suite's
+/// all-black guard must not treat it as a rendering failure. This is
+/// the only frame in the suite that is legitimately empty.
+fn visual_route_frame_is_intentionally_black(label: &str) -> bool {
+    label == ENDGAME_FADE_TO_BLACK_FRAME_LABEL
+}
+
+/// Step at which `route-endgame-box-full-victory-cinematic` reaches the
+/// `§7.1` fade. Pinned so a change in the beat ordering fails the suite
+/// rather than silently moving the black frame somewhere else.
+const ENDGAME_FADE_TO_BLACK_FRAME_LABEL: &str = "route-endgame-box-full-victory-cinematic-19-empty";
+
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // `endgame.md §4`: the restoration beat is a held frame - a short
     // blocking wait - and several walk-in steps move actors that are
@@ -7741,7 +7765,7 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // is pixel-identical to the tableau's authored floor tile. Those
     // steps therefore produce byte-identical frames today.
     (route_label == "route-endgame-tableau-walk-in")
-        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=18).contains(&step))
+        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=23).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
         || (route_label == "route-castle-light-decay-route" && (1..=2).contains(&step))
         || (route_label.starts_with("route-shop-arms-")
@@ -12214,7 +12238,7 @@ fn render_endgame_framebuffer(
     let system = endgame_text_window_system(&message, show_tableau);
     let mut rgba = render_text_window_rgba(&system, ctx.ibm)
         .unwrap_or_else(|err| panic!("visual endgame text window render failed: {err}"));
-    apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
+    apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
 
     if show_tableau {
         let viewport = render_endgame_tableau_viewport(state, atlas)
@@ -12732,7 +12756,7 @@ fn render_status_framebuffer(
     }
     let mut rgba = render_text_window_rgba(&system, font)
         .unwrap_or_else(|err| panic!("visual status text window render failed: {err}"));
-    apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
+    apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
     rgba
 }
 
@@ -12811,7 +12835,7 @@ fn render_integrated_status_framebuffer(
     }
     let mut rgba = render_text_window_rgba(&system, ctx.ibm)
         .unwrap_or_else(|err| panic!("visual integrated text window render failed: {err}"));
-    apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
+    apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
     // The live input line always carries a cursor in the cell after its
     // ribbon cap, and that cursor is a four-frame barber pole rather
     // than a blink: every capture of the shipped build shows one of
@@ -12848,11 +12872,29 @@ fn visual_display_message(state: &PlayState) -> String {
     }
 }
 
-fn apply_endgame_certificate_rect_operation_mask(rgba: &mut [u8], state: &PlayState) {
+/// `endgame.md §7.1` fade to black (`cleak/u5-spec#53`).
+///
+/// The published beat is: fill the hidden surface with palette index 0,
+/// then dissolve that rectangle from the hidden surface to the visible
+/// page in the driver's pseudo-random per-pixel order. Both calls are
+/// blocking and self-paced - one call each, no tick pacing, no input -
+/// so a completed beat is exactly "the rectangle now reads as the
+/// filled colour on the visible page".
+///
+/// This compositor renders whole frames rather than driving the
+/// front/back surfaces, so it models the completed beat by filling the
+/// rectangle. That is not an approximation of the end state: a dissolve
+/// visits every pixel of the rectangle exactly once, so a dissolve from
+/// a uniformly filled source is pixel-identical to the fill, whatever
+/// the visible page held before - asserted against the real driver
+/// primitive in `endgame_fade_to_black_matches_the_driver_dissolve`.
+/// Only the mid-transfer scatter is unmodelled, and #53 publishes no
+/// wall-clock length for it.
+fn apply_endgame_fade_to_black_mask(rgba: &mut [u8], state: &PlayState) {
     let Some(rect) = state
         .endgame
         .as_ref()
-        .and_then(|endgame| endgame.cinematic.certificate_rect_operation)
+        .and_then(|endgame| endgame.cinematic.fade_to_black_rect)
     else {
         return;
     };
@@ -13015,16 +13057,11 @@ fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut 
 }
 
 fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
-    // `endgame.md §4`/`§7`: the dead-member restoration beats and the
-    // one-cell-per-call tableau walk-in are frame-driven presentation,
-    // not keypress-driven, so the wait frame pumps them first.
-    if state.advance_endgame_entry_presentation() {
-        return true;
-    }
-    state
-        .endgame
-        .as_mut()
-        .is_some_and(|endgame| endgame.advance_cinematic_frame_operation())
+    // `endgame.md §4`/`§7`/`§7.1`: the dead-member restoration beats,
+    // the one-cell-per-call tableau walk-in and the full-screen fade to
+    // black are all display-driven, not keypress-driven, so the wait
+    // frame is what pumps them.
+    state.advance_endgame_display_frame()
 }
 
 fn should_escape_quit_visual(state: &PlayState) -> bool {
@@ -14544,34 +14581,56 @@ mod tests {
     }
 
     #[test]
-    fn intro_rect_dissolve_order_is_scattered_not_row_or_column_major() {
-        // The published contract calls out the order explicitly: not
-        // row-major, not column-major, not a spiral — it reads as
-        // scattered single-pixel updates.
+    fn intro_rect_dissolve_order_satisfies_the_published_visit_contract() {
+        // `systems/display-driver-abi.md §9.6` publishes four visible
+        // bullets for dispatch `0x66`. The original drives the order
+        // from a Galois-style LFSR whose tap inventory is indexed by
+        // the rectangle's pixel count, but §9.6 states outright that
+        // "an engine that does not need exact frame-by-frame parity
+        // may substitute any other order that satisfies the four
+        // bullet points above" — so this test pins the four bullets
+        // and stays agnostic about which generator supplies them.
+        let (width, height) = (32usize, 16usize);
         let rect = u5_runtime::DisplayPixelRect {
             x0: 0,
             y0: 0,
-            x1: 31,
-            y1: 15,
+            x1: width - 1,
+            y1: height - 1,
         };
-        let mut state = u5_runtime::EgaDissolveState::new(rect);
-        let mut visited = Vec::new();
-        while let Some(pixel) = state.next_pixel() {
-            visited.push(pixel);
-        }
-        assert_eq!(visited.len(), 32 * 16);
+        let walk = || {
+            let mut state = u5_runtime::EgaDissolveState::new(rect);
+            let mut visited = Vec::new();
+            while let Some(pixel) = state.next_pixel() {
+                visited.push(pixel);
+            }
+            visited
+        };
+        let visited = walk();
+
+        // Bullet 1: every pixel inside the inclusive rectangle is
+        // visited exactly once.
+        assert_eq!(visited.len(), width * height);
         let mut sorted = visited.clone();
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(sorted.len(), visited.len(), "every pixel exactly once");
+        assert_eq!(sorted.first(), Some(&(0, 0)));
+        assert_eq!(sorted.last(), Some(&(width - 1, height - 1)));
 
-        let row_major: Vec<(usize, usize)> =
-            (0..16).flat_map(|y| (0..32).map(move |x| (x, y))).collect();
-        let column_major: Vec<(usize, usize)> =
-            (0..32).flat_map(|x| (0..16).map(move |y| (x, y))).collect();
+        // Bullet 3: deterministic and reproducible across calls with
+        // the same rectangle dimensions.
+        assert_eq!(walk(), visited, "visit order must be reproducible");
+
+        // Bullet 4: not row-major, not column-major, not a clean
+        // spiral; it reads as scattered single-pixel updates.
+        let row_major: Vec<(usize, usize)> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .collect();
+        let column_major: Vec<(usize, usize)> = (0..width)
+            .flat_map(|x| (0..height).map(move |y| (x, y)))
+            .collect();
         assert_ne!(visited, row_major);
         assert_ne!(visited, column_major);
-        // Consecutive visits jump around rather than stepping by one.
         let adjacent = visited
             .windows(2)
             .filter(|pair| pair[0].0.abs_diff(pair[1].0) + pair[0].1.abs_diff(pair[1].1) == 1)
@@ -14581,6 +14640,11 @@ mod tests {
             "dissolve order should be scattered, {adjacent} adjacent steps of {}",
             visited.len()
         );
+
+        // Bullet 2 is covered by
+        // `intro_start_menu_reveal_is_one_blocking_dissolve_of_the_published_rect`,
+        // which asserts the destination matches the source across the
+        // whole rectangle once the transfer returns.
     }
 
     #[test]
@@ -16220,7 +16284,10 @@ mod tests {
     }
 
     #[test]
-    fn visual_wait_frame_consumes_endgame_certificate_rect_operation_before_certificate() {
+    fn visual_wait_frame_runs_the_endgame_fade_to_black_before_the_first_window() {
+        // `endgame.md §7.1` / `cleak/u5-spec#53`: the full-screen beat
+        // sits between the throne tableau and window one, and it is
+        // display-driven - the wait frame runs it, no keystroke.
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.endgame = Some(u5_runtime::EndgameState::terminal(
             true,
@@ -16234,19 +16301,17 @@ mod tests {
                 u5_runtime::GameClock::with_date(141, 5, 6, 12, 0).unwrap(),
             ),
             None,
-            None,
+            Some(bevy_test_end_narrative()),
         ));
         let endgame = state.endgame.as_mut().unwrap();
-        for _ in 0..(1 + u5_runtime::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT) {
-            endgame.cinematic.advance();
-        }
+        endgame.cinematic.advance();
         assert_eq!(
             endgame.cinematic.step,
-            u5_runtime::endgame_cinematic::EndgameCinematicStep::CertificateRectOperation
+            u5_runtime::endgame_cinematic::EndgameCinematicStep::FadeToBlack
         );
         assert_eq!(
-            endgame.cinematic.certificate_rect_operation,
-            Some(u5_runtime::endgame_cinematic::ENDGAME_CERTIFICATE_RECT_OPERATION)
+            endgame.cinematic.fade_to_black_rect,
+            Some(u5_runtime::endgame_cinematic::ENDGAME_FADE_TO_BLACK_RECT)
         );
 
         let mut prompt_cursor_visible = true;
@@ -16258,14 +16323,66 @@ mod tests {
         assert!(!prompt_cursor_visible);
         assert_eq!(
             state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
-            Some(u5_runtime::endgame_cinematic::EndgameCinematicStep::Certificate)
+            Some(u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0))
         );
         assert_eq!(
             state
                 .endgame
                 .as_ref()
-                .and_then(|endgame| endgame.cinematic.certificate_rect_operation),
+                .and_then(|endgame| endgame.cinematic.fade_to_black_rect),
             None
+        );
+        // Completing the fade publishes window one; the beat consumes
+        // no input, so nothing else can publish it.
+        assert_eq!(state.message, "Window one");
+    }
+
+    #[test]
+    fn endgame_fade_to_black_matches_the_driver_dissolve() {
+        // The compositor models `§7.1`'s completed beat with a flat
+        // fill. Anchor that against the real driver primitive: fill the
+        // hidden surface, dissolve it over arbitrary visible content,
+        // and every pixel of the rectangle must equal the fill colour.
+        let mut surface = u5_runtime::display_driver::EgaDisplaySurface::new();
+        let whole = u5_runtime::display_driver::normalize_clamp_pixel_rect(0, 0, 319, 199).unwrap();
+        surface.set_render_target(u5_runtime::display_driver::DisplayRenderTarget::Front);
+        surface.fill_rect(whole, 12);
+
+        u5_runtime::run_endgame_fade_to_black(&mut surface).unwrap();
+
+        assert!(
+            surface
+                .front_pixels()
+                .iter()
+                .all(|pixel| *pixel == u5_runtime::ENDGAME_FADE_TO_BLACK_COLOR),
+            "the driver beat and the compositor's fill must agree on the end state"
+        );
+
+        // And the mask the compositor applies produces the same thing
+        // in RGBA terms: the whole frame reads black.
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.endgame = Some(u5_runtime::EndgameState::terminal(
+            true,
+            true,
+            true,
+            u5_runtime::endgame_certificate_fields(
+                "AVATAR",
+                u5_runtime::GameClock::with_date(141, 5, 6, 12, 0).unwrap(),
+            ),
+            u5_runtime::endgame_final_report(
+                u5_runtime::GameClock::with_date(141, 5, 6, 12, 0).unwrap(),
+            ),
+            None,
+            Some(bevy_test_end_narrative()),
+        ));
+        state.endgame.as_mut().unwrap().cinematic.advance();
+        let mut rgba =
+            vec![0xffu8; VISUAL_PLAY_FRAME_WIDTH as usize * VISUAL_PLAY_FRAME_HEIGHT as usize * 4];
+        apply_endgame_fade_to_black_mask(&mut rgba, &state);
+        assert!(
+            rgba.chunks_exact(4)
+                .all(|pixel| pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0),
+            "the fade-to-black mask must blank the whole frame"
         );
     }
 
@@ -17565,17 +17682,24 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        // Integration dropped one R-Ready step (VISUAL_KEY_READY_STEPS);
-        // route-endgame-tableau-walk-in adds 24 (endgame.md §4 walk-in).
-        assert_eq!(reports.len(), 1803);
+        // route-endgame-tableau-walk-in adds 24 (endgame.md §4 walk-in)
+        // and the full-victory cinematic grew by 5 to reach §7.1's fade.
+        assert_eq!(reports.len(), 1808);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
             assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
-            assert!(report.nonblack_pixels > 0);
+            if report.nonblack_pixels == 0 {
+                // `§7.1`: the fade beat blanks the screen on purpose.
+                assert!(
+                    visual_route_frame_is_intentionally_black(&report.label),
+                    "unexpected all-black route frame `{}`",
+                    report.label
+                );
+            }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1803"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1808"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));

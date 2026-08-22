@@ -452,6 +452,22 @@ impl EgaDisplaySurface {
         copy_rect_between_buffers(&self.back_pixels, &mut self.front_pixels, rect);
     }
 
+    /// Copy one pixel from the hidden surface to the visible page.
+    ///
+    /// `display-driver-abi.md §9.6`: the rectangle dissolve always reads the
+    /// hidden surface and always writes the visible page, whatever the
+    /// render-target selector says. This is the per-pixel primitive
+    /// [`crate::RectangleDissolve`] drives, so callers share one visit order
+    /// instead of each carrying a transfer of their own.
+    pub fn copy_back_pixel_to_front(&mut self, x: usize, y: usize) {
+        assert!(
+            x < DISPLAY_SURFACE_WIDTH && y < DISPLAY_SURFACE_HEIGHT,
+            "dissolve pixel ({x}, {y}) exceeds {DISPLAY_SURFACE_WIDTH}x{DISPLAY_SURFACE_HEIGHT}"
+        );
+        let index = y * DISPLAY_SURFACE_WIDTH + x;
+        self.front_pixels[index] = self.back_pixels[index];
+    }
+
     pub fn dissolve_back_to_front_rect(&mut self, rect: DisplayPixelRect) {
         let mut state = EgaDissolveState::new(rect);
         while self.dissolve_back_to_front_step(&mut state, usize::MAX) != 0 {}

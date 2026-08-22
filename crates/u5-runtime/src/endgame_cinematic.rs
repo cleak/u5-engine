@@ -24,9 +24,10 @@ pub enum EndgameCinematicStep {
     /// One of the six fixed `END.DAT` narrative windows is on screen,
     /// indexed `0..6`. Pressing a key advances to the next.
     NarrativeWindow(u8),
-    /// Late full-screen rectangle operation immediately before the
-    /// certificate setup. This is not an intro-style timed column wipe.
-    CertificateRectOperation,
+    /// `endgame.md §7.1` full-screen fade to black, entering the final
+    /// narrative presentation. Not an intro-style timed column wipe and
+    /// not a no-op: see [`ENDGAME_FADE_TO_BLACK_RECT`].
+    FadeToBlack,
     /// Certificate body scroll is on screen (`endgame.md §9`).
     Certificate,
     /// `endgame.md §9`: after the certificate body the scroll clears or
@@ -39,11 +40,35 @@ pub enum EndgameCinematicStep {
 
 /// Total number of `END.DAT` narrative windows (per `endgame.md` §8).
 pub const ENDGAME_NARRATIVE_WINDOW_COUNT: u8 = 6;
-/// `endgame.md §7` / `§8`: traced late orb/certificate path rectangle
-/// operation. This is ordered before certificate setup and is not
-/// evidence for intro-style page wipes on the ordinary `END.DAT`
-/// narrative windows.
-pub const ENDGAME_CERTIFICATE_RECT_OPERATION: (u16, u16, u16, u16) = (0, 0, 319, 199);
+/// `endgame.md §7.1` full-screen fade to black, inclusive
+/// `(0, 0)..(319, 199)`.
+///
+/// `cleak/u5-spec#53` retracted the earlier reading that this rectangle
+/// "produces no visible change at all" and could be omitted. It is a
+/// two-part beat and both halves are load-bearing:
+///
+/// 1. the victory sequence points the render target at the hidden
+///    surface, sets the colour to palette index 0, releases the active
+///    graphics asset segment, fills this rectangle, and points back at
+///    the visible page — invisible in isolation, which is what made the
+///    earlier trace mis-read it;
+/// 2. control passes straight into the final narrative presentation
+///    helper, which — after acquiring its three presentation resources
+///    and before drawing anything else, on an unconditional
+///    straight-line path — dissolves this same rectangle from the
+///    hidden surface to the visible page.
+///
+/// Net player-visible effect: the whole screen dissolves to black, in
+/// the driver's pseudo-random per-pixel order, **before the first
+/// `END.DAT` window**. Skipping the fill would dissolve stale offscreen
+/// content onto the screen instead.
+///
+/// Both calls are blocking and self-paced: no tick pacing, no title
+/// tick, and no keyboard poll anywhere in the beat, so it cannot be
+/// interrupted. `§8` records the sequencing consequence — this happens
+/// once, before window one, and the six windows themselves have no
+/// page-in rectangle of their own.
+pub const ENDGAME_FADE_TO_BLACK_RECT: (u16, u16, u16, u16) = (0, 0, 319, 199);
 
 /// Run state for the cinematic.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -55,8 +80,9 @@ pub struct EndgameCinematic {
     /// Number of keystrokes consumed since the cinematic began. Useful
     /// for testing and for the UI's page indicator.
     pub keystrokes: u32,
-    /// Pending one-frame rectangle operation before certificate setup.
-    pub certificate_rect_operation: Option<(u16, u16, u16, u16)>,
+    /// Pending `§7.1` full-screen fade-to-black beat, entering the
+    /// final narrative presentation.
+    pub fade_to_black_rect: Option<(u16, u16, u16, u16)>,
 }
 
 impl EndgameCinematic {
@@ -76,7 +102,7 @@ impl EndgameCinematic {
             },
             rite_message_count,
             keystrokes: 0,
-            certificate_rect_operation: None,
+            fade_to_black_rect: None,
         }
     }
 
@@ -84,7 +110,7 @@ impl EndgameCinematic {
     /// already `Finished` is a no-op.
     pub fn advance(&mut self) -> EndgameCinematicStep {
         self.keystrokes = self.keystrokes.saturating_add(1);
-        self.certificate_rect_operation = None;
+        self.fade_to_black_rect = None;
         self.step = match self.step {
             EndgameCinematicStep::Inactive | EndgameCinematicStep::Finished => self.step,
             EndgameCinematicStep::RiteMessage(idx) => {
@@ -95,31 +121,46 @@ impl EndgameCinematic {
                     EndgameCinematicStep::ThroneTableau
                 }
             }
-            EndgameCinematicStep::ThroneTableau => EndgameCinematicStep::NarrativeWindow(0),
+            // `§7.1` / `§8`: the fade to black runs once, on the way
+            // out of the throne tableau and into the final narrative
+            // presentation - before window one, not after window six.
+            EndgameCinematicStep::ThroneTableau => {
+                self.fade_to_black_rect = Some(ENDGAME_FADE_TO_BLACK_RECT);
+                EndgameCinematicStep::FadeToBlack
+            }
+            // `§7.1`: the fade samples no input, so a keystroke does
+            // not carry it - only `advance_fade_to_black` does. A key
+            // arriving mid-beat stays queued for the window that
+            // follows.
+            EndgameCinematicStep::FadeToBlack => self.step,
             EndgameCinematicStep::NarrativeWindow(idx) => {
                 let next = idx.saturating_add(1);
                 if next >= ENDGAME_NARRATIVE_WINDOW_COUNT {
-                    self.certificate_rect_operation = Some(ENDGAME_CERTIFICATE_RECT_OPERATION);
-                    EndgameCinematicStep::CertificateRectOperation
+                    // `§8`: the windows have no page-in rectangle of
+                    // their own, and none is issued on the way to the
+                    // certificate either.
+                    EndgameCinematicStep::Certificate
                 } else {
                     EndgameCinematicStep::NarrativeWindow(next)
                 }
             }
-            EndgameCinematicStep::CertificateRectOperation => EndgameCinematicStep::Certificate,
             EndgameCinematicStep::Certificate => EndgameCinematicStep::FinalReport,
             EndgameCinematicStep::FinalReport => EndgameCinematicStep::Finished,
         };
         self.step
     }
 
-    pub fn advance_certificate_rect_operation(&mut self) -> bool {
-        if !matches!(self.step, EndgameCinematicStep::CertificateRectOperation)
-            || self.certificate_rect_operation.is_none()
+    /// Run the `§7.1` fade-to-black beat. It consumes no keystroke -
+    /// the beat samples no input at all - so the caller drives it from
+    /// the display pump, and both blocking halves complete within it.
+    pub fn advance_fade_to_black(&mut self) -> bool {
+        if !matches!(self.step, EndgameCinematicStep::FadeToBlack)
+            || self.fade_to_black_rect.is_none()
         {
             return false;
         }
-        self.certificate_rect_operation = None;
-        self.step = EndgameCinematicStep::Certificate;
+        self.fade_to_black_rect = None;
+        self.step = EndgameCinematicStep::NarrativeWindow(0);
         true
     }
 
@@ -144,7 +185,7 @@ impl EndgameCinematic {
             EndgameCinematicStep::NarrativeWindow(4) => "Blackthorn judgment (2)",
             EndgameCinematicStep::NarrativeWindow(5) => "Blackthorn judgment (3)",
             EndgameCinematicStep::NarrativeWindow(_) => "Narrative window",
-            EndgameCinematicStep::CertificateRectOperation => "Certificate transition",
+            EndgameCinematicStep::FadeToBlack => "Fade to black",
             EndgameCinematicStep::Certificate => "Quest certificate",
             EndgameCinematicStep::FinalReport => "Final report panel",
             EndgameCinematicStep::Finished => "Cinematic finished",
@@ -156,75 +197,92 @@ impl EndgameCinematic {
 mod tests {
     use super::*;
 
+    /// `§7.1`: leaving the throne tableau always runs the fade to black
+    /// first, and it clears without a keystroke.
+    fn started_at_first_narrative_window() -> EndgameCinematic {
+        let mut cin = EndgameCinematic::start();
+        assert_eq!(cin.advance(), EndgameCinematicStep::FadeToBlack);
+        assert_eq!(cin.fade_to_black_rect, Some(ENDGAME_FADE_TO_BLACK_RECT));
+        let keystrokes = cin.keystrokes;
+        assert!(cin.advance_fade_to_black());
+        assert_eq!(cin.step, EndgameCinematicStep::NarrativeWindow(0));
+        assert_eq!(cin.fade_to_black_rect, None);
+        assert_eq!(cin.keystrokes, keystrokes, "the fade consumes no input");
+        cin
+    }
+
     #[test]
     fn start_initialises_to_throne_tableau_with_zero_keystrokes() {
         let cin = EndgameCinematic::start();
         assert_eq!(cin.step, EndgameCinematicStep::ThroneTableau);
         assert_eq!(cin.keystrokes, 0);
-        assert_eq!(cin.certificate_rect_operation, None);
+        assert_eq!(cin.fade_to_black_rect, None);
         assert!(!cin.is_finished());
     }
 
     #[test]
-    fn advance_walks_all_six_narrative_windows_in_order() {
-        let mut cin = EndgameCinematic::start();
-        assert_eq!(cin.advance(), EndgameCinematicStep::NarrativeWindow(0));
-        assert_eq!(cin.certificate_rect_operation, None);
+    fn the_fade_to_black_runs_once_before_the_first_narrative_window() {
+        // `cleak/u5-spec#53` retraction: the full-screen rectangle is
+        // NOT after window six, and it is NOT omittable. It is the fade
+        // to black entering the final narrative presentation.
+        let mut cin = started_at_first_narrative_window();
         for expected in 1..ENDGAME_NARRATIVE_WINDOW_COUNT {
             assert_eq!(
                 cin.advance(),
                 EndgameCinematicStep::NarrativeWindow(expected)
             );
-            assert_eq!(cin.certificate_rect_operation, None);
+            assert_eq!(
+                cin.fade_to_black_rect, None,
+                "`§8`: the six windows have no page-in rectangle of their own"
+            );
+        }
+        // Window six goes straight to the certificate: no second
+        // full-screen operation on the way out.
+        assert_eq!(cin.advance(), EndgameCinematicStep::Certificate);
+        assert_eq!(cin.fade_to_black_rect, None);
+    }
+
+    #[test]
+    fn the_fade_to_black_covers_the_whole_inclusive_surface() {
+        assert_eq!(ENDGAME_FADE_TO_BLACK_RECT, (0, 0, 319, 199));
+        let mut cin = EndgameCinematic::start();
+        assert_eq!(cin.advance(), EndgameCinematicStep::FadeToBlack);
+        assert_eq!(cin.fade_to_black_rect, Some(ENDGAME_FADE_TO_BLACK_RECT));
+        assert!(cin.advance_fade_to_black());
+        assert!(!cin.advance_fade_to_black());
+    }
+
+    #[test]
+    fn advance_walks_all_six_narrative_windows_in_order() {
+        let mut cin = started_at_first_narrative_window();
+        for expected in 1..ENDGAME_NARRATIVE_WINDOW_COUNT {
+            assert_eq!(
+                cin.advance(),
+                EndgameCinematicStep::NarrativeWindow(expected)
+            );
+            assert_eq!(cin.fade_to_black_rect, None);
         }
     }
 
     #[test]
     fn ordinary_narrative_windows_do_not_install_intro_style_page_wipes() {
-        let mut cin = EndgameCinematic::start();
-        for _ in 0..ENDGAME_NARRATIVE_WINDOW_COUNT {
+        let mut cin = started_at_first_narrative_window();
+        for _ in 1..ENDGAME_NARRATIVE_WINDOW_COUNT {
             assert!(matches!(
                 cin.advance(),
                 EndgameCinematicStep::NarrativeWindow(_)
             ));
-            assert_eq!(cin.certificate_rect_operation, None);
+            assert_eq!(cin.fade_to_black_rect, None);
         }
-    }
-
-    #[test]
-    fn advance_transitions_to_certificate_rect_operation_after_six_windows() {
-        let mut cin = EndgameCinematic::start();
-        for _ in 0..(1 + ENDGAME_NARRATIVE_WINDOW_COUNT) {
-            cin.advance();
-        }
-        assert_eq!(cin.step, EndgameCinematicStep::CertificateRectOperation);
-        assert_eq!(
-            cin.certificate_rect_operation,
-            Some(ENDGAME_CERTIFICATE_RECT_OPERATION)
-        );
-    }
-
-    #[test]
-    fn certificate_rect_operation_advances_without_keystroke() {
-        let mut cin = EndgameCinematic::start();
-        for _ in 0..(1 + ENDGAME_NARRATIVE_WINDOW_COUNT) {
-            cin.advance();
-        }
-        let keystrokes = cin.keystrokes;
-        assert!(cin.advance_certificate_rect_operation());
-        assert_eq!(cin.step, EndgameCinematicStep::Certificate);
-        assert_eq!(cin.certificate_rect_operation, None);
-        assert_eq!(cin.keystrokes, keystrokes);
-        assert!(!cin.advance_certificate_rect_operation());
     }
 
     #[test]
     fn certificate_then_final_report_then_finished() {
-        let mut cin = EndgameCinematic::start();
-        for _ in 0..(1 + ENDGAME_NARRATIVE_WINDOW_COUNT) {
+        let mut cin = started_at_first_narrative_window();
+        for _ in 1..ENDGAME_NARRATIVE_WINDOW_COUNT {
             cin.advance();
         }
-        assert!(cin.advance_certificate_rect_operation());
+        assert_eq!(cin.advance(), EndgameCinematicStep::Certificate);
         assert_eq!(cin.advance(), EndgameCinematicStep::FinalReport);
         assert_eq!(cin.advance(), EndgameCinematicStep::Finished);
         assert!(cin.is_finished());
@@ -235,6 +293,7 @@ mod tests {
         let mut cin = EndgameCinematic::start();
         for _ in 0..16 {
             cin.advance();
+            cin.advance_fade_to_black();
         }
         let before = cin.step;
         assert_eq!(cin.advance(), before);
@@ -253,16 +312,28 @@ mod tests {
         let mut cin = EndgameCinematic::start();
         assert_eq!(cin.banner_label(), "Throne-room tableau");
         cin.advance();
+        assert_eq!(cin.banner_label(), "Fade to black");
+        assert!(cin.advance_fade_to_black());
         assert_eq!(cin.banner_label(), "Return-home arc (1)");
-        for _ in 0..ENDGAME_NARRATIVE_WINDOW_COUNT {
+        for _ in 1..ENDGAME_NARRATIVE_WINDOW_COUNT {
             cin.advance();
         }
-        assert_eq!(cin.banner_label(), "Certificate transition");
-        assert!(cin.advance_certificate_rect_operation());
+        cin.advance();
         assert_eq!(cin.banner_label(), "Quest certificate");
         cin.advance();
         assert_eq!(cin.banner_label(), "Final report panel");
         cin.advance();
         assert_eq!(cin.banner_label(), "Cinematic finished");
+    }
+
+    #[test]
+    fn rite_messages_page_before_the_tableau_and_the_fade() {
+        let mut cin = EndgameCinematic::start_with_rite_messages(3);
+        assert_eq!(cin.step, EndgameCinematicStep::RiteMessage(0));
+        assert_eq!(cin.advance(), EndgameCinematicStep::RiteMessage(1));
+        assert_eq!(cin.advance(), EndgameCinematicStep::RiteMessage(2));
+        assert_eq!(cin.advance(), EndgameCinematicStep::ThroneTableau);
+        assert_eq!(cin.fade_to_black_rect, None);
+        assert_eq!(cin.advance(), EndgameCinematicStep::FadeToBlack);
     }
 }

@@ -1071,7 +1071,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &[
                 "Y", "Y", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
                 "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
-                "empty", "empty", "empty", "empty", "empty",
+                "empty", "empty", "empty", "empty", "empty", "empty",
             ],
             expected: RouteSmokeExpectation::Endgame(EndgameOutcome::Victory),
             min_turn: 0,

@@ -341,7 +341,7 @@ impl EndgameState {
     /// Advance a frame-owned cinematic display operation that does not
     /// consume a keypress. Returns `true` when an operation was pending.
     pub fn advance_cinematic_frame_operation(&mut self) -> bool {
-        self.cinematic.advance_certificate_rect_operation()
+        self.cinematic.advance_fade_to_black()
     }
 
     /// `true` when the post-victory cinematic has presented every
@@ -428,7 +428,7 @@ impl EndgameState {
                 }),
             Step::Certificate => require_published_endgame_certificate_prose(),
             Step::FinalReport | Step::Finished => require_published_endgame_final_report_prose(),
-            Step::Inactive | Step::ThroneTableau | Step::CertificateRectOperation => String::new(),
+            Step::Inactive | Step::ThroneTableau | Step::FadeToBlack => String::new(),
         }
     }
 }
@@ -456,6 +456,65 @@ pub fn require_published_endgame_final_report_prose() -> ! {
         "endgame final report panel requires the published source-free transcription of its elapsed-time wording and the closing Origin report line; composing them in the engine is a forbidden fallback; see cleak/u5-spec#82"
     )
 }
+
+/// `endgame.md §7.1` full-screen fade to black, run against the real
+/// display surface (`cleak/u5-spec#53`).
+///
+/// This is the published caller-side idiom, in order:
+///
+/// 1. point the render target at the hidden surface;
+/// 2. fill the inclusive rectangle with palette index 0 (the fill is
+///    render-target aware and really does fill the hidden surface -
+///    #53 withdrew the earlier "front-buffer only" reading);
+/// 3. point the render target back at the visible page;
+/// 4. dissolve the same rectangle from the hidden surface to the
+///    visible page.
+///
+/// Filling first is what makes this a dissolve *out* to a flat colour;
+/// composing first would make it a dissolve *in* to new art. Skipping
+/// step 2 would dissolve stale offscreen content onto the screen.
+///
+/// Both driver calls are blocking and self-paced. Nothing here samples
+/// input or runs a title tick, so the beat cannot be interrupted.
+pub fn run_endgame_fade_to_black(
+    surface: &mut crate::display_driver::EgaDisplaySurface,
+) -> std::io::Result<()> {
+    let bounds = crate::endgame_cinematic::ENDGAME_FADE_TO_BLACK_RECT;
+    let (x0, y0, x1, y1) = bounds;
+    let rect = crate::display_driver::normalize_clamp_pixel_rect(
+        i32::from(x0),
+        i32::from(y0),
+        i32::from(x1),
+        i32::from(y1),
+    )
+    .expect("endgame fade-to-black rectangle is the whole surface");
+
+    surface.set_render_target(crate::display_driver::DisplayRenderTarget::Back);
+    surface.fill_back_rect(rect, ENDGAME_FADE_TO_BLACK_COLOR);
+    surface.release_back_buffer();
+    surface.set_render_target(crate::display_driver::DisplayRenderTarget::Front);
+
+    // The dissolve itself is the shared driver primitive
+    // (`display-driver-abi.md §9.6`), not a transfer of the endgame's own:
+    // this is one of the six published call sites, and it has to visit
+    // pixels in the same order the intro's dissolves do.
+    crate::RectangleDissolve::new(bounds)?
+        .run_to_completion(|x, y| surface.copy_back_pixel_to_front(usize::from(x), usize::from(y)));
+    Ok(())
+}
+
+/// `display-driver-abi.md §9.6`: by the time the endgame fade runs, the abort
+/// gate has long been cleared - the victory rite drew `ENDMSG.DAT` text
+/// through the driver's fixed-cell glyph entry - so this dissolve is silent,
+/// cannot be interrupted, and consumes no keystroke.
+pub fn endgame_fade_to_black_abort_gate() -> crate::DissolveAbortGate {
+    let mut gate = crate::DissolveAbortGate::on_driver_load();
+    gate.note_fixed_cell_glyph_drawn();
+    gate
+}
+
+/// `endgame.md §7.1`: the fade fills with palette index 0.
+pub const ENDGAME_FADE_TO_BLACK_COLOR: u8 = 0;
 
 /// `endgame.md §4`: returns `true` when a party slot needs the
 /// dead-member restoration pass before the throne-room tableau. The
@@ -913,6 +972,32 @@ impl PlayState {
             .expect("endgame state was just installed")
             .first_prompt_text(&self.party_leader_name());
         MoveOutcome::EndgameEntered
+    }
+
+    /// Display-driven endgame pump: the beats that advance without a
+    /// keystroke. Returns `true` while a frame is still owed.
+    ///
+    /// `endgame.md §4`/`§7` entry presentation first (restoration beats
+    /// and the one-cell tableau walk-in), then `§7.1`'s fade to black.
+    /// The fade lands immediately before the first `END.DAT` window, so
+    /// finishing it publishes that window's text here rather than
+    /// waiting for the next keystroke - the beat samples no input.
+    pub fn advance_endgame_display_frame(&mut self) -> bool {
+        if self.advance_endgame_entry_presentation() {
+            return true;
+        }
+        let advanced = self
+            .endgame
+            .as_mut()
+            .is_some_and(|endgame| endgame.advance_cinematic_frame_operation());
+        if advanced {
+            self.message = self
+                .endgame
+                .as_ref()
+                .map(|endgame| endgame.current_cinematic_text())
+                .unwrap_or_default();
+        }
+        advanced
     }
 
     /// `endgame.md §4`/`§7` entry presentation pump. Returns `true`
@@ -1392,6 +1477,19 @@ impl PlayState {
         // arrives while the walk-in is still being rendered, settle it
         // first so the branch scripts start from the published targets.
         self.finish_endgame_entry_presentation();
+        // `§7.1`: the fade to black is a beat the player watches, and
+        // it consumes no input. If a caller that only drives keystrokes
+        // reaches here with the fade still owed, run it and let this
+        // step present its result - the following `END.DAT` window -
+        // rather than advancing past that window.
+        if self
+            .endgame
+            .as_ref()
+            .is_some_and(|endgame| endgame.cinematic.fade_to_black_rect.is_some())
+        {
+            self.advance_endgame_display_frame();
+            return MoveOutcome::Observed;
+        }
         let Some(current) = self.endgame.clone() else {
             self.message = "No endgame confirmation is pending.".to_string();
             return MoveOutcome::Blocked;
@@ -1488,5 +1586,97 @@ impl PlayState {
             .first()
             .and_then(|name| party_name_to_string(name))
             .unwrap_or_else(|| "Avatar".to_string())
+    }
+}
+
+#[cfg(test)]
+mod fade_to_black_tests {
+    use super::*;
+    use crate::display_driver::{DisplayRenderTarget, EgaDisplaySurface};
+
+    fn seeded_surface() -> EgaDisplaySurface {
+        // Put distinct non-black content on BOTH surfaces, so a beat
+        // that forgot either half would leave visible pixels behind.
+        let mut surface = EgaDisplaySurface::new();
+        let whole = crate::display_driver::normalize_clamp_pixel_rect(0, 0, 319, 199).unwrap();
+        surface.set_render_target(DisplayRenderTarget::Front);
+        surface.fill_rect(whole, 9);
+        surface.fill_back_rect(whole, 4);
+        surface
+    }
+
+    #[test]
+    fn the_fade_blanks_the_whole_visible_page() {
+        // endgame.md §7.1 / cleak/u5-spec#53: the net player-visible
+        // effect is that the whole screen goes black.
+        let mut surface = seeded_surface();
+        assert!(surface.front_pixels().iter().any(|pixel| *pixel != 0));
+
+        run_endgame_fade_to_black(&mut surface).unwrap();
+
+        assert!(
+            surface
+                .front_pixels()
+                .iter()
+                .all(|pixel| *pixel == ENDGAME_FADE_TO_BLACK_COLOR),
+            "the fade must leave the visible page entirely black"
+        );
+    }
+
+    #[test]
+    fn omitting_the_hidden_fill_would_dissolve_stale_content_onto_the_screen() {
+        // #53's warning, made executable: the fill is load-bearing.
+        // Running only the dissolve half publishes the stale hidden
+        // surface instead of black.
+        let mut surface = seeded_surface();
+        let whole = crate::display_driver::normalize_clamp_pixel_rect(0, 0, 319, 199).unwrap();
+        surface.dissolve_back_to_front_rect(whole);
+        assert!(
+            surface.front_pixels().iter().all(|pixel| *pixel == 4),
+            "without the fill the dissolve publishes stale offscreen content"
+        );
+    }
+
+    #[test]
+    fn the_fade_is_silent_and_uninterruptible_by_the_time_it_runs() {
+        // §9.6 / #53: the gate is cleared permanently by the first
+        // fixed-cell glyph, and the victory rite has drawn plenty.
+        let gate = endgame_fade_to_black_abort_gate();
+        assert!(!gate.is_armed());
+        assert!(!gate.samples_input_at(0));
+        assert!(!gate.samples_input_at(1));
+    }
+
+    #[test]
+    fn the_dissolve_visits_every_pixel_of_the_rectangle_exactly_once() {
+        // #53: "visiting every pixel exactly once in a deterministic
+        // pseudo-random order". This is what makes the compositor's
+        // flat fill an exact model of the completed beat rather than an
+        // approximation of it.
+        let mut dissolve =
+            crate::RectangleDissolve::new(crate::endgame_cinematic::ENDGAME_FADE_TO_BLACK_RECT)
+                .unwrap();
+        let total = dissolve.pixel_count() as usize;
+        assert_eq!(total, 320 * 200);
+
+        let mut seen = vec![false; total];
+        let mut row_major = true;
+        let mut previous = None;
+        while let Some((x, y)) = dissolve.next_pixel() {
+            let index = usize::from(y) * 320 + usize::from(x);
+            assert!(!seen[index], "pixel ({x}, {y}) visited twice");
+            seen[index] = true;
+            if let Some(previous) = previous {
+                if index != previous + 1 {
+                    row_major = false;
+                }
+            }
+            previous = Some(index);
+        }
+        assert!(
+            seen.into_iter().all(|visited| visited),
+            "every pixel visited"
+        );
+        assert!(!row_major, "the order is scattered, not row-major");
     }
 }
