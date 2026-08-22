@@ -28,6 +28,7 @@ pub mod directed_step;
 pub mod direction;
 pub mod disk_io;
 pub mod display_driver;
+pub mod dissolve;
 pub mod dungeon_tables;
 pub mod dungeon_tables_io;
 pub mod dungeon_tables_io_movement;
@@ -243,6 +244,7 @@ pub use directed_step::{
 pub use direction::Direction;
 pub use disk_io::*;
 pub use display_driver::*;
+pub use dissolve::{DissolveAbortGate, RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL, RectangleDissolve};
 pub use dungeon_tables::*;
 pub use dungeon_tables_io::*;
 pub use dungeon_tables_io_movement::*;
@@ -559,10 +561,11 @@ pub use story_io::{
     story_record_display_text, story_text_marker,
 };
 pub use story_layout::{
-    CHARGEN_GYPSY_TEXT_REGION, CHARGEN_QUESTION_TEXT_REGION, CHARGEN_RESULT_TEXT_REGION,
-    INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT, PROPORTIONAL_LINE_STRIDE,
-    PROPORTIONAL_PARAGRAPH_INDENT, PlacedProportionalGlyph, ProportionalTextGutter,
-    ProportionalTextRegion, intro_story_text_region, layout_proportional_justified_paragraph,
+    CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX, CHARGEN_RESULT_PARAGRAPH_BOX,
+    CHARGEN_RESULT_SPACE_ADVANCE, INTRO_DOORWAY_LINES, INTRO_DOORWAY_SECOND_LINE_PEN_Y,
+    PROPORTIONAL_BRACE_INDENT, PROPORTIONAL_DEFAULT_SPACE_ADVANCE, PROPORTIONAL_LINE_STRIDE,
+    PlacedProportionalGlyph, ProportionalLayoutDescriptor, intro_doorway_paragraph_boxes,
+    intro_story_paragraph_box, layout_proportional_paragraph_glyphs,
 };
 pub use text_wrap::{
     EmitterByteKind, ParagraphByteKind, ProportionalRendererByteKind, TEXT_COLOR_BACKGROUND_SHIFT,
@@ -674,17 +677,18 @@ pub use u4_transfer::*;
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use visibility::{
     ActiveObjectCompositeResult, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,
-    LOCAL_LIGHT_MASK_SIDE, LOCAL_LIGHT_SOURCE_RADIUS, LightRadiusBranch, TERRAIN_BAND_LEN,
-    TERRAIN_BAND_ROW_STRIDE, VEHICLE_AVATAR_UNDERLAY_MARKER, VIEWPORT_CENTER, VIEWPORT_MAX_INDEX,
-    VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE,
-    VISIBILITY_ALREADY_RENDERED, VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR,
-    VISIBILITY_DIM_PERIPHERY, VISIBILITY_GRID_LEN, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION,
-    VisibilityMarker, active_object_composite, active_object_compositor_branch,
-    active_object_compositor_variant, active_object_default_composite,
-    active_object_default_tile_is_terrain_aware, fog_refine_folded_coord,
-    fog_refine_inside_clear_core, fog_refine_squared_distance, is_local_light_source_tile,
-    light_radius_branch, terrain_band_active_index, visibility_cheap_path_needs_refill,
-    visibility_grid_active_index, visibility_in_radius, visibility_marker,
+    LOCAL_LIGHT_MASK_SIDE, LOCAL_LIGHT_SOURCE_CELL_COUNT, LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD,
+    LightRadiusBranch, TERRAIN_BAND_LEN, TERRAIN_BAND_ROW_STRIDE, VEHICLE_AVATAR_UNDERLAY_MARKER,
+    VIEWPORT_CENTER, VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW,
+    VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
+    VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY,
+    VISIBILITY_GRID_LEN, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION, VisibilityMarker,
+    active_object_composite, active_object_compositor_branch, active_object_compositor_variant,
+    active_object_default_composite, active_object_default_tile_is_terrain_aware,
+    fog_refine_folded_coord, fog_refine_inside_clear_core, fog_refine_squared_distance,
+    is_local_light_source_tile, light_radius_branch, terrain_band_active_index,
+    visibility_cheap_path_needs_refill, visibility_grid_active_index, visibility_in_radius,
+    visibility_marker,
 };
 pub use visual_asset_audit::*;
 pub use wind::{

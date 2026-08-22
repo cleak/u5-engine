@@ -945,6 +945,24 @@ impl PlayState {
         self.message = format!("{title}:\n{text_map}");
     }
 
+    /// **Contradicted by `cleak/u5-spec#60`; do not trust this output.**
+    ///
+    /// The closing comment retracts the "full Britannia chunk-map
+    /// renderer" this was built from, specifically: it is not an 8x22
+    /// chunk map but eight cells in total, one per row; the party's
+    /// position is never read (the inputs are the saved year, month and
+    /// day); the overlay marker tracks the Shadowlords, not the party;
+    /// and there is no map-edge wrapping, only a 22-slot column ring.
+    /// The retraction says in terms that a party-chunk crosshair
+    /// "paints the wrong cells for the wrong reason".
+    ///
+    /// The corrected contract needs `systems/view.md` section 4.2.3's
+    /// eight-row table (per-row y origin, start column and permitted
+    /// column ring), which the issue says is published but does not
+    /// reproduce, so it is not available to this workspace until the
+    /// read-only spec checkout is refreshed past `9a898d1`. Left in
+    /// place rather than replaced with a guess or a loud failure that
+    /// would red-build the visual route suite; see the report.
     pub fn britannia_chunk_overview_map(&self) -> String {
         let mut out = String::new();
         let current_chunk_x = self.player.x / CHUNK_SIDE;

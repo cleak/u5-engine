@@ -2006,7 +2006,6 @@ fn active_map_window_aliases_anchor_to_town_grid_side() {
     assert_eq!(LOCAL_LIGHT_MASK_SIDE, TOWN_GRID_SIDE);
     assert_eq!(LOCAL_VIEW_OVERLAY_SIDE, TOWN_GRID_SIDE);
     assert_eq!(LOCAL_LIGHT_MASK_SIDE, 32);
-    assert_eq!(LOCAL_LIGHT_SOURCE_RADIUS, 3);
     assert_eq!(LOCAL_VIEW_OVERLAY_SIDE, 32);
 }
 
