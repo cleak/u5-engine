@@ -4,8 +4,18 @@ This audit maps each public-spec deliverable (the systems and formats published
 in `C:\Projects\Rust\u5-clean\u5-spec`) to concrete engine evidence
 (`crates/u5-runtime`, `crates/u5-tui`, `crates/u5-bevy`) and to test coverage.
 
-Created on 2026-05-19. This document satisfies the completion criterion in
-`TODO.md`:
+Created on 2026-05-19; last refreshed on 2026-08-22 at `cb6779f`, after the
+six-package presentation-parity pass and the `cleak/u5-spec` sweep that closed
+all 72 prior issues.
+
+**Read spec contracts from the GitHub issues, not from the local checkout.**
+`C:\Projects\Rust\u5-clean\u5-spec` is read-only from this workspace and is
+stale at `9a898d1`, behind spec head `8192d67` and several of its retractions
+(notably `#42` local light, `#53` reveal transitions, `#54` Return-to-View,
+`#65`/`#66`/`#67` title sequence, `#69` doorway text, `#70` font metrics). An
+audit checked against the local files would disagree with this document.
+
+This document satisfies the completion criterion in `TODO.md`:
 
 > A final completion audit maps each public spec deliverable to concrete engine
 > evidence and calls out any remaining public-spec gaps instead of assuming
@@ -51,7 +61,7 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer and reconciled checked-in spec wording |
 | `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
 | `cleak/u5-spec#51` | Native tile `0x04` town poison-gas detection | Implemented |
-| `cleak/u5-spec#53` | Story step-1 wipe, STARTSC menu-loader reveal, and endgame transition clarification | Step-1 and STARTSC use public one-column-per-title-tick rectangles; ordinary END.DAT narrative pages no longer invent intro-style wipes; the late certificate rectangle operation is modeled separately, with a fresh follow-up asking for its exact primitive/cadence |
+| `cleak/u5-spec#53` | Rectangle-dissolve primitive for the story step-1 reveal, the STARTSC menu-loader reveal, and the endgame's full-screen rectangle | Resolved, and both of the earlier answers it retracted are now corrected in the engine. The one-column-per-title-tick sweep is withdrawn in full: all three callers issue the shared rectangle dissolve (`crates/u5-runtime/src/dissolve.rs`) as one blocking call visiting every pixel once in a deterministic pseudo-random order. The late endgame rectangle is **not** a no-op before certificate setup: it is `endgame.md §7.1`'s fade to black, run once leaving the throne tableau and before the *first* `END.DAT` window, and the ordinary narrative windows carry no page-in rectangle of their own |
 | `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect rasters are explicitly deferred by the clean spec |
 | `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Implemented from latest issue answer; MISCMAPS record 3, active-object slots, class sprites, scene marker, branch movement, and `0x44`-gated refusal jitter follow the published contract |
 | `cleak/u5-spec#57` | `.NPC` slot-zero sentinel byte policy | Runtime scheduling skips slot zero regardless of stored bytes; validators do not reject a nonzero slot-zero type/tag byte |
@@ -305,7 +315,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| `intro.md` §1–§14 | `intro.rs`, `intro_menu.rs`, `menu_dispatch.rs`, `pth.rs` (BRITISH.PTH walker), `return_to_view.rs`, `story_io.rs`; Bevy intro shell composes published title bitmap, animates signature path, draws the public issue #52 four-frame palette-cycled clean flame stripe, renders story art with the spec-defined transition-strip and secondary-art draws, runs the public issue #53 step-1 36-title-tick column wipe, and applies the animated STARTSC menu-loader reveal before sampling menu input; Return-to-View preview rendering uses public title-tick animation families, transparent actor overlay composition, public #54 fixed strip captions from LoadMapStrip, high-opcode no-ops, 4x19 source strip loading, `(x, y + 7)` cell-effect coordinates, and scheduler/playback timing for preview ticks, cell effects, fixed wipes, fixed waits, trailing ticks, and one-shot actor draws; §11 (`A` submenu) is an artwork screen, not a text screen - `render_acknowledgements_intro_frame` draws the ULTIMA logo panel and the credits parchment at their published origins, and any key restores the menu. No credits text is authored; the earlier `ACKNOWLEDGEMENTS_LINES` clean-room-authored constant was removed. The terminal harness has no surface for it and still fails loudly through `intro.rs::require_acknowledgements_contract` | intro/chargen menu tests in `chunk_01.rs`, `chunk_02.rs`; Bevy intro framebuffer/title-tick/story-wipe tests; Bevy acknowledgements panel/restore tests; Return-to-View renderer/playback tests; `intro::tests::acknowledgements_contract_refuses_placeholder_lines` | Partial; §11's bottom-up entry and top-down exit slab wipes still need the published stride/cadence (cleak/u5-spec#72), and exact historical title-tick silhouette pixels and exact Return-to-View effect rasters remain Presentation work |
+| `intro.md` §1–§14 | `intro.rs`, `intro_menu.rs`, `menu_dispatch.rs`, `pth.rs` (BRITISH.PTH walker), `return_to_view.rs`, `story_io.rs`; Bevy intro shell composes published title bitmap, animates signature path, draws the four title-tick flame bands from `ULTIMA.16` records 1..=4 (the public issue #52 procedural flame stripe was withdrawn and its generator deleted), renders all 21 story slides with the spec-defined transition-strip and secondary-art draws plus step 6's published #69 doorway text, and reveals story step 1 and the STARTSC menu loader through the public issue #53 rectangle dissolve (the 36-tick and 320-tick column sweeps were withdrawn) before sampling menu input; Return-to-View preview rendering uses public title-tick animation families, transparent actor overlay composition, public #54 fixed strip captions from LoadMapStrip, high-opcode no-ops, 4x19 source strip loading, `(x, y + 7)` cell-effect coordinates, and scheduler/playback timing for preview ticks, cell effects, fixed wipes, fixed waits, trailing ticks, and one-shot actor draws; §11 (`A` submenu) is an artwork screen, not a text screen - `render_acknowledgements_intro_frame` draws the ULTIMA logo panel and the credits parchment at their published origins, and any key restores the menu. No credits text is authored; the earlier `ACKNOWLEDGEMENTS_LINES` clean-room-authored constant was removed. The terminal harness has no surface for it and still fails loudly through `intro.rs::require_acknowledgements_contract` | intro/chargen menu tests in `chunk_01.rs`, `chunk_02.rs`; Bevy intro framebuffer/title-tick/story-wipe tests; Bevy acknowledgements panel/restore tests; Return-to-View renderer/playback tests; `intro::tests::acknowledgements_contract_refuses_placeholder_lines` | Partial; §11's bottom-up entry and top-down exit slab wipes still need the published stride/cadence (cleak/u5-spec#72), and exact historical title-tick silhouette pixels and exact Return-to-View effect rasters remain Presentation work |
 | `chargen.md` §1–§11 | `chargen.rs` questionnaire VM, gender prompt, virtue tournament, stat assignment | chargen tests | Implemented |
 | `u4-transfer.md` §1–§10 | `u4_transfer.rs`, `u4_transfer_session.rs` state machine, public issue #16 `PARTY.SAV` source validation offsets, BRIT.GAM/BRIT.OOL handling, stat translation, OOL ordering | u4-transfer tests | Implemented |
 
@@ -422,35 +432,62 @@ through the asset-backed Talk command path.
 
 ## Remaining Public-Spec Gaps
 
-The following items are the known public-spec blockers from the latest issue
-audit. Gameplay blockers use conservative placeholders; presentation blockers
-are kept out of gameplay logic until the public spec publishes exact data.
+`cleak/u5-spec` head `8192d67` closed every issue this audit previously tracked
+as blocking, many with explicit retractions. The rows that used to sit here
+(`#53`, `#60`, `#62`) are resolved: `#53` published the rectangle-dissolve
+primitive and corrected the endgame's full-screen rectangle into the `§7.1`
+fade to black before the first `END.DAT` window, and `#60`/`#62` were answered
+during the same sweep.
 
-| Issue | Public gap | Engine placeholder |
-|------|------------|--------------------|
-| `cleak/u5-spec#53` | Late endgame rectangle-operation primitive/cadence and any caller-owned fixed-window page-in behavior | Step-1 and STARTSC use public one-column-per-title-tick rectangles; ordinary END.DAT narrative pages are fixed windows with no invented intro-style wipe; the late certificate rectangle operation is modeled at published order/bounds while awaiting primitive/timing detail |
-| `cleak/u5-spec#60` | Exact Look/View overlay glyph pixels, source-bank/tint selection, full chunk-map presentation, and dungeon minimap glyph/flood renderer details | Gameplay-depth View and minimap behavior is implemented from `systems/view.md`; exact per-class 4x4 glyph pixels, source-bank/tint choices, chunk-map pixels, and dungeon minimap renderer details remain clean-spec questions |
-| `cleak/u5-spec#62` | Exhaustive live shop-dialogue transcript, resident literal table, wait/clear/prompt pacing, and inherited-window first-frame state | Implemented for the published shared timing and inherited-window/register geometry slices; remaining live dialogue details stay in the modal-summary path until published |
+What remains splits into two kinds.
 
-Follow-up questions were current as of the 2026-05-24 issue audit for the
-remaining response-needed items:
+### Filed by us, answer pending
 
-- `cleak/u5-spec#53`: exact primitive and cadence for the late endgame
-  full-screen rectangle operation, plus any caller-owned clear/page-in behavior
-  around ordinary fixed `END.DAT` narrative windows.
-- `cleak/u5-spec#60`: exact Look/View overlay glyph pixels, source-bank/tint
-  selection, full chunk-map presentation, and dungeon minimap glyph/flood
-  renderer details.
-- `cleak/u5-spec#62`: exhaustive live shop-dialogue transcript, resident
-  literal/template table, wait/clear/prompt pacing, redraw rules, and
-  inherited-window first-frame state beyond the shared record-selection timing
-  and register geometry already published.
+These are corrections and publications this engine asked for after settling the
+behaviour by black-box observation of the shipped assets. Private traces are
+complete and the spec pass is queued; none is answered yet. Every affected code
+path carries a comment naming the issue, so `grep -rn "cleak/u5-spec#8" crates/`
+finds them.
 
-No remaining response-needed issue in this audit is about #1, #3, #5, #8, #9,
-#10, #11, #12, #13, #18, #19, #20, #31, #36, #38, #41, #43, #47, #49, #51,
-#54, #56, #57, #58, #59, or #61; those
-are implemented from current checked-in public spec plus latest issue answers,
-or explicitly deferred as presentation work in the public spec.
+| Issue | Topic | Engine behavior meanwhile |
+|------|-------|---------------------------|
+| `cleak/u5-spec#78` | Intro/menu corrections: menu backing art is `ULTIMA` slot 0, title-tick frames are slots 1..=4, acknowledgements art is the `STARTSC` credits composition, and the lower menu frame is rounded blue chrome rather than box glyphs | Implements the observed behaviour; see `docs/intro-graphics-gaps.md` |
+| `cleak/u5-spec#79` | Gameplay screen chrome geometry | Implements the measured border, stats panel, sky strip, wind/`Dir:` banners and message window |
+| `cleak/u5-spec#80` | Per-scene floor-page table | Implements the observed mapping (e.g. Iolo's Hut is `DWELLING` page 12) |
+| `cleak/u5-spec#81` | Command echo wording, dungeon first-person wall/scenery tables, Z-stats, minimap | Command echoes and the message transcript are implemented from observation; the **dungeon first-person wall tables are not**, so that presentation is not parity-checked |
+| `cleak/u5-spec#82` | Endgame certificate wording, chargen prompt/paragraph geometry, `PARTY.SAV` virtue-standing offsets, endgame tableau sprite index space | See the loud gates below |
+| `cleak/u5-spec#83` | Light-byte semantics, including a local-light **influence mask** that reveals cells beyond the threshold | The `#42` squared-distance disc is implemented; the influence mask is not |
+
+### Loud gates still standing in the engine
+
+Under the strict no-fallback rule these paths refuse rather than invent. Each is
+a genuine unpublished contract, not a shortcut:
+
+| Gate | Why | Where |
+|------|-----|-------|
+| Endgame certificate body | `endgame.md §9` lists the certificate's fields but not its fixed wording, separators, or the centered Codex-style closing title. The engine carries the published data-derived fields (`EndgameCertificate`) and refuses to compose English around them. **This keeps the victory ending deliberately unreachable.** | `require_published_endgame_certificate_prose` |
+| Endgame final report panel | Same section: the elapsed-time arithmetic and its zero-omitting singular/plural formatting are published and implemented (`EndgameFinalReport::elapsed_label`); the panel's wording and the closing Origin report line are not | `require_published_endgame_final_report_prose` |
+| Ultima IV transfer preview | `#73`: per-field cursor positions, attributes, redraw timing and prompt wording. Missing/unreadable media is *not* gated - it takes the published retryable branch | `require_published_u4_transfer_preview_presentation` |
+| Terminal intro subflows | Story slides, Return-to-View, acknowledgements and the transfer preview are graphical screens; `--intro` has no surface for them | `crates/u5-tui/src/intro_loop.rs` |
+| Acknowledgements wipes | `#72`: the artwork and origin are published and drawn; the entry/exit slab-wipe stride and cadence are not | `require_acknowledgements_contract` (terminal only) |
+
+Two further items are known-wrong rather than unimplemented, annotated in place
+and waiting on `#82`:
+
+- The endgame tableau's class-to-sprite bytes are drawn through the world tile
+  atlas, where `0x44` (Bard) is the tableau's own floor tile. `#56` republished
+  the class table but still does not name the index space, so the bytes are kept
+  verbatim rather than guessed at (`endgame_tableau_tile_for_class_byte`).
+- The `PARTY.SAV` virtue-standing window is eight bytes at `0x0002`, which
+  overlaps the moon counter, dungeon counter and gold field and sits before food
+  and gold rather than after them, contradicting `u4-transfer.md §5`. Left as-is
+  with the collision documented (`crates/u5-runtime/src/u4_transfer.rs`).
+
+Also unpublished, and deliberately not invented: the border-caption wedge / echo
+cap glyph primitive (the original draws a solid triangle plus a four-frame
+barber-pole cursor, not an ASCII `>`), and any wall-clock length for the
+rectangle dissolve, which the engine therefore completes as the single blocking
+call `#53` specifies rather than pacing it.
 
 ## Presentation Work (Separate From Gameplay Correctness)
 
@@ -459,18 +496,40 @@ spec's "exact visual parity deferrals" section. They do not block gameplay
 correctness; the engine renders the published content with clean substitute
 overlays where exact historical pixels are not public.
 
-- Title-tick exact historical silhouette pixels and palette fades.
+- Title-tick silhouette pixels are no longer deferred: the four bands are
+  `ULTIMA` records 1..=4, read from the shipped asset at runtime. The
+  clean-room flame generator and palette-cycle table are deleted.
 - Exact per-shop live bark layout, waits, and pacing beyond the inherited Talk-to-shop window handoff.
-- Return-to-View exact effect-raster pacing internals.
+- Return-to-View effect-raster pacing internals (the preview geometry itself is
+  published as `#54` and implemented).
 - Exact remote-view panel pixels for X-Ray / Peer (`cleak/u5-spec#60`).
 - Exact dungeon minimap glyph/floodability edge cases (`cleak/u5-spec#60`).
 
 ## Conclusion
 
-Across the public spec — 22 systems documents, 22 format documents, and seven
-catalogs — every gameplay-correctness deliverable that has complete public
-data has a corresponding engine implementation backed by tests,
-route-smoke coverage, or visual-frame-suite captures. The blocker table above
-is the current remaining public-spec blocker set from this audit, and each has
-a safe documented placeholder. The remaining visual/audio polish items are
-tracked under Milestone 3 in `TODO.md`.
+Across the public spec - 22 systems documents, 22 format documents, and seven
+catalogs - every gameplay-correctness deliverable that has complete public data
+has a corresponding engine implementation backed by tests, route-smoke
+coverage, or visual-frame-suite captures.
+
+Presentation is the part that moved most on 2026-08-22: six packages landed the
+intro title/menu from `ULTIMA.16`, the measured gameplay screen chrome, the
+interior visibility carve with ambient-as-squared-threshold lighting and the
+`#42` local-light disc, the command-echo transcript, all 21 intro story slides,
+and the endgame's own surface with the chargen prompt screen, the U4 media
+branch and the asset-write guards. That is a large step toward parity, not
+parity itself: it is measured against black-box observation of the shipped
+assets, and the gaps section above lists what is still unpublished or still
+known-wrong. Nothing here should be read as pixel-exact parity for a screen it
+does not name.
+
+The gaps section is the current remaining set, split between six issues we filed
+that are awaiting a spec answer and the loud gates the engine still refuses at -
+most consequentially the endgame certificate wording, which keeps the victory
+ending deliberately unreachable. Remaining visual/audio polish is tracked under
+Milestone 3 in `TODO.md`.
+
+Verified on 2026-08-22 at `cb6779f`: 2805 u5-runtime, 151 u5-bevy, 96 u5-tui
+tests pass, `cargo fmt --all -- --check` is clean, `--route-smoke` passes
+493/493 cases, `--visual-frame-suite` writes 186 PNGs and `--visual-route-suite`
+writes 1808.

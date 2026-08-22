@@ -14,6 +14,32 @@ this file alone.
 
 Last known verification state:
 
+2026-08-22, engine `intro-preflourish-phase` at `cb6779f`, after the
+six-package presentation-parity pass (intro title/menu, gameplay screen chrome,
+visibility/lighting, command-echo transcript, intro story slides,
+endgame/chargen/U4/harness):
+
+- `cargo fmt --all -- --check` clean.
+- `cargo test -p u5-runtime --lib` 2805 passed.
+- `cargo test -p u5-bevy` 151 passed.
+- `cargo test -p u5-tui --features visual` 96 passed (11 + 51 + 34).
+- `--route-smoke` 493/493 scripted cases passed.
+- `--visual-frame-suite` wrote 186 PNGs and now runs to completion; the
+  Return-to-View panic that used to abort it is gone (`cleak/u5-spec#54`).
+- `--visual-route-suite` wrote 1808 PNGs. Exactly one is black by contract: the
+  `endgame.md §7.1` fade-to-black frame between the throne tableau and the first
+  `END.DAT` window.
+- Asset-backed runs used a **copy** of the asset directory. `C:\Games\U5-Clean`
+  is a read-only clean-room input; the engine now refuses a write destination
+  that resolves to `DEFAULT_GAME_DIR`, and `copy_asset_writable` clears the
+  read-only bit Windows `fs::copy` propagates into scratch copies.
+- Spec contracts come from the `cleak/u5-spec` GitHub issues. The local
+  `u5-spec` checkout is read-only from this workspace and stale at `9a898d1`,
+  behind head `8192d67` and its retractions.
+
+Earlier verification detail, kept for history:
+
+
 - `cargo test -p u5-runtime --lib` passed on 2026-05-24, including 2653 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
@@ -791,6 +817,43 @@ clean-engine session without losing supported state.
 Goal: move from diagnostic terminal rendering to a real playable visual
 experience.
 
+### 2026-08-22 status
+
+Six presentation packages landed together on `intro-preflourish-phase`, each
+reconciled against `cleak/u5-spec` head `8192d67` and, where the spec was silent
+or wrong, against black-box observation of the shipped assets:
+
+- **Intro title/menu** - `TITLE.BIT`/`BRITISH.BIT` whole-page publish phases,
+  the corrected `#67` flourish script at the `#77` 14 ms cadence, the menu
+  screen from `ULTIMA.16` slot 0 with title-tick bands 1..=4, the measured
+  rounded blue lower chrome, and the acknowledgements credits artwork.
+- **Gameplay screen chrome** - the measured border, stats panel, sky strip,
+  wind and `Dir:` banners, and the scrolling message window with verb echoes
+  and the triangle-plus-barber-pole prompt cursor.
+- **Visibility and lighting** - the interior visibility carve, the ambient byte
+  read as a squared-distance threshold, and `#42`'s local light corrected to a
+  squared-distance disc (`dx*dx + dy*dy <= 10`, 37 cells) rather than the
+  withdrawn Chebyshev square.
+- **Commands and text** - the command-echo transcript and the wrap fix.
+- **Intro story slides** - all 21 steps from observation-derived proportional
+  metrics, including step 6 from the published `#69` doorway text, with `#53`'s
+  rectangle dissolve replacing the withdrawn column sweep.
+- **Endgame, chargen, U4 transfer, harness** - the endgame's own surface (no
+  gameplay stats panel, text never under the tableau blit), the `§7.1` fade to
+  black before the first `END.DAT` window, the tableau walk-in as rendered
+  frames, the chargen prompt screen at `§5.1`'s published cells, the U4
+  retryable-media branch, and the guards that stop harness paths writing into
+  the pristine asset install.
+
+This is a large step toward presentation parity, not parity itself. What is
+still open is listed in `docs/completion-audit.md` "Remaining Public-Spec Gaps"
+and `docs/intro-graphics-gaps.md`; the load-bearing ones are the endgame
+certificate wording (`#82`, which keeps the victory ending deliberately
+unreachable), the dungeon first-person wall tables (`#81`), the local-light
+influence mask (`#83`), the border-caption wedge/cap glyph primitive, the
+acknowledgements slab-wipe cadence (`#72`), and the U4 transfer preview
+(`#73`). Six issues we filed - `#78`-`#83` - are awaiting a spec answer.
+
 ### Bevy Integration
 
 - The Bevy visual frontend now exists behind `cargo run --features visual --
@@ -825,8 +888,12 @@ experience.
   - Render world and town tiles from decoded tile sheets.
   - Render active objects with phase animation.
   - Respect line-of-sight, light radius, and public issue #42 local-light
-    source masks: radius-three Chebyshev sources, source-to-target blocker
-    carving, active-object flame sources, and multiple-source union.
+    source masks: source-to-target blocker carving, active-object flame
+    sources, and multiple-source union. #42's "radius-three Chebyshev" reading
+    was withdrawn - the source mask is a squared-distance disc,
+    `dx*dx + dy*dy <= 10`, 37 cells. A local-light *influence mask* that
+    reveals cells beyond the threshold is a separate, still-unpublished gap
+    (our `#83`).
   - Top-down radius-5 raster rendering now drives the public `visibility.md`
     persistent scratch model: an 11-active-cell, 32-byte-stride visibility
     grid plus 16-byte-stride terrain companion band, full rebuild on dirty

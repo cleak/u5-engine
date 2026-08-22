@@ -192,10 +192,11 @@ const INTRO_PRESENTS_HOLD_BIOS_TICKS: u16 = 18;
 const PROPORTIONAL_TEXT_LINE_HEIGHT: usize = u5_runtime::PROPORTIONAL_LINE_STRIDE as usize;
 // The character-creation paragraph rectangles that used to live here
 // (CHARGEN_PROPORTIONAL_TEXT_*, CHARGEN_QUESTION_TEXT_*, CHARGEN_RESULT_TEXT_*)
-// were invented placeholders with no spec or observation behind them. They are
-// deleted rather than shipped; the chargen render paths now fail loudly through
-// `require_published_chargen_proportional_text_rectangle` until the rectangles
-// are derived the same way the intro story regions were.
+// were invented placeholders with no spec or observation behind them. They were
+// deleted rather than shipped, and the chargen paragraphs now derive their
+// regions the same way the intro story slides do - measured off a capture of
+// the original - as CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX
+// and CHARGEN_RESULT_PARAGRAPH_BOX in `u5-runtime/src/story_layout.rs`.
 const PROMPT_CURSOR_GLYPH: u8 = 4;
 
 #[derive(Clone, Copy)]
