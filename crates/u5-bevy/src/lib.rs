@@ -110,10 +110,11 @@ use u5_runtime::{
     load_ultima_title_tick_frames,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
-    paint_stats_panel_text_window, paint_talk_shop_text_window, published_world_location_entries,
-    read_save_image_file, read_u4_transfer_source_from_party_sav, render_play_text_window_system,
-    render_text_panel_rgba, render_text_window_rgba, run_intro_pre_flourish_phase,
-    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
+    paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
+    published_world_location_entries, read_save_image_file, read_u4_transfer_source_from_party_sav,
+    render_play_text_window_system, render_text_panel_rgba, render_text_window_rgba,
+    run_intro_pre_flourish_phase, run_return_to_view_playback_until_restart,
+    save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -1877,8 +1878,20 @@ fn seed_visual_suite_combat(state: &mut PlayState, game_dir: &Path) -> io::Resul
 /// roster when `SAVED.GAM` is readable, so combat frames show the real
 /// party formation and the panel shows recorded names. A missing or
 /// unreadable save leaves the default party in place.
+///
+/// This decodes the save image directly instead of going through
+/// `load_play_options_from_save`, which emulates the original's load flow
+/// and rewrites the `BRIT.OOL` / `UNDER.OOL` mirrors from `SAVED.OOL`.
+/// The visual suite runs against the real asset directory, which must be
+/// treated as read-only, so the decode must have no disk side effects.
 fn adopt_visual_suite_saved_party(state: &mut PlayState, game_dir: &Path) {
-    let Ok(options) = load_play_options_from_save(game_dir) else {
+    let Ok(bytes) = read_save_image_file(&game_dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)
+    else {
+        return;
+    };
+    let Ok(options) =
+        play_options_from_save_bytes_named(&bytes, SAVED_GAM_FILENAME, "--from-save", false)
+    else {
         return;
     };
     if options.party.is_empty() {
