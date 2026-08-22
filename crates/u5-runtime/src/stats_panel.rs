@@ -2,16 +2,34 @@
 
 use crate::*;
 
-pub const STATS_PANEL_WIDTH: usize = 16;
+/// Stats-panel text area width in cells: columns 24..=38, bounded by
+/// the white rules at `x=191` and `x=312`. See `gameplay_chrome` for
+/// the geometry's provenance and the pending spec question.
+pub const STATS_PANEL_WIDTH: usize = 15;
 pub const STATS_PANEL_PARTY_ROWS: usize = SAVE_PARTY_SIZE_MAX as usize;
 pub const MAIN_TEXT_WINDOW_INDEX: usize = 0;
 pub const STATS_PANEL_TEXT_WINDOW_INDEX: usize = 1;
 pub const TALK_SHOP_TEXT_WINDOW_INDEX: usize = 2;
 pub const PROMPT_TEXT_WINDOW_INDEX: usize = 3;
-pub const MESSAGE_TEXT_WINDOW_RIGHT: u8 = 23;
-pub const STATS_PANEL_TEXT_LEFT: u8 = 23;
-pub const STATS_PANEL_TEXT_RIGHT: u8 = TEXT_SCREEN_COLUMNS - 1;
-pub const STATS_PANEL_TEXT_BOTTOM: u8 = TEXT_SCREEN_ROWS - 1;
+pub const MESSAGE_TEXT_WINDOW_RIGHT: u8 = MESSAGE_WINDOW_RIGHT;
+pub const STATS_PANEL_TEXT_LEFT: u8 = 24;
+/// `text-output.md §4`: a window's printable width is
+/// `bottom_right_x - top_left_x`, excluding the trailing column. The
+/// right edge therefore sits one column past the last painted cell so
+/// all fifteen cells (columns 24..=38) are printable.
+pub const STATS_PANEL_TEXT_RIGHT: u8 = STATS_PANEL_TEXT_LEFT + STATS_PANEL_WIDTH as u8;
+/// Roster rows 1..=6, then the divider band at row 7, then the
+/// food/gold and calendar rows 8..=9. Row 7 is chrome and is never
+/// written by the panel.
+pub const STATS_PANEL_TEXT_TOP: u8 = STATS_ROSTER_TOP;
+/// One row past the last painted row: emitting a full-width line
+/// wraps the cursor onto the following row, and without the spare row
+/// that wrap would scroll the window and shift every line up by one.
+pub const STATS_PANEL_TEXT_BOTTOM: u8 = STATS_COUNTER_BOTTOM + 1;
+/// Cells of the party row's left-aligned name field.
+pub const STATS_PANEL_NAME_CELLS: usize = 9;
+/// Cells of the party row's right-justified hit-point field.
+pub const STATS_PANEL_HP_CELLS: usize = 4;
 pub const INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX: usize = STATS_PANEL_TEXT_WINDOW_INDEX;
 pub const INN_PICKUP_REGISTER_LEFT: u8 = 24;
 pub const INN_PICKUP_REGISTER_TOP: u8 = 1;
@@ -26,39 +44,40 @@ pub struct StatsPanelCombatRowOverlay {
 }
 
 pub fn render_stats_panel(state: &PlayState, active_cursor: Option<usize>) -> String {
-    let mut lines = Vec::with_capacity(STATS_PANEL_PARTY_ROWS + 5);
-    lines.push(fixed_panel_line("STATS"));
+    let mut lines = Vec::with_capacity(STATS_PANEL_PARTY_ROWS + 2);
     for index in 0..STATS_PANEL_PARTY_ROWS {
         lines.push(render_stats_panel_party_row(state, active_cursor, index));
     }
-    lines.push(render_stats_panel_food_row(state.food));
-    lines.push(render_stats_panel_middle_row(state));
+    lines.push(render_stats_panel_counter_row(state));
     lines.push(render_stats_panel_date_row(&state.clock));
-    lines.push(render_stats_panel_sky_status_row(state));
     lines.join("\n")
 }
 
+/// Lay out the gameplay screen's text windows. The message/command
+/// window is the right-hand column below the stats boxes, and the live
+/// input line is its own bottom row rather than a separate bottom-left
+/// prompt window. Text row 24 is never covered by any window.
 pub fn configure_play_text_windows(system: &mut TextWindowSystem) {
     system.set_window_rect(
         MAIN_TEXT_WINDOW_INDEX,
-        0,
-        0,
-        MESSAGE_TEXT_WINDOW_RIGHT,
-        TEXT_SCREEN_ROWS - 1,
+        MESSAGE_WINDOW_LEFT,
+        MESSAGE_WINDOW_TOP,
+        MESSAGE_WINDOW_RIGHT,
+        MESSAGE_WINDOW_BOTTOM,
     );
     system.set_window_rect(
         STATS_PANEL_TEXT_WINDOW_INDEX,
         STATS_PANEL_TEXT_LEFT,
-        0,
+        STATS_PANEL_TEXT_TOP,
         STATS_PANEL_TEXT_RIGHT,
         STATS_PANEL_TEXT_BOTTOM,
     );
     system.set_window_rect(
         PROMPT_TEXT_WINDOW_INDEX,
-        0,
-        TEXT_SCREEN_ROWS - 2,
-        MESSAGE_TEXT_WINDOW_RIGHT,
-        TEXT_SCREEN_ROWS - 1,
+        MESSAGE_WINDOW_LEFT,
+        MESSAGE_WINDOW_BOTTOM,
+        MESSAGE_WINDOW_RIGHT,
+        MESSAGE_WINDOW_BOTTOM,
     );
     system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
 }
@@ -66,10 +85,10 @@ pub fn configure_play_text_windows(system: &mut TextWindowSystem) {
 pub fn configure_talk_shop_text_window(system: &mut TextWindowSystem) {
     system.set_window_rect(
         TALK_SHOP_TEXT_WINDOW_INDEX,
-        0,
-        0,
-        MESSAGE_TEXT_WINDOW_RIGHT,
-        TEXT_SCREEN_ROWS - 1,
+        MESSAGE_WINDOW_LEFT,
+        MESSAGE_WINDOW_TOP,
+        MESSAGE_WINDOW_RIGHT,
+        MESSAGE_WINDOW_BOTTOM,
     );
     system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
 }
@@ -194,27 +213,20 @@ pub fn paint_stats_panel_text_window(
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.clear_active_flags();
 
-    system.set_active_cursor(0, 0);
-    emit_fixed_panel_line(system, &fixed_panel_line("STATS"));
-
     for index in 0..STATS_PANEL_PARTY_ROWS {
-        let row = index + 1;
-        system.set_active_cursor(0, row.min(u8::MAX as usize) as u8);
+        system.set_active_cursor(0, index.min(u8::MAX as usize) as u8);
         paint_stats_panel_party_row(system, state, active_cursor, index);
     }
 
+    // Screen rows 8 and 9 are window rows 7 and 8: the divider band at
+    // screen row 7 is chrome, not a window row.
+    let counter_row = STATS_COUNTER_TOP - STATS_PANEL_TEXT_TOP;
     let bottom_rows = [
-        render_stats_panel_food_row(state.food),
-        render_stats_panel_middle_row(state),
+        render_stats_panel_counter_row(state),
         render_stats_panel_date_row(&state.clock),
-        render_stats_panel_sky_status_row(state),
     ];
     for (offset, line) in bottom_rows.iter().enumerate() {
-        let row = STATS_PANEL_PARTY_ROWS + 1 + offset;
-        if row >= usize::from(TEXT_SCREEN_ROWS) {
-            break;
-        }
-        system.set_active_cursor(0, row.min(u8::MAX as usize) as u8);
+        system.set_active_cursor(0, counter_row + offset as u8);
         emit_fixed_panel_line(system, line);
     }
 }
@@ -230,9 +242,9 @@ pub fn paint_prompt_text_window_with_cursor(
 ) {
     system.set_active_window(PROMPT_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
-    system.set_active_cursor(0, 0);
-    system.emit_byte(b'>');
-    system.emit_byte(b' ');
+    // Column 24 carries the two-colour ribbon end-cap sprite, painted
+    // by the chrome pass; the echoed text starts one column in.
+    system.set_active_cursor(1, 0);
     system.print_wrapped_string(input_echo);
     if let Some(cursor_glyph) = cursor_glyph {
         system.paint_cursor_glyph(cursor_glyph);
@@ -274,7 +286,7 @@ fn stats_panel_party_row(
         .get(index)
         .and_then(|name| party_name_to_string(name))
         .unwrap_or_else(|| format!("Party {}", index + 1));
-    let name = truncate_ascii_chars(&name, 10);
+    let name = truncate_ascii_chars(&name, STATS_PANEL_NAME_CELLS);
     let overlay = stats_panel_combat_row_overlay(state, index);
     let cursor = if active_cursor == Some(index) && !matches!(member.status, b'D' | b'S') {
         '>'
@@ -284,7 +296,7 @@ fn stats_panel_party_row(
     let status = overlay.status_override.unwrap_or(member.status);
     (
         fixed_panel_line(&format!(
-            "{name:<10}{cursor}{:>4}{}",
+            "{name:<STATS_PANEL_NAME_CELLS$}{cursor}{:>STATS_PANEL_HP_CELLS$}{}",
             member.hp.min(9999),
             char::from(status)
         )),
@@ -353,43 +365,30 @@ fn stats_panel_combat_cast_status_override(state: &PlayState, index: usize) -> O
     }
 }
 
-fn render_stats_panel_food_row(food: u16) -> String {
-    fixed_panel_line(&format!("Food{:>12}", food.min(9999)))
+/// Screen row 8: provisions left-aligned at column 24 and the middle
+/// counter right-aligned to end at column 38, sharing one row.
+fn render_stats_panel_counter_row(state: &PlayState) -> String {
+    let food = format!("F:{}", state.food.min(9999));
+    let middle = render_stats_panel_middle_counter(state);
+    let used = food.chars().count() + middle.chars().count();
+    let padding = STATS_PANEL_WIDTH.saturating_sub(used);
+    fixed_panel_line(&format!("{food}{}{middle}", " ".repeat(padding)))
 }
 
-fn render_stats_panel_middle_row(state: &PlayState) -> String {
+fn render_stats_panel_middle_counter(state: &PlayState) -> String {
     match stats_panel_middle_counter(state.player.transport.save_marker()) {
-        StatsPanelMiddleCounter::PartyGold => fixed_panel_line(&format!("Gold{:>12}", state.gold)),
-        StatsPanelMiddleCounter::ShipHullCondition => fixed_panel_line(&format!(
-            "Ship hull{:>7}",
-            current_ship_hull(state).unwrap_or(0)
-        )),
-    }
-}
-
-fn render_stats_panel_date_row(clock: &GameClock) -> String {
-    fixed_panel_line(&format!(
-        "Date {:02}-{:02} {:03}",
-        clock.month, clock.day, clock.year
-    ))
-}
-
-fn render_stats_panel_sky_status_row(state: &PlayState) -> String {
-    let glyph = state.timing_status.save_byte();
-    let glyph = if glyph == 0 { '-' } else { char::from(glyph) };
-    match state.area {
-        Area::Dungeon { .. } => fixed_panel_line(&format!(
-            "Light T{:>3} S{:>3}",
-            state.torch_counter, state.light_spell_counter
-        )),
-        Area::World { plane } if plane == WorldPlane::Underworld => {
-            fixed_panel_line(&format!("Underworld  {glyph}"))
+        StatsPanelMiddleCounter::PartyGold => format!("G:{}", state.gold),
+        StatsPanelMiddleCounter::ShipHullCondition => {
+            format!("H:{}", current_ship_hull(state).unwrap_or(0))
         }
-        Area::World { .. } | Area::Town { .. } => fixed_panel_line(&format!(
-            "Sky {} {glyph}",
-            sky_strip_text(state.clock.hour, state.cached_moon_glyph_bytes)
-        )),
     }
+}
+
+/// Screen row 9: the calendar, centred in the fifteen-column text
+/// area. `stats-panel.md §5` gives "a short M-D pair" and "the year
+/// printed as a three-digit zero-padded value".
+fn render_stats_panel_date_row(clock: &GameClock) -> String {
+    centred_panel_line(&format!("{}-{}-{:03}", clock.month, clock.day, clock.year))
 }
 
 fn current_ship_hull(state: &PlayState) -> Option<u8> {
@@ -399,28 +398,14 @@ fn current_ship_hull(state: &PlayState) -> Option<u8> {
     }
 }
 
-fn sky_strip_text(hour: u8, cached_moon_glyph_bytes: [u8; 2]) -> String {
-    sky_strip_composed_cells(hour)
-        .into_iter()
-        .map(|cell| match cell {
-            Some(SkyStripMarker::FixedHour) => '|',
-            Some(SkyStripMarker::Trammel) => moon_glyph_cell(cached_moon_glyph_bytes[0]),
-            Some(SkyStripMarker::Felucca) => moon_glyph_cell(cached_moon_glyph_bytes[1]),
-            None => '.',
-        })
-        .collect()
-}
-
-fn moon_glyph_cell(byte: u8) -> char {
-    if (b'0'..=b'7').contains(&byte) {
-        char::from(byte)
-    } else {
-        '-'
-    }
-}
-
 fn truncate_ascii_chars(value: &str, max_chars: usize) -> String {
     value.chars().take(max_chars).collect()
+}
+
+fn centred_panel_line(value: &str) -> String {
+    let value = truncate_ascii_chars(value, STATS_PANEL_WIDTH);
+    let leading = (STATS_PANEL_WIDTH - value.chars().count()) / 2;
+    fixed_panel_line(&format!("{}{value}", " ".repeat(leading)))
 }
 
 fn fixed_panel_line(value: &str) -> String {

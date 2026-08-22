@@ -641,3 +641,32 @@ pub fn potion_inventory_name(index: usize) -> &'static str {
         _ => "Potion",
     }
 }
+
+/// `inventory.md §4`: "The command starts by choosing a character... In
+/// combat scenes, Z-stats and R-Ready bind to the currently active living
+/// combat actor when that actor maps to a party slot; outside combat they
+/// use the normal party-member selector. Escape cancels the selector."
+///
+/// The selector is a presentation stage as much as an input stage: while
+/// it is live the party-roster box's border label reads `Select:` and the
+/// candidate roster row is drawn in inverse video.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PartySelectorSession {
+    /// Which command opened the selector, so the confirmed slot can be
+    /// handed to the right follow-on stage.
+    pub target: PartySelectorTarget,
+    /// The roster row currently offered, drawn in inverse video.
+    pub highlight: usize,
+}
+
+impl PartySelectorSession {
+    pub const fn new(target: PartySelectorTarget, highlight: usize) -> Self {
+        Self { target, highlight }
+    }
+}
+
+/// The command a live [`PartySelectorSession`] is selecting for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PartySelectorTarget {
+    ZStats,
+}

@@ -3,7 +3,7 @@
 //! These were originally `parts/play_state_impl/chunk_NN.rs` and lived under an `include!` wrapper; they're now proper modules each wrapping their own `impl PlayState { ... }` block.
 
 mod chunk_01;
-mod chunk_02;
+pub(crate) mod chunk_02;
 mod chunk_03;
 mod chunk_04;
 mod chunk_05;

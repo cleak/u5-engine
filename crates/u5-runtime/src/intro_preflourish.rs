@@ -343,8 +343,9 @@ mod tests {
     #[test]
     fn hercules_driver_load_is_deferred() {
         let game_dir = std::env::temp_dir().join("u5-intro-preflourish-hercules");
-        let err = load_intro_font_slots(&game_dir, DisplayDriverFamily::Hercules)
-            .expect_err("Hercules path must surface the deferred parity work, not silently load .CH");
+        let err = load_intro_font_slots(&game_dir, DisplayDriverFamily::Hercules).expect_err(
+            "Hercules path must surface the deferred parity work, not silently load .CH",
+        );
         assert_eq!(err.kind(), io::ErrorKind::Unsupported);
         assert!(
             err.to_string().contains("Hercules"),

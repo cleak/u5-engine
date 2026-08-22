@@ -1,410 +1,349 @@
+// Gameplay-screen border chrome and message window.
+//
+// Geometry here is the measured 320x200 layout documented in
+// `gameplay_chrome`; see that module's header for provenance and for
+// the pending spec question `cleak/u5-spec#79`.
 
-    /// Local clean asset folder, or `None` when it is not installed. Every
-    /// test that reads original game data is skipped without it; the runtime
-    /// crate never embeds asset bytes.
-    fn local_clean_assets() -> Option<std::path::PathBuf> {
-        let dir = std::env::var_os("U5_CLEAN_ASSETS")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_GAME_DIR));
-        dir.join(PROPORT_PCS_FILE).is_file().then_some(dir)
+fn chrome_test_font() -> FixedCellFont {
+    // A font whose only meaningful glyphs are the two end-cap source
+    // triangles; everything else is blank so tests can tell chrome
+    // apart from text.
+    let mut bytes = vec![0u8; CH_FONT_LEN];
+    let right: [u8; 8] = [0x80, 0xe0, 0xf8, 0xfc, 0xfc, 0xf8, 0xe0, 0x80];
+    let left: [u8; 8] = [0x01, 0x07, 0x1f, 0x3f, 0x3f, 0x1f, 0x07, 0x01];
+    bytes[0x02 * 8..0x02 * 8 + 8].copy_from_slice(&right);
+    bytes[0x01 * 8..0x01 * 8 + 8].copy_from_slice(&left);
+    parse_ch_font(&bytes, IBM_CH_FILE).unwrap()
+}
+
+fn chrome_frame(content: &GameplayChromeContent) -> Vec<u8> {
+    let font = chrome_test_font();
+    let mut rgba = vec![0u8; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0, 0, 0, 0xff]);
     }
+    paint_gameplay_frame_chrome(
+        &mut rgba,
+        TEXT_WINDOW_RENDER_WIDTH,
+        TEXT_WINDOW_RENDER_HEIGHT,
+        content,
+        ChromeFonts {
+            ibm: &font,
+            runes: &font,
+        },
+    );
+    rgba
+}
 
-    #[test]
-    fn fonts_proportional_font_directory_matches_the_shipped_asset_shape() {
-        let Some(dir) = local_clean_assets() else {
-            return;
-        };
-        let font = load_proportional_font(&dir).expect("PROPORT.PCS glyph directory loads");
+fn chrome_index_at(rgba: &[u8], x: usize, y: usize) -> u8 {
+    let offset = (y * TEXT_WINDOW_RENDER_WIDTH + x) * 4;
+    let pixel = [rgba[offset], rgba[offset + 1], rgba[offset + 2]];
+    EGA_PALETTE_RGB
+        .iter()
+        .position(|rgb| *rgb == pixel)
+        .unwrap_or_else(|| panic!("pixel ({x}, {y}) = {pixel:?} is not an EGA palette entry"))
+        as u8
+}
 
-        // `formats/font-pcs.md §8` leaves the glyph inventory unpublished; the
-        // shipped directory holds one glyph per code 0x20..=0x7a.
-        assert_eq!(font.first_code, PCS_FIRST_CODE);
-        assert_eq!(font.glyphs.len(), 91);
-        for (slot, glyph) in font.glyphs.iter().enumerate() {
-            assert_eq!(
-                (glyph.bitmap.width, glyph.bitmap.height),
-                (PCS_GLYPH_BITMAP_WIDTH, PCS_GLYPH_HEIGHT),
-                "glyph slot {slot} cell size"
-            );
-            assert!(
-                usize::from(glyph.advance_width) <= PCS_GLYPH_BITMAP_WIDTH,
-                "glyph slot {slot} ink width {} exceeds the cell",
-                glyph.advance_width
-            );
-            // The stored width word is the glyph's ink width: no lit pixel may
-            // fall outside it, and (except for the blank space glyph) the
-            // rightmost ink column must be the last one.
-            let ink_columns = (0..PCS_GLYPH_BITMAP_WIDTH)
-                .filter(|x| {
-                    (0..PCS_GLYPH_HEIGHT).any(|y| glyph.bitmap.pixel(*x, y) == Some(1))
-                })
-                .collect::<Vec<_>>();
-            let widest = ink_columns.last().map_or(0, |x| x + 1);
-            assert_eq!(
-                widest,
-                usize::from(glyph.advance_width),
-                "glyph slot {slot} ink extent does not match its stored width word"
-            );
-        }
-    }
+#[test]
+fn gameplay_chrome_paints_ribbon_bands_rules_and_leaves_row_24_black() {
+    let rgba = chrome_frame(&GameplayChromeContent::default());
 
-    #[test]
-    fn fonts_proportional_advance_table_matches_shipped_font() {
-        let Some(dir) = local_clean_assets() else {
-            return;
-        };
-        let font = load_proportional_font(&dir).expect("PROPORT.PCS glyph directory loads");
-
-        // `cleak/u5-spec#70`: the checked-in observation-derived advance table
-        // must equal the fitted rule applied to the shipped glyph strips.
-        assert_eq!(
-            proportional_advance_table_from_font(&font),
-            PROPORTIONAL_ADVANCE_TABLE
-        );
-        assert_eq!(
-            PROPORTIONAL_ADVANCE_TABLE.width_for_byte(b' ').unwrap(),
-            usize::from(PCS_SPACE_ADVANCE)
-        );
-        for code in PCS_FIRST_CODE..=b'z' {
-            let glyph = font.glyph_for_code(code).expect("shipped glyph");
-            let expected = if code == b' ' {
-                usize::from(PCS_SPACE_ADVANCE)
-            } else {
-                usize::from(glyph.advance_width) + usize::from(PCS_GLYPH_ADVANCE_GAP)
-            };
-            assert_eq!(
-                PROPORTIONAL_ADVANCE_TABLE.width_for_byte(code).unwrap(),
-                expected,
-                "advance for code {code}"
-            );
-        }
-        // Codes with no glyph in the shipped directory stay at zero rather
-        // than being guessed; the layout engine rejects them.
-        for code in 0..PCS_FIRST_CODE {
-            assert_eq!(PROPORTIONAL_ADVANCE_TABLE.width_for_byte(code).unwrap(), 0);
-        }
-        for code in (b'z' + 1)..(PROPORTIONAL_WIDTH_TABLE_LEN as u8) {
-            assert_eq!(PROPORTIONAL_ADVANCE_TABLE.width_for_byte(code).unwrap(), 0);
+    // Left ribbon band and the viewport's white left rule.
+    assert_eq!(chrome_index_at(&rgba, 3, 100), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 7, 100), CHROME_RULE_INDEX);
+    // Viewport interior stays black for the tile blit.
+    assert_eq!(chrome_index_at(&rgba, 8, 100), 0);
+    assert_eq!(chrome_index_at(&rgba, 183, 100), 0);
+    // Middle band, stats-panel rules, and the right band.
+    assert_eq!(chrome_index_at(&rgba, 184, 100), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 187, 100), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 191, 30), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 312, 30), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 316, 30), CHROME_RIBBON_INDEX);
+    // The right band stops at y=86: the message box runs to the edge.
+    assert_eq!(chrome_index_at(&rgba, 316, 86), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 316, 88), 0);
+    // Divider bands at rows 7 and 10, framed by white rules.
+    assert_eq!(chrome_index_at(&rgba, 250, 56), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 250, 60), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 250, 63), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 250, 80), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 250, 84), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 250, 87), CHROME_RULE_INDEX);
+    // Text row 24 is left entirely black.
+    assert_eq!(chrome_index_at(&rgba, 100, 195), 0);
+    for y in 192..TEXT_WINDOW_RENDER_HEIGHT {
+        for x in 0..TEXT_WINDOW_RENDER_WIDTH {
+            assert_eq!(chrome_index_at(&rgba, x, y), 0, "({x}, {y}) must stay black");
         }
     }
+}
 
-    #[test]
-    fn story_layout_publishes_a_region_for_every_text_consuming_step() {
-        assert!(intro_story_text_region(INTRO_INLINE_DOORWAY_STEP).is_none());
-        assert!(intro_story_text_region(INTRO_STORY_STEP_COUNT).is_none());
-        for step in 0..INTRO_STORY_STEP_COUNT {
-            if step == INTRO_INLINE_DOORWAY_STEP {
-                continue;
-            }
-            let region = intro_story_text_region(step)
-                .unwrap_or_else(|| panic!("intro story step {step} needs a text region"));
-            assert_eq!(region.left, INTRO_STORY_TEXT_LEFT);
-            assert_eq!(region.right, INTRO_STORY_TEXT_RIGHT);
-            assert!(region.top_y < 200, "step {step} text top {}", region.top_y);
-            if let Some(gutter) = region.gutter {
-                assert!(gutter.top_y <= gutter.bottom_y, "step {step} gutter rows");
-                assert!(gutter.left < gutter.right, "step {step} gutter columns");
-                assert!(gutter.right <= INTRO_STORY_TEXT_RIGHT, "step {step} gutter right");
-            }
+#[test]
+fn gameplay_chrome_rounds_the_three_outer_corners() {
+    let rgba = chrome_frame(&GameplayChromeContent::default());
+
+    // `CHROME_CORNER_PROFILE` starts the fill at column 5/3/2/1/1/0 on
+    // the first six rows of each band, mirrored on the far edge.
+    for (row_from_edge, start_column) in CHROME_CORNER_PROFILE.into_iter().enumerate() {
+        let start_column = usize::from(start_column);
+        let top = row_from_edge;
+        let bottom = CHROME_BOTTOM_Y - row_from_edge;
+        if start_column > 0 {
+            assert_eq!(chrome_index_at(&rgba, start_column - 1, top), 0);
+            assert_eq!(chrome_index_at(&rgba, start_column - 1, bottom), 0);
+            assert_eq!(chrome_index_at(&rgba, 320 - start_column, top), 0);
         }
-    }
-
-    #[test]
-    fn story_layout_line_bounds_narrow_only_inside_the_gutter() {
-        // Step 13 draws STORY6.16 #0 at (176, 0); the measured text is
-        // narrowed to x 0..168 through line y=108 and runs full width from
-        // line y=117.
-        let region = intro_story_text_region(13).unwrap();
-        assert_eq!(region.line_bounds(0), (0, 168));
-        assert_eq!(region.line_bounds(108), (0, 168));
         assert_eq!(
-            region.line_bounds(117),
-            (INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT)
+            chrome_index_at(&rgba, start_column, top),
+            CHROME_RIBBON_INDEX
         );
-        // Step 3 narrows in the middle: full width above and below the art.
-        let region = intro_story_text_region(3).unwrap();
         assert_eq!(
-            region.line_bounds(27),
-            (INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT)
+            chrome_index_at(&rgba, start_column, bottom),
+            CHROME_RIBBON_INDEX
         );
-        assert_eq!(region.line_bounds(36), (210, 318));
-        assert_eq!(region.line_bounds(153), (210, 318));
         assert_eq!(
-            region.line_bounds(162),
-            (INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT)
+            chrome_index_at(&rgba, 319 - start_column, top),
+            CHROME_RIBBON_INDEX
         );
     }
 
-    fn uniform_advance_table(advance: u8) -> ProportionalWidthTable {
-        let mut widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
-        for code in PCS_FIRST_CODE..=b'z' {
-            widths[usize::from(code)] = advance;
-        }
-        widths[usize::from(b' ')] = PCS_SPACE_ADVANCE;
-        ProportionalWidthTable::new(widths)
+    // The intro menu frame is the same measured carve, kept in one place.
+    assert_eq!(INTRO_MENU_FRAME_CORNER_PROFILE, CHROME_CORNER_PROFILE);
+}
+
+#[test]
+fn ribbon_end_cap_is_the_one_row_erosion_of_its_source_triangle() {
+    let font = chrome_test_font();
+
+    let right = ribbon_cap_sprite(&font, RibbonCapDirection::Right);
+    assert_eq!(right.ribbon, [0x00, 0x80, 0xe0, 0xf8, 0xf8, 0xe0, 0x80, 0x00]);
+    assert_eq!(right.white, [0x80, 0x60, 0x18, 0x04, 0x04, 0x18, 0x60, 0x80]);
+
+    let left = ribbon_cap_sprite(&font, RibbonCapDirection::Left);
+    assert_eq!(left.ribbon, [0x00, 0x01, 0x07, 0x1f, 0x1f, 0x07, 0x01, 0x00]);
+    assert_eq!(left.white, [0x01, 0x06, 0x18, 0x20, 0x20, 0x18, 0x06, 0x01]);
+
+    // The two masks partition the source triangle exactly.
+    for row in 0..8 {
+        let solid = font.glyph_row(RIBBON_CAP_RIGHT_SOURCE_GLYPH, row).unwrap();
+        assert_eq!(right.ribbon[row] | right.white[row], solid);
+        assert_eq!(right.ribbon[row] & right.white[row], 0);
+    }
+}
+
+#[test]
+fn sky_strip_cells_map_to_columns_six_through_seventeen() {
+    assert_eq!(sky_strip_cell_column(0), SKY_STRIP_FIRST_COLUMN);
+    assert_eq!(sky_strip_cell_column(11), 17);
+
+    // Hour 8 puts the fixed marker at cell 9 and Trammel at cell 0.
+    let cells = sky_strip_cells(8, [b'4', b'6']);
+    assert_eq!(
+        cells[9],
+        Some(SkyStripCell {
+            rune_code: SKY_STRIP_HOUR_MARKER_RUNE,
+            palette_index: SKY_STRIP_HOUR_MARKER_INDEX,
+        })
+    );
+    assert_eq!(
+        cells[0],
+        Some(SkyStripCell {
+            rune_code: 0x34,
+            palette_index: SKY_STRIP_MOON_INDEX,
+        })
+    );
+    assert!(cells[1].is_none());
+
+    // Phase digits index the rune alphabet directly; anything else has
+    // no glyph rather than a placeholder.
+    assert_eq!(sky_strip_moon_rune(b'0'), Some(0x30));
+    assert_eq!(sky_strip_moon_rune(b'7'), Some(0x37));
+    assert_eq!(sky_strip_moon_rune(b'8'), None);
+    assert_eq!(sky_strip_moon_rune(0), None);
+}
+
+#[test]
+fn sky_strip_gap_caps_sit_at_columns_five_and_eighteen() {
+    let content = ChromeGap::SkyStrip(Box::new(sky_strip_cells(8, [b'4', b'6'])));
+    let gap = top_gap(&content).unwrap();
+
+    assert_eq!(gap.left_cap_column, 5);
+    assert_eq!(gap.right_cap_column, 18);
+    assert_eq!(gap.content_first_column, SKY_STRIP_FIRST_COLUMN);
+    assert_eq!(gap.content_cells, SKY_STRIP_CELL_COUNT as usize);
+
+    // The white rule at y=7 is interrupted across the whole gap.
+    let rgba = chrome_frame(&GameplayChromeContent {
+        top: content,
+        ..GameplayChromeContent::default()
+    });
+    assert_eq!(chrome_index_at(&rgba, 40, 7), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 41, 7), 0);
+    assert_eq!(chrome_index_at(&rgba, 150, 7), 0);
+    assert_eq!(chrome_index_at(&rgba, 151, 7), CHROME_RULE_INDEX);
+    // The cap's outline and ribbon fill both land in column 5.
+    assert_eq!(chrome_index_at(&rgba, 40, 0), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 40, 1), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 41, 1), CHROME_RULE_INDEX);
+}
+
+#[test]
+fn wind_banner_pads_direction_into_a_five_column_field() {
+    assert_eq!(wind_banner_text(Some("East")), "East  Winds");
+    assert_eq!(wind_banner_text(Some("South")), "South Winds");
+    assert_eq!(wind_banner_text(Some("West")), "West  Winds");
+    assert_eq!(wind_banner_text(Some("Calm")), "Calm  Winds");
+    // `weather.md §2`: an out-of-range wind byte drops the direction
+    // label but keeps the shared suffix.
+    assert_eq!(wind_banner_text(None), "      Winds");
+    for text in [
+        wind_banner_text(Some("East")),
+        wind_banner_text(Some("South")),
+        wind_banner_text(None),
+    ] {
+        assert_eq!(text.chars().count(), WIND_BANNER_CELLS);
     }
 
-    #[test]
-    fn story_layout_indents_paragraphs_and_starts_at_the_region_top() {
-        let widths = uniform_advance_table(5);
-        let region = ProportionalTextRegion::full_width(20);
-        let placed =
-            layout_proportional_justified_paragraph(&widths, &region, b"\n{ab cd\0", 200).unwrap();
-        // The leading hard newline costs one line, then `{` indents by 15.
-        assert_eq!(placed[0].y, 20 + PROPORTIONAL_LINE_STRIDE);
-        assert_eq!(placed[0].x, PROPORTIONAL_PARAGRAPH_INDENT);
-        assert_eq!(placed[0].code, b'a');
-        // The final line of a paragraph keeps natural 5-pixel spaces.
-        let space_gap = placed[2].x - placed[1].x;
-        assert_eq!(space_gap, 5 + u16::from(PCS_SPACE_ADVANCE));
-    }
+    let gap = bottom_gap(&ChromeGap::Label(wind_banner_text(Some("East")))).unwrap();
+    assert_eq!(gap.left_cap_column, 6);
+    assert_eq!(gap.right_cap_column, 18);
+    assert_eq!(gap.content_first_column, WIND_BANNER_FIRST_COLUMN);
+}
 
-    #[test]
-    fn story_layout_justifies_every_line_but_the_last_of_a_paragraph() {
-        let widths = uniform_advance_table(5);
-        // Each glyph advances 5 px (4 px of ink plus the separator column),
-        // so four two-glyph words plus three natural 5 px spaces measure
-        // 53 px of ink. A rectangle ending at column 58 cannot take the fifth
-        // word, and justifying the first line spreads 5 extra pixels over its
-        // three spaces as 6, 7 and 7.
-        let region = ProportionalTextRegion {
-            top_y: 0,
-            left: 0,
-            right: 58,
-            gutter: None,
-            first_line_left: None,
-            space_advance: PCS_SPACE_ADVANCE,
-        };
-        let placed =
-            layout_proportional_justified_paragraph(&widths, &region, b"aa bb cc dd ee\0", 200)
-                .unwrap();
-        let first_line: Vec<_> = placed.iter().filter(|glyph| glyph.y == 0).collect();
-        assert_eq!(first_line.len(), 8);
-        // Justified: the last glyph's rightmost ink column lands on `right`.
-        let last = first_line.last().unwrap();
-        let ink_width = 5 - usize::from(PCS_GLYPH_ADVANCE_GAP);
-        assert_eq!(
-            usize::from(last.x) + ink_width - 1,
-            usize::from(region.right)
-        );
-        let gaps: Vec<u16> = (0..3)
-            .map(|word| first_line[word * 2 + 2].x - first_line[word * 2 + 1].x - 5)
-            .collect();
-        assert_eq!(gaps, vec![6, 7, 7], "extra pixels go to the rightmost spaces");
-        // The paragraph's last line is left-aligned with natural spacing.
-        let second_line: Vec<_> = placed
+#[test]
+fn dungeon_labels_close_the_ribbon_gap_around_their_own_width() {
+    // Observed on the published dungeon frame: `L5` sits between caps
+    // at columns 10 and 13, and `Dir:  East` between columns 6 and 17.
+    let level = ChromeGap::Label(dungeon_level_label(5));
+    let gap = top_gap(&level).unwrap();
+    assert_eq!(gap.left_cap_column, 10);
+    assert_eq!(gap.right_cap_column, 13);
+    assert_eq!(gap.content_first_column, 11);
+
+    let facing = ChromeGap::Label(dungeon_direction_label("East"));
+    assert_eq!(dungeon_direction_label("East"), "Dir:  East");
+    let gap = bottom_gap(&facing).unwrap();
+    assert_eq!(gap.left_cap_column, 6);
+    assert_eq!(gap.right_cap_column, 17);
+    assert_eq!(gap.content_first_column, 7);
+}
+
+#[test]
+fn timing_glyph_slot_appears_only_when_the_tag_byte_is_nonzero() {
+    assert!(timing_glyph_gap(None).is_none());
+    assert!(timing_glyph_gap(Some(0)).is_none());
+
+    let gap = timing_glyph_gap(Some(b'P')).unwrap();
+    assert_eq!(gap.left_cap_column, 30);
+    assert_eq!(gap.right_cap_column, 32);
+    assert_eq!(gap.content_first_column, TIMING_GLYPH_COLUMN);
+
+    // Zero leaves divider row 7 a plain ribbon band with no caps.
+    let plain = chrome_frame(&GameplayChromeContent::default());
+    assert_eq!(chrome_index_at(&plain, 245, 60), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&plain, 250, 56), CHROME_RULE_INDEX);
+
+    let tagged = chrome_frame(&GameplayChromeContent {
+        timing_glyph: Some(b'P'),
+        ..GameplayChromeContent::default()
+    });
+    assert_eq!(chrome_index_at(&tagged, 241, 56), 0);
+    assert_eq!(chrome_index_at(&tagged, 240, 56), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&tagged, 263, 56), CHROME_RULE_INDEX);
+}
+
+#[test]
+fn gameplay_chrome_content_follows_the_scene_family() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.wind = WindState::South;
+    state.wind_save_byte = WindState::South.save_byte();
+
+    let town = gameplay_chrome_content(&state);
+    assert!(matches!(town.top, ChromeGap::SkyStrip(_)));
+    assert_eq!(town.bottom, ChromeGap::Label("South Winds".to_string()));
+
+    let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    dungeon.player.facing = Direction::East;
+    let Area::Dungeon { level, .. } = dungeon.area else {
+        panic!("dungeon fixture must be a dungeon scene");
+    };
+    let below = gameplay_chrome_content(&dungeon);
+    assert_eq!(below.top, ChromeGap::Label(format!("L{level}")));
+    assert_eq!(below.bottom, ChromeGap::Label("Dir:  East".to_string()));
+}
+
+#[test]
+fn message_window_prefixes_command_echoes_and_spaces_turns() {
+    let mut log = GameplayMessageLog::new();
+    log.push_command("Pass");
+    log.end_turn();
+    log.push_command("Z-stats");
+    log.push_output("Player! None!");
+    log.end_turn();
+
+    let layout = layout_message_window(&log, Some("Look-"));
+    let rows: Vec<(u8, u8, &str, bool)> = layout
+        .rows
+        .iter()
+        .map(|row| (row.row, row.column, row.text.as_str(), row.prefixed))
+        .collect();
+
+    // Blank rows are not emitted; the live input line is the window's
+    // bottom row and carries the end-cap prefix like any command echo.
+    assert_eq!(
+        rows,
+        vec![
+            (18, MESSAGE_WINDOW_LEFT + 1, "Pass", true),
+            (20, MESSAGE_WINDOW_LEFT + 1, "Z-stats", true),
+            (21, MESSAGE_WINDOW_LEFT, "Player! None!", false),
+            (23, MESSAGE_WINDOW_LEFT + 1, "Look-", true),
+        ]
+    );
+    assert_eq!(layout.prefixed_rows(), vec![18, 20, 23]);
+    assert_eq!(MESSAGE_WINDOW_BOTTOM, 23);
+}
+
+#[test]
+fn message_window_wraps_and_scrolls_within_its_thirteen_rows() {
+    let mut log = GameplayMessageLog::new();
+    log.push_output("Yes. Saving... Done.");
+    let layout = layout_message_window(&log, None);
+    assert_eq!(
+        layout
+            .rows
             .iter()
-            .filter(|glyph| glyph.y == PROPORTIONAL_LINE_STRIDE)
-            .collect();
-        assert_eq!(second_line.len(), 2);
-        assert_eq!(second_line[0].x, 0);
-    }
-
-    #[test]
-    fn story_layout_breaks_words_at_soft_hyphens_and_draws_the_hyphen() {
-        let widths = uniform_advance_table(5);
-        let region = ProportionalTextRegion {
-            top_y: 0,
-            left: 0,
-            right: 39,
-            gutter: None,
-            first_line_left: None,
-            space_advance: PCS_SPACE_ADVANCE,
-        };
-        let placed =
-            layout_proportional_justified_paragraph(&widths, &region, b"aa bb_cc_dd\0", 200)
-                .unwrap();
-        let first: String = placed
+            .map(|row| row.text.clone())
+            .collect::<Vec<_>>(),
+        vec!["Yes. Saving...".to_string(), "Done.".to_string()]
+    );
+    assert!(
+        layout
+            .rows
             .iter()
-            .filter(|glyph| glyph.y == 0)
-            .map(|glyph| glyph.code as char)
-            .collect();
-        let second: String = placed
-            .iter()
-            .filter(|glyph| glyph.y == PROPORTIONAL_LINE_STRIDE)
-            .map(|glyph| glyph.code as char)
-            .collect();
-        assert_eq!(first, "aabbcc-");
-        assert_eq!(second, "dd");
-        // The soft-break marker itself never reaches the framebuffer.
-        assert!(
-            placed
-                .iter()
-                .all(|glyph| glyph.code != STORY_SOFT_BREAK_MARKER)
-        );
+            .all(|row| row.text.chars().count() <= MESSAGE_WINDOW_WIDTH)
+    );
+
+    // The log keeps only the rows that can still scroll into view.
+    for index in 0..40 {
+        log.push_command(&format!("Cmd{index}"));
+        log.end_turn();
     }
+    assert!(log.lines().len() <= MESSAGE_WINDOW_HISTORY_ROWS);
+    let layout = layout_message_window(&log, Some(""));
+    assert!(layout.rows.iter().all(|row| {
+        row.row >= MESSAGE_WINDOW_TOP && row.row <= MESSAGE_WINDOW_BOTTOM
+    }));
+    assert_eq!(layout.rows.last().unwrap().row, MESSAGE_WINDOW_BOTTOM);
+}
 
-    #[test]
-    fn story_layout_rejects_codes_the_advance_table_never_measured() {
-        let widths = uniform_advance_table(5);
-        let region = ProportionalTextRegion::full_width(0);
-        assert!(
-            layout_proportional_justified_paragraph(&widths, &region, b"a\x01b\0", 200).is_err()
-        );
-    }
-
-    /// Golden geometry for the twenty text-consuming intro story steps,
-    /// measured off a black-box run of the original (`cleak/u5-spec#70`):
-    /// `(step, first line y, first glyph x, last line y, last glyph's right
-    /// ink column, line count, glyph count)`. Only geometry and counts are
-    /// recorded here; the narrative text itself stays in `STORY.DAT`.
-    const INTRO_STORY_MEASURED_GEOMETRY: [(usize, u16, u16, u16, u16, usize, usize); 20] = [
-        (0, 128, 195, 191, 286, 8, 214),
-        (1, 9, 15, 171, 274, 19, 531),
-        (2, 67, 15, 166, 289, 12, 341),
-        (3, 0, 15, 180, 84, 21, 484),
-        (4, 18, 15, 189, 55, 20, 548),
-        (5, 0, 191, 171, 223, 20, 516),
-        (7, 136, 203, 181, 164, 6, 142),
-        (8, 9, 15, 63, 207, 7, 313),
-        (9, 0, 15, 72, 89, 9, 350),
-        (10, 0, 15, 63, 178, 8, 352),
-        (11, 9, 15, 63, 179, 7, 312),
-        (12, 9, 15, 63, 97, 7, 288),
-        (13, 0, 15, 171, 223, 20, 595),
-        (14, 41, 199, 185, 141, 17, 483),
-        (15, 0, 15, 162, 304, 19, 574),
-        (16, 0, 15, 171, 35, 20, 596),
-        (17, 9, 15, 162, 105, 18, 571),
-        (18, 0, 189, 180, 46, 21, 646),
-        (19, 9, 15, 171, 205, 19, 631),
-        (20, 9, 15, 171, 213, 19, 604),
-    ];
-
-    #[test]
-    fn story_layout_reproduces_the_measured_intro_slide_geometry() {
-        let Some(dir) = local_clean_assets() else {
-            return;
-        };
-        if !dir.join(STORY_DAT_FILE).is_file() {
-            return;
-        }
-        let Some(records) = load_story_records(&dir).expect("STORY.DAT loads") else {
-            return;
-        };
-        for (step, first_y, first_x, last_y, last_right, line_count, glyph_count) in
-            INTRO_STORY_MEASURED_GEOMETRY
-        {
-            let record_index = if step < INTRO_INLINE_DOORWAY_STEP {
-                step
-            } else {
-                step - 1
-            };
-            let text = records
-                .record(record_index)
-                .unwrap_or_else(|| panic!("STORY.DAT record {record_index}"));
-            let region = intro_story_text_region(step).unwrap();
-            let placed = layout_proportional_justified_paragraph(
-                &PROPORTIONAL_ADVANCE_TABLE,
-                &region,
-                text.as_bytes(),
-                200,
-            )
-            .unwrap_or_else(|err| panic!("intro story step {step} layout: {err}"));
-
-            assert_eq!(placed.len(), glyph_count, "step {step} glyph count");
-            assert_eq!(placed[0].y, first_y, "step {step} first line row");
-            assert_eq!(placed[0].x, first_x, "step {step} first glyph column");
-            let last = placed.last().unwrap();
-            assert_eq!(last.y, last_y, "step {step} last line row");
-            let last_width = PROPORTIONAL_ADVANCE_TABLE.width_for_byte(last.code).unwrap()
-                - usize::from(PCS_GLYPH_ADVANCE_GAP);
-            assert_eq!(
-                usize::from(last.x) + last_width - 1,
-                usize::from(last_right),
-                "step {step} last glyph right column"
-            );
-            let rows = placed
-                .iter()
-                .map(|glyph| glyph.y)
-                .collect::<std::collections::BTreeSet<_>>();
-            assert_eq!(rows.len(), line_count, "step {step} line count");
-            for row in &rows {
-                assert_eq!(
-                    (row - first_y) % PROPORTIONAL_LINE_STRIDE,
-                    0,
-                    "step {step} row {row} is off the 9-pixel line grid"
-                );
-            }
-            // Every glyph must sit inside its line's measured bounds.
-            for glyph in &placed {
-                let (left, right) = region.line_bounds(glyph.y);
-                let left = match region.first_line_left {
-                    Some(first_left) if glyph.y == first_y => first_left,
-                    _ => left,
-                };
-                let width = PROPORTIONAL_ADVANCE_TABLE.width_for_byte(glyph.code).unwrap()
-                    - usize::from(PCS_GLYPH_ADVANCE_GAP);
-                assert!(glyph.x >= left, "step {step} glyph left of its band");
-                assert!(
-                    usize::from(glyph.x) + width - 1 <= usize::from(right),
-                    "step {step} glyph past its band right edge"
-                );
-            }
-        }
-    }
-
-
-    /// Golden geometry for the three character-creation proportional screens,
-    /// measured off captures of the original (`cleak/u5-spec#70`):
-    /// `(QUESTION.DAT record, first line y, first glyph x, last line y, last
-    /// glyph's right ink column, line count, glyph count)`. Record 15 is the
-    /// dilemma shown in the captured question screen; every dilemma record
-    /// uses the same rectangle.
-    const CHARGEN_MEASURED_GEOMETRY: [(usize, u16, u16, u16, u16, usize, usize); 3] = [
-        (0, 9, 15, 180, 288, 20, 617),
-        (1, 0, 15, 189, 112, 22, 705),
-        (15, 152, 0, 179, 280, 4, 179),
-    ];
-
-    #[test]
-    fn story_layout_reproduces_the_measured_chargen_geometry() {
-        let Some(dir) = local_clean_assets() else {
-            return;
-        };
-        if !dir.join(QUESTION_DAT_FILE).is_file() {
-            return;
-        }
-        let Some(records) = load_question_records(&dir).expect("QUESTION.DAT loads") else {
-            return;
-        };
-        for (record, first_y, first_x, last_y, last_right, line_count, glyph_count) in
-            CHARGEN_MEASURED_GEOMETRY
-        {
-            let region = match record {
-                0 => CHARGEN_GYPSY_TEXT_REGION,
-                1 => CHARGEN_RESULT_TEXT_REGION,
-                _ => CHARGEN_QUESTION_TEXT_REGION,
-            };
-            let text = records
-                .records
-                .get(record)
-                .unwrap_or_else(|| panic!("QUESTION.DAT record {record}"));
-            let placed = layout_proportional_justified_paragraph(
-                &PROPORTIONAL_ADVANCE_TABLE,
-                &region,
-                text.as_bytes(),
-                200,
-            )
-            .unwrap_or_else(|err| panic!("chargen record {record} layout: {err}"));
-
-            assert_eq!(placed.len(), glyph_count, "record {record} glyph count");
-            assert_eq!(placed[0].y, first_y, "record {record} first line row");
-            assert_eq!(placed[0].x, first_x, "record {record} first glyph column");
-            let last = placed.last().unwrap();
-            assert_eq!(last.y, last_y, "record {record} last line row");
-            let last_width = PROPORTIONAL_ADVANCE_TABLE.width_for_byte(last.code).unwrap()
-                - usize::from(PCS_GLYPH_ADVANCE_GAP);
-            assert_eq!(
-                usize::from(last.x) + last_width - 1,
-                usize::from(last_right),
-                "record {record} last glyph right column"
-            );
-            let rows = placed
-                .iter()
-                .map(|glyph| glyph.y)
-                .collect::<std::collections::BTreeSet<_>>();
-            assert_eq!(rows.len(), line_count, "record {record} line count");
-        }
-    }
-
+#[test]
+fn viewport_origin_sits_inside_the_white_frame_rule() {
+    assert_eq!(VIEWPORT_ORIGIN_X, 8);
+    assert_eq!(VIEWPORT_ORIGIN_Y, 8);
+    // Eleven 16px tiles fill x=8..=183, immediately inside the rules at
+    // x=7 and x=184.
+    assert_eq!(VIEWPORT_ORIGIN_X + 11 * TILE_ATLAS_SIDE, 184);
+    assert_eq!(VIEWPORT_ORIGIN_Y + 11 * TILE_ATLAS_SIDE, 184);
+}

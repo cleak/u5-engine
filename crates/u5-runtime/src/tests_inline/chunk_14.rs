@@ -1338,30 +1338,170 @@
         assert!(!dungeon.visibility_dirty);
     }
 
+    /// `visibility.md §5` + `lighting.md §3`: the ambient byte is handed
+    /// to the carve as the squared-distance threshold, unmodified (clamped
+    /// at `FULL_DAYLIGHT` so a skip-recompute sentinel cannot widen the
+    /// disc). No linear-radius ladder, and no squaring by the carve.
     #[test]
-    fn surface_visibility_radius_follows_cached_ambient_light() {
+    fn surface_visibility_threshold_is_the_cached_ambient_light() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
 
+        for level in [
+            FULL_DAYLIGHT,
+            DAWN_DUSK_LIGHT[4],
+            DAWN_DUSK_LIGHT[3],
+            DAWN_DUSK_LIGHT[2],
+            TORCH_LIGHT_FLOOR,
+            LIGHT_SPELL_FLOOR,
+            DAWN_DUSK_LIGHT[1],
+            FULL_DARKNESS,
+        ] {
+            state.ambient_light = level;
+            assert_eq!(
+                state.surface_visibility_light_threshold(),
+                u32::from(level),
+                "ambient {level} is the squared-distance threshold itself"
+            );
+            assert!(!state.surface_visibility_pitch_dark());
+        }
+
+        state.ambient_light = DAYLIGHT_SENTINEL_MIN;
+        assert_eq!(
+            state.surface_visibility_light_threshold(),
+            u32::from(FULL_DAYLIGHT)
+        );
+
+        state.ambient_light = 0;
+        assert_eq!(state.surface_visibility_light_threshold(), 0);
+        assert!(state.surface_visibility_pitch_dark());
+    }
+
+    /// `visibility.md §5`: `FULL_DAYLIGHT` (50) is exactly the squared
+    /// distance from the centre to a corner of the 11x11 viewport, so
+    /// daytime Britannia lights all 121 cells — which is what the original
+    /// shows at noon.
+    #[test]
+    fn full_daylight_threshold_lights_the_whole_viewport() {
+        let mut state = britannia_state(open_world_grid(), 100, 100);
         state.ambient_light = FULL_DAYLIGHT;
-        assert_eq!(state.surface_visibility_radius(5), 5);
+        let threshold = state.surface_visibility_light_threshold();
 
-        state.ambient_light = DAWN_DUSK_LIGHT[4];
-        assert_eq!(state.surface_visibility_radius(5), 4);
+        let carve = state.surface_visibility_carve_with_light_threshold(100, 100, 5, threshold, true);
+        assert_eq!(carve.len(), 121);
+        assert_eq!(carve.iter().filter(|lit| **lit).count(), 121);
+        assert!(state.world_cell_visible_with_light_threshold(100, 100, 95, 95, 5, threshold));
+    }
 
-        state.ambient_light = DAWN_DUSK_LIGHT[3];
-        assert_eq!(state.surface_visibility_radius(5), 3);
+    /// `lighting.md §3`: full darkness is 2, and a squared-distance
+    /// threshold of 2 covers exactly the eight neighbours plus the centre.
+    #[test]
+    fn full_darkness_threshold_lights_only_the_player_neighbourhood() {
+        let mut state = britannia_state(open_world_grid(), 100, 100);
+        state.ambient_light = FULL_DARKNESS;
+        let threshold = state.surface_visibility_light_threshold();
 
-        state.ambient_light = TORCH_LIGHT_FLOOR;
-        assert_eq!(state.surface_visibility_radius(5), 2);
+        let carve = state.surface_visibility_carve_with_light_threshold(100, 100, 5, threshold, true);
+        assert_eq!(carve.iter().filter(|lit| **lit).count(), 9);
+        assert!(state.world_cell_visible_with_light_threshold(100, 100, 101, 101, 5, threshold));
+        assert!(!state.world_cell_visible_with_light_threshold(100, 100, 102, 100, 5, threshold));
+    }
 
-        state.ambient_light = LIGHT_SPELL_FLOOR;
-        assert_eq!(state.surface_visibility_radius(5), 2);
+    /// `visibility.md §3`/`§4`: a zero light radius skips the carve and
+    /// leaves the grid fully obscured — the player sees nothing at all,
+    /// not even the cell underfoot.
+    #[test]
+    fn zero_ambient_light_leaves_the_town_grid_fully_obscured() {
+        let mut state = test_state(open_grid(), 15, 15);
+        state.ambient_light = 0;
 
-        state.ambient_light = DAWN_DUSK_LIGHT[1];
-        assert_eq!(state.surface_visibility_radius(5), 1);
+        assert!(state.surface_visibility_pitch_dark());
+        let view = state.render_text_view(5);
+        assert!(
+            view.lines()
+                .skip(1)
+                .take(11)
+                .all(|line| line.chars().all(|glyph| glyph == ' ')),
+            "pitch dark should paint nothing, got:\n{view}"
+        );
 
         state.ambient_light = FULL_DARKNESS;
-        assert_eq!(state.surface_visibility_radius(5), 0);
+        assert!(!state.surface_visibility_pitch_dark());
+        assert!(
+            state
+                .render_text_view(5)
+                .lines()
+                .skip(1)
+                .take(11)
+                .any(|line| line.chars().any(|glyph| glyph != ' '))
+        );
+    }
+
+    /// `visibility.md §5`/`§6`/`§11`: indoor scenes run the same carve as
+    /// the overworld, with the same tile classifier. The interior brick
+    /// floor `0x44` is not in the propagation-blocker set, so a hut lit by
+    /// daylight carves out its whole interior plus the surrounding wall
+    /// ring — it does not collapse to the player's own 3x3 neighbourhood,
+    /// which is what an extra `surface_tile_blocks_projectile` gate used
+    /// to do (that predicate calls all of `0x18..=0x4F` opaque, `0x44`
+    /// included).
+    #[test]
+    fn town_interior_brick_floor_propagates_the_sight_carve() {
+        const INTERIOR_FLOOR: u8 = 0x44;
+        const WALL: u8 = 0x4D;
+
+        let mut grid = open_grid();
+        for y in 11..=19usize {
+            for x in 11..=19usize {
+                let on_ring = x == 11 || x == 19 || y == 11 || y == 19;
+                grid[y * TOWN_GRID_SIDE + x] = if on_ring { WALL } else { INTERIOR_FLOOR };
+            }
+        }
+        let mut state = test_state(grid, 15, 15);
+        state.ambient_light = FULL_DAYLIGHT;
+        let threshold = state.surface_visibility_light_threshold();
+
+        // Far interior corner, five cells away diagonally.
+        assert!(state.town_cell_visible_with_light_threshold(15, 15, 12, 12, 5, threshold));
+        // The wall ring itself is painted (it is carved, it just does not
+        // propagate onward).
+        assert!(state.town_cell_visible_with_light_threshold(15, 15, 11, 15, 5, threshold));
+        // One cell past the wall is hidden.
+        assert!(!state.town_cell_visible_with_light_threshold(15, 15, 10, 15, 5, threshold));
+
+        // 7x7 = 49 interior cells plus the 32-cell wall ring around them.
+        let carve = state.surface_visibility_carve_with_light_threshold(15, 15, 5, threshold, false);
+        assert_eq!(carve.iter().filter(|lit| **lit).count(), 81);
+    }
+
+    /// INTERIM — spec gap `cleak/u5-spec#80`.
+    ///
+    /// `formats/location-dat.md §4` forbids deriving the active floor page
+    /// as `location_index * 2 + floor` and points at a resident per-scene
+    /// base-page table that the spec does not publish yet. For scene 13
+    /// (Iolo's Hut, where the shipped SAVED.GAM starts) the derivation
+    /// gives `DWELLING.DAT` page 8, but black-box observation of the
+    /// original shows page 12. Until the table lands the observed page is
+    /// pinned, and a supplied `location_floor_pages.tsv` still wins.
+    #[test]
+    fn iolos_hut_resolves_to_the_observed_dwelling_base_page() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(13).unwrap();
+
+        assert_eq!(scene.block * 2, 8, "the derivation §4 forbids");
+        assert_eq!(resolve_location_base_page(&dir, scene).unwrap(), 12);
+        assert_eq!(resolve_location_floor_page(&dir, scene, 0).unwrap(), 12);
+        assert_eq!(resolve_location_floor_page(&dir, scene, 1).unwrap(), 13);
+
+        std::fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "0x0d 4\n").unwrap();
+        assert_eq!(resolve_location_base_page(&dir, scene).unwrap(), 4);
+
+        // Scenes with no observed page still use the derivation.
+        std::fs::remove_file(dir.join(LOCATION_FLOOR_TABLE_FILE)).unwrap();
+        let castle = Scene::new(17).unwrap();
+        assert_eq!(
+            resolve_location_base_page(&dir, castle).unwrap(),
+            castle.block * 2
+        );
     }
 
     #[test]
@@ -1379,30 +1519,48 @@
 
         let lit_view = lit.render_text_view(5);
         assert_ne!(lit_view.lines().nth(10).unwrap().chars().nth(5), Some(' '));
-        assert!(lit.town_cell_visible_with_light_radius(5, 5, 5, 9, 5, 1));
+        assert!(lit.town_cell_visible_with_light_threshold(5, 5, 5, 9, 5, 1));
     }
 
+    /// Uses `0x4D`, a real `visibility.md §6` propagation blocker. Tile
+    /// `24` (`0x18`) used to stand in here only because the town carve
+    /// wrongly treated the whole `0x18..=0x4F` band as opaque.
     #[test]
     fn town_local_light_mask_respects_visibility_blockers() {
         let mut grid = open_grid();
         for x in 0..=10 {
-            grid[7 * TOWN_GRID_SIDE + x] = 24;
+            grid[7 * TOWN_GRID_SIDE + x] = 0x4D;
         }
         grid[8 * TOWN_GRID_SIDE + 5] = 0xDC;
         let state = test_state(grid, 5, 5);
 
-        assert!(!state.town_cell_visible_with_light_radius(5, 5, 5, 9, 5, 1));
+        assert!(!state.town_cell_visible_with_light_threshold(5, 5, 5, 9, 5, 1));
     }
 
+    /// `visibility.md §12`: the local-light mask "runs the same centre-out
+    /// visibility carve ... using the source as the centre and a fixed
+    /// source radius", and §5 forbids implementing it as a line caster.
+    /// An L-shaped `0x4D` wall that blocks the straight source-to-target
+    /// line therefore does not darken the target while an eight-neighbour
+    /// path around the corner is open. The fixed Chebyshev source radius
+    /// still bounds the mask.
+    ///
+    /// This replaces `town_local_light_uses_source_to_target_carves_not_flood_fill`,
+    /// which asserted the old Bresenham-style caster.
     #[test]
-    fn town_local_light_uses_source_to_target_carves_not_flood_fill() {
+    fn town_local_light_carve_walks_around_an_l_shaped_wall() {
         let mut grid = open_grid();
         grid[8 * TOWN_GRID_SIDE + 8] = 0xDC;
-        grid[7 * TOWN_GRID_SIDE + 8] = 24;
+        grid[7 * TOWN_GRID_SIDE + 8] = 0x4D;
+        grid[7 * TOWN_GRID_SIDE + 7] = 0x4D;
+        grid[6 * TOWN_GRID_SIDE + 7] = 0x4D;
         let state = test_state(grid, 8, 3);
 
-        assert!(!state.town_cell_visible_with_light_radius(8, 3, 8, 6, 6, 0));
-        assert!(state.town_cell_visible_with_light_radius(8, 3, 7, 6, 6, 0));
+        // Straight line (8,8) -> (8,6) is blocked at (8,7); the open
+        // eight-neighbour path (9,7) -> (9,6) -> (8,6) still lights it.
+        assert!(state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
+        // Chebyshev distance 4 from the source: outside the fixed radius.
+        assert!(!state.town_cell_visible_with_light_threshold(8, 3, 8, 4, 6, 0));
     }
 
     #[test]
@@ -1415,7 +1573,7 @@
             let state = test_state(grid, 8, 3);
 
             assert!(
-                state.town_cell_visible_with_light_radius(8, 3, 8, 6, 6, 0),
+                state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0),
                 "source tile {source_tile:#04x} should light within radius"
             );
         }
@@ -1428,9 +1586,9 @@
         grid[8 * TOWN_GRID_SIDE + 11] = 0xDE;
         let state = test_state(grid, 8, 3);
 
-        assert!(state.town_cell_visible_with_light_radius(8, 3, 5, 6, 6, 0));
-        assert!(state.town_cell_visible_with_light_radius(8, 3, 11, 6, 6, 0));
-        assert!(!state.town_cell_visible_with_light_radius(8, 3, 11, 4, 6, 0));
+        assert!(state.town_cell_visible_with_light_threshold(8, 3, 5, 6, 6, 0));
+        assert!(state.town_cell_visible_with_light_threshold(8, 3, 11, 6, 6, 0));
+        assert!(!state.town_cell_visible_with_light_threshold(8, 3, 11, 4, 6, 0));
     }
 
     #[test]
@@ -1440,7 +1598,7 @@
         let mut state = test_state(grid, 10, 10);
         state.ambient_light = DAWN_DUSK_LIGHT[1];
 
-        assert!(state.town_cell_visible_with_light_radius(10, 10, 10, 18, 10, 1));
+        assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 18, 10, 1));
         assert_eq!(
             state
                 .render_text_view(10)
@@ -1459,8 +1617,8 @@
         grid[8 * TOWN_GRID_SIDE + 8] = 0xDC;
         let state = test_state(grid, 5, 5);
 
-        assert!(state.town_cell_visible_with_light_radius(5, 5, 11, 11, 8, 0));
-        assert!(!state.town_cell_visible_with_light_radius(5, 5, 12, 8, 8, 0));
+        assert!(state.town_cell_visible_with_light_threshold(5, 5, 11, 11, 8, 0));
+        assert!(!state.town_cell_visible_with_light_threshold(5, 5, 12, 8, 8, 0));
     }
 
     #[test]
@@ -1478,7 +1636,7 @@
             aux3: 0,
         });
 
-        assert!(state.town_cell_visible_with_light_radius(10, 10, 10, 18, 10, 1));
+        assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 18, 10, 1));
         assert_eq!(
             state
                 .render_text_view(10)
@@ -1505,7 +1663,7 @@
             aux3: 0,
         });
 
-        assert!(state.town_cell_visible_with_light_radius(8, 3, 8, 6, 6, 0));
+        assert!(state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
     }
 
     #[test]
@@ -1515,7 +1673,7 @@
         let mut state = britannia_state(grid, 0, 0);
         state.ambient_light = DAWN_DUSK_LIGHT[1];
 
-        assert!(state.world_cell_visible_with_light_radius(0, 0, -6, 0, 10, 1));
+        assert!(state.world_cell_visible_with_light_threshold(0, 0, -6, 0, 10, 1));
         assert_eq!(
             state
                 .render_text_view(10)
@@ -1594,17 +1752,20 @@
         let panel = state.render_stats_panel_view();
         let lines = panel.lines().collect::<Vec<_>>();
 
-        assert_eq!(lines.len(), STATS_PANEL_PARTY_ROWS + 5);
-        assert!(lines.iter().all(|line| line.chars().count() == STATS_PANEL_WIDTH));
-        assert!(lines[1].contains("Avatar"));
-        assert!(lines[2].contains("Julia"));
-        assert!(lines[2].contains(">  87P"));
-        assert!(lines[7].contains("Food"));
-        assert!(lines[7].contains("123"));
-        assert!(lines[8].contains("Gold"));
-        assert!(lines[8].contains("456"));
-        assert!(lines[9].contains("05-18"));
-        assert!(lines[10].contains("Sky"));
+        // Six roster rows, then the shared food/gold row and the
+        // centred calendar row. There is no header row and no sky row:
+        // the sun/moon strip lives in the top border, not the panel.
+        assert_eq!(lines.len(), STATS_PANEL_PARTY_ROWS + 2);
+        assert!(
+            lines
+                .iter()
+                .all(|line| line.chars().count() == STATS_PANEL_WIDTH)
+        );
+        assert!(lines[0].contains("Avatar"));
+        assert!(lines[1].contains("Julia"));
+        assert!(lines[1].contains(">  87P"));
+        assert_eq!(lines[6].trim_end(), "F:123     G:456");
+        assert_eq!(lines[7].trim(), "5-18-012");
     }
 
     #[test]
@@ -1614,14 +1775,14 @@
 
         let visible_panel = state.render_stats_panel_frame();
 
-        assert!(visible_panel.lines().nth(1).unwrap().contains(">"));
+        assert!(visible_panel.lines().next().unwrap().contains(">"));
         assert_eq!(state.active_player, None);
 
         state.active_player = Some(0);
         state.party[0].status = b'S';
         let sleeping_panel = state.render_stats_panel_frame();
 
-        assert!(!sleeping_panel.lines().nth(1).unwrap().contains(">"));
+        assert!(!sleeping_panel.lines().next().unwrap().contains(">"));
         assert_eq!(state.active_player, Some(0));
     }
 
@@ -1633,26 +1794,44 @@
 
         let system = render_play_text_window_system(&state, state.active_player, Some("job"));
 
+        // The message window is the right-hand column below the stats
+        // boxes, and the live input line is its own bottom row: there
+        // is no bottom-left prompt window and no ASCII "> " prefix
+        // (column 24 carries the ribbon end-cap sprite instead).
         assert_eq!(system.active_window_index(), MAIN_TEXT_WINDOW_INDEX);
-        assert_eq!(system.cell(0, 0).unwrap().byte, b'H');
+        assert_eq!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_TOP)
+                .unwrap()
+                .byte,
+            b'H'
+        );
+        assert!(system.cell(0, 0).is_none());
         assert_eq!(
             system
                 .region_rows(
                     STATS_PANEL_TEXT_LEFT,
-                    0,
+                    STATS_ROSTER_TOP,
                     STATS_PANEL_TEXT_RIGHT,
-                    0,
+                    STATS_ROSTER_TOP,
                     b' '
                 )
                 .first()
                 .unwrap()
                 .trim_end(),
-            "STATS"
+            "Avatar   >  60G"
         );
-        assert_eq!(system.cell(STATS_PANEL_TEXT_LEFT, 1).unwrap().byte, b'A');
-        assert_eq!(system.cell(0, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'>');
-        assert_eq!(system.cell(1, TEXT_SCREEN_ROWS - 2).unwrap().byte, b' ');
-        assert_eq!(system.cell(2, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'j');
+        assert_eq!(
+            system.cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP).unwrap().byte,
+            b'A'
+        );
+        assert_eq!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT + 1, MESSAGE_WINDOW_BOTTOM)
+                .unwrap()
+                .byte,
+            b'j'
+        );
     }
 
     #[test]
@@ -1670,13 +1849,19 @@
 
         let system = render_play_text_window_system(&state, state.active_player, None);
         let main = system
-            .region_rows(0, 0, MESSAGE_TEXT_WINDOW_RIGHT, 5, b' ')
+            .region_rows(
+                MESSAGE_WINDOW_LEFT,
+                MESSAGE_WINDOW_TOP,
+                MESSAGE_WINDOW_RIGHT,
+                MESSAGE_WINDOW_BOTTOM,
+                b' ',
+            )
             .join("\n");
 
         assert_eq!(system.active_window_index(), TALK_SHOP_TEXT_WINDOW_INDEX);
         assert_eq!(
             system.window(TALK_SHOP_TEXT_WINDOW_INDEX).unwrap().top_left_x,
-            0
+            MESSAGE_WINDOW_LEFT
         );
         assert_eq!(
             system
@@ -1685,23 +1870,29 @@
                 .bottom_right_x,
             MESSAGE_TEXT_WINDOW_RIGHT
         );
-        assert!(system.cell(0, 0).is_none(), "Talk entry newline leaves row 0 untouched");
-        assert!(main.contains("Iolo"), "{main}");
-        assert!(main.contains("Item 1 costs 42 gold"), "{main}");
-        assert!(main.contains("Mace costs 42 gold."), "{main}");
+        assert!(
+            system.cell(MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_TOP).is_none(),
+            "Talk entry newline leaves the window's first row untouched"
+        );
+        // The window is fifteen columns wide, so the modal text wraps;
+        // compare with whitespace squeezed out.
+        let squished: String = main.chars().filter(|ch| !ch.is_whitespace()).collect();
+        assert!(squished.contains("Iolo"), "{main}");
+        assert!(squished.contains("Item1costs42gold"), "{main}");
+        assert!(squished.contains("Macecosts42gold."), "{main}");
         assert_eq!(
             system
                 .region_rows(
                     STATS_PANEL_TEXT_LEFT,
-                    0,
+                    STATS_ROSTER_TOP,
                     STATS_PANEL_TEXT_RIGHT,
-                    0,
+                    STATS_ROSTER_TOP,
                     b' '
                 )
                 .first()
                 .unwrap()
                 .trim_end(),
-            "STATS"
+            "Avatar      60G"
         );
     }
 
@@ -1773,16 +1964,34 @@
 
         paint_prompt_text_window_with_cursor(&mut system, "job", Some(4));
 
+        // The prompt is the message window's bottom row; column 24 is
+        // reserved for the ribbon end-cap sprite so the echo starts at
+        // column 25.
         assert_eq!(system.active_window_index(), PROMPT_TEXT_WINDOW_INDEX);
-        assert_eq!(system.cell(0, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'>');
-        assert_eq!(system.cell(2, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'j');
-        assert_eq!(system.cell(5, TEXT_SCREEN_ROWS - 2).unwrap().byte, 4);
-        assert_eq!(system.active_cursor(), (5, 0));
+        assert_eq!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT + 1, MESSAGE_WINDOW_BOTTOM)
+                .unwrap()
+                .byte,
+            b'j'
+        );
+        assert_eq!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT + 4, MESSAGE_WINDOW_BOTTOM)
+                .unwrap()
+                .byte,
+            4
+        );
+        assert_eq!(system.active_cursor(), (4, 0));
 
         paint_prompt_text_window_with_cursor(&mut system, "job", None);
 
-        assert!(system.cell(5, TEXT_SCREEN_ROWS - 2).is_none());
-        assert_eq!(system.active_cursor(), (5, 0));
+        assert!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT + 4, MESSAGE_WINDOW_BOTTOM)
+                .is_none()
+        );
+        assert_eq!(system.active_cursor(), (4, 0));
     }
 
     #[test]
@@ -1792,7 +2001,13 @@
 
         let visible_frame = state.render_text_window_frame(None);
 
-        assert!(visible_frame.lines().nth(1).unwrap().contains(">"));
+        assert!(
+            visible_frame
+                .lines()
+                .nth(usize::from(STATS_ROSTER_TOP))
+                .unwrap()
+                .contains(">")
+        );
         assert_eq!(state.active_player, None);
 
         state.active_player = Some(0);
@@ -1831,17 +2046,17 @@
             state
                 .render_stats_panel_view()
                 .lines()
-                .nth(1)
+                .next()
                 .unwrap()
                 .chars()
-                .nth(10),
+                .nth(STATS_PANEL_NAME_CELLS),
             Some(' ')
         );
         let system = render_play_text_window_system(&state, None, None);
         for offset in 0..STATS_PANEL_WIDTH {
             assert!(
                 system
-                    .cell(STATS_PANEL_TEXT_LEFT + offset as u8, 1)
+                    .cell(STATS_PANEL_TEXT_LEFT + offset as u8, STATS_ROSTER_TOP)
                     .unwrap()
                     .inverse,
                 "party row cell {offset} should be inverse-highlighted"
@@ -1849,7 +2064,7 @@
         }
         assert!(
             !system
-                .cell(STATS_PANEL_TEXT_LEFT, 2)
+                .cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP + 1)
                 .map(|cell| cell.inverse)
                 .unwrap_or(false)
         );
@@ -1858,12 +2073,14 @@
         let casting_overlay = stats_panel_combat_row_overlay(&state, 0);
 
         assert_eq!(casting_overlay.status_override, Some(b'C'));
-        assert!(state
-            .render_stats_panel_view()
-            .lines()
-            .nth(1)
-            .unwrap()
-            .ends_with('C'));
+        assert!(
+            state
+                .render_stats_panel_view()
+                .lines()
+                .next()
+                .unwrap()
+                .ends_with('C')
+        );
     }
 
     #[test]
@@ -1884,13 +2101,18 @@
         ]);
 
         let panel = state.render_stats_panel_view();
-        let row = panel.lines().nth(1).unwrap();
+        let row = panel.lines().next().unwrap();
 
         assert!(row.contains('>'));
+        let cursor_column = STATS_PANEL_TEXT_LEFT + STATS_PANEL_NAME_CELLS as u8;
+        let last_column = STATS_PANEL_TEXT_LEFT + STATS_PANEL_WIDTH as u8 - 1;
         let system = render_play_text_window_system(&state, state.active_player, None);
-        assert_eq!(system.cell(STATS_PANEL_TEXT_LEFT + 10, 1).unwrap().byte, b'>');
-        assert!(system.cell(STATS_PANEL_TEXT_LEFT + 10, 1).unwrap().inverse);
-        assert!(system.cell(STATS_PANEL_TEXT_LEFT + 15, 1).unwrap().inverse);
+        assert_eq!(
+            system.cell(cursor_column, STATS_ROSTER_TOP).unwrap().byte,
+            b'>'
+        );
+        assert!(system.cell(cursor_column, STATS_ROSTER_TOP).unwrap().inverse);
+        assert!(system.cell(last_column, STATS_ROSTER_TOP).unwrap().inverse);
     }
 
     #[test]
@@ -1924,8 +2146,18 @@
         assert!(stats_panel_combat_row_overlay(&state, 1).highlighted);
 
         let system = render_play_text_window_system(&state, None, None);
-        assert!(!system.cell(STATS_PANEL_TEXT_LEFT, 1).unwrap().inverse);
-        assert!(system.cell(STATS_PANEL_TEXT_LEFT, 2).unwrap().inverse);
+        assert!(
+            !system
+                .cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP)
+                .unwrap()
+                .inverse
+        );
+        assert!(
+            system
+                .cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP + 1)
+                .unwrap()
+                .inverse
+        );
     }
 
     #[test]
@@ -1941,11 +2173,10 @@
         };
 
         let panel = state.render_stats_panel_view();
-        let middle = panel.lines().nth(8).unwrap();
+        let middle = panel.lines().nth(STATS_PANEL_PARTY_ROWS).unwrap();
 
-        assert!(middle.contains("Ship hull"));
-        assert!(middle.contains("42"));
-        assert!(!middle.contains("999"));
+        assert!(middle.contains("H:42"), "{middle}");
+        assert!(!middle.contains("999"), "{middle}");
     }
 
     #[test]
@@ -2081,14 +2312,16 @@
             Some(MOONGATE_TILE_BASE % atlas.depth.pixel_limit())
         );
 
+        // `visibility.md §3`/`§4`: a zero light radius is the pitch-dark
+        // branch — the producer skips the carve and the grid stays fully
+        // obscured, so §8 step 3 also skips compositing the avatar into a
+        // hidden cell. Nothing is painted at all. (`FULL_DARKNESS` is 2,
+        // not 0: as a squared-distance threshold it still lights the eight
+        // cells around the party.)
         let mut dark = state.clone();
-        dark.ambient_light = FULL_DARKNESS;
+        dark.ambient_light = 0;
         let dark_viewport = dark.render_top_down_viewport(1, &atlas).unwrap().unwrap();
-        assert_eq!(
-            dark_viewport.pixel(16, 16),
-            Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
-        );
-        assert_eq!(dark_viewport.pixel(32, 16), Some(0));
+        assert!(dark_viewport.pixels.iter().all(|&pixel| pixel == 0));
     }
 
     #[test]
@@ -2420,12 +2653,17 @@
         assert!(viewport.pixels.iter().any(|&pixel| pixel != 0));
     }
 
+    /// Uses `0x4D`, a real `visibility.md §6` propagation blocker, and
+    /// seals the column across the whole viewport: the carve is a
+    /// centre-out flood, so a wall with an open cell past its end is
+    /// walked around rather than casting a shadow behind it.
     #[test]
     fn town_render_visibility_carve_uses_terrain_blockers() {
         let mut grid = open_grid();
-        grid[2] = 24;
-        grid[32 + 2] = 24;
-        grid[64 + 2] = 24;
+        grid[2] = 0x4D;
+        grid[32 + 2] = 0x4D;
+        grid[64 + 2] = 0x4D;
+        grid[96 + 2] = 0x4D;
         grid[32 + 3] = 16;
         let state = test_state(grid, 1, 1);
 
@@ -2433,7 +2671,7 @@
         let row: Vec<_> = view.lines().nth(3).unwrap().chars().collect();
 
         assert_eq!(row[2], '@');
-        assert_eq!(row[3], '#');
+        assert_eq!(row[3], 'f');
         assert_eq!(row[4], ' ');
     }
 

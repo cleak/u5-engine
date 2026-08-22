@@ -169,6 +169,16 @@ pub fn load_ibm_ch_font(game_dir: &std::path::Path) -> io::Result<FixedCellFont>
     parse_ch_font(&read_disk_file(&game_dir.join(IBM_CH_FILE))?, IBM_CH_FILE)
 }
 
+/// `formats/font-ch.md §1`: the rune alphabet shares `IBM.CH`'s
+/// code-point order and 8x8 cell geometry; only the file differs. The
+/// gameplay sky strip draws its moon phases and hour marker from it.
+pub fn load_runes_ch_font(game_dir: &std::path::Path) -> io::Result<FixedCellFont> {
+    parse_ch_font(
+        &read_disk_file(&game_dir.join(RUNES_CH_FILE))?,
+        RUNES_CH_FILE,
+    )
+}
+
 pub fn parse_ch_font(bytes: &[u8], resource_name: &str) -> io::Result<FixedCellFont> {
     if bytes.len() != CH_FONT_LEN {
         return Err(io::Error::new(

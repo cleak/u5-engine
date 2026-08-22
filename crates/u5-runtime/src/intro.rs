@@ -3,7 +3,10 @@
 use std::io;
 use std::path::Path;
 
-use crate::{input_case_fold, read_optional_disk_file};
+use crate::{
+    GraphicImage, GraphicImageDirectory, TileGraphicsDepth, input_case_fold,
+    load_graphic_image_directory, read_optional_disk_file,
+};
 
 /// `intro.md §3` title-screen surface dimensions. The title flow
 /// places its bitmap slots inside a fixed 320-by-200 pixel coordinate
@@ -175,20 +178,82 @@ pub const INTRO_MENU_FRAME_HEIGHT_CELLS: u8 = 10;
 pub const INTRO_MENU_FRAME_RULE_Y: u16 = 127;
 pub const INTRO_MENU_FRAME_RULE_X0: u16 = 7;
 pub const INTRO_MENU_FRAME_RULE_X1: u16 = 312;
-/// `intro.md §6.1`: the five-glyph reserved corner/edge set the
-/// fixed-cell font carries for boxed intro text. Per the published
-/// IBM.CH glyph shapes at codes 0x7B-0x7F, the assignments are:
-/// 0x7E = top-left (top + left solid, curve carved at bottom-right);
-/// 0x7D = top-right (top + right solid, curve at bottom-left);
-/// 0x7C = bottom-left (bottom + left solid, curve at top-right);
-/// 0x7B = bottom-right (bottom + right solid, curve at top-left);
-/// 0x7F = shared edge (solid 8×8 block, used for both horizontal
-/// and vertical edges).
-pub const INTRO_MENU_FRAME_GLYPH_TOP_LEFT: u8 = 0x7E;
-pub const INTRO_MENU_FRAME_GLYPH_TOP_RIGHT: u8 = 0x7D;
-pub const INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT: u8 = 0x7C;
-pub const INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT: u8 = 0x7B;
-pub const INTRO_MENU_FRAME_GLYPH_EDGE: u8 = 0x7F;
+/// Runtime observation of the original's lower intro menu frame,
+/// pending the spec correction tracked as `cleak/u5-spec#78`.
+///
+/// `systems/intro.md §6.1` describes this frame as a single-line
+/// rectangle built from five reserved box-drawing glyphs in the
+/// intro's bright foreground index. A black-box capture of the
+/// original shows instead the same rounded blue chrome the gameplay
+/// border uses: pixel rows 120..=199 filled with EGA index 1 behind a
+/// 1-pixel index-15 rectangle, a black interior, and two captions
+/// drawn over the border rows.
+pub const INTRO_MENU_FRAME_BORDER_COLOR: u8 = 0x01;
+pub const INTRO_MENU_FRAME_OUTLINE_COLOR: u8 = 0x0f;
+pub const INTRO_MENU_FRAME_INTERIOR_COLOR: u8 = 0x00;
+/// First and last pixel row of the blue border band. Anchored to the
+/// published `§6.1` cell rectangle: rows 15..=24 of the 8-pixel text
+/// grid.
+pub const INTRO_MENU_FRAME_TOP_Y: u16 = INTRO_MENU_FRAME_ANCHOR_ROW as u16 * 8;
+pub const INTRO_MENU_FRAME_BOTTOM_Y: u16 =
+    INTRO_MENU_FRAME_TOP_Y + INTRO_MENU_FRAME_HEIGHT_CELLS as u16 * 8 - 1;
+/// `cleak/u5-spec#78` corner-rounding profile: the left-edge column
+/// at which the blue fill starts, for each of the first six rows of
+/// the band. Rows past the profile start at column 0, and the bottom
+/// six rows mirror the profile in reverse. The right edge mirrors
+/// each entry about the surface centre.
+///
+/// The gameplay border frame carves its outer corners with the same
+/// measured staircase, so the numbers live once in
+/// [`crate::gameplay_chrome::CHROME_CORNER_PROFILE`] and this name
+/// stays as the `§6.1`-facing alias.
+pub const INTRO_MENU_FRAME_CORNER_PROFILE: [u16; 6] = crate::gameplay_chrome::CHROME_CORNER_PROFILE;
+/// `intro.md §6.1` horizontal-rule pixel coordinates. Observation
+/// confirms the published top rule and adds the matching bottom rule
+/// plus the two verticals that close the rectangle.
+pub const INTRO_MENU_FRAME_BOTTOM_RULE_Y: u16 = 192;
+pub const INTRO_MENU_FRAME_OUTLINE_LEFT_X: u16 = INTRO_MENU_FRAME_RULE_X0;
+pub const INTRO_MENU_FRAME_OUTLINE_RIGHT_X: u16 = INTRO_MENU_FRAME_RULE_X1;
+pub const INTRO_MENU_FRAME_INTERIOR_TOP_Y: u16 = INTRO_MENU_FRAME_RULE_Y + 1;
+pub const INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y: u16 = INTRO_MENU_FRAME_BOTTOM_RULE_Y - 1;
+pub const INTRO_MENU_FRAME_INTERIOR_LEFT_X: u16 = INTRO_MENU_FRAME_OUTLINE_LEFT_X + 1;
+pub const INTRO_MENU_FRAME_INTERIOR_RIGHT_X: u16 = INTRO_MENU_FRAME_OUTLINE_RIGHT_X - 1;
+
+/// `cleak/u5-spec#78` border captions. Both are drawn as ordinary
+/// white-on-black fixed cells over the blue border rows and visibly
+/// interrupt the white rules, exactly like the gameplay border's wind
+/// label.
+pub const INTRO_MENU_SELECT_CAPTION_PREFIX: &str = ">Select:";
+pub const INTRO_MENU_SELECT_CAPTION_SUFFIX: &str = "<";
+/// The caption's cursor cell is `IBM.CH` glyph 8 (a diagonal hatch),
+/// measured directly from the capture's cell 23 of text row 15. The
+/// engine's gameplay prompt cursor (`PROMPT_CURSOR_GLYPH`) is a
+/// different glyph, so this caption names its own code rather than
+/// reusing it.
+pub const INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH: u8 = 8;
+pub const INTRO_MENU_SELECT_CAPTION_COLUMN: u8 = 15;
+pub const INTRO_MENU_SELECT_CAPTION_ROW: u8 = 15;
+pub const INTRO_MENU_COPYRIGHT_CAPTION: &str = ">Copyright 1988 Lord British<";
+pub const INTRO_MENU_COPYRIGHT_CAPTION_COLUMN: u8 = 5;
+pub const INTRO_MENU_COPYRIGHT_CAPTION_ROW: u8 = 24;
+
+/// `cleak/u5-spec#78`: the left-edge column at which the blue border
+/// fill starts on `row`, or `None` when the row is outside the band.
+pub fn intro_menu_frame_border_start_column(row: u16) -> Option<u16> {
+    if row < INTRO_MENU_FRAME_TOP_Y || row > INTRO_MENU_FRAME_BOTTOM_Y {
+        return None;
+    }
+    let profile_len = INTRO_MENU_FRAME_CORNER_PROFILE.len() as u16;
+    let from_top = row - INTRO_MENU_FRAME_TOP_Y;
+    let from_bottom = INTRO_MENU_FRAME_BOTTOM_Y - row;
+    if from_top < profile_len {
+        Some(INTRO_MENU_FRAME_CORNER_PROFILE[from_top as usize])
+    } else if from_bottom < profile_len {
+        Some(INTRO_MENU_FRAME_CORNER_PROFILE[from_bottom as usize])
+    } else {
+        Some(0)
+    }
+}
 
 /// `intro.md §3` remaining title-sequence bitmap placements drawn
 /// after the seven-slot initial title mark. Order is `TITLE.BIT` 7,
@@ -234,44 +299,63 @@ pub const TITLE_BIT_REMAINING_PLACEMENTS: [TitleBitPlacement; 4] = [
 pub const TITLE_LOWER_BAND_CLEAR_Y: u16 = 140;
 
 /// `intro.md §5` title-tick frame rectangle. The intro menu's idle
-/// title-tick path draws one driver-local frame strip over the
-/// title screen at this fixed pixel rectangle, then advances the
-/// driver-local frame index modulo four. The replacement frames
-/// belong to a cleanroom renderer; the cadence and destination
-/// rectangle are part of the public contract.
+/// title-tick path draws one frame strip over the title screen at
+/// this fixed pixel rectangle, then advances the frame index modulo
+/// four. The destination rectangle is the published 320-by-49 band
+/// at `(0, 65)`; the source pixels only cover its central 288
+/// columns (see [`TITLE_TICK_SOURCE_X`]).
 pub const TITLE_TICK_FRAME_X: u16 = 0;
 pub const TITLE_TICK_FRAME_Y: u16 = 65;
 pub const TITLE_TICK_FRAME_WIDTH: u16 = TITLE_SURFACE_WIDTH;
 pub const TITLE_TICK_FRAME_HEIGHT: u16 = 49;
 pub const TITLE_TICK_FRAME_COUNT: u8 = 4;
+
+/// Runtime observation of the shipped `ULTIMA.16` asset, pending the
+/// spec correction tracked as `cleak/u5-spec#78`.
+///
+/// `systems/intro.md §5` and `systems/display-driver.md §8` claim the
+/// four flaming "Warriors of Destiny" bands live only inside the EGA
+/// driver's runtime back-buffer and cannot be read from an external
+/// art file. Decoding the local `ULTIMA.16` image directory
+/// contradicts that: it carries five panels — slot 0 is the 319-by-61
+/// "Ultima V" logo and slots 1..=4 are the four 288-wide title-tick
+/// bands (three at 49 rows, the last at 50). A black-box capture of
+/// the original running the same assets matches those panels exactly
+/// at `(0, 0)` and `(16, 65)` respectively, so the engine renders from
+/// the asset rather than from authored replacement art.
+pub const ULTIMA_PANEL_STEM: &str = "ULTIMA";
+/// `cleak/u5-spec#78`: `ULTIMA` slot 0 is the menu logo, blitted at
+/// the surface origin.
+pub const ULTIMA_LOGO_SLOT: u8 = 0;
+pub const ULTIMA_LOGO_WIDTH: usize = 319;
+pub const ULTIMA_LOGO_HEIGHT: usize = 61;
+/// `cleak/u5-spec#78`: `ULTIMA` slots 1..=4 are title-tick frames
+/// 0..=3. Frame 0 is slot 1 — the slot-to-frame mapping is assumed to
+/// be the natural directory order because the captures only pin slots
+/// 2 and 3 (which match the settled menu), and the four-frame loop
+/// makes any rotation visually equivalent after one cycle.
+pub const ULTIMA_TITLE_TICK_FIRST_SLOT: u8 = 1;
+/// `cleak/u5-spec#78`: horizontal offset of the 288-wide source band
+/// inside the published 320-wide destination rectangle. Columns
+/// `0..=15` and `304..=319` of the destination rows are cleared to
+/// palette index 0 on every tick.
+pub const TITLE_TICK_SOURCE_X: u16 = 16;
+pub const TITLE_TICK_SOURCE_WIDTH: u16 = 288;
+/// `cleak/u5-spec#78`: `ULTIMA` slot 4 is authored with a 50th row
+/// that the destination rectangle does not consume; only the upper
+/// [`TITLE_TICK_FRAME_HEIGHT`] rows of each panel are copied, which
+/// corroborates the published "50-row source stride, upper 49 rows
+/// copied" rule.
+pub const TITLE_TICK_SOURCE_MAX_HEIGHT: usize = 50;
+
 pub const TITLE_TICK_FRAME_PIXELS: usize =
-    TITLE_TICK_FRAME_WIDTH as usize * TITLE_TICK_FRAME_HEIGHT as usize;
+    TITLE_TICK_SOURCE_WIDTH as usize * TITLE_TICK_FRAME_HEIGHT as usize;
 pub const TITLE_TICK_FRAME_SET_BYTES: usize =
     TITLE_TICK_FRAME_PIXELS * TITLE_TICK_FRAME_COUNT as usize;
 
 /// `intro.md §5`: advance the title-tick frame index modulo four.
 pub const fn title_tick_next_frame(current_frame: u8) -> u8 {
     (current_frame + 1) % TITLE_TICK_FRAME_COUNT
-}
-
-/// `cleak/u5-spec#52` published title-tick palette cycle. Each frame
-/// pairs an EGA bright index (drawn on the upper half of the flame
-/// silhouette) with an EGA dim index (drawn on the lower half). The
-/// four-frame loop drives the "wavering flame stripe" perceived
-/// effect over the title-tick rectangle without changing the
-/// underlying silhouette.
-pub const TITLE_TICK_PALETTE_CYCLE: [(u8, u8); TITLE_TICK_FRAME_COUNT as usize] = [
-    (0x0E, 0x06), // frame 0: light yellow over brown
-    (0x0C, 0x04), // frame 1: light red over red
-    (0x0E, 0x04), // frame 2: light yellow over red
-    (0x0C, 0x06), // frame 3: light red over brown
-];
-
-/// `cleak/u5-spec#52`: returns `(bright_index, dim_index)` EGA
-/// palette indices for the given mod-four title-tick frame.
-pub const fn title_tick_palette_indices(frame: u8) -> (u8, u8) {
-    let frame = (frame % TITLE_TICK_FRAME_COUNT) as usize;
-    TITLE_TICK_PALETTE_CYCLE[frame]
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -285,9 +369,9 @@ impl TitleTickFrameSet {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "{source}: authored title-tick frame set must be exactly {TITLE_TICK_FRAME_SET_BYTES} bytes ({} frames of {}x{}), found {}",
+                    "{source}: title-tick frame set must be exactly {TITLE_TICK_FRAME_SET_BYTES} bytes ({} frames of {}x{}), found {}",
                     TITLE_TICK_FRAME_COUNT,
-                    TITLE_TICK_FRAME_WIDTH,
+                    TITLE_TICK_SOURCE_WIDTH,
                     TITLE_TICK_FRAME_HEIGHT,
                     pixels.len()
                 ),
@@ -316,201 +400,106 @@ impl TitleTickFrameSet {
     }
 }
 
-pub fn authored_title_tick_frames() -> &'static TitleTickFrameSet {
-    panic!(
-        "title-tick animation requires published authored frame pixels; generated clean-room frames are a forbidden fallback; see cleak/u5-spec#65"
-    )
-}
-
-/// `systems/display-driver.md §5` source layout for the EGA driver's
-/// title-tick frame strip. The spec publishes the band geometry — four
-/// 320-pixel-wide bands at a 50-row source stride, with each tick
-/// copying the upper 49 rows — but the exact byte offset within
-/// `EGA.DRV` is a driver-revision-dependent locator that has not been
-/// published clean-room-safely yet (tracked upstream as a follow-up
-/// to `cleak/u5-spec#65`).
+/// `cleak/u5-spec#78` title-tick source loader. Reads the local
+/// `ULTIMA` image directory and emits the four-frame strip from slots
+/// [`ULTIMA_TITLE_TICK_FIRST_SLOT`]..=`+3`, taking the upper
+/// [`TITLE_TICK_FRAME_HEIGHT`] rows of each 288-wide panel.
 ///
-/// Callers parameterise the parser with this descriptor so the engine
-/// can adopt the published locator immediately when the spec adds
-/// one, without restructuring the extraction code.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct EgaTitleTickLayout {
-    /// Byte offset within `EGA.DRV` where band 0 begins.
-    pub start_offset: usize,
-    /// Bytes per source row across all four EGA planes. The standard
-    /// 320-pixel 4-plane packed layout is 40 bytes per plane × 4
-    /// planes = 160 bytes per row.
-    pub bytes_per_row: usize,
-    /// Per-plane byte stride within a row (40 bytes for a
-    /// 320-pixel-wide row at 1 bit per pixel per plane).
-    pub plane_stride_bytes: usize,
-    /// Total source rows per band (50, with the upper 49 copied to
-    /// the destination rectangle and the bottom row discarded per
-    /// the published §5 contract).
-    pub source_rows_per_band: usize,
-}
-
-impl EgaTitleTickLayout {
-    /// Standard 320-pixel-wide 4-plane EGA packed-row layout: 40
-    /// bytes per plane × 4 planes = 160 bytes per row, with planes
-    /// stored sequentially within each row (P0 P1 P2 P3). The
-    /// `start_offset` is caller-supplied since the published
-    /// `EGA.DRV` locator is still pending.
-    pub const fn standard_4_plane(start_offset: usize) -> Self {
-        Self {
-            start_offset,
-            bytes_per_row: 160,
-            plane_stride_bytes: 40,
-            source_rows_per_band: 50,
-        }
-    }
-
-    pub const fn band_stride_bytes(&self) -> usize {
-        self.bytes_per_row * self.source_rows_per_band
-    }
-}
-
-/// `systems/display-driver.md §5` clean-room-safe extractor for the
-/// title-tick four-frame strip from a runtime `EGA.DRV` image. The
-/// caller supplies the layout descriptor; this function performs no
-/// disassembly or address-derived reading and operates only on the
-/// caller-provided byte range. Plane bytes are unpacked into per-pixel
-/// EGA palette indices and the upper [`TITLE_TICK_FRAME_HEIGHT`] rows
-/// of each band are emitted in band-major order to the returned
-/// `TitleTickFrameSet`.
-pub fn parse_ega_drv_title_tick_frames(
-    bytes: &[u8],
-    layout: EgaTitleTickLayout,
+/// This is a runtime read of a local asset, not authored replacement
+/// art: the panels are the original flaming "Warriors of Destiny"
+/// bands, and a black-box capture of the original confirms them at
+/// `(16, 65)`.
+pub fn load_ultima_title_tick_frames(
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
 ) -> io::Result<TitleTickFrameSet> {
-    let total_bands = TITLE_TICK_FRAME_COUNT as usize;
-    let band_stride = layout.band_stride_bytes();
-    let required = layout
-        .start_offset
-        .checked_add(band_stride.checked_mul(total_bands).ok_or_else(|| {
-            io::Error::new(
+    let directory = load_graphic_image_directory(game_dir, ULTIMA_PANEL_STEM, depth)?;
+    parse_ultima_title_tick_frames(&directory)
+}
+
+/// `cleak/u5-spec#78`: extract the four title-tick frames from an
+/// already-decoded `ULTIMA` image directory.
+pub fn parse_ultima_title_tick_frames(
+    directory: &GraphicImageDirectory,
+) -> io::Result<TitleTickFrameSet> {
+    let width = TITLE_TICK_SOURCE_WIDTH as usize;
+    let height = TITLE_TICK_FRAME_HEIGHT as usize;
+    let mut pixels = Vec::with_capacity(TITLE_TICK_FRAME_SET_BYTES);
+    for frame in 0..TITLE_TICK_FRAME_COUNT {
+        let slot = usize::from(ULTIMA_TITLE_TICK_FIRST_SLOT + frame);
+        let panel = directory
+            .images
+            .get(slot)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{ULTIMA_PANEL_STEM} image directory is missing title-tick panel slot {slot}"
+                    ),
+                )
+            })?;
+        if panel.width != width
+            || panel.height < height
+            || panel.height > TITLE_TICK_SOURCE_MAX_HEIGHT
+        {
+            return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "EGA.DRV title-tick layout overflows: 4 * band_stride exceeds usize",
-            )
-        })?)
+                format!(
+                    "{ULTIMA_PANEL_STEM} title-tick panel slot {slot} is {}x{}, expected {width} wide and {height}..={TITLE_TICK_SOURCE_MAX_HEIGHT} rows tall",
+                    panel.width, panel.height
+                ),
+            ));
+        }
+        // §5 / `cleak/u5-spec#78`: only the upper `height` rows of the
+        // source band reach the destination rectangle.
+        pixels.extend_from_slice(&panel.pixels[..width * height]);
+    }
+    TitleTickFrameSet::from_palette_indices(pixels, "ULTIMA title-tick panels")
+}
+
+/// `cleak/u5-spec#78` menu-logo loader. Reads `ULTIMA` slot 0, the
+/// 319-by-61 "Ultima V" logo the original blits at the surface origin
+/// on the start/menu screen.
+pub fn load_ultima_logo_panel(
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
+) -> io::Result<GraphicImage> {
+    let directory = load_graphic_image_directory(game_dir, ULTIMA_PANEL_STEM, depth)?;
+    let panel = directory
+        .images
+        .get(usize::from(ULTIMA_LOGO_SLOT))
+        .and_then(Option::as_ref)
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                "EGA.DRV title-tick layout overflows: start_offset + 4 * band_stride exceeds usize",
+                format!(
+                    "{ULTIMA_PANEL_STEM} image directory is missing logo slot {ULTIMA_LOGO_SLOT}"
+                ),
             )
         })?;
-    if bytes.len() < required {
+    if (panel.width, panel.height) != (ULTIMA_LOGO_WIDTH, ULTIMA_LOGO_HEIGHT) {
         return Err(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
+            io::ErrorKind::InvalidData,
             format!(
-                "EGA.DRV title-tick parser needs at least {required} bytes from offset {} (have {})",
-                layout.start_offset,
-                bytes.len()
+                "{ULTIMA_PANEL_STEM} logo slot {ULTIMA_LOGO_SLOT} is {}x{}, expected {ULTIMA_LOGO_WIDTH}x{ULTIMA_LOGO_HEIGHT}",
+                panel.width, panel.height
             ),
         ));
     }
-    if layout.plane_stride_bytes * 4 != layout.bytes_per_row {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "EGA.DRV title-tick layout invalid: plane_stride_bytes * 4 ({}) must equal bytes_per_row ({})",
-                layout.plane_stride_bytes * 4,
-                layout.bytes_per_row,
-            ),
-        ));
-    }
-    let width = TITLE_TICK_FRAME_WIDTH as usize;
-    let height = TITLE_TICK_FRAME_HEIGHT as usize;
-
-    let mut pixels = Vec::with_capacity(TITLE_TICK_FRAME_SET_BYTES);
-    for band in 0..total_bands {
-        let band_offset = layout.start_offset + band * band_stride;
-        // §5: the destination receives the upper `height` rows of
-        // the `source_rows_per_band`-row source band.
-        for row in 0..height {
-            let row_offset = band_offset + row * layout.bytes_per_row;
-            for x in 0..width {
-                let byte_index = x / 8;
-                let bit_index = 7 - (x % 8);
-                let plane_base = row_offset + byte_index;
-                let p0 = (bytes[plane_base] >> bit_index) & 1;
-                let p1 = (bytes[plane_base + layout.plane_stride_bytes] >> bit_index) & 1;
-                let p2 = (bytes[plane_base + layout.plane_stride_bytes * 2] >> bit_index) & 1;
-                let p3 = (bytes[plane_base + layout.plane_stride_bytes * 3] >> bit_index) & 1;
-                pixels.push(p0 | (p1 << 1) | (p2 << 2) | (p3 << 3));
-            }
-        }
-    }
-    TitleTickFrameSet::from_palette_indices(pixels, "EGA.DRV title-tick strip")
+    Ok(panel.clone())
 }
 
-/// `systems/display-driver.md §5` development placeholder. Returns a
-/// four-frame strip of all-zero (black) pixels that satisfies the
-/// public destination contract (320×49 per frame, four frames,
-/// in-range EGA palette indices) without claiming any visual fidelity
-/// to the original `EGA.DRV` frames. Use this only when the published
-/// `EGA.DRV` locator is not yet wired up; the visible result is an
-/// honest black band that surfaces the missing asset rather than a
-/// synthesised animation that hides it.
+/// Four-frame strip of all-zero (black) pixels satisfying the public
+/// destination contract (288×49 per frame, four frames, in-range EGA
+/// palette indices). Test-only scaffolding for the destination-blit
+/// geometry; no render path uses it.
 pub fn placeholder_title_tick_frames() -> TitleTickFrameSet {
     TitleTickFrameSet::from_palette_indices(
         vec![0u8; TITLE_TICK_FRAME_SET_BYTES],
         "placeholder title-tick frames",
     )
     .expect("placeholder title-tick frame set is well-formed by construction")
-}
-
-/// `systems/display-driver.md §5` + `cleak/u5-spec#52` clean-room
-/// authored title-tick strip. Produces four 320×49 frames whose
-/// silhouette is a procedurally-generated wavering flame band
-/// (deterministic, independently authored) and whose pixel palette
-/// follows the published palette cycle exactly: bright index on the
-/// upper half of the silhouette, dim index on the lower half, black
-/// elsewhere. This is NOT pixel-identical to the historical
-/// `EGA.DRV` frames — the spec explicitly says "exact reuse of the
-/// historical driver-resident pixels is a driver-binary parity
-/// issue, not an asset-format requirement" — but it satisfies every
-/// public contract the spec ratifies: destination rectangle,
-/// four-frame cadence, palette cycle, opaque overwrite, and visible
-/// wavering effect.
-///
-/// The four silhouettes differ by phase so the eye sees motion in
-/// the band, matching the §5 "wavering flame stripe perceived
-/// effect" description.
-pub fn clean_room_authored_title_tick_frames() -> TitleTickFrameSet {
-    let width = TITLE_TICK_FRAME_WIDTH as usize;
-    let height = TITLE_TICK_FRAME_HEIGHT as usize;
-    let mut pixels = Vec::with_capacity(TITLE_TICK_FRAME_SET_BYTES);
-    for frame in 0..TITLE_TICK_FRAME_COUNT as usize {
-        let (bright, dim) = TITLE_TICK_PALETTE_CYCLE[frame];
-        // Per-column flame height profile. Use a simple deterministic
-        // multi-frequency sum to get a wavering crest that varies by
-        // frame phase. Phase shifts in 1/4-cycle steps across the
-        // four-frame loop so the silhouette appears to move with the
-        // palette swap.
-        let phase = frame as f32 * 0.5;
-        let upper_split = height / 2;
-        for row in 0..height {
-            for col in 0..width {
-                // Flame "tip" height varies sinusoidally per column.
-                let crest_factor = 0.55
-                    + 0.25 * ((col as f32) * 0.045 + phase).sin()
-                    + 0.20 * ((col as f32) * 0.013 - phase * 1.7).sin()
-                    + 0.10 * ((col as f32) * 0.085 + phase * 2.3).cos();
-                let crest_row = (height as f32 * crest_factor.clamp(0.15, 0.95)) as usize;
-                let lit = row >= crest_row;
-                let pixel = if !lit {
-                    0
-                } else if row < upper_split {
-                    bright & 0x0f
-                } else {
-                    dim & 0x0f
-                };
-                pixels.push(pixel);
-            }
-        }
-    }
-    TitleTickFrameSet::from_palette_indices(pixels, "clean-room authored title-tick frames")
-        .expect("clean-room authored title-tick frame set is well-formed by construction")
 }
 
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
@@ -728,79 +717,186 @@ mod tests {
         }
     }
 
-    #[test]
-    fn ega_drv_title_tick_parser_round_trips_synthesised_bands() {
-        // Build a synthetic EGA.DRV-style buffer where each band's
-        // first row sets every plane to 0xff (producing palette
-        // index 15 across the whole row) and every other row is
-        // zero. Parsing the four bands then asserts that:
-        //   - row 0 of each frame is palette 15 everywhere,
-        //   - rows 1..48 are palette 0 everywhere,
-        //   - row 49 of the source band is *not* copied (only the
-        //     upper 49 rows are taken per §5).
-        let layout = EgaTitleTickLayout::standard_4_plane(0);
-        let band_stride = layout.band_stride_bytes();
-        let mut bytes = vec![0u8; band_stride * TITLE_TICK_FRAME_COUNT as usize];
-        for band in 0..TITLE_TICK_FRAME_COUNT as usize {
-            let band_base = band * band_stride;
-            // Row 0: all planes set across all 40 bytes.
-            for plane in 0..4 {
-                let plane_base = band_base + plane * layout.plane_stride_bytes;
-                for col in 0..layout.plane_stride_bytes {
-                    bytes[plane_base + col] = 0xff;
-                }
-            }
-            // Row 49 (the row §5 says is discarded): set a sentinel
-            // pattern that should *not* show up in the parsed
-            // frame pixels.
-            let row49_base = band_base + 49 * layout.bytes_per_row;
-            for plane in 0..4 {
-                let plane_base = row49_base + plane * layout.plane_stride_bytes;
-                for col in 0..layout.plane_stride_bytes {
-                    bytes[plane_base + col] = 0xaa;
-                }
-            }
+    /// `cleak/u5-spec#78`: the shipped `ULTIMA` image directory holds
+    /// five panels - the 319x61 menu logo followed by the four
+    /// title-tick bands (288x49, 288x49, 288x49, 288x50). The tests
+    /// read the local clean asset directory when it is present and
+    /// skip when it is not, so a checkout without game files still
+    /// passes.
+    fn local_ultima_directory() -> Option<GraphicImageDirectory> {
+        let game_dir = Path::new(crate::DEFAULT_GAME_DIR);
+        if !game_dir
+            .join(crate::tile_graphics_file_name(
+                ULTIMA_PANEL_STEM,
+                TileGraphicsDepth::Ega16,
+            ))
+            .exists()
+        {
+            return None;
         }
+        Some(
+            load_graphic_image_directory(game_dir, ULTIMA_PANEL_STEM, TileGraphicsDepth::Ega16)
+                .expect("local ULTIMA image directory decodes"),
+        )
+    }
 
+    #[test]
+    fn local_ultima_directory_has_the_published_five_panel_shape() {
+        let Some(directory) = local_ultima_directory() else {
+            eprintln!("skipping: local ULTIMA.16 is not present");
+            return;
+        };
+        let shapes: Vec<(usize, usize)> = directory
+            .images
+            .iter()
+            .map(|image| {
+                let image = image.as_ref().expect("ULTIMA panels are all populated");
+                (image.width, image.height)
+            })
+            .collect();
+        assert_eq!(
+            shapes,
+            vec![(319, 61), (288, 49), (288, 49), (288, 49), (288, 50)],
+            "ULTIMA slot 0 is the menu logo and slots 1..=4 are the title-tick bands"
+        );
+    }
+
+    #[test]
+    fn ultima_title_tick_panels_fill_the_288_by_49_frame_buffer() {
+        let Some(directory) = local_ultima_directory() else {
+            eprintln!("skipping: local ULTIMA.16 is not present");
+            return;
+        };
         let frames =
-            parse_ega_drv_title_tick_frames(&bytes, layout).expect("synthesised EGA.DRV decodes");
+            parse_ultima_title_tick_frames(&directory).expect("ULTIMA title-tick panels decode");
+        assert_eq!(
+            TITLE_TICK_FRAME_PIXELS,
+            TITLE_TICK_SOURCE_WIDTH as usize * TITLE_TICK_FRAME_HEIGHT as usize
+        );
         for frame in 0..TITLE_TICK_FRAME_COUNT {
             let pixels = frames.frame_pixels(frame);
-            let width = TITLE_TICK_FRAME_WIDTH as usize;
-            for col in 0..width {
-                assert_eq!(pixels[col], 0x0f, "frame {frame} row 0 col {col}");
-            }
-            for row in 1..TITLE_TICK_FRAME_HEIGHT as usize {
-                for col in 0..width {
-                    assert_eq!(
-                        pixels[row * width + col],
-                        0,
-                        "frame {frame} row {row} col {col}"
-                    );
-                }
-            }
+            assert_eq!(
+                pixels.len(),
+                TITLE_TICK_FRAME_PIXELS,
+                "frame {frame} is {}x{}",
+                TITLE_TICK_SOURCE_WIDTH,
+                TITLE_TICK_FRAME_HEIGHT
+            );
+            assert!(pixels.iter().all(|index| *index <= 0x0f));
+            assert!(
+                pixels.iter().any(|index| *index != 0),
+                "frame {frame} must carry the flaming band, not an empty strip"
+            );
         }
     }
 
     #[test]
-    fn ega_drv_title_tick_parser_rejects_truncated_input() {
-        let layout = EgaTitleTickLayout::standard_4_plane(0);
-        let err = parse_ega_drv_title_tick_frames(&[], layout)
-            .expect_err("empty buffer must fail the parser");
-        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+    fn ultima_title_tick_panels_take_only_the_upper_rows_of_the_50_row_band() {
+        let Some(directory) = local_ultima_directory() else {
+            eprintln!("skipping: local ULTIMA.16 is not present");
+            return;
+        };
+        let frames =
+            parse_ultima_title_tick_frames(&directory).expect("ULTIMA title-tick panels decode");
+        let last_slot = usize::from(ULTIMA_TITLE_TICK_FIRST_SLOT + TITLE_TICK_FRAME_COUNT - 1);
+        let panel = directory.images[last_slot]
+            .as_ref()
+            .expect("last title-tick panel is populated");
+        assert_eq!(panel.height, TITLE_TICK_SOURCE_MAX_HEIGHT);
+        let width = TITLE_TICK_SOURCE_WIDTH as usize;
+        let height = TITLE_TICK_FRAME_HEIGHT as usize;
+        assert_eq!(
+            frames.frame_pixels(TITLE_TICK_FRAME_COUNT - 1),
+            &panel.pixels[..width * height],
+            "only the upper {height} rows of the 50-row source band reach the destination"
+        );
     }
 
     #[test]
-    fn ega_drv_title_tick_parser_rejects_invalid_layout() {
-        let layout = EgaTitleTickLayout {
-            start_offset: 0,
-            bytes_per_row: 160,
-            plane_stride_bytes: 50, // 50 * 4 != 160 -> invalid
-            source_rows_per_band: 50,
+    fn ultima_logo_panel_is_the_published_319_by_61_menu_art() {
+        let game_dir = Path::new(crate::DEFAULT_GAME_DIR);
+        if local_ultima_directory().is_none() {
+            eprintln!("skipping: local ULTIMA.16 is not present");
+            return;
+        }
+        let logo = load_ultima_logo_panel(game_dir, TileGraphicsDepth::Ega16)
+            .expect("local ULTIMA logo panel decodes");
+        assert_eq!(
+            (logo.width, logo.height),
+            (ULTIMA_LOGO_WIDTH, ULTIMA_LOGO_HEIGHT)
+        );
+        assert_eq!(logo.pixels.len(), ULTIMA_LOGO_WIDTH * ULTIMA_LOGO_HEIGHT);
+    }
+
+    #[test]
+    fn ultima_title_tick_parser_rejects_a_directory_without_the_bands() {
+        let directory = GraphicImageDirectory {
+            depth: TileGraphicsDepth::Ega16,
+            images: vec![None],
         };
-        let buffer = vec![0u8; layout.band_stride_bytes() * 4];
-        let err = parse_ega_drv_title_tick_frames(&buffer, layout)
-            .expect_err("inconsistent layout must fail the parser");
-        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        let err = parse_ultima_title_tick_frames(&directory)
+            .expect_err("a directory without title-tick panels must fail");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn intro_menu_frame_border_profile_rounds_both_ends_and_fills_the_middle() {
+        // `cleak/u5-spec#78` measured profile: the blue fill starts at
+        // column 5 on the first band row, 3, 2, 1, 1, then 0 from the
+        // sixth row on, and the bottom six rows mirror it.
+        assert_eq!(intro_menu_frame_border_start_column(119), None);
+        assert_eq!(intro_menu_frame_border_start_column(120), Some(5));
+        assert_eq!(intro_menu_frame_border_start_column(121), Some(3));
+        assert_eq!(intro_menu_frame_border_start_column(122), Some(2));
+        assert_eq!(intro_menu_frame_border_start_column(123), Some(1));
+        assert_eq!(intro_menu_frame_border_start_column(124), Some(1));
+        for y in 125..=194 {
+            assert_eq!(intro_menu_frame_border_start_column(y), Some(0), "row {y}");
+        }
+        assert_eq!(intro_menu_frame_border_start_column(195), Some(1));
+        assert_eq!(intro_menu_frame_border_start_column(196), Some(1));
+        assert_eq!(intro_menu_frame_border_start_column(197), Some(2));
+        assert_eq!(intro_menu_frame_border_start_column(198), Some(3));
+        assert_eq!(intro_menu_frame_border_start_column(199), Some(5));
+        assert_eq!(intro_menu_frame_border_start_column(200), None);
+    }
+
+    #[test]
+    fn intro_menu_frame_rectangle_matches_the_measured_geometry() {
+        assert_eq!(INTRO_MENU_FRAME_TOP_Y, 120);
+        assert_eq!(INTRO_MENU_FRAME_BOTTOM_Y, 199);
+        assert_eq!(INTRO_MENU_FRAME_RULE_Y, 127);
+        assert_eq!(INTRO_MENU_FRAME_BOTTOM_RULE_Y, 192);
+        assert_eq!(INTRO_MENU_FRAME_RULE_X0, 7);
+        assert_eq!(INTRO_MENU_FRAME_RULE_X1, 312);
+        assert_eq!(INTRO_MENU_FRAME_INTERIOR_LEFT_X, 8);
+        assert_eq!(INTRO_MENU_FRAME_INTERIOR_RIGHT_X, 311);
+        assert_eq!(INTRO_MENU_FRAME_INTERIOR_TOP_Y, 128);
+        assert_eq!(INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y, 191);
+        assert_eq!(INTRO_MENU_FRAME_BORDER_COLOR, 0x01);
+        assert_eq!(INTRO_MENU_FRAME_OUTLINE_COLOR, 0x0f);
+    }
+
+    #[test]
+    fn intro_menu_border_captions_occupy_the_measured_cells() {
+        // `>Select:` + cursor + `<` fills cells 15..=24 of row 15;
+        // the copyright caption fills cells 5..=33 of row 24.
+        let select_cells =
+            INTRO_MENU_SELECT_CAPTION_PREFIX.len() + 1 + INTRO_MENU_SELECT_CAPTION_SUFFIX.len();
+        assert_eq!(select_cells, 10);
+        assert_eq!(INTRO_MENU_SELECT_CAPTION_COLUMN, 15);
+        assert_eq!(
+            usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN) + select_cells - 1,
+            24
+        );
+        assert_eq!(INTRO_MENU_SELECT_CAPTION_ROW, 15);
+        assert_eq!(INTRO_MENU_COPYRIGHT_CAPTION.len(), 29);
+        assert_eq!(INTRO_MENU_COPYRIGHT_CAPTION_COLUMN, 5);
+        assert_eq!(
+            usize::from(INTRO_MENU_COPYRIGHT_CAPTION_COLUMN) + INTRO_MENU_COPYRIGHT_CAPTION.len()
+                - 1,
+            33
+        );
+        assert_eq!(INTRO_MENU_COPYRIGHT_CAPTION_ROW, 24);
     }
 }

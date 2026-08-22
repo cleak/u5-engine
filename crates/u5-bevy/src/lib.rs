@@ -39,54 +39,58 @@ use u5_runtime::{
     FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
     GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
     HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
-    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_MENU_FRAME_ANCHOR_COLUMN,
-    INTRO_MENU_FRAME_ANCHOR_ROW, INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT,
-    INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT, INTRO_MENU_FRAME_GLYPH_EDGE,
-    INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
-    INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
-    INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, INTRO_STEP_1_EXTRA_ART_X,
-    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
-    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
-    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots,
-    IntroStoryArtPlacement, JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1,
-    LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX,
-    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot,
-    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
-    NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    PCS_GLYPH_ADVANCE_GAP, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY,
-    PLAYER_SPRITE_TILE, PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
-    POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROPORTIONAL_ADVANCE_TABLE, PROTECTION_COST,
-    PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
-    PreFlourishOutcome, ProportionalTextRegion, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
-    REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
-    RESURRECT_SPELL_INDEX, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
-    RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
-    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_MENU_COPYRIGHT_CAPTION,
+    INTRO_MENU_COPYRIGHT_CAPTION_COLUMN, INTRO_MENU_COPYRIGHT_CAPTION_ROW,
+    INTRO_MENU_FRAME_BORDER_COLOR, INTRO_MENU_FRAME_BOTTOM_RULE_Y, INTRO_MENU_FRAME_BOTTOM_Y,
+    INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y, INTRO_MENU_FRAME_INTERIOR_COLOR,
+    INTRO_MENU_FRAME_INTERIOR_LEFT_X, INTRO_MENU_FRAME_INTERIOR_RIGHT_X,
+    INTRO_MENU_FRAME_INTERIOR_TOP_Y, INTRO_MENU_FRAME_OUTLINE_COLOR,
+    INTRO_MENU_FRAME_OUTLINE_LEFT_X, INTRO_MENU_FRAME_OUTLINE_RIGHT_X, INTRO_MENU_FRAME_RULE_X0,
+    INTRO_MENU_FRAME_RULE_X1, INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_TOP_Y,
+    INTRO_MENU_SELECT_CAPTION_COLUMN, INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH,
+    INTRO_MENU_SELECT_CAPTION_PREFIX, INTRO_MENU_SELECT_CAPTION_ROW,
+    INTRO_MENU_SELECT_CAPTION_SUFFIX, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
+    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
+    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
+    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots, IntroStoryArtPlacement,
+    JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2,
+    LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX,
+    MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
+    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS,
+    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_ADVANCE_GAP, PCS_GLYPH_HEIGHT, PEER_COST,
+    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PLAYER_TILE,
+    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
+    PROPORTIONAL_ADVANCE_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
+    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome,
+    ProportionalTextRegion, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
+    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
+    RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectColumnSweepTransition,
+    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
     SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
     SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
     SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
     SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
-    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
-    SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
-    TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
-    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem,
-    TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_LEFT,
+    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable,
+    StoryRecords, TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH,
+    TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
+    TITLE_BIT_INITIAL_SOURCE_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_SOURCE_WIDTH, TITLE_TICK_SOURCE_X,
+    TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
+    Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, ULTIMA_LOGO_HEIGHT,
+    ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
-    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, clean_room_authored_title_tick_frames,
-    combat_actor_is_active_not_dead, combat_class_stats, commit_chargen_save,
-    configure_talk_shop_text_window,
+    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
+    combat_class_stats, commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -94,19 +98,19 @@ use u5_runtime::{
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
-    intro_step_has_story6_secondary_pass, intro_step_transition_strips,
-    intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    intro_story_step_waits_for_input, intro_story_text_region, intro_story6_secondary_subimage,
-    layout_proportional_justified_paragraph, load_brit_cbt, load_british_bit, load_british_pth,
-    load_dungeon_cbt, load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
-    load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
-    load_tile_atlas, load_title_bit,
+    intro_menu_frame_border_start_column, intro_step_has_story6_secondary_pass,
+    intro_step_transition_strips, intro_story_art_file_for_step,
+    intro_story_art_placement_for_step, intro_story_step_waits_for_input, intro_story_text_region,
+    intro_story6_secondary_subimage, layout_proportional_justified_paragraph, load_brit_cbt,
+    load_british_bit, load_british_pth, load_dungeon_cbt, load_graphic_image_directory,
+    load_ibm_ch_font, load_play_options_from_save, load_proportional_font, load_question_records,
+    load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
+    load_ultima_title_tick_frames,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    paint_inn_pickup_register_text_window, paint_message_text_window,
-    paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
-    paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
-    read_u4_transfer_source_from_party_sav, render_play_text_window_system, render_text_panel_rgba,
-    render_text_window_rgba, run_intro_pre_flourish_phase,
+    paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
+    paint_stats_panel_text_window, paint_talk_shop_text_window, published_world_location_entries,
+    read_save_image_file, read_u4_transfer_source_from_party_sav, render_play_text_window_system,
+    render_text_panel_rgba, render_text_window_rgba, run_intro_pre_flourish_phase,
     run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
@@ -119,6 +123,14 @@ use u5_runtime::{
     terrain_combat_tile_for_spawn_index, title_tick_next_frame, town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
+};
+// Gameplay-screen border chrome and the message/command window.
+use u5_runtime::{
+    CHROME_RULE_INDEX, ChromeFonts, GameplayMessageLog, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
+    VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter, configure_play_text_windows,
+    gameplay_chrome_content, layout_message_window, load_runes_ch_font,
+    message_is_scene_entry_narration, paint_fixed_cell_glyph, paint_fixed_cell_text,
+    paint_gameplay_frame_chrome, paint_message_line_cap,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -281,18 +293,20 @@ impl IntroDisplayBuffer {
         }
     }
 
-    /// `systems/display-driver.md §5`: copy the requested four-frame
-    /// strip frame into this framebuffer at `(0, 65)` covering
-    /// `320 x 49` pixels. The strip is supplied by the caller through
-    /// `TitleTickFrameSet`; the engine routes either the runtime
-    /// extraction (`parse_ega_drv_title_tick_frames` from a local
-    /// `EGA.DRV`) or the explicit black placeholder when the
-    /// `EGA.DRV` locator is not yet wired up.
+    /// `systems/display-driver.md §5` + `cleak/u5-spec#78`: copy the
+    /// requested four-frame strip frame into this framebuffer,
+    /// overwriting the whole published `(0, 65)` `320 x 49`
+    /// destination rectangle opaquely. The source band supplied
+    /// through `TitleTickFrameSet` is the 288-wide `ULTIMA` panel, so
+    /// it lands at x = 16 and the 16 columns at each side of the
+    /// rectangle are cleared to palette index 0.
     fn draw_title_tick(&mut self, frame: u8, frames: &TitleTickFrameSet) {
         let width = TITLE_TICK_FRAME_WIDTH as usize;
         let height = TITLE_TICK_FRAME_HEIGHT as usize;
         let dst_x = TITLE_TICK_FRAME_X as usize;
         let dst_y = TITLE_TICK_FRAME_Y as usize;
+        let source_width = TITLE_TICK_SOURCE_WIDTH as usize;
+        let source_x = dst_x + TITLE_TICK_SOURCE_X as usize;
         assert!(
             dst_x + width <= self.width && dst_y + height <= self.height,
             "title-tick rectangle ({width}x{height} at ({dst_x}, {dst_y})) exceeds framebuffer {}x{}",
@@ -302,10 +316,12 @@ impl IntroDisplayBuffer {
         let frame_pixels = frames.frame_pixels(frame);
         debug_assert_eq!(frame_pixels.len(), TITLE_TICK_FRAME_PIXELS);
         for row in 0..height {
-            let src_start = row * width;
-            let dst_start = (dst_y + row) * self.width + dst_x;
-            self.pixels[dst_start..dst_start + width]
-                .copy_from_slice(&frame_pixels[src_start..src_start + width]);
+            let src_start = row * source_width;
+            let row_start = (dst_y + row) * self.width;
+            self.pixels[row_start + dst_x..row_start + source_x].fill(0);
+            self.pixels[row_start + source_x..row_start + source_x + source_width]
+                .copy_from_slice(&frame_pixels[src_start..src_start + source_width]);
+            self.pixels[row_start + source_x + source_width..row_start + dst_x + width].fill(0);
         }
     }
 
@@ -467,42 +483,96 @@ fn intro_buffer_from_rgba_frame(rgba: &[u8]) -> IntroDisplayBuffer {
     )
 }
 
+/// `cleak/u5-spec#78`: `STARTSC.16` decodes to the credits artwork
+/// the Acknowledgements screen shows, not the start/menu backing
+/// `systems/intro.md §3` assigns it. The 16 + 288 + 16 by 137
+/// composition is drawn bottom-aligned at `y = 63`, so it fills
+/// `(0, 63)..=(319, 199)` under the retained `ULTIMA` logo.
 const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
     ImagePanelSpec {
         stem: "STARTSC",
         subimage: 0,
         top_left_x: 0,
-        top_left_y: 0,
+        top_left_y: ACKNOWLEDGEMENTS_PANEL_TOP_Y,
         width: 16,
-        height: 137,
+        height: STARTSC_PANEL_HEIGHT,
     },
     ImagePanelSpec {
         stem: "STARTSC",
         subimage: 1,
         top_left_x: 16,
-        top_left_y: 0,
+        top_left_y: ACKNOWLEDGEMENTS_PANEL_TOP_Y,
         width: 288,
-        height: 137,
+        height: STARTSC_PANEL_HEIGHT,
     },
     ImagePanelSpec {
         stem: "STARTSC",
         subimage: 2,
         top_left_x: 304,
-        top_left_y: 0,
+        top_left_y: ACKNOWLEDGEMENTS_PANEL_TOP_Y,
         width: 16,
-        height: 137,
+        height: STARTSC_PANEL_HEIGHT,
     },
 ];
 
-#[cfg(test)]
+/// `cleak/u5-spec#72` + `#78`: the acknowledgements parchment is
+/// bottom-aligned on the 200-row surface, so its 137 rows occupy
+/// `63..=199` and the `ULTIMA` logo above it stays on screen.
+const ACKNOWLEDGEMENTS_PANEL_TOP_Y: usize =
+    INTRO_FRAMEBUFFER_HEIGHT as usize - STARTSC_PANEL_HEIGHT;
+
+/// `cleak/u5-spec#78` menu backing art: `ULTIMA` slot 0, the
+/// 319-by-61 "Ultima V" logo, blitted at the surface origin over a
+/// surface cleared to palette index 0.
+///
+/// `systems/intro.md §3` assigns `STARTSC` to the start/menu screen,
+/// but `STARTSC.16` decodes to the credits artwork the
+/// Acknowledgements screen shows, and a black-box capture of the
+/// original menu matches this `ULTIMA` panel exactly at `(0, 0)`.
+/// `STARTSC_PANEL_SPECS` stays available for the Acknowledgements
+/// subflow.
+const ULTIMA_LOGO_PANEL_SPEC: ImagePanelSpec = ImagePanelSpec {
+    stem: ULTIMA_PANEL_STEM,
+    subimage: ULTIMA_LOGO_SLOT,
+    top_left_x: 0,
+    top_left_y: 0,
+    width: ULTIMA_LOGO_WIDTH,
+    height: ULTIMA_LOGO_HEIGHT,
+};
+
+/// `systems/intro.md §6.2` menu rows: published cell origins with the
+/// published one leading and one trailing blank baked into the string
+/// so the render path and the geometry tests share one table.
+///
+/// `cleak/u5-spec#78`: §6.2's label column carries abbreviations
+/// ("Create New Char.", "Transfer from U4", "Ultima V Intro.",
+/// "Return to View"); a black-box capture of the original shows the
+/// full strings below, whose measured ink spans line up exactly with
+/// the published origins plus the leading blank.
 const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
     (IntroSubflow::JourneyOnward, 12, 17, " Journey Onward "),
-    (IntroSubflow::CharacterCreation, 9, 18, " Create New Char. "),
-    (IntroSubflow::UltimaIvTransfer, 8, 19, " Transfer from U4 "),
-    (IntroSubflow::StorySlides, 9, 20, " Ultima V Intro. "),
+    (
+        IntroSubflow::CharacterCreation,
+        9,
+        18,
+        " Create New Character ",
+    ),
+    (
+        IntroSubflow::UltimaIvTransfer,
+        8,
+        19,
+        " Transfer from Ultima IV ",
+    ),
+    (IntroSubflow::StorySlides, 9, 20, " Ultima V Introduction "),
     (IntroSubflow::Acknowledgements, 11, 21, " Acknowledgements "),
-    (IntroSubflow::ReturnToView, 10, 22, " Return to View "),
+    (IntroSubflow::ReturnToView, 10, 22, " Return to the View "),
 ];
+
+/// `systems/intro.md §6.2` default highlight. A black-box capture of
+/// the original shows row 0 in inverse video the moment the menu is
+/// presented, before any key is pressed (`cleak/u5-spec#78`).
+const INTRO_MENU_DEFAULT_HIGHLIGHT: IntroSubflow = IntroSubflow::JourneyOnward;
+
 const STARTSC_PANEL_HEIGHT: usize = 137;
 const INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS: u16 = 200;
 
@@ -614,11 +684,13 @@ pub fn run_visual_loop(
     let state = PlayState::load_scene(game_dir, options)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let text_font = load_ibm_ch_font(game_dir)?;
+    let rune_font = load_runes_ch_font(game_dir)?;
     let bootstrap = Bootstrap {
         game_dir: game_dir.to_path_buf(),
         state,
         atlas,
         text_font,
+        rune_font,
     };
 
     let display_w = VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE;
@@ -768,12 +840,19 @@ pub fn visual_frame_suite(
     std::fs::create_dir_all(out_dir)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let font = load_ibm_ch_font(game_dir)?;
+    let runes = load_runes_ch_font(game_dir)?;
+    let suite_log = GameplayMessageLog::new();
+    let ctx = PlayFrameContext {
+        ibm: &font,
+        runes: &runes,
+        log: &suite_log,
+    };
     let mut reports = Vec::new();
 
     for case in visual_gameplay_frame_cases() {
         let mut state = PlayState::load_scene(game_dir, case.options)?;
         if case.synthetic_combat {
-            seed_visual_suite_combat(&mut state);
+            seed_visual_suite_combat(&mut state, game_dir)?;
         }
         if let Some(configure) = case.configure {
             configure(&mut state);
@@ -792,11 +871,11 @@ pub fn visual_frame_suite(
             case.frame_kind,
             &mut state,
             &atlas,
-            &font,
+            ctx,
         )?);
     }
-    push_visual_combat_gallery_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
-    push_visual_surface_view_class_gallery_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
+    push_visual_combat_gallery_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
+    push_visual_surface_view_class_gallery_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
 
     reports.push(write_visual_intro_report(
         out_dir,
@@ -870,6 +949,13 @@ pub fn visual_route_suite(
     std::fs::create_dir_all(out_dir)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let font = load_ibm_ch_font(game_dir)?;
+    let runes = load_runes_ch_font(game_dir)?;
+    let suite_log = GameplayMessageLog::new();
+    let ctx = PlayFrameContext {
+        ibm: &font,
+        runes: &runes,
+        log: &suite_log,
+    };
     let mut reports = Vec::new();
 
     for case in visual_route_suite_cases() {
@@ -888,7 +974,7 @@ pub fn visual_route_suite(
             case.frame_kind,
             &mut state,
             &atlas,
-            &font,
+            ctx,
         )?;
         let mut previous_hash = initial.byte_hash;
         reports.push(initial);
@@ -910,7 +996,7 @@ pub fn visual_route_suite(
                 case.frame_kind,
                 &mut state,
                 &atlas,
-                &font,
+                ctx,
             )?;
             if report.byte_hash == previous_hash
                 && !visual_route_allows_unchanged_step(case.label, index + 1)
@@ -930,7 +1016,7 @@ pub fn visual_route_suite(
             let _ = std::fs::remove_dir_all(dir);
         }
     }
-    push_visual_key_route_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
+    push_visual_key_route_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
 
     for report in &reports {
         if report.nonblack_pixels == 0 {
@@ -1003,7 +1089,7 @@ fn push_visual_key_route_reports(
     game_dir: &Path,
     out_dir: &Path,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     reports: &mut Vec<VisualFrameReport>,
 ) -> io::Result<()> {
     for case in visual_key_route_suite_cases() {
@@ -1019,7 +1105,7 @@ fn push_visual_key_route_reports(
             case.frame_kind,
             &mut state,
             atlas,
-            font,
+            ctx,
             &input_line,
             prompt_cursor_visible,
         )?;
@@ -1035,7 +1121,7 @@ fn push_visual_key_route_reports(
                 case.frame_kind,
                 &mut state,
                 atlas,
-                font,
+                ctx,
                 &input_line,
                 prompt_cursor_visible,
             )?;
@@ -1278,7 +1364,20 @@ fn copy_visual_route_save_file(
     source_name: &str,
     destination_name: &str,
 ) -> io::Result<()> {
-    std::fs::copy(game_dir.join(source_name), save_dir.join(destination_name)).map(|_| ())
+    let destination = save_dir.join(destination_name);
+    std::fs::copy(game_dir.join(source_name), &destination)?;
+    // `fs::copy` inherits the source's permissions, and the clean asset
+    // folder is kept read-only so nothing can write back into it. The staged
+    // copy is a scratch save the route suite writes to, so it must not be.
+    if let Ok(metadata) = std::fs::metadata(&destination) {
+        let mut permissions = metadata.permissions();
+        if permissions.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            std::fs::set_permissions(&destination, permissions)?;
+        }
+    }
+    Ok(())
 }
 
 fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
@@ -1659,12 +1758,104 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
     ]
 }
 
-fn seed_visual_suite_combat(state: &mut PlayState) {
-    state.combat_active = true;
-    state.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-    state.combat_terrain[0][0] = 12;
-    state.combat_terrain[5][5] = 4;
-    state.combat_terrain[6][5] = 1;
+/// Seed the `synthetic_combat` visual-suite cases from a real combat
+/// arena instead of a hand-painted terrain block.
+///
+/// `combat.md §3` copies an 11x11 arena terrain grid to the runtime grid,
+/// `§5` writes one actor record per spawned monster, and `§8`'s
+/// Attack/Cast/Ready/Search prompts need an active combat actor. Seeding
+/// only `combat_terrain` left every combat frame in the suite with no
+/// actors at all, so the four prompt frames printed `No active combatant.`
+/// and combat presentation went unverified.
+///
+/// The party is taken from the shipped save when one is present, so the
+/// stats-panel roster matches the placed party actors with recorded
+/// names rather than synthesised ones.
+fn seed_visual_suite_combat(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    const ARENA_INDEX: usize = 0;
+    const REQUESTED_MONSTERS: u8 = 4;
+
+    adopt_visual_suite_saved_party(state, game_dir);
+
+    let bank = load_brit_cbt(game_dir)?;
+    let record = bank.record(ARENA_INDEX).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("BRIT.CBT has no outdoor arena record {ARENA_INDEX}"),
+        )
+    })?;
+    let trigger = ActiveObject {
+        type_byte: 0x40 + (ARENA_INDEX as u8) * 4,
+        tile: 0xc0,
+        x: 0,
+        y: 0,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    };
+    let setup = terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, record)?;
+    let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(ARENA_INDEX);
+    let replacement_rolls = vec![0; usize::from(REQUESTED_MONSTERS)];
+    let mut instance = terrain_combat_instance_from_setup(
+        &setup,
+        REQUESTED_MONSTERS,
+        replacement_tile,
+        &replacement_rolls,
+    )?;
+    if instance.placed_count == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "BRIT.CBT arena {ARENA_INDEX} placed no monsters for the synthetic combat suite"
+            ),
+        ));
+    }
+    state.populate_combat_party_at_placement_slots(
+        &mut instance.active_objects,
+        &mut instance.actors,
+        trigger.z,
+        &setup.placement_slots,
+        usize::from(instance.placed_count),
+    );
+    state.enter_combat_frame_with_terrain(
+        instance.active_objects,
+        instance.actors,
+        setup.terrain,
+    )?;
+
+    // `combat.md §8`: the player-command prompts bind to the active
+    // combat actor. Without this the A/C/R/S frames refuse instead of
+    // rendering their prompt.
+    let active_slot = (0..COMBAT_PARTY_ACTOR_SLOTS)
+        .find(|slot| !state.combat_actors[*slot].is_empty())
+        .ok_or_else(|| {
+            io::Error::other("synthetic combat suite placed no living party combat actor")
+        })?;
+    state.pending_combat_actor_slot = Some(active_slot);
+    state.active_player = Some(active_slot);
+    Ok(())
+}
+
+/// Replace the suite's one-member default party with the shipped save's
+/// roster when `SAVED.GAM` is readable, so combat frames show the real
+/// party formation and the panel shows recorded names. A missing or
+/// unreadable save leaves the default party in place.
+fn adopt_visual_suite_saved_party(state: &mut PlayState, game_dir: &Path) {
+    let Ok(options) = load_play_options_from_save(game_dir) else {
+        return;
+    };
+    if options.party.is_empty() {
+        return;
+    }
+    state.party = options.party;
+    state.party_names = options.party_names;
+    state.party_experience = options.party_experience;
+    state.party_stay_counters = options.party_stay_counters;
+    state.party_strengths = options.party_strengths;
+    state.party_intelligence = options.party_intelligence;
+    state.party_equipment = options.party_equipment;
+    state.party_roster = options.party_roster;
 }
 
 fn seed_visual_suite_combat_status_highlight(state: &mut PlayState) {
@@ -1706,7 +1897,7 @@ fn push_visual_surface_view_class_gallery_reports(
     game_dir: &Path,
     out_dir: &Path,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     reports: &mut Vec<VisualFrameReport>,
 ) -> io::Result<()> {
     for (label, mode) in [
@@ -1728,7 +1919,7 @@ fn push_visual_surface_view_class_gallery_reports(
             "visual surface view class gallery frame",
             &mut state,
             atlas,
-            font,
+            ctx,
         )?);
     }
     Ok(())
@@ -1738,7 +1929,7 @@ fn push_visual_combat_gallery_reports(
     game_dir: &Path,
     out_dir: &Path,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     reports: &mut Vec<VisualFrameReport>,
 ) -> io::Result<()> {
     let bank = load_brit_cbt(game_dir)?;
@@ -1792,7 +1983,7 @@ fn push_visual_combat_gallery_reports(
             "combat outdoor arena replacement gallery",
             &mut state,
             atlas,
-            font,
+            ctx,
         )?);
     }
 
@@ -1833,7 +2024,7 @@ fn push_visual_combat_gallery_reports(
             "combat dungeon-room arena gallery",
             &mut state,
             atlas,
-            font,
+            ctx,
         )?);
     }
 
@@ -1851,7 +2042,7 @@ fn push_visual_combat_gallery_reports(
         "combat death and marker gallery",
         &mut marker_state,
         atlas,
-        font,
+        ctx,
     )?);
     Ok(())
 }
@@ -2399,10 +2590,16 @@ const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_x", KeyCode::KeyX),
     VisualKeyStep::key("enter", KeyCode::Enter),
 ];
+// The equip and unequip picker states now render identically in the
+// message window: the invented `(stock N)` / `(readied)` row annotations
+// were the only thing that distinguished them, and the readied marker
+// belongs to the eight-row panel (inventory.md 5), not to this text. Two
+// Enter steps in a row therefore produce the same frame, so the route
+// equips once and then exits. Unequip stays covered by the runtime test
+// `active_ready_picker_equips_and_unequips_without_turn`.
 const VISUAL_KEY_READY_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_r", KeyCode::KeyR),
     VisualKeyStep::key("digit_1", KeyCode::Digit1),
-    VisualKeyStep::key("enter", KeyCode::Enter),
     VisualKeyStep::key("enter", KeyCode::Enter),
     VisualKeyStep::key("space", KeyCode::Space),
 ];
@@ -5198,8 +5395,11 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 start: Some((62, 124)),
                 ..PlayOptions::default()
             },
+            // inventory.md 4: Z now opens the party-member selector first,
+            // so the step after it picks a member instead of pressing Enter
+            // at a prompt that ignores it.
             script: &[
-                "d", "d", "s", "s", "a", "a", "w", "w", "l6", "empty", "Z", "empty",
+                "d", "d", "s", "s", "a", "a", "w", "w", "l6", "empty", "Z", "1",
             ],
             configure: None,
         },
@@ -7576,8 +7776,12 @@ fn screenshot_system(
             }
             // Re-render the framebuffer to reflect the new state.
             let v: &mut VisualState = visual.as_mut();
-            let rgba =
-                render_visual_play_frame_with_input(&mut v.state, &v.atlas, &v.text_font, "", "");
+            let ctx = PlayFrameContext {
+                ibm: &v.text_font,
+                runes: &v.rune_font,
+                log: &v.message_log,
+            };
+            let rgba = render_visual_play_frame_with_input(&mut v.state, &v.atlas, ctx, "", "");
             replace_visual_image_data(&mut images, &v.image_handle, rgba, "screenshot preset play");
             state.preset_keys_applied = true;
         } else if let Some(mut intro) = intro {
@@ -7637,6 +7841,7 @@ struct Bootstrap {
     state: PlayState,
     atlas: TileAtlas,
     text_font: FixedCellFont,
+    rune_font: FixedCellFont,
 }
 
 #[derive(Resource)]
@@ -7649,6 +7854,11 @@ struct VisualState {
     atlas: TileAtlas,
     image_handle: Handle<Image>,
     text_font: FixedCellFont,
+    /// `RUNES.CH`, the alphabet the sky strip's moon phases and hour
+    /// marker are drawn from.
+    rune_font: FixedCellFont,
+    /// Scrolling command/output history for the message window.
+    message_log: GameplayMessageLog,
     input_line: String,
     prompt_cursor_visible: bool,
 }
@@ -7689,10 +7899,9 @@ struct VisualIntroState {
     /// the title flourish; it is then cleared.
     pending_pre_flourish_outcome: Option<PreFlourishOutcome>,
     /// `systems/display-driver.md §5` four-frame title-tick strip.
-    /// Sourced from a local `EGA.DRV` when the `U5_EGA_DRV_TITLE_TICK_OFFSET`
-    /// env var configures the layout locator; otherwise a black
-    /// placeholder so the rest of the intro can render. Tests may
-    /// leave this `None` and fall back to the placeholder lazily.
+    /// Sourced from the local `ULTIMA` image directory, slots 1..=4
+    /// (`cleak/u5-spec#78`). Left `None` until the first menu render,
+    /// which decodes the directory once.
     title_tick_frames: Option<TitleTickFrameSet>,
 }
 
@@ -7800,10 +8009,15 @@ fn animate_static_tiles(
     }
     let v: &mut VisualState = visual.as_mut();
     let input_line = v.input_line.clone();
+    let ctx = PlayFrameContext {
+        ibm: &v.text_font,
+        runes: &v.rune_font,
+        log: &v.message_log,
+    };
     let rgba = render_visual_play_frame_with_input_and_cursor(
         &mut v.state,
         &v.atlas,
-        &v.text_font,
+        ctx,
         &input_line,
         "",
         v.prompt_cursor_visible,
@@ -7827,9 +8041,21 @@ fn setup(
         mut state,
         atlas,
         text_font,
+        rune_font,
     } = bootstrap;
 
-    let rgba = render_visual_play_frame_with_input(&mut state, &atlas, &text_font, "", READY_HINT);
+    let message_log = GameplayMessageLog::new();
+    let rgba = render_visual_play_frame_with_input(
+        &mut state,
+        &atlas,
+        PlayFrameContext {
+            ibm: &text_font,
+            runes: &rune_font,
+            log: &message_log,
+        },
+        "",
+        READY_HINT,
+    );
     let mut image = Image::new(
         Extent3d {
             width: VISUAL_PLAY_FRAME_WIDTH,
@@ -7862,6 +8088,8 @@ fn setup(
         atlas,
         image_handle,
         text_font,
+        rune_font,
+        message_log,
         input_line: String::new(),
         prompt_cursor_visible: false,
     });
@@ -7987,16 +8215,28 @@ fn transition_visual_intro_to_gameplay(
     let launch = PlayState::load_scene(&game_dir, options).and_then(|state| {
         let atlas = load_tile_atlas(&game_dir, intro.raster_depth)?;
         let text_font = load_ibm_ch_font(&game_dir)?;
-        Ok((state, atlas, text_font))
+        let rune_font = load_runes_ch_font(&game_dir)?;
+        Ok((state, atlas, text_font, rune_font))
     });
-    let (mut state, atlas, text_font) =
+    let (mut state, atlas, text_font, rune_font) =
         launch.unwrap_or_else(|err| panic!("Journey Onward launch failed: {err}"));
+    let message_log = GameplayMessageLog::new();
     let image_handle = intro
         .image_handle
         .clone()
         .expect("Journey Onward requires the intro visual framebuffer handle");
     intro.image_handle = None;
-    let rgba = render_visual_play_frame_with_input(&mut state, &atlas, &text_font, "", READY_HINT);
+    let rgba = render_visual_play_frame_with_input(
+        &mut state,
+        &atlas,
+        PlayFrameContext {
+            ibm: &text_font,
+            runes: &rune_font,
+            log: &message_log,
+        },
+        "",
+        READY_HINT,
+    );
     replace_visual_image_data(images, &image_handle, rgba, "Journey Onward");
     for mut sprite in sprites.iter_mut() {
         sprite.custom_size = Some(Vec2::new(
@@ -8018,6 +8258,8 @@ fn transition_visual_intro_to_gameplay(
         atlas,
         image_handle,
         text_font,
+        rune_font,
+        message_log,
         input_line: String::new(),
         prompt_cursor_visible: false,
     });
@@ -8174,11 +8416,11 @@ fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
 // required panic gate is no longer needed.
 
 // `cleak/u5-spec#63` (lower intro menu/text-window frame contract)
-// is still open upstream. While it's pending the engine renders a
-// procedural single-pixel placeholder outline via
-// `draw_visual_intro_menu_text_window_frame_placeholder` so the rest
-// of the intro can run; that helper carries the TODO and will be
-// replaced the moment the spec publishes the border geometry.
+// is resolved by direct runtime observation of the original, pending
+// the spec correction requested as `cleak/u5-spec#78`:
+// `draw_visual_intro_menu_text_window_frame` renders the measured
+// rounded blue chrome, the white inner rectangle, the interior clear,
+// and both border captions.
 
 fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
     intro.dispatch.dismiss_title();
@@ -8410,6 +8652,36 @@ fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool
     false
 }
 
+/// `systems/intro.md §6.2` + `cleak/u5-spec#78`: the row drawn in
+/// inverse video. The original enters the menu with row 0 ("Journey
+/// Onward") highlighted before any key is pressed, and thereafter the
+/// highlight tracks the recent-selection cache the §6.2
+/// repeat-by-Enter behaviour already maintains.
+fn visual_intro_menu_highlight(intro: &VisualIntroState) -> IntroSubflow {
+    intro
+        .dispatch
+        .intro
+        .cached_selection
+        .unwrap_or(INTRO_MENU_DEFAULT_HIGHLIGHT)
+}
+
+/// `cleak/u5-spec#78`: step the highlight one row down (or up),
+/// wrapping around the six published rows.
+fn move_visual_intro_menu_highlight(intro: &mut VisualIntroState, down: bool) {
+    let current = visual_intro_menu_highlight(intro);
+    let count = INTRO_MENU_LABELS.len();
+    let index = INTRO_MENU_LABELS
+        .iter()
+        .position(|(subflow, _, _, _)| *subflow == current)
+        .expect("menu highlight always names a published row");
+    let next = if down {
+        (index + 1) % count
+    } else {
+        (index + count - 1) % count
+    };
+    intro.dispatch.intro.cached_selection = Some(INTRO_MENU_LABELS[next].0);
+}
+
 fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     if visual_intro_start_menu_reveal_active(intro) {
         return false;
@@ -8450,6 +8722,19 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
 
     intro.menu_idle_ticks = 0;
     let key = if ch == '\r' { b'\r' } else { ch as u8 };
+    // `cleak/u5-spec#78`: besides the published letter hotkeys, the
+    // original moves the inverse-video highlight with the arrow keys
+    // and activates the highlighted row with Space or Enter.
+    if key == u5_runtime::INPUT_CODE_NORTH || key == u5_runtime::INPUT_CODE_SOUTH {
+        move_visual_intro_menu_highlight(intro, key == u5_runtime::INPUT_CODE_SOUTH);
+        return true;
+    }
+    let key = if key == b' ' { b'\r' } else { key };
+    if key == b'\r' && intro.dispatch.intro.cached_selection.is_none() {
+        // The menu is always presented with a highlighted row, so
+        // Enter always has a row to activate.
+        intro.dispatch.intro.cached_selection = Some(INTRO_MENU_DEFAULT_HIGHLIGHT);
+    }
     match intro.dispatch.submit_menu_key(key) {
         UnifiedMenuStep::EnteredSubflow(subflow) => resolve_visual_intro_subflow(intro, subflow),
         UnifiedMenuStep::Ignored => true,
@@ -8498,7 +8783,14 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             let _ = records;
             step_visual_intro_story_panel(step, transition)
         }
-        VisualIntroPanel::Acknowledgements => u5_runtime::require_acknowledgements_contract(),
+        // `systems/intro.md §11`: any key wipes the parchment away and
+        // restores the menu (`cleak/u5-spec#72` - the wipe cadence is
+        // unpublished, so the restore is immediate).
+        VisualIntroPanel::Acknowledgements => VisualIntroPanelOutcome::ReturnToMenu {
+            subflow: IntroSubflow::Acknowledgements,
+            result: IntroSubflowResult::ReturnedToMenu,
+            message: String::new(),
+        },
         VisualIntroPanel::ReturnToView { preview_frames, .. } => {
             require_published_return_to_view_preview_pixel_geometry_for_frame_count(
                 preview_frames.len(),
@@ -8547,9 +8839,6 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
 }
 
 fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
-    if matches!(intro.panel, VisualIntroPanel::Acknowledgements) {
-        u5_runtime::require_acknowledgements_contract();
-    }
     if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
         require_published_u4_transfer_preview_presentation();
     }
@@ -8574,7 +8863,11 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
             IntroSubflowResult::ReturnedToMenu,
             "Ultima V Introduction cancelled; returning to the intro menu.",
         )),
-        VisualIntroPanel::Acknowledgements => unreachable!("acknowledgements contract panics"),
+        VisualIntroPanel::Acknowledgements => Some((
+            IntroSubflow::Acknowledgements,
+            IntroSubflowResult::ReturnedToMenu,
+            "",
+        )),
         VisualIntroPanel::ReturnToView { .. } => None,
     }) else {
         return false;
@@ -8842,6 +9135,7 @@ fn drive_visual(
             continue;
         };
         let game_dir = visual.game_dir.clone();
+        echo_play_command_into_log(visual.as_mut(), ch);
         match handle_play_key_input(&mut visual.state, ch, "", &game_dir) {
             Ok(PlayInputDisposition::Quit) => {
                 exit.write(AppExit::Success);
@@ -8861,15 +9155,47 @@ fn drive_visual(
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
     let input_line = v.input_line.clone();
+    let ctx = PlayFrameContext {
+        ibm: &v.text_font,
+        runes: &v.rune_font,
+        log: &v.message_log,
+    };
     let rgba = render_visual_play_frame_with_input_and_cursor(
         &mut v.state,
         &v.atlas,
-        &v.text_font,
+        ctx,
         &input_line,
         "",
         v.prompt_cursor_visible,
     );
     replace_visual_image_data(&mut images, &v.image_handle, rgba, "play input redraw");
+}
+
+/// Commit the previous turn's output and echo the new command into
+/// the message log, matching the observed one-blank-row-per-turn
+/// cadence. Only a fresh command key echoes: keys consumed by an open
+/// modal or line prompt are that command's continuation, not new
+/// commands of their own.
+fn echo_play_command_into_log(visual: &mut VisualState, key: char) {
+    if visual_modal_prompt_active(&visual.state) {
+        return;
+    }
+    let Some(byte) = u8::try_from(u32::from(key)).ok() else {
+        return;
+    };
+    let Some(command) = command_for_letter(byte) else {
+        return;
+    };
+    // Carry the previous turn's output into history before echoing the
+    // new command. An empty log means the only message so far is the
+    // unspecified scene-entry narration, which is dropped rather than
+    // logged.
+    let carried = visual.state.message.clone();
+    if !visual.message_log.is_empty() && !carried.trim().is_empty() {
+        visual.message_log.push_output(&carried);
+    }
+    visual.message_log.end_turn();
+    visual.message_log.push_command(command.verb_prefix());
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
@@ -8888,7 +9214,7 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
             return summarize_intro_story(records, *step);
         }
         VisualIntroPanel::Acknowledgements => {
-            u5_runtime::require_acknowledgements_contract();
+            return "Acknowledgements: STARTSC credits parchment at (0, 63).".to_string();
         }
         VisualIntroPanel::ReturnToView { preview_frames, .. } => {
             require_published_return_to_view_preview_pixel_geometry_for_frame_count(
@@ -9066,10 +9392,10 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
                 signature_progress,
             );
         } else {
-            // Source the title-tick strip once at first render so
-            // the env var / EGA.DRV check doesn't run every frame.
+            // Source the title-tick strip once at first render so the
+            // ULTIMA directory decode doesn't run every frame.
             let title_tick_frame = intro.title_tick_visible_frame;
-            let cached_selection = intro.dispatch.intro.cached_selection;
+            let cached_selection = Some(visual_intro_menu_highlight(intro));
             let game_dir = intro.game_dir.clone();
             let raster_depth = intro.raster_depth;
             let frames = ensure_title_tick_frames(&mut *intro).clone();
@@ -9137,135 +9463,153 @@ fn draw_visual_intro_start_menu_to_buffer(
     }
 }
 
-/// `systems/intro.md §6` published menu labels at the published
-/// text-cell origins. Labels are stamped through the IBM glyph slot;
-/// the highlight (inverse-video toggle) wraps the highlighted row's
-/// label per the §6 contract.
+/// `systems/intro.md §6.2` published menu labels at the published
+/// text-cell origins, each emitted with one leading and one trailing
+/// blank so the origin cell holds the blank. Labels are stamped
+/// through the IBM glyph slot; the highlight (inverse-video toggle)
+/// wraps the highlighted row's label *including* both padding blanks,
+/// matching the capture's 16-cell inverse block on row 17.
 fn draw_visual_intro_menu_labels(
     buffer: &mut IntroDisplayBuffer,
     font: &FixedCellFont,
     highlighted: Option<IntroSubflow>,
 ) {
-    const ROWS: [(IntroSubflow, &str, u8, u8); 6] = [
-        (IntroSubflow::JourneyOnward, "Journey Onward", 12, 17),
-        (IntroSubflow::CharacterCreation, "Create New Char.", 9, 18),
-        (IntroSubflow::UltimaIvTransfer, "Transfer from U4", 8, 19),
-        (IntroSubflow::StorySlides, "Ultima V Intro.", 9, 20),
-        (IntroSubflow::Acknowledgements, "Acknowledgements", 11, 21),
-        (IntroSubflow::ReturnToView, "Return to View", 10, 22),
-    ];
-    let fg = 0x0f;
-    let bg = 0x00;
-    for (subflow, label, col, row) in ROWS.iter().copied() {
+    let fg = INTRO_MENU_FRAME_OUTLINE_COLOR;
+    let bg = INTRO_MENU_FRAME_INTERIOR_COLOR;
+    for (subflow, col, row, label) in INTRO_MENU_LABELS {
         let highlighted_row = highlighted == Some(subflow);
         let (cell_fg, cell_bg) = if highlighted_row { (bg, fg) } else { (fg, bg) };
         for (offset, byte) in label.as_bytes().iter().enumerate() {
-            buffer.draw_fixed_glyph_cell(
-                font,
-                *byte,
-                usize::from(col) + offset,
-                usize::from(row),
-                cell_fg,
-                cell_bg,
-            );
+            buffer.draw_fixed_glyph_cell(font, *byte, col + offset, row, cell_fg, cell_bg);
         }
     }
 }
 
-/// `systems/intro.md §6.1` lower intro menu/text-window frame. Draws
-/// a 40-cell × 10-cell single-line rectangle anchored at the
-/// published cell `(0, 15)` using the fixed-cell font's reserved
-/// five-glyph corner/edge set, plus a thin horizontal rule at pixel
-/// `y = 127` via a direct line draw through the framebuffer. The
-/// frame does not clear the interior — STARTSC paint + title tick
-/// already established those pixels.
+/// `systems/intro.md §6.1` lower intro menu/text-window frame, as the
+/// original actually draws it (`cleak/u5-spec#78`).
+///
+/// §6.1 describes a single-line rectangle of five reserved
+/// box-drawing glyphs in the intro's bright foreground index. A
+/// black-box capture of the original running the shipped assets shows
+/// the same rounded blue chrome the gameplay border uses instead:
+///
+/// 1. pixel rows 120..=199 filled with EGA index 1, with the measured
+///    corner-rounding profile applied at both ends of the band and
+///    mirrored on the right edge;
+/// 2. a one-pixel index-15 rectangle - rules at y = 127 and y = 192
+///    spanning x = 7..=312, verticals at x = 7 and x = 312 spanning
+///    y = 128..=191;
+/// 3. the interior x = 8..=311, y = 128..=191 cleared to index 0;
+/// 4. two white-on-black fixed-cell captions drawn over the border
+///    rows, which visibly interrupt both rules.
+///
+/// §6.1's rule that the frame pass does not clear the *label* rows
+/// still holds: the interior clear happens here at frame
+/// construction, and the label pass runs afterwards. Message text is
+/// overlaid on the finished RGBA frame, not through this pass.
 fn draw_visual_intro_menu_text_window_frame(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont) {
-    let fg = 0x0f;
-    let bg = 0x00;
-    let anchor_col = usize::from(INTRO_MENU_FRAME_ANCHOR_COLUMN);
-    let anchor_row = usize::from(INTRO_MENU_FRAME_ANCHOR_ROW);
-    let width_cells = usize::from(INTRO_MENU_FRAME_WIDTH_CELLS);
-    let height_cells = usize::from(INTRO_MENU_FRAME_HEIGHT_CELLS);
-    let last_col = anchor_col + width_cells - 1;
-    let last_row = anchor_row + height_cells - 1;
-
-    // Top row: top-left corner + 38 top-edge glyphs + top-right corner.
-    buffer.draw_fixed_glyph_cell(
-        font,
-        INTRO_MENU_FRAME_GLYPH_TOP_LEFT,
-        anchor_col,
-        anchor_row,
-        fg,
-        bg,
+    let top = usize::from(INTRO_MENU_FRAME_TOP_Y);
+    let bottom = usize::from(INTRO_MENU_FRAME_BOTTOM_Y);
+    assert!(
+        bottom < buffer.height && buffer.width == INTRO_FRAMEBUFFER_WIDTH as usize,
+        "intro menu frame expects the published 320x200 surface, got {}x{}",
+        buffer.width,
+        buffer.height
     );
-    for col in (anchor_col + 1)..last_col {
-        buffer.draw_fixed_glyph_cell(font, INTRO_MENU_FRAME_GLYPH_EDGE, col, anchor_row, fg, bg);
-    }
-    buffer.draw_fixed_glyph_cell(
-        font,
-        INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
-        last_col,
-        anchor_row,
-        fg,
-        bg,
-    );
+    let last_column = buffer.width - 1;
 
-    // Side rows: shared edge glyph at column 0 and column 39.
-    for row in (anchor_row + 1)..last_row {
-        buffer.draw_fixed_glyph_cell(font, INTRO_MENU_FRAME_GLYPH_EDGE, anchor_col, row, fg, bg);
-        buffer.draw_fixed_glyph_cell(font, INTRO_MENU_FRAME_GLYPH_EDGE, last_col, row, fg, bg);
+    // 1. Blue band with rounded corners.
+    for y in top..=bottom {
+        let start = usize::from(
+            intro_menu_frame_border_start_column(y as u16)
+                .expect("row inside the intro menu frame band has a border profile"),
+        );
+        let end = last_column - start;
+        let row_start = y * buffer.width;
+        buffer.pixels[row_start + start..row_start + end + 1].fill(INTRO_MENU_FRAME_BORDER_COLOR);
     }
 
-    // Bottom row: bottom-left corner + 38 bottom-edge glyphs +
-    // bottom-right corner. §6.1 calls out that the bottom-right
-    // corner is emitted with the text-attribute inverse flag briefly
-    // cleared; the engine renders the corner as plain foreground (the
-    // attribute toggle would otherwise come from the wrapping
-    // text-output path, which isn't routed through this direct
-    // glyph blit).
-    buffer.draw_fixed_glyph_cell(
-        font,
-        INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT,
-        anchor_col,
-        last_row,
-        fg,
-        bg,
+    // 2. Interior clear, then the one-pixel white rectangle.
+    buffer.clear_rect_inclusive(
+        usize::from(INTRO_MENU_FRAME_INTERIOR_LEFT_X),
+        usize::from(INTRO_MENU_FRAME_INTERIOR_TOP_Y),
+        usize::from(INTRO_MENU_FRAME_INTERIOR_RIGHT_X),
+        usize::from(INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y),
+        INTRO_MENU_FRAME_INTERIOR_COLOR,
     );
-    for col in (anchor_col + 1)..last_col {
-        buffer.draw_fixed_glyph_cell(font, INTRO_MENU_FRAME_GLYPH_EDGE, col, last_row, fg, bg);
-    }
-    buffer.draw_fixed_glyph_cell(
-        font,
-        INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT,
-        last_col,
-        last_row,
-        fg,
-        bg,
-    );
-
-    // Horizontal rule at pixel y = 127, columns 7..312 inclusive.
-    // §6.1 says the rule lies inside the top border row's eight-pixel
-    // cell, immediately under the top-edge glyph row.
-    let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
     let rule_x0 = usize::from(INTRO_MENU_FRAME_RULE_X0);
     let rule_x1 = usize::from(INTRO_MENU_FRAME_RULE_X1);
-    if rule_y < buffer.height && rule_x0 <= rule_x1 && rule_x1 < buffer.width {
-        let stride = buffer.width;
-        for x in rule_x0..=rule_x1 {
-            buffer.pixels[rule_y * stride + x] = fg;
-        }
+    for rule_y in [
+        usize::from(INTRO_MENU_FRAME_RULE_Y),
+        usize::from(INTRO_MENU_FRAME_BOTTOM_RULE_Y),
+    ] {
+        let row_start = rule_y * buffer.width;
+        buffer.pixels[row_start + rule_x0..row_start + rule_x1 + 1]
+            .fill(INTRO_MENU_FRAME_OUTLINE_COLOR);
+    }
+    let interior_top = usize::from(INTRO_MENU_FRAME_INTERIOR_TOP_Y);
+    let interior_bottom = usize::from(INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y);
+    for y in interior_top..=interior_bottom {
+        let row_start = y * buffer.width;
+        buffer.pixels[row_start + usize::from(INTRO_MENU_FRAME_OUTLINE_LEFT_X)] =
+            INTRO_MENU_FRAME_OUTLINE_COLOR;
+        buffer.pixels[row_start + usize::from(INTRO_MENU_FRAME_OUTLINE_RIGHT_X)] =
+            INTRO_MENU_FRAME_OUTLINE_COLOR;
+    }
+
+    // 3. Border captions, white-on-black over the blue rows.
+    draw_visual_intro_menu_border_caption(
+        buffer,
+        font,
+        usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN),
+        usize::from(INTRO_MENU_SELECT_CAPTION_ROW),
+        INTRO_MENU_SELECT_CAPTION_PREFIX
+            .bytes()
+            .chain(std::iter::once(INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH))
+            .chain(INTRO_MENU_SELECT_CAPTION_SUFFIX.bytes()),
+    );
+    draw_visual_intro_menu_border_caption(
+        buffer,
+        font,
+        usize::from(INTRO_MENU_COPYRIGHT_CAPTION_COLUMN),
+        usize::from(INTRO_MENU_COPYRIGHT_CAPTION_ROW),
+        INTRO_MENU_COPYRIGHT_CAPTION.bytes(),
+    );
+}
+
+/// `cleak/u5-spec#78`: stamp one `>text<` border caption as plain
+/// white-on-black fixed cells starting at `(column, row)`.
+fn draw_visual_intro_menu_border_caption(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    column: usize,
+    row: usize,
+    codes: impl Iterator<Item = u8>,
+) {
+    for (offset, code) in codes.enumerate() {
+        buffer.draw_fixed_glyph_cell(
+            font,
+            code,
+            column + offset,
+            row,
+            INTRO_MENU_FRAME_OUTLINE_COLOR,
+            INTRO_MENU_FRAME_INTERIOR_COLOR,
+        );
     }
 }
 
 /// Lazily initialise [`VisualIntroState::title_tick_frames`] from the
-/// configured locator. `U5_EGA_DRV_TITLE_TICK_OFFSET` (decimal byte
-/// offset within `EGA.DRV`) selects runtime extraction via
-/// `parse_ega_drv_title_tick_frames`; if the env var is unset or the
-/// file is missing, the placeholder strip is used and the band is
-/// rendered as opaque black per the §5 destination contract.
+/// local `ULTIMA` image directory (`cleak/u5-spec#78`).
 fn ensure_title_tick_frames(intro: &mut VisualIntroState) -> &TitleTickFrameSet {
     if intro.title_tick_frames.is_none() {
-        intro.title_tick_frames = Some(load_or_placeholder_title_tick_frames(&intro.game_dir));
+        let depth = intro.raster_depth;
+        intro.title_tick_frames = Some(
+            load_ultima_title_tick_frames(&intro.game_dir, depth).unwrap_or_else(|err| {
+                panic!(
+                    "intro title tick requires the local {ULTIMA_PANEL_STEM} title-tick panels: {err}"
+                )
+            }),
+        );
     }
     intro
         .title_tick_frames
@@ -9273,80 +9617,21 @@ fn ensure_title_tick_frames(intro: &mut VisualIntroState) -> &TitleTickFrameSet 
         .expect("title-tick frames were just populated")
 }
 
-fn load_or_placeholder_title_tick_frames(game_dir: &Path) -> TitleTickFrameSet {
-    // `cleak/u5-spec#74` (resolved against spec head `a885a12`): the
-    // original title-tick frames come from the EGA driver's runtime
-    // back-buffer, not a passive byte offset inside `EGA.DRV`. The
-    // file-locator parser path is therefore unimplementable as a
-    // byte-offset extraction. Two clean-room-safe paths remain:
-    //   1. User-captured PNG frames (`TITLE_TICK_0.png` ..
-    //      `TITLE_TICK_3.png` in the game dir). Each must be a
-    //      320×49 image; pixels are nearest-EGA-palette-matched.
-    //      This is the byte-identical path: the user captures the
-    //      `(0, 65)` `320 x 49` rectangle from the original game
-    //      and drops the PNGs in place.
-    //   2. `clean_room_authored_title_tick_frames`: the
-    //      independently-authored procedural fallback that uses
-    //      the published palette cycle (`cleak/u5-spec#52`).
-    //      Spec-sanctioned; not byte-identical to the original.
-    if let Some(frames) = try_load_title_tick_frames_from_png(game_dir) {
-        return frames;
-    }
-    let _ = game_dir;
-    clean_room_authored_title_tick_frames()
-}
-
-/// Read four `TITLE_TICK_<n>.png` files (n = 0..3) from `game_dir`,
-/// resample each into 320×49 EGA-palette-indexed pixels, and emit a
-/// `TitleTickFrameSet`. Returns `None` if any of the four files is
-/// missing — that triggers the next fallback in the loader chain.
-/// Failures during decoding panic loudly: a broken PNG is a config
-/// error worth surfacing, not a silent fall-through.
-fn try_load_title_tick_frames_from_png(game_dir: &Path) -> Option<TitleTickFrameSet> {
-    let mut paths = Vec::with_capacity(4);
-    for frame in 0..4 {
-        paths.push(game_dir.join(format!("TITLE_TICK_{frame}.png")));
-    }
-    if paths.iter().any(|p| !p.exists()) {
-        return None;
-    }
-    let target_w = TITLE_TICK_FRAME_WIDTH as usize;
-    let target_h = TITLE_TICK_FRAME_HEIGHT as usize;
-    let mut pixels = Vec::with_capacity(TITLE_TICK_FRAME_PIXELS * 4);
-    for (frame, path) in paths.iter().enumerate() {
-        let image = image::open(path).unwrap_or_else(|err| {
-            panic!("title-tick frame {frame} at {path:?} could not be opened: {err}")
-        });
-        let rgba = image.to_rgba8();
-        let (w, h) = rgba.dimensions();
-        if w as usize != target_w || h as usize != target_h {
-            panic!(
-                "title-tick frame {frame} at {path:?} must be {target_w}x{target_h}, got {w}x{h}"
-            );
-        }
-        for pixel in rgba.pixels() {
-            pixels.push(ega_palette_index_from_rgba(&pixel.0));
-        }
-    }
-    Some(
-        TitleTickFrameSet::from_palette_indices(pixels, "TITLE_TICK_*.png frame strip")
-            .expect("TITLE_TICK_*.png frame strip is well-formed by construction"),
-    )
-}
-
+/// `cleak/u5-spec#78` menu backing art: clear the surface to palette
+/// index 0 and blit the `ULTIMA` logo panel at the origin. Rows
+/// 61..=64 and 114..=119 stay black; the title-tick band and the
+/// lower menu frame paint the rest.
 fn draw_visual_intro_start_menu_art_to_buffer(
     buffer: &mut IntroDisplayBuffer,
     game_dir: &Path,
     depth: TileGraphicsDepth,
 ) {
     buffer.clear(0);
-    blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &STARTSC_PANEL_SPECS);
-    buffer.clear_rect_inclusive(
-        0,
-        STARTSC_PANEL_HEIGHT,
-        INTRO_FRAMEBUFFER_WIDTH as usize - 1,
-        INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
-        0,
+    blit_image_panel_specs_intro_buffer(
+        buffer,
+        game_dir,
+        depth,
+        std::slice::from_ref(&ULTIMA_LOGO_PANEL_SPEC),
     );
 }
 
@@ -9465,9 +9750,45 @@ fn require_published_u4_transfer_preview_presentation() -> ! {
     )
 }
 
+/// `systems/intro.md §11` acknowledgements screen, as the original
+/// draws it (`cleak/u5-spec#72`, `cleak/u5-spec#78`).
+///
+/// §11 says the acknowledgements load "their own graphics resource
+/// from the end-screen asset family"; `ENDSC.16` is a single blank
+/// 260x168 parchment, while `STARTSC.16` decodes to the credits
+/// artwork ("Produced and Designed by Lord British" ... "Artwork by
+/// Denis Loubet and Doug Wike"). A black-box capture of the original
+/// confirms it: pressing `A` keeps the `ULTIMA` logo on rows 0..=60
+/// and replaces everything from row 63 down with the STARTSC
+/// 16 + 288 + 16 by 137 composition. No text is drawn over it - the
+/// credits are part of the artwork - so nothing here is authored.
+///
+/// The entry/exit wipe cadence is still unpublished, so this blits
+/// the composition immediately rather than inventing a sweep.
 fn render_acknowledgements_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    let _ = intro;
-    u5_runtime::require_acknowledgements_contract();
+    let mut buffer = new_intro_display_buffer();
+    buffer.clear(0);
+    blit_image_panel_specs_intro_buffer(
+        &mut buffer,
+        &intro.game_dir,
+        intro.raster_depth,
+        std::slice::from_ref(&ULTIMA_LOGO_PANEL_SPEC),
+    );
+    buffer.clear_rect_inclusive(
+        0,
+        ULTIMA_LOGO_HEIGHT,
+        INTRO_FRAMEBUFFER_WIDTH as usize - 1,
+        INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
+        0,
+    );
+    blit_image_panel_specs_intro_buffer(
+        &mut buffer,
+        &intro.game_dir,
+        intro.raster_depth,
+        &STARTSC_PANEL_SPECS,
+    );
+    intro.surface = buffer;
+    intro.surface.to_rgba()
 }
 
 fn render_chargen_intro_graphics(
@@ -10983,9 +11304,9 @@ fn write_visual_play_report(
     frame_kind: &'static str,
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
 ) -> io::Result<VisualFrameReport> {
-    let rgba = render_visual_play_frame(state, atlas, font);
+    let rgba = render_visual_play_frame(state, atlas, ctx);
     write_visual_report(
         out_dir,
         label,
@@ -11002,14 +11323,14 @@ fn write_visual_play_report_with_input(
     frame_kind: &'static str,
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     input_line: &str,
     prompt_cursor_visible: bool,
 ) -> io::Result<VisualFrameReport> {
     let rgba = render_visual_play_frame_with_input_and_cursor(
         state,
         atlas,
-        font,
+        ctx,
         input_line,
         READY_HINT,
         prompt_cursor_visible,
@@ -11114,57 +11435,127 @@ fn write_visual_intro_report_inner(
 
 const VISUAL_PLAY_FRAME_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
 const VISUAL_PLAY_FRAME_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
-const VISUAL_MAIN_TEXT_TOP: u8 = 22;
-const VISUAL_MAIN_TEXT_RIGHT: u8 = 22;
 const VISUAL_OVERLAY_SIDE_PANEL_X: usize = STATS_PANEL_TEXT_LEFT as usize * 8;
 const VISUAL_OVERLAY_SIDE_PANEL_Y: usize = 0;
+
+/// Everything the gameplay frame compositor needs beyond the tile
+/// atlas: both fixed-cell fonts (`IBM.CH` for text and the ribbon end
+/// caps, `RUNES.CH` for the sky strip) and the scrolling message log.
+#[derive(Clone, Copy)]
+struct PlayFrameContext<'a> {
+    ibm: &'a FixedCellFont,
+    runes: &'a FixedCellFont,
+    log: &'a GameplayMessageLog,
+}
+
+impl<'a> PlayFrameContext<'a> {
+    fn chrome_fonts(&self) -> ChromeFonts<'a> {
+        ChromeFonts {
+            ibm: self.ibm,
+            runes: self.runes,
+        }
+    }
+}
+
+/// The composed text-cell surface plus the message-window rows that
+/// take the two-colour ribbon end-cap prefix, which the fixed-cell
+/// text pipeline cannot express.
+struct IntegratedStatusSurface {
+    rgba: Vec<u8>,
+    message_rows: Vec<MessageWindowRow>,
+}
+
+/// `systems/text-output.md §4`: text row 24 (pixel rows 192..=199) is
+/// never written by the gameplay screen.
+const VISUAL_PLAY_BACKGROUND_RGBA: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
+
+fn visual_play_background_framebuffer() -> Vec<u8> {
+    let mut rgba =
+        vec![0u8; VISUAL_PLAY_FRAME_WIDTH as usize * VISUAL_PLAY_FRAME_HEIGHT as usize * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&VISUAL_PLAY_BACKGROUND_RGBA);
+    }
+    rgba
+}
+
+/// Composite a same-sized RGBA surface, skipping its black pixels so
+/// the border chrome underneath survives.
+fn overlay_nonblack_rgba(dst: &mut [u8], src: &[u8]) {
+    assert_eq!(
+        dst.len(),
+        src.len(),
+        "non-black overlay requires identically sized surfaces"
+    );
+    for (dst_pixel, src_pixel) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+        if src_pixel[0] == 0 && src_pixel[1] == 0 && src_pixel[2] == 0 {
+            continue;
+        }
+        dst_pixel.copy_from_slice(src_pixel);
+    }
+}
 
 fn render_visual_play_frame(
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
 ) -> Vec<u8> {
-    render_visual_play_frame_with_input(state, atlas, font, "", READY_HINT)
+    render_visual_play_frame_with_input(state, atlas, ctx, "", READY_HINT)
 }
 
 fn render_visual_play_frame_with_input(
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     input_line: &str,
     default_message: &str,
 ) -> Vec<u8> {
     render_visual_play_frame_with_input_and_cursor(
         state,
         atlas,
-        font,
+        ctx,
         input_line,
         default_message,
         false,
     )
 }
 
+/// Compose one gameplay frame.
+///
+/// Order matters: the border chrome is painted first, the text-cell
+/// surface is composited over it skipping black so the ribbon shows
+/// through every box interior, the message window's rows and their
+/// end-cap prefixes go on next, and the tile viewport is blitted last
+/// at its measured origin inside the white frame rule.
 fn render_visual_play_frame_with_input_and_cursor(
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     input_line: &str,
     default_message: &str,
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
     if state.endgame.is_some() {
-        return render_endgame_framebuffer(state, atlas, input_line, default_message, font);
+        return render_endgame_framebuffer(state, atlas, input_line, default_message, ctx);
     }
 
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let mut rgba = render_integrated_status_framebuffer(
+
+    let mut chrome_state = state.clone();
+    chrome_state.refresh_cached_moon_glyphs();
+    let chrome = gameplay_chrome_content(&chrome_state);
+    let mut rgba = visual_play_background_framebuffer();
+    paint_gameplay_frame_chrome(&mut rgba, width, height, &chrome, ctx.chrome_fonts());
+
+    let surface = render_integrated_status_framebuffer(
         state,
         input_line,
         default_message,
-        font,
+        ctx,
         prompt_cursor_visible,
     );
+    overlay_nonblack_rgba(&mut rgba, &surface.rgba);
+    paint_message_window_rows(&mut rgba, width, height, ctx, &surface.message_rows);
 
     let viewport = render_base_framebuffer(state, atlas);
     blit_rgba(
@@ -11174,11 +11565,41 @@ fn render_visual_play_frame_with_input_and_cursor(
         &viewport,
         VIEWPORT_SIZE_PX as usize,
         VIEWPORT_SIZE_PX as usize,
-        0,
-        0,
+        VIEWPORT_ORIGIN_X,
+        VIEWPORT_ORIGIN_Y,
     );
     blit_active_view_overlay_rgba(&mut rgba, width, height, state, atlas.depth);
     rgba
+}
+
+/// Draw the message window's placed rows straight into the frame.
+///
+/// The window is painted here rather than through a text window
+/// because each echoed command line carries the two-colour ribbon
+/// end-cap sprite in column 24, which the 1-bit fixed-cell text
+/// pipeline has no way to express.
+fn paint_message_window_rows(
+    rgba: &mut [u8],
+    width: usize,
+    height: usize,
+    ctx: PlayFrameContext<'_>,
+    rows: &[MessageWindowRow],
+) {
+    for row in rows {
+        if row.prefixed {
+            paint_message_line_cap(rgba, width, height, ctx.ibm, row.row);
+        }
+        paint_fixed_cell_text(
+            rgba,
+            width,
+            height,
+            ctx.ibm,
+            &row.text,
+            row.column,
+            row.row,
+            CHROME_RULE_INDEX,
+        );
+    }
 }
 
 fn render_endgame_framebuffer(
@@ -11186,11 +11607,11 @@ fn render_endgame_framebuffer(
     atlas: &TileAtlas,
     input_line: &str,
     default_message: &str,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
 ) -> Vec<u8> {
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let mut rgba = render_status_framebuffer(state, input_line, default_message, font);
+    let mut rgba = render_status_framebuffer(state, input_line, default_message, ctx.ibm);
     if endgame_frame_should_show_tableau(state) {
         let viewport = render_endgame_tableau_viewport(state, atlas)
             .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"));
@@ -11201,8 +11622,8 @@ fn render_endgame_framebuffer(
             &viewport.to_rgba(),
             viewport.width,
             viewport.height,
-            0,
-            0,
+            VIEWPORT_ORIGIN_X,
+            VIEWPORT_ORIGIN_Y,
         );
     }
     rgba
@@ -11718,9 +12139,9 @@ fn render_integrated_status_framebuffer(
     state: &mut PlayState,
     input_line: &str,
     default_message: &str,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     prompt_cursor_visible: bool,
-) -> Vec<u8> {
+) -> IntegratedStatusSurface {
     let active_cursor = state.active_player;
     let mut display_state = state.clone();
     display_state.refresh_cached_moon_glyphs();
@@ -11739,53 +12160,45 @@ fn render_integrated_status_framebuffer(
         None
     };
     let mut system = TextWindowSystem::new();
-    system.set_window_rect(
-        MAIN_TEXT_WINDOW_INDEX,
-        0,
-        VISUAL_MAIN_TEXT_TOP,
-        VISUAL_MAIN_TEXT_RIGHT,
-        TEXT_SCREEN_ROWS - 1,
-    );
-    system.set_window_rect(
-        STATS_PANEL_TEXT_WINDOW_INDEX,
-        STATS_PANEL_TEXT_LEFT,
-        0,
-        STATS_PANEL_TEXT_RIGHT,
-        STATS_PANEL_TEXT_BOTTOM,
-    );
-    system.set_window_rect(
-        PROMPT_TEXT_WINDOW_INDEX,
-        0,
-        TEXT_SCREEN_ROWS - 2,
-        VISUAL_MAIN_TEXT_RIGHT,
-        TEXT_SCREEN_ROWS - 1,
-    );
-    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    configure_play_text_windows(&mut system);
     let message = display_state
         .active_shop
         .as_ref()
         .map(|shop| shop.modal_text(&display_state.message))
         .unwrap_or_else(|| display_state.message.clone());
+    let mut message_rows = Vec::new();
     if display_state.active_shop.is_some() {
         configure_talk_shop_text_window(&mut system);
-        system.set_window_rect(
-            TALK_SHOP_TEXT_WINDOW_INDEX,
-            0,
-            VISUAL_MAIN_TEXT_TOP,
-            VISUAL_MAIN_TEXT_RIGHT,
-            TEXT_SCREEN_ROWS - 1,
-        );
         paint_talk_shop_text_window(&mut system, &message);
     } else {
-        paint_message_text_window(&mut system, &message);
+        // The message window is drawn straight into the framebuffer by
+        // the compositor: its echoed lines carry the two-colour ribbon
+        // end cap, which text cells cannot represent.
+        //
+        // The engine's scene-entry narration prints raw map
+        // coordinates, is specified by no `systems/` document, and the
+        // original never shows it, so it is kept out of the window.
+        // Every other message is shown normally.
+        let mut log = ctx.log.clone();
+        if !message_is_scene_entry_narration(
+            &message,
+            display_state.player.x,
+            display_state.player.y,
+        ) {
+            log.push_output(&message);
+        }
+        message_rows = layout_message_window(&log, Some(input_echo.unwrap_or(""))).rows;
     }
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
     if display_state.active_shop.is_some() {
         paint_inn_pickup_register_text_window(&mut system, &display_state);
-    }
-    if let Some(input_echo) = input_echo {
-        let cursor_glyph = prompt_cursor_visible.then_some(PROMPT_CURSOR_GLYPH);
-        paint_prompt_text_window_with_cursor(&mut system, input_echo, cursor_glyph);
+        // Shop line prompts keep their own prompt window on the message
+        // window's bottom row; the non-shop live line is placed by the
+        // message-window layout instead.
+        if let Some(input_echo) = input_echo {
+            let cursor_glyph = prompt_cursor_visible.then_some(PROMPT_CURSOR_GLYPH);
+            paint_prompt_text_window_with_cursor(&mut system, input_echo, cursor_glyph);
+        }
     }
     if display_state.active_shop.is_some() {
         system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
@@ -11795,10 +12208,25 @@ fn render_integrated_status_framebuffer(
     if stats_panel_active_cursor_visible(state, active_cursor) {
         state.active_player = None;
     }
-    let mut rgba = render_text_window_rgba(&system, font)
+    let mut rgba = render_text_window_rgba(&system, ctx.ibm)
         .unwrap_or_else(|err| panic!("visual integrated text window render failed: {err}"));
     apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
-    rgba
+    if prompt_cursor_visible && display_state.active_shop.is_none() {
+        if let Some(live) = message_rows.last() {
+            let column = live.column + live.text.chars().count().min(15) as u8;
+            paint_fixed_cell_glyph(
+                &mut rgba,
+                VISUAL_PLAY_FRAME_WIDTH as usize,
+                VISUAL_PLAY_FRAME_HEIGHT as usize,
+                ctx.ibm,
+                PROMPT_CURSOR_GLYPH,
+                column.min(MESSAGE_WINDOW_RIGHT),
+                live.row,
+                CHROME_RULE_INDEX,
+            );
+        }
+    }
+    IntegratedStatusSurface { rgba, message_rows }
 }
 
 fn visual_display_message(state: &PlayState) -> String {
@@ -12210,6 +12638,17 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
 
 #[cfg(test)]
 mod tests {
+
+    /// Frame context for tests: the synthetic fixed-cell font stands in
+    /// for both alphabets, with an empty message log.
+    fn play_ctx<'a>(font: &'a FixedCellFont, log: &'a GameplayMessageLog) -> PlayFrameContext<'a> {
+        PlayFrameContext {
+            ibm: font,
+            runes: font,
+            log,
+        }
+    }
+
     use super::*;
     use std::fs;
     use std::path::Path;
@@ -12331,6 +12770,7 @@ mod tests {
             "TITLE.BIT",
             "BRITISH.BIT",
             "BRITISH.PTH",
+            "ULTIMA.16",
             "STARTSC.16",
             "CREATE.16",
             "TEXT.16",
@@ -12351,6 +12791,7 @@ mod tests {
                 fs::copy(&src, &dst).unwrap_or_else(|err| {
                     panic!("failed to install intro test asset {file_name}: {err}")
                 });
+                clear_read_only(&dst);
             }
         }
         install_canonical_intro_bit_asset(
@@ -12367,6 +12808,22 @@ mod tests {
             |bytes| parse_british_bit(bytes).map(|bitmap| vec![bitmap]),
             parse_legacy_lzw_british_bit,
         );
+    }
+
+    /// Drops the read-only flag `fs::copy` inherits from the source.
+    ///
+    /// The clean local asset folder is kept read-only so nothing can write
+    /// back into it; the fixture copies these tests then rewrite must not
+    /// inherit that.
+    fn clear_read_only(path: &Path) {
+        if let Ok(metadata) = fs::metadata(path) {
+            let mut permissions = metadata.permissions();
+            if permissions.readonly() {
+                #[allow(clippy::permissions_set_readonly_false)]
+                permissions.set_readonly(false);
+                let _ = fs::set_permissions(path, permissions);
+            }
+        }
     }
 
     fn install_canonical_intro_bit_asset<T, FC, FV>(
@@ -12391,9 +12848,11 @@ mod tests {
                     )
                 })
         });
-        fs::write(dir.join(file_name), encode_sparse_bit_resource(&bitmaps)).unwrap_or_else(
-            |err| panic!("failed to write canonical intro test asset {file_name}: {err}"),
-        );
+        let destination = dir.join(file_name);
+        clear_read_only(&destination);
+        fs::write(&destination, encode_sparse_bit_resource(&bitmaps)).unwrap_or_else(|err| {
+            panic!("failed to write canonical intro test asset {file_name}: {err}")
+        });
     }
 
     trait IntoCanonicalBitmaps {
@@ -12679,12 +13138,18 @@ mod tests {
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
 
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        // The viewport is blitted at its measured origin inside the
+        // white frame rule, so tile centres are offset by (8, 8).
         let cell_center = |x: usize, y: usize| {
             (
-                x * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
-                y * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
+                VIEWPORT_ORIGIN_X + x * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
+                VIEWPORT_ORIGIN_Y + y * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
             )
         };
 
@@ -12701,7 +13166,12 @@ mod tests {
         let (x, y) = cell_center(3, 4);
         assert_eq!(rgba_pixel(&rgba, width, x, y), ega_rgba(11));
         assert_eq!(
-            rgba_pixel(&rgba, width, 5 * TILE_ATLAS_SIDE, 8 * TILE_ATLAS_SIDE),
+            rgba_pixel(
+                &rgba,
+                width,
+                VIEWPORT_ORIGIN_X + 5 * TILE_ATLAS_SIDE,
+                VIEWPORT_ORIGIN_Y + 8 * TILE_ATLAS_SIDE
+            ),
             ega_rgba(14)
         );
     }
@@ -12955,17 +13425,25 @@ mod tests {
 
     #[test]
     fn intro_menu_dump_png_for_visual_inspection() {
-        // Renders a complete menu frame (STARTSC + title tick +
-        // §6.1 frame + §6.2 labels) and dumps the RGBA as a PNG to
-        // a known temp path so the work can be visually inspected
-        // without waiting for the full title flourish + signature
-        // animation. The path is `%TEMP%/u5-intro-shots/intro-menu-direct.png`.
+        // Renders a complete menu frame (ULTIMA logo + title tick +
+        // §6.1 frame + §6.2 labels) and the acknowledgements frame,
+        // dumping each as a PNG to a known temp path so the work can
+        // be visually inspected without waiting for the full title
+        // flourish + signature animation. The paths are
+        // `%TEMP%/u5-intro-shots/intro-menu-direct.png` and
+        // `%TEMP%/u5-intro-shots/intro-acknowledgements.png`.
         let dir = debug_game_dir();
         install_intro_assets(&dir);
         let ibm = load_ibm_ch_font(&dir).unwrap();
         let slots = IntroFontSlots::new(ibm.clone(), ibm);
         let mut text_windows = TextWindowSystem::new();
-        text_windows.set_window_rect(0, 0, 0, TEXT_SCREEN_COLUMNS - 1, TEXT_SCREEN_ROWS - 1);
+        text_windows.set_window_rect(
+            0,
+            0,
+            0,
+            TEXT_SCREEN_COLUMNS - 1,
+            u5_runtime::TEXT_SCREEN_ROWS - 1,
+        );
         text_windows.set_active_window(0);
         let mut intro = VisualIntroState {
             game_dir: dir.clone(),
@@ -13006,59 +13484,159 @@ mod tests {
         img.save(&out_path).expect("PNG save");
         eprintln!("intro menu PNG written: {}", out_path.display());
 
+        intro.panel = VisualIntroPanel::Acknowledgements;
+        let ack_rgba = render_intro_frame(&mut intro);
+        let ack_path = out_dir.join("intro-acknowledgements.png");
+        let ack_img = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, ack_rgba)
+            .expect("rgba buffer must be 320×200×4 bytes");
+        ack_img.save(&ack_path).expect("PNG save");
+        eprintln!("intro acknowledgements PNG written: {}", ack_path.display());
+
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn intro_menu_text_window_frame_uses_published_box_glyphs() {
-        // `systems/intro.md §6.1` published frame contract: 40-cell
-        // by 10-cell rectangle anchored at (0, 15), composed from
-        // the IBM.CH reserved corner/edge glyph set (0x7B..0x7F).
-        // Each frame cell must contain the pixel pattern of the
-        // corresponding glyph. The interior is preserved by the
-        // STARTSC paint, so this test seeds a known interior color
-        // and confirms the frame draws only the border cells.
+    fn intro_menu_text_window_frame_draws_the_measured_blue_chrome() {
+        // `cleak/u5-spec#78`: `systems/intro.md §6.1`'s single-line
+        // box-glyph rectangle is not what the original draws. A
+        // black-box capture shows the rounded EGA index-1 band over
+        // pixel rows 120..=199, a one-pixel index-15 rectangle
+        // (rules at y = 127 and y = 192 spanning x = 7..=312,
+        // verticals at x = 7 and x = 312 spanning y = 128..=191), a
+        // black interior, and two white-on-black border captions.
         let dir = debug_game_dir();
         install_intro_assets(&dir);
         let font = load_ibm_ch_font(&dir).unwrap();
+        // The art pass clears the surface before the frame runs, so
+        // start from black and mark only the rows above the band with
+        // a sentinel to prove the frame paints nothing up there.
         let mut buffer = new_intro_display_buffer();
-        buffer.clear(0x03); // sentinel interior color
+        buffer.clear_rect_inclusive(
+            0,
+            0,
+            INTRO_FRAMEBUFFER_WIDTH as usize - 1,
+            usize::from(INTRO_MENU_FRAME_TOP_Y) - 1,
+            0x03,
+        );
 
         draw_visual_intro_menu_text_window_frame(&mut buffer, &font);
 
-        // Check the four corners contain the published glyph
-        // shapes' first row.
-        let cell = CH_CELL_SIDE;
-        let top_left_pixel = buffer.pixels[15 * cell * buffer.width + 0];
-        let top_right_pixel = buffer.pixels[15 * cell * buffer.width + (39 * cell + 7)];
-        let bottom_left_pixel = buffer.pixels[24 * cell * buffer.width + 0];
-        let bottom_right_pixel = buffer.pixels[(25 * cell - 1) * buffer.width + (39 * cell + 7)];
-        // Top-left and bottom-right corner glyphs have a fully
-        // solid pixel at the outer corner; bottom-left and
-        // top-right have the same.
-        assert_eq!(top_left_pixel, 0x0f, "top-left outer corner pixel");
-        assert_eq!(top_right_pixel, 0x0f, "top-right outer corner pixel");
-        assert_eq!(bottom_left_pixel, 0x0f, "bottom-left outer corner pixel");
-        assert_eq!(bottom_right_pixel, 0x0f, "bottom-right outer corner pixel");
+        let at = |x: usize, y: usize| buffer.pixels[y * buffer.width + x];
 
-        // Horizontal rule at y = 127, columns 7..312 inclusive.
-        let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
-        for x in usize::from(INTRO_MENU_FRAME_RULE_X0)..=usize::from(INTRO_MENU_FRAME_RULE_X1) {
+        // Rows above the band are untouched.
+        assert_eq!(at(0, 119), 0x03, "frame must not paint above row 120");
+
+        // Corner-rounding profile on both edges, top and bottom.
+        for (y, start_column) in [
+            (120usize, 5usize),
+            (121, 3),
+            (122, 2),
+            (123, 1),
+            (124, 1),
+            (125, 0),
+            (194, 0),
+            (195, 1),
+            (196, 1),
+            (197, 2),
+            (198, 3),
+            (199, 5),
+        ] {
+            if start_column > 0 {
+                assert_eq!(at(start_column - 1, y), 0x00, "left outside at row {y}");
+                assert_eq!(
+                    at(buffer.width - start_column, y),
+                    0x00,
+                    "right outside at row {y}"
+                );
+            }
             assert_eq!(
-                buffer.pixels[rule_y * buffer.width + x],
-                0x0f,
-                "rule pixel at ({x}, {rule_y})"
+                at(start_column, y),
+                INTRO_MENU_FRAME_BORDER_COLOR,
+                "left border start at row {y}"
+            );
+            assert_eq!(
+                at(buffer.width - 1 - start_column, y),
+                INTRO_MENU_FRAME_BORDER_COLOR,
+                "right border start at row {y}"
             );
         }
 
-        // Interior cells (row 17..22, cols 1..38) should preserve
-        // the sentinel.
-        let interior_y = 18 * cell + 3;
-        let interior_x = 20 * cell + 3;
+        // Both white rules, away from the caption cells.
+        for rule_y in [
+            usize::from(INTRO_MENU_FRAME_RULE_Y),
+            usize::from(INTRO_MENU_FRAME_BOTTOM_RULE_Y),
+        ] {
+            for x in [7usize, 20, 300, 312] {
+                assert_eq!(
+                    at(x, rule_y),
+                    INTRO_MENU_FRAME_OUTLINE_COLOR,
+                    "rule pixel at ({x}, {rule_y})"
+                );
+            }
+        }
+
+        // Verticals and the black interior between them.
+        for y in [128usize, 160, 191] {
+            assert_eq!(at(6, y), INTRO_MENU_FRAME_BORDER_COLOR, "blue left of x=7");
+            assert_eq!(at(7, y), INTRO_MENU_FRAME_OUTLINE_COLOR, "left vertical");
+            assert_eq!(at(8, y), 0x00, "interior is black");
+            assert_eq!(at(311, y), 0x00, "interior is black");
+            assert_eq!(at(312, y), INTRO_MENU_FRAME_OUTLINE_COLOR, "right vertical");
+            assert_eq!(
+                at(313, y),
+                INTRO_MENU_FRAME_BORDER_COLOR,
+                "blue right of x=312"
+            );
+        }
+
+        // Both captions are stamped as fixed cells over the blue
+        // border rows, so they replace the border pixels across
+        // exactly their published cell spans. `debug_game_dir`
+        // installs an all-0xff IBM.CH fixture, so every caption cell
+        // paints a solid foreground block; that is enough to pin the
+        // spans and the draw order (captions after the border fill).
+        let select_x = usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN) * CH_CELL_SIDE;
+        let select_cells =
+            INTRO_MENU_SELECT_CAPTION_PREFIX.len() + 1 + INTRO_MENU_SELECT_CAPTION_SUFFIX.len();
+        let select_y = usize::from(INTRO_MENU_SELECT_CAPTION_ROW) * CH_CELL_SIDE + 4;
+        assert_eq!(select_cells, 10, ">Select: + cursor + < is ten cells");
         assert_eq!(
-            buffer.pixels[interior_y * buffer.width + interior_x],
-            0x03,
-            "frame must not clear interior"
+            at(select_x - 1, select_y),
+            INTRO_MENU_FRAME_BORDER_COLOR,
+            "border survives left of the >Select:< caption"
+        );
+        for cell in 0..select_cells {
+            assert_eq!(
+                at(select_x + cell * CH_CELL_SIDE, select_y),
+                INTRO_MENU_FRAME_OUTLINE_COLOR,
+                ">Select:< caption cell {cell}"
+            );
+        }
+        assert_eq!(
+            at(select_x + select_cells * CH_CELL_SIDE, select_y),
+            INTRO_MENU_FRAME_BORDER_COLOR,
+            "border survives right of the >Select:< caption"
+        );
+
+        let copyright_x = usize::from(INTRO_MENU_COPYRIGHT_CAPTION_COLUMN) * CH_CELL_SIDE;
+        let copyright_cells = INTRO_MENU_COPYRIGHT_CAPTION.len();
+        let copyright_y = usize::from(INTRO_MENU_COPYRIGHT_CAPTION_ROW) * CH_CELL_SIDE + 4;
+        assert_eq!(
+            at(copyright_x - 1, copyright_y),
+            INTRO_MENU_FRAME_BORDER_COLOR,
+            "border survives left of the copyright caption"
+        );
+        for cell in 0..copyright_cells {
+            assert_eq!(
+                at(copyright_x + cell * CH_CELL_SIDE, copyright_y),
+                INTRO_MENU_FRAME_OUTLINE_COLOR,
+                "copyright caption cell {cell}"
+            );
+        }
+        assert_eq!(
+            at(copyright_x + copyright_cells * CH_CELL_SIDE, copyright_y),
+            INTRO_MENU_FRAME_BORDER_COLOR,
+            "border survives right of the copyright caption"
         );
 
         let _ = fs::remove_dir_all(dir);
@@ -13081,7 +13659,13 @@ mod tests {
         // font as both since the runes path isn't exercised here.
         let slots = IntroFontSlots::new(ibm_font.clone(), ibm_font);
         let mut text_windows = TextWindowSystem::new();
-        text_windows.set_window_rect(0, 0, 0, TEXT_SCREEN_COLUMNS - 1, TEXT_SCREEN_ROWS - 1);
+        text_windows.set_window_rect(
+            0,
+            0,
+            0,
+            TEXT_SCREEN_COLUMNS - 1,
+            u5_runtime::TEXT_SCREEN_ROWS - 1,
+        );
         text_windows.set_active_window(0);
         let mut intro = VisualIntroState {
             game_dir: dir.clone(),
@@ -13185,34 +13769,72 @@ mod tests {
     }
 
     #[test]
-    fn intro_start_menu_art_preserves_full_137_pixel_startsc_height() {
+    fn intro_start_menu_art_blits_the_ultima_logo_over_a_cleared_surface() {
+        // `cleak/u5-spec#78`: the menu backing is `ULTIMA` slot 0
+        // (319x61) at (0, 0), not the `STARTSC` composition
+        // `systems/intro.md §3` names. Everything below the logo
+        // starts black, which is what keeps the §6.1 "frame does not
+        // clear its interior" rule from leaking credits art into the
+        // menu window.
         let dir = debug_game_dir();
         install_intro_assets(&dir);
-        let mut expected_panels = new_intro_display_buffer();
+        let logo = u5_runtime::load_ultima_logo_panel(&dir, TileGraphicsDepth::Ega16)
+            .expect("ULTIMA logo panel decodes");
+        let mut actual = new_intro_display_buffer();
+        actual.clear(0x03);
+
+        draw_visual_intro_start_menu_art_to_buffer(&mut actual, &dir, TileGraphicsDepth::Ega16);
+
+        for y in 0..ULTIMA_LOGO_HEIGHT {
+            for x in 0..ULTIMA_LOGO_WIDTH {
+                assert_eq!(
+                    actual.pixels[y * actual.width + x],
+                    logo.pixels[y * ULTIMA_LOGO_WIDTH + x],
+                    "logo pixel at ({x}, {y})"
+                );
+            }
+            assert_eq!(
+                actual.pixels[y * actual.width + ULTIMA_LOGO_WIDTH],
+                0,
+                "the 319-wide logo leaves column 319 black on row {y}"
+            );
+        }
+        for y in ULTIMA_LOGO_HEIGHT..INTRO_FRAMEBUFFER_HEIGHT as usize {
+            for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
+                assert_eq!(
+                    actual.pixels[y * actual.width + x],
+                    0,
+                    "everything below the logo starts cleared at ({x}, {y})"
+                );
+            }
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn startsc_panels_remain_the_acknowledgements_credits_composition() {
+        // `cleak/u5-spec#78`: `STARTSC.16` stays loadable for the
+        // Acknowledgements subflow (still gated behind
+        // `require_acknowledgements_contract`), as the published
+        // 16 + 288 + 16 by 137 composition.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut panels = new_intro_display_buffer();
+
         blit_image_panel_specs_intro_buffer(
-            &mut expected_panels,
+            &mut panels,
             &dir,
             TileGraphicsDepth::Ega16,
             &STARTSC_PANEL_SPECS,
         );
-        let mut actual = new_intro_display_buffer();
 
-        draw_visual_intro_start_menu_art_to_buffer(&mut actual, &dir, TileGraphicsDepth::Ega16);
-
-        let last_panel_row = STARTSC_PANEL_HEIGHT - 1;
-        let first_lower_row = STARTSC_PANEL_HEIGHT;
-        for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
-            assert_eq!(
-                actual.pixels[last_panel_row * actual.width + x],
-                expected_panels.pixels[last_panel_row * expected_panels.width + x],
-                "STARTSC panel row {last_panel_row} must remain visible at x={x}"
-            );
-            assert_eq!(
-                actual.pixels[first_lower_row * actual.width + x],
-                0,
-                "lower intro menu area must begin cleared at row {first_lower_row}, x={x}"
-            );
-        }
+        assert_eq!(STARTSC_PANEL_HEIGHT, 137);
+        assert!(
+            panels.pixels[..STARTSC_PANEL_HEIGHT * panels.width]
+                .iter()
+                .any(|index| *index != 0),
+            "the STARTSC composition must decode to visible credits art"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -14167,6 +14789,202 @@ mod tests {
     }
 
     #[test]
+    fn intro_menu_labels_are_the_full_strings_at_the_published_origins() {
+        // `cleak/u5-spec#78`: `systems/intro.md §6.2` abbreviates four
+        // of the six labels. A black-box capture of the original shows
+        // the full strings, and their measured ink spans line up with
+        // the published origins plus §6.2's leading blank.
+        assert_eq!(
+            INTRO_MENU_LABELS,
+            [
+                (IntroSubflow::JourneyOnward, 12, 17, " Journey Onward "),
+                (
+                    IntroSubflow::CharacterCreation,
+                    9,
+                    18,
+                    " Create New Character "
+                ),
+                (
+                    IntroSubflow::UltimaIvTransfer,
+                    8,
+                    19,
+                    " Transfer from Ultima IV "
+                ),
+                (IntroSubflow::StorySlides, 9, 20, " Ultima V Introduction "),
+                (IntroSubflow::Acknowledgements, 11, 21, " Acknowledgements "),
+                (IntroSubflow::ReturnToView, 10, 22, " Return to the View "),
+            ]
+        );
+        // Each entry carries exactly one leading and one trailing
+        // blank, so the origin cell holds the blank and the ink starts
+        // one cell to the right.
+        for (_, origin, _, label) in INTRO_MENU_LABELS {
+            assert!(label.starts_with(' ') && label.ends_with(' '), "{label:?}");
+            assert!(!label[1..label.len() - 1].starts_with(' '), "{label:?}");
+            assert!(!label[1..label.len() - 1].ends_with(' '), "{label:?}");
+            assert!(
+                origin + label.len() <= TEXT_SCREEN_COLUMNS as usize,
+                "{label:?}"
+            );
+        }
+        // Measured ink spans from the capture (cell of first ink cell
+        // through cell of last ink cell).
+        let measured = [
+            (13usize, 26usize),
+            (10, 29),
+            (9, 31),
+            (10, 30),
+            (12, 27),
+            (11, 28),
+        ];
+        for ((_, origin, _, label), (first, last)) in INTRO_MENU_LABELS.iter().zip(measured) {
+            assert_eq!(origin + 1, first, "{label:?} first ink cell");
+            assert_eq!(origin + label.len() - 2, last, "{label:?} last ink cell");
+        }
+    }
+
+    #[test]
+    fn intro_menu_render_emits_the_leading_blank_at_the_origin_cell() {
+        // `debug_game_dir` installs an all-0xff IBM.CH, so every glyph
+        // is a solid block: a plain row paints solid foreground across
+        // its whole padded span and a highlighted row paints solid
+        // background. That pins both the span and the inverse toggle.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let font = load_ibm_ch_font(&dir).unwrap();
+        let mut buffer = new_intro_display_buffer();
+
+        draw_visual_intro_menu_labels(&mut buffer, &font, Some(IntroSubflow::JourneyOnward));
+
+        let at = |cell_x: usize, cell_y: usize| {
+            buffer.pixels[(cell_y * CH_CELL_SIDE + 3) * buffer.width + cell_x * CH_CELL_SIDE + 3]
+        };
+        // Row 0 is highlighted: the inverse block covers cells 12..=27
+        // (the label plus both padding blanks), 16 cells wide.
+        assert_eq!(at(11, 17), 0x00, "nothing painted left of the highlight");
+        for cell in 12..=27 {
+            assert_eq!(at(cell, 17), 0x00, "inverse cell {cell} draws background");
+        }
+        assert_eq!(at(28, 17), 0x00, "nothing painted right of the highlight");
+        // A plain row paints solid foreground from its origin cell
+        // through its trailing blank.
+        assert_eq!(at(8, 18), 0x00, "nothing painted left of row 1");
+        for cell in 9..=30 {
+            assert_eq!(at(cell, 18), 0x0f, "plain cell {cell} draws foreground");
+        }
+        assert_eq!(at(31, 18), 0x00, "nothing painted right of row 1");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn intro_menu_enters_with_journey_onward_highlighted() {
+        // `cleak/u5-spec#78`: the original presents the menu with row 0
+        // in inverse video before any key is pressed.
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        assert_eq!(intro.dispatch.intro.cached_selection, None);
+
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
+        );
+
+        // After a selection the highlight follows §6.2's recent-
+        // selection cache.
+        intro.dispatch.intro.cached_selection = Some(IntroSubflow::StorySlides);
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::StorySlides
+        );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_arrow_keys_move_the_highlight_and_wrap() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        let down = char::from(u5_runtime::INPUT_CODE_SOUTH);
+        let up = char::from(u5_runtime::INPUT_CODE_NORTH);
+
+        assert!(step_visual_intro(&mut intro, down));
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::CharacterCreation
+        );
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+
+        assert!(step_visual_intro(&mut intro, up));
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
+        );
+
+        // Up from row 0 wraps to the last row; down from there wraps
+        // back to the first.
+        assert!(step_visual_intro(&mut intro, up));
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::ReturnToView
+        );
+        assert!(step_visual_intro(&mut intro, down));
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
+        );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_space_activates_the_highlighted_row() {
+        // Space and Enter both activate whatever row is highlighted.
+        // Walking the highlight down to "Acknowledgements" and
+        // pressing Space must enter that subflow (whose rendering is
+        // still gated behind the unpublished acknowledgements
+        // contract) rather than being ignored.
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        let down = char::from(u5_runtime::INPUT_CODE_SOUTH);
+        for _ in 0..4 {
+            assert!(step_visual_intro(&mut intro, down));
+        }
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::Acknowledgements
+        );
+
+        assert!(step_visual_intro(&mut intro, ' '));
+
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::Acknowledgements),
+            "space must enter the highlighted row's subflow"
+        );
+        assert_eq!(
+            intro.dispatch.intro.cached_selection,
+            Some(IntroSubflow::Acknowledgements)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn intro_menu_enter_without_a_prior_selection_takes_the_default_row() {
+        // With no cached selection the menu still shows row 0
+        // highlighted, so Enter has a row to activate: Journey Onward,
+        // which surfaces the missing-save path rather than being
+        // silently ignored.
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        assert_eq!(intro.dispatch.intro.cached_selection, None);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = step_visual_intro(&mut intro, '\r');
+        }));
+
+        assert!(
+            result.is_err() || intro.dispatch.intro.cached_selection.is_some(),
+            "Enter must activate the default highlighted row"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn intro_menu_cached_selection_renders_inverse_highlight() {
         let font = parse_ch_font(&vec![0x00; CH_FONT_LEN], IBM_CH_FILE).unwrap();
         let mut frame =
@@ -14727,7 +15545,11 @@ mod tests {
 
         let mut expected_state = state.clone();
         let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
 
         assert_ne!(rgba, expected);
         assert_nonblack_rgba(&rgba);
@@ -14762,7 +15584,11 @@ mod tests {
 
         let mut expected_state = state.clone();
         let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
 
         assert_eq!(rgba, expected);
     }
@@ -14820,7 +15646,11 @@ mod tests {
         let mut state = world_state(open_world_grid(), 10, 20);
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
 
         assert_eq!(
             rgba.len(),
@@ -14828,6 +15658,137 @@ mod tests {
         );
         assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
         assert_nonblack_rgba(&rgba);
+    }
+
+    #[test]
+    fn visual_play_frame_paints_border_chrome_before_the_viewport_and_text() {
+        // The measured 320x200 chrome: blue ribbon bands, white 1px
+        // rules, the viewport at (8, 8), and a black text row 24. See
+        // `u5_runtime::gameplay_chrome` for provenance.
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+
+        assert_eq!(rgba_pixel(&rgba, width, 3, 100), ega_rgba(1));
+        assert_eq!(rgba_pixel(&rgba, width, 187, 100), ega_rgba(1));
+        assert_eq!(rgba_pixel(&rgba, width, 7, 100), ega_rgba(15));
+        assert_eq!(rgba_pixel(&rgba, width, 184, 100), ega_rgba(15));
+        assert_eq!(rgba_pixel(&rgba, width, 191, 30), ega_rgba(15));
+        assert_eq!(rgba_pixel(&rgba, width, 312, 30), ega_rgba(15));
+        // The right band is absent below y=86: the message box runs to
+        // the screen edge.
+        assert_eq!(rgba_pixel(&rgba, width, 316, 30), ega_rgba(1));
+        assert_eq!(rgba_pixel(&rgba, width, 316, 100), ega_rgba(0));
+        // Text row 24 stays black in every column.
+        for x in 0..width {
+            for y in 192..VISUAL_PLAY_FRAME_HEIGHT as usize {
+                assert_eq!(rgba_pixel(&rgba, width, x, y), ega_rgba(0), "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn visual_play_frame_blits_the_viewport_at_its_measured_origin() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = render_base_framebuffer(&mut state.clone(), &atlas);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let side = VIEWPORT_SIZE_PX as usize;
+
+        for (x, y) in [
+            (0usize, 0usize),
+            (1, 0),
+            (0, 1),
+            (side - 1, side - 1),
+            (88, 88),
+        ] {
+            let src = (y * side + x) * 4;
+            assert_eq!(
+                rgba_pixel(&rgba, width, VIEWPORT_ORIGIN_X + x, VIEWPORT_ORIGIN_Y + y),
+                [
+                    viewport[src],
+                    viewport[src + 1],
+                    viewport[src + 2],
+                    viewport[src + 3]
+                ],
+                "viewport pixel ({x}, {y}) must land at ({}, {})",
+                VIEWPORT_ORIGIN_X + x,
+                VIEWPORT_ORIGIN_Y + y
+            );
+        }
+    }
+
+    #[test]
+    fn scene_entry_narration_is_hidden_but_later_messages_still_change_the_frame() {
+        // The engine's "Entered <scene> at (x, y)." narration prints
+        // raw map coordinates, is specified by no `systems/` document,
+        // and the original never shows it, so the message window stays
+        // empty on the opening frame. Every other message renders, so
+        // a turn that produces one still changes the frame -- which is
+        // the invariant `visual_route_suite` checks per command.
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let log = GameplayMessageLog::new();
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = format!(
+            "Entered CASTLE:0 at ({}, {}).",
+            state.player.x, state.player.y
+        );
+        assert!(message_is_scene_entry_narration(
+            &state.message,
+            state.player.x,
+            state.player.y
+        ));
+        let initial = render_visual_play_frame(&mut state.clone(), &atlas, play_ctx(&font, &log));
+
+        let mut passed = state.clone();
+        passed.message = "Passed.".to_string();
+        assert!(!message_is_scene_entry_narration(
+            &passed.message,
+            passed.player.x,
+            passed.player.y
+        ));
+        let after = render_visual_play_frame(&mut passed, &atlas, play_ctx(&font, &log));
+
+        assert_ne!(
+            hash_bytes(&initial),
+            hash_bytes(&after),
+            "a turn that produces a message must change the frame"
+        );
+
+        // The narration frame really is message-free: every cell of the
+        // message window body is background.
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        for row in u5_runtime::MESSAGE_WINDOW_TOP..u5_runtime::MESSAGE_WINDOW_BOTTOM {
+            for column in u5_runtime::MESSAGE_WINDOW_LEFT..=MESSAGE_WINDOW_RIGHT {
+                for y in 0..8 {
+                    for x in 0..8 {
+                        let px = usize::from(column) * 8 + x;
+                        let py = usize::from(row) * 8 + y;
+                        assert_eq!(
+                            rgba_pixel(&initial, width, px, py),
+                            ega_rgba(0),
+                            "message window cell ({column}, {row}) must be empty"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -14867,7 +15828,11 @@ mod tests {
         let overlay_sample_x = overlay_index % overlay.width;
         let overlay_sample_y = overlay_index / overlay.width;
 
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
         let base_pixel = rgba_pixel(
             &rgba,
@@ -15769,7 +16734,9 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1780);
+        // One fewer step: the R-Ready route no longer presses Enter twice
+        // (see VISUAL_KEY_READY_STEPS).
+        assert_eq!(reports.len(), 1779);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -15777,8 +16744,8 @@ mod tests {
             assert!(report.nonblack_pixels > 0);
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1780"));
-        assert!(manifest.contains("coverage\tvisual-key-route-steps\t89"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1779"));
+        assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
         assert!(manifest.contains("review=route-step route=route-world-movement step=01 input=d"));
@@ -15791,7 +16758,7 @@ mod tests {
         assert!(manifest.contains("route-key-prompt-escape-cancel-04-escape"));
         assert!(manifest.contains("route-key-world-direction-prompts-12-key_d"));
         assert!(manifest.contains("route-key-yell-buffer-09-enter"));
-        assert!(manifest.contains("route-key-ready-picker-05-space"));
+        assert!(manifest.contains("route-key-ready-picker-04-space"));
         assert!(manifest.contains("route-key-z-stats-picker-02-space"));
         assert!(manifest.contains("route-key-use-picker-02-enter"));
         assert!(manifest.contains("route-key-mix-prompt-02-escape"));
@@ -16097,7 +17064,7 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-xit-foes-remain-02-x"));
         assert!(manifest.contains("route-doom-combat-quit-defeat-02-q"));
         assert!(manifest.contains("route-endgame-class-tableau-restoration-01-y"));
-        assert!(manifest.contains("route-britannia-extended-exploration-12-empty"));
+        assert!(manifest.contains("route-britannia-extended-exploration-12-1"));
         assert!(manifest.contains("route-castle-extended-walk-and-save-09-z"));
         assert!(manifest.contains("route-castle-extended-walk-and-rest-01-s"));
         assert!(manifest.contains("route-dungeon-extended-turn-and-search-09-s6"));
@@ -16268,12 +17235,23 @@ mod tests {
         install_test_conversation(&mut state);
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
 
-        let hidden =
-            render_integrated_status_framebuffer(&mut state.clone(), "job", "", &font, false);
-        let visible =
-            render_integrated_status_framebuffer(&mut state.clone(), "job", "", &font, true);
+        let log = GameplayMessageLog::new();
+        let hidden = render_integrated_status_framebuffer(
+            &mut state.clone(),
+            "job",
+            "",
+            play_ctx(&font, &log),
+            false,
+        );
+        let visible = render_integrated_status_framebuffer(
+            &mut state.clone(),
+            "job",
+            "",
+            play_ctx(&font, &log),
+            true,
+        );
 
-        assert_ne!(hash_bytes(&hidden), hash_bytes(&visible));
+        assert_ne!(hash_bytes(&hidden.rgba), hash_bytes(&visible.rgba));
     }
 
     #[test]
@@ -16388,7 +17366,15 @@ mod tests {
 
         assert_eq!(input_line, "j");
         let summary = summarize(&mut state, "", &input_line);
-        assert!(summary.contains("\n> j"));
+        // Column 24 carries the ribbon end-cap sprite rather than an
+        // ASCII "> ", so the echo starts at column 25 of the message
+        // window's bottom row.
+        let echo_column = usize::from(u5_runtime::MESSAGE_WINDOW_LEFT) + 1;
+        let echo_row = summary
+            .lines()
+            .find(|line| line.trim() == "j" && line.len() > echo_column)
+            .unwrap_or_else(|| panic!("{summary}"));
+        assert_eq!(echo_row.as_bytes()[echo_column], b'j', "{summary}");
     }
 
     #[test]
@@ -16573,10 +17559,13 @@ mod tests {
 
         let summary = summarize(&mut state, "", "");
 
-        assert!(summary.contains("Iolo"), "{summary}");
-        assert!(summary.contains("Item 1 costs 42 gold"), "{summary}");
-        assert!(summary.contains("Mace costs 42 gold."), "{summary}");
-        assert!(summary.contains("STATS"), "{summary}");
+        let squished: String = summary.chars().filter(|ch| !ch.is_whitespace()).collect();
+        assert!(squished.contains("Iolo"), "{summary}");
+        assert!(squished.contains("Item1costs42gold"), "{summary}");
+        assert!(squished.contains("Macecosts42gold."), "{summary}");
+        // The invented "STATS" header is gone; the roster starts at the
+        // panel's first row.
+        assert!(squished.contains("Avatar"), "{summary}");
     }
 
     #[test]
@@ -16585,13 +17574,24 @@ mod tests {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
-        let before =
-            render_integrated_status_framebuffer(&mut state.clone(), "", READY_HINT, &font, false);
+        let log = GameplayMessageLog::new();
+        let before = render_integrated_status_framebuffer(
+            &mut state.clone(),
+            "",
+            READY_HINT,
+            play_ctx(&font, &log),
+            false,
+        );
         handle_play_key_input(&mut state, 'M', "ANTRA", Path::new("")).unwrap();
-        let after =
-            render_integrated_status_framebuffer(&mut state.clone(), "", READY_HINT, &font, false);
+        let after = render_integrated_status_framebuffer(
+            &mut state.clone(),
+            "",
+            READY_HINT,
+            play_ctx(&font, &log),
+            false,
+        );
 
-        assert_ne!(hash_bytes(&before), hash_bytes(&after));
+        assert_ne!(hash_bytes(&before.rgba), hash_bytes(&after.rgba));
     }
 
     #[test]
@@ -16791,8 +17791,8 @@ mod tests {
         let records = load_story_records(game_dir)
             .expect("STORY.DAT loads")
             .expect("STORY.DAT present");
-        let mut intro = visual_intro_state_with_panel(
-            game_dir.to_path_buf(),
+        let mut intro = read_only_intro_state_for_local_assets(
+            game_dir,
             VisualIntroPanel::Story {
                 records,
                 step: 0,
@@ -16912,8 +17912,8 @@ mod tests {
         let records = load_story_records(game_dir)
             .expect("STORY.DAT loads")
             .expect("STORY.DAT present");
-        let mut intro = visual_intro_state_with_panel(
-            game_dir.to_path_buf(),
+        let mut intro = read_only_intro_state_for_local_assets(
+            game_dir,
             VisualIntroPanel::Story {
                 records,
                 step: 13,
@@ -16997,6 +17997,46 @@ mod tests {
         (0..30)
             .map(|index| format!("Questionnaire record {index}"))
             .collect()
+    }
+
+    /// Builds an intro state that reads the player's real asset folder.
+    ///
+    /// Unlike [`visual_intro_state_with_panel`] this never calls
+    /// `install_intro_assets`, which copies and rewrites canonical `.BIT`
+    /// files into the target directory - harmless for a temp fixture dir,
+    /// destructive for `DEFAULT_GAME_DIR`. Tests using this must not write to
+    /// or delete `game_dir` either.
+    fn read_only_intro_state_for_local_assets(
+        game_dir: &Path,
+        panel: VisualIntroPanel,
+    ) -> VisualIntroState {
+        let mut dispatch = UnifiedMenuDispatch::new();
+        dispatch.dismiss_title();
+        VisualIntroState {
+            game_dir: game_dir.to_path_buf(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch,
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
+            title_tick_frames: None,
+        }
     }
 
     fn visual_intro_state_with_panel(
@@ -17153,59 +18193,81 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_acknowledgements_refuses_placeholder_render() {
+    fn visual_intro_acknowledgements_draws_the_startsc_credits_parchment() {
+        // `cleak/u5-spec#72` + `#78`: pressing `A` keeps the `ULTIMA`
+        // logo and replaces everything from row 63 down with the
+        // STARTSC 16 + 288 + 16 by 137 credits composition. No text is
+        // authored over it.
         let dir = debug_game_dir();
         let mut intro =
             visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
-
-        let message = panic_message(result.expect_err("acknowledgements render must panic"));
-        assert!(
-            message.contains("placeholder credits are a forbidden fallback"),
-            "{message}"
+        let logo = u5_runtime::load_ultima_logo_panel(&dir, TileGraphicsDepth::Ega16)
+            .expect("ULTIMA logo panel decodes");
+        let mut expected_panels = new_intro_display_buffer();
+        blit_image_panel_specs_intro_buffer(
+            &mut expected_panels,
+            &dir,
+            TileGraphicsDepth::Ega16,
+            &STARTSC_PANEL_SPECS,
         );
-        assert!(message.contains("cleak/u5-spec#72"), "{message}");
+
+        let rgba = render_intro_frame(&mut intro);
+        let actual = intro_buffer_from_rgba_frame(&rgba);
+
+        assert_eq!(ACKNOWLEDGEMENTS_PANEL_TOP_Y, 63);
+        // Logo rows survive.
+        for y in 0..ULTIMA_LOGO_HEIGHT {
+            for x in 0..ULTIMA_LOGO_WIDTH {
+                assert_eq!(
+                    actual.pixels[y * actual.width + x],
+                    logo.pixels[y * ULTIMA_LOGO_WIDTH + x],
+                    "logo pixel at ({x}, {y})"
+                );
+            }
+        }
+        // The gap between the logo and the parchment stays black.
+        for y in ULTIMA_LOGO_HEIGHT..ACKNOWLEDGEMENTS_PANEL_TOP_Y {
+            for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
+                assert_eq!(actual.pixels[y * actual.width + x], 0, "gap at ({x}, {y})");
+            }
+        }
+        // The parchment fills the rest of the surface.
+        for y in ACKNOWLEDGEMENTS_PANEL_TOP_Y..INTRO_FRAMEBUFFER_HEIGHT as usize {
+            for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
+                assert_eq!(
+                    actual.pixels[y * actual.width + x],
+                    expected_panels.pixels[y * expected_panels.width + x],
+                    "parchment pixel at ({x}, {y})"
+                );
+            }
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn visual_intro_acknowledgements_input_refuses_placeholder_skip() {
+    fn visual_intro_acknowledgements_any_key_restores_the_menu() {
         let dir = debug_game_dir();
         let mut intro =
             visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = step_visual_intro_panel(&mut intro, ' ');
-        }));
+        assert!(step_visual_intro_panel(&mut intro, ' '));
 
-        let message = panic_message(result.expect_err("acknowledgements input must panic"));
-        assert!(
-            message.contains("placeholder credits are a forbidden fallback"),
-            "{message}"
-        );
-        assert!(message.contains("cleak/u5-spec#72"), "{message}");
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.is_empty(), "no message text is authored");
+        assert!(!intro.message_waiting_for_key);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn visual_intro_acknowledgements_cancel_refuses_placeholder_skip() {
+    fn visual_intro_acknowledgements_cancel_restores_the_menu() {
         let dir = debug_game_dir();
         let mut intro =
             visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = cancel_visual_intro_panel(&mut intro);
-        }));
+        assert!(cancel_visual_intro_panel(&mut intro));
 
-        let message = panic_message(result.expect_err("acknowledgements cancel must panic"));
-        assert!(
-            message.contains("placeholder credits are a forbidden fallback"),
-            "{message}"
-        );
-        assert!(message.contains("cleak/u5-spec#72"), "{message}");
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.is_empty(), "no message text is authored");
         let _ = fs::remove_dir_all(dir);
     }
 
