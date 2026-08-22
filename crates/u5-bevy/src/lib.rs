@@ -14233,34 +14233,56 @@ mod tests {
     }
 
     #[test]
-    fn intro_rect_dissolve_order_is_scattered_not_row_or_column_major() {
-        // The published contract calls out the order explicitly: not
-        // row-major, not column-major, not a spiral — it reads as
-        // scattered single-pixel updates.
+    fn intro_rect_dissolve_order_satisfies_the_published_visit_contract() {
+        // `systems/display-driver-abi.md §9.6` publishes four visible
+        // bullets for dispatch `0x66`. The original drives the order
+        // from a Galois-style LFSR whose tap inventory is indexed by
+        // the rectangle's pixel count, but §9.6 states outright that
+        // "an engine that does not need exact frame-by-frame parity
+        // may substitute any other order that satisfies the four
+        // bullet points above" — so this test pins the four bullets
+        // and stays agnostic about which generator supplies them.
+        let (width, height) = (32usize, 16usize);
         let rect = u5_runtime::DisplayPixelRect {
             x0: 0,
             y0: 0,
-            x1: 31,
-            y1: 15,
+            x1: width - 1,
+            y1: height - 1,
         };
-        let mut state = u5_runtime::EgaDissolveState::new(rect);
-        let mut visited = Vec::new();
-        while let Some(pixel) = state.next_pixel() {
-            visited.push(pixel);
-        }
-        assert_eq!(visited.len(), 32 * 16);
+        let walk = || {
+            let mut state = u5_runtime::EgaDissolveState::new(rect);
+            let mut visited = Vec::new();
+            while let Some(pixel) = state.next_pixel() {
+                visited.push(pixel);
+            }
+            visited
+        };
+        let visited = walk();
+
+        // Bullet 1: every pixel inside the inclusive rectangle is
+        // visited exactly once.
+        assert_eq!(visited.len(), width * height);
         let mut sorted = visited.clone();
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(sorted.len(), visited.len(), "every pixel exactly once");
+        assert_eq!(sorted.first(), Some(&(0, 0)));
+        assert_eq!(sorted.last(), Some(&(width - 1, height - 1)));
 
-        let row_major: Vec<(usize, usize)> =
-            (0..16).flat_map(|y| (0..32).map(move |x| (x, y))).collect();
-        let column_major: Vec<(usize, usize)> =
-            (0..32).flat_map(|x| (0..16).map(move |y| (x, y))).collect();
+        // Bullet 3: deterministic and reproducible across calls with
+        // the same rectangle dimensions.
+        assert_eq!(walk(), visited, "visit order must be reproducible");
+
+        // Bullet 4: not row-major, not column-major, not a clean
+        // spiral; it reads as scattered single-pixel updates.
+        let row_major: Vec<(usize, usize)> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .collect();
+        let column_major: Vec<(usize, usize)> = (0..width)
+            .flat_map(|x| (0..height).map(move |y| (x, y)))
+            .collect();
         assert_ne!(visited, row_major);
         assert_ne!(visited, column_major);
-        // Consecutive visits jump around rather than stepping by one.
         let adjacent = visited
             .windows(2)
             .filter(|pair| pair[0].0.abs_diff(pair[1].0) + pair[0].1.abs_diff(pair[1].1) == 1)
@@ -14270,6 +14292,11 @@ mod tests {
             "dissolve order should be scattered, {adjacent} adjacent steps of {}",
             visited.len()
         );
+
+        // Bullet 2 is covered by
+        // `intro_start_menu_reveal_is_one_blocking_dissolve_of_the_published_rect`,
+        // which asserts the destination matches the source across the
+        // whole rectangle once the transfer returns.
     }
 
     #[test]
