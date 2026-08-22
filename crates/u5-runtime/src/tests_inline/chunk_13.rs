@@ -8200,7 +8200,7 @@ fn title_tick_frame_set_requires_complete_ega_palette_frames() {
 }
 
 #[test]
-fn display_surface_title_tick_draws_source_band_at_x16_and_advances() {
+fn display_surface_title_tick_overwrites_the_full_320_wide_band_and_advances() {
     let mut bytes = vec![0; TITLE_TICK_FRAME_SET_BYTES];
     for frame in 0..TITLE_TICK_FRAME_COUNT as usize {
         let start = frame * TITLE_TICK_FRAME_PIXELS;
@@ -8227,32 +8227,24 @@ fn display_surface_title_tick_draws_source_band_at_x16_and_advances() {
         surface.read_pixel(54, TITLE_TICK_FRAME_Y as usize - 1),
         Some(0x03)
     );
-    // `cleak/u5-spec#78`: the 288-wide source band lands at x = 16;
-    // the 16 columns at each side of the published 320-wide
-    // rectangle are cleared to index 0.
-    let band_x = TITLE_TICK_SOURCE_X as usize;
-    let band_last_x = band_x + TITLE_TICK_SOURCE_WIDTH as usize - 1;
+    // `cleak/u5-spec#65`: every tick copies 49 rows at the full
+    // 320-pixel width, so the whole rectangle — flanks included — is
+    // overwritten opaquely from the staged band.
     let band_last_y = (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize;
-    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(0));
+    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(1));
+    assert_eq!(surface.read_pixel(319, TITLE_TICK_FRAME_Y as usize), Some(1));
+    assert_eq!(surface.read_pixel(0, band_last_y), Some(1));
+    assert_eq!(surface.read_pixel(319, band_last_y), Some(1));
+    // Nothing outside the rectangle is touched.
     assert_eq!(
-        surface.read_pixel(band_x - 1, TITLE_TICK_FRAME_Y as usize),
-        Some(0)
+        surface.read_pixel(54, TITLE_TICK_FRAME_Y as usize - 1),
+        Some(0x03)
     );
-    assert_eq!(
-        surface.read_pixel(band_x, TITLE_TICK_FRAME_Y as usize),
-        Some(1)
-    );
-    assert_eq!(surface.read_pixel(band_last_x, band_last_y), Some(1));
-    assert_eq!(surface.read_pixel(band_last_x + 1, band_last_y), Some(0));
-    assert_eq!(surface.read_pixel(319, band_last_y), Some(0));
     assert_eq!(surface.title_tick_frame(), 1);
 
     surface.advance_title_tick();
 
-    assert_eq!(
-        surface.read_pixel(band_x, TITLE_TICK_FRAME_Y as usize),
-        Some(2)
-    );
+    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(2));
     assert_eq!(surface.title_tick_frame(), 2);
 }
 

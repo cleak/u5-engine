@@ -1,7 +1,7 @@
 # Intro Graphics Gaps
 
-Last refreshed: 2026-08-22 from `cleak/u5-spec` open issues and the current
-`u5-engine` tree.
+Last refreshed: 2026-08-22 against `cleak/u5-spec` head `8192d67` and the
+current `u5-engine` tree.
 
 This file tracks the intro graphics contracts that still block an authentic
 minimum intro implementation under the strict no-fallback rule. If a behavior is
@@ -27,6 +27,28 @@ generated animation, cropped buffers, or diagnostic substitutes.
 | [#52](https://github.com/cleak/u5-spec/issues/52) / [#65](https://github.com/cleak/u5-spec/issues/65) / [#63](https://github.com/cleak/u5-spec/issues/63) | Resolved by clean runtime observation of the shipped assets, pending the spec correction requested as [#78](https://github.com/cleak/u5-spec/issues/78). See "Resolved By Runtime Observation" below. |
 | [#64](https://github.com/cleak/u5-spec/issues/64) | CREATE/chargen presentation was published and implemented; no current response is needed for the chargen graphics contract. |
 | [#66](https://github.com/cleak/u5-spec/issues/66) / [#67](https://github.com/cleak/u5-spec/issues/67) | Title bitmap layering and flourish slot presentation were answered and implemented; remaining title blockers are now the initial screen and cadence above; the title-tick frame content is resolved by runtime observation. |
+
+## Reconciled With Spec Head `8192d67`
+
+The spec's 2026-08-22 pass answered the whole intro sequence and retracted
+several earlier answers. The engine now follows head `8192d67`:
+
+| Contract | Correction | Where |
+|---|---|---|
+| Title tick (`#65`) | The four bands are `ULTIMA` records 1..=4 — the black-box finding below was confirmed and the "driver-internal pixels / author your own frames" answers in `#52`/`#65` were withdrawn. The staging is: clear the hidden surface, draw records 1..=4 at `(16, 0)`, `(16, 50)`, `(16, 100)`, `(16, 150)`; each tick copies 49 rows at the **full 320-pixel width** from hidden row `50 * frame` to visible rows `65..=113`, then advances mod 4. The flanks are part of the rectangle, so the engine stages each record onto a background-filled 320-wide band rather than blitting 288 wide and clearing the margins. Record 4 contributes only its first 49 rows. | `TitleTickFrameSet`, `parse_ultima_title_tick_frames` |
+| Flourish script (`#67`) | The published row-reveal table was wrong: the script has **eight row groups per frame, 56 total**, of which **seven reveal steps** are ever presented, plus **six erase steps** between consecutive frames — `7x7 + 6x6 = 85` presentation steps, not 67 groups. Each presentation repaints the frame's whole band at full 320-pixel width with the visible rows packed contiguously and centred (`floor(c/2)` blank above, `ceil(c/2)` below); even frames fill top-down, odd frames bottom-up and are therefore mirrored and shifted one row down. Frame 5 names source row 19 twice and never row 29, so row 29 stays blank — that quirk is part of the contract. | `TITLE_FLOURISH_REVEAL_SETS`, `title_flourish_step_state`, `blit_intro_title_flourish_frame_buffer` |
+| Flourish cadence (`#77`) | The flourish is **not** BIOS-tick paced and is not driven by the title-tick helper: it is one call into the driver's calibrated animation-script entry. `timing.md §5.1` now publishes **14 ms per presentation step, ~1.2 s total**. The earlier "one title-tick call per row-reveal group / ~3.7 s" answer was withdrawn. | `INTRO_FLOURISH_STEP_INTERVAL_SECS`, `visual_intro_animation_interval` |
+| Title palette (`#66`) | The flourish is palette index **9** (a blue-plus-intensity write mask); slots 7, 8, 9, `BRITISH.BIT` and the live pen strokes are index **15**. The two-colour result is deliberate. | `compose_intro_title_flourish_source_buffer`, `blit_intro_title_slots` |
+| Final pre-menu frame (`#66` Q4) | The title sequence is a series of **whole-page publishes**, so the final frame contains exactly three things: slot 8 at `(152, 0)`, `BRITISH.BIT` at `(24, 66)` and slot 9 at `(104, 160)`. It does **not** still contain the slot-6 mark or the slot-7 "Presents" line — the whole-page publish that opens the attribution card cleared them. Only slot 7's own draw is a partial publish, of `(0, 140)..(319, 199)`, which is why the mark survives beneath it during the hold. | `IntroTitleCompositionPhase`, `visual_intro_presents_hold_buffer` |
+| Reveal transitions (`#53`) | The one-pixel-column-per-title-tick sweep is withdrawn in full for both intro callers. Both are the driver's **rectangle dissolve**: one blocking call visiting every pixel exactly once in a deterministic pseudo-random order, hidden surface to visible page. There is no per-column schedule and no tick pacing. | `IntroDisplayBuffer::dissolve_rect_from` |
+| Menu idle cadence | A no-key menu poll pass costs two DOS BIOS user-ticks (~110 ms), so the 200-pass Return-to-View timeout is **~22 s**, and the flame band advances once per pass rather than once per tick. | `INTRO_MENU_IDLE_POLL_BIOS_TICKS` |
+
+Residuals the spec states honestly and the engine inherits: the 14 ms flourish
+step is a derived target inside a 10.5-15.8 ms bracket, not a measured figure;
+the dissolve is self-paced with no published wall-clock length for any
+rectangle, so the engine completes it as the single blocking call it is rather
+than inventing a rate; and the `.4`-depth conversion of the title-tick records
+is published as geometry only.
 
 ## Resolved By Runtime Observation (pending `cleak/u5-spec#78`)
 
