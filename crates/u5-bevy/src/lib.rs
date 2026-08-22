@@ -12259,12 +12259,17 @@ fn write_visual_intro_report_inner(
     raster_depth: TileGraphicsDepth,
     title_dismissed: bool,
 ) -> io::Result<VisualFrameReport> {
-    // `systems/intro.md §3` step 2 loads the resident font slots
-    // before the title flourish, and every later intro screen draws
-    // through them. Seeding `None` here made the suite's menu frames
-    // omit the §6.1 frame and §6.2 labels entirely.
-    let font_slots =
-        IntroFontSlots::new(load_ibm_ch_font(game_dir)?, load_runes_ch_font(game_dir)?);
+    // `systems/intro.md §3` step 2. Run the **same** pre-flourish phase
+    // the live harness runs rather than reproducing its effects by
+    // hand: it loads the resident font slots and resets the primary
+    // text window to 40x25, and later intro screens draw through both.
+    // Hand-rolling that state is exactly what let this suite disagree
+    // with the live renderer — it seeded `font_slots: None`, the menu
+    // compositor silently dropped the §6.1 frame and the §6.2 labels,
+    // and every suite menu frame came out black below row 119.
+    let mut text_windows = TextWindowSystem::new();
+    let (font_slots, _pre_flourish_outcome) =
+        run_intro_pre_flourish_phase(game_dir, DisplayDriverFamily::Ega, &mut text_windows, None)?;
     let mut intro = VisualIntroState {
         game_dir: game_dir.to_path_buf(),
         raster_depth,
@@ -12288,7 +12293,7 @@ fn write_visual_intro_report_inner(
         launch_result: Arc::new(Mutex::new(None)),
         image_handle: None,
         font_slots: Some(font_slots),
-        text_windows: TextWindowSystem::new(),
+        text_windows,
         pending_pre_flourish_outcome: None,
         title_tick_frames: None,
     };
@@ -17201,6 +17206,109 @@ mod tests {
     fn intro_centered_text_band_rejects_clipped_geometry() {
         let mut rgba = vec![0; 8 * 8 * 4];
         overlay_centered_text_band_rgba(&mut rgba, 8, 8, "X", 6, 4);
+    }
+
+    #[test]
+    fn visual_frame_suite_menu_frame_carries_the_chrome_and_labels() {
+        // Regression guard for the defect where the frame suite seeded
+        // `font_slots: None` and the menu compositor silently dropped
+        // the §6.1 frame and §6.2 labels, so every suite menu frame was
+        // black below row 119 while the live renderer drew the chrome.
+        // A harness that quietly disagrees with the live path is worse
+        // than one that fails: it launders the error into every
+        // downstream comparison — the Return-to-View frame inherited
+        // this one through its preserved backing.
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(IBM_CH_FILE).exists()
+            || !game_dir.join("ULTIMA.16").exists()
+            || !game_dir.join("WD.BIT").exists()
+        {
+            eprintln!("skipping: local clean assets are not present");
+            return;
+        }
+
+        let dir = temp_output_dir("suite-menu");
+        let report = write_visual_intro_report_with_title_dismissed(
+            &dir,
+            "intro-finished-menu",
+            "intro finished menu",
+            game_dir,
+            TileGraphicsDepth::Ega16,
+        )
+        .expect("suite menu frame renders");
+        let rgba = image::open(&report.path)
+            .expect("suite menu PNG opens")
+            .to_rgba8();
+        let buffer = IntroDisplayBuffer::from_rgba(
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            rgba.as_raw(),
+        );
+        let at = |x: usize, y: usize| buffer.pixels[y * buffer.width + x];
+
+        // Both border bands carry the blue frame and its white rules.
+        for (y0, y1, x0, x1, label) in [
+            (120usize, 127usize, 24usize, 119usize, "top border"),
+            (192, 199, 24, 95, "bottom border"),
+        ] {
+            let mut border = 0;
+            let mut rule = 0;
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    if at(x, y) == INTRO_MENU_FRAME_BORDER_COLOR {
+                        border += 1;
+                    } else if at(x, y) == INTRO_MENU_FRAME_OUTLINE_COLOR {
+                        rule += 1;
+                    }
+                }
+            }
+            assert!(border > 0, "{label} must carry the blue frame fill");
+            assert!(rule > 0, "{label} must carry the white rule");
+        }
+
+        // Every published label row carries ink across its published
+        // cell span, blanks included.
+        for (subflow, origin, row, label) in INTRO_MENU_LABELS {
+            let ink: Vec<usize> = (8..312)
+                .filter(|x| {
+                    (row * CH_CELL_SIDE..row * CH_CELL_SIDE + CH_CELL_SIDE).any(|y| at(*x, y) != 0)
+                })
+                .collect();
+            assert!(!ink.is_empty(), "label row {row} ({label:?}) has no ink");
+            // The highlighted row is inverse video, so its solid block
+            // covers the padding blanks too and starts at the origin
+            // cell; a plain row's ink starts one cell right of it.
+            let highlighted = subflow == INTRO_MENU_DEFAULT_HIGHLIGHT;
+            let (first, last) = if highlighted {
+                (origin, origin + label.len() - 1)
+            } else {
+                (origin + 1, origin + label.len() - 2)
+            };
+            assert_eq!(
+                ink[0] / CH_CELL_SIDE,
+                first,
+                "label {label:?} ink starts at the wrong cell"
+            );
+            assert_eq!(
+                ink[ink.len() - 1] / CH_CELL_SIDE,
+                last,
+                "label {label:?} ink ends at the wrong cell"
+            );
+        }
+
+        // Both border captions punch through the border rows.
+        let select_x = usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN) * CH_CELL_SIDE;
+        assert!(
+            (select_x..select_x + 10 * CH_CELL_SIDE).any(|x| at(x, 124) == 0x00),
+            "the Select caption must punch through the top border"
+        );
+        let copyright_x = usize::from(INTRO_MENU_COPYRIGHT_CAPTION_COLUMN) * CH_CELL_SIDE;
+        assert!(
+            (copyright_x..copyright_x + INTRO_MENU_COPYRIGHT_CAPTION.len() * CH_CELL_SIDE)
+                .any(|x| at(x, 196) == 0x00),
+            "the copyright caption must punch through the bottom border"
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
