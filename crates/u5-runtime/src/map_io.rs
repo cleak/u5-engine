@@ -395,52 +395,272 @@ pub fn normalize_town_runtime_floor(grid: &mut [u8], hour: u8) {
     }
 }
 
-/// INTERIM — spec gap `cleak/u5-spec#80`.
+/// `formats/location-dat.md §4.1`: one location's page ownership inside
+/// its class file. `base_page` is the page loaded when the floor byte is
+/// zero; `first_page..=last_page` is the run of 1024-byte pages the
+/// location owns.
 ///
-/// `formats/location-dat.md §4` says the logical ground floor is chosen by
-/// "a resident per-scene base-page table", and states outright that "an
-/// implementation must not derive active-floor pages solely as
-/// `location_index × 2 + floor`". The published table is not in the spec
-/// yet; it has been requested as `cleak/u5-spec#80`. The supported way to
-/// supply it meanwhile is a `location_floor_pages.tsv` beside the game
-/// data, which takes priority over everything below.
-///
-/// Without that file the only thing left is the forbidden derivation, and
-/// it is demonstrably wrong for the scene the shipped SAVED.GAM starts in:
-/// black-box observation of the original in Iolo's Hut (scene byte 13)
-/// renders `DWELLING.DAT` page 12, while `block * 2` yields page 8. Rather
-/// than silently drawing the wrong map, that one observed pair is pinned
-/// here until the table lands.
-///
-/// Entries are `(scene byte, observed base page)`. Do not grow this list
-/// by guessing — only by black-box observation of the original, and only
-/// until `cleak/u5-spec#80` closes, at which point the whole constant and
-/// [`derived_location_base_page`] should be deleted.
-const INTERIM_OBSERVED_LOCATION_BASE_PAGES: &[(u8, usize)] = &[(13, 12)];
-
-static DERIVED_LOCATION_BASE_PAGE_WARNED: std::sync::Once = std::sync::Once::new();
-
-/// INTERIM — spec gap `cleak/u5-spec#80`. The `block * 2` derivation
-/// `formats/location-dat.md §4` forbids, kept only so scenes with no
-/// observed page still load something. Warns once per process so the gap
-/// is visible in any run that relies on it.
-fn derived_location_base_page(scene: Scene) -> usize {
-    DERIVED_LOCATION_BASE_PAGE_WARNED.call_once(|| {
-        eprintln!(
-            "warning: no {LOCATION_FLOOR_TABLE_FILE} beside the game data, so \
-location floor pages fall back to the `block * 2` derivation that \
-formats/location-dat.md §4 forbids. Maps for scenes without an observed \
-base page may be wrong. Tracking the missing per-scene base-page table as \
-cleak/u5-spec#80."
-        );
-    });
-    scene.block * 2
+/// The base page is *not* always the lowest page of the run: exactly four
+/// locations enter above the bottom of theirs (Yew, both large castles,
+/// and Serpent's Hold), which is what makes negative floor values
+/// ordinary rather than exotic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LocationPageRun {
+    pub base_page: usize,
+    pub first_page: usize,
+    pub last_page: usize,
 }
 
-/// `formats/location-dat.md §4`: base page for the scene's logical floor
-/// zero. Prefers the `location_floor_pages.tsv` table, then the interim
-/// observed pages, then the forbidden derivation — see
-/// [`INTERIM_OBSERVED_LOCATION_BASE_PAGES`] and `cleak/u5-spec#80`.
+impl LocationPageRun {
+    /// `formats/location-dat.md §4`: the signed floor values that address
+    /// this run. A higher page index is a higher floor, so the lowest page
+    /// is the most negative floor.
+    pub const fn floor_range(&self) -> (i8, i8) {
+        (
+            (self.first_page as isize - self.base_page as isize) as i8,
+            (self.last_page as isize - self.base_page as isize) as i8,
+        )
+    }
+
+    pub const fn floor_count(&self) -> usize {
+        self.last_page - self.first_page + 1
+    }
+
+    pub const fn contains_page(&self, page: usize) -> bool {
+        self.first_page <= page && page <= self.last_page
+    }
+}
+
+/// `formats/location-dat.md §4.1`: the complete per-scene base
+/// floor-page binding for the shipped DOS data, indexed by `scene.byte -
+/// 1`. Slot zero of the resident table is the overworld and is never
+/// consulted by this path, so it is not represented here.
+///
+/// This is a **lookup, not a derivation**. The withdrawn model was
+/// `page = sub_map_index * 2 + floor`, which is wrong for twenty-two of
+/// the thirty-two locations and merely happens to be right for the other
+/// ten — which is why it survived so long. `cleak/u5-spec#80` published
+/// this table and withdrew both that arithmetic and the
+/// "eight 2048-byte blocks, each a pair of floors" file model behind it:
+/// a class file is a flat array of sixteen 1024-byte pages, seven
+/// locations own three-page runs, two own five-page runs, and nine runs
+/// cross a 2048-byte boundary. Do not reintroduce a block index here;
+/// the unit is the page. (`Scene::block` survives only as the `.NPC` /
+/// `.TLK` roster index, where the pairing does still hold.)
+///
+/// Two structural properties are asserted by the tests and are worth
+/// relying on: the sixty-four pages **partition exactly** across the four
+/// class files, and the four rows most likely to expose a `2 * index`
+/// implementation are Yew, Iolo's Hut, and the two large castles.
+pub const LOCATION_PAGE_RUNS: [LocationPageRun; 32] = [
+    //  1 Moonglow
+    LocationPageRun {
+        base_page: 0,
+        first_page: 0,
+        last_page: 1,
+    },
+    //  2 Britain
+    LocationPageRun {
+        base_page: 2,
+        first_page: 2,
+        last_page: 3,
+    },
+    //  3 Jhelom
+    LocationPageRun {
+        base_page: 4,
+        first_page: 4,
+        last_page: 5,
+    },
+    //  4 Yew
+    LocationPageRun {
+        base_page: 7,
+        first_page: 6,
+        last_page: 7,
+    },
+    //  5 Minoc
+    LocationPageRun {
+        base_page: 8,
+        first_page: 8,
+        last_page: 9,
+    },
+    //  6 Trinsic
+    LocationPageRun {
+        base_page: 10,
+        first_page: 10,
+        last_page: 11,
+    },
+    //  7 Skara Brae
+    LocationPageRun {
+        base_page: 12,
+        first_page: 12,
+        last_page: 13,
+    },
+    //  8 New Magincia
+    LocationPageRun {
+        base_page: 14,
+        first_page: 14,
+        last_page: 15,
+    },
+    //  9 Fogsbane
+    LocationPageRun {
+        base_page: 0,
+        first_page: 0,
+        last_page: 2,
+    },
+    // 10 Stormcrow
+    LocationPageRun {
+        base_page: 3,
+        first_page: 3,
+        last_page: 5,
+    },
+    // 11 Greyhaven
+    LocationPageRun {
+        base_page: 6,
+        first_page: 6,
+        last_page: 8,
+    },
+    // 12 Waveguide
+    LocationPageRun {
+        base_page: 9,
+        first_page: 9,
+        last_page: 11,
+    },
+    // 13 Iolo's Hut
+    LocationPageRun {
+        base_page: 12,
+        first_page: 12,
+        last_page: 12,
+    },
+    // 14 DWELLING:5 (blank name)
+    LocationPageRun {
+        base_page: 13,
+        first_page: 13,
+        last_page: 13,
+    },
+    // 15 DWELLING:6 (blank name)
+    LocationPageRun {
+        base_page: 14,
+        first_page: 14,
+        last_page: 14,
+    },
+    // 16 DWELLING:7 (blank name)
+    LocationPageRun {
+        base_page: 15,
+        first_page: 15,
+        last_page: 15,
+    },
+    // 17 Lord British's Castle
+    LocationPageRun {
+        base_page: 1,
+        first_page: 0,
+        last_page: 4,
+    },
+    // 18 Lord Blackthorn's Castle
+    LocationPageRun {
+        base_page: 6,
+        first_page: 5,
+        last_page: 9,
+    },
+    // 19 West Britanny
+    LocationPageRun {
+        base_page: 10,
+        first_page: 10,
+        last_page: 10,
+    },
+    // 20 North Britanny
+    LocationPageRun {
+        base_page: 11,
+        first_page: 11,
+        last_page: 11,
+    },
+    // 21 East Britanny
+    LocationPageRun {
+        base_page: 12,
+        first_page: 12,
+        last_page: 12,
+    },
+    // 22 Paws
+    LocationPageRun {
+        base_page: 13,
+        first_page: 13,
+        last_page: 13,
+    },
+    // 23 Cove
+    LocationPageRun {
+        base_page: 14,
+        first_page: 14,
+        last_page: 14,
+    },
+    // 24 Buccaneer's Den
+    LocationPageRun {
+        base_page: 15,
+        first_page: 15,
+        last_page: 15,
+    },
+    // 25 Ararat
+    LocationPageRun {
+        base_page: 0,
+        first_page: 0,
+        last_page: 1,
+    },
+    // 26 Bordermarch
+    LocationPageRun {
+        base_page: 2,
+        first_page: 2,
+        last_page: 3,
+    },
+    // 27 Farthing
+    LocationPageRun {
+        base_page: 4,
+        first_page: 4,
+        last_page: 4,
+    },
+    // 28 Windemere
+    LocationPageRun {
+        base_page: 5,
+        first_page: 5,
+        last_page: 5,
+    },
+    // 29 Stonegate
+    LocationPageRun {
+        base_page: 6,
+        first_page: 6,
+        last_page: 6,
+    },
+    // 30 The Lycaeum
+    LocationPageRun {
+        base_page: 7,
+        first_page: 7,
+        last_page: 9,
+    },
+    // 31 Empath Abbey
+    LocationPageRun {
+        base_page: 10,
+        first_page: 10,
+        last_page: 12,
+    },
+    // 32 Serpent's Hold
+    LocationPageRun {
+        base_page: 14,
+        first_page: 13,
+        last_page: 15,
+    },
+];
+
+/// `formats/location-dat.md §4.1`: page run owned by `scene`. Total for
+/// every `Scene`, which is constructible only for scene bytes 1..=32.
+pub fn location_page_run(scene: Scene) -> LocationPageRun {
+    LOCATION_PAGE_RUNS[usize::from(scene.byte) - 1]
+}
+
+/// `formats/location-dat.md §4.1`: base page for the scene's logical
+/// floor zero.
+///
+/// A `location_floor_pages.tsv` beside the game data still overrides the
+/// published table, but it is now an override for *modified* assets, not
+/// a fallback for missing spec: with no file present the published table
+/// answers every scene, so there is nothing left to derive and no warning
+/// to emit.
 pub fn resolve_location_base_page(game_dir: &Path, scene: Scene) -> io::Result<usize> {
     if let Some(base_page) = load_location_floor_entries(game_dir)?.and_then(|entries| {
         entries
@@ -451,19 +671,50 @@ pub fn resolve_location_base_page(game_dir: &Path, scene: Scene) -> io::Result<u
         return Ok(base_page);
     }
 
-    if let Some((_, base_page)) = INTERIM_OBSERVED_LOCATION_BASE_PAGES
-        .iter()
-        .find(|(scene_byte, _)| *scene_byte == scene.byte)
-    {
-        return Ok(*base_page);
-    }
-
-    Ok(derived_location_base_page(scene))
+    Ok(location_page_run(scene).base_page)
 }
 
+/// `formats/location-dat.md §4`: `page = base_page[scene] +
+/// sign_extend_8(floor_byte)`, and exactly 1024 bytes are read at
+/// `page * 1024`.
+///
+/// `floor` is signed in this use: `0xFF` is one floor *below* the entry
+/// floor, not floor 255. A higher page index is a higher floor, so a
+/// transition that raises the floor byte goes up and one that lowers it
+/// goes down. Inverting this puts every basement above its ground floor.
 pub fn resolve_location_floor_page(game_dir: &Path, scene: Scene, floor: i8) -> io::Result<usize> {
+    let run = location_page_run(scene);
     let base_page = resolve_location_base_page(game_dir, scene)?;
     let page = base_page as i16 + floor as i16;
+
+    // `formats/location-dat.md §4.1`: the sixty-four pages partition
+    // exactly, so a page outside this scene's own run belongs to a
+    // *different* location. Reading it renders someone else's map —
+    // exactly the class of bug the published table exists to prevent
+    // (`block * 2` sent Lord Blackthorn's Castle into Lord British's).
+    // This is also what makes "is there a floor above/below me?" a real
+    // question: the answer is the run, not the 0..15 page bound.
+    //
+    // Only enforced when the base came from the published table. A
+    // `location_floor_pages.tsv` override is for modified assets, where
+    // the shipped run no longer describes the file, so it keeps the
+    // plain page bound below.
+    if base_page == run.base_page && !run.contains_page(page.clamp(0, 255) as usize) {
+        let (lowest, highest) = run.floor_range();
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "{} floor {} is outside its published floor range {}..={} (pages {}..={})",
+                scene.key(),
+                floor,
+                lowest,
+                highest,
+                run.first_page,
+                run.last_page
+            ),
+        ));
+    }
+
     if !(0..16).contains(&page) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

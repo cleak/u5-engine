@@ -217,9 +217,15 @@ pub fn audit_location_dat_files(game_dir: &Path) -> io::Result<LocationAuditRepo
         }
     }
 
+    // `formats/location-dat.md` §4.1: walk each scene's *published* floor
+    // range rather than a fixed -1..=1 window. Because the sixty-four
+    // pages partition exactly, this visits every page of every class file
+    // exactly once, which makes the logical pass a conformance check on
+    // the base-page table rather than a sample of it.
     for scene_byte in SCENE_TOWN_FAMILY_FIRST..=SCENE_TOWN_FAMILY_LAST {
         let scene = Scene::new(scene_byte)?;
-        for floor in -1..=1 {
+        let (lowest_floor, highest_floor) = location_page_run(scene).floor_range();
+        for floor in lowest_floor..=highest_floor {
             let page = match resolve_location_floor_page(game_dir, scene, floor) {
                 Ok(page) => page,
                 Err(err) if err.kind() == io::ErrorKind::InvalidInput => continue,

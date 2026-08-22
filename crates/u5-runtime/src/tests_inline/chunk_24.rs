@@ -184,7 +184,18 @@ fn shipped_location_dat_audit_covers_authored_cell_facets_when_assets_present() 
     );
     assert!(report.npc_path_open_count > 0);
     assert!(report.foot_walkable_count > 0);
-    assert!(report.logical_floors.len() >= 80);
+    // `formats/location-dat.md` §4.1: the sixty-four pages partition
+    // exactly across the four class files, so walking every scene's
+    // published floor range visits each physical page exactly once.
+    assert_eq!(report.logical_floors.len(), 64);
+    let mut seen: Vec<(&'static str, usize)> = report
+        .logical_floors
+        .iter()
+        .map(|floor| (floor.family.stem(), floor.physical_page))
+        .collect();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), 64, "every page is owned by exactly one scene");
     assert_eq!(report.dawn_dusk_bottom_row_count, 0);
     assert_eq!(report.dawn_dusk_unexpected_pair_count, 0);
 
