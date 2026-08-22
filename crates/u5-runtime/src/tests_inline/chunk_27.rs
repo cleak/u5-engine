@@ -13,6 +13,13 @@ fn chrome_test_font() -> FixedCellFont {
     let left: [u8; 8] = [0x01, 0x07, 0x1f, 0x3f, 0x3f, 0x1f, 0x07, 0x01];
     bytes[0x02 * 8..0x02 * 8 + 8].copy_from_slice(&right);
     bytes[0x01 * 8..0x01 * 8 + 8].copy_from_slice(&left);
+    // The three reserved corner glyphs the chrome stamps opaquely.
+    let top_left: [u8; 8] = [0x07, 0x1f, 0x3f, 0x7f, 0x7f, 0xff, 0xff, 0xff];
+    let top_right: [u8; 8] = [0xe0, 0xf8, 0xfc, 0xfe, 0xfe, 0xff, 0xff, 0xff];
+    let bottom_left: [u8; 8] = [0xff, 0xff, 0xff, 0x7f, 0x7f, 0x3f, 0x1f, 0x07];
+    bytes[0x7b * 8..0x7b * 8 + 8].copy_from_slice(&top_left);
+    bytes[0x7c * 8..0x7c * 8 + 8].copy_from_slice(&top_right);
+    bytes[0x7d * 8..0x7d * 8 + 8].copy_from_slice(&bottom_left);
     parse_ch_font(&bytes, IBM_CH_FILE).unwrap()
 }
 
@@ -197,14 +204,13 @@ fn wind_banner_pads_direction_into_a_five_column_field() {
     assert_eq!(wind_banner_text(Some("Calm")), "Calm  Winds");
     // `weather.md §2`: an out-of-range wind byte drops the direction
     // label but keeps the shared suffix.
-    assert_eq!(wind_banner_text(None), "      Winds");
-    for text in [
-        wind_banner_text(Some("East")),
-        wind_banner_text(Some("South")),
-        wind_banner_text(None),
-    ] {
+    // Out of range: no direction label at all, so the suffix keeps its
+    // own leading space at columns 7..=12 and the cap closes at 13.
+    assert_eq!(wind_banner_text(None), " Winds");
+    for text in [wind_banner_text(Some("East")), wind_banner_text(Some("South"))] {
         assert_eq!(text.chars().count(), WIND_BANNER_CELLS);
     }
+    assert_eq!(wind_banner_text(None).chars().count(), 6);
 
     let gap = bottom_gap(&ChromeGap::Label(wind_banner_text(Some("East")))).unwrap();
     assert_eq!(gap.left_cap_column, 6);
