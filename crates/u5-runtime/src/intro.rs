@@ -433,7 +433,8 @@ pub const INTRO_MENU_SELECT_CAPTION_SUFFIX: &str = "<";
 /// engine's gameplay prompt cursor (`PROMPT_CURSOR_GLYPH`) is a
 /// different glyph, so this caption names its own code rather than
 /// reusing it.
-pub const INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH: u8 = 8;
+pub const INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH: u8 =
+    crate::gameplay_chrome::PROMPT_CURSOR_FRAME_GLYPHS[3];
 pub const INTRO_MENU_SELECT_CAPTION_COLUMN: u8 = 15;
 pub const INTRO_MENU_SELECT_CAPTION_ROW: u8 = 15;
 pub const INTRO_MENU_COPYRIGHT_CAPTION: &str = ">Copyright 1988 Lord British<";

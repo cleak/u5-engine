@@ -1611,14 +1611,58 @@
         );
     }
 
+    /// `visibility.md §12.2` / `cleak/u5-spec#42`: a local-light source
+    /// lights the Euclidean disc `dx*dx + dy*dy <= 10` — 37 cells, being
+    /// every offset within `|dx| <= 3, |dy| <= 3` except the twelve
+    /// `(±3, ±3)`, `(±3, ±2)` and `(±2, ±3)` corners.
+    ///
+    /// This replaces `town_local_light_uses_chebyshev_radius_three`, which
+    /// asserted the 7x7 Chebyshev square that #42 retracted: it expected
+    /// `(11, 11)` (offset `(3, 3)`, squared 18) to be lit, and it is not.
     #[test]
-    fn town_local_light_uses_chebyshev_radius_three() {
+    fn town_local_light_source_lights_the_squared_distance_disc() {
         let mut grid = open_grid();
         grid[8 * TOWN_GRID_SIDE + 8] = 0xDC;
-        let state = test_state(grid, 5, 5);
+        let state = test_state(grid, 8, 8);
 
-        assert!(state.town_cell_visible_with_light_threshold(5, 5, 11, 11, 8, 0));
-        assert!(!state.town_cell_visible_with_light_threshold(5, 5, 12, 8, 8, 0));
+        let mut lit = Vec::new();
+        for dy in -4..=4isize {
+            for dx in -4..=4isize {
+                if state.town_cell_visible_with_light_threshold(8, 8, 8 + dx, 8 + dy, 8, 0) {
+                    lit.push((dx, dy));
+                }
+            }
+        }
+
+        let expected: Vec<(isize, isize)> = (-4..=4isize)
+            .flat_map(|dy| (-4..=4isize).map(move |dx| (dx, dy)))
+            .filter(|(dx, dy)| dx * dx + dy * dy <= 10)
+            .collect();
+
+        assert_eq!(lit, expected);
+        assert_eq!(lit.len(), LOCAL_LIGHT_SOURCE_CELL_COUNT);
+
+        // The four Chebyshev-3 corners the retracted reading lit.
+        for corner in [(3, 3), (3, -3), (-3, 3), (-3, -3)] {
+            assert!(!lit.contains(&corner), "{corner:?} is outside the disc");
+        }
+        // ... and the eight (±3, ±2) / (±2, ±3) cells, squared 13.
+        for edge in [
+            (3, 2),
+            (3, -2),
+            (-3, 2),
+            (-3, -2),
+            (2, 3),
+            (2, -3),
+            (-2, 3),
+            (-2, -3),
+        ] {
+            assert!(!lit.contains(&edge), "{edge:?} is outside the disc");
+        }
+        // Straight out to three cells is inside (squared 9).
+        for edge in [(3, 0), (0, 3), (-3, 0), (0, -3)] {
+            assert!(lit.contains(&edge), "{edge:?} is inside the disc");
+        }
     }
 
     #[test]

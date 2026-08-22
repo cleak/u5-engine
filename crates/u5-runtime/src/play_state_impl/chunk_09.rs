@@ -1668,6 +1668,19 @@ impl PlayState {
                 };
                 let squared_distance = visibility_squared_distance(px, py, x, y);
                 let propagates = surface_tile_propagates_visibility(tile, squared_distance);
+                // `visibility.md §5`: failing the main threshold does NOT
+                // make a cell dark. The local-light mask can still reveal
+                // it, and the rules below (propagating candidates need
+                // only their own mask cell; non-propagating ones need a
+                // lit parent too) are this engine's current reading.
+                //
+                // SEAM: `cleak/u5-spec#83` is open and unanswered. The
+                // decomp side has said a separate local-light *influence*
+                // mask governs out-of-threshold cells with different rules
+                // for sight-transparent versus sight-blocking cells, and
+                // that material is still being written into the spec. When
+                // #83 lands, this branch — not the threshold test above,
+                // which is confirmed correct — is what changes.
                 let in_player_light = visibility_in_radius(squared_distance, light_threshold);
                 if !in_player_light {
                     let locally_lit = Self::surface_local_light_mask_is_lit(
@@ -1838,17 +1851,34 @@ impl PlayState {
         mask
     }
 
-    /// `visibility.md §12`: one local-light source's contribution to the
-    /// 32x32 mask. The spec's refresh pass "runs the same centre-out
-    /// visibility carve into the thirty-two by thirty-two mask, using the
-    /// source as the centre and a fixed source radius", so this reuses
-    /// [`Self::surface_centre_out_carve`] rather than casting a line to
-    /// every cell of the source's square — §5 rules out line casting for
-    /// both carves. Light therefore reaches around an L-shaped wall when
-    /// an eight-neighbour path is open, exactly as the player carve does.
+    /// `visibility.md §12`/`§12.2`: one local-light source's contribution
+    /// to the 32x32 mask, per the contract re-verified in
+    /// `cleak/u5-spec#42`.
     ///
-    /// The per-source visited set is local to the helper (§12 step 3), so
-    /// sources accumulate into a shared mask without shadowing each other.
+    /// The refresh pass runs "the same queue-based centre-out neighbour
+    /// carve the ordinary producer uses, seeded at the source", so this
+    /// reuses [`Self::surface_centre_out_carve`]; §5 rules out line
+    /// casting for both carves, and light therefore reaches around an
+    /// L-shaped wall when an eight-neighbour path is open.
+    ///
+    /// Range is the squared-distance disc
+    /// [`LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD`], *not* a Chebyshev square
+    /// — see that constant. Blockers inside the disc are themselves lit
+    /// and only stop the expansion past them, which
+    /// [`Self::surface_centre_out_carve`] already does. Outside the disc
+    /// the local-light flood stops dead: an out-of-range candidate is
+    /// neither painted nor expanded (unlike the producer's carve, which
+    /// keeps expanding through dark space and consults this mask). The
+    /// per-source visited set is local to the helper, so overlapping
+    /// sources union into the shared mask without shadowing each other.
+    ///
+    /// KNOWN GAP (`cleak/u5-spec#42`, cadence): the original rebuilds this
+    /// mask on exactly three triggers — the Moonstone live-gate terrain
+    /// refresh, combat entry, and combat exit — and the mask *persists*
+    /// between them while the producer keeps reading it. This engine
+    /// instead rebuilds it on demand during each carve, which is always
+    /// at least as fresh but will not reproduce a stale-mask frame. Making
+    /// that exact needs mask caching plus the three invalidation hooks.
     fn carve_surface_local_light_source(
         &self,
         source_x: isize,
@@ -1864,10 +1894,7 @@ impl PlayState {
             wrap_world,
             |x, y| surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world),
             |x, y| surface_local_light_squared_distance(source_x, source_y, x, y, wrap_world),
-            |x, y, _| {
-                surface_local_light_chebyshev_distance(source_x, source_y, x, y, wrap_world)
-                    <= LOCAL_LIGHT_SOURCE_RADIUS
-            },
+            |_, _, squared| squared <= LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD,
             mask,
         );
     }
@@ -3556,27 +3583,6 @@ fn surface_local_light_squared_distance(
     let dx = i32::from(wrapped_world_axis_delta(sx, tx)).unsigned_abs();
     let dy = i32::from(wrapped_world_axis_delta(sy, ty)).unsigned_abs();
     dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
-}
-
-fn surface_local_light_chebyshev_distance(
-    source_x: isize,
-    source_y: isize,
-    x: isize,
-    y: isize,
-    wrap_world: bool,
-) -> usize {
-    if !wrap_world {
-        let dx = (x - source_x).unsigned_abs();
-        let dy = (y - source_y).unsigned_abs();
-        return dx.max(dy);
-    }
-    let sx = source_x.rem_euclid(WORLD_SIDE as isize) as usize;
-    let sy = source_y.rem_euclid(WORLD_SIDE as isize) as usize;
-    let tx = x.rem_euclid(WORLD_SIDE as isize) as usize;
-    let ty = y.rem_euclid(WORLD_SIDE as isize) as usize;
-    let dx = i32::from(wrapped_world_axis_delta(sx, tx)).unsigned_abs() as usize;
-    let dy = i32::from(wrapped_world_axis_delta(sy, ty)).unsigned_abs() as usize;
-    dx.max(dy)
 }
 
 /// `visibility.md §5`/`§6`: the one sight-propagation classifier, used

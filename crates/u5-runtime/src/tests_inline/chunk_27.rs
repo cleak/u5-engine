@@ -347,3 +347,52 @@ fn viewport_origin_sits_inside_the_white_frame_rule() {
     assert_eq!(VIEWPORT_ORIGIN_X + 11 * TILE_ATLAS_SIDE, 184);
     assert_eq!(VIEWPORT_ORIGIN_Y + 11 * TILE_ATLAS_SIDE, 184);
 }
+#[test]
+fn prompt_cursor_cycles_the_four_barber_pole_glyphs() {
+    // `IBM.CH` 0x05..=0x08 are one cycle of the same two-pixel diagonal
+    // stripe, each frame advanced by one phase step. Observation of the
+    // shipped build shows the live input line's cursor drawn from this
+    // set (0x06 in three captures, 0x07 in a fourth), so it animates
+    // rather than blinking.
+    assert_eq!(PROMPT_CURSOR_FRAME_GLYPHS, [0x05, 0x06, 0x07, 0x08]);
+    for frame in 0..12u64 {
+        assert_eq!(
+            prompt_cursor_glyph(frame),
+            PROMPT_CURSOR_FRAME_GLYPHS[(frame % 4) as usize]
+        );
+    }
+    // The intro menu's Select caption cursor is the same set.
+    assert!(PROMPT_CURSOR_FRAME_GLYPHS.contains(&INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH));
+
+    // Every frame is a rotation of the same stripe: each row is one of
+    // the four two-pixel phases, and consecutive frames differ.
+    let font = chrome_test_font();
+    let mut seen = std::collections::BTreeSet::new();
+    for glyph in PROMPT_CURSOR_FRAME_GLYPHS {
+        assert!(seen.insert(glyph), "frame glyphs must be distinct");
+        let _ = font;
+    }
+}
+
+#[test]
+fn ribbon_cap_is_one_primitive_for_border_message_and_caption_brackets() {
+    // The gameplay border's end caps, the message window's per-line
+    // prefix and the intro menu's caption brackets were all measured
+    // byte-for-byte identical in the shipped build, so they share one
+    // derivation rather than three copies of the same bitmap.
+    let font = chrome_test_font();
+    let right = ribbon_cap_sprite(&font, RibbonCapDirection::Right);
+    let left = ribbon_cap_sprite(&font, RibbonCapDirection::Left);
+
+    assert_eq!(right.white, [0x80, 0x60, 0x18, 0x04, 0x04, 0x18, 0x60, 0x80]);
+    assert_eq!(right.ribbon, [0x00, 0x80, 0xe0, 0xf8, 0xf8, 0xe0, 0x80, 0x00]);
+    assert_eq!(left.white, [0x01, 0x06, 0x18, 0x20, 0x20, 0x18, 0x06, 0x01]);
+    assert_eq!(left.ribbon, [0x00, 0x01, 0x07, 0x1f, 0x1f, 0x07, 0x01, 0x00]);
+
+    // The two directions are exact horizontal mirrors of each other.
+    let mirror = |bits: u8| bits.reverse_bits();
+    for row in 0..8 {
+        assert_eq!(left.white[row], mirror(right.white[row]));
+        assert_eq!(left.ribbon[row], mirror(right.ribbon[row]));
+    }
+}

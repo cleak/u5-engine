@@ -87,6 +87,25 @@ pub const SKY_STRIP_ROW: u8 = 0;
 /// Column of sky strip cell 0; cell `i` sits at `6 + i`.
 pub const SKY_STRIP_FIRST_COLUMN: u8 = 6;
 
+/// Four-frame barber-pole cursor drawn in the cell after a live input
+/// line's ribbon cap.
+///
+/// `IBM.CH` glyphs `0x05..=0x08` are one cycle of the same two-pixel
+/// diagonal stripe, each frame advanced by one phase step, so playing
+/// them in code order scrolls the stripe smoothly. Observation of the
+/// shipped build confirms the cursor is drawn from this set and that it
+/// animates rather than blinking: three captures of the gameplay input
+/// line show frame `0x06` and a fourth shows `0x07`. The intro menu's
+/// `Select:` caption cursor is the same set (`intro` pins frame index
+/// 3). See the module header for the pending spec question.
+pub const PROMPT_CURSOR_FRAME_GLYPHS: [u8; 4] = [0x05, 0x06, 0x07, 0x08];
+
+/// Barber-pole cursor glyph for an animation frame counter.
+pub fn prompt_cursor_glyph(frame: u64) -> u8 {
+    let count = PROMPT_CURSOR_FRAME_GLYPHS.len() as u64;
+    PROMPT_CURSOR_FRAME_GLYPHS[(frame % count) as usize]
+}
+
 /// Screen row hosting the prevailing-wind banner.
 pub const WIND_BANNER_ROW: u8 = 23;
 /// First column of the eleven-cell wind banner field.
@@ -524,6 +543,25 @@ pub fn paint_gameplay_frame_chrome(
     }
 }
 
+/// Paint one ribbon end-cap sprite at an absolute cell.
+///
+/// This is the build's single two-colour bracket primitive. The same
+/// sprite terminates every interrupted ribbon, prefixes every echoed
+/// command line, and forms the `>`/`<` brackets around the intro
+/// menu's border captions - all four uses were measured byte-for-byte
+/// identical in the shipped build.
+pub fn paint_ribbon_cap(
+    rgba: &mut [u8],
+    width: usize,
+    height: usize,
+    font: &FixedCellFont,
+    direction: RibbonCapDirection,
+    column: u8,
+    row: u8,
+) {
+    draw_ribbon_cap(rgba, width, height, font, direction, column, row);
+}
+
 /// Paint the message window's per-line right-pointing cap prefix.
 pub fn paint_message_line_cap(
     rgba: &mut [u8],
@@ -532,7 +570,7 @@ pub fn paint_message_line_cap(
     font: &FixedCellFont,
     row: u8,
 ) {
-    draw_ribbon_cap(
+    paint_ribbon_cap(
         rgba,
         width,
         height,

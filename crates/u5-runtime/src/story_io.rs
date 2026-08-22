@@ -202,6 +202,14 @@ pub fn intro_rect_transition_revealed_columns(rect: (u16, u16, u16, u16), tick: 
 /// the intro code itself and are not part of the published spec
 /// text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// **Retracted contract.** `cleak/u5-spec#53` withdrew the left-to-right
+/// one-pixel-column-per-title-tick sweep in full, for both intro callers; the
+/// 36-tick and 320-tick figures were wrong and are deleted, not adjusted.
+/// Both callers dispatch the driver's rectangle dissolve instead - see
+/// [`crate::RectangleDissolve`] and `systems/display-driver-abi.md` section
+/// 9.6. The intro story step-1 path has been migrated; this type survives only
+/// for the start/menu loader until that caller moves too, and must not be used
+/// for anything new.
 pub struct RectColumnSweepTransition {
     pub rect: (u16, u16, u16, u16),
     pub tick: u16,

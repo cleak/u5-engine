@@ -108,10 +108,27 @@ pub const fn visibility_marker(byte: u8) -> VisibilityMarker {
 /// mask and the active map window share one source of truth.
 pub const LOCAL_LIGHT_MASK_SIDE: usize = crate::TOWN_GRID_SIDE;
 
-/// `visibility.md §12`: fixed local-light source radius in Chebyshev
-/// distance. Each source can light a 7x7 square, subject to the normal
-/// visibility-propagation blockers.
-pub const LOCAL_LIGHT_SOURCE_RADIUS: usize = 3;
+/// `visibility.md §12.2`: the fixed per-source local-light range. This
+/// is a **squared-distance threshold**, not a cell radius: a cell is
+/// inside a source's light when `dx*dx + dy*dy <= 10`.
+///
+/// That is a Euclidean disc of radius sqrt(10) (about 3.16) covering
+/// **37 cells** — every offset with `|dx| <= 3` and `|dy| <= 3` *except*
+/// the twelve offsets `(±3, ±3)`, `(±3, ±2)` and `(±2, ±3)`. The
+/// original looks the distance up from a small folded table, but the
+/// table is exactly `dx*dx + dy*dy`.
+///
+/// An earlier revision of this engine modelled the range as Chebyshev
+/// distance 3 (a 7x7 square, 49 cells); `cleak/u5-spec#42` retracted
+/// that reading against re-verified binary traces. Corner cells such as
+/// `(±3, ±3)` are *not* lit.
+pub const LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD: u32 = 10;
+
+/// `visibility.md §12.2`: number of cells one unobstructed local-light
+/// source covers — the 37 offsets satisfying
+/// [`LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD`]. Kept beside the threshold so
+/// a change to one is caught against the other.
+pub const LOCAL_LIGHT_SOURCE_CELL_COUNT: usize = 37;
 
 /// `visibility.md §12`: returns `true` for tile ids the resident
 /// local-light refresh recognises as local-light source candidates.
