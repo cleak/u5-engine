@@ -488,6 +488,93 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
     }
 }
 
+/// Refuse to use the player's pristine asset install as a *write*
+/// target.
+///
+/// `CLAUDE.md`'s clean-room rules let the engine read local original
+/// game assets at runtime, but never modify them. Several test helpers
+/// and harness paths take a "game dir" that they both read from and
+/// write into (installed test assets, committed saves, seeded data
+/// files). If such a path is ever handed [`crate::DEFAULT_GAME_DIR`],
+/// it silently corrupts the reference install - which has happened:
+/// `SAVED.GAM` was replaced by a played save and `TITLE.BIT` /
+/// `BRITISH.BIT` were rewritten as re-encoded test variants.
+///
+/// Call this from any helper whose `dir` argument is a write
+/// destination. Comparison is on the canonicalised path where
+/// possible so `C:/Games/U5-Clean`, `C:\Games\U5-Clean` and
+/// symlinked or `..`-relative spellings are all caught; it falls back
+/// to a case-insensitive separator-normalised compare when the path
+/// does not exist yet.
+pub fn assert_writable_game_dir(dir: &Path, context: &str) {
+    fn normalize(path: &Path) -> String {
+        path.canonicalize()
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy()
+            .replace('\\', "/")
+            .trim_end_matches('/')
+            .to_ascii_lowercase()
+    }
+
+    let pristine = Path::new(crate::DEFAULT_GAME_DIR);
+    assert!(
+        normalize(dir) != normalize(pristine),
+        "{context} would write into the pristine local asset install at {}. \
+         Copy the assets to a temp directory and pass that instead - the \
+         original game files are read-only clean-room inputs and must never \
+         be modified (got {dir:?}).",
+        crate::DEFAULT_GAME_DIR
+    );
+}
+
+/// Clear a file's read-only bit, if it has one.
+///
+/// The pristine asset install is kept read-only so nothing can modify
+/// it by accident. On Windows `fs::copy` propagates that attribute to
+/// the destination, so a fixture copied out of it lands read-only and
+/// the very next write into the *temp* copy fails with "Access is
+/// denied" - a failure that looks like a permissions bug but is really
+/// attribute inheritance.
+pub fn clear_readonly(path: &Path) -> std::io::Result<()> {
+    let mut permissions = fs::metadata(path)?.permissions();
+    if permissions.readonly() {
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        fs::set_permissions(path, permissions)?;
+    }
+    Ok(())
+}
+
+/// `fs::copy` that leaves the destination writable. Use this whenever
+/// copying out of a game-asset directory into a scratch directory the
+/// caller intends to write to.
+pub fn copy_asset_writable(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::copy(source, destination)?;
+    clear_readonly(destination)
+}
+
+#[cfg(test)]
+mod pristine_game_dir_guard_tests {
+    use super::*;
+
+    #[test]
+    fn temp_dirs_are_accepted() {
+        assert_writable_game_dir(&debug_game_dir(), "unit test");
+    }
+
+    #[test]
+    #[should_panic(expected = "pristine local asset install")]
+    fn the_pristine_install_is_rejected() {
+        assert_writable_game_dir(Path::new(crate::DEFAULT_GAME_DIR), "unit test");
+    }
+
+    #[test]
+    #[should_panic(expected = "pristine local asset install")]
+    fn alternate_spellings_of_the_pristine_install_are_rejected() {
+        assert_writable_game_dir(Path::new("C:/Games/u5-clean/"), "unit test");
+    }
+}
+
 pub fn debug_game_dir() -> PathBuf {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

@@ -840,6 +840,7 @@ pub fn visual_frame_suite(
     raster_depth: TileGraphicsDepth,
     out_dir: &Path,
 ) -> io::Result<Vec<VisualFrameReport>> {
+    u5_runtime::test_fixtures::assert_writable_game_dir(out_dir, "visual frame suite output");
     std::fs::create_dir_all(out_dir)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let font = load_ibm_ch_font(game_dir)?;
@@ -969,6 +970,7 @@ pub fn visual_route_suite(
     raster_depth: TileGraphicsDepth,
     out_dir: &Path,
 ) -> io::Result<Vec<VisualFrameReport>> {
+    u5_runtime::test_fixtures::assert_writable_game_dir(out_dir, "visual route suite output");
     std::fs::create_dir_all(out_dir)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let font = load_ibm_ch_font(game_dir)?;
@@ -1381,7 +1383,12 @@ fn copy_visual_route_save_file(
     source_name: &str,
     destination_name: &str,
 ) -> io::Result<()> {
-    std::fs::copy(game_dir.join(source_name), save_dir.join(destination_name)).map(|_| ())
+    // The reload checkpoints write into `save_dir`, so the seeded copy
+    // must not inherit the pristine install's read-only attribute.
+    u5_runtime::test_fixtures::copy_asset_writable(
+        &game_dir.join(source_name),
+        &save_dir.join(destination_name),
+    )
 }
 
 fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
@@ -12870,6 +12877,7 @@ mod tests {
     }
 
     fn install_intro_assets(dir: &Path) {
+        u5_runtime::test_fixtures::assert_writable_game_dir(dir, "install_intro_assets");
         let source_dir = Path::new(DEFAULT_GAME_DIR);
         for file_name in [
             "IBM.CH",
@@ -12895,9 +12903,13 @@ mod tests {
             );
             let dst = dir.join(file_name);
             if !dst.exists() {
-                fs::copy(&src, &dst).unwrap_or_else(|err| {
+                // Writable copy: the pristine install is read-only and
+                // Windows propagates that attribute through `fs::copy`.
+                u5_runtime::test_fixtures::copy_asset_writable(&src, &dst).unwrap_or_else(|err| {
                     panic!("failed to install intro test asset {file_name}: {err}")
                 });
+            } else {
+                let _ = u5_runtime::test_fixtures::clear_readonly(&dst);
             }
         }
         install_canonical_intro_bit_asset(
@@ -12927,6 +12939,13 @@ mod tests {
         FC: Fn(&[u8]) -> std::io::Result<Vec<MonochromeBitmap>>,
         FV: Fn(&[u8]) -> std::io::Result<T>,
     {
+        // This one writes unconditionally, so guard it directly too
+        // rather than trusting every future caller to go through
+        // `install_intro_assets`.
+        u5_runtime::test_fixtures::assert_writable_game_dir(
+            dir,
+            "install_canonical_intro_bit_asset",
+        );
         let bytes = fs::read(source_dir.join(file_name))
             .unwrap_or_else(|err| panic!("failed to read intro test asset {file_name}: {err}"));
         let bitmaps = parse_canonical(&bytes).unwrap_or_else(|canonical_err| {
