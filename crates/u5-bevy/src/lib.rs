@@ -130,10 +130,11 @@ use u5_runtime::{
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, GameplayMessageLog, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
-    VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter, configure_play_text_windows,
-    gameplay_chrome_content, layout_message_window, load_runes_ch_font,
-    message_is_scene_entry_narration, paint_fixed_cell_glyph, paint_fixed_cell_text,
-    paint_gameplay_frame_chrome, paint_message_line_cap,
+    RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter,
+    configure_play_text_windows, gameplay_chrome_content, layout_message_window,
+    load_runes_ch_font, message_is_scene_entry_narration, paint_fixed_cell_glyph,
+    paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
+    prompt_cursor_glyph,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -853,6 +854,7 @@ pub fn visual_frame_suite(
         ibm: &font,
         runes: &runes,
         log: &suite_log,
+        cursor_frame: 0,
     };
     let mut reports = Vec::new();
 
@@ -999,6 +1001,7 @@ pub fn visual_route_suite(
         ibm: &font,
         runes: &runes,
         log: &suite_log,
+        cursor_frame: 0,
     };
     let mut reports = Vec::new();
 
@@ -7870,6 +7873,7 @@ fn screenshot_system(
                 ibm: &v.text_font,
                 runes: &v.rune_font,
                 log: &v.message_log,
+                cursor_frame: v.prompt_cursor_frame,
             };
             let rgba = render_visual_play_frame_with_input(&mut v.state, &v.atlas, ctx, "", "");
             replace_visual_image_data(&mut images, &v.image_handle, rgba, "screenshot preset play");
@@ -7975,6 +7979,8 @@ struct VisualState {
     rune_font: FixedCellFont,
     /// Scrolling command/output history for the message window.
     message_log: GameplayMessageLog,
+    /// Live input line's barber-pole cursor animation frame.
+    prompt_cursor_frame: u64,
     input_line: String,
     prompt_cursor_visible: bool,
 }
@@ -8119,6 +8125,10 @@ fn animate_static_tiles(
         let mut prompt_cursor_visible = visual.prompt_cursor_visible;
         advanced |= advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
         visual.prompt_cursor_visible = prompt_cursor_visible;
+        // The live input line's barber pole scrolls one phase per pump
+        // tick whether or not a line prompt is open.
+        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advanced = true;
     }
     if !advanced {
         return;
@@ -8129,6 +8139,7 @@ fn animate_static_tiles(
         ibm: &v.text_font,
         runes: &v.rune_font,
         log: &v.message_log,
+        cursor_frame: v.prompt_cursor_frame,
     };
     let rgba = render_visual_play_frame_with_input_and_cursor(
         &mut v.state,
@@ -8168,6 +8179,7 @@ fn setup(
             ibm: &text_font,
             runes: &rune_font,
             log: &message_log,
+            cursor_frame: 0,
         },
         "",
         READY_HINT,
@@ -8206,6 +8218,7 @@ fn setup(
         text_font,
         rune_font,
         message_log,
+        prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
     });
@@ -8349,6 +8362,7 @@ fn transition_visual_intro_to_gameplay(
             ibm: &text_font,
             runes: &rune_font,
             log: &message_log,
+            cursor_frame: 0,
         },
         "",
         READY_HINT,
@@ -8376,6 +8390,7 @@ fn transition_visual_intro_to_gameplay(
         text_font,
         rune_font,
         message_log,
+        prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
     });
@@ -9303,6 +9318,7 @@ fn drive_visual(
         ibm: &v.text_font,
         runes: &v.rune_font,
         log: &v.message_log,
+        cursor_frame: v.prompt_cursor_frame,
     };
     let rgba = render_visual_play_frame_with_input_and_cursor(
         &mut v.state,
@@ -9721,8 +9737,54 @@ fn draw_visual_intro_menu_text_window_frame(buffer: &mut IntroDisplayBuffer, fon
     );
 }
 
-/// `cleak/u5-spec#78`: stamp one `>text<` border caption as plain
-/// white-on-black fixed cells starting at `(column, row)`.
+/// Draw one ribbon end cap into the intro's palette-indexed surface.
+///
+/// The sprite itself comes from the shared
+/// [`u5_runtime::ribbon_cap_sprite`] derivation so the caption
+/// brackets, the gameplay border caps and the message-line prefix stay
+/// one primitive; only the blit differs, because the intro paints into
+/// an indexed buffer rather than RGBA.
+fn draw_intro_ribbon_cap_cell(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    direction: RibbonCapDirection,
+    column: usize,
+    row: usize,
+) {
+    let sprite = u5_runtime::ribbon_cap_sprite(font, direction);
+    let base_x = column * CH_CELL_SIDE;
+    let base_y = row * CH_CELL_SIDE;
+    for glyph_y in 0..CH_CELL_SIDE {
+        let y = base_y + glyph_y;
+        if y >= buffer.height {
+            break;
+        }
+        for glyph_x in 0..CH_CELL_SIDE {
+            let x = base_x + glyph_x;
+            if x >= buffer.width {
+                continue;
+            }
+            let bit = 1u8 << (7 - glyph_x);
+            let color = if sprite.white[glyph_y] & bit != 0 {
+                INTRO_MENU_FRAME_OUTLINE_COLOR
+            } else if sprite.ribbon[glyph_y] & bit != 0 {
+                INTRO_MENU_FRAME_BORDER_COLOR
+            } else {
+                INTRO_MENU_FRAME_INTERIOR_COLOR
+            };
+            buffer.pixels[y * buffer.width + x] = color;
+        }
+    }
+}
+
+/// `cleak/u5-spec#78`: stamp one `>text<` border caption starting at
+/// `(column, row)`.
+///
+/// The caption's `>` and `<` are not ASCII glyphs: measured against
+/// the shipped build they are the same two-colour ribbon end-cap
+/// sprite the gameplay border and message window use, byte for byte
+/// (blue fill under a white chevron). They are drawn through the
+/// shared primitive; every other cell is plain white-on-black text.
 fn draw_visual_intro_menu_border_caption(
     buffer: &mut IntroDisplayBuffer,
     font: &FixedCellFont,
@@ -9731,6 +9793,14 @@ fn draw_visual_intro_menu_border_caption(
     codes: impl Iterator<Item = u8>,
 ) {
     for (offset, code) in codes.enumerate() {
+        if let Some(direction) = match code {
+            b'>' => Some(RibbonCapDirection::Right),
+            b'<' => Some(RibbonCapDirection::Left),
+            _ => None,
+        } {
+            draw_intro_ribbon_cap_cell(buffer, font, direction, column + offset, row);
+            continue;
+        }
         buffer.draw_fixed_glyph_cell(
             font,
             code,
@@ -11724,6 +11794,8 @@ struct PlayFrameContext<'a> {
     ibm: &'a FixedCellFont,
     runes: &'a FixedCellFont,
     log: &'a GameplayMessageLog,
+    /// Animation frame for the live input line's barber-pole cursor.
+    cursor_frame: u64,
 }
 
 impl<'a> PlayFrameContext<'a> {
@@ -12582,7 +12654,13 @@ fn render_integrated_status_framebuffer(
     let mut rgba = render_text_window_rgba(&system, ctx.ibm)
         .unwrap_or_else(|err| panic!("visual integrated text window render failed: {err}"));
     apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
-    if prompt_cursor_visible && display_state.active_shop.is_none() {
+    // The live input line always carries a cursor in the cell after its
+    // ribbon cap, and that cursor is a four-frame barber pole rather
+    // than a blink: every capture of the shipped build shows one of
+    // `IBM.CH` 0x05..=0x08 there, on ordinary turns as well as during
+    // line prompts. `prompt_cursor_visible` therefore no longer gates
+    // it; it only drives the shop path's own prompt window.
+    if display_state.active_shop.is_none() {
         if let Some(live) = message_rows.last() {
             let column = live.column + live.text.chars().count().min(15) as u8;
             paint_fixed_cell_glyph(
@@ -12590,7 +12668,7 @@ fn render_integrated_status_framebuffer(
                 VISUAL_PLAY_FRAME_WIDTH as usize,
                 VISUAL_PLAY_FRAME_HEIGHT as usize,
                 ctx.ibm,
-                PROMPT_CURSOR_GLYPH,
+                prompt_cursor_glyph(ctx.cursor_frame),
                 column.min(MESSAGE_WINDOW_RIGHT),
                 live.row,
                 CHROME_RULE_INDEX,
@@ -13019,10 +13097,20 @@ mod tests {
     /// Frame context for tests: the synthetic fixed-cell font stands in
     /// for both alphabets, with an empty message log.
     fn play_ctx<'a>(font: &'a FixedCellFont, log: &'a GameplayMessageLog) -> PlayFrameContext<'a> {
+        play_ctx_at_frame(font, log, 0)
+    }
+
+    /// Frame context pinned to one barber-pole cursor animation frame.
+    fn play_ctx_at_frame<'a>(
+        font: &'a FixedCellFont,
+        log: &'a GameplayMessageLog,
+        cursor_frame: u64,
+    ) -> PlayFrameContext<'a> {
         PlayFrameContext {
             ibm: font,
             runes: font,
             log,
+            cursor_frame,
         }
     }
 
@@ -13993,7 +14081,20 @@ mod tests {
             INTRO_MENU_FRAME_BORDER_COLOR,
             "border survives left of the >Select:< caption"
         );
-        for cell in 0..select_cells {
+        // Cells 0 and 9 are the `>` and `<` brackets, which are the
+        // shared two-colour ribbon end cap rather than a text glyph:
+        // on glyph row 4 the right cap is blue over x0..=x4 with its
+        // white chevron at x5, and the left cap mirrors that.
+        let select_top = usize::from(INTRO_MENU_SELECT_CAPTION_ROW) * CH_CELL_SIDE;
+        assert_cap_cell(&at, &font, select_x, select_top, RibbonCapDirection::Right);
+        assert_cap_cell(
+            &at,
+            &font,
+            select_x + (select_cells - 1) * CH_CELL_SIDE,
+            select_top,
+            RibbonCapDirection::Left,
+        );
+        for cell in 1..select_cells - 1 {
             assert_eq!(
                 at(select_x + cell * CH_CELL_SIDE, select_y),
                 INTRO_MENU_FRAME_OUTLINE_COLOR,
@@ -14014,7 +14115,22 @@ mod tests {
             INTRO_MENU_FRAME_BORDER_COLOR,
             "border survives left of the copyright caption"
         );
-        for cell in 0..copyright_cells {
+        let copyright_top = usize::from(INTRO_MENU_COPYRIGHT_CAPTION_ROW) * CH_CELL_SIDE;
+        assert_cap_cell(
+            &at,
+            &font,
+            copyright_x,
+            copyright_top,
+            RibbonCapDirection::Right,
+        );
+        assert_cap_cell(
+            &at,
+            &font,
+            copyright_x + (copyright_cells - 1) * CH_CELL_SIDE,
+            copyright_top,
+            RibbonCapDirection::Left,
+        );
+        for cell in 1..copyright_cells - 1 {
             assert_eq!(
                 at(copyright_x + cell * CH_CELL_SIDE, copyright_y),
                 INTRO_MENU_FRAME_OUTLINE_COLOR,
@@ -14028,6 +14144,36 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Assert a caption bracket cell carries the shared ribbon end cap
+    /// rather than a text glyph, checking every pixel of the cell
+    /// against the sprite derived from the same font the frame used.
+    fn assert_cap_cell(
+        at: &impl Fn(usize, usize) -> u8,
+        font: &FixedCellFont,
+        cell_x: usize,
+        cell_top_y: usize,
+        direction: RibbonCapDirection,
+    ) {
+        let sprite = u5_runtime::ribbon_cap_sprite(font, direction);
+        for glyph_y in 0..CH_CELL_SIDE {
+            for glyph_x in 0..CH_CELL_SIDE {
+                let bit = 1u8 << (7 - glyph_x);
+                let expected = if sprite.white[glyph_y] & bit != 0 {
+                    INTRO_MENU_FRAME_OUTLINE_COLOR
+                } else if sprite.ribbon[glyph_y] & bit != 0 {
+                    INTRO_MENU_FRAME_BORDER_COLOR
+                } else {
+                    INTRO_MENU_FRAME_INTERIOR_COLOR
+                };
+                assert_eq!(
+                    at(cell_x + glyph_x, cell_top_y + glyph_y),
+                    expected,
+                    "caption bracket cap pixel ({glyph_x}, {glyph_y})"
+                );
+            }
+        }
     }
 
     #[test]
@@ -17733,28 +17879,44 @@ mod tests {
     }
 
     #[test]
-    fn visual_prompt_cursor_changes_fixed_cell_frame_only_when_visible() {
+    fn visual_prompt_cursor_animates_through_its_four_barber_pole_frames() {
+        // The live input line's cursor is always present and cycles
+        // `IBM.CH` 0x05..=0x08 rather than blinking on and off, so the
+        // frame counter - not `prompt_cursor_visible` - is what changes
+        // the rendered surface. The real IBM.CH is needed here: the
+        // all-0xff fixture renders every glyph as the same solid block,
+        // so the four frames would be indistinguishable.
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(IBM_CH_FILE).exists() {
+            return;
+        }
+        let font = load_ibm_ch_font(game_dir).unwrap();
         let mut state = test_state(open_grid(), 1, 1);
         install_test_conversation(&mut state);
-        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
-
         let log = GameplayMessageLog::new();
-        let hidden = render_integrated_status_framebuffer(
-            &mut state.clone(),
-            "job",
-            "",
-            play_ctx(&font, &log),
-            false,
-        );
-        let visible = render_integrated_status_framebuffer(
-            &mut state.clone(),
-            "job",
-            "",
-            play_ctx(&font, &log),
-            true,
-        );
 
-        assert_ne!(hash_bytes(&hidden.rgba), hash_bytes(&visible.rgba));
+        let surface = |frame: u64| {
+            render_integrated_status_framebuffer(
+                &mut state.clone(),
+                "job",
+                "",
+                play_ctx_at_frame(&font, &log, frame),
+                false,
+            )
+            .rgba
+        };
+
+        let frames: Vec<u64> = (0..4).map(|frame| hash_bytes(&surface(frame))).collect();
+        for (index, hash) in frames.iter().enumerate() {
+            for (other, other_hash) in frames.iter().enumerate() {
+                if index != other {
+                    assert_ne!(hash, other_hash, "cursor frames {index} and {other} match");
+                }
+            }
+        }
+        // The cycle repeats every four frames.
+        assert_eq!(hash_bytes(&surface(4)), frames[0]);
+        assert_eq!(hash_bytes(&surface(7)), frames[3]);
     }
 
     #[test]
