@@ -1631,83 +1631,73 @@ impl PlayState {
         light_threshold: u32,
         wrap_world: bool,
     ) -> Vec<bool> {
-        let mut visible =
-            self.surface_visibility_player_carve(px, py, view_radius, light_threshold, wrap_world);
-        let local_light_mask = self.surface_local_light_mask(px, py, wrap_world);
-        if !local_light_mask.iter().any(|lit| *lit) {
-            return visible;
-        }
-        let (local_light_origin_x, local_light_origin_y) =
-            surface_local_light_mask_origin(px, py, wrap_world);
-
         let side = view_radius.saturating_mul(2).saturating_add(1);
         let cell_count = side.saturating_mul(side);
+        let mut visible = vec![false; cell_count];
         if cell_count == 0 {
             return visible;
         }
 
-        let center = view_radius * side + view_radius;
-        let mut considered = vec![false; cell_count];
-        considered[center] = true;
-        let mut queue = std::collections::VecDeque::from([(px, py)]);
+        let mask = self.surface_local_light_mask(px, py, wrap_world);
+        let (mask_origin_x, mask_origin_y) = surface_local_light_mask_origin(px, py, wrap_world);
+        let lit = |x: isize, y: isize| {
+            Self::surface_local_light_mask_is_lit(
+                &mask,
+                mask_origin_x,
+                mask_origin_y,
+                x,
+                y,
+                wrap_world,
+            )
+        };
 
-        while let Some((cx, cy)) = queue.pop_front() {
-            for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
-                let x = cx + isize::from(dx);
-                let y = cy + isize::from(dy);
-                let Some(index) = visibility_view_index(px, py, x, y, view_radius) else {
-                    continue;
-                };
-                if considered[index] {
-                    continue;
+        self.surface_centre_out_carve(
+            px,
+            py,
+            wrap_world,
+            |x, y| visibility_view_index(px, py, x, y, view_radius),
+            |x, y| visibility_squared_distance(px, py, x, y),
+            |candidate| {
+                let propagates =
+                    surface_tile_propagates_visibility(candidate.tile, candidate.squared_distance);
+
+                // Inside the threshold: painted unconditionally. Opacity
+                // governs propagation *past* a cell, never visibility of
+                // the cell itself (`visibility.md §3`/`§5`).
+                if visibility_in_radius(candidate.squared_distance, light_threshold) {
+                    return SurfaceCarveVerdict {
+                        paint: true,
+                        expand: propagates,
+                    };
                 }
-                considered[index] = true;
 
-                let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
-                    continue;
-                };
-                let squared_distance = visibility_squared_distance(px, py, x, y);
-                let propagates = surface_tile_propagates_visibility(tile, squared_distance);
-                // `visibility.md §5`: failing the main threshold does NOT
-                // make a cell dark. The local-light mask can still reveal
-                // it, and the rules below (propagating candidates need
-                // only their own mask cell; non-propagating ones need a
-                // lit parent too) are this engine's current reading.
-                //
-                // SEAM: `cleak/u5-spec#83` is open and unanswered. The
-                // decomp side has said a separate local-light *influence*
-                // mask governs out-of-threshold cells with different rules
-                // for sight-transparent versus sight-blocking cells, and
-                // that material is still being written into the spec. When
-                // #83 lands, this branch — not the threshold test above,
-                // which is confirmed correct — is what changes.
-                let in_player_light = visibility_in_radius(squared_distance, light_threshold);
-                if !in_player_light {
-                    let locally_lit = Self::surface_local_light_mask_is_lit(
-                        &local_light_mask,
-                        local_light_origin_x,
-                        local_light_origin_y,
-                        x,
-                        y,
-                        wrap_world,
-                    );
-                    let parent_lit = Self::surface_local_light_mask_is_lit(
-                        &local_light_mask,
-                        local_light_origin_x,
-                        local_light_origin_y,
-                        cx,
-                        cy,
-                        wrap_world,
-                    );
-                    if locally_lit && (propagates || parent_lit) {
-                        visible[index] = true;
+                // Beyond the threshold the influence mask decides, with
+                // two different rules (`visibility.md §5`, published
+                // through `cleak/u5-spec#83`). Cells out here are NOT
+                // automatically dark; without this an engine blacks out
+                // lit rooms and lamp-lit streets at night.
+                if propagates {
+                    // Sight-transparent: shown if its own mask coverage is
+                    // nonzero, and enqueued *either way*, so the flood can
+                    // cross unlit ground and reach lit ground further out.
+                    SurfaceCarveVerdict {
+                        paint: lit(candidate.x, candidate.y),
+                        expand: true,
+                    }
+                } else {
+                    // Sight-blocking: shown only if the cell the carve
+                    // arrived from was visible and both it and the
+                    // candidate have mask coverage. Never expands.
+                    SurfaceCarveVerdict {
+                        paint: candidate.parent_carved
+                            && lit(candidate.parent_x, candidate.parent_y)
+                            && lit(candidate.x, candidate.y),
+                        expand: false,
                     }
                 }
-                if propagates {
-                    queue.push_back((x, y));
-                }
-            }
-        }
+            },
+            &mut visible,
+        );
 
         visible
     }
@@ -1717,8 +1707,8 @@ impl PlayState {
     /// coordinate and examines its eight neighbours in the fixed ring
     /// order (west, southwest, south, southeast, east, northeast, north,
     /// northwest). Candidates that are out of the caller's window, already
-    /// considered, or outside the caller's light region are dropped; the
-    /// rest are carved and, when the tile propagates, enqueued.
+    /// considered, or refused by `classify` are dropped; the rest are
+    /// painted and/or enqueued exactly as `classify` directs.
     ///
     /// The same helper serves the player's viewport carve (§5) and the
     /// local-light mask's per-source carve (§12) — the spec says the mask
@@ -1728,22 +1718,25 @@ impl PlayState {
     ///
     /// `index_of` maps a world coordinate to a slot in `carved` (`None`
     /// for out-of-window), `squared_distance` supplies the centre-relative
-    /// squared distance used both by the range test and by the
-    /// adjacent-only propagation rule, and `in_range` decides membership
-    /// of the caller's light region.
-    fn surface_centre_out_carve<FIndex, FDist, FRange>(
+    /// squared distance used by both the range tests and the
+    /// adjacent-only propagation rule, and `classify` returns the paint
+    /// and expand decisions. Painting and expansion are *independent*:
+    /// the player carve paints a lit blocker without expanding through
+    /// it, and enqueues an unlit sight-transparent cell without painting
+    /// it.
+    fn surface_centre_out_carve<FIndex, FDist, FClassify>(
         &self,
         center_x: isize,
         center_y: isize,
         wrap_world: bool,
         index_of: FIndex,
         squared_distance: FDist,
-        in_range: FRange,
+        classify: FClassify,
         carved: &mut [bool],
     ) where
         FIndex: Fn(isize, isize) -> Option<usize>,
         FDist: Fn(isize, isize) -> u32,
-        FRange: Fn(isize, isize, u32) -> bool,
+        FClassify: Fn(SurfaceCarveCandidate) -> SurfaceCarveVerdict,
     {
         let Some(center) = index_of(center_x, center_y) else {
             return;
@@ -1751,6 +1744,8 @@ impl PlayState {
         if center >= carved.len() {
             return;
         }
+        // `lighting.md §7.1`: the centre is seeded into the visible set
+        // unconditionally, before any distance comparison.
         carved[center] = true;
 
         let mut considered = vec![false; carved.len()];
@@ -1758,6 +1753,7 @@ impl PlayState {
         let mut queue = std::collections::VecDeque::from([(center_x, center_y)]);
 
         while let Some((cx, cy)) = queue.pop_front() {
+            let parent_carved = index_of(cx, cy).is_some_and(|index| carved[index]);
             for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
                 let x = cx + isize::from(dx);
                 let y = cy + isize::from(dy);
@@ -1772,45 +1768,24 @@ impl PlayState {
                 let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
                     continue;
                 };
-                let squared = squared_distance(x, y);
-                if !in_range(x, y, squared) {
-                    continue;
-                }
+                let verdict = classify(SurfaceCarveCandidate {
+                    x,
+                    y,
+                    squared_distance: squared_distance(x, y),
+                    tile,
+                    parent_x: cx,
+                    parent_y: cy,
+                    parent_carved,
+                });
 
-                carved[index] = true;
-                if surface_tile_propagates_visibility(tile, squared) {
+                if verdict.paint {
+                    carved[index] = true;
+                }
+                if verdict.expand {
                     queue.push_back((x, y));
                 }
             }
         }
-    }
-
-    fn surface_visibility_player_carve(
-        &self,
-        px: isize,
-        py: isize,
-        view_radius: usize,
-        light_threshold: u32,
-        wrap_world: bool,
-    ) -> Vec<bool> {
-        let side = view_radius.saturating_mul(2).saturating_add(1);
-        let cell_count = side.saturating_mul(side);
-        let mut visible = vec![false; cell_count];
-        if cell_count == 0 {
-            return visible;
-        }
-
-        self.surface_centre_out_carve(
-            px,
-            py,
-            wrap_world,
-            |x, y| visibility_view_index(px, py, x, y, view_radius),
-            |x, y| visibility_squared_distance(px, py, x, y),
-            |_, _, squared| visibility_in_radius(squared, light_threshold),
-            &mut visible,
-        );
-
-        visible
     }
 
     fn surface_local_light_mask(&self, px: isize, py: isize, wrap_world: bool) -> Vec<bool> {
@@ -1894,7 +1869,17 @@ impl PlayState {
             wrap_world,
             |x, y| surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world),
             |x, y| surface_local_light_squared_distance(source_x, source_y, x, y, wrap_world),
-            |_, _, squared| squared <= LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD,
+            |candidate| {
+                let inside = candidate.squared_distance <= LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD;
+                SurfaceCarveVerdict {
+                    paint: inside,
+                    expand: inside
+                        && surface_tile_propagates_visibility(
+                            candidate.tile,
+                            candidate.squared_distance,
+                        ),
+                }
+            },
             mask,
         );
     }
@@ -3583,6 +3568,30 @@ fn surface_local_light_squared_distance(
     let dx = i32::from(wrapped_world_axis_delta(sx, tx)).unsigned_abs();
     let dy = i32::from(wrapped_world_axis_delta(sy, ty)).unsigned_abs();
     dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+}
+
+/// One candidate cell offered to a [`PlayState::surface_centre_out_carve`]
+/// classifier: the cell itself, its centre-relative squared distance, its
+/// live tile byte, and the cell the carve arrived from together with
+/// whether that parent is currently painted. `visibility.md §5` needs the
+/// parent's state for the sight-blocking influence rule.
+struct SurfaceCarveCandidate {
+    x: isize,
+    y: isize,
+    squared_distance: u32,
+    tile: u8,
+    parent_x: isize,
+    parent_y: isize,
+    parent_carved: bool,
+}
+
+/// A classifier's decision for one candidate. `paint` and `expand` are
+/// independent: `visibility.md §5` paints a lit sight-blocker without
+/// expanding through it, and expands through an unlit sight-transparent
+/// cell without painting it.
+struct SurfaceCarveVerdict {
+    paint: bool,
+    expand: bool,
 }
 
 /// `visibility.md §5`/`§6`: the one sight-propagation classifier, used

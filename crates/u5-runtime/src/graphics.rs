@@ -113,6 +113,38 @@ impl TileViewport {
     }
 }
 
+/// Index whose shipped value deviates from the stock hardware set.
+pub const SHIPPED_PALETTE_DEVIATING_INDEX: usize = 6;
+/// Dark yellow: what the shipped table selects at index six.
+pub const SHIPPED_PALETTE_DARK_YELLOW: [u8; 3] = [0xaa, 0xaa, 0x00];
+/// Brown: what the *stock* mode table selects at index six, and what
+/// this engine must never render there.
+pub const STOCK_EGA_BROWN: [u8; 3] = [0xaa, 0x55, 0x00];
+
+/// The game's sixteen-entry palette.
+///
+/// **This is not the stock IBM EGA palette, and must not be "corrected"
+/// back into one.** `formats/tiles.md` section 7 and
+/// `systems/display-driver-mode.md` section 5.2: the palette is a table
+/// of attribute-controller values shipping inside the resident screen
+/// descriptor, handed to the BIOS once during mode setup. Fifteen
+/// entries are the stock values for the mode; **index six is dark
+/// yellow where stock selects brown**, and that single substitution is
+/// the only way the game's palette differs from the hardware default.
+/// A reader that renders index six as brown gets the game's dark-yellow
+/// tones wrong everywhere they appear.
+///
+/// The spec directs implementations to take the stock set and apply the
+/// index-six substitution rather than parsing the resident table, which
+/// is what this constant is. It is the single palette the whole
+/// renderer shares - tiles, text, chrome and every reverse index
+/// lookup - so the substitution lands everywhere at once.
+///
+/// Nothing reprograms the palette after mode setup, the intro included.
+/// Anything that looks like recolouring is either a draw under a
+/// restricted plane write mask, landing pixels at a different index, or
+/// an effect that mutates loaded asset data. Do not add palette-change
+/// modelling here.
 pub const EGA_PALETTE_RGB: [[u8; 3]; 16] = [
     [0x00, 0x00, 0x00],
     [0x00, 0x00, 0xaa],
@@ -120,7 +152,7 @@ pub const EGA_PALETTE_RGB: [[u8; 3]; 16] = [
     [0x00, 0xaa, 0xaa],
     [0xaa, 0x00, 0x00],
     [0xaa, 0x00, 0xaa],
-    [0xaa, 0x55, 0x00],
+    SHIPPED_PALETTE_DARK_YELLOW,
     [0xaa, 0xaa, 0xaa],
     [0x55, 0x55, 0x55],
     [0x55, 0x55, 0xff],

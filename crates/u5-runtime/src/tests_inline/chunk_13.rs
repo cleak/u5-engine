@@ -19833,8 +19833,11 @@ fn lighting_helpers_match_spec_table() {
     assert_eq!(apply_personal_light(2, 0, 0), 2);
     assert_eq!(apply_personal_light(2, 1, 0), TORCH_LIGHT_FLOOR);
     assert_eq!(apply_personal_light(2, 0, 1), LIGHT_SPELL_FLOOR);
-    // Torch dominates spell when both nonzero
-    assert_eq!(apply_personal_light(2, 5, 5), TORCH_LIGHT_FLOOR);
+    // `cleak/u5-spec#83`: magic light is the brighter of the two, so the
+    // SPELL floor (18) dominates the torch floor (10) when both burn.
+    assert_eq!(apply_personal_light(2, 5, 5), LIGHT_SPELL_FLOOR);
+    assert_eq!(TORCH_LIGHT_FLOOR, 10);
+    assert_eq!(LIGHT_SPELL_FLOOR, 18);
     // Ambient already brighter than the floor wins
     assert_eq!(apply_personal_light(FULL_DAYLIGHT, 5, 5), FULL_DAYLIGHT);
     assert_eq!(apply_personal_light(20, 1, 0), 20);

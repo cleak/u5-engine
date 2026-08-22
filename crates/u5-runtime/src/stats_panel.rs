@@ -22,10 +22,11 @@ pub const STATS_PANEL_TEXT_RIGHT: u8 = STATS_PANEL_TEXT_LEFT + STATS_PANEL_WIDTH
 /// food/gold and calendar rows 8..=9. Row 7 is chrome and is never
 /// written by the panel.
 pub const STATS_PANEL_TEXT_TOP: u8 = STATS_ROSTER_TOP;
-/// One row past the last painted row: emitting a full-width line
-/// wraps the cursor onto the following row, and without the spare row
-/// that wrap would scroll the window and shift every line up by one.
-pub const STATS_PANEL_TEXT_BOTTOM: u8 = STATS_COUNTER_BOTTOM + 1;
+/// Published stats-window bottom row (`text-output.md` section 10.1:
+/// the window is cells `(24, 1)-(39, 9)`, pixels `(192, 8)-(319, 79)`).
+/// The window spans columns 24..=39 but the panel only ever writes
+/// 24..=38 - that is why the field is fifteen cells.
+pub const STATS_PANEL_TEXT_BOTTOM: u8 = STATS_COUNTER_BOTTOM;
 /// Cells of the party row's left-aligned name field.
 pub const STATS_PANEL_NAME_CELLS: usize = 9;
 /// Cells of the party row's right-justified hit-point field.
@@ -234,14 +235,25 @@ pub fn paint_stats_panel_text_window(
 
     // Screen rows 8 and 9 are window rows 7 and 8: the divider band at
     // screen row 7 is chrome, not a window row.
+    //
+    // These two rows emit their trailing blanks trimmed. The window was
+    // just cleared, so the cells are already blank and the output is
+    // identical - but emitting a full fifteen glyphs into a
+    // fifteen-column window wraps the cursor onto the next row, and
+    // from the window's own last row that wrap scrolls the whole panel
+    // up by one. The roster rows above can wrap harmlessly and must not
+    // be trimmed, because a highlighted row's inverse video has to
+    // cover all fifteen cells.
     let counter_row = STATS_COUNTER_TOP - STATS_PANEL_TEXT_TOP;
-    let bottom_rows = [
-        render_stats_panel_counter_row(state),
-        render_stats_panel_date_row(&state.clock),
-    ];
-    for (offset, line) in bottom_rows.iter().enumerate() {
-        system.set_active_cursor(0, counter_row + offset as u8);
-        emit_fixed_panel_line(system, line);
+    let date_row = STATS_COUNTER_BOTTOM - STATS_PANEL_TEXT_TOP;
+    for (row, line) in [
+        (counter_row, render_stats_panel_counter_row(state)),
+        (date_row, render_stats_panel_date_row(&state.clock)),
+    ] {
+        system.set_active_cursor(0, row);
+        for byte in line.trim_end().bytes().take(STATS_PANEL_WIDTH) {
+            system.emit_byte(byte);
+        }
     }
 }
 
@@ -401,8 +413,28 @@ fn render_stats_panel_middle_counter(state: &PlayState) -> String {
 /// Screen row 9: the calendar, centred in the fifteen-column text
 /// area. `stats-panel.md §5` gives "a short M-D pair" and "the year
 /// printed as a three-digit zero-padded value".
+/// Screen row 9: the calendar (`stats-panel.md` section 7).
+///
+/// The published mechanism is not a centring calculation: a line feed
+/// to column 24, three fixed spaces, a fourth **only when both month
+/// and day are below ten**, then month, hyphen, day, hyphen and the
+/// year zero-padded to three digits. `4-5-139` lands in columns
+/// 28..=34 centred on 31 and `12-25-139` in 27..=35 also centred, but
+/// `12-5-139` sits one cell left of true centre - that is the
+/// original's behaviour, not a bug to correct.
 fn render_stats_panel_date_row(clock: &GameClock) -> String {
-    centred_panel_line(&format!("{}-{}-{:03}", clock.month, clock.day, clock.year))
+    let leading = if clock.month < 10 && clock.day < 10 {
+        4
+    } else {
+        3
+    };
+    fixed_panel_line(&format!(
+        "{}{}-{}-{:03}",
+        " ".repeat(leading),
+        clock.month,
+        clock.day,
+        clock.year
+    ))
 }
 
 fn current_ship_hull(state: &PlayState) -> Option<u8> {
@@ -414,12 +446,6 @@ fn current_ship_hull(state: &PlayState) -> Option<u8> {
 
 fn truncate_ascii_chars(value: &str, max_chars: usize) -> String {
     value.chars().take(max_chars).collect()
-}
-
-fn centred_panel_line(value: &str) -> String {
-    let value = truncate_ascii_chars(value, STATS_PANEL_WIDTH);
-    let leading = (STATS_PANEL_WIDTH - value.chars().count()) / 2;
-    fixed_panel_line(&format!("{}{value}", " ".repeat(leading)))
 }
 
 fn fixed_panel_line(value: &str) -> String {

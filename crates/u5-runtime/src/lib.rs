@@ -579,9 +579,9 @@ pub use story_io::{
 pub use story_layout::{
     CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX, CHARGEN_RESULT_PARAGRAPH_BOX,
     CHARGEN_RESULT_SPACE_ADVANCE, INTRO_DOORWAY_LINES, INTRO_DOORWAY_SECOND_LINE_PEN_Y,
-    PROPORTIONAL_BRACE_INDENT, PROPORTIONAL_DEFAULT_SPACE_ADVANCE, PROPORTIONAL_LINE_STRIDE,
-    PlacedProportionalGlyph, ProportionalLayoutDescriptor, intro_doorway_paragraph_boxes,
-    intro_story_paragraph_box, layout_proportional_paragraph_glyphs,
+    PROPORTIONAL_BRACE_INDENT, PROPORTIONAL_DEFAULT_SPACE_ADVANCE, PROPORTIONAL_DRAW_CLIP_Y,
+    PROPORTIONAL_LINE_STRIDE, PlacedProportionalGlyph, ProportionalLayoutDescriptor,
+    intro_doorway_paragraph_boxes, intro_story_paragraph_box, layout_proportional_paragraph_glyphs,
 };
 pub use text_wrap::{
     EmitterByteKind, ParagraphByteKind, ProportionalRendererByteKind, TEXT_COLOR_BACKGROUND_SHIFT,

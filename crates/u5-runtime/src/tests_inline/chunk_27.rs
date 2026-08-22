@@ -13,6 +13,13 @@ fn chrome_test_font() -> FixedCellFont {
     let left: [u8; 8] = [0x01, 0x07, 0x1f, 0x3f, 0x3f, 0x1f, 0x07, 0x01];
     bytes[0x02 * 8..0x02 * 8 + 8].copy_from_slice(&right);
     bytes[0x01 * 8..0x01 * 8 + 8].copy_from_slice(&left);
+    // The three reserved corner glyphs the chrome stamps opaquely.
+    let top_left: [u8; 8] = [0x07, 0x1f, 0x3f, 0x7f, 0x7f, 0xff, 0xff, 0xff];
+    let top_right: [u8; 8] = [0xe0, 0xf8, 0xfc, 0xfe, 0xfe, 0xff, 0xff, 0xff];
+    let bottom_left: [u8; 8] = [0xff, 0xff, 0xff, 0x7f, 0x7f, 0x3f, 0x1f, 0x07];
+    bytes[0x7b * 8..0x7b * 8 + 8].copy_from_slice(&top_left);
+    bytes[0x7c * 8..0x7c * 8 + 8].copy_from_slice(&top_right);
+    bytes[0x7d * 8..0x7d * 8 + 8].copy_from_slice(&bottom_left);
     parse_ch_font(&bytes, IBM_CH_FILE).unwrap()
 }
 
@@ -31,6 +38,7 @@ fn chrome_frame(content: &GameplayChromeContent) -> Vec<u8> {
             ibm: &font,
             runes: &font,
         },
+        ChromePalette::EGA,
     );
     rgba
 }
@@ -197,14 +205,13 @@ fn wind_banner_pads_direction_into_a_five_column_field() {
     assert_eq!(wind_banner_text(Some("Calm")), "Calm  Winds");
     // `weather.md §2`: an out-of-range wind byte drops the direction
     // label but keeps the shared suffix.
-    assert_eq!(wind_banner_text(None), "      Winds");
-    for text in [
-        wind_banner_text(Some("East")),
-        wind_banner_text(Some("South")),
-        wind_banner_text(None),
-    ] {
+    // Out of range: no direction label at all, so the suffix keeps its
+    // own leading space at columns 7..=12 and the cap closes at 13.
+    assert_eq!(wind_banner_text(None), " Winds");
+    for text in [wind_banner_text(Some("East")), wind_banner_text(Some("South"))] {
         assert_eq!(text.chars().count(), WIND_BANNER_CELLS);
     }
+    assert_eq!(wind_banner_text(None).chars().count(), 6);
 
     let gap = bottom_gap(&ChromeGap::Label(wind_banner_text(Some("East")))).unwrap();
     assert_eq!(gap.left_cap_column, 6);
@@ -395,4 +402,102 @@ fn ribbon_cap_is_one_primitive_for_border_message_and_caption_brackets() {
         assert_eq!(left.white[row], mirror(right.white[row]));
         assert_eq!(left.ribbon[row], mirror(right.ribbon[row]));
     }
+}
+
+#[test]
+fn chrome_paint_takes_its_two_colours_as_parameters() {
+    // The published paint reads no gameplay state - only the chrome and
+    // accent colour-table slots - and every colour index in this module
+    // is provisional pending the spec's colour re-grounding audit. Both
+    // facts are only safe if the painters take the pair as a parameter
+    // rather than reading the constants, so pin that: swapping the
+    // palette must swap the painted indices and nothing else.
+    let font = chrome_test_font();
+    let content = GameplayChromeContent::default();
+    let paint = |palette: ChromePalette| {
+        let mut rgba = vec![0u8; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0, 0, 0, 0xff]);
+        }
+        paint_gameplay_frame_chrome(
+            &mut rgba,
+            TEXT_WINDOW_RENDER_WIDTH,
+            TEXT_WINDOW_RENDER_HEIGHT,
+            &content,
+            ChromeFonts {
+                ibm: &font,
+                runes: &font,
+            },
+            palette,
+        );
+        rgba
+    };
+
+    let ega = paint(ChromePalette::EGA);
+    let swapped = paint(ChromePalette {
+        chrome: 4,
+        accent: 10,
+        background: 0,
+    });
+
+    // Ribbon fill and rule both follow the palette.
+    assert_eq!(chrome_index_at(&ega, 3, 100), ChromePalette::EGA.chrome);
+    assert_eq!(chrome_index_at(&swapped, 3, 100), 4);
+    assert_eq!(chrome_index_at(&ega, 7, 100), ChromePalette::EGA.accent);
+    assert_eq!(chrome_index_at(&swapped, 7, 100), 10);
+    // Background and the untouched viewport interior do not.
+    assert_eq!(chrome_index_at(&swapped, 100, 195), 0);
+    assert_eq!(chrome_index_at(&swapped, 100, 100), 0);
+
+    // The default is the provisional EGA pair.
+    assert_eq!(ChromePalette::default(), ChromePalette::EGA);
+    assert_eq!(ChromePalette::EGA.chrome, CHROME_RIBBON_INDEX);
+    assert_eq!(ChromePalette::EGA.accent, CHROME_RULE_INDEX);
+}
+
+#[test]
+fn shipped_palette_is_stock_except_dark_yellow_at_index_six() {
+    // `formats/tiles.md` section 7: the palette shipped in the resident
+    // screen descriptor is the stock set for the mode with exactly one
+    // substitution - index six is dark yellow, not brown. Rendering it
+    // as brown gets the game's dark-yellow tones wrong everywhere they
+    // appear, so this guards against anyone "restoring" the stock
+    // hardware default.
+    const STOCK: [[u8; 3]; 16] = [
+        [0x00, 0x00, 0x00],
+        [0x00, 0x00, 0xaa],
+        [0x00, 0xaa, 0x00],
+        [0x00, 0xaa, 0xaa],
+        [0xaa, 0x00, 0x00],
+        [0xaa, 0x00, 0xaa],
+        STOCK_EGA_BROWN,
+        [0xaa, 0xaa, 0xaa],
+        [0x55, 0x55, 0x55],
+        [0x55, 0x55, 0xff],
+        [0x55, 0xff, 0x55],
+        [0x55, 0xff, 0xff],
+        [0xff, 0x55, 0x55],
+        [0xff, 0x55, 0xff],
+        [0xff, 0xff, 0x55],
+        [0xff, 0xff, 0xff],
+    ];
+
+    assert_eq!(
+        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX],
+        SHIPPED_PALETTE_DARK_YELLOW,
+        "index six must be dark yellow"
+    );
+    assert_ne!(
+        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX],
+        STOCK_EGA_BROWN,
+        "index six must not be the stock brown"
+    );
+
+    // Every other entry matches stock, and index six is the only
+    // deviation - "that single substitution is the only way the game's
+    // palette differs from the hardware default".
+    let deviations: Vec<usize> = (0..16)
+        .filter(|index| EGA_PALETTE_RGB[*index] != STOCK[*index])
+        .collect();
+    assert_eq!(deviations, vec![SHIPPED_PALETTE_DEVIATING_INDEX]);
 }
