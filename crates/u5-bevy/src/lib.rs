@@ -9705,10 +9705,6 @@ fn visual_intro_presents_hold_buffer(game_dir: &Path) -> IntroDisplayBuffer {
     compose_intro_title_art_buffer(&title, &british, IntroTitleCompositionPhase::PresentsHold)
 }
 
-fn visual_intro_final_title_backing_buffer(intro: &VisualIntroState) -> IntroDisplayBuffer {
-    visual_intro_title_art_buffer(&intro.game_dir, None, None)
-}
-
 fn draw_visual_intro_start_menu_to_buffer(
     buffer: &mut IntroDisplayBuffer,
     game_dir: &Path,
@@ -10394,6 +10390,20 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
 const RTV_UI_COLOUR_SLOT_1: u8 = INTRO_MENU_FRAME_OUTLINE_COLOR;
 const RTV_UI_COLOUR_SLOT_2: u8 = INTRO_MENU_FRAME_BORDER_COLOR;
 
+/// `cleak/u5-spec#78`: the intro's border captions are "ordinary
+/// white-on-black fixed cells over the blue border rows" that visibly
+/// interrupt the white rules — the caption punches its own black cells
+/// into the band rather than sitting on the band's blue.
+///
+/// Measured on the original's Return-to-View attract capture
+/// (`refs/dos-menu-settled.png`): across the thirteen caption cells of
+/// `The Summoning` the bottom border row is black plus white glyph
+/// pixels, while the same rows immediately left of the caption are the
+/// border blue with the white rule. So the caption's background is the
+/// frame interior colour, not the border colour.
+const RTV_CAPTION_FOREGROUND: u8 = INTRO_MENU_FRAME_OUTLINE_COLOR;
+const RTV_CAPTION_BACKGROUND: u8 = INTRO_MENU_FRAME_INTERIOR_COLOR;
+
 fn visual_return_to_view_summary(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
@@ -10560,8 +10570,8 @@ fn draw_return_to_view_caption(
             *byte,
             start_column + offset,
             RTV_CAPTION_TEXT_ROW,
-            RTV_UI_COLOUR_SLOT_1,
-            RTV_UI_COLOUR_SLOT_2,
+            RTV_CAPTION_FOREGROUND,
+            RTV_CAPTION_BACKGROUND,
         );
     }
 }
@@ -12007,7 +12017,20 @@ fn write_visual_intro_report_inner(
         intro.dispatch.dismiss_title();
     }
     if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
-        intro.modal_backing = Some(visual_intro_final_title_backing_buffer(&intro));
+        // `cleak/u5-spec#54`: the preview is entered from the menu and
+        // composites over the preserved title/menu image, which it
+        // restores on abort. The live path captures that backing by
+        // rendering the menu panel at the moment `R` (or the idle
+        // attract) fires; seed the suite the same way so the frame shows
+        // the preview over the settled menu rather than over the title
+        // art the flourish leaves behind.
+        let panel = std::mem::replace(&mut intro.panel, VisualIntroPanel::Menu);
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.dispatch.dismiss_title();
+        let menu = render_intro_frame(&mut intro);
+        intro.modal_backing = Some(intro_buffer_from_rgba_frame(&menu));
+        intro.panel = panel;
     }
     let rgba = render_intro_frame(&mut intro);
     write_visual_report(
@@ -19066,7 +19089,7 @@ mod tests {
             title_tick_frames: None,
         };
         if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
-            intro.modal_backing = Some(visual_intro_final_title_backing_buffer(&intro));
+            intro.modal_backing = Some(visual_intro_title_art_buffer(&intro.game_dir, None, None));
         }
         intro
     }
@@ -19542,17 +19565,34 @@ mod tests {
         assert_eq!(start_column, 18 - caption.len() / 2);
         let surface = &intro.surface;
         let row_y = RTV_CAPTION_TEXT_ROW * CH_CELL_SIDE;
-        let caption_pixels: Vec<u8> = (0..caption.len() * CH_CELL_SIDE)
-            .map(|offset| {
-                surface.pixels[row_y * surface.width + start_column * CH_CELL_SIDE + offset]
+        let caption_pixels: Vec<u8> = (0..CH_CELL_SIDE)
+            .flat_map(|row| (0..caption.len() * CH_CELL_SIDE).map(move |offset| (row, offset)))
+            .map(|(row, offset)| {
+                surface.pixels[(row_y + row) * surface.width + start_column * CH_CELL_SIDE + offset]
             })
             .collect();
-        // The debug fixture font is solid, so every caption cell paints
-        // the slot-1 foreground rather than leaving the backing behind.
+        // `cleak/u5-spec#78`: the intro's border captions are ordinary
+        // white-on-black fixed cells punched into the blue border band —
+        // measured on the original's Return-to-View attract capture,
+        // where the caption's own cells are black plus white glyph
+        // pixels while the band beside them stays blue. Nothing from the
+        // backing (index 3) survives inside the caption cells.
         assert!(
-            caption_pixels.iter().any(|pixel| *pixel != 3),
-            "caption row was not painted"
+            caption_pixels
+                .iter()
+                .all(|pixel| *pixel == RTV_CAPTION_FOREGROUND || *pixel == RTV_CAPTION_BACKGROUND),
+            "caption cells painted something other than white-on-black"
         );
+        assert!(
+            caption_pixels
+                .iter()
+                .any(|pixel| *pixel == RTV_CAPTION_FOREGROUND),
+            "caption row has no glyph pixels"
+        );
+        // The fixture font is solid, so no background pixel shows
+        // through here; pin the colour itself instead.
+        assert_eq!(RTV_CAPTION_BACKGROUND, 0, "caption background is black");
+        assert_eq!(RTV_CAPTION_FOREGROUND, 0x0f, "caption glyphs are white");
         let _ = fs::remove_dir_all(dir);
     }
 
