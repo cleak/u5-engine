@@ -674,17 +674,18 @@ pub use u4_transfer::*;
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use visibility::{
     ActiveObjectCompositeResult, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,
-    LOCAL_LIGHT_MASK_SIDE, LOCAL_LIGHT_SOURCE_RADIUS, LightRadiusBranch, TERRAIN_BAND_LEN,
-    TERRAIN_BAND_ROW_STRIDE, VEHICLE_AVATAR_UNDERLAY_MARKER, VIEWPORT_CENTER, VIEWPORT_MAX_INDEX,
-    VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE,
-    VISIBILITY_ALREADY_RENDERED, VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR,
-    VISIBILITY_DIM_PERIPHERY, VISIBILITY_GRID_LEN, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION,
-    VisibilityMarker, active_object_composite, active_object_compositor_branch,
-    active_object_compositor_variant, active_object_default_composite,
-    active_object_default_tile_is_terrain_aware, fog_refine_folded_coord,
-    fog_refine_inside_clear_core, fog_refine_squared_distance, is_local_light_source_tile,
-    light_radius_branch, terrain_band_active_index, visibility_cheap_path_needs_refill,
-    visibility_grid_active_index, visibility_in_radius, visibility_marker,
+    LOCAL_LIGHT_MASK_SIDE, LOCAL_LIGHT_SOURCE_CELL_COUNT, LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD,
+    LightRadiusBranch, TERRAIN_BAND_LEN, TERRAIN_BAND_ROW_STRIDE, VEHICLE_AVATAR_UNDERLAY_MARKER,
+    VIEWPORT_CENTER, VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW,
+    VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
+    VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY,
+    VISIBILITY_GRID_LEN, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION, VisibilityMarker,
+    active_object_composite, active_object_compositor_branch, active_object_compositor_variant,
+    active_object_default_composite, active_object_default_tile_is_terrain_aware,
+    fog_refine_folded_coord, fog_refine_inside_clear_core, fog_refine_squared_distance,
+    is_local_light_source_tile, light_radius_branch, terrain_band_active_index,
+    visibility_cheap_path_needs_refill, visibility_grid_active_index, visibility_in_radius,
+    visibility_marker,
 };
 pub use visual_asset_audit::*;
 pub use wind::{
