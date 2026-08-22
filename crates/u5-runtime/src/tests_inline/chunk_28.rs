@@ -589,3 +589,36 @@ b ", 200).unwrap();
         assert!(RectangleDissolve::new((10, 10, 9, 20)).is_err());
         assert!(RectangleDissolve::new((10, 10, 20, 9)).is_err());
     }
+
+    #[test]
+    fn dissolve_driver_entry_and_caller_side_share_one_visit_order() {
+        // One published operation, one order: the dispatch-0x66 driver entry
+        // and the caller-side generator must scatter identically, or the same
+        // dissolve would look different depending on which path issued it.
+        let rect = (40u16, 86u16, 75u16, 120u16);
+        let mut caller = RectangleDissolve::new(rect).unwrap();
+        let mut driver = crate::display_driver::EgaDissolveState::new(
+            crate::display_driver::normalize_clamp_pixel_rect(
+                i32::from(rect.0),
+                i32::from(rect.1),
+                i32::from(rect.2),
+                i32::from(rect.3),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(driver.total_pixels() as u32, caller.pixel_count());
+        let mut visited = 0usize;
+        while let Some((x, y)) = caller.next_pixel() {
+            let from_driver = driver.next_pixel().expect("driver entry visits in step");
+            assert_eq!(
+                (usize::from(x), usize::from(y)),
+                from_driver,
+                "visit {visited} differs between the two entries"
+            );
+            visited += 1;
+        }
+        assert_eq!(visited, caller.pixel_count() as usize);
+        assert!(driver.next_pixel().is_none());
+        assert!(driver.is_finished() && caller.is_complete());
+    }
