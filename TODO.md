@@ -14,21 +14,27 @@ this file alone.
 
 Last known verification state:
 
-2026-08-22, engine `intro-preflourish-phase` at `cb6779f`, after the
-six-package presentation-parity pass (intro title/menu, gameplay screen chrome,
-visibility/lighting, command-echo transcript, intro story slides,
-endgame/chargen/U4/harness):
+2026-08-22, engine `intro-preflourish-phase` at `d4fc579`, after the
+six-package presentation-parity pass and the work implemented from the answers
+to our own `#78`-`#83`:
 
 - `cargo fmt --all -- --check` clean.
-- `cargo test -p u5-runtime --lib` 2805 passed.
-- `cargo test -p u5-bevy` 151 passed.
+- `cargo test -p u5-runtime --lib` 2815 passed.
+- `cargo test -p u5-bevy` 155 passed.
 - `cargo test -p u5-tui --features visual` 96 passed (11 + 51 + 34).
-- `--route-smoke` 493/493 scripted cases passed.
-- `--visual-frame-suite` wrote 186 PNGs and now runs to completion; the
-  Return-to-View panic that used to abort it is gone (`cleak/u5-spec#54`).
-- `--visual-route-suite` wrote 1808 PNGs. Exactly one is black by contract: the
+- `--route-smoke` all scripted cases passed.
+- `--visual-frame-suite` wrote 187 PNGs and runs to completion.
+- `--visual-route-suite` wrote 1814 PNGs, now including the whole victory
+  ending through to the certificate. Exactly one is black by contract: the
   `endgame.md §7.1` fade-to-black frame between the throne tableau and the first
   `END.DAT` window.
+- **The victory ending is reachable.** `endgame.md §9.1`-`§9.5` published the
+  certificate wording, which was the last gate on an unpublished contract
+  anywhere in the engine. The ending runs rite beats, tableau exit, the `§7.1`
+  fade, six `END.DAT` windows, the certificate on its parchment, the
+  elapsed-time report, and the `§9.5` terminal hold; route-smoke's validator
+  requires `cinematic_is_finished()`, so the case fails if it stops short.
+- The `cleak/u5-spec` queue is empty: 83 closed, 0 open.
 - Asset-backed runs used a **copy** of the asset directory. `C:\Games\U5-Clean`
   is a read-only clean-room input; the engine now refuses a write destination
   that resolves to `DEFAULT_GAME_DIR`, and `copy_asset_writable` clears the
@@ -845,14 +851,42 @@ or wrong, against black-box observation of the shipped assets:
   retryable-media branch, and the guards that stop harness paths writing into
   the pristine asset install.
 
-This is a large step toward presentation parity, not parity itself. What is
-still open is listed in `docs/completion-audit.md` "Remaining Public-Spec Gaps"
-and `docs/intro-graphics-gaps.md`; the load-bearing ones are the endgame
-certificate wording (`#82`, which keeps the victory ending deliberately
-unreachable), the dungeon first-person wall tables (`#81`), the local-light
-influence mask (`#83`), the border-caption wedge/cap glyph primitive, the
-acknowledgements slab-wipe cadence (`#72`), and the U4 transfer preview
-(`#73`). Six issues we filed - `#78`-`#83` - are awaiting a spec answer.
+All six issues we filed were then answered, and that work is in too: the
+published chrome contract and command echoes, the two-pass border end-cap
+composite (a solid triangle glyph plus two accent strokes, shared by every
+ribbon interruption, the Return-to-View caption wedges and the message-window
+prompt - which is why byte-matching a single glyph always failed), the `#83`
+local-light influence mask, the `#80` per-scene base-page table, and the `#82`
+endgame/chargen/`PARTY.SAV` work.
+
+**The victory ending is reachable.** The endgame certificate wording was the
+last gate on an unpublished contract anywhere in the engine; `endgame.md
+§9.1`-`§9.5` published it and the ending now runs end to end.
+
+Three corrections from that round are worth remembering rather than just
+recording. `#80` withdrew the `page = sub_map_index * 2 + floor` floor-page
+model, which was wrong for 22 of 32 locations. `TORCH_LIGHT_FLOOR` and
+`LIGHT_SPELL_FLOOR` were inverted in the engine - magic light is the brighter
+one. And the visual frame suite was rendering no menu window at all while the
+live path was correct, because the suite built its intro state through a
+parallel path; it now drives the real render path, so a defect of that shape
+cannot hide in the harness again.
+
+The shipped palette is not stock EGA: index 6 is `(170, 170, 0)` dark yellow
+rather than `(170, 85, 0)` brown, and it is the only index that differs. Forty-
+two decoded sub-images contain it, so several screens changed hue. Nothing
+reprograms the palette after mode setup - apparent recolouring is a restricted
+plane write mask or a display effect mutating the loaded asset data.
+
+This is a long step toward presentation parity, not parity itself, and none of
+it is pixel-verified against the original for any screen not named above. What
+is still open is engine work rather than missing contracts, listed in
+`docs/completion-audit.md`: the graphical U4 transfer preview (`#73` is closed
+and `§6.1`-`§6.6` publish it; it has not been built), the dungeon first-person
+wall tables (`#81` item 5 - the corridor is still an untextured wireframe),
+`#42`'s mask cadence, and the night-time beacon gate (`visibility.md §12.6`).
+The decomp side also has a cross-document contradiction sweep in flight that
+may yet touch contracts already implemented here.
 
 ### Bevy Integration
 

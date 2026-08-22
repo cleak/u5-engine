@@ -4,16 +4,19 @@ This audit maps each public-spec deliverable (the systems and formats published
 in `C:\Projects\Rust\u5-clean\u5-spec`) to concrete engine evidence
 (`crates/u5-runtime`, `crates/u5-tui`, `crates/u5-bevy`) and to test coverage.
 
-Created on 2026-05-19; last refreshed on 2026-08-22 at `cb6779f`, after the
-six-package presentation-parity pass and the `cleak/u5-spec` sweep that closed
-all 72 prior issues.
+Created on 2026-05-19; last refreshed on 2026-08-22 at `d4fc579`, after the
+six-package presentation-parity pass, the `cleak/u5-spec` sweep that closed
+every issue including our own `#78`-`#83`, and the work implemented from those
+answers.
 
 **Read spec contracts from the GitHub issues, not from the local checkout.**
 `C:\Projects\Rust\u5-clean\u5-spec` is read-only from this workspace and is
 stale at `9a898d1`, behind spec head `8192d67` and several of its retractions
 (notably `#42` local light, `#53` reveal transitions, `#54` Return-to-View,
-`#65`/`#66`/`#67` title sequence, `#69` doorway text, `#70` font metrics). An
-audit checked against the local files would disagree with this document.
+`#65`/`#66`/`#67` title sequence, `#69` doorway text, `#70` font metrics,
+`#80` floor pages, `#82` endgame/chargen). The spec queue is now empty - 83
+closed, 0 open - and head has moved several times past `9a898d1`, so an audit
+checked against the local files would disagree with this document.
 
 This document satisfies the completion criterion in `TODO.md`:
 
@@ -432,62 +435,60 @@ through the asset-backed Talk command path.
 
 ## Remaining Public-Spec Gaps
 
-`cleak/u5-spec` head `8192d67` closed every issue this audit previously tracked
-as blocking, many with explicit retractions. The rows that used to sit here
-(`#53`, `#60`, `#62`) are resolved: `#53` published the rectangle-dissolve
-primitive and corrected the endgame's full-screen rectangle into the `§7.1`
-fade to black before the first `END.DAT` window, and `#60`/`#62` were answered
-during the same sweep.
+There are none. Every issue in `cleak/u5-spec` is closed, including the six
+this engine filed (`#78` intro/menu, `#79` gameplay chrome, `#80` per-scene
+floor pages, `#81` command echoes and dungeon tables, `#82` endgame/chargen/
+`PARTY.SAV`, `#83` light-byte semantics). What is left is engine work against
+published contracts, and a small number of details the spec states honestly
+that it does not publish.
 
-What remains splits into two kinds.
+### The last gate on an unpublished contract is down
 
-### Filed by us, answer pending
+The endgame certificate wording was the final one. `endgame.md §9.1`-`§9.5`
+published it, so `endgame_certificate_lines` now builds the screen and **the
+victory ending is reachable and rendering end to end** - rite beats, tableau
+exit, the `§7.1` fade to black, six `END.DAT` windows, the certificate on its
+parchment, the elapsed-time report, and the `§9.5` terminal hold. Evidence:
+`route-endgame-box-full-victory-cinematic-29-empty.png` in the visual route
+suite, and route-smoke's validator requires `cinematic_is_finished()` so the
+case fails if the ending stops short.
 
-These are corrections and publications this engine asked for after settling the
-behaviour by black-box observation of the shipped assets. Private traces are
-complete and the spec pass is queued; none is answered yet. Every affected code
-path carries a comment naming the issue, so `grep -rn "cleak/u5-spec#8" crates/`
-finds them.
+### Panics that remain, and what each one is
 
-| Issue | Topic | Engine behavior meanwhile |
-|------|-------|---------------------------|
-| `cleak/u5-spec#78` | Intro/menu corrections: menu backing art is `ULTIMA` slot 0, title-tick frames are slots 1..=4, acknowledgements art is the `STARTSC` credits composition, and the lower menu frame is rounded blue chrome rather than box glyphs | Implements the observed behaviour; see `docs/intro-graphics-gaps.md` |
-| `cleak/u5-spec#79` | Gameplay screen chrome geometry | Implements the measured border, stats panel, sky strip, wind/`Dir:` banners and message window |
-| `cleak/u5-spec#80` | Per-scene floor-page table | Implements the observed mapping (e.g. Iolo's Hut is `DWELLING` page 12) |
-| `cleak/u5-spec#81` | Command echo wording, dungeon first-person wall/scenery tables, Z-stats, minimap | Command echoes and the message transcript are implemented from observation; the **dungeon first-person wall tables are not**, so that presentation is not parity-checked |
-| `cleak/u5-spec#82` | Endgame certificate wording, chargen prompt/paragraph geometry, `PARTY.SAV` virtue-standing offsets, endgame tableau sprite index space | See the loud gates below |
-| `cleak/u5-spec#83` | Light-byte semantics, including a local-light **influence mask** that reveals cells beyond the threshold | The `#42` squared-distance disc is implemented; the influence mask is not |
+Six `panic!` sites still cite a spec issue. Only one of them is an
+unimplemented contract; the rest are structural. Derived by grepping
+`crates/` rather than from any summary:
 
-### Loud gates still standing in the engine
+| Site | Kind |
+|---|---|
+| `u5-bevy` `require_published_u4_transfer_preview_presentation` | **Unimplemented published contract.** `#73` is closed and `u4-transfer.md §6.1`-`§6.6` publish the per-field cursor cells, the label strip, the "Found:" summary page, the stage machine and the finish. The graphical preview has not been built against them yet. This is the one real remaining implementation gap in this area. |
+| `u5-tui` terminal story / Return-to-View / transfer preview | No terminal surface. These are graphical screens; `--intro` refuses rather than printing a diagnostic substitute. Not spec gaps. |
+| `u5-runtime` `require_acknowledgements_contract` | Same: the graphical path draws the credits artwork, the terminal harness cannot. |
+| `u5-runtime` display title-tick operation | An injection guard - the caller must supply the `ULTIMA` bands rather than generated clean-room frames. Not a gap. |
 
-Under the strict no-fallback rule these paths refuse rather than invent. Each is
-a genuine unpublished contract, not a shortcut:
+### Details the spec publishes as unpublished
 
-| Gate | Why | Where |
-|------|-----|-------|
-| Endgame certificate body | `endgame.md §9` lists the certificate's fields but not its fixed wording, separators, or the centered Codex-style closing title. The engine carries the published data-derived fields (`EndgameCertificate`) and refuses to compose English around them. **This keeps the victory ending deliberately unreachable.** | `require_published_endgame_certificate_prose` |
-| Endgame final report panel | Same section: the elapsed-time arithmetic and its zero-omitting singular/plural formatting are published and implemented (`EndgameFinalReport::elapsed_label`); the panel's wording and the closing Origin report line are not | `require_published_endgame_final_report_prose` |
-| Ultima IV transfer preview | `#73`: per-field cursor positions, attributes, redraw timing and prompt wording. Missing/unreadable media is *not* gated - it takes the published retryable branch | `require_published_u4_transfer_preview_presentation` |
-| Terminal intro subflows | Story slides, Return-to-View, acknowledgements and the transfer preview are graphical screens; `--intro` has no surface for them | `crates/u5-tui/src/intro_loop.rs` |
-| Acknowledgements wipes | `#72`: the artwork and origin are published and drawn; the entry/exit slab-wipe stride and cadence are not | `require_acknowledgements_contract` (terminal only) |
+- The two rune digraph code points. `endgame.md §9.3` publishes that TH and ST
+  each occupy one character in the closing title's encoding, and that the
+  at-sign is the word space, but not which code points the digraphs use - it
+  explicitly allows an engine to supply its own mapping. `runic_line_encoding`
+  applies the published word-space rule and leaves the digraphs as two runes;
+  that is the only part of the certificate that is not exact.
+- The driver's per-step pixel pattern for the brightness entry the endgame gate
+  flare drives (`display-driver-abi.md`).
+- Any wall-clock length for the rectangle dissolve, so the engine completes it
+  as the single blocking call `#53` specifies rather than pacing it.
+- The alternate-depth (`.4`) conversion of the archives named in `#82`.
 
-Two further items are known-wrong rather than unimplemented, annotated in place
-and waiting on `#82`:
+### Engine work still outstanding
 
-- The endgame tableau's class-to-sprite bytes are drawn through the world tile
-  atlas, where `0x44` (Bard) is the tableau's own floor tile. `#56` republished
-  the class table but still does not name the index space, so the bytes are kept
-  verbatim rather than guessed at (`endgame_tableau_tile_for_class_byte`).
-- The `PARTY.SAV` virtue-standing window is eight bytes at `0x0002`, which
-  overlaps the moon counter, dungeon counter and gold field and sits before food
-  and gold rather than after them, contradicting `u4-transfer.md §5`. Left as-is
-  with the collision documented (`crates/u5-runtime/src/u4_transfer.rs`).
-
-Also unpublished, and deliberately not invented: the border-caption wedge / echo
-cap glyph primitive (the original draws a solid triangle plus a four-frame
-barber-pole cursor, not an ASCII `>`), and any wall-clock length for the
-rectangle dissolve, which the engine therefore completes as the single blocking
-call `#53` specifies rather than pacing it.
+- **Dungeon first-person wall tables** (`#81` item 5). The corridor renders as
+  an untextured wireframe; no wall/scenery table exists in `crates/`. Whether
+  the tables were published is being checked.
+- `#42`'s local-light mask cadence, and the night-time beacon gate
+  (`visibility.md §12.6`).
+- The decomp side has a cross-document contradiction sweep in flight that may
+  yet touch contracts already implemented here.
 
 ## Presentation Work (Separate From Gameplay Correctness)
 
@@ -523,13 +524,32 @@ assets, and the gaps section above lists what is still unpublished or still
 known-wrong. Nothing here should be read as pixel-exact parity for a screen it
 does not name.
 
-The gaps section is the current remaining set, split between six issues we filed
-that are awaiting a spec answer and the loud gates the engine still refuses at -
-most consequentially the endgame certificate wording, which keeps the victory
-ending deliberately unreachable. Remaining visual/audio polish is tracked under
-Milestone 3 in `TODO.md`.
+The six issues this engine filed have all been answered, and the work from them
+is in: the published chrome contract and command echoes, the two-pass border
+end-cap composite shared across ribbon interruptions and the message-window
+prompt, the `#83` local-light influence mask, the `#80` per-scene base-page
+table (which withdrew the `page = sub_map_index * 2 + floor` model - wrong for
+22 of 32 locations), and the `#82` endgame/chargen/`PARTY.SAV` work including
+the certificate. The gaps section above is what is genuinely left, and it is
+now engine work rather than missing contracts.
 
-Verified on 2026-08-22 at `cb6779f`: 2805 u5-runtime, 151 u5-bevy, 96 u5-tui
-tests pass, `cargo fmt --all -- --check` is clean, `--route-smoke` passes
-493/493 cases, `--visual-frame-suite` writes 186 PNGs and `--visual-route-suite`
-writes 1808.
+Two corrections that arrived with those answers are worth recording because
+they were wrong in the engine, not merely unimplemented: `TORCH_LIGHT_FLOOR`
+and `LIGHT_SPELL_FLOOR` were inverted (magic light is the brighter one), and
+the visual frame suite was rendering no menu window at all while the live path
+was correct - fixed structurally by driving the suite's intro state through the
+real render path rather than a parallel one. A parallel render path in a test
+harness hid a defect the harness existed to catch.
+
+The shipped palette is also **not** stock EGA: index 6 is `(170, 170, 0)` dark
+yellow, not `(170, 85, 0)` brown, and it is the only index that differs. Forty-
+two decoded sub-images contain index 6 - `END1` panel 1 is 32% of it, `STORY1`
+slide 0 25%, the `STARTSC` acknowledgements parchment 6% - so several screens
+changed hue once it was corrected. Nothing in the game reprograms the palette
+after mode setup; apparent recolouring is a restricted plane write mask or a
+display effect mutating the loaded asset data, never a palette change.
+
+Verified on 2026-08-22 at `d4fc579`: 2815 u5-runtime, 155 u5-bevy, 96 u5-tui
+tests pass, `cargo fmt --all -- --check` is clean, `--route-smoke` passes all
+cases, `--visual-frame-suite` writes 187 PNGs and `--visual-route-suite` writes
+1814. Every asset-backed run used a copy of the asset directory.

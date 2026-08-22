@@ -10,20 +10,21 @@ generated animation, cropped buffers, or diagnostic substitutes.
 
 ## Still Open
 
-Spec head `8192d67` answered every prior intro issue, so the list below is what
-is genuinely left. Everything else that used to sit here is now implemented; the
-corrections it landed under are recorded in "Reconciled With Spec Head" below.
+The `cleak/u5-spec` queue is empty - 83 closed, 0 open - so nothing on the
+intro path is waiting on a contract. What is listed here is engine work and the
+handful of details the spec states honestly that it does not publish.
 
-| Issue | What is still missing | Current engine behavior |
-|---:|---|---|
-| [#72](https://github.com/cleak/u5-spec/issues/72) | Entry/exit slab-wipe cadence for the acknowledgements screen. The artwork, its origin and the restore-on-any-key behavior are answered and implemented; only the two wipes are unpublished. | Bevy draws the credits composition directly, with no invented sweep. |
-| [#73](https://github.com/cleak/u5-spec/issues/73) | Ultima IV transfer roster/status preview: per-field cursor positions, text attributes, redraw timing, and the name-replace / gender-flip / abort / commit prompt wording. `§6` fixes the region level (eight-column slot-heading strip written to both pages, full-width lower prompt window with a three-row interior, two character-info panels at x=0 and x=168), so the gap is per-field geometry and prompt text. | Bevy reaches the preview only with a *valid* `PARTY.SAV` and then fails loudly. Missing or unreadable media is the `§3` retryable branch: message in the intro window, wait for a key, back to the menu, nothing written. |
-| [#78](https://github.com/cleak/u5-spec/issues/78) | Our own correction request for the intro/menu contracts we settled by black-box observation (menu backing art, title-tick frames, acknowledgements art, lower menu frame). Filed, private trace complete, spec pass queued - not yet answered. | The engine implements the observed behaviour; every affected path carries a `cleak/u5-spec#78` comment. See "Resolved By Runtime Observation". |
+| Item | Status |
+|---|---|
+| Ultima IV transfer preview | **The one unimplemented published contract on this path.** `#73` is closed and `u4-transfer.md §6.1`-`§6.6` publish the per-field cursor cells, the label strip, the "Found:" summary page, the media-selection behaviour, the stage machine and the finish. The graphical preview has not been built against them, so `require_published_u4_transfer_preview_presentation` still fires when a *valid* `PARTY.SAV` is present. Missing or unreadable media is not gated - it takes the published `§3` retryable branch. `§6.4`'s "Please insert the Ultima IV Player Disk" block is statically orphaned in the shipped build and must not be drawn. |
+| Acknowledgements wipe cadence | Published and implemented: 8-px stride, 18 steps, one BIOS tick per step on the part and close phases, no wait on rise and sink. `#72` is closed. |
+| Rune digraph code points | `endgame.md §9.3` publishes that TH and ST each occupy one character and that the at-sign is the word space, but not which code points the digraphs use - and explicitly allows an engine to supply its own mapping. The engine applies the published word-space rule and leaves the digraphs as two runes. |
 
-Two loud gates remain in the **terminal** shell only, and they are not spec gaps:
-story slides (`#69`/`#70`), Return-to-View (`#54`), acknowledgements (`#72`) and
-the transfer preview (`#73`) are graphical screens, and `--intro` has no surface
-to draw them on. Each refuses rather than printing a diagnostic substitute.
+Four `panic!` sites on this path are structural rather than gaps: the terminal
+shell refuses story slides, Return-to-View, acknowledgements and the transfer
+preview because they are graphical screens and `--intro` has no surface to draw
+them on, and the display driver's title-tick operation requires the caller to
+inject the `ULTIMA` bands rather than generating clean-room frames.
 
 ## Answered Or Non-Blocking For This Pass
 
@@ -97,9 +98,18 @@ needed.
   add focused tests that prove the published contract is being followed.
 - Read contracts from the `cleak/u5-spec` GitHub issues. The local checkout at
   `C:\Projects\Rust\u5-clean\u5-spec` is read-only from this workspace and is
-  stale at `9a898d1`, which predates several of the retractions above - the
-  reconciliation table would look wrong if checked against it.
+  stale at `9a898d1`, now many commits and several retractions behind spec head
+  - the reconciliation table would look wrong if checked against it.
+- The shipped palette is not stock EGA: index 6 is `(170, 170, 0)` dark yellow,
+  not `(170, 85, 0)` brown, and it is the only index that differs. `STORY1`
+  slide 0 is 25% index 6 and the `STARTSC` acknowledgements parchment 6%, so
+  both changed hue when it was corrected. Nothing reprograms the palette after
+  mode setup.
 - Intro evidence in `--visual-frame-suite`: `intro-menu`, `intro-finished-menu`,
   `intro-story-00`..`intro-story-20`, `intro-return-to-view`,
   `intro-chargen-name-prompt`, `intro-chargen-gender-prompt`,
-  `intro-chargen-gender-echo`. 186 PNGs total on 2026-08-22.
+  `intro-chargen-gender-echo`. 187 PNGs total on 2026-08-22 at `d4fc579`.
+- The suite used to render no menu window at all while the live path was
+  correct, because it built its intro state through a parallel path. It now
+  drives the real render path, so a defect of that shape cannot hide there
+  again.
