@@ -838,7 +838,7 @@ pub fn visual_frame_suite(
     for case in visual_gameplay_frame_cases() {
         let mut state = PlayState::load_scene(game_dir, case.options)?;
         if case.synthetic_combat {
-            seed_visual_suite_combat(&mut state);
+            seed_visual_suite_combat(&mut state, game_dir)?;
         }
         if let Some(configure) = case.configure {
             configure(&mut state);
@@ -1715,12 +1715,104 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
     ]
 }
 
-fn seed_visual_suite_combat(state: &mut PlayState) {
-    state.combat_active = true;
-    state.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-    state.combat_terrain[0][0] = 12;
-    state.combat_terrain[5][5] = 4;
-    state.combat_terrain[6][5] = 1;
+/// Seed the `synthetic_combat` visual-suite cases from a real combat
+/// arena instead of a hand-painted terrain block.
+///
+/// `combat.md §3` copies an 11x11 arena terrain grid to the runtime grid,
+/// `§5` writes one actor record per spawned monster, and `§8`'s
+/// Attack/Cast/Ready/Search prompts need an active combat actor. Seeding
+/// only `combat_terrain` left every combat frame in the suite with no
+/// actors at all, so the four prompt frames printed `No active combatant.`
+/// and combat presentation went unverified.
+///
+/// The party is taken from the shipped save when one is present, so the
+/// stats-panel roster matches the placed party actors with recorded
+/// names rather than synthesised ones.
+fn seed_visual_suite_combat(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    const ARENA_INDEX: usize = 0;
+    const REQUESTED_MONSTERS: u8 = 4;
+
+    adopt_visual_suite_saved_party(state, game_dir);
+
+    let bank = load_brit_cbt(game_dir)?;
+    let record = bank.record(ARENA_INDEX).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("BRIT.CBT has no outdoor arena record {ARENA_INDEX}"),
+        )
+    })?;
+    let trigger = ActiveObject {
+        type_byte: 0x40 + (ARENA_INDEX as u8) * 4,
+        tile: 0xc0,
+        x: 0,
+        y: 0,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    };
+    let setup = terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, record)?;
+    let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(ARENA_INDEX);
+    let replacement_rolls = vec![0; usize::from(REQUESTED_MONSTERS)];
+    let mut instance = terrain_combat_instance_from_setup(
+        &setup,
+        REQUESTED_MONSTERS,
+        replacement_tile,
+        &replacement_rolls,
+    )?;
+    if instance.placed_count == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "BRIT.CBT arena {ARENA_INDEX} placed no monsters for the synthetic combat suite"
+            ),
+        ));
+    }
+    state.populate_combat_party_at_placement_slots(
+        &mut instance.active_objects,
+        &mut instance.actors,
+        trigger.z,
+        &setup.placement_slots,
+        usize::from(instance.placed_count),
+    );
+    state.enter_combat_frame_with_terrain(
+        instance.active_objects,
+        instance.actors,
+        setup.terrain,
+    )?;
+
+    // `combat.md §8`: the player-command prompts bind to the active
+    // combat actor. Without this the A/C/R/S frames refuse instead of
+    // rendering their prompt.
+    let active_slot = (0..COMBAT_PARTY_ACTOR_SLOTS)
+        .find(|slot| !state.combat_actors[*slot].is_empty())
+        .ok_or_else(|| {
+            io::Error::other("synthetic combat suite placed no living party combat actor")
+        })?;
+    state.pending_combat_actor_slot = Some(active_slot);
+    state.active_player = Some(active_slot);
+    Ok(())
+}
+
+/// Replace the suite's one-member default party with the shipped save's
+/// roster when `SAVED.GAM` is readable, so combat frames show the real
+/// party formation and the panel shows recorded names. A missing or
+/// unreadable save leaves the default party in place.
+fn adopt_visual_suite_saved_party(state: &mut PlayState, game_dir: &Path) {
+    let Ok(options) = load_play_options_from_save(game_dir) else {
+        return;
+    };
+    if options.party.is_empty() {
+        return;
+    }
+    state.party = options.party;
+    state.party_names = options.party_names;
+    state.party_experience = options.party_experience;
+    state.party_stay_counters = options.party_stay_counters;
+    state.party_strengths = options.party_strengths;
+    state.party_intelligence = options.party_intelligence;
+    state.party_equipment = options.party_equipment;
+    state.party_roster = options.party_roster;
 }
 
 fn seed_visual_suite_combat_status_highlight(state: &mut PlayState) {
@@ -2455,10 +2547,16 @@ const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_x", KeyCode::KeyX),
     VisualKeyStep::key("enter", KeyCode::Enter),
 ];
+// The equip and unequip picker states now render identically in the
+// message window: the invented `(stock N)` / `(readied)` row annotations
+// were the only thing that distinguished them, and the readied marker
+// belongs to the eight-row panel (inventory.md 5), not to this text. Two
+// Enter steps in a row therefore produce the same frame, so the route
+// equips once and then exits. Unequip stays covered by the runtime test
+// `active_ready_picker_equips_and_unequips_without_turn`.
 const VISUAL_KEY_READY_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_r", KeyCode::KeyR),
     VisualKeyStep::key("digit_1", KeyCode::Digit1),
-    VisualKeyStep::key("enter", KeyCode::Enter),
     VisualKeyStep::key("enter", KeyCode::Enter),
     VisualKeyStep::key("space", KeyCode::Space),
 ];
@@ -5254,8 +5352,11 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 start: Some((62, 124)),
                 ..PlayOptions::default()
             },
+            // inventory.md 4: Z now opens the party-member selector first,
+            // so the step after it picks a member instead of pressing Enter
+            // at a prompt that ignores it.
             script: &[
-                "d", "d", "s", "s", "a", "a", "w", "w", "l6", "empty", "Z", "empty",
+                "d", "d", "s", "s", "a", "a", "w", "w", "l6", "empty", "Z", "1",
             ],
             configure: None,
         },
@@ -16186,7 +16287,9 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1780);
+        // One fewer step: the R-Ready route no longer presses Enter twice
+        // (see VISUAL_KEY_READY_STEPS).
+        assert_eq!(reports.len(), 1779);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -16194,8 +16297,8 @@ mod tests {
             assert!(report.nonblack_pixels > 0);
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1780"));
-        assert!(manifest.contains("coverage\tvisual-key-route-steps\t89"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1779"));
+        assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
         assert!(manifest.contains("review=route-step route=route-world-movement step=01 input=d"));
@@ -16208,7 +16311,7 @@ mod tests {
         assert!(manifest.contains("route-key-prompt-escape-cancel-04-escape"));
         assert!(manifest.contains("route-key-world-direction-prompts-12-key_d"));
         assert!(manifest.contains("route-key-yell-buffer-09-enter"));
-        assert!(manifest.contains("route-key-ready-picker-05-space"));
+        assert!(manifest.contains("route-key-ready-picker-04-space"));
         assert!(manifest.contains("route-key-z-stats-picker-02-space"));
         assert!(manifest.contains("route-key-use-picker-02-enter"));
         assert!(manifest.contains("route-key-mix-prompt-02-escape"));
@@ -16514,7 +16617,7 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-xit-foes-remain-02-x"));
         assert!(manifest.contains("route-doom-combat-quit-defeat-02-q"));
         assert!(manifest.contains("route-endgame-class-tableau-restoration-01-y"));
-        assert!(manifest.contains("route-britannia-extended-exploration-12-empty"));
+        assert!(manifest.contains("route-britannia-extended-exploration-12-1"));
         assert!(manifest.contains("route-castle-extended-walk-and-save-09-z"));
         assert!(manifest.contains("route-castle-extended-walk-and-rest-01-s"));
         assert!(manifest.contains("route-dungeon-extended-turn-and-search-09-s6"));

@@ -25,6 +25,11 @@ impl PlayState {
         self.handle_dungeon_key_with_inline(key, game_dir, None, None, None, None, None)
     }
 
+    /// `commands.md §5`: every dungeon command echoes its resident verb
+    /// prefix before the handler prompts or refuses. The echo is opened
+    /// speculatively — a key this mode does not handle rolls it back —
+    /// and the handler's own prompt or result is folded into it on the
+    /// way out. See [`PlayState::begin_command_echo`].
     pub fn handle_dungeon_key_with_inline(
         &mut self,
         key: char,
@@ -35,10 +40,41 @@ impl PlayState {
         inline_use_request: Option<UseItemRequest>,
         inline_look_focus: Option<DungeonLookFocus>,
     ) -> io::Result<bool> {
-        let inline_rest = inline_rest.into();
         if !matches!(self.area, Area::Dungeon { .. }) {
             return Ok(false);
         }
+        if let Some(echo) = dungeon_command_echo(key) {
+            self.begin_command_echo(echo);
+        }
+        let handled = self.handle_dungeon_key_with_inline_inner(
+            key,
+            game_dir,
+            inline_rest,
+            inline_drink,
+            inline_party_index,
+            inline_use_request,
+            inline_look_focus,
+        );
+        match &handled {
+            Ok(true) => {
+                self.commit_command_echo();
+            }
+            _ => self.abort_command_echo(),
+        }
+        handled
+    }
+
+    fn handle_dungeon_key_with_inline_inner(
+        &mut self,
+        key: char,
+        game_dir: &Path,
+        inline_rest: impl Into<InlineRestRequest>,
+        inline_drink: Option<bool>,
+        inline_party_index: Option<usize>,
+        inline_use_request: Option<UseItemRequest>,
+        inline_look_focus: Option<DungeonLookFocus>,
+    ) -> io::Result<bool> {
+        let inline_rest = inline_rest.into();
         if self
             .resolve_current_dungeon_room_trigger(Some(game_dir))?
             .is_some()
@@ -216,7 +252,7 @@ impl PlayState {
                 handled!(self.start_yell_prompt());
             }
             'z' => {
-                handled!(self.z_stats());
+                handled!(self.z_stats_command());
             }
             'j' => {
                 handled!(self.jimmy_facing_with_game_dir(Some(game_dir))?);
@@ -239,6 +275,9 @@ impl PlayState {
         self.step_dungeon_back(direction, nx, ny, scene, level, game_dir)
     }
 
+    /// `commands.md §5`: every overworld and town-family command echoes
+    /// its resident verb prefix before the handler prompts or refuses.
+    /// See [`PlayState::begin_command_echo`].
     pub fn handle_top_down_key_with_inline(
         &mut self,
         key: char,
@@ -248,10 +287,39 @@ impl PlayState {
         inline_yes_no: Option<bool>,
         inline_use_request: Option<UseItemRequest>,
     ) -> io::Result<bool> {
-        let inline_rest = inline_rest.into();
         if matches!(self.area, Area::Dungeon { .. }) {
             return Ok(false);
         }
+        if let Some(echo) = top_down_command_echo(key) {
+            self.begin_command_echo(echo);
+        }
+        let handled = self.handle_top_down_key_with_inline_inner(
+            key,
+            game_dir,
+            inline_direction,
+            inline_rest,
+            inline_yes_no,
+            inline_use_request,
+        );
+        match &handled {
+            Ok(true) => {
+                self.commit_command_echo();
+            }
+            _ => self.abort_command_echo(),
+        }
+        handled
+    }
+
+    fn handle_top_down_key_with_inline_inner(
+        &mut self,
+        key: char,
+        game_dir: &Path,
+        inline_direction: Option<Direction>,
+        inline_rest: impl Into<InlineRestRequest>,
+        inline_yes_no: Option<bool>,
+        inline_use_request: Option<UseItemRequest>,
+    ) -> io::Result<bool> {
+        let inline_rest = inline_rest.into();
         let turn_before = self.turn;
         macro_rules! handled {
             ($outcome:expr) => {{
@@ -410,7 +478,7 @@ impl PlayState {
                     handled!(self.start_yell_prompt());
                 }
                 'Z' => {
-                    handled!(self.z_stats());
+                    handled!(self.z_stats_command());
                 }
                 _ => {}
             }
@@ -493,7 +561,7 @@ impl PlayState {
                     self.start_mix_reagents_prompt()
                 }
             }
-            'z' => self.z_stats(),
+            'z' => self.z_stats_command(),
             'c' => self.start_cast_spell_prompt(),
             'n' => self.start_new_order_prompt(),
             'r' => self.start_ready_equipment(),
@@ -1425,7 +1493,9 @@ impl PlayState {
             }
             ShrinePhase::Offering => {
                 format!(
-                    "Offering at the Shrine of {}? _\nChoose 1-9; 0/Space/Esc cancels.",
+                    // cleak/u5-spec#81: offering prompt literal unpublished; the
+                    // invented instructional line is removed.
+                    "Offering at the Shrine of {}? _",
                     session.virtue.name()
                 )
             }
@@ -1767,7 +1837,7 @@ impl PlayState {
     }
 }
 
-fn high_byte_direction_from_key(key: char) -> Option<Direction> {
+pub(crate) fn high_byte_direction_from_key(key: char) -> Option<Direction> {
     let scalar = key as u32;
     if scalar > u8::MAX as u32 {
         return None;

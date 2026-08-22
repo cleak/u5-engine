@@ -12,7 +12,31 @@ pub enum PlayInputDisposition {
     Quit,
 }
 
+/// `commands.md §5` + `text-output.md §2`: dispatch one key and make sure
+/// whatever it printed reaches the scrolling message transcript. The
+/// world/town/dungeon dispatchers open their own verb echo; anything that
+/// resolves before them (or outside the command surface entirely) is
+/// recorded here as a plain continuation line.
 pub fn handle_play_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let message_before = state.message.clone();
+    let revision_before = state.message_transcript_revision();
+    let result = handle_play_key_input_inner(state, key, suffix, game_dir);
+    state.commit_command_echo();
+    if state.message_transcript_revision() == revision_before
+        && state.message != message_before
+        && !state.message.is_empty()
+    {
+        state.push_message_transcript_lines(&state.message.clone());
+    }
+    result
+}
+
+fn handle_play_key_input_inner(
     state: &mut PlayState,
     key: char,
     suffix: &str,
@@ -76,6 +100,10 @@ pub fn handle_play_key_input(
     if state.active_use.is_some() {
         return handle_active_use_key_input(state, key, suffix, game_dir);
     }
+    if state.active_party_selector.is_some() {
+        state.step_active_party_selector(key, suffix);
+        return Ok(PlayInputDisposition::Continue);
+    }
     if state.active_z_stats.is_some() {
         return Ok(handle_active_z_stats_key_input(state, key, suffix));
     }
@@ -119,6 +147,7 @@ pub fn handle_play_key_input(
         return handle_combat_cast_key_input(state, suffix, game_dir);
     }
     if key == 'C' && !suffix.is_empty() {
+        state.begin_command_echo_for(Command::Cast);
         let turn_before = state.turn;
         let outcome = state.cast_spell_from_suffix(suffix, game_dir)?;
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
@@ -128,10 +157,12 @@ pub fn handle_play_key_input(
         return Ok(handle_combat_key_input(state, key, suffix));
     }
     if key == 'Z' {
-        state.z_stats();
+        state.begin_command_echo_for(Command::ZStats);
+        state.z_stats_command();
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'M' && !suffix.is_empty() {
+        state.begin_command_echo_for(Command::Mix);
         if state
             .read_codex_urn_at_current_position(game_dir)?
             .is_none()
@@ -144,16 +175,19 @@ pub fn handle_play_key_input(
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'N' && !suffix.is_empty() {
+        state.begin_command_echo_for(Command::NewOrder);
         state.new_order_from_suffix(suffix);
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'R' && !suffix.is_empty() {
+        state.begin_command_echo_for(Command::Ready);
         let turn_before = state.turn;
         let outcome = state.ready_equipment_from_suffix(suffix);
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         return Ok(PlayInputDisposition::Continue);
     }
     if matches!(key, 'J' | 'j') {
+        state.begin_command_echo_for(Command::Jimmy);
         let turn_before = state.turn;
         let member_index = if suffix.is_empty() {
             None
@@ -165,6 +199,7 @@ pub fn handle_play_key_input(
         return Ok(PlayInputDisposition::Continue);
     }
     if matches!(key, 'Y' | 'y') && !suffix.trim().is_empty() {
+        state.begin_command_echo_for(Command::Yell);
         let turn_before = state.turn;
         let outcome = state.yell_command(non_empty_yell_word(suffix));
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
@@ -174,6 +209,7 @@ pub fn handle_play_key_input(
         return Ok(PlayInputDisposition::Quit);
     }
     if matches!(state.area, Area::Dungeon { .. }) && key == 'Q' {
+        state.begin_command_echo_for(Command::Quit);
         if let Some(confirm) = parse_inline_yes_no(suffix) {
             return Ok(state.exit_to_dos_prompt(Some(confirm)));
         }

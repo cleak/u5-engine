@@ -586,3 +586,117 @@ pub fn command_for_letter(byte: u8) -> Option<Command> {
         _ => return None,
     })
 }
+
+/// `dungeon-mode.md §4.1`: the dungeon level is presented one-based
+/// ("prints the one-based dungeon level"), while the runtime stores the
+/// zero-based Z index. Every player-facing level statement goes through
+/// this helper so the two numbering schemes never mix.
+pub const fn dungeon_display_level(level: u8) -> u16 {
+    level as u16 + 1
+}
+
+/// How a handler's own prompt or result joins the verb echo that
+/// `commands.md §5` requires the dispatcher to print before it runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandEchoJoin {
+    /// The handler continues the echoed line. Observed for the
+    /// direction-prompting family: `Look-` followed by the resolved
+    /// direction result renders as one line, `Look-Pass`.
+    SameLine,
+    /// The handler's prompt or result starts the next transcript line.
+    /// Observed for `Use item` followed by the `Item:` prompt and for
+    /// `Z-stats...` followed by the `Player:` prompt.
+    NextLine,
+}
+
+/// One resident verb echo: the literal the dispatcher writes into the
+/// message transcript, plus how the handler's own output joins it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CommandEcho {
+    pub text: &'static str,
+    pub join: CommandEchoJoin,
+}
+
+impl Command {
+    /// `commands.md §5`: the literal verb echo the dispatcher prints
+    /// before invoking the handler or refusal path, and how the
+    /// handler's output continues it.
+    ///
+    /// Directly observed forms: `Pass`, `Look-`, `Attack-`, `Use item`,
+    /// `Z-stats...`. Where the literal is not observed this falls back
+    /// to [`Command::verb_prefix`] plus the punctuation convention of
+    /// the command's class — a trailing `-` for the commands that
+    /// immediately prompt for a direction, nothing otherwise. Those
+    /// fallbacks are marked `#81` below; `cleak/u5-spec#81` asks for the
+    /// per-command literal echo strings.
+    ///
+    /// [`Command::UnassignedRefusal`] echoes the stock `What?` refusal
+    /// observed for an invalid key; its handler prints the same literal,
+    /// which the transcript folds back into the one line.
+    pub const fn echo(self) -> Option<CommandEcho> {
+        use CommandEchoJoin::{NextLine, SameLine};
+        let (text, join) = match self {
+            // Observed in the reference message-window transcripts.
+            Command::Pass => ("Pass", SameLine),
+            Command::Look => ("Look-", SameLine),
+            Command::Attack => ("Attack-", SameLine),
+            Command::Use => ("Use item", NextLine),
+            Command::ZStats => ("Z-stats...", NextLine),
+            // #81: direction-prompting class; punctuation follows the
+            // observed `Look-`/`Attack-` convention, verb from §5.
+            Command::Fire => ("Fire-", SameLine),
+            Command::Get => ("Get-", SameLine),
+            Command::Klimb => ("Klimb-", SameLine),
+            Command::Open => ("Open-", SameLine),
+            Command::Push => ("Push-", SameLine),
+            Command::Search => ("Search-", SameLine),
+            Command::Talk => ("Talk-", SameLine),
+            // #81: no direction prompt, so no trailing dash; verb from §5.
+            Command::Board => ("Board", NextLine),
+            Command::Cast => ("Cast", NextLine),
+            Command::Enter => ("Enter", NextLine),
+            Command::HoleUp => ("Hole up", NextLine),
+            Command::Ignite => ("Ignite", NextLine),
+            Command::Jimmy => ("Jimmy", NextLine),
+            Command::Mix => ("Mix", NextLine),
+            Command::NewOrder => ("New order", NextLine),
+            Command::Quit => ("Quit", NextLine),
+            Command::Ready => ("Ready", NextLine),
+            Command::View => ("View", NextLine),
+            Command::Xit => ("X-it", NextLine),
+            Command::Yell => ("Yell", NextLine),
+            // Observed: an invalid key echoes the stock refusal.
+            Command::UnassignedRefusal => ("What?", NextLine),
+        };
+        Some(CommandEcho { text, join })
+    }
+}
+
+/// `commands.md §5` + observation: top-down movement echoes the cardinal
+/// name of the step (`North`, `South`, `East`, `West`). Diagonal steps
+/// have no observed echo literal, so they get none rather than an
+/// invented one (`cleak/u5-spec#81`).
+pub const fn movement_echo(direction: Direction) -> Option<CommandEcho> {
+    let text = match direction {
+        Direction::North => "North",
+        Direction::South => "South",
+        Direction::East => "East",
+        Direction::West => "West",
+        Direction::NorthEast
+        | Direction::NorthWest
+        | Direction::SouthEast
+        | Direction::SouthWest => return None,
+    };
+    Some(CommandEcho {
+        text,
+        join: CommandEchoJoin::SameLine,
+    })
+}
+
+/// Observed in the dungeon message window: a forward step echoes
+/// `Advance`. The back-step and the two turn keys have no observed
+/// literal, so they emit no echo (`cleak/u5-spec#81`).
+pub const DUNGEON_ADVANCE_ECHO: CommandEcho = CommandEcho {
+    text: "Advance",
+    join: CommandEchoJoin::SameLine,
+};
