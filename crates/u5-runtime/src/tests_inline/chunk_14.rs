@@ -1594,17 +1594,20 @@
         let panel = state.render_stats_panel_view();
         let lines = panel.lines().collect::<Vec<_>>();
 
-        assert_eq!(lines.len(), STATS_PANEL_PARTY_ROWS + 5);
-        assert!(lines.iter().all(|line| line.chars().count() == STATS_PANEL_WIDTH));
-        assert!(lines[1].contains("Avatar"));
-        assert!(lines[2].contains("Julia"));
-        assert!(lines[2].contains(">  87P"));
-        assert!(lines[7].contains("Food"));
-        assert!(lines[7].contains("123"));
-        assert!(lines[8].contains("Gold"));
-        assert!(lines[8].contains("456"));
-        assert!(lines[9].contains("05-18"));
-        assert!(lines[10].contains("Sky"));
+        // Six roster rows, then the shared food/gold row and the
+        // centred calendar row. There is no header row and no sky row:
+        // the sun/moon strip lives in the top border, not the panel.
+        assert_eq!(lines.len(), STATS_PANEL_PARTY_ROWS + 2);
+        assert!(
+            lines
+                .iter()
+                .all(|line| line.chars().count() == STATS_PANEL_WIDTH)
+        );
+        assert!(lines[0].contains("Avatar"));
+        assert!(lines[1].contains("Julia"));
+        assert!(lines[1].contains(">  87P"));
+        assert_eq!(lines[6].trim_end(), "F:123     G:456");
+        assert_eq!(lines[7].trim(), "5-18-012");
     }
 
     #[test]
@@ -1614,14 +1617,14 @@
 
         let visible_panel = state.render_stats_panel_frame();
 
-        assert!(visible_panel.lines().nth(1).unwrap().contains(">"));
+        assert!(visible_panel.lines().next().unwrap().contains(">"));
         assert_eq!(state.active_player, None);
 
         state.active_player = Some(0);
         state.party[0].status = b'S';
         let sleeping_panel = state.render_stats_panel_frame();
 
-        assert!(!sleeping_panel.lines().nth(1).unwrap().contains(">"));
+        assert!(!sleeping_panel.lines().next().unwrap().contains(">"));
         assert_eq!(state.active_player, Some(0));
     }
 
@@ -1633,26 +1636,44 @@
 
         let system = render_play_text_window_system(&state, state.active_player, Some("job"));
 
+        // The message window is the right-hand column below the stats
+        // boxes, and the live input line is its own bottom row: there
+        // is no bottom-left prompt window and no ASCII "> " prefix
+        // (column 24 carries the ribbon end-cap sprite instead).
         assert_eq!(system.active_window_index(), MAIN_TEXT_WINDOW_INDEX);
-        assert_eq!(system.cell(0, 0).unwrap().byte, b'H');
+        assert_eq!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_TOP)
+                .unwrap()
+                .byte,
+            b'H'
+        );
+        assert!(system.cell(0, 0).is_none());
         assert_eq!(
             system
                 .region_rows(
                     STATS_PANEL_TEXT_LEFT,
-                    0,
+                    STATS_ROSTER_TOP,
                     STATS_PANEL_TEXT_RIGHT,
-                    0,
+                    STATS_ROSTER_TOP,
                     b' '
                 )
                 .first()
                 .unwrap()
                 .trim_end(),
-            "STATS"
+            "Avatar   >  60G"
         );
-        assert_eq!(system.cell(STATS_PANEL_TEXT_LEFT, 1).unwrap().byte, b'A');
-        assert_eq!(system.cell(0, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'>');
-        assert_eq!(system.cell(1, TEXT_SCREEN_ROWS - 2).unwrap().byte, b' ');
-        assert_eq!(system.cell(2, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'j');
+        assert_eq!(
+            system.cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP).unwrap().byte,
+            b'A'
+        );
+        assert_eq!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT + 1, MESSAGE_WINDOW_BOTTOM)
+                .unwrap()
+                .byte,
+            b'j'
+        );
     }
 
     #[test]
@@ -1670,13 +1691,19 @@
 
         let system = render_play_text_window_system(&state, state.active_player, None);
         let main = system
-            .region_rows(0, 0, MESSAGE_TEXT_WINDOW_RIGHT, 5, b' ')
+            .region_rows(
+                MESSAGE_WINDOW_LEFT,
+                MESSAGE_WINDOW_TOP,
+                MESSAGE_WINDOW_RIGHT,
+                MESSAGE_WINDOW_BOTTOM,
+                b' ',
+            )
             .join("\n");
 
         assert_eq!(system.active_window_index(), TALK_SHOP_TEXT_WINDOW_INDEX);
         assert_eq!(
             system.window(TALK_SHOP_TEXT_WINDOW_INDEX).unwrap().top_left_x,
-            0
+            MESSAGE_WINDOW_LEFT
         );
         assert_eq!(
             system
@@ -1685,23 +1712,29 @@
                 .bottom_right_x,
             MESSAGE_TEXT_WINDOW_RIGHT
         );
-        assert!(system.cell(0, 0).is_none(), "Talk entry newline leaves row 0 untouched");
-        assert!(main.contains("Iolo"), "{main}");
-        assert!(main.contains("Item 1 costs 42 gold"), "{main}");
-        assert!(main.contains("Mace costs 42 gold."), "{main}");
+        assert!(
+            system.cell(MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_TOP).is_none(),
+            "Talk entry newline leaves the window's first row untouched"
+        );
+        // The window is fifteen columns wide, so the modal text wraps;
+        // compare with whitespace squeezed out.
+        let squished: String = main.chars().filter(|ch| !ch.is_whitespace()).collect();
+        assert!(squished.contains("Iolo"), "{main}");
+        assert!(squished.contains("Item1costs42gold"), "{main}");
+        assert!(squished.contains("Macecosts42gold."), "{main}");
         assert_eq!(
             system
                 .region_rows(
                     STATS_PANEL_TEXT_LEFT,
-                    0,
+                    STATS_ROSTER_TOP,
                     STATS_PANEL_TEXT_RIGHT,
-                    0,
+                    STATS_ROSTER_TOP,
                     b' '
                 )
                 .first()
                 .unwrap()
                 .trim_end(),
-            "STATS"
+            "Avatar      60G"
         );
     }
 
@@ -1773,16 +1806,34 @@
 
         paint_prompt_text_window_with_cursor(&mut system, "job", Some(4));
 
+        // The prompt is the message window's bottom row; column 24 is
+        // reserved for the ribbon end-cap sprite so the echo starts at
+        // column 25.
         assert_eq!(system.active_window_index(), PROMPT_TEXT_WINDOW_INDEX);
-        assert_eq!(system.cell(0, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'>');
-        assert_eq!(system.cell(2, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'j');
-        assert_eq!(system.cell(5, TEXT_SCREEN_ROWS - 2).unwrap().byte, 4);
-        assert_eq!(system.active_cursor(), (5, 0));
+        assert_eq!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT + 1, MESSAGE_WINDOW_BOTTOM)
+                .unwrap()
+                .byte,
+            b'j'
+        );
+        assert_eq!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT + 4, MESSAGE_WINDOW_BOTTOM)
+                .unwrap()
+                .byte,
+            4
+        );
+        assert_eq!(system.active_cursor(), (4, 0));
 
         paint_prompt_text_window_with_cursor(&mut system, "job", None);
 
-        assert!(system.cell(5, TEXT_SCREEN_ROWS - 2).is_none());
-        assert_eq!(system.active_cursor(), (5, 0));
+        assert!(
+            system
+                .cell(MESSAGE_WINDOW_LEFT + 4, MESSAGE_WINDOW_BOTTOM)
+                .is_none()
+        );
+        assert_eq!(system.active_cursor(), (4, 0));
     }
 
     #[test]
@@ -1792,7 +1843,13 @@
 
         let visible_frame = state.render_text_window_frame(None);
 
-        assert!(visible_frame.lines().nth(1).unwrap().contains(">"));
+        assert!(
+            visible_frame
+                .lines()
+                .nth(usize::from(STATS_ROSTER_TOP))
+                .unwrap()
+                .contains(">")
+        );
         assert_eq!(state.active_player, None);
 
         state.active_player = Some(0);
@@ -1831,17 +1888,17 @@
             state
                 .render_stats_panel_view()
                 .lines()
-                .nth(1)
+                .next()
                 .unwrap()
                 .chars()
-                .nth(10),
+                .nth(STATS_PANEL_NAME_CELLS),
             Some(' ')
         );
         let system = render_play_text_window_system(&state, None, None);
         for offset in 0..STATS_PANEL_WIDTH {
             assert!(
                 system
-                    .cell(STATS_PANEL_TEXT_LEFT + offset as u8, 1)
+                    .cell(STATS_PANEL_TEXT_LEFT + offset as u8, STATS_ROSTER_TOP)
                     .unwrap()
                     .inverse,
                 "party row cell {offset} should be inverse-highlighted"
@@ -1849,7 +1906,7 @@
         }
         assert!(
             !system
-                .cell(STATS_PANEL_TEXT_LEFT, 2)
+                .cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP + 1)
                 .map(|cell| cell.inverse)
                 .unwrap_or(false)
         );
@@ -1858,12 +1915,14 @@
         let casting_overlay = stats_panel_combat_row_overlay(&state, 0);
 
         assert_eq!(casting_overlay.status_override, Some(b'C'));
-        assert!(state
-            .render_stats_panel_view()
-            .lines()
-            .nth(1)
-            .unwrap()
-            .ends_with('C'));
+        assert!(
+            state
+                .render_stats_panel_view()
+                .lines()
+                .next()
+                .unwrap()
+                .ends_with('C')
+        );
     }
 
     #[test]
@@ -1884,13 +1943,18 @@
         ]);
 
         let panel = state.render_stats_panel_view();
-        let row = panel.lines().nth(1).unwrap();
+        let row = panel.lines().next().unwrap();
 
         assert!(row.contains('>'));
+        let cursor_column = STATS_PANEL_TEXT_LEFT + STATS_PANEL_NAME_CELLS as u8;
+        let last_column = STATS_PANEL_TEXT_LEFT + STATS_PANEL_WIDTH as u8 - 1;
         let system = render_play_text_window_system(&state, state.active_player, None);
-        assert_eq!(system.cell(STATS_PANEL_TEXT_LEFT + 10, 1).unwrap().byte, b'>');
-        assert!(system.cell(STATS_PANEL_TEXT_LEFT + 10, 1).unwrap().inverse);
-        assert!(system.cell(STATS_PANEL_TEXT_LEFT + 15, 1).unwrap().inverse);
+        assert_eq!(
+            system.cell(cursor_column, STATS_ROSTER_TOP).unwrap().byte,
+            b'>'
+        );
+        assert!(system.cell(cursor_column, STATS_ROSTER_TOP).unwrap().inverse);
+        assert!(system.cell(last_column, STATS_ROSTER_TOP).unwrap().inverse);
     }
 
     #[test]
@@ -1924,8 +1988,18 @@
         assert!(stats_panel_combat_row_overlay(&state, 1).highlighted);
 
         let system = render_play_text_window_system(&state, None, None);
-        assert!(!system.cell(STATS_PANEL_TEXT_LEFT, 1).unwrap().inverse);
-        assert!(system.cell(STATS_PANEL_TEXT_LEFT, 2).unwrap().inverse);
+        assert!(
+            !system
+                .cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP)
+                .unwrap()
+                .inverse
+        );
+        assert!(
+            system
+                .cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP + 1)
+                .unwrap()
+                .inverse
+        );
     }
 
     #[test]
@@ -1941,11 +2015,10 @@
         };
 
         let panel = state.render_stats_panel_view();
-        let middle = panel.lines().nth(8).unwrap();
+        let middle = panel.lines().nth(STATS_PANEL_PARTY_ROWS).unwrap();
 
-        assert!(middle.contains("Ship hull"));
-        assert!(middle.contains("42"));
-        assert!(!middle.contains("999"));
+        assert!(middle.contains("H:42"), "{middle}");
+        assert!(!middle.contains("999"), "{middle}");
     }
 
     #[test]

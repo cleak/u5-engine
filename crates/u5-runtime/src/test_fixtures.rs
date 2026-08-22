@@ -497,7 +497,11 @@ pub fn debug_game_dir() -> PathBuf {
     // blank (all-zero) fixture would silently pass the size check
     // but produce empty rendered pixels, breaking downstream
     // tests that assert on visible chargen / menu output.
-    fs::write(dir.join(crate::IBM_CH_FILE), vec![0xffu8; crate::CH_FONT_LEN]).unwrap();
+    fs::write(
+        dir.join(crate::IBM_CH_FILE),
+        vec![0xffu8; crate::CH_FONT_LEN],
+    )
+    .unwrap();
     fs::write(
         dir.join(crate::RUNES_CH_FILE),
         vec![0xffu8; crate::CH_FONT_LEN],

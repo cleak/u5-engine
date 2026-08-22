@@ -826,7 +826,10 @@ fn cli_intro_non_j_first_key_does_not_take_journey_onward_path() {
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("Intro Menu"), "menu must follow non-J first key");
+    assert!(
+        stdout.contains("Intro Menu"),
+        "menu must follow non-J first key"
+    );
     assert!(
         !stdout.contains("Disk read failed for SAVED.GAM"),
         "non-J first key must not attempt the Journey Onward load: {stdout}"
@@ -1033,7 +1036,10 @@ fn cli_binary_play_script_confirmed_save_round_trips_to_temp_save() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("Script mode: 3 command(s)."));
-    assert!(stdout.contains("Saving... Done"));
+    // The message window is fifteen columns wide, so the confirmation
+    // wraps across two rows.
+    let squished: String = stdout.chars().filter(|ch| !ch.is_whitespace()).collect();
+    assert!(squished.contains("Yes.Saving...Done."), "{stdout}");
     assert!(String::from_utf8(output.stderr).unwrap().is_empty());
 
     let reloaded = load_play_options_from_save(&dir).unwrap();

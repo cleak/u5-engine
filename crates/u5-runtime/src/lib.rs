@@ -37,6 +37,7 @@ pub mod endgame_cinematic;
 pub mod endmsg_io;
 pub mod equipment;
 pub mod fonts_io;
+pub mod gameplay_chrome;
 pub mod graphics;
 pub mod graphics_io;
 pub mod hidden_treasures;
@@ -57,6 +58,7 @@ pub mod main_loop;
 pub mod map_decoders;
 pub mod map_io;
 pub mod menu_dispatch;
+pub mod message_window;
 pub mod misc_tables;
 pub mod misc_tables_io;
 pub mod miscmsg_io;
@@ -255,6 +257,7 @@ pub use endmsg_io::{
 };
 pub use equipment::*;
 pub use fonts_io::*;
+pub use gameplay_chrome::*;
 pub use graphics::*;
 pub use graphics_io::*;
 pub use hidden_treasures::{
@@ -292,9 +295,8 @@ pub use intro::{
     INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
     INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
     INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, IntroMenuAction,
-    MISCMAPS_CUTSCENE_RECORD_BYTES,
-    MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE, MISCMAPS_CUTSCENE_ROWS,
-    MISCMAPS_CUTSCENE_SECTION_BYTES, MISCMAPS_CUTSCENE_SECTION_OFFSET,
+    MISCMAPS_CUTSCENE_RECORD_BYTES, MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE,
+    MISCMAPS_CUTSCENE_ROWS, MISCMAPS_CUTSCENE_SECTION_BYTES, MISCMAPS_CUTSCENE_SECTION_OFFSET,
     MISCMAPS_CUTSCENE_VISIBLE_COLUMNS, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
     MISCMAPS_RTV_STRIP_ROW_STRIDE, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MiscmapsCutsceneMap, RTV_COMMAND_COUNT,
@@ -385,6 +387,7 @@ pub use main_loop::{
 };
 pub use map_decoders::*;
 pub use map_io::*;
+pub use message_window::*;
 pub use misc_tables::*;
 pub use misc_tables_io::*;
 pub use miscmsg_io::{
@@ -516,7 +519,8 @@ pub use stats_panel::{
     INN_PICKUP_REGISTER_BOTTOM, INN_PICKUP_REGISTER_FRAME_RIGHT, INN_PICKUP_REGISTER_INITIAL_RIGHT,
     INN_PICKUP_REGISTER_LEFT, INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX, INN_PICKUP_REGISTER_TOP,
     MAIN_TEXT_WINDOW_INDEX, MESSAGE_TEXT_WINDOW_RIGHT, PROMPT_TEXT_WINDOW_INDEX,
-    STATS_PANEL_PARTY_ROWS, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
+    STATS_PANEL_HP_CELLS, STATS_PANEL_NAME_CELLS, STATS_PANEL_PARTY_ROWS, STATS_PANEL_TEXT_BOTTOM,
+    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_TOP,
     STATS_PANEL_TEXT_WINDOW_INDEX, STATS_PANEL_WIDTH, StatsPanelCombatRowOverlay,
     TALK_SHOP_TEXT_WINDOW_INDEX, configure_play_text_windows, configure_talk_shop_text_window,
     paint_inn_pickup_register_text_window, paint_message_text_window, paint_prompt_text_window,
@@ -716,4 +720,5 @@ mod tests {
     include!("tests_inline/chunk_24.rs");
     include!("tests_inline/chunk_25.rs");
     include!("tests_inline/chunk_26.rs");
+    include!("tests_inline/chunk_27.rs");
 }
