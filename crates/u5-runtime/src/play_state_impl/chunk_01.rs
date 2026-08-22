@@ -717,10 +717,13 @@ impl PlayState {
             sail_cadence: 0,
             sail_stall_pending: false,
             turn: 0,
-            // cleak/u5-spec#81: dungeon-mode.md publishes no entry
-            // narration, so nothing player-facing is printed here. The
-            // coordinate report the frame/route suites used lives on the
-            // debug-only `debug_dungeon_entry_report` helper instead.
+            // cleak/u5-spec#81: dungeon-mode.md publishes no dungeon-entry
+            // narration, so nothing player-facing is printed here. The old
+            // `Entered <name> (<name>) level N at (x, y).` line exposed raw
+            // coordinates and a zero-based level; no test or suite depended
+            // on it, so it is dropped rather than moved behind a debug flag.
+            // `PlayState::area_status_label` still reports the one-based
+            // level for diagnostics.
             message: String::new(),
             message_transcript: Vec::new(),
             message_transcript_revision: 0,
