@@ -57,6 +57,8 @@ pub mod main_loop;
 pub mod map_decoders;
 pub mod map_io;
 pub mod menu_dispatch;
+pub mod message_transcript;
+pub use message_transcript::{dungeon_command_echo, top_down_command_echo};
 pub mod misc_tables;
 pub mod misc_tables_io;
 pub mod miscmsg_io;
@@ -188,15 +190,16 @@ pub use combat_setup::*;
 pub use combat_stats::*;
 pub use commands::{
     BRITANNIA_CHUNK_MAP_COLUMNS, BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE, BRITANNIA_CHUNK_MAP_ROWS,
-    Command, DEATH_VISION_OBJECT_CLASS, DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW,
-    LOCAL_VIEW_CELL_PIXEL_SCALE, LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome,
-    PUSHABLE_CANNON_FLOOR_STAMP, PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily,
-    TOWN_CANNON_TILE_FIRST, TOWN_CANNON_TILE_LAST, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
+    Command, CommandEcho, CommandEchoJoin, DEATH_VISION_OBJECT_CLASS, DEATH_VISION_ROLL_HIGH,
+    DEATH_VISION_ROLL_LOW, DUNGEON_ADVANCE_ECHO, LOCAL_VIEW_CELL_PIXEL_SCALE,
+    LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome, PUSHABLE_CANNON_FLOOR_STAMP,
+    PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily, TOWN_CANNON_TILE_FIRST,
+    TOWN_CANNON_TILE_LAST, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
     WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE,
     YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_for_letter,
-    death_vision_object_class, local_view_class_for_tile, new_order_outcome,
-    new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile, pushable_tile_family,
-    sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
+    death_vision_object_class, dungeon_display_level, local_view_class_for_tile, movement_echo,
+    new_order_outcome, new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile,
+    pushable_tile_family, sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
     surface_wishing_well_look_tile, town_cannon_tile_fire_direction, town_fountain_drink_accepts,
     view_command_outcome, wishing_well_grant_scene, wishing_well_wish, wishing_well_wish_accepted,
 };
@@ -286,12 +289,18 @@ pub use input_codes::{
 };
 pub use input_dispatch::{PlayInputDisposition, handle_play_key_input};
 pub use intro::{
-    BRITISH_PTH_PEN_ORIGINS, EgaTitleTickLayout, INTRO_MENU_FRAME_ANCHOR_COLUMN,
-    INTRO_MENU_FRAME_ANCHOR_ROW, INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT,
-    INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT, INTRO_MENU_FRAME_GLYPH_EDGE,
-    INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
-    INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
-    INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, IntroMenuAction,
+    BRITISH_PTH_PEN_ORIGINS, INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,
+    INTRO_MENU_COPYRIGHT_CAPTION_ROW, INTRO_MENU_FRAME_ANCHOR_COLUMN, INTRO_MENU_FRAME_ANCHOR_ROW,
+    INTRO_MENU_FRAME_BORDER_COLOR, INTRO_MENU_FRAME_BOTTOM_RULE_Y, INTRO_MENU_FRAME_BOTTOM_Y,
+    INTRO_MENU_FRAME_CORNER_PROFILE, INTRO_MENU_FRAME_HEIGHT_CELLS,
+    INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y, INTRO_MENU_FRAME_INTERIOR_COLOR,
+    INTRO_MENU_FRAME_INTERIOR_LEFT_X, INTRO_MENU_FRAME_INTERIOR_RIGHT_X,
+    INTRO_MENU_FRAME_INTERIOR_TOP_Y, INTRO_MENU_FRAME_OUTLINE_COLOR,
+    INTRO_MENU_FRAME_OUTLINE_LEFT_X, INTRO_MENU_FRAME_OUTLINE_RIGHT_X, INTRO_MENU_FRAME_RULE_X0,
+    INTRO_MENU_FRAME_RULE_X1, INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_TOP_Y,
+    INTRO_MENU_FRAME_WIDTH_CELLS, INTRO_MENU_SELECT_CAPTION_COLUMN,
+    INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH, INTRO_MENU_SELECT_CAPTION_PREFIX,
+    INTRO_MENU_SELECT_CAPTION_ROW, INTRO_MENU_SELECT_CAPTION_SUFFIX, IntroMenuAction,
     MISCMAPS_CUTSCENE_RECORD_BYTES, MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE,
     MISCMAPS_CUTSCENE_ROWS, MISCMAPS_CUTSCENE_SECTION_BYTES, MISCMAPS_CUTSCENE_SECTION_OFFSET,
     MISCMAPS_CUTSCENE_VISIBLE_COLUMNS, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
@@ -302,11 +311,13 @@ pub use intro::{
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
     TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
     TITLE_TICK_FRAME_SET_BYTES, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y,
-    TITLE_TICK_PALETTE_CYCLE, TitleBitAsset, TitleBitPlacement, TitleTickFrameSet,
-    authored_title_tick_frames, clean_room_authored_title_tick_frames, intro_menu_action,
-    load_miscmaps_cutscene_map, parse_ega_drv_title_tick_frames, parse_miscmaps_cutscene_map_file,
-    placeholder_title_tick_frames, require_acknowledgements_contract,
-    require_miscmaps_cutscene_map, title_tick_next_frame, title_tick_palette_indices,
+    TITLE_TICK_SOURCE_MAX_HEIGHT, TITLE_TICK_SOURCE_WIDTH, TITLE_TICK_SOURCE_X, TitleBitAsset,
+    TitleBitPlacement, TitleTickFrameSet, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH,
+    ULTIMA_PANEL_STEM, ULTIMA_TITLE_TICK_FIRST_SLOT, intro_menu_action,
+    intro_menu_frame_border_start_column, load_miscmaps_cutscene_map, load_ultima_logo_panel,
+    load_ultima_title_tick_frames, parse_miscmaps_cutscene_map_file,
+    parse_ultima_title_tick_frames, placeholder_title_tick_frames,
+    require_acknowledgements_contract, require_miscmaps_cutscene_map, title_tick_next_frame,
 };
 pub use intro_preflourish::{
     IntroFontSlot, IntroFontSlots, JOURNEY_ONWARD_SHORTCUT_BANNER, PRE_FLOURISH_TEXT_WINDOW_INDEX,
@@ -442,8 +453,9 @@ pub use play_state_impl::{
     town_free_roaming_pen_tile_blocks,
 };
 pub use play_state_struct::{
-    CombatPotionPresentation, CombatPotionPresentationKind, PlayState, ViewOverlay,
-    ViewOverlayKind, ViewOverlayMode, WhitePotionSweep, WorldOverlayCache, WorldReturn,
+    CombatPotionPresentation, CombatPotionPresentationKind, MESSAGE_TRANSCRIPT_CAPACITY,
+    MessageEntry, PlayState, ViewOverlay, ViewOverlayKind, ViewOverlayMode, WhitePotionSweep,
+    WorldOverlayCache, WorldReturn,
 };
 pub use predicates::*;
 pub use prng::*;

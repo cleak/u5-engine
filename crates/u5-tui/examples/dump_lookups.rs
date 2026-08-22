@@ -18,7 +18,7 @@ fn main() {
         let walk = is_tile_walkable(tid, None);
         let water = is_water_tile(tid);
         let mtn = is_mountain_tile(tid);
-        let sight = surface_tile_blocks_sight(tid);
+        let sight = tile_blocks_sight_propagation(tid);
         println!(
             "{tid:3}  0x{tid:02x}  {:4} {:5} {:4} {:5}  {desc}",
             if walk { "yes" } else { "no" },

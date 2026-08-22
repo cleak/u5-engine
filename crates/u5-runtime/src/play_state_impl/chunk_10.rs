@@ -339,7 +339,7 @@ impl PlayState {
         y: usize,
     ) -> Option<&ActiveObject> {
         self.active_objects.iter().skip(1).find(|object| {
-            self.object_occupies(**object, x, y) && surface_tile_blocks_sight(object.tile)
+            self.object_occupies(**object, x, y) && tile_blocks_sight_propagation(object.tile)
         })
     }
 

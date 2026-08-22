@@ -230,7 +230,7 @@
         );
         assert_eq!(state.turn, 0);
         assert_eq!(state.grid[32 + 1], 55);
-        assert!(state.message.contains("Z-stats:"));
+        assert!(state.message.contains("Player:"));
         assert!(!state.message.contains("trap door"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -652,7 +652,7 @@
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.turn, 0);
         assert_eq!(state.grid[32 + 1], 55);
-        assert!(state.message.contains("Z-stats:"));
+        assert!(state.message.contains("Player:"));
         assert!(!state.message.contains("town exit tile"));
         let _ = fs::remove_dir_all(dir);
     }

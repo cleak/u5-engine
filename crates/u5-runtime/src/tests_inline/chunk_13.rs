@@ -8179,31 +8179,6 @@ fn return_to_view_published_wait_cadence_constants() {
 }
 
 #[test]
-fn title_tick_palette_cycle_matches_published_per_frame_colors() {
-    // `cleak/u5-spec#52`: four-frame palette cycle pairs a bright
-    // EGA index over a dim EGA index. Frames 0..3 cycle the four
-    // published combinations.
-    assert_eq!(title_tick_palette_indices(0), (0x0E, 0x06));
-    assert_eq!(title_tick_palette_indices(1), (0x0C, 0x04));
-    assert_eq!(title_tick_palette_indices(2), (0x0E, 0x04));
-    assert_eq!(title_tick_palette_indices(3), (0x0C, 0x06));
-    // The cycle wraps mod-four.
-    assert_eq!(title_tick_palette_indices(4), (0x0E, 0x06));
-    assert_eq!(
-        title_tick_palette_indices(255),
-        title_tick_palette_indices(3)
-    );
-    // The published cycle table has exactly four entries.
-    assert_eq!(TITLE_TICK_PALETTE_CYCLE.len(), 4);
-    // Every entry uses a fire-family index (0x4 red, 0x6 brown,
-    // 0xC light red, 0xE light yellow) per the spec table.
-    for (bright, dim) in TITLE_TICK_PALETTE_CYCLE {
-        assert!(matches!(bright, 0x0C | 0x0E));
-        assert!(matches!(dim, 0x04 | 0x06));
-    }
-}
-
-#[test]
 fn title_tick_frame_set_requires_complete_ega_palette_frames() {
     let short = TitleTickFrameSet::from_palette_indices(
         vec![0; TITLE_TICK_FRAME_SET_BYTES - 1],
@@ -8226,22 +8201,7 @@ fn title_tick_frame_set_requires_complete_ega_palette_frames() {
 }
 
 #[test]
-fn authored_title_tick_frames_refuse_generated_clean_room_fallback() {
-    let result = std::panic::catch_unwind(|| {
-        let _ = authored_title_tick_frames();
-    });
-
-    let payload = result.expect_err("generated title-tick frames must panic");
-    let message = payload
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| payload.downcast_ref::<&str>().copied())
-        .expect("title-tick panic payload must be a string");
-    assert!(message.contains("forbidden fallback"), "{message}");
-}
-
-#[test]
-fn display_surface_title_tick_draws_authored_frame_and_advances() {
+fn display_surface_title_tick_draws_source_band_at_x16_and_advances() {
     let mut bytes = vec![0; TITLE_TICK_FRAME_SET_BYTES];
     for frame in 0..TITLE_TICK_FRAME_COUNT as usize {
         let start = frame * TITLE_TICK_FRAME_PIXELS;
@@ -8268,19 +8228,32 @@ fn display_surface_title_tick_draws_authored_frame_and_advances() {
         surface.read_pixel(54, TITLE_TICK_FRAME_Y as usize - 1),
         Some(0x03)
     );
-    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(1));
+    // `cleak/u5-spec#78`: the 288-wide source band lands at x = 16;
+    // the 16 columns at each side of the published 320-wide
+    // rectangle are cleared to index 0.
+    let band_x = TITLE_TICK_SOURCE_X as usize;
+    let band_last_x = band_x + TITLE_TICK_SOURCE_WIDTH as usize - 1;
+    let band_last_y = (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize;
+    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(0));
     assert_eq!(
-        surface.read_pixel(
-            319,
-            (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize
-        ),
+        surface.read_pixel(band_x - 1, TITLE_TICK_FRAME_Y as usize),
+        Some(0)
+    );
+    assert_eq!(
+        surface.read_pixel(band_x, TITLE_TICK_FRAME_Y as usize),
         Some(1)
     );
+    assert_eq!(surface.read_pixel(band_last_x, band_last_y), Some(1));
+    assert_eq!(surface.read_pixel(band_last_x + 1, band_last_y), Some(0));
+    assert_eq!(surface.read_pixel(319, band_last_y), Some(0));
     assert_eq!(surface.title_tick_frame(), 1);
 
     surface.advance_title_tick();
 
-    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(2));
+    assert_eq!(
+        surface.read_pixel(band_x, TITLE_TICK_FRAME_Y as usize),
+        Some(2)
+    );
     assert_eq!(surface.title_tick_frame(), 2);
 }
 
@@ -20821,6 +20794,53 @@ fn wrap_text_terminates_on_nul_and_handles_hard_newlines() {
 }
 
 #[test]
+fn wrap_text_moves_a_trailing_overlong_word_to_the_next_line() {
+    // text-output.md §5: "When the next character would carry the line past
+    // the window's right edge, the printer backs up to the most recent soft
+    // break". The final word of a string has no following space, so the
+    // width test cannot live on the space path: `Combat status highlight`
+    // in a 22-cell window used to emit `Combat status highligh` + `t`.
+    let lines = wrap_text("Combat status highlight", 22, 0);
+    assert_eq!(lines, vec!["Combat status", "highlight"]);
+    for line in &lines {
+        assert!(line.len() <= 22, "line {line:?} crosses the right edge");
+    }
+}
+
+#[test]
+fn wrap_text_breaks_a_prompt_line_at_the_last_space() {
+    // §5: the same defect hard-split `Choose 1-9; Space/0 cancels.` into
+    // `Choose 1-9; Space/0 c` + `ancels.` in the 22-cell world prompt row.
+    let lines = wrap_text("Choose 1-9; Space/0 cancels.", 22, 0);
+    assert_eq!(lines, vec!["Choose 1-9; Space/0", "cancels."]);
+}
+
+#[test]
+fn wrap_text_matches_the_observed_fifteen_cell_message_window_wrap() {
+    // §5, observed in the original's 15-cell dungeon message window: every
+    // break lands on a space, never mid-word.
+    let lines = wrap_text("Wielding the Sceptre of Lord British...", 15, 0);
+    assert_eq!(
+        lines,
+        vec!["Wielding the", "Sceptre of Lord", "British..."]
+    );
+    for line in &lines {
+        assert!(line.len() <= 15, "line {line:?} crosses the right edge");
+    }
+}
+
+#[test]
+fn wrap_text_emits_a_single_overlong_word_without_losing_characters() {
+    // §6 degenerate case: a word wider than the window has no soft break to
+    // back up to, so the filled line is emitted as-is and assembly restarts.
+    let lines = wrap_text("supercalifragilistic", 8, 0);
+    assert_eq!(lines.concat(), "supercalifragilistic");
+    for line in &lines {
+        assert!(line.len() <= 8, "line {line:?} crosses the right edge");
+    }
+}
+
+#[test]
 fn tile_view_class_matches_spec_lookup_table() {
     // systems/view.md §4: per-tile view class lookup. Spot-check
     // representative tiles from each class plus boundary cases.
@@ -22237,6 +22257,243 @@ fn dungeon_attack_forward_non_class_object_reports_no_combat_class() {
     assert!(!state.message.contains("pending"));
 }
 
+fn transcript_texts(state: &PlayState) -> Vec<String> {
+    state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect()
+}
+
+#[test]
+fn shipped_dungeon_room_party_positions_come_from_the_record_not_arena_origin() {
+    // combat.md section 3 + spec#5/#12/#19: the dungeon-room party entry
+    // coordinates are published record data, not an engine default. The
+    // combat visual suite showed the leader clipped at arena cell (0, 0),
+    // so pin down that the record read actually supplies real cells.
+    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join(DUNGEON_CBT_FILE).exists() {
+        return;
+    }
+    let bank = load_dungeon_cbt(game_dir).expect("shipped DUNGEON.CBT parses");
+    let mut arenas_with_real_leader_cell = 0usize;
+    for arena_index in 0..DUNGEON_CBT_RECORDS {
+        let record = bank
+            .record(arena_index)
+            .expect("record index inside DUNGEON_CBT_RECORDS");
+        let positions = record.dungeon_room_party_positions_for_seed(0);
+        for (slot, (x, y)) in positions.iter().copied().enumerate() {
+            assert!(
+                usize::from(x) < COMBAT_ARENA_SIDE && usize::from(y) < COMBAT_ARENA_SIDE,
+                "dungeon arena {arena_index} party slot {slot} at ({x}, {y}) is outside the arena"
+            );
+        }
+        if positions[0] != (0, 0) {
+            arenas_with_real_leader_cell += 1;
+        }
+    }
+    assert!(
+        arenas_with_real_leader_cell > 0,
+        "every shipped dungeon arena put the party leader at arena cell (0, 0);          the party-position record read is not being honoured"
+    );
+}
+
+#[test]
+fn party_name_records_inside_the_travelling_party_must_be_readable() {
+    // stats-panel.md section 3: a party row's name is "printed from the
+    // record"; only rows outside the travelling-party size are cleared.
+    // An empty record inside the party is a loader fault, not a cue to
+    // synthesise a `Party 2` placeholder.
+    let good = [*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+    assert!(validate_party_names(&good).is_ok());
+
+    let bad = [*b"AVATAR\0\0\0", [0; SAVE_CHARACTER_NAME_LEN]];
+    let error = validate_party_names(&bad).expect_err("empty name record must fail loudly");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(
+        error.to_string().contains("slot 1"),
+        "{}",
+        error
+    );
+}
+
+#[test]
+fn z_stats_selector_cancels_with_the_observed_none_result() {
+    // inventory.md section 4: "Escape cancels the selector." Observed
+    // message window: `Z-stats...`, `Player:`, then `Player: None!`.
+    for cancel in ['\u{1b}', ' '] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert!(
+            state
+                .handle_top_down_key_with_inline('Z', Path::new(""), None, None, None, None)
+                .unwrap()
+        );
+        assert!(state.active_party_selector.is_some());
+        assert_eq!(state.roster_box_label(), Some("Select:"));
+        assert_eq!(transcript_texts(&state), vec!["Z-stats...", "Player:"]);
+        assert!(state.message_entries()[0].is_command_echo);
+        assert!(!state.message_entries()[1].is_command_echo);
+
+        assert!(state.step_active_party_selector(cancel, ""));
+        assert!(state.active_party_selector.is_none());
+        assert_eq!(state.selector_highlight(), None);
+        assert_eq!(state.roster_box_label(), None);
+        assert_eq!(state.message, "Player: None!");
+    }
+}
+
+#[test]
+fn z_stats_selector_rejects_slots_beyond_the_travelling_party() {
+    // inventory.md section 4: "Jumps beyond the active party size are
+    // rejected."
+    let mut state = test_state(open_grid(), 5, 5);
+    assert_eq!(state.z_stats_command(), MoveOutcome::Observed);
+    let party_len = state.party.len();
+    assert!(
+        state.step_active_party_selector(
+            char::from_digit(party_len as u32 + 1, 10).unwrap(),
+            ""
+        )
+    );
+    assert!(state.active_party_selector.is_some());
+    assert!(state.active_z_stats.is_none());
+    assert_eq!(state.message, "Player:");
+}
+
+#[test]
+fn use_picker_labels_the_roster_box_for_the_panel_renderer() {
+    // Observed: the party-roster box's border label becomes `Items:`
+    // while the U-Use picker owns the box.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        state
+            .handle_top_down_key_with_inline('U', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+    assert_eq!(state.roster_box_label(), Some("Items:"));
+    assert_eq!(state.selector_highlight(), None);
+}
+
+#[test]
+fn command_echo_opens_a_transcript_entry_before_the_handler_prompts() {
+    // commands.md §5: "Each command block prints a resident verb prefix
+    // before it invokes the handler or refusal path... commands that
+    // immediately prompt for a direction... do so after the prefix has
+    // been emitted." The direction prompt renders `Look-` itself, so the
+    // transcript must carry one `Look-` line, not two.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        state
+            .handle_top_down_key_with_inline('L', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+    assert_eq!(transcript_texts(&state), vec!["Look-"]);
+    assert!(state.message_entries()[0].is_command_echo);
+}
+
+#[test]
+fn direction_result_continues_the_echoed_verb_line() {
+    // Observed: the verb prefix plus the resolved direction result render
+    // as one message-window line, `Look-Pass`. Open takes the same
+    // direction-prompting shape without needing LOOK2.DAT.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        state
+            .handle_top_down_key_with_inline(
+                'O',
+                Path::new(""),
+                Some(Direction::North),
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+    );
+    let entries = state.message_entries();
+    assert_eq!(entries.len(), 1, "{:?}", transcript_texts(&state));
+    assert!(entries[0].is_command_echo);
+    assert!(
+        entries[0].text.starts_with("Open-"),
+        "{:?}",
+        entries[0].text
+    );
+    assert!(entries[0].text.len() > "Open-".len());
+}
+
+#[test]
+fn use_item_echo_puts_the_item_prompt_on_the_next_line() {
+    // Observed: `>Use item` then `Item: <name>` on the following row.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        state
+            .handle_top_down_key_with_inline('U', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+    let entries = state.message_entries();
+    assert_eq!(entries[0].text, "Use item");
+    assert!(entries[0].is_command_echo);
+    assert_eq!(entries[1].text, "Item:");
+    assert!(!entries[1].is_command_echo);
+}
+
+#[test]
+fn movement_keys_echo_their_cardinal_name() {
+    // Observed: movement echoes `North`/`South`/`East`/`West`.
+    for (key, expected) in [('8', "North"), ('2', "South"), ('6', "East"), ('4', "West")] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert!(
+            state
+                .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
+                .unwrap()
+        );
+        let entries = state.message_entries();
+        assert!(entries[0].is_command_echo);
+        assert!(
+            entries[0].text.starts_with(expected),
+            "{key} echoed {:?}",
+            entries[0].text
+        );
+    }
+}
+
+#[test]
+fn invalid_command_letters_echo_the_stock_refusal_once() {
+    // Observed: an invalid key prints `What?`. The handler prints the same
+    // literal, so the transcript must fold it back into one line.
+    for key in ['D', 'W'] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert!(
+            state
+                .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
+                .unwrap()
+        );
+        assert_eq!(transcript_texts(&state), vec!["What?"]);
+        assert!(state.message_entries()[0].is_command_echo);
+    }
+}
+
+#[test]
+fn unhandled_keys_roll_back_their_speculative_verb_echo() {
+    // A key the active mode does not handle must not leave a dangling
+    // verb echo in the transcript.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        !state
+            .handle_top_down_key_with_inline('!', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+    assert!(state.message_entries().is_empty());
+}
+
+#[test]
+fn transcript_is_capped_so_a_long_session_cannot_grow_without_bound() {
+    let mut state = test_state(open_grid(), 5, 5);
+    for _ in 0..(MESSAGE_TRANSCRIPT_CAPACITY * 2) {
+        state.push_message_entry("line", false);
+    }
+    assert_eq!(state.message_entries().len(), MESSAGE_TRANSCRIPT_CAPACITY);
+}
+
 #[test]
 fn top_down_uppercase_command_letters_preempt_vi_movement() {
     for (key, expected) in [
@@ -22246,9 +22503,9 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
         ('M', MMIX_SPELL_PROMPT_MESSAGE),
         ('N', "New order:"),
         ('Q', "Save game?"),
-        ('U', "Use:"),
+        ('U', "Item:"),
         ('W', "What?"),
-        ('Z', "Z-stats:"),
+        ('Z', "Player:"),
     ] {
         let mut state = test_state(open_grid(), 5, 5);
 
@@ -22587,7 +22844,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('U', "No usable items."),
         ('W', "What?"),
         ('Y', "Yell what?"),
-        ('Z', "Z-stats:"),
+        ('Z', "Player:"),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 

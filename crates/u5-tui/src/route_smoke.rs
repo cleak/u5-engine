@@ -6102,7 +6102,9 @@ fn validate_route_smoke_case_state(
             }
         }
         "dungeon-ladder-down-up-route" | "reload-dungeon-ladder-down-up-route" => {
-            if state.current_floor() != Some(0) || !state.message.contains("level 0") {
+            // dungeon-mode.md 4.1: the level is presented one-based, so the
+            // zero-based floor 0 reads as  in the message window.
+            if state.current_floor() != Some(0) || !state.message.contains("level 1") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the down/up ladder chain"
                 )));

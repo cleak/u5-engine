@@ -688,36 +688,12 @@ pub fn wrap_text(source: &str, window_width: usize, cursor_x_at_entry: usize) ->
         match byte {
             0x00 => break,
             b' ' => {
-                if buffer.len() >= line_width(emitted_any) {
-                    if let Some(break_at) = last_break {
-                        let surplus = buffer.split_off(break_at);
-                        let trimmed = buffer.trim_end_matches(' ').to_string();
-                        lines.push(trimmed);
-                        emitted_any = true;
-                        buffer = surplus.trim_start_matches(' ').to_string();
-                        last_break = None;
-                        // The current space caused the wrap; re-evaluate whether
-                        // it still fits on the new line so it can serve as the
-                        // next break candidate.
-                        if buffer.len() < line_width(emitted_any) {
-                            buffer.push(' ');
-                            last_break = Some(buffer.len() - 1);
-                        }
-                    } else {
-                        // No earlier break point: the buffer is one giant
-                        // word that fully filled the line. Emit it as-is and
-                        // start the next line empty. The trigger space is
-                        // consumed silently.
-                        let trimmed = buffer.trim_end_matches(' ').to_string();
-                        lines.push(trimmed);
-                        emitted_any = true;
-                        buffer.clear();
-                        last_break = None;
-                    }
-                } else {
-                    buffer.push(' ');
-                    last_break = Some(buffer.len() - 1);
-                }
+                // `text-output.md §5`: a space is pure soft-break
+                // bookkeeping. The width test lives on the visible-byte
+                // path below, so that the *next* character — not the next
+                // space — is what forces the back-up to this break.
+                buffer.push(' ');
+                last_break = Some(buffer.len() - 1);
             }
             0x0a | 0x0d => {
                 let trimmed = buffer.trim_end_matches(' ').to_string();
@@ -727,6 +703,34 @@ pub fn wrap_text(source: &str, window_width: usize, cursor_x_at_entry: usize) ->
                 last_break = None;
             }
             ch if (0x20..=0x7e).contains(&ch) => {
+                // `text-output.md §5`: "When the next character would carry
+                // the line past the window's right edge, the printer backs
+                // up to the most recent soft break, emits everything up to
+                // that break, and begins a new line with the remainder."
+                // The test must run before the push, on every visible byte,
+                // or a trailing word that crosses the edge survives to the
+                // final flush and is hard-split by the per-cell emitter.
+                if !buffer.is_empty() && buffer.len() + 1 > line_width(emitted_any) {
+                    match last_break {
+                        Some(break_at) => {
+                            let surplus = buffer.split_off(break_at);
+                            let trimmed = buffer.trim_end_matches(' ').to_string();
+                            lines.push(trimmed);
+                            emitted_any = true;
+                            buffer = surplus.trim_start_matches(' ').to_string();
+                            last_break = None;
+                        }
+                        None => {
+                            // A single word wider than the window. §6 calls
+                            // this degenerate and allows a stricter
+                            // behaviour than the original overflow: emit the
+                            // filled line as-is and restart.
+                            lines.push(buffer.clone());
+                            emitted_any = true;
+                            buffer.clear();
+                        }
+                    }
+                }
                 buffer.push(ch as char);
             }
             _ => {
