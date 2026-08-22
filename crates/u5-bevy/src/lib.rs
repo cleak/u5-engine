@@ -13139,7 +13139,6 @@ mod tests {
             .expect("panic payload must be a string")
     }
 
-
     fn install_intro_assets(dir: &Path) {
         u5_runtime::test_fixtures::assert_writable_game_dir(dir, "install_intro_assets");
         let source_dir = Path::new(DEFAULT_GAME_DIR);
