@@ -10562,30 +10562,27 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
     records.record(record_index)
 }
 
-/// `cleak/u5-spec#54`: the fixed-wipe rectangles are drawn in
-/// user-interface colour slot 1, and the menu's `Select:` caption is
-/// painted out with a filled rectangle in slot 2 plus a one-pixel run in
-/// slot 1 beneath.
+/// The Return-to-View preview's chrome palette.
 ///
-/// The published text names the two slots but not their EGA indices.
-/// What *is* structural, and is what this binding rests on: the
-/// paint-out only makes sense as "restore the band fill, then restore
-/// the one-pixel rule", and `§12.1`'s flanking repaint is likewise a
-/// slot 2 band with a slot 1 rule. So slot 1 is the chrome's rule
-/// colour and slot 2 its band colour, whatever indices those turn out
-/// to be.
+/// `cleak/u5-spec#54` specifies the wipe rectangles and the caption's
+/// flanking repaint in terms of "user-interface colour slot 1" and
+/// "slot 2" rather than raw indices, and the audit found that several
+/// spec sites quoting literal colour numbers were giving low-colour-
+/// table slots rather than EGA indices. [`ChromePalette`] is the shared
+/// parameterisation for exactly that: the published paint is specified
+/// as "the chrome colour" and "the accent colour", and the preview's
+/// caption is one of its three named call sites (the gameplay border,
+/// the intro menu's border captions, and the message window's line
+/// prompt), each supplying its own pair.
 ///
-/// PROVENANCE: these alias the gameplay chrome's own two constants
-/// rather than naming raw indices, so if the palette audit moves either
-/// colour both this path and the chrome follow it in one edit. Colour
-/// indices quoted anywhere in the #78-#83 spec pass are provisional —
-/// several were capture-derived and the capture pipeline shifts colour —
-/// so nothing here should be read as an independent colour claim.
-const RTV_UI_COLOUR_SLOT_1: u8 = CHROME_RULE_INDEX;
-/// `systems/intro.md §12.1`: the caption helper repaints the window's
-/// bottom border either side of the caption in user-interface colour
-/// slot 2 — the same band fill the §6.1 frame uses.
-const RTV_UI_COLOUR_SLOT_2: u8 = CHROME_RIBBON_INDEX;
+/// Routing through it means this path names slots, not indices, so a
+/// palette correction needs no change here at all.
+const RTV_CHROME_PALETTE: ChromePalette = ChromePalette::EGA;
+
+/// Slot 1 — rules, label text and the stroked pass of a bracket cap.
+const RTV_UI_COLOUR_SLOT_1: u8 = RTV_CHROME_PALETTE.accent;
+/// Slot 2 — the band fill and the solid pass of a bracket cap.
+const RTV_UI_COLOUR_SLOT_2: u8 = RTV_CHROME_PALETTE.chrome;
 
 /// The caption's own cells are **not** the band: `#54`'s follow-up says
 /// the colour is "the fixed-cell printer's active window colour, not a
@@ -10595,18 +10592,14 @@ const RTV_UI_COLOUR_SLOT_2: u8 = CHROME_RIBBON_INDEX;
 /// sitting on the band's fill.
 ///
 /// The structural claim, which is what this rests on, is that the
-/// caption cells differ from the flanking band and match the intro text
-/// window's ordinary ink-on-ground pair. A capture of the original's
-/// attract state corroborates it: across the thirteen caption cells of
-/// `The Summoning` the row is ground plus 252 ink pixels, while the same
-/// rows immediately left of the caption are band fill plus the rule.
-///
-/// PROVENANCE: the *counts* above are load-bearing, the *colours* are
-/// not — the capture pipeline shifts colour and the #78-#83 palette
-/// claims are being audited. These alias the intro frame's own named
-/// colours so a palette correction lands in one place.
-const RTV_CAPTION_FOREGROUND: u8 = INTRO_MENU_FRAME_OUTLINE_COLOR;
-const RTV_CAPTION_BACKGROUND: u8 = INTRO_MENU_FRAME_INTERIOR_COLOR;
+/// caption cells differ from the flanking band and match the window's
+/// ordinary ink-on-ground pair. A capture of the original's attract
+/// state corroborates it: across the thirteen caption cells of
+/// `The Summoning` the row is ground plus 252 ink pixels, while the
+/// same rows immediately left of the caption are band fill plus rule.
+/// The *counts* are load-bearing; the colours are not.
+const RTV_CAPTION_FOREGROUND: u8 = RTV_CHROME_PALETTE.accent;
+const RTV_CAPTION_BACKGROUND: u8 = RTV_CHROME_PALETTE.background;
 
 /// `#54` follow-up: the caption's flanking chrome is a filled repaint in
 /// slot 2 over `y = 193..199` plus a one-pixel rule in slot 1 at
@@ -10839,7 +10832,7 @@ fn draw_return_to_view_caption(
         RibbonCapDirection::Right,
         start_col,
         row,
-        RTV_CAPTION_BACKGROUND,
+        RTV_CHROME_PALETTE,
     );
     for (offset, byte) in bytes.iter().enumerate() {
         buffer.draw_fixed_glyph_cell(
@@ -10857,7 +10850,7 @@ fn draw_return_to_view_caption(
         RibbonCapDirection::Left,
         start_col + len + 1,
         row,
-        RTV_CAPTION_BACKGROUND,
+        RTV_CHROME_PALETTE,
     );
 }
 
@@ -10881,7 +10874,7 @@ fn draw_intro_ribbon_cap(
     direction: RibbonCapDirection,
     cell_x: usize,
     cell_y: usize,
-    ground: u8,
+    palette: ChromePalette,
 ) {
     let sprite = ribbon_cap_sprite(font, direction);
     let dst_x = cell_x * CH_CELL_SIDE;
@@ -10898,12 +10891,12 @@ fn draw_intro_ribbon_cap(
             let index = (dst_y + row) * buffer.width + dst_x + col;
             // The cap is stamped opaquely: its own ground first, so
             // nothing underneath shows through the transparent pixels.
-            buffer.pixels[index] = ground & 0x0f;
+            buffer.pixels[index] = palette.background & 0x0f;
             if sprite.ribbon[row] & bit != 0 {
-                buffer.pixels[index] = CHROME_RIBBON_INDEX;
+                buffer.pixels[index] = palette.chrome & 0x0f;
             }
             if sprite.white[row] & bit != 0 {
-                buffer.pixels[index] = CHROME_RULE_INDEX;
+                buffer.pixels[index] = palette.accent & 0x0f;
             }
         }
     }
