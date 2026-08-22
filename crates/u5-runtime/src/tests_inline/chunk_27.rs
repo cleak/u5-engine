@@ -38,6 +38,7 @@ fn chrome_frame(content: &GameplayChromeContent) -> Vec<u8> {
             ibm: &font,
             runes: &font,
         },
+        ChromePalette::EGA,
     );
     rgba
 }
@@ -408,4 +409,102 @@ fn ribbon_cap_is_one_primitive_for_border_message_and_caption_brackets() {
         assert_eq!(left.white[row], mirror(right.white[row]));
         assert_eq!(left.ribbon[row], mirror(right.ribbon[row]));
     }
+}
+
+#[test]
+fn chrome_paint_takes_its_two_colours_as_parameters() {
+    // The published paint reads no gameplay state - only the chrome and
+    // accent colour-table slots - and every colour index in this module
+    // is provisional pending the spec's colour re-grounding audit. Both
+    // facts are only safe if the painters take the pair as a parameter
+    // rather than reading the constants, so pin that: swapping the
+    // palette must swap the painted indices and nothing else.
+    let font = chrome_test_font();
+    let content = GameplayChromeContent::default();
+    let paint = |palette: ChromePalette| {
+        let mut rgba = vec![0u8; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0, 0, 0, 0xff]);
+        }
+        paint_gameplay_frame_chrome(
+            &mut rgba,
+            TEXT_WINDOW_RENDER_WIDTH,
+            TEXT_WINDOW_RENDER_HEIGHT,
+            &content,
+            ChromeFonts {
+                ibm: &font,
+                runes: &font,
+            },
+            palette,
+        );
+        rgba
+    };
+
+    let ega = paint(ChromePalette::EGA);
+    let swapped = paint(ChromePalette {
+        chrome: 4,
+        accent: 10,
+        background: 0,
+    });
+
+    // Ribbon fill and rule both follow the palette.
+    assert_eq!(chrome_index_at(&ega, 3, 100), ChromePalette::EGA.chrome);
+    assert_eq!(chrome_index_at(&swapped, 3, 100), 4);
+    assert_eq!(chrome_index_at(&ega, 7, 100), ChromePalette::EGA.accent);
+    assert_eq!(chrome_index_at(&swapped, 7, 100), 10);
+    // Background and the untouched viewport interior do not.
+    assert_eq!(chrome_index_at(&swapped, 100, 195), 0);
+    assert_eq!(chrome_index_at(&swapped, 100, 100), 0);
+
+    // The default is the provisional EGA pair.
+    assert_eq!(ChromePalette::default(), ChromePalette::EGA);
+    assert_eq!(ChromePalette::EGA.chrome, CHROME_RIBBON_INDEX);
+    assert_eq!(ChromePalette::EGA.accent, CHROME_RULE_INDEX);
+}
+
+#[test]
+fn shipped_palette_is_stock_except_dark_yellow_at_index_six() {
+    // `formats/tiles.md` section 7: the palette shipped in the resident
+    // screen descriptor is the stock set for the mode with exactly one
+    // substitution - index six is dark yellow, not brown. Rendering it
+    // as brown gets the game's dark-yellow tones wrong everywhere they
+    // appear, so this guards against anyone "restoring" the stock
+    // hardware default.
+    const STOCK: [[u8; 3]; 16] = [
+        [0x00, 0x00, 0x00],
+        [0x00, 0x00, 0xaa],
+        [0x00, 0xaa, 0x00],
+        [0x00, 0xaa, 0xaa],
+        [0xaa, 0x00, 0x00],
+        [0xaa, 0x00, 0xaa],
+        STOCK_EGA_BROWN,
+        [0xaa, 0xaa, 0xaa],
+        [0x55, 0x55, 0x55],
+        [0x55, 0x55, 0xff],
+        [0x55, 0xff, 0x55],
+        [0x55, 0xff, 0xff],
+        [0xff, 0x55, 0x55],
+        [0xff, 0x55, 0xff],
+        [0xff, 0xff, 0x55],
+        [0xff, 0xff, 0xff],
+    ];
+
+    assert_eq!(
+        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX],
+        SHIPPED_PALETTE_DARK_YELLOW,
+        "index six must be dark yellow"
+    );
+    assert_ne!(
+        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX],
+        STOCK_EGA_BROWN,
+        "index six must not be the stock brown"
+    );
+
+    // Every other entry matches stock, and index six is the only
+    // deviation - "that single substitution is the only way the game's
+    // palette differs from the hardware default".
+    let deviations: Vec<usize> = (0..16)
+        .filter(|index| EGA_PALETTE_RGB[*index] != STOCK[*index])
+        .collect();
+    assert_eq!(deviations, vec![SHIPPED_PALETTE_DEVIATING_INDEX]);
 }

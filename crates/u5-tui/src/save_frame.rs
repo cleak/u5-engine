@@ -8,7 +8,7 @@ use std::path::Path;
 
 use image::{ImageBuffer, Rgba};
 use u5_runtime::{
-    CHROME_RULE_INDEX, COMBAT_ARENA_SIDE, ChromeFonts, DungeonScene, FixedCellFont,
+    CHROME_RULE_INDEX, COMBAT_ARENA_SIDE, ChromeFonts, ChromePalette, DungeonScene, FixedCellFont,
     GameplayMessageLog, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT, Scene,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
     TextWindowSystem, TileGraphicsDepth, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode,
@@ -829,6 +829,7 @@ pub fn compose_gameplay_screen(
         height,
         &content,
         ChromeFonts { ibm, runes },
+        ChromePalette::EGA,
     );
 
     // Only the stats panel goes through the text-window pipeline. The
@@ -851,7 +852,7 @@ pub fn compose_gameplay_screen(
     log.push_output(&state.message);
     for row in layout_message_window(&log, Some("")).rows {
         if row.prefixed {
-            paint_message_line_cap(&mut rgba, width, height, ibm, row.row);
+            paint_message_line_cap(&mut rgba, width, height, ibm, row.row, ChromePalette::EGA);
         }
         paint_fixed_cell_text(
             &mut rgba,

@@ -960,7 +960,10 @@ fn u4_transfer_gold_gem_food_max_anchors_to_party_gold_cap() {
     assert_eq!(U4_PARTY_SAV_LEN, 532);
     assert_eq!(U4_PARTY_SAV_REQUIRED_LEN, U4_PARTY_SAV_LEN);
     assert_eq!(U4_PARTY_SAV_MOVE_COUNTER_OFFSET, 0x0000);
-    assert_eq!(U4_PARTY_SAV_VIRTUE_STANDING_OFFSET, 0x0002);
+    // §5.3 (cleak/u5-spec#82): the standings block is 16-bit words
+    // at 0x0146, not bytes at 0x0002 - the old offset collided with
+    // the moon/dungeon counters and the gold field below.
+    assert_eq!(U4_PARTY_SAV_VIRTUE_STANDING_OFFSET, 0x0146);
     assert_eq!(U4_PARTY_SAV_MOON_COUNTER_OFFSET, 0x0006);
     assert_eq!(U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET, 0x0007);
     assert_eq!(U4_PARTY_SAV_GOLD_OFFSET, 0x0008);
@@ -11315,21 +11318,30 @@ fn chest_secondary_pool_attempts_uses_floor_half_plus_one() {
 
 #[test]
 fn u4_transfer_no_transferable_data_fires_only_when_all_zero() {
-    // u4-transfer.md §5
+    // u4-transfer.md §5.3: eight 16-bit standings at stride 2 from
+    // 0x0146, tested as eight independent comparisons against zero.
     assert_eq!(U4_TRANSFER_VIRTUE_STANDING_COUNT, 8);
-    // All zero -> guard fires.
-    assert!(u4_transfer_no_transferable_data(&[0u8; 8]));
+    assert_eq!(U4_PARTY_SAV_VIRTUE_STANDING_OFFSET, 0x0146);
+    assert_eq!(U4_PARTY_SAV_VIRTUE_STANDING_STRIDE, 2);
+    // The block ends at 0x0155, inclusive.
+    assert_eq!(
+        U4_PARTY_SAV_VIRTUE_STANDING_OFFSET
+            + U4_TRANSFER_VIRTUE_STANDING_COUNT * U4_PARTY_SAV_VIRTUE_STANDING_STRIDE
+            - 1,
+        0x0155
+    );
+    // All zero -> the Avatar latch fires.
+    assert!(u4_transfer_no_transferable_data(&[0u16; 8]));
     assert!(u4_transfer_no_transferable_data(&[]));
-    // Any nonzero byte allows normal preview.
+    // Any nonzero standing allows the normal preview.
+    assert!(!u4_transfer_no_transferable_data(&[1u16, 0, 0, 0, 0, 0, 0, 0]));
+    assert!(!u4_transfer_no_transferable_data(&[0u16, 0, 0, 0, 0, 0, 0, 50]));
     assert!(!u4_transfer_no_transferable_data(&[
-        1u8, 0, 0, 0, 0, 0, 0, 0
+        10u16, 20, 30, 40, 50, 60, 70, 80
     ]));
-    assert!(!u4_transfer_no_transferable_data(&[
-        0u8, 0, 0, 0, 0, 0, 0, 50
-    ]));
-    assert!(!u4_transfer_no_transferable_data(&[
-        10u8, 20, 30, 40, 50, 60, 70, 80
-    ]));
+    // A standing whose low byte is zero but high byte is not must still
+    // count - the reason the old eight-byte read was wrong.
+    assert!(!u4_transfer_no_transferable_data(&[0x0100u16, 0, 0, 0, 0, 0, 0, 0]));
 }
 
 #[test]
@@ -17006,7 +17018,8 @@ fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
     assert_eq!(certificate.leader_name, "MARIA");
     assert_eq!(certificate.day_ordinal, "sixth");
     assert_eq!(certificate.month_ordinal, "fifth");
-    assert_eq!(certificate.year_words, "one hundred forty-one");
+    assert_eq!(certificate.year_hundreds_words, "one");
+    assert_eq!(certificate.year_remainder_words, "forty-one");
     let report = endgame.final_report.unwrap();
     assert_eq!(report.elapsed_label(), "2 years, 1 month, 1 day");
     let _ = fs::remove_dir_all(dir);
@@ -17075,8 +17088,8 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     // banner label is no longer shown to the player.
     assert_eq!(victory.message, "");
     assert_eq!(
-        victory.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
-        ENDGAME_TABLEAU_LORD_BRITISH_TYPE
+        victory.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
+        ENDGAME_TABLEAU_BOX_ACTOR_BYTE
     );
     for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
         victory.resolve_endgame_confirmation(true);
@@ -17107,8 +17120,8 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau,
     ));
     assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
-        ENDGAME_TABLEAU_LORD_BRITISH_TYPE
+        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
+        ENDGAME_TABLEAU_BOX_ACTOR_BYTE
     );
     assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 5));
 
@@ -17122,20 +17135,20 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         Some(crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau)
     ));
     assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
-        ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE
+        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
+        ENDGAME_TABLEAU_ORB_ACTOR_BYTE
     );
 
     state.resolve_endgame_confirmation(true);
     assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
         0
     );
 
     let exit_slots = (0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
         .chain([
-            ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
             ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+            ENDGAME_TABLEAU_BOX_SLOT,
         ])
         .collect::<Vec<_>>();
     for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
@@ -17152,8 +17165,8 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     }
     assert!((0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
         .chain([
-            ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
-            ENDGAME_TABLEAU_LORD_BRITISH_SLOT
+            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+            ENDGAME_TABLEAU_BOX_SLOT
         ])
         .all(|slot| state.active_objects[slot].type_byte == 0
             && state.active_objects[slot].tile == 0));
@@ -17196,7 +17209,8 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         assert_eq!(certificate.leader_name, "AVATAR");
         assert_eq!(certificate.day_ordinal, "sixth");
         assert_eq!(certificate.month_ordinal, "fifth");
-        assert_eq!(certificate.year_words, "one hundred forty-one");
+        assert_eq!(certificate.year_hundreds_words, "one");
+    assert_eq!(certificate.year_remainder_words, "forty-one");
         assert_eq!(
             endgame.final_report.unwrap().elapsed_label(),
             "2 years, 1 month, 1 day"
@@ -17230,44 +17244,115 @@ fn walk_endgame_cinematic_to_certificate(endgame: &mut EndgameState) {
 }
 
 #[test]
-#[should_panic(expected = "cleak/u5-spec#82")]
-fn endgame_certificate_beat_is_a_loud_unpublished_prose_gate() {
-    // endgame.md §9 lists the certificate's fields but not its wording;
-    // composing the sentence in Rust would ship invented text.
-    let mut endgame = EndgameState::terminal(
-        true,
-        true,
-        true,
-        endgame_certificate_fields("AVATAR", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
-        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
-        None,
-        Some(synthetic_end_narrative()),
-    );
-    walk_endgame_cinematic_to_certificate(&mut endgame);
-    let _ = endgame.current_cinematic_text();
+fn endgame_certificate_matches_the_published_row_assignment() {
+    // endgame.md §9.2 publishes the whole screen as a fixed row table,
+    // which is the easiest thing to diff an implementation against.
+    let clock = GameClock::with_date(141, 5, 6, 12, 0).unwrap();
+    let certificate = endgame_certificate_fields("AVATAR", clock);
+    let report = endgame_final_report(clock);
+    let lines = endgame_certificate_lines(&certificate, report);
+
+    let by_row = |row: u8| {
+        lines
+            .iter()
+            .find(|line| line.row == row)
+            .unwrap_or_else(|| panic!("no certificate line on row {row}"))
+    };
+
+    assert_eq!(by_row(1).text, "Be it known that on");
+    assert_eq!(by_row(2).text, "the sixth Day of");
+    assert_eq!(by_row(3).text, "the fifth Month");
+    assert_eq!(by_row(4).text, "of the Year");
+    assert_eq!(by_row(5).text, "one Hundred");
+    assert_eq!(by_row(6).text, "forty-one");
+    assert_eq!(by_row(8).text, "AVATAR the Avatar");
+    assert_eq!(by_row(10).text, "saved the life");
+    assert_eq!(by_row(11).text, "of our sovereign");
+    assert_eq!(by_row(12).text, "Lord British, thereby");
+    assert_eq!(by_row(13).text, "saving our people");
+    assert_eq!(by_row(14).text, "and our land.");
+    assert_eq!(by_row(16).text, "THE QUEST OF THE AVATAR");
+    assert_eq!(by_row(17).text, "IS FOREVER");
+    assert_eq!(by_row(21).text, "Report now, thy Quest compleat in");
+    assert_eq!(by_row(22).text, "2 years, 1 month, 1 day");
+    assert_eq!(by_row(23).text, "to Lord British at Origin Systems!");
+
+    // §9.2: rows 7, 9, 15 and 18-20 are the blank rows the newline runs
+    // leave behind. Nothing is printed on them.
+    for blank in [0u8, 7, 9, 15, 18, 19, 20, 24] {
+        assert!(
+            !lines.iter().any(|line| line.row == blank),
+            "row {blank} must stay blank"
+        );
+    }
+    assert_eq!(lines.len(), 17);
 }
 
 #[test]
-#[should_panic(expected = "cleak/u5-spec#82")]
-fn endgame_final_report_beat_is_a_loud_unpublished_prose_gate() {
-    // endgame.md §9's separate final report panel: the elapsed-time
-    // arithmetic is published, the Origin report line's wording is not.
-    let mut endgame = EndgameState::terminal(
-        true,
-        true,
-        true,
-        endgame_certificate_fields("AVATAR", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
-        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
-        None,
-        Some(synthetic_end_narrative()),
-    );
-    walk_endgame_cinematic_to_certificate(&mut endgame);
-    endgame.cinematic.advance();
-    assert_eq!(
-        endgame.cinematic.step,
-        crate::endgame_cinematic::EndgameCinematicStep::FinalReport
-    );
-    let _ = endgame.current_cinematic_text();
+fn endgame_certificate_inverse_video_and_runic_slots_follow_the_parchment() {
+    // §9.1/§9.3/§9.5: the body is inverse video (that is what makes
+    // dark lettering on the light parchment), the closing title is the
+    // ordinary character path with the runic slot selected for exactly
+    // two lines, and the report switches inverse off because it lands
+    // off the parchment on the black page.
+    let clock = GameClock::with_date(141, 5, 6, 12, 0).unwrap();
+    let certificate = endgame_certificate_fields("AVATAR", clock);
+    let lines = endgame_certificate_lines(&certificate, endgame_final_report(clock));
+
+    let runic: Vec<u8> = lines
+        .iter()
+        .filter(|line| line.runic)
+        .map(|line| line.row)
+        .collect();
+    assert_eq!(runic, vec![16, 17]);
+
+    for line in &lines {
+        let expected_inverse = line.row <= 17;
+        assert_eq!(
+            line.inverse, expected_inverse,
+            "row {} inverse video",
+            line.row
+        );
+    }
+    // The parchment covers rows 0..=20, so every inverse row lands on
+    // it and every normal-video row lands below it.
+    assert!(lines.iter().all(|line| line.inverse == (line.row <= 20)));
+}
+
+#[test]
+fn endgame_certificate_centring_uses_the_forty_column_form() {
+    // §9.2 / text-output.md §5, and the cleak/u5-spec#82 retraction of
+    // the earlier `(39 - length) / 2` form: even-length lines centre
+    // exactly, odd-length lines land half a cell left by truncation.
+    let line = |text: &str| EndgameCertificateLine {
+        row: 1,
+        text: text.to_string(),
+        inverse: true,
+        runic: false,
+    };
+    // Even lengths the 39 form would have placed one whole cell left.
+    assert_eq!(line("saved the life").column(), 13); // 14 chars
+    assert_eq!(line("of our sovereign").column(), 12); // 16
+    assert_eq!(line("IS FOREVER").column(), 15); // 10
+    assert_eq!(line("to Lord British at Origin Systems!").column(), 3); // 34
+    // Odd length: truncation puts it half a cell left of true centre.
+    assert_eq!(line("THE QUEST OF THE AVATAR").column(), 8); // 23
+}
+
+#[test]
+fn endgame_final_report_omits_zero_units_and_pluralises() {
+    // §9.5: a zero component is skipped entirely, `s` is appended above
+    // one, and the separator is emitted only when a later component
+    // will also print.
+    let label = |year, month, day| {
+        endgame_final_report(GameClock::with_date(year, month, day, 12, 0).unwrap())
+            .elapsed_label()
+    };
+    assert_eq!(label(139, 4, 6), "1 day");
+    assert_eq!(label(139, 5, 5), "1 month");
+    assert_eq!(label(140, 4, 5), "1 year");
+    assert_eq!(label(141, 5, 6), "2 years, 1 month, 1 day");
+    assert_eq!(label(141, 4, 5), "2 years");
 }
 
 #[test]
@@ -21641,13 +21726,13 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     );
     assert_eq!(
         endgame_tableau_role_for_slot(
-            ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
-            state.active_objects[ENDGAME_TABLEAU_SCENE_MARKER_SLOT]
+            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT]
         ),
-        Some(EndgameTableauActorRole::SceneMarker)
+        Some(EndgameTableauActorRole::LordBritish)
     );
     assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
         0
     );
     assert!(!state
@@ -21714,7 +21799,7 @@ fn endgame_tableau_six_member_layout_restores_dead_and_omits_lord_british_until_
         );
     }
     assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
         0
     );
 
@@ -21723,10 +21808,10 @@ fn endgame_tableau_six_member_layout_restores_dead_and_omits_lord_british_until_
     state.resolve_endgame_confirmation(true);
     assert_eq!(
         endgame_tableau_role_for_slot(
-            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
-            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT]
+            ENDGAME_TABLEAU_BOX_SLOT,
+            state.active_objects[ENDGAME_TABLEAU_BOX_SLOT]
         ),
-        Some(EndgameTableauActorRole::LordBritish)
+        Some(EndgameTableauActorRole::SandalwoodBox)
     );
 }
 
@@ -21763,12 +21848,12 @@ fn endgame_tableau_install_preserves_non_type_tile_fields() {
     assert_eq!(empty_slot.phase, 0x7e);
     assert_eq!((empty_slot.z, empty_slot.aux1, empty_slot.aux3), (-3, 0x11, 0x22));
 
-    let marker = state.active_objects[ENDGAME_TABLEAU_SCENE_MARKER_SLOT];
+    let marker = state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT];
     assert_eq!(
         (marker.type_byte, marker.tile),
         (
-            ENDGAME_TABLEAU_SCENE_MARKER_TYPE,
-            ENDGAME_TABLEAU_SCENE_MARKER_TYPE
+            ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE,
+            ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE
         )
     );
     assert_eq!((marker.x, marker.y), (5, 8));
@@ -21864,8 +21949,8 @@ fn missing_box_terminal_input_runs_tableau_jitter_without_leaving_endgame() {
     assert_eq!((state.active_objects[2].x, state.active_objects[2].y), (8, 6));
     assert_eq!(
         (
-            state.active_objects[ENDGAME_TABLEAU_SCENE_MARKER_SLOT].x,
-            state.active_objects[ENDGAME_TABLEAU_SCENE_MARKER_SLOT].y
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].x,
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].y
         ),
         (4, 1)
     );

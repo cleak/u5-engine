@@ -1501,3 +1501,34 @@ pub fn u32_at(bytes: &[u8], off: usize) -> u32 {
 pub fn write_u16_at(bytes: &mut [u8], off: usize, value: u16) {
     bytes[off..off + 2].copy_from_slice(&value.to_le_bytes());
 }
+
+/// `systems/active-objects.md §12` / `catalogs/tile-catalog.md §3.1`:
+/// active-object records do **not** carry a tile id.
+///
+/// Placing an active object writes its actor byte into the companion
+/// band for that cell and sets the viewport grid cell to zero. A
+/// non-zero grid cell draws the terrain tile it names; a zero grid
+/// cell reads the companion byte and draws tile `byte + 256`. Actor
+/// bytes therefore index the upper, actor half of the 512-tile space,
+/// and a terrain byte and an actor byte with the same value are
+/// different sprites - which is why actor byte `0x44` is the Bard
+/// (tile 324) and not the floor tile whose terrain index is also
+/// `0x44`.
+///
+/// `cleak/u5-spec#82` withdrew the "carry the tile id directly" note
+/// and the `320..335` / `368..383` range names that went with it; a
+/// confirmed id beats a range name.
+pub const ACTOR_TILE_BANK_BASE: usize = 256;
+
+/// `catalogs/tile-catalog.md §3.1`: the one reserved actor byte -
+/// draw nothing, the transparent cell.
+pub const ACTOR_TILE_TRANSPARENT_BYTE: u8 = 0x16;
+
+/// Resolve an actor byte to the tile index the scene compositor draws,
+/// or `None` for the reserved transparent value.
+pub const fn actor_tile_for_byte(actor_byte: u8) -> Option<usize> {
+    if actor_byte == ACTOR_TILE_TRANSPARENT_BYTE {
+        return None;
+    }
+    Some(ACTOR_TILE_BANK_BASE + actor_byte as usize)
+}

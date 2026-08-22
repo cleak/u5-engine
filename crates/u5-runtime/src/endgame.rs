@@ -164,8 +164,11 @@ pub struct EndgameCertificate {
     pub day_ordinal: String,
     /// `§9`: current saved month *number* rendered as an ordinal word.
     pub month_ordinal: String,
-    /// `§9`: current saved year rendered in words, hundreds + remainder.
-    pub year_words: String,
+    /// `§9.2`: the saved year in words, split - `year / 100` cardinal
+    /// followed by the literal `Hundred` on one row, `year % 100`
+    /// cardinal on the next.
+    pub year_hundreds_words: String,
+    pub year_remainder_words: String,
     /// `§9`: the party leader's name.
     pub leader_name: String,
 }
@@ -218,11 +221,11 @@ pub enum EndgameOutcome {
 pub const ENDGAME_TABLEAU_WIDTH: usize = 11;
 pub const ENDGAME_TABLEAU_HEIGHT: usize = 11;
 pub const ENDGAME_TABLEAU_PARTY_START: (usize, usize) = (5, 9);
-pub const ENDGAME_TABLEAU_LORD_BRITISH_SLOT: usize = 6;
-pub const ENDGAME_TABLEAU_SCENE_MARKER_SLOT: usize = OOL_SLOTS - 1;
-pub const ENDGAME_TABLEAU_LORD_BRITISH_TYPE: u8 = 0x0e;
-pub const ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE: u8 = 0x08;
-pub const ENDGAME_TABLEAU_SCENE_MARKER_TYPE: u8 = 0x7c;
+pub const ENDGAME_TABLEAU_BOX_SLOT: usize = 6;
+pub const ENDGAME_TABLEAU_LORD_BRITISH_SLOT: usize = OOL_SLOTS - 1;
+pub const ENDGAME_TABLEAU_BOX_ACTOR_BYTE: u8 = 0x0e;
+pub const ENDGAME_TABLEAU_ORB_ACTOR_BYTE: u8 = 0x08;
+pub const ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE: u8 = 0x7c;
 pub const ENDGAME_TABLEAU_PHASE: u8 = 0;
 /// `formats/location-dat.md section 11`: endgame loads MISCMAPS cutscene-map
 /// record 3 as the authored 11x11 terminal tableau scene.
@@ -232,10 +235,10 @@ pub const ENDGAME_TABLEAU_WALKABLE_TILE: u8 = 0x44;
 const ENDGAME_TABLEAU_PARTY_TARGETS: [(usize, usize); SAVE_PARTY_SIZE_MAX as usize] =
     [(5, 5), (4, 6), (6, 6), (3, 7), (5, 7), (7, 7)];
 const ENDGAME_TABLEAU_LORD_BRITISH_POS: (usize, usize) = (5, 4);
-const ENDGAME_TABLEAU_SCENE_MARKER_START: (usize, usize) = (5, 8);
+const ENDGAME_TABLEAU_LORD_BRITISH_START: (usize, usize) = (5, 8);
 const ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET: (usize, usize) = (8, 4);
 const ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET: (usize, usize) = (8, 6);
-const ENDGAME_TABLEAU_REFUSAL_MARKER_TARGET: (usize, usize) = (4, 1);
+const ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET: (usize, usize) = (4, 1);
 const ENDGAME_TABLEAU_VICTORY_EXIT_TARGET: (usize, usize) = (5, 4);
 const ENDGAME_TABLEAU_SETTLE_STEP_CAP: usize = ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2;
 pub const ENDGAME_TABLEAU_JITTER_SLOTS: [usize; 4] = [1, 3, 4, 5];
@@ -243,8 +246,16 @@ pub const ENDGAME_TABLEAU_JITTER_SLOTS: [usize; 4] = [1, 3, 4, 5];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EndgameTableauActorRole {
     PartyMember(u8),
+    /// `endgame.md §4`: slot 6, actor byte `0x0E` - a lidded chest,
+    /// the sandalwood box. Swapped in place for the Orb spark and then
+    /// cleared during the victory rite. `cleak/u5-spec#82` retracted
+    /// the earlier reading that called this slot Lord British.
+    SandalwoodBox,
+    /// `endgame.md §4`: slot 31, actor byte `0x7C` - a crowned seated
+    /// figure between two banners. This, not slot 6, is Lord British;
+    /// the earlier "scene marker" label was the other half of the same
+    /// inversion.
     LordBritish,
-    SceneMarker,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -426,35 +437,184 @@ impl EndgameState {
                         index.saturating_add(1)
                     )
                 }),
-            Step::Certificate => require_published_endgame_certificate_prose(),
-            Step::FinalReport | Step::Finished => require_published_endgame_final_report_prose(),
+            // `§9`: the certificate screen is one composed page, not a
+            // line of message text - the caller renders it from
+            // `endgame_certificate_lines`. Its message slot stays empty
+            // so nothing is echoed into the message window under it.
+            Step::Certificate | Step::FinalReport | Step::Finished => String::new(),
             Step::Inactive | Step::ThroneTableau | Step::FadeToBlack => String::new(),
         }
     }
 }
 
-/// `endgame.md §9` names the certificate body's *fields* but
-/// deliberately does not reproduce its fixed wording, its separators,
-/// or the centered Codex-style closing title (which is drawn through
-/// the sign/tile-glyph text path, not ordinary prose). Composing an
-/// English sentence around [`EndgameCertificate`] in Rust would ship
-/// invented text to the player, so the certificate beat is a loud gate
-/// until the transcription is published. See `cleak/u5-spec#82`.
-pub fn require_published_endgame_certificate_prose() -> ! {
-    panic!(
-        "endgame certificate body requires the published source-free transcription of its fixed wording, separators, and centered Codex-style closing title (plus the sign/tile-glyph path that draws it); composing the sentence in the engine is a forbidden fallback; see cleak/u5-spec#82"
-    )
+/// `endgame.md §9.2`: one printed row of the certificate screen.
+///
+/// The certificate is printed onto the visible page over the parchment
+/// backdrop with centred output on; the body runs in inverse video
+/// (that, not any palette work, is what makes dark lettering on the
+/// light parchment), the closing title switches to the runic font slot
+/// for exactly two lines, and the elapsed-time report switches inverse
+/// video back off - which is what makes it legible where it lands, on
+/// the cleared black page below the parchment's bottom edge.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EndgameCertificateLine {
+    /// Row within the full-screen text window. The cursor starts on
+    /// row 1 and nothing wraps or scrolls, so rows are fixed.
+    pub row: u8,
+    pub text: String,
+    pub inverse: bool,
+    /// `§9.3`: the closing title goes through the ordinary fixed-cell
+    /// character path with the runic font slot selected, not through a
+    /// sign or tile-glyph composition.
+    pub runic: bool,
 }
 
-/// `endgame.md §9`'s final report panel. The elapsed-time arithmetic
-/// and its zero-omitting singular/plural formatting are published (see
-/// [`EndgameFinalReport::elapsed_label`]), but the panel's fixed
-/// wording and the closing "report this quest to Origin" line are not.
-/// See `cleak/u5-spec#82`.
-pub fn require_published_endgame_final_report_prose() -> ! {
-    panic!(
-        "endgame final report panel requires the published source-free transcription of its elapsed-time wording and the closing Origin report line; composing them in the engine is a forbidden fallback; see cleak/u5-spec#82"
-    )
+impl EndgameCertificateLine {
+    /// `endgame.md §9.2` / `text-output.md §5` centred output:
+    /// `(40 - characters_in_line) / 2`, truncating.
+    ///
+    /// `cleak/u5-spec#82` retracted the earlier `(39 - length) / 2`
+    /// form and its claimed systematic four-pixel left bias. The two
+    /// agree only for odd-length lines; for even-length lines the 39
+    /// form places the text a whole cell too far left. Even-length
+    /// lines are centred exactly; odd-length lines land half a cell
+    /// left of true centre, and that is plain truncation.
+    pub fn column(&self) -> u8 {
+        let width = crate::TEXT_SCREEN_COLUMNS as usize;
+        let length = self.text.chars().count().min(width);
+        ((width - length) / 2) as u8
+    }
+}
+
+/// `endgame.md §9.4`: the certificate parchment, the shipped
+/// end-screen archive's single 260x168 record, drawn at `(40, 0)` so
+/// it occupies `(40, 0)..(299, 167)` - character rows 0 through 20.
+/// The body and closing title land on it; the three report rows fall
+/// on the cleared black page just below its bottom edge.
+pub const ENDGAME_CERTIFICATE_PARCHMENT_X: usize = 40;
+pub const ENDGAME_CERTIFICATE_PARCHMENT_Y: usize = 0;
+
+/// `endgame.md §9.1`: the certificate's first printed row. The cursor
+/// is set to column 0 of row 1 of the full-screen window.
+pub const ENDGAME_CERTIFICATE_FIRST_ROW: u8 = 1;
+
+/// `endgame.md §9.1`-`§9.5`: the whole certificate screen, as printed
+/// rows.
+///
+/// The wording is the published transcription (`cleak/u5-spec#82`
+/// ask 4, re-derived): it is assembled from resident fragments rather
+/// than read from a data file, which is why it can be transcribed at
+/// all when `END.DAT` and `ENDMSG.DAT` prose cannot.
+///
+/// Blank rows follow from the encoding rather than being placed: a
+/// line feed is a combined CR+LF and the printer emits one per newline
+/// byte, so a run of `k` newlines leaves `k - 1` blank rows. The three
+/// body gaps are each a pair of newlines (one blank row apiece) and
+/// the closing title ends with four (three blank rows). The earlier
+/// two / two / one / four counts were retracted.
+pub fn endgame_certificate_lines(
+    certificate: &EndgameCertificate,
+    report: EndgameFinalReport,
+) -> Vec<EndgameCertificateLine> {
+    let body = [
+        "Be it known that on".to_string(),
+        format!("the {} Day of", certificate.day_ordinal),
+        format!("the {} Month", certificate.month_ordinal),
+        "of the Year".to_string(),
+        format!("{} Hundred", certificate.year_hundreds_words),
+        certificate.year_remainder_words.clone(),
+    ];
+    let salvation = [
+        "saved the life",
+        "of our sovereign",
+        "Lord British, thereby",
+        "saving our people",
+        "and our land.",
+    ];
+
+    let mut lines = Vec::with_capacity(16);
+    let mut row = ENDGAME_CERTIFICATE_FIRST_ROW;
+    let push = |lines: &mut Vec<EndgameCertificateLine>,
+                row: &mut u8,
+                text: String,
+                inverse: bool,
+                runic: bool| {
+        lines.push(EndgameCertificateLine {
+            row: *row,
+            text,
+            inverse,
+            runic,
+        });
+        *row += 1;
+    };
+
+    for line in body {
+        push(&mut lines, &mut row, line, true, false);
+    }
+    row += 1; // §9.2 row 7
+    push(
+        &mut lines,
+        &mut row,
+        format!("{} the Avatar", certificate.leader_name),
+        true,
+        false,
+    );
+    row += 1; // §9.2 row 9
+    for line in salvation {
+        push(&mut lines, &mut row, line.to_string(), true, false);
+    }
+    row += 1; // §9.2 row 15
+    for line in ENDGAME_CERTIFICATE_CLOSING_TITLE {
+        push(&mut lines, &mut row, line.to_string(), true, true);
+    }
+    row += 3; // §9.2 rows 18-20, the three blank rows after the title
+    // §9.5: inverse video off for the report, which lands off the
+    // parchment on the black page.
+    push(
+        &mut lines,
+        &mut row,
+        "Report now, thy Quest compleat in".to_string(),
+        false,
+        false,
+    );
+    push(&mut lines, &mut row, report.elapsed_label(), false, false);
+    push(
+        &mut lines,
+        &mut row,
+        "to Lord British at Origin Systems!".to_string(),
+        false,
+        false,
+    );
+
+    lines
+}
+
+/// `endgame.md §9.3` closing title, stored in decoded Latin.
+pub const ENDGAME_CERTIFICATE_CLOSING_TITLE: [&str; 2] = ["THE QUEST OF THE AVATAR", "IS FOREVER"];
+
+/// `endgame.md §9.3` / `text-output.md §7`: the runic word separator.
+///
+/// The original stores the closing title in the rune digraph encoding,
+/// where the at-sign is the word space. That much is published, so the
+/// engine re-encodes spaces rather than passing an ASCII blank through
+/// the runic slot.
+pub const RUNIC_WORD_SPACE: char = '@';
+
+/// Re-encode a decoded Latin line for the runic font slot.
+///
+/// `cleak/u5-spec#82` publishes two of the three parts of the digraph
+/// encoding: the at-sign is the word space, and TH and ST each occupy a
+/// single character. It does **not** publish which code points the two
+/// digraphs use, and it explicitly allows an engine to "supply your own
+/// rune mapping" instead. Rather than guess two code points and draw
+/// whatever glyphs happen to live there, this applies the published
+/// word-space rule and leaves TH and ST as their two component runes -
+/// a one-rune-per-digraph difference from the original, and the only
+/// part of the certificate that is not exact.
+pub fn runic_line_encoding(line: &str) -> String {
+    line.chars()
+        .map(|ch| if ch == ' ' { RUNIC_WORD_SPACE } else { ch })
+        .collect()
 }
 
 /// `endgame.md §7.1` full-screen fade to black, run against the real
@@ -575,7 +735,8 @@ pub fn endgame_certificate_fields(leader_name: &str, clock: GameClock) -> Endgam
     EndgameCertificate {
         day_ordinal: endgame_ordinal_word(clock.day).unwrap_or_else(|| clock.day.to_string()),
         month_ordinal: endgame_ordinal_word(clock.month).unwrap_or_else(|| clock.month.to_string()),
-        year_words: endgame_cardinal_word(clock.year),
+        year_hundreds_words: endgame_cardinal_word(clock.year / 100),
+        year_remainder_words: endgame_cardinal_word(clock.year % 100),
         leader_name: leader_name.to_string(),
     }
 }
@@ -774,15 +935,37 @@ pub fn endgame_step_toward_target(
 /// ENDSC/END1/END2 sprite bank, or an active-object type-to-tile
 /// mapping) these index, the engine keeps the published bytes as-is
 /// rather than guessing a translation.
-pub const fn endgame_tableau_tile_for_class_byte(class_byte: u8) -> u8 {
-    match class_byte {
-        b'M' => 0x40,
-        b'B' => 0x44,
-        b'F' => 0x48,
-        b'A' | b'D' | b'T' | b'P' | b'R' | b'S' => 0x4c,
-        _ => 0x4c,
+/// `endgame.md §4` class -> tableau actor byte.
+///
+/// Lookup is by the position of the class letter within the nine-letter
+/// class-order string, not by arithmetic on the letter code. The table
+/// has nine entries but only four distinct values, so Mage, Bard and
+/// Fighter get their own sprite and every other class - the Avatar
+/// included - draws the Avatar sprite.
+///
+/// These are actor bytes, not tile ids: see [`crate::actor_tile_for_byte`].
+/// `0x40` is tile 320 (Mage), `0x44` is 324 (Bard), `0x48` is 328
+/// (Fighter) and `0x4C` is 332 (Avatar).
+pub fn endgame_tableau_tile_for_class_byte(class_byte: u8) -> u8 {
+    const ACTOR_BYTES: [u8; ENDGAME_CLASS_ORDER.len()] =
+        [0x4C, 0x40, 0x44, 0x48, 0x4C, 0x4C, 0x4C, 0x4C, 0x4C];
+    let upper = class_byte.to_ascii_uppercase();
+    match ENDGAME_CLASS_ORDER
+        .iter()
+        .position(|candidate| *candidate == upper)
+    {
+        Some(index) => ACTOR_BYTES[index],
+        None => ENDGAME_TABLEAU_AVATAR_ACTOR_BYTE,
     }
 }
+
+/// `endgame.md §4`: the nine-letter class-order string the tableau
+/// class table is indexed by.
+pub const ENDGAME_CLASS_ORDER: [u8; 9] = *b"AMBFDTPRS";
+
+/// `endgame.md §4`: the sprite every class outside Mage/Bard/Fighter
+/// draws, the Avatar.
+pub const ENDGAME_TABLEAU_AVATAR_ACTOR_BYTE: u8 = 0x4C;
 
 pub const fn endgame_tableau_party_tile(tile: u8) -> bool {
     matches!(tile, 0x40 | 0x44 | 0x48 | 0x4c)
@@ -804,27 +987,27 @@ pub fn endgame_tableau_party_placement(
     })
 }
 
-pub fn endgame_tableau_lord_british_placement() -> EndgameTableauActorPlacement {
+pub fn endgame_tableau_box_placement() -> EndgameTableauActorPlacement {
     EndgameTableauActorPlacement {
-        role: EndgameTableauActorRole::LordBritish,
-        active_object_slot: ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+        role: EndgameTableauActorRole::SandalwoodBox,
+        active_object_slot: ENDGAME_TABLEAU_BOX_SLOT,
         start: ENDGAME_TABLEAU_LORD_BRITISH_POS,
         target: ENDGAME_TABLEAU_LORD_BRITISH_POS,
-        tile: ENDGAME_TABLEAU_LORD_BRITISH_TYPE,
-        type_byte: ENDGAME_TABLEAU_LORD_BRITISH_TYPE,
+        tile: ENDGAME_TABLEAU_BOX_ACTOR_BYTE,
+        type_byte: ENDGAME_TABLEAU_BOX_ACTOR_BYTE,
     }
 }
 
-pub fn endgame_tableau_scene_marker_placement(
+pub fn endgame_tableau_lord_british_placement(
     target: (usize, usize),
 ) -> EndgameTableauActorPlacement {
     EndgameTableauActorPlacement {
-        role: EndgameTableauActorRole::SceneMarker,
-        active_object_slot: ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
-        start: ENDGAME_TABLEAU_SCENE_MARKER_START,
+        role: EndgameTableauActorRole::LordBritish,
+        active_object_slot: ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+        start: ENDGAME_TABLEAU_LORD_BRITISH_START,
         target,
-        tile: ENDGAME_TABLEAU_SCENE_MARKER_TYPE,
-        type_byte: ENDGAME_TABLEAU_SCENE_MARKER_TYPE,
+        tile: ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE,
+        type_byte: ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE,
     }
 }
 
@@ -837,8 +1020,8 @@ pub fn endgame_tableau_actor_placements(
         .enumerate()
         .filter_map(|(slot, member)| endgame_tableau_party_placement(slot, member.class_byte))
         .collect::<Vec<_>>();
-    placements.push(endgame_tableau_scene_marker_placement(
-        ENDGAME_TABLEAU_SCENE_MARKER_START,
+    placements.push(endgame_tableau_lord_british_placement(
+        ENDGAME_TABLEAU_LORD_BRITISH_START,
     ));
     placements
 }
@@ -875,19 +1058,19 @@ pub fn endgame_tableau_role_for_slot(
         && endgame_tableau_party_tile(object.type_byte)
     {
         Some(EndgameTableauActorRole::PartyMember(slot as u8))
-    } else if slot == ENDGAME_TABLEAU_LORD_BRITISH_SLOT
+    } else if slot == ENDGAME_TABLEAU_BOX_SLOT
         && object.type_byte == object.tile
         && matches!(
             object.type_byte,
-            ENDGAME_TABLEAU_LORD_BRITISH_TYPE | ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE
+            ENDGAME_TABLEAU_BOX_ACTOR_BYTE | ENDGAME_TABLEAU_ORB_ACTOR_BYTE
         )
     {
-        Some(EndgameTableauActorRole::LordBritish)
-    } else if slot == ENDGAME_TABLEAU_SCENE_MARKER_SLOT
-        && object.type_byte == ENDGAME_TABLEAU_SCENE_MARKER_TYPE
-        && object.tile == ENDGAME_TABLEAU_SCENE_MARKER_TYPE
+        Some(EndgameTableauActorRole::SandalwoodBox)
+    } else if slot == ENDGAME_TABLEAU_LORD_BRITISH_SLOT
+        && object.type_byte == ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE
+        && object.tile == ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE
     {
-        Some(EndgameTableauActorRole::SceneMarker)
+        Some(EndgameTableauActorRole::LordBritish)
     } else {
         None
     }
@@ -1239,8 +1422,8 @@ impl PlayState {
             let moved = self
                 .step_endgame_tableau_slot_once_to_target(2, ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET)
                 | self.step_endgame_tableau_slot_once_to_target(
-                    ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
-                    ENDGAME_TABLEAU_REFUSAL_MARKER_TARGET,
+                    ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+                    ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET,
                 )
                 | self.step_endgame_tableau_slot_once_to_target(
                     0,
@@ -1258,38 +1441,32 @@ impl PlayState {
         if self.active_objects.len() < OOL_SLOTS {
             self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         }
-        if let Some(slot) = self
-            .active_objects
-            .get_mut(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
-        {
-            write_endgame_tableau_placement(slot, endgame_tableau_lord_british_placement());
+        if let Some(slot) = self.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
+            write_endgame_tableau_placement(slot, endgame_tableau_box_placement());
         }
     }
 
     pub fn complete_endgame_victory_tableau(&mut self) {
         let mut changed_lord_british_to_orb = false;
-        if let Some(lord_british) = self
-            .active_objects
-            .get_mut(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
-        {
-            if endgame_tableau_role_for_slot(ENDGAME_TABLEAU_LORD_BRITISH_SLOT, *lord_british)
-                == Some(EndgameTableauActorRole::LordBritish)
+        if let Some(lord_british) = self.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
+            if endgame_tableau_role_for_slot(ENDGAME_TABLEAU_BOX_SLOT, *lord_british)
+                == Some(EndgameTableauActorRole::SandalwoodBox)
             {
-                lord_british.type_byte = ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE;
-                lord_british.tile = ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE;
+                lord_british.type_byte = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
+                lord_british.tile = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
                 changed_lord_british_to_orb = true;
             }
         }
         if changed_lord_british_to_orb {
             self.animation.tick_static_tiles();
         }
-        self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
+        self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_BOX_SLOT);
         self.animation.tick_static_tiles();
         self.step_endgame_tableau_slot_to_target(
-            ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
+            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
             ENDGAME_TABLEAU_VICTORY_EXIT_TARGET,
         );
-        self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_SCENE_MARKER_SLOT);
+        self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
         self.animation.tick_static_tiles();
         for slot in 0..self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) {
             self.step_endgame_tableau_slot_to_target(slot, ENDGAME_TABLEAU_VICTORY_EXIT_TARGET);
@@ -1299,20 +1476,17 @@ impl PlayState {
     }
 
     pub fn advance_endgame_victory_tableau_exit_step(&mut self) -> bool {
-        if let Some(lord_british) = self
-            .active_objects
-            .get_mut(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
-        {
-            if endgame_tableau_role_for_slot(ENDGAME_TABLEAU_LORD_BRITISH_SLOT, *lord_british)
-                == Some(EndgameTableauActorRole::LordBritish)
+        if let Some(lord_british) = self.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
+            if endgame_tableau_role_for_slot(ENDGAME_TABLEAU_BOX_SLOT, *lord_british)
+                == Some(EndgameTableauActorRole::SandalwoodBox)
             {
-                if lord_british.type_byte == ENDGAME_TABLEAU_LORD_BRITISH_TYPE {
-                    lord_british.type_byte = ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE;
-                    lord_british.tile = ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE;
+                if lord_british.type_byte == ENDGAME_TABLEAU_BOX_ACTOR_BYTE {
+                    lord_british.type_byte = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
+                    lord_british.tile = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
                     self.animation.tick_static_tiles();
                     return true;
                 }
-                self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
+                self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_BOX_SLOT);
                 self.animation.tick_static_tiles();
                 return true;
             }
@@ -1320,20 +1494,20 @@ impl PlayState {
 
         if self
             .active_objects
-            .get(ENDGAME_TABLEAU_SCENE_MARKER_SLOT)
+            .get(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
             .copied()
             .is_some_and(|object| {
-                endgame_tableau_role_for_slot(ENDGAME_TABLEAU_SCENE_MARKER_SLOT, object)
-                    == Some(EndgameTableauActorRole::SceneMarker)
+                endgame_tableau_role_for_slot(ENDGAME_TABLEAU_LORD_BRITISH_SLOT, object)
+                    == Some(EndgameTableauActorRole::LordBritish)
             })
         {
             if self.step_endgame_tableau_slot_once_to_target(
-                ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
+                ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
                 ENDGAME_TABLEAU_VICTORY_EXIT_TARGET,
             ) {
                 return true;
             }
-            self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_SCENE_MARKER_SLOT);
+            self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
             self.animation.tick_static_tiles();
             return true;
         }

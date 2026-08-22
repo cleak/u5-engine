@@ -60,14 +60,73 @@ use crate::clock::{SKY_STRIP_CELL_COUNT, SkyStripMarker, sky_strip_composed_cell
 use crate::constants::CH_CELL_SIDE;
 use crate::graphics::{EGA_PALETTE_RGB, FixedCellFont};
 
-/// EGA index of the border ribbon fill.
+// # Colour provenance - PROVISIONAL
+//
+// The published contract names these as user-interface colour-table
+// *slots*, not raw indices, and the per-family values it quotes are
+// under a re-grounding audit on the decomp side: any colour claim in
+// the spec that traces only to a screen capture is being re-derived
+// from the binaries or reworded as an unconfirmed observation. Treat
+// every index below as provisional and change it here, in one place,
+// when that audit reports.
+//
+// What these particular values do *not* come from is a photographed or
+// re-encoded capture. They were read as palette **indices** out of
+// `u5-spec/capture/ultima_000.png`, which is an indexed 320x200 file
+// whose palette is bit-exact standard EGA, so no RGB sampling and no
+// display pipeline sits between the file and the number. That is a
+// stronger provenance than a colour sampled from a scaled RGB capture,
+// but it is still a capture rather than the code, which is why it stays
+// marked provisional. The painters take these as parameters (see
+// [`ChromePalette`]) rather than reading the constants directly, so a
+// correction needs no call-site changes.
+
+/// Provisional EGA index of the border ribbon fill ("chrome").
 pub const CHROME_RIBBON_INDEX: u8 = 1;
-/// EGA index of the 1px white rules and the chrome label text.
+/// Provisional EGA index of the 1px rules and chrome label text
+/// ("accent").
 pub const CHROME_RULE_INDEX: u8 = 15;
-/// EGA index the sky strip draws moon-phase glyphs in.
+/// Provisional EGA index the sky strip draws moon-phase glyphs in.
+/// `moons.md` publishes this as colour-table slot 6; the lead's note
+/// flags the moons.md colours specifically as capture-derived.
 pub const SKY_STRIP_MOON_INDEX: u8 = 7;
-/// EGA index the sky strip draws the fixed hour marker in.
+/// Provisional EGA index the sky strip draws the fixed hour marker in.
+/// `moons.md` publishes this as colour-table slot 5; same caveat.
 pub const SKY_STRIP_HOUR_MARKER_INDEX: u8 = 14;
+
+/// The two colour-table slots the chrome paint uses, plus the
+/// background it clears to.
+///
+/// The published paint is specified in terms of "the chrome colour"
+/// and "the accent colour" rather than raw indices, and it reads no
+/// gameplay state - only these two values. Passing them in keeps the
+/// bracket primitive reusable by the three call sites that consume it
+/// (the gameplay border, the intro menu's border captions and the
+/// message window's line prompt), each of which supplies its own pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChromePalette {
+    /// Ribbon fill and the solid pass of a bracket end cap.
+    pub chrome: u8,
+    /// Rules, label text and the stroked pass of a bracket end cap.
+    pub accent: u8,
+    /// Cleared background behind the frame.
+    pub background: u8,
+}
+
+impl ChromePalette {
+    /// Provisional EGA-family values. See the colour-provenance note.
+    pub const EGA: Self = Self {
+        chrome: CHROME_RIBBON_INDEX,
+        accent: CHROME_RULE_INDEX,
+        background: 0,
+    };
+}
+
+impl Default for ChromePalette {
+    fn default() -> Self {
+        Self::EGA
+    }
+}
 
 /// Top-left pixel of the 11x11 map viewport interior, immediately
 /// inside the white frame rule at `x=7` / `y=7`.
@@ -613,15 +672,16 @@ pub fn paint_gameplay_frame_chrome(
     height: usize,
     content: &GameplayChromeContent,
     fonts: ChromeFonts<'_>,
+    palette: ChromePalette,
 ) {
     let top = top_gap(&content.top);
     let bottom = bottom_gap(&content.bottom);
     let timing = timing_glyph_gap(content.timing_glyph);
 
     for (x0, y0, x1, y1) in RIBBON_BANDS {
-        fill_rect(rgba, width, height, x0, y0, x1, y1, CHROME_RIBBON_INDEX);
+        fill_rect(rgba, width, height, x0, y0, x1, y1, palette.chrome);
     }
-    carve_rounded_corners(rgba, width, height, fonts.ibm);
+    carve_rounded_corners(rgba, width, height, fonts.ibm, palette);
 
     for (gap, band_row) in [
         (top, SKY_STRIP_ROW),
@@ -643,25 +703,33 @@ pub fn paint_gameplay_frame_chrome(
     }
 
     for (x0, y0, x1, y1) in FIXED_RULES {
-        fill_rect(rgba, width, height, x0, y0, x1, y1, CHROME_RULE_INDEX);
+        fill_rect(rgba, width, height, x0, y0, x1, y1, palette.accent);
     }
-    paint_interrupted_rule(rgba, width, height, 7, 7, 184, top);
-    paint_interrupted_rule(rgba, width, height, 184, 7, 184, bottom);
+    paint_interrupted_rule(rgba, width, height, 7, 7, 184, top, palette);
+    paint_interrupted_rule(rgba, width, height, 184, 7, 184, bottom, palette);
     for row_y in DIVIDER_RULE_ROWS {
         let gap = if row_y == 56 || row_y == 63 {
             timing
         } else {
             None
         };
-        paint_interrupted_rule(rgba, width, height, row_y, 191, 312, gap);
+        paint_interrupted_rule(rgba, width, height, row_y, 191, 312, gap, palette);
     }
 
     if let Some(gap) = top {
-        paint_gap_caps(rgba, width, height, fonts.ibm, gap, SKY_STRIP_ROW);
+        paint_gap_caps(rgba, width, height, fonts.ibm, gap, SKY_STRIP_ROW, palette);
         paint_gap_content(rgba, width, height, fonts, gap, SKY_STRIP_ROW, &content.top);
     }
     if let Some(gap) = bottom {
-        paint_gap_caps(rgba, width, height, fonts.ibm, gap, WIND_BANNER_ROW);
+        paint_gap_caps(
+            rgba,
+            width,
+            height,
+            fonts.ibm,
+            gap,
+            WIND_BANNER_ROW,
+            palette,
+        );
         paint_gap_content(
             rgba,
             width,
@@ -673,7 +741,15 @@ pub fn paint_gameplay_frame_chrome(
         );
     }
     if let (Some(gap), Some(byte)) = (timing, content.timing_glyph) {
-        paint_gap_caps(rgba, width, height, fonts.ibm, gap, TIMING_GLYPH_ROW);
+        paint_gap_caps(
+            rgba,
+            width,
+            height,
+            fonts.ibm,
+            gap,
+            TIMING_GLYPH_ROW,
+            palette,
+        );
         draw_glyph(
             rgba,
             width,
@@ -702,8 +778,9 @@ pub fn paint_ribbon_cap(
     direction: RibbonCapDirection,
     column: u8,
     row: u8,
+    palette: ChromePalette,
 ) {
-    draw_ribbon_cap(rgba, width, height, font, direction, column, row);
+    draw_ribbon_cap(rgba, width, height, font, direction, column, row, palette);
 }
 
 /// Paint the message window's per-line right-pointing cap prefix.
@@ -713,6 +790,7 @@ pub fn paint_message_line_cap(
     height: usize,
     font: &FixedCellFont,
     row: u8,
+    palette: ChromePalette,
 ) {
     paint_ribbon_cap(
         rgba,
@@ -722,13 +800,20 @@ pub fn paint_message_line_cap(
         RibbonCapDirection::Right,
         MESSAGE_WINDOW_LEFT,
         row,
+        palette,
     );
 }
 
 /// Phase 2: stamp the three reserved corner glyphs opaquely over the
 /// fills. Set bits paint chrome, clear bits paint black, so the glyph's
 /// carve shapes the bevel out of the band that was filled underneath.
-fn carve_rounded_corners(rgba: &mut [u8], width: usize, height: usize, font: &FixedCellFont) {
+fn carve_rounded_corners(
+    rgba: &mut [u8],
+    width: usize,
+    height: usize,
+    font: &FixedCellFont,
+    palette: ChromePalette,
+) {
     for (code, column, row) in CHROME_CORNER_GLYPHS {
         let mut mask = [0u8; CH_CELL_SIDE];
         for (glyph_row, bits) in mask.iter_mut().enumerate() {
@@ -743,8 +828,8 @@ fn carve_rounded_corners(rgba: &mut [u8], width: usize, height: usize, font: &Fi
             &mask,
             column,
             row,
-            CHROME_RIBBON_INDEX,
-            0,
+            palette.chrome,
+            palette.background,
         );
     }
 }
@@ -795,9 +880,10 @@ fn paint_interrupted_rule(
     x0: usize,
     x1: usize,
     gap: Option<ResolvedGap>,
+    palette: ChromePalette,
 ) {
     match gap {
-        None => fill_rect(rgba, width, height, x0, row_y, x1, row_y, CHROME_RULE_INDEX),
+        None => fill_rect(rgba, width, height, x0, row_y, x1, row_y, palette.accent),
         Some(gap) => {
             let left_end = gap.left_cap_column as usize * CH_CELL_SIDE;
             let right_start = gap.right_cap_column as usize * CH_CELL_SIDE + CH_CELL_SIDE - 1;
@@ -810,7 +896,7 @@ fn paint_interrupted_rule(
                     row_y,
                     left_end.min(x1),
                     row_y,
-                    CHROME_RULE_INDEX,
+                    palette.accent,
                 );
             }
             if right_start <= x1 {
@@ -822,7 +908,7 @@ fn paint_interrupted_rule(
                     row_y,
                     x1,
                     row_y,
-                    CHROME_RULE_INDEX,
+                    palette.accent,
                 );
             }
         }
@@ -836,6 +922,7 @@ fn paint_gap_caps(
     font: &FixedCellFont,
     gap: ResolvedGap,
     row: u8,
+    palette: ChromePalette,
 ) {
     draw_ribbon_cap(
         rgba,
@@ -845,6 +932,7 @@ fn paint_gap_caps(
         RibbonCapDirection::Right,
         gap.left_cap_column,
         row,
+        palette,
     );
     draw_ribbon_cap(
         rgba,
@@ -854,6 +942,7 @@ fn paint_gap_caps(
         RibbonCapDirection::Left,
         gap.right_cap_column,
         row,
+        palette,
     );
 }
 
@@ -908,6 +997,7 @@ fn draw_ribbon_cap(
     direction: RibbonCapDirection,
     column: u8,
     row: u8,
+    palette: ChromePalette,
 ) {
     let sprite = ribbon_cap_sprite(font, direction);
     draw_mask(
@@ -917,7 +1007,7 @@ fn draw_ribbon_cap(
         &sprite.ribbon,
         column,
         row,
-        CHROME_RIBBON_INDEX,
+        palette.chrome,
     );
     draw_mask(
         rgba,
@@ -926,7 +1016,7 @@ fn draw_ribbon_cap(
         &sprite.white,
         column,
         row,
-        CHROME_RULE_INDEX,
+        palette.accent,
     );
 }
 

@@ -62,10 +62,10 @@ use u5_runtime::{
     MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot,
     NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
     NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
-    PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX,
-    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome,
+    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_TILE,
+    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y,
+    PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
+    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome,
     ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
     REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
     RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
@@ -136,12 +136,12 @@ use u5_runtime::{
 };
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
-    CHROME_RIBBON_INDEX, CHROME_RULE_INDEX, ChromeFonts, GameplayMessageLog, MESSAGE_WINDOW_RIGHT,
-    MessageWindowRow, RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter,
-    configure_play_text_windows, gameplay_chrome_content, layout_message_window,
-    load_runes_ch_font, message_is_scene_entry_narration, paint_fixed_cell_glyph,
-    paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
-    prompt_cursor_glyph, ribbon_cap_sprite,
+    CHROME_RIBBON_INDEX, CHROME_RULE_INDEX, ChromeFonts, ChromePalette, GameplayMessageLog,
+    MESSAGE_WINDOW_RIGHT, MessageWindowRow, RibbonCapDirection, VIEWPORT_ORIGIN_X,
+    VIEWPORT_ORIGIN_Y, command_for_letter, configure_play_text_windows, gameplay_chrome_content,
+    layout_message_window, load_runes_ch_font, message_is_scene_entry_narration,
+    paint_fixed_cell_glyph, paint_fixed_cell_text, paint_gameplay_frame_chrome,
+    paint_message_line_cap, prompt_cursor_glyph, ribbon_cap_sprite,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -878,6 +878,7 @@ pub fn visual_frame_suite(
         ibm: &font,
         runes: &runes,
         log: &suite_log,
+        game_dir,
         cursor_frame: 0,
     };
     let mut reports = Vec::new();
@@ -1035,6 +1036,7 @@ pub fn visual_route_suite(
         ibm: &font,
         runes: &runes,
         log: &suite_log,
+        game_dir,
         cursor_frame: 0,
     };
     let mut reports = Vec::new();
@@ -7552,11 +7554,12 @@ fn seed_visual_route_underworld_word_of_power(state: &mut PlayState) {
     seed_visual_route_word_of_power(state, "VERAMOCOR");
 }
 
-/// `Y`, `Y`, then keystrokes enough to page the victory rite, the
-/// tableau exit, the `endgame.md §7.1` fade to black and the first
-/// `END.DAT` narrative windows.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 23] = {
-    let mut script = [""; 23];
+/// `Y`, `Y`, then keystrokes enough to run the victory ending to its
+/// end: the rite beats, the tableau exit, the `endgame.md §7.1` fade to
+/// black, all six `END.DAT` narrative windows, the certificate and the
+/// elapsed-time report, finishing in the `§9.5` terminal hold.
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 29] = {
+    let mut script = [""; 29];
     script[0] = "Y";
     script[1] = "Y";
     script
@@ -7779,7 +7782,7 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // is pixel-identical to the tableau's authored floor tile. Those
     // steps therefore produce byte-identical frames today.
     (route_label == "route-endgame-tableau-walk-in")
-        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=23).contains(&step))
+        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=29).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
         || (route_label == "route-castle-light-decay-route" && (1..=2).contains(&step))
         || (route_label.starts_with("route-shop-arms-")
@@ -7933,6 +7936,7 @@ fn screenshot_system(
                 ibm: &v.text_font,
                 runes: &v.rune_font,
                 log: &v.message_log,
+                game_dir: &game_dir,
                 cursor_frame: v.prompt_cursor_frame,
             };
             let rgba = render_visual_play_frame_with_input(&mut v.state, &v.atlas, ctx, "", "");
@@ -8220,6 +8224,7 @@ fn animate_static_tiles(
         ibm: &v.text_font,
         runes: &v.rune_font,
         log: &v.message_log,
+        game_dir: &v.game_dir,
         cursor_frame: v.prompt_cursor_frame,
     };
     let rgba = render_visual_play_frame_with_input_and_cursor(
@@ -8260,6 +8265,7 @@ fn setup(
             ibm: &text_font,
             runes: &rune_font,
             log: &message_log,
+            game_dir: &game_dir,
             cursor_frame: 0,
         },
         "",
@@ -8440,6 +8446,7 @@ fn transition_visual_intro_to_gameplay(
             ibm: &text_font,
             runes: &rune_font,
             log: &message_log,
+            game_dir: &game_dir,
             cursor_frame: 0,
         },
         "",
@@ -9565,6 +9572,7 @@ fn drive_visual(
         ibm: &v.text_font,
         runes: &v.rune_font,
         log: &v.message_log,
+        game_dir: &v.game_dir,
         cursor_frame: v.prompt_cursor_frame,
     };
     let rgba = render_visual_play_frame_with_input_and_cursor(
@@ -10233,8 +10241,12 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
 const CHARGEN_NAME_PROMPT_TEXT: &str = "By what name shalt thou be known?";
 const CHARGEN_NAME_PROMPT_COLUMN: usize = 3;
 const CHARGEN_NAME_PROMPT_ROW: usize = 17;
-/// `chargen.md §5.1` step 2 read/echo cell.
-const CHARGEN_NAME_ECHO_COLUMN: usize = 14;
+/// `chargen.md §5.1` step 2 read/echo cells. `cleak/u5-spec#82`
+/// measurement 3 pinned these exactly: the input prompt's colon sits at
+/// column 14 and the typed name begins at column 15, capped at eight
+/// characters.
+const CHARGEN_NAME_PROMPT_COLON_COLUMN: usize = 14;
+const CHARGEN_NAME_ECHO_COLUMN: usize = 15;
 const CHARGEN_NAME_ECHO_ROW: usize = 19;
 /// `chargen.md §4` gender prompt text at the `§5.1` step-4 cell. §4
 /// prints it with a trailing space before the accepted key is echoed.
@@ -10333,11 +10345,21 @@ fn paint_chargen_prompt_screen(
     } else {
         String::from_utf8_lossy(accepted_name).into_owned()
     };
+    // The free-text input prompt's colon is drawn as soon as the prompt
+    // opens and stays put while the gender step runs.
+    overlay_fixed_cell_text_intro_buffer(
+        buffer,
+        font,
+        ":",
+        CHARGEN_NAME_PROMPT_COLON_COLUMN,
+        CHARGEN_NAME_ECHO_ROW,
+        false,
+    );
     if !echo.is_empty() {
         overlay_fixed_cell_text_intro_buffer(
             buffer,
             font,
-            &echo,
+            &echo[..echo.len().min(u5_runtime::CHARGEN_NAME_INPUT_LIMIT)],
             CHARGEN_NAME_ECHO_COLUMN,
             CHARGEN_NAME_ECHO_ROW,
             false,
@@ -12442,6 +12464,10 @@ struct PlayFrameContext<'a> {
     ibm: &'a FixedCellFont,
     runes: &'a FixedCellFont,
     log: &'a GameplayMessageLog,
+    /// `endgame.md §9.4`: the certificate backdrop is loaded from the
+    /// end-screen archive at render time, so the compositor needs the
+    /// asset directory. Every other path ignores it.
+    game_dir: &'a Path,
     /// Animation frame for the live input line's barber-pole cursor.
     cursor_frame: u64,
 }
@@ -12535,7 +12561,40 @@ fn render_visual_play_frame_with_input_and_cursor(
     if state.endgame.is_some() {
         return render_endgame_framebuffer(state, atlas, input_line, default_message, ctx);
     }
+    render_visual_play_frame_over_viewport(
+        state,
+        atlas,
+        ctx,
+        input_line,
+        default_message,
+        prompt_cursor_visible,
+        EndgameViewport::World,
+    )
+}
 
+/// Which raster fills the ordinary gameplay viewport.
+///
+/// `endgame.md §3.1`: the endgame draws its throne-room tableau into
+/// the *same* eleven-by-eleven viewport at `(8, 8)`, over the same
+/// chrome and standing text windows, so the only thing that differs
+/// between a gameplay frame and an endgame tableau frame is which
+/// raster goes in the viewport.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EndgameViewport {
+    World,
+    Tableau,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_visual_play_frame_over_viewport(
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    ctx: PlayFrameContext<'_>,
+    input_line: &str,
+    default_message: &str,
+    prompt_cursor_visible: bool,
+    which: EndgameViewport,
+) -> Vec<u8> {
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
 
@@ -12543,7 +12602,14 @@ fn render_visual_play_frame_with_input_and_cursor(
     chrome_state.refresh_cached_moon_glyphs();
     let chrome = gameplay_chrome_content(&chrome_state);
     let mut rgba = visual_play_background_framebuffer();
-    paint_gameplay_frame_chrome(&mut rgba, width, height, &chrome, ctx.chrome_fonts());
+    paint_gameplay_frame_chrome(
+        &mut rgba,
+        width,
+        height,
+        &chrome,
+        ctx.chrome_fonts(),
+        ChromePalette::EGA,
+    );
 
     let surface = render_integrated_status_framebuffer(
         state,
@@ -12555,7 +12621,12 @@ fn render_visual_play_frame_with_input_and_cursor(
     overlay_nonblack_rgba(&mut rgba, &surface.rgba);
     paint_message_window_rows(&mut rgba, width, height, ctx, &surface.message_rows);
 
-    let viewport = render_base_framebuffer(state, atlas);
+    let viewport = match which {
+        EndgameViewport::World => render_base_framebuffer(state, atlas),
+        EndgameViewport::Tableau => render_endgame_tableau_viewport(state, atlas)
+            .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"))
+            .to_rgba(),
+    };
     blit_rgba(
         &mut rgba,
         width,
@@ -12585,7 +12656,7 @@ fn paint_message_window_rows(
 ) {
     for row in rows {
         if row.prefixed {
-            paint_message_line_cap(rgba, width, height, ctx.ibm, row.row);
+            paint_message_line_cap(rgba, width, height, ctx.ibm, row.row, ChromePalette::EGA);
         }
         paint_fixed_cell_text(
             rgba,
@@ -12600,118 +12671,167 @@ fn paint_message_window_rows(
     }
 }
 
-/// `systems/endgame.md §3` step 2 / `§10`: the endgame owns the whole
-/// 320x200 surface. It is *not* a gameplay mode, so this path never
-/// calls the gameplay stats-panel painter — live party gold, food,
-/// date and moon phases must not be painted over the terminal ending
-/// — and it starts from a cleared surface every frame rather than from
-/// the play text-window layout.
+/// `systems/endgame.md §3.1`: the endgame installs no bespoke renderer
+/// and no bespoke layout.
 ///
-/// Layout note (cleak/u5-spec#82): `§3`/`§5`/`§9` do not publish the
-/// endgame's own pixel geometry — where the throne-room tableau sits
-/// on the surface, nor the rectangles that carry the Lord British
-/// dialogue, the two box-delivery Y/N prompts, the `ENDMSG.DAT` rite
-/// beats, the six `END.DAT` windows and the certificate. Rather than
-/// leave the prose provably occluded (the tableau blit is 176x176 at
-/// the origin, so a full-width text window is completely covered),
-/// this picks the minimal non-occluding split that needs no invented
-/// numbers: the tableau keeps the origin it already had, and endgame
-/// text is confined to the columns the blit cannot reach while the
-/// tableau is up, expanding to the full screen on the beats that drop
-/// it. Replace both rectangles with the published geometry when #82
-/// lands.
+/// `cleak/u5-spec#82` published this and it retracts the reading this
+/// engine shipped. The endgame **reuses the ordinary gameplay surface
+/// and the standing text windows**, and only selects which window is
+/// active:
+///
+/// - the throne-room tableau is the ordinary eleven-by-eleven world
+///   viewport, 16-px cells with the grid's top-left at pixel `(8, 8)`,
+///   so it is the inclusive square `(8, 8)..(183, 183)`;
+/// - Lord British's dialogue, both box-delivery prompts and their
+///   echoes, the revival lines and all seven rite messages go to the
+///   **message window**, cells `(24, 11)..(39, 23)` - selected
+///   implicitly, as the last act of the full status-panel redraw the
+///   endgame runs on entry. It does not overlap the tableau, which is
+///   exactly why the text never occludes the scene;
+/// - the six narrative windows and the certificate use the
+///   **full-screen window**, cells `(0, 0)..(39, 24)`.
+///
+/// So the tableau phase is the ordinary play frame with the tableau
+/// viewport substituted for the world one - stats panel and all. The
+/// earlier "the endgame owns the whole surface and must never paint
+/// the stats panel" reading was wrong; what was actually broken was
+/// the window selection, which put the dialogue under the blit.
 fn render_endgame_framebuffer(
     state: &mut PlayState,
     atlas: &TileAtlas,
     input_line: &str,
-    // The gameplay "ready" hint is not endgame text: `§10` takes the
-    // scene byte out of play, so an empty beat leaves an empty
-    // rectangle rather than borrowing the play-mode default message.
-    _default_message: &str,
+    default_message: &str,
     ctx: PlayFrameContext<'_>,
 ) -> Vec<u8> {
-    let width = VISUAL_PLAY_FRAME_WIDTH as usize;
-    let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let show_tableau = endgame_frame_should_show_tableau(state);
-
-    let display_state = state.clone();
-    let mut message = display_state.message.clone();
-    if !input_line.is_empty() {
-        message.push('\n');
-        message.push_str(input_line);
-    }
-
-    let system = endgame_text_window_system(&message, show_tableau);
-    let mut rgba = render_text_window_rgba(&system, ctx.ibm)
-        .unwrap_or_else(|err| panic!("visual endgame text window render failed: {err}"));
-    apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
-
-    if show_tableau {
-        let viewport = render_endgame_tableau_viewport(state, atlas)
-            .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"));
-        assert!(
-            ENDGAME_TABLEAU_ORIGIN_X + viewport.width
-                <= ENDGAME_TEXT_WINDOW_LEFT_COLUMN as usize * CH_CELL_SIDE,
-            "endgame tableau blit ({} px wide at x={ENDGAME_TABLEAU_ORIGIN_X}) would occlude the endgame text rectangle starting at column {}",
-            viewport.width,
-            ENDGAME_TEXT_WINDOW_LEFT_COLUMN
-        );
-        blit_rgba(
-            &mut rgba,
-            width,
-            height,
-            &viewport.to_rgba(),
-            viewport.width,
-            viewport.height,
-            ENDGAME_TABLEAU_ORIGIN_X,
-            ENDGAME_TABLEAU_ORIGIN_Y,
+    if endgame_frame_is_certificate(state) {
+        return render_endgame_certificate_framebuffer(
+            state,
+            ctx.game_dir,
+            TileGraphicsDepth::Ega16,
+            ctx,
         );
     }
-    rgba
+    if !endgame_frame_should_show_tableau(state) {
+        return render_endgame_full_screen_framebuffer(state, ctx);
+    }
+    render_visual_play_frame_over_viewport(
+        state,
+        atlas,
+        ctx,
+        input_line,
+        default_message,
+        false,
+        EndgameViewport::Tableau,
+    )
 }
 
-/// cleak/u5-spec#82: the endgame tableau's origin on its own surface.
+/// `endgame.md §9.4`: the certificate backdrop is the end-screen
+/// archive's single 260x168 record - a blank torn-edged parchment with
+/// a plain light interior - drawn at `(40, 0)`, so it occupies
+/// `(40, 0)..(299, 167)`, character rows 0 through 20.
+const ENDGAME_CERTIFICATE_PARCHMENT: ImagePanelSpec = ImagePanelSpec {
+    stem: "ENDSC",
+    subimage: 0,
+    top_left_x: u5_runtime::ENDGAME_CERTIFICATE_PARCHMENT_X,
+    top_left_y: u5_runtime::ENDGAME_CERTIFICATE_PARCHMENT_Y,
+    width: 260,
+    height: 168,
+};
+
+/// `endgame.md §9.1`-`§9.5`: the certificate screen.
 ///
-/// `endgame.md §10` takes the endgame out of gameplay entirely, so it
-/// does not draw the gameplay border and must not inherit that
-/// border's `VIEWPORT_ORIGIN_X`/`_Y` inset — the endgame owns the
-/// whole 320x200 surface. The origin stays at (0, 0) until #82
-/// publishes the real one.
-const ENDGAME_TABLEAU_ORIGIN_X: usize = 0;
-const ENDGAME_TABLEAU_ORIGIN_Y: usize = 0;
+/// Printed directly onto the page over the parchment - there is no
+/// second composition and no further page copy. Centred output on;
+/// inverse video on for the body, which is what makes dark lettering
+/// on the light parchment; the runic font slot for exactly the two
+/// closing-title lines; inverse video off for the elapsed-time report,
+/// which lands on the cleared black page below the parchment's bottom
+/// edge, where normal video is what makes it legible.
+fn render_endgame_certificate_framebuffer(
+    state: &PlayState,
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
+    ctx: PlayFrameContext<'_>,
+) -> Vec<u8> {
+    let endgame = state
+        .endgame
+        .as_ref()
+        .expect("endgame certificate render requires endgame state");
+    let certificate = endgame
+        .certificate
+        .as_ref()
+        .expect("victory endgame carries certificate fields");
+    let report = endgame
+        .final_report
+        .expect("victory endgame carries the final report");
 
-/// First text column the tableau blit cannot reach, derived from the
-/// origin and the 11x11 / 16-px-per-cell tableau so the two can never
-/// drift apart. Provisional with the origin above (#82); this is the
-/// minimal non-occluding split, not published geometry.
-const ENDGAME_TEXT_WINDOW_LEFT_COLUMN: u8 = ((ENDGAME_TABLEAU_ORIGIN_X
-    + ENDGAME_TABLEAU_WIDTH * TILE_ATLAS_SIDE)
-    .div_ceil(CH_CELL_SIDE)) as u8;
+    let mut buffer = new_intro_display_buffer();
+    buffer.clear(0);
+    blit_image_panel_specs_intro_buffer(
+        &mut buffer,
+        game_dir,
+        depth,
+        std::slice::from_ref(&ENDGAME_CERTIFICATE_PARCHMENT),
+    );
 
-fn endgame_text_window_left(show_tableau: bool) -> u8 {
-    if show_tableau {
-        ENDGAME_TEXT_WINDOW_LEFT_COLUMN
-    } else {
-        0
+    for line in u5_runtime::endgame_certificate_lines(certificate, report) {
+        // Inverse video swaps the cell's foreground and background, so
+        // the body prints dark-on-light over the parchment and the
+        // report prints light-on-dark below it.
+        let (fg, bg) = if line.inverse {
+            (0x00, 0x0f)
+        } else {
+            (0x0f, 0x00)
+        };
+        let font = if line.runic { ctx.runes } else { ctx.ibm };
+        let column = usize::from(line.column());
+        let text = if line.runic {
+            u5_runtime::runic_line_encoding(&line.text)
+        } else {
+            line.text.clone()
+        };
+        for (index, byte) in text.bytes().enumerate() {
+            buffer.draw_fixed_glyph_cell(font, byte, column + index, usize::from(line.row), fg, bg);
+        }
     }
+    buffer.to_rgba()
 }
 
-/// `endgame.md §3` step 2 "reset the screen": a fresh window system
-/// means every cell outside the endgame's own text rectangle renders
-/// as cleared background, so nothing of the gameplay layout - the
-/// stats panel above all - survives into an endgame frame.
-fn endgame_text_window_system(message: &str, show_tableau: bool) -> TextWindowSystem {
+/// `endgame.md §8`/`§9`: the narrative windows and the certificate own
+/// the full-screen window on a page the caller has cleared. Nothing of
+/// the gameplay layout survives onto them.
+fn render_endgame_full_screen_framebuffer(
+    state: &mut PlayState,
+    ctx: PlayFrameContext<'_>,
+) -> Vec<u8> {
+    let display_state = state.clone();
     let mut system = TextWindowSystem::new();
     system.set_window_rect(
         MAIN_TEXT_WINDOW_INDEX,
-        endgame_text_window_left(show_tableau),
+        0,
         0,
         TEXT_SCREEN_COLUMNS - 1,
         TEXT_SCREEN_ROWS - 1,
     );
     system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
-    paint_message_text_window(&mut system, message);
-    system
+    paint_message_text_window(&mut system, &display_state.message);
+    let mut rgba = render_text_window_rgba(&system, ctx.ibm)
+        .unwrap_or_else(|err| panic!("visual endgame text window render failed: {err}"));
+    apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
+    rgba
+}
+
+/// `endgame.md §9`: the certificate screen owns the page from the
+/// certificate beat onward, including the terminal hold.
+fn endgame_frame_is_certificate(state: &PlayState) -> bool {
+    state.endgame.as_ref().is_some_and(|endgame| {
+        matches!(
+            endgame.cinematic.step,
+            u5_runtime::endgame_cinematic::EndgameCinematicStep::Certificate
+                | u5_runtime::endgame_cinematic::EndgameCinematicStep::FinalReport
+                | u5_runtime::endgame_cinematic::EndgameCinematicStep::Finished
+        ) && endgame.certificate.is_some()
+    })
 }
 
 fn endgame_frame_should_show_tableau(state: &PlayState) -> bool {
@@ -12763,16 +12883,15 @@ fn render_endgame_tableau_viewport(
         if object.x >= ENDGAME_TABLEAU_WIDTH || object.y >= ENDGAME_TABLEAU_HEIGHT {
             continue;
         }
-        // cleak/u5-spec#82: `endgame.md §4` gives the class -> tableau
-        // type/tile bytes but not the index space they live in. Drawn
-        // through the world tile atlas they are terrain/furniture, and
-        // `0x44` (Bard) is the tableau's own authored floor byte, so a
-        // Bard is pixel-identical to the floor. The bytes are kept
-        // verbatim rather than guessing a sprite-bank translation.
-        let tile = if object.tile == u5_runtime::PLAYER_TILE {
-            PLAYER_SPRITE_TILE
-        } else {
-            usize::from(object.tile)
+        // `active-objects.md §12` / `catalogs/tile-catalog.md §3.1`,
+        // published in answer to cleak/u5-spec#82: an active-object
+        // record carries an *actor byte*, not a tile id. The renderer
+        // adds 256, so actor bytes index the upper, actor half of the
+        // 512-tile space - which is why actor `0x44` is the Bard sprite
+        // (tile 324) and not the floor tile whose terrain index is also
+        // `0x44`. `0x16` is the reserved draw-nothing value.
+        let Some(tile) = u5_runtime::actor_tile_for_byte(object.tile) else {
+            continue;
         };
         blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;
     }
@@ -13657,6 +13776,7 @@ mod tests {
             ibm: font,
             runes: font,
             log,
+            game_dir: std::path::Path::new("."),
             cursor_frame,
         }
     }
@@ -16848,68 +16968,33 @@ mod tests {
         );
     }
 
-    /// Column of the leftmost non-space cell the endgame text window
-    /// painted, if any.
-    fn endgame_text_first_painted_column(system: &TextWindowSystem) -> Option<u8> {
-        let mut first = None;
-        for row in 0..TEXT_SCREEN_ROWS {
-            for column in 0..TEXT_SCREEN_COLUMNS {
-                let Some(cell) = system.cell(column, row) else {
-                    continue;
-                };
-                if cell.byte != b' ' && cell.byte != 0 {
-                    first = Some(first.map_or(column, |current: u8| current.min(column)));
-                }
-            }
-        }
-        first
-    }
-
     #[test]
-    fn endgame_text_never_lands_under_the_tableau_blit() {
-        // `endgame.md §3`/`§5`: the Lord British dialogue and the
-        // box-delivery Y/N prompts are blocking prompts the player has
-        // to read. The tableau blit is 11 cells at 16 px, i.e. the
-        // whole left 176 px of the surface, so the endgame text window
-        // has to start at the first column it cannot reach.
-        // cleak/u5-spec#82 still owes the published rectangles.
+    fn endgame_reuses_the_published_gameplay_windows() {
+        // `endgame.md §3.1` (cleak/u5-spec#82): the endgame installs no
+        // bespoke layout. The tableau is the ordinary world viewport at
+        // (8, 8), 176 px on a side, and the dialogue goes to the
+        // standing message window at cells (24, 11)..(39, 23) - which
+        // is why it never occludes the scene.
+        assert_eq!(VIEWPORT_ORIGIN_X, 8);
+        assert_eq!(VIEWPORT_ORIGIN_Y, 8);
         assert_eq!(
-            ENDGAME_TEXT_WINDOW_LEFT_COLUMN as usize * CH_CELL_SIDE,
+            VIEWPORT_SIZE_PX as usize,
             ENDGAME_TABLEAU_WIDTH * TILE_ATLAS_SIDE
         );
-        assert_eq!(
-            endgame_text_window_left(true),
-            ENDGAME_TEXT_WINDOW_LEFT_COLUMN
-        );
-        assert_eq!(endgame_text_window_left(false), 0);
+        assert_eq!(VIEWPORT_SIZE_PX, 176);
 
-        let system = endgame_text_window_system(
-            "Lord British asks whether thou hast brought his box. (Y/N)",
-            true,
-        );
-        let first = endgame_text_first_painted_column(&system)
-            .expect("endgame prompt must paint at least one glyph");
+        // The message window starts past the tableau's right edge, so
+        // the two rectangles are disjoint by construction.
+        let tableau_right = VIEWPORT_ORIGIN_X + VIEWPORT_SIZE_PX as usize - 1;
+        assert_eq!(tableau_right, 183);
         assert!(
-            first >= ENDGAME_TEXT_WINDOW_LEFT_COLUMN,
-            "endgame prompt glyph at column {first} is under the tableau blit"
+            usize::from(u5_runtime::MESSAGE_WINDOW_LEFT) * CH_CELL_SIDE > tableau_right,
+            "message window must start right of the tableau"
         );
-    }
-
-    #[test]
-    fn endgame_frame_never_paints_the_gameplay_stats_panel() {
-        // `endgame.md §3`/`§10`: the endgame is not a gameplay mode.
-        // Live party gold / food / date / moon phases must not be
-        // painted over the terminal ending.
-        let system = endgame_text_window_system("Rite of Avatarhood", false);
-        for row in 0..TEXT_SCREEN_ROWS {
-            let mut line = String::new();
-            for column in STATS_PANEL_TEXT_LEFT..TEXT_SCREEN_COLUMNS {
-                if let Some(cell) = system.cell(column, row) {
-                    line.push(cell.byte as char);
-                }
-            }
-            assert!(!line.contains("STATS"), "row {row}: {line}");
-        }
+        assert_eq!(u5_runtime::MESSAGE_WINDOW_LEFT, 24);
+        assert_eq!(u5_runtime::MESSAGE_WINDOW_TOP, 11);
+        assert_eq!(u5_runtime::MESSAGE_WINDOW_RIGHT, 39);
+        assert_eq!(u5_runtime::MESSAGE_WINDOW_BOTTOM, 23);
     }
 
     #[test]
@@ -18247,9 +18332,9 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        // route-endgame-tableau-walk-in adds 24 (endgame.md §4 walk-in)
-        // and the full-victory cinematic grew by 5 to reach §7.1's fade.
-        assert_eq!(reports.len(), 1808);
+        // route-endgame-tableau-walk-in adds 24 (endgame.md §4 walk-in);
+        // the full-victory cinematic now runs to the §9.5 terminal hold.
+        assert_eq!(reports.len(), 1814);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -18264,7 +18349,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1808"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1814"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
