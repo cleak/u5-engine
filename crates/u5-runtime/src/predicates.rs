@@ -1142,7 +1142,19 @@ pub fn rounded_div(numerator: isize, denominator: isize) -> isize {
     }
 }
 
-pub fn surface_tile_blocks_sight(tile: u8) -> bool {
+/// NOT a visibility predicate. This is the *physical* line-blocker used
+/// by the town F-Fire cannon scan (`vehicles.md §8`: the handler "scans a
+/// short fixed line for the first blocking target"). `visibility.md §6` is
+/// explicit that the sight rule "is its own classifier" and "is not
+/// derived from movement passability", so the centre-out sight carve must
+/// use [`tile_blocks_sight_propagation`] and
+/// [`tile_propagates_sight_only_when_adjacent`] instead. The band this
+/// covers (`24..=79`, `96..=103`, `160..=255`) swallows ordinary interior
+/// floor tiles such as the brick floor `0x44`, so wiring it into the carve
+/// collapses every indoor scene to the player's own 3x3 neighbourhood.
+/// Kept under a projectile name so it cannot drift back into the
+/// visibility path.
+pub fn surface_tile_blocks_projectile(tile: u8) -> bool {
     is_mountain_tile(tile) || is_wall_or_closed_door_tile(tile) || matches!(tile, 160..=255)
 }
 

@@ -57,10 +57,18 @@ pub const CHROME_BOTTOM_Y: usize = 191;
 /// i.e. the right edge of the middle ribbon band.
 pub const CHROME_MIDDLE_BAND_RIGHT_X: usize = 190;
 
-/// Rounded outer-corner profile. `CHROME_CORNER_INSETS[d]` is how many
-/// pixel rows the ribbon is carved back at horizontal distance `d`
-/// from the outer edge of the screen. Mirrored on the right band.
-pub const CHROME_CORNER_INSETS: [usize; 7] = [5, 3, 2, 1, 1, 0, 0];
+/// Rounded outer-corner profile shared by the original's two blue
+/// chrome frames.
+///
+/// `CHROME_CORNER_PROFILE[r]` is the first column the fill occupies on
+/// the row `r` pixel rows in from the band's outer edge; rows past the
+/// profile start at column 0, and the far edge mirrors each entry.
+///
+/// The intro menu frame carves its corners with the same measured
+/// staircase (`intro::INTRO_MENU_FRAME_CORNER_PROFILE`, published as
+/// `cleak/u5-spec#78`), which re-exports this constant so the numbers
+/// live in exactly one place.
+pub const CHROME_CORNER_PROFILE: [u16; 6] = [5, 3, 2, 1, 1, 0];
 
 /// `IBM.CH` glyph whose solid triangle is the union of the
 /// right-pointing end cap's two colour masks.
@@ -536,27 +544,19 @@ pub fn paint_message_line_cap(
 }
 
 fn carve_rounded_corners(rgba: &mut [u8], width: usize, height: usize) {
-    for (distance, inset) in CHROME_CORNER_INSETS.into_iter().enumerate() {
-        if inset == 0 {
+    for (row_from_edge, start_column) in CHROME_CORNER_PROFILE.into_iter().enumerate() {
+        let start_column = usize::from(start_column);
+        if start_column == 0 {
             continue;
         }
-        let left = distance;
-        let right = 319 - distance;
+        let top = row_from_edge;
+        let bottom = CHROME_BOTTOM_Y - row_from_edge;
         // Top-left and bottom-left carves.
-        fill_rect(rgba, width, height, left, 0, left, inset - 1, 0);
-        fill_rect(
-            rgba,
-            width,
-            height,
-            left,
-            CHROME_BOTTOM_Y - inset + 1,
-            left,
-            CHROME_BOTTOM_Y,
-            0,
-        );
+        fill_rect(rgba, width, height, 0, top, start_column - 1, top, 0);
+        fill_rect(rgba, width, height, 0, bottom, start_column - 1, bottom, 0);
         // Top-right carve. The right band ends at y=86, so it has no
         // bottom-right corner to round.
-        fill_rect(rgba, width, height, right, 0, right, inset - 1, 0);
+        fill_rect(rgba, width, height, 320 - start_column, top, 319, top, 0);
     }
 }
 

@@ -84,23 +84,33 @@ fn gameplay_chrome_paints_ribbon_bands_rules_and_leaves_row_24_black() {
 fn gameplay_chrome_rounds_the_three_outer_corners() {
     let rgba = chrome_frame(&GameplayChromeContent::default());
 
-    // `CHROME_CORNER_INSETS` carves the ribbon back by 5/3/2/1/1/0/0
-    // pixel rows as it approaches each outer edge.
-    for (distance, inset) in CHROME_CORNER_INSETS.into_iter().enumerate() {
-        let left = distance;
-        let right = 319 - distance;
-        if inset > 0 {
-            assert_eq!(chrome_index_at(&rgba, left, inset - 1), 0);
-            assert_eq!(chrome_index_at(&rgba, left, CHROME_BOTTOM_Y - inset + 1), 0);
-            assert_eq!(chrome_index_at(&rgba, right, inset - 1), 0);
+    // `CHROME_CORNER_PROFILE` starts the fill at column 5/3/2/1/1/0 on
+    // the first six rows of each band, mirrored on the far edge.
+    for (row_from_edge, start_column) in CHROME_CORNER_PROFILE.into_iter().enumerate() {
+        let start_column = usize::from(start_column);
+        let top = row_from_edge;
+        let bottom = CHROME_BOTTOM_Y - row_from_edge;
+        if start_column > 0 {
+            assert_eq!(chrome_index_at(&rgba, start_column - 1, top), 0);
+            assert_eq!(chrome_index_at(&rgba, start_column - 1, bottom), 0);
+            assert_eq!(chrome_index_at(&rgba, 320 - start_column, top), 0);
         }
-        assert_eq!(chrome_index_at(&rgba, left, inset), CHROME_RIBBON_INDEX);
         assert_eq!(
-            chrome_index_at(&rgba, left, CHROME_BOTTOM_Y - inset),
+            chrome_index_at(&rgba, start_column, top),
             CHROME_RIBBON_INDEX
         );
-        assert_eq!(chrome_index_at(&rgba, right, inset), CHROME_RIBBON_INDEX);
+        assert_eq!(
+            chrome_index_at(&rgba, start_column, bottom),
+            CHROME_RIBBON_INDEX
+        );
+        assert_eq!(
+            chrome_index_at(&rgba, 319 - start_column, top),
+            CHROME_RIBBON_INDEX
+        );
     }
+
+    // The intro menu frame is the same measured carve, kept in one place.
+    assert_eq!(INTRO_MENU_FRAME_CORNER_PROFILE, CHROME_CORNER_PROFILE);
 }
 
 #[test]

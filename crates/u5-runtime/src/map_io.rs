@@ -395,15 +395,74 @@ pub fn normalize_town_runtime_floor(grid: &mut [u8], hour: u8) {
     }
 }
 
+/// INTERIM — spec gap `cleak/u5-spec#80`.
+///
+/// `formats/location-dat.md §4` says the logical ground floor is chosen by
+/// "a resident per-scene base-page table", and states outright that "an
+/// implementation must not derive active-floor pages solely as
+/// `location_index × 2 + floor`". The published table is not in the spec
+/// yet; it has been requested as `cleak/u5-spec#80`. The supported way to
+/// supply it meanwhile is a `location_floor_pages.tsv` beside the game
+/// data, which takes priority over everything below.
+///
+/// Without that file the only thing left is the forbidden derivation, and
+/// it is demonstrably wrong for the scene the shipped SAVED.GAM starts in:
+/// black-box observation of the original in Iolo's Hut (scene byte 13)
+/// renders `DWELLING.DAT` page 12, while `block * 2` yields page 8. Rather
+/// than silently drawing the wrong map, that one observed pair is pinned
+/// here until the table lands.
+///
+/// Entries are `(scene byte, observed base page)`. Do not grow this list
+/// by guessing — only by black-box observation of the original, and only
+/// until `cleak/u5-spec#80` closes, at which point the whole constant and
+/// [`derived_location_base_page`] should be deleted.
+const INTERIM_OBSERVED_LOCATION_BASE_PAGES: &[(u8, usize)] = &[(13, 12)];
+
+static DERIVED_LOCATION_BASE_PAGE_WARNED: std::sync::Once = std::sync::Once::new();
+
+/// INTERIM — spec gap `cleak/u5-spec#80`. The `block * 2` derivation
+/// `formats/location-dat.md §4` forbids, kept only so scenes with no
+/// observed page still load something. Warns once per process so the gap
+/// is visible in any run that relies on it.
+fn derived_location_base_page(scene: Scene) -> usize {
+    DERIVED_LOCATION_BASE_PAGE_WARNED.call_once(|| {
+        eprintln!(
+            "warning: no {LOCATION_FLOOR_TABLE_FILE} beside the game data, so \
+location floor pages fall back to the `block * 2` derivation that \
+formats/location-dat.md §4 forbids. Maps for scenes without an observed \
+base page may be wrong. Tracking the missing per-scene base-page table as \
+cleak/u5-spec#80."
+        );
+    });
+    scene.block * 2
+}
+
+/// `formats/location-dat.md §4`: base page for the scene's logical floor
+/// zero. Prefers the `location_floor_pages.tsv` table, then the interim
+/// observed pages, then the forbidden derivation — see
+/// [`INTERIM_OBSERVED_LOCATION_BASE_PAGES`] and `cleak/u5-spec#80`.
+pub fn resolve_location_base_page(game_dir: &Path, scene: Scene) -> io::Result<usize> {
+    if let Some(base_page) = load_location_floor_entries(game_dir)?.and_then(|entries| {
+        entries
+            .iter()
+            .find(|entry| entry.scene == scene)
+            .map(|entry| entry.base_page)
+    }) {
+        return Ok(base_page);
+    }
+
+    if let Some((_, base_page)) = INTERIM_OBSERVED_LOCATION_BASE_PAGES
+        .iter()
+        .find(|(scene_byte, _)| *scene_byte == scene.byte)
+    {
+        return Ok(*base_page);
+    }
+
+    Ok(derived_location_base_page(scene))
+}
+
 pub fn resolve_location_floor_page(game_dir: &Path, scene: Scene, floor: i8) -> io::Result<usize> {
-    let base_page = load_location_floor_entries(game_dir)?
-        .and_then(|entries| {
-            entries
-                .iter()
-                .find(|entry| entry.scene == scene)
-                .map(|entry| entry.base_page)
-        })
-        .unwrap_or_else(|| scene.block * 2);
+    let base_page = resolve_location_base_page(game_dir, scene)?;
     let page = base_page as i16 + floor as i16;
     if !(0..16).contains(&page) {
         return Err(io::Error::new(

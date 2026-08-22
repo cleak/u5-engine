@@ -418,7 +418,10 @@
         grid[32 + 2] = 16;
         let mut hidden = test_state(grid.clone(), 1, 1);
         hidden.player.facing = Direction::East;
-        hidden.ambient_light = FULL_DARKNESS;
+        // `visibility.md §4`: zero light is the pitch-dark branch — the
+        // carve is skipped and even the adjacent cell stays hidden.
+        // `FULL_DARKNESS` (2) is a threshold that still lights it.
+        hidden.ambient_light = 0;
         hidden.message = "previous".to_string();
 
         assert_eq!(
@@ -508,7 +511,10 @@
         grid[32 + 2] = 0xa1;
         let mut hidden = test_state(grid.clone(), 1, 1);
         hidden.player.facing = Direction::East;
-        hidden.ambient_light = FULL_DARKNESS;
+        // `visibility.md §4`: zero light is the pitch-dark branch — the
+        // carve is skipped and even the adjacent cell stays hidden.
+        // `FULL_DARKNESS` (2) is a threshold that still lights it.
+        hidden.ambient_light = 0;
         hidden.gold = 1;
 
         assert_eq!(hidden.look_facing(), MoveOutcome::Observed);
@@ -921,7 +927,10 @@
     fn world_look_visibility_gate_hides_dark_unlit_wrapped_object() {
         let mut hidden = world_state(open_world_grid(), 255, 0);
         hidden.player.facing = Direction::East;
-        hidden.ambient_light = FULL_DARKNESS;
+        // `visibility.md §4`: zero light is the pitch-dark branch — the
+        // carve is skipped and even the adjacent cell stays hidden.
+        // `FULL_DARKNESS` (2) is a threshold that still lights it.
+        hidden.ambient_light = 0;
         hidden.message = "previous".to_string();
         hidden.active_objects.push(ActiveObject {
             type_byte: 170,
