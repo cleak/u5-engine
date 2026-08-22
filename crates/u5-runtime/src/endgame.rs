@@ -476,8 +476,11 @@ pub fn require_published_endgame_final_report_prose() -> ! {
 ///
 /// Both driver calls are blocking and self-paced. Nothing here samples
 /// input or runs a title tick, so the beat cannot be interrupted.
-pub fn run_endgame_fade_to_black(surface: &mut crate::display_driver::EgaDisplaySurface) {
-    let (x0, y0, x1, y1) = crate::endgame_cinematic::ENDGAME_FADE_TO_BLACK_RECT;
+pub fn run_endgame_fade_to_black(
+    surface: &mut crate::display_driver::EgaDisplaySurface,
+) -> std::io::Result<()> {
+    let bounds = crate::endgame_cinematic::ENDGAME_FADE_TO_BLACK_RECT;
+    let (x0, y0, x1, y1) = bounds;
     let rect = crate::display_driver::normalize_clamp_pixel_rect(
         i32::from(x0),
         i32::from(y0),
@@ -490,7 +493,24 @@ pub fn run_endgame_fade_to_black(surface: &mut crate::display_driver::EgaDisplay
     surface.fill_back_rect(rect, ENDGAME_FADE_TO_BLACK_COLOR);
     surface.release_back_buffer();
     surface.set_render_target(crate::display_driver::DisplayRenderTarget::Front);
-    surface.dissolve_back_to_front_rect(rect);
+
+    // The dissolve itself is the shared driver primitive
+    // (`display-driver-abi.md §9.6`), not a transfer of the endgame's own:
+    // this is one of the six published call sites, and it has to visit
+    // pixels in the same order the intro's dissolves do.
+    crate::RectangleDissolve::new(bounds)?
+        .run_to_completion(|x, y| surface.copy_back_pixel_to_front(usize::from(x), usize::from(y)));
+    Ok(())
+}
+
+/// `display-driver-abi.md §9.6`: by the time the endgame fade runs, the abort
+/// gate has long been cleared - the victory rite drew `ENDMSG.DAT` text
+/// through the driver's fixed-cell glyph entry - so this dissolve is silent,
+/// cannot be interrupted, and consumes no keystroke.
+pub fn endgame_fade_to_black_abort_gate() -> crate::DissolveAbortGate {
+    let mut gate = crate::DissolveAbortGate::on_driver_load();
+    gate.note_fixed_cell_glyph_drawn();
+    gate
 }
 
 /// `endgame.md §7.1`: the fade fills with palette index 0.
@@ -1572,7 +1592,7 @@ impl PlayState {
 #[cfg(test)]
 mod fade_to_black_tests {
     use super::*;
-    use crate::display_driver::{DisplayRenderTarget, EgaDisplaySurface, EgaDissolveState};
+    use crate::display_driver::{DisplayRenderTarget, EgaDisplaySurface};
 
     fn seeded_surface() -> EgaDisplaySurface {
         // Put distinct non-black content on BOTH surfaces, so a beat
@@ -1592,7 +1612,7 @@ mod fade_to_black_tests {
         let mut surface = seeded_surface();
         assert!(surface.front_pixels().iter().any(|pixel| *pixel != 0));
 
-        run_endgame_fade_to_black(&mut surface);
+        run_endgame_fade_to_black(&mut surface).unwrap();
 
         assert!(
             surface
@@ -1618,21 +1638,32 @@ mod fade_to_black_tests {
     }
 
     #[test]
+    fn the_fade_is_silent_and_uninterruptible_by_the_time_it_runs() {
+        // §9.6 / #53: the gate is cleared permanently by the first
+        // fixed-cell glyph, and the victory rite has drawn plenty.
+        let gate = endgame_fade_to_black_abort_gate();
+        assert!(!gate.is_armed());
+        assert!(!gate.samples_input_at(0));
+        assert!(!gate.samples_input_at(1));
+    }
+
+    #[test]
     fn the_dissolve_visits_every_pixel_of_the_rectangle_exactly_once() {
         // #53: "visiting every pixel exactly once in a deterministic
         // pseudo-random order". This is what makes the compositor's
         // flat fill an exact model of the completed beat rather than an
         // approximation of it.
-        let whole = crate::display_driver::normalize_clamp_pixel_rect(0, 0, 319, 199).unwrap();
-        let mut state = EgaDissolveState::new(whole);
-        let total = state.total_pixels();
+        let mut dissolve =
+            crate::RectangleDissolve::new(crate::endgame_cinematic::ENDGAME_FADE_TO_BLACK_RECT)
+                .unwrap();
+        let total = dissolve.pixel_count() as usize;
         assert_eq!(total, 320 * 200);
 
         let mut seen = vec![false; total];
         let mut row_major = true;
         let mut previous = None;
-        while let Some((x, y)) = state.next_pixel() {
-            let index = y * 320 + x;
+        while let Some((x, y)) = dissolve.next_pixel() {
+            let index = usize::from(y) * 320 + usize::from(x);
             assert!(!seen[index], "pixel ({x}, {y}) visited twice");
             seen[index] = true;
             if let Some(previous) = previous {

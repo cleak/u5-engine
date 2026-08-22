@@ -16100,7 +16100,7 @@ mod tests {
         surface.set_render_target(u5_runtime::display_driver::DisplayRenderTarget::Front);
         surface.fill_rect(whole, 12);
 
-        u5_runtime::run_endgame_fade_to_black(&mut surface);
+        u5_runtime::run_endgame_fade_to_black(&mut surface).unwrap();
 
         assert!(
             surface
