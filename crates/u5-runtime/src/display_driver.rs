@@ -572,19 +572,27 @@ impl EgaDisplaySurface {
             x1: (TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1) as usize,
             y1: (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize,
         };
+        // `cleak/u5-spec#78`: the source band is 288 pixels wide and
+        // lands at x = 16 inside the published 320-wide destination
+        // rectangle. The 16 columns at each side are cleared to index
+        // 0 so the tick still overwrites the whole rectangle opaquely.
+        let source_x = rect.x0 + TITLE_TICK_SOURCE_X as usize;
+        let source_width = TITLE_TICK_SOURCE_WIDTH as usize;
         for (row, src) in self
             .title_tick_frames
             .as_ref()
             .expect(
-                "display title-tick operation requires injected authored frame pixels; generated clean-room frames are a forbidden fallback; see cleak/u5-spec#65",
+                "display title-tick operation requires the ULTIMA title-tick panels to be injected; generated clean-room frames are a forbidden fallback; see cleak/u5-spec#78",
             )
             .frame_pixels(self.title_tick_frame)
-            .chunks_exact(TITLE_TICK_FRAME_WIDTH as usize)
+            .chunks_exact(source_width)
             .enumerate()
         {
-            let dst_start = (rect.y0 + row) * DISPLAY_SURFACE_WIDTH + rect.x0;
-            self.front_pixels[dst_start..dst_start + TITLE_TICK_FRAME_WIDTH as usize]
+            let row_start = (rect.y0 + row) * DISPLAY_SURFACE_WIDTH;
+            self.front_pixels[row_start + rect.x0..row_start + source_x].fill(0);
+            self.front_pixels[row_start + source_x..row_start + source_x + source_width]
                 .copy_from_slice(src);
+            self.front_pixels[row_start + source_x + source_width..row_start + rect.x1 + 1].fill(0);
         }
         self.title_tick_frame = title_tick_next_frame(self.title_tick_frame);
         rect
