@@ -16,9 +16,8 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
-use u5_runtime::TITLE_TICK_FRAME_Y;
 #[cfg(test)]
-use u5_runtime::{TEXT_SCREEN_COLUMNS, placeholder_title_tick_frames};
+use u5_runtime::placeholder_title_tick_frames;
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
     BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT,
@@ -32,31 +31,37 @@ use u5_runtime::{
     CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
     DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
     DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, Direction,
-    DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
-    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING,
-    EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
+    DisplayDriverFamily, DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB,
+    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
+    EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
     FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
     FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
     GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
     HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
-    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
+    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_MENU_FRAME_ANCHOR_COLUMN,
+    INTRO_MENU_FRAME_ANCHOR_ROW, INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT,
+    INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT, INTRO_MENU_FRAME_GLYPH_EDGE,
+    INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
+    INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
+    INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, INTRO_STEP_1_EXTRA_ART_X,
     INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_6_EXTRA_ART_X,
     INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
-    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, LOAD_EMPTY_SAVE_LINE_1,
-    LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX,
-    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot,
-    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
-    NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
-    PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX,
-    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
-    RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
-    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots, IntroStoryArtPlacement,
+    JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2,
+    LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX,
+    MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
+    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS,
+    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
+    PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PLAYER_TILE, POISON_FIELD_SPELL_INDEX,
+    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST,
+    PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
+    PreFlourishOutcome, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH,
+    REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
+    RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectColumnSweepTransition,
+    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
     SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
     SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
@@ -71,44 +76,36 @@ use u5_runtime::{
     TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor,
-    TextWindowSystem, TileAtlas,
-    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem,
+    TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
-    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
-    combat_class_stats, commit_chargen_save, configure_talk_shop_text_window,
+    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, clean_room_authored_title_tick_frames,
+    combat_actor_is_active_not_dead, combat_class_stats, commit_chargen_save,
+    configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
-    DisplayDriverFamily, INTRO_MENU_FRAME_ANCHOR_COLUMN, INTRO_MENU_FRAME_ANCHOR_ROW,
-    INTRO_MENU_FRAME_GLYPH_BOTTOM_LEFT, INTRO_MENU_FRAME_GLYPH_BOTTOM_RIGHT,
-    INTRO_MENU_FRAME_GLYPH_EDGE, INTRO_MENU_FRAME_GLYPH_TOP_LEFT, INTRO_MENU_FRAME_GLYPH_TOP_RIGHT,
-    INTRO_MENU_FRAME_HEIGHT_CELLS, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
-    INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_WIDTH_CELLS, IntroFontSlots,
-    JOURNEY_ONWARD_SHORTCUT_BANNER, PreFlourishOutcome, TITLE_TICK_FRAME_HEIGHT,
-    TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TitleTickFrameSet,
-    clean_room_authored_title_tick_frames,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_brit_cbt,
     load_british_bit, load_british_pth, load_dungeon_cbt, load_graphic_image_directory,
     load_ibm_ch_font, load_play_options_from_save, load_question_records,
-    run_intro_pre_flourish_phase,
     load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_inn_pickup_register_text_window, paint_message_text_window,
     paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system, render_text_panel_rgba,
-    render_text_window_rgba, run_return_to_view_playback_until_restart,
-    save_image_has_active_avatar,
+    render_text_window_rgba, run_intro_pre_flourish_phase,
+    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -123,6 +120,7 @@ use u5_runtime::{
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
+use u5_runtime::{TEXT_SCREEN_COLUMNS, TITLE_TICK_FRAME_Y};
 
 const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
@@ -150,6 +148,13 @@ const INTRO_STORY_TEXT_X: usize = 10;
 const INTRO_STORY_TEXT_Y: usize = 138;
 const INTRO_STORY_TEXT_WIDTH: usize = 300;
 const INTRO_STORY_TEXT_CLEAR_Y0: usize = 136;
+// cleak/u5-spec#82: `chargen.md §5.1` publishes the CREATE panel
+// placements (all eleven verified against the shipped CREATE.16) but
+// no paragraph geometry, and `text-output.md §8` makes the rectangle
+// the caller's responsibility. The nine constants below - and the line
+// advance and drop shadow that go with them - are provisional and must
+// not become de-facto contract. They are unreachable today anyway: the
+// proportional renderer is gated on cleak/u5-spec#70.
 const CHARGEN_PROPORTIONAL_TEXT_X: usize = 16;
 const CHARGEN_PROPORTIONAL_TEXT_Y: usize = 34;
 const CHARGEN_PROPORTIONAL_TEXT_WIDTH: usize = 288;
@@ -335,10 +340,7 @@ impl IntroDisplayBuffer {
         );
         for glyph_y in 0..CH_CELL_SIDE {
             let row_bits = font.glyph_row(code & 0x7f, glyph_y).unwrap_or_else(|| {
-                panic!(
-                    "fixed font glyph {} is missing row {glyph_y}",
-                    code & 0x7f
-                )
+                panic!("fixed font glyph {} is missing row {glyph_y}", code & 0x7f)
             });
             for glyph_x in 0..CH_CELL_SIDE {
                 let color = if row_bits & (1 << (7 - glyph_x)) != 0 {
@@ -819,6 +821,42 @@ pub fn visual_frame_suite(
         game_dir,
         raster_depth,
     )?);
+    // `chargen.md §5.1` steps 1-4. These three cases are the headless
+    // coverage for the shared name/gender prompt screen; the CREATE
+    // panel screens past step 4 still need the resident proportional
+    // width table (cleak/u5-spec#70).
+    for (label, typed, submit_name, gender_key) in [
+        ("intro-chargen-name-prompt", "AVATAR", false, None),
+        ("intro-chargen-gender-prompt", "AVATAR", true, None),
+        ("intro-chargen-gender-echo", "AVATAR", true, Some(b'M')),
+    ] {
+        let records = load_question_records(game_dir)?
+            .ok_or_else(|| io::Error::other("visual frame suite requires QUESTION.DAT"))?;
+        let mut session = ChargenSession::new(records.records, visual_chargen_rng_pool())?;
+        let mut input_line = String::new();
+        if submit_name {
+            session.submit_name(typed);
+            if let Some(key) = gender_key {
+                // Step 4's accepted-key echo. `submit_gender_key`
+                // moves the session on to step 5, so this frame is
+                // painted from the prompt screen directly - in normal
+                // play the gypsy panel overdraws it with no wait.
+                session.submit_gender_key(key);
+            }
+        } else {
+            input_line.push_str(typed);
+        }
+        reports.push(write_visual_chargen_prompt_report(
+            out_dir,
+            label,
+            "intro chargen prompt",
+            &session,
+            &input_line,
+            game_dir,
+            raster_depth,
+        )?);
+    }
+
     let records = load_story_records(game_dir)?
         .ok_or_else(|| io::Error::other("visual frame suite requires STORY.DAT"))?;
     reports.push(write_visual_intro_report(
@@ -971,7 +1009,8 @@ fn apply_visual_route_initial_setup(
         | "route-endgame-missing-box-confirmation"
         | "route-endgame-box-victory-confirmation"
         | "route-endgame-box-full-victory-cinematic"
-        | "route-endgame-class-tableau-restoration" => {
+        | "route-endgame-class-tableau-restoration"
+        | "route-endgame-tableau-walk-in" => {
             state.enter_endgame_from_game_dir(Some(game_dir))?;
         }
         "route-codex-urn-honesty-read" => {
@@ -5116,6 +5155,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_endgame_class_tableau),
         },
         VisualRouteSuiteCase {
+            // `endgame.md §4`: the dead-member restoration beat and
+            // then one frame per one-cell step as the party walks in
+            // from (5,9) to its published targets.
+            label: "route-endgame-tableau-walk-in",
+            frame_kind: "visual route endgame frame",
+            options: PlayOptions::default(),
+            script: &ENDGAME_TABLEAU_WALK_IN_SCRIPT,
+            configure: Some(seed_visual_route_endgame_class_tableau),
+        },
+        VisualRouteSuiteCase {
             label: "route-doom-combat-trigger",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
@@ -7252,6 +7301,12 @@ fn seed_visual_route_underworld_word_of_power(state: &mut PlayState) {
     seed_visual_route_word_of_power(state, "VERAMOCOR");
 }
 
+/// One `endgame:frame` per owed entry-presentation frame: one
+/// restoration beat for the seeded dead party member plus the 22
+/// single-cell steps that carry six party actors from (5,9) to the
+/// `endgame.md §4` targets.
+const ENDGAME_TABLEAU_WALK_IN_SCRIPT: [&str; 23] = ["endgame:frame"; 23];
+
 fn seed_visual_route_endgame_missing_box(state: &mut PlayState) {
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 0;
 }
@@ -7357,6 +7412,18 @@ fn apply_visual_route_command(
         )?;
         return Ok(PlayInputDisposition::Continue);
     }
+    // `endgame.md §4`/`§7`: one rendered frame per restoration beat and
+    // per one-cell step of the tableau movement helper. These frames
+    // are display-driven, not keypress-driven, so the route suite pumps
+    // them explicitly instead of sending a key.
+    if lower == "endgame:frame" {
+        if !advance_visual_endgame_frame_operation(state) {
+            return Err(io::Error::other(
+                "visual route `endgame:frame` found no pending endgame presentation frame",
+            ));
+        }
+        return Ok(PlayInputDisposition::Continue);
+    }
     if matches!(lower.as_str(), "empty" | "pass") {
         handle_play_key_input(state, '\n', "", game_dir)?;
         return Ok(PlayInputDisposition::Continue);
@@ -7431,7 +7498,14 @@ fn visual_route_step_label(route_label: &str, step: usize, command: &str) -> Str
 }
 
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
-    (route_label == "route-endgame-box-full-victory-cinematic" && (3..=18).contains(&step))
+    // `endgame.md §4`: the restoration beat is a held frame - a short
+    // blocking wait - and several walk-in steps move actors that are
+    // currently drawn as terrain: cleak/u5-spec#82 leaves the tableau
+    // class bytes in the world tile index space, where a Bard (`0x44`)
+    // is pixel-identical to the tableau's authored floor tile. Those
+    // steps therefore produce byte-identical frames today.
+    (route_label == "route-endgame-tableau-walk-in")
+        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=18).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
         || (route_label == "route-castle-light-decay-route" && (1..=2).contains(&step))
         || (route_label.starts_with("route-shop-arms-")
@@ -7531,6 +7605,12 @@ struct ScreenshotConfig {
 #[derive(Resource, Default)]
 struct ScreenshotState {
     frames_elapsed: u32,
+    /// `U5_BEVY_PRESS` is a *queue*, not a fire-and-forget burst: the
+    /// intro only accepts keys once the title flourish and signature
+    /// have finished, so keys delivered on frame 1 used to be dropped
+    /// and `U5_BEVY_PRESS=C` never reached chargen. This cursor
+    /// advances only when the intro actually consumes a key.
+    preset_key_cursor: usize,
     preset_keys_applied: bool,
     taken: bool,
     frames_after_shot: u32,
@@ -7594,23 +7674,33 @@ fn screenshot_system(
                     .expect("visual intro launch lock poisoned")
                     .is_none()
             {
-                let mut handled = false;
-                for ch in &config.preset_keys {
-                    handled |= step_visual_intro(&mut intro, *ch);
-                }
-                if handled {
-                    let rgba = render_intro_frame(&mut intro);
-                    if let Some(handle) = intro.image_handle.as_ref() {
-                        replace_visual_image_data(
-                            &mut images,
-                            handle,
-                            rgba,
-                            "screenshot preset intro",
-                        );
+                // Drain at most one queued key per Update, and only
+                // once the intro is actually able to consume it, so a
+                // sequence like `U5_BEVY_PRESS=C` selects a menu entry
+                // after the flourish instead of being swallowed by it.
+                // `J` keeps its pre-flourish shortcut.
+                if let Some(ch) = config.preset_keys.get(state.preset_key_cursor).copied() {
+                    if visual_intro_accepts_preset_key(&intro, ch)
+                        && step_visual_intro(&mut intro, ch)
+                    {
+                        state.preset_key_cursor += 1;
+                        let rgba = render_intro_frame(&mut intro);
+                        if let Some(handle) = intro.image_handle.as_ref() {
+                            replace_visual_image_data(
+                                &mut images,
+                                handle,
+                                rgba,
+                                "screenshot preset intro",
+                            );
+                        }
                     }
                 }
+                if state.preset_key_cursor >= config.preset_keys.len() {
+                    state.preset_keys_applied = true;
+                }
+            } else {
+                state.preset_keys_applied = true;
             }
-            state.preset_keys_applied = true;
         }
     }
 
@@ -7627,6 +7717,22 @@ fn screenshot_system(
             exit.write(AppExit::Success);
         }
     }
+}
+
+/// `systems/intro.md §3`/`§6`: the title screen only hands keys to the
+/// menu once the flourish and the signature have finished animating
+/// (and it auto-advances to the menu at that point). `J` is the one
+/// key the title itself honours early. Anything else offered during
+/// the title phase must stay queued rather than be spent dismissing
+/// the title.
+fn visual_intro_accepts_preset_key(intro: &VisualIntroState, ch: char) -> bool {
+    if ch.eq_ignore_ascii_case(&'J') {
+        return true;
+    }
+    if !matches!(intro.panel, VisualIntroPanel::Menu) {
+        return true;
+    }
+    !matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
 }
 
 struct Bootstrap {
@@ -8247,8 +8353,7 @@ fn apply_pre_flourish_outcome(intro: &mut VisualIntroState) {
     };
     let window = intro.text_windows.active_window();
     intro.surface.clear(0);
-    let banner_row = usize::from(window.top_left_y)
-        + usize::from(window.height()) / 2;
+    let banner_row = usize::from(window.top_left_y) + usize::from(window.height()) / 2;
     intro.surface.draw_fixed_text_centered_in_window(
         slots.active_font(),
         JOURNEY_ONWARD_SHORTCUT_BANNER,
@@ -8705,7 +8810,26 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
                     intro.message_waiting_for_key = false;
                     intro.message.clear();
                 }
-                Err(err) => panic!("Ultima IV transfer source rejected: {err}"),
+                // `u4-transfer.md §3`: missing or wrong media is a
+                // *retryable* condition, not a hard process failure,
+                // and a single-directory implementation collapses the
+                // floppy prompts into an ordinary file-existence
+                // check. `§5` defines the separate "no transferable
+                // data" branch, also presented in the intro. Either
+                // way the path shows a message, waits for a key and
+                // returns to menu polling without writing anything -
+                // the same behaviour as the terminal path. The
+                // cleak/u5-spec#73 gate stays for the case where a
+                // valid source exists and the preview screen would
+                // actually have to be drawn.
+                Err(_rejected) => {
+                    intro
+                        .dispatch
+                        .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                    intro.message = visual_intro_transfer_source_rejected_message();
+                    intro.message_waiting_for_key = true;
+                    return true;
+                }
             }
         }
         IntroSubflow::StorySlides => match load_story_records(&intro.game_dir) {
@@ -8749,6 +8873,15 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
         }
     }
     true
+}
+
+/// `u4-transfer.md §3`/`§5`: the retryable missing-media / no
+/// transferable-data notice shown in the intro window. The intro
+/// message line is a single fixed-cell row starting at column 1, so
+/// the underlying `io::Error` detail stays on the terminal path and
+/// this line is kept inside the 40-column screen.
+fn visual_intro_transfer_source_rejected_message() -> String {
+    "Transfer source rejected.".to_string()
 }
 
 fn visual_intro_empty_save_message() -> String {
@@ -9148,10 +9281,7 @@ fn draw_visual_intro_menu_labels(
 /// `y = 127` via a direct line draw through the framebuffer. The
 /// frame does not clear the interior — STARTSC paint + title tick
 /// already established those pixels.
-fn draw_visual_intro_menu_text_window_frame(
-    buffer: &mut IntroDisplayBuffer,
-    font: &FixedCellFont,
-) {
+fn draw_visual_intro_menu_text_window_frame(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont) {
     let fg = 0x0f;
     let bg = 0x00;
     let anchor_col = usize::from(INTRO_MENU_FRAME_ANCHOR_COLUMN);
@@ -9407,14 +9537,53 @@ fn clear_intro_story_text_band(buffer: &mut IntroDisplayBuffer) {
     );
 }
 
+/// `chargen.md §4` name prompt text, printed at the `§5.1` step-1 cell.
+const CHARGEN_NAME_PROMPT_TEXT: &str = "By what name shalt thou be known?";
+const CHARGEN_NAME_PROMPT_COLUMN: usize = 3;
+const CHARGEN_NAME_PROMPT_ROW: usize = 17;
+/// `chargen.md §5.1` step 2 read/echo cell.
+const CHARGEN_NAME_ECHO_COLUMN: usize = 14;
+const CHARGEN_NAME_ECHO_ROW: usize = 19;
+/// `chargen.md §4` gender prompt text at the `§5.1` step-4 cell. §4
+/// prints it with a trailing space before the accepted key is echoed.
+const CHARGEN_GENDER_PROMPT_TEXT: &str = "Art thou Male or Female?";
+const CHARGEN_GENDER_PROMPT_COLUMN: usize = 8;
+const CHARGEN_GENDER_PROMPT_ROW: usize = 21;
+/// `chargen.md §5.1` step 4 echo cell: immediately after the prompt
+/// and its trailing space.
+const CHARGEN_GENDER_ECHO_COLUMN: usize =
+    CHARGEN_GENDER_PROMPT_COLUMN + CHARGEN_GENDER_PROMPT_TEXT.len() + 1;
+
+/// `chargen.md §5.1` steps 1-4.
+///
+/// The name and gender prompts share one screen: the name prompt stays
+/// on row 17 and the accepted name stays on row 19 while the gender
+/// prompt is drawn on row 21. The surface is therefore *not* cleared
+/// per frame, and it is not cleared on entry either - the prompts are
+/// fixed-cell text drawn into the intro menu window, over the still
+/// resident title art and window frame, replacing only the menu
+/// labels. The first CREATE panel screen (step 5) is what clears.
 fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    intro.surface.clear(0);
+    let step = match &intro.panel {
+        VisualIntroPanel::CharacterCreation { session, .. } => session.current_step(),
+        _ => panic!("render_chargen_intro_frame called for non-character-creation intro panel"),
+    };
+
+    if matches!(
+        step,
+        ChargenSessionStep::PromptName | ChargenSessionStep::PromptGender
+    ) {
+        redraw_chargen_prompt_backdrop(intro);
+    } else {
+        intro.surface.clear(0);
+    }
+
     let Some((session, input_line)) = (match &intro.panel {
         VisualIntroPanel::CharacterCreation {
             session,
             input_line,
         } => Some((session, input_line.as_str())),
-        _ => panic!("render_chargen_intro_frame called for non-character-creation intro panel"),
+        _ => unreachable!("character creation intro panel was matched above"),
     }) else {
         unreachable!("character creation intro panel match must either produce data or panic");
     };
@@ -9426,6 +9595,89 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         session,
         input_line,
     )
+}
+
+/// Repaint the intro menu backdrop the chargen prompts are drawn into:
+/// the STARTSC composition, the title-tick strip and the menu text
+/// window frame, but not the menu labels the prompts replace.
+fn redraw_chargen_prompt_backdrop(intro: &mut VisualIntroState) {
+    let title_tick_frame = intro.title_tick_visible_frame;
+    let game_dir = intro.game_dir.clone();
+    let raster_depth = intro.raster_depth;
+    let frames = ensure_title_tick_frames(&mut *intro).clone();
+    let menu_font = intro
+        .font_slots
+        .as_ref()
+        .map(|slots| slots.active_font().clone());
+    draw_visual_intro_start_menu_art_to_buffer(&mut intro.surface, &game_dir, raster_depth);
+    intro.surface.draw_title_tick(title_tick_frame, &frames);
+    if let Some(font) = menu_font.as_ref() {
+        draw_visual_intro_menu_text_window_frame(&mut intro.surface, font);
+    }
+}
+
+/// `chargen.md §5.1` steps 1, 2 and 4 painted together, because they
+/// coexist on one screen until the first CREATE panel is drawn.
+fn paint_chargen_prompt_screen(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    session: &ChargenSession,
+    input_line: &str,
+) {
+    overlay_fixed_cell_text_intro_buffer(
+        buffer,
+        font,
+        CHARGEN_NAME_PROMPT_TEXT,
+        CHARGEN_NAME_PROMPT_COLUMN,
+        CHARGEN_NAME_PROMPT_ROW,
+        false,
+    );
+
+    // Step 2: the characters typed so far while the prompt is open,
+    // then the accepted name - which stays on screen for step 4.
+    let accepted_name = session.entered_name();
+    let echo = if accepted_name.is_empty() {
+        input_line.to_string()
+    } else {
+        String::from_utf8_lossy(accepted_name).into_owned()
+    };
+    if !echo.is_empty() {
+        overlay_fixed_cell_text_intro_buffer(
+            buffer,
+            font,
+            &echo,
+            CHARGEN_NAME_ECHO_COLUMN,
+            CHARGEN_NAME_ECHO_ROW,
+            false,
+        );
+    }
+
+    if accepted_name.is_empty() {
+        return;
+    }
+
+    // Step 4: the gender prompt is added without clearing, and the
+    // accepted key is echoed after it. The echo is short-lived in
+    // normal play - step 5 draws the gypsy panel over this screen with
+    // no wait in between - but it is part of the published draw order.
+    overlay_fixed_cell_text_intro_buffer(
+        buffer,
+        font,
+        CHARGEN_GENDER_PROMPT_TEXT,
+        CHARGEN_GENDER_PROMPT_COLUMN,
+        CHARGEN_GENDER_PROMPT_ROW,
+        false,
+    );
+    if let Some(key) = session.accepted_gender_key() {
+        overlay_fixed_cell_text_intro_buffer(
+            buffer,
+            font,
+            &(key as char).to_string(),
+            CHARGEN_GENDER_ECHO_COLUMN,
+            CHARGEN_GENDER_PROMPT_ROW,
+            false,
+        );
+    }
 }
 
 fn render_u4_transfer_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
@@ -9465,27 +9717,8 @@ fn render_chargen_intro_graphics(
 ) -> Vec<u8> {
     let font = load_ibm_ch_font(game_dir).expect("character creation requires IBM fixed-cell font");
     match session.current_step() {
-        ChargenSessionStep::PromptName => {
-            overlay_fixed_cell_text_intro_buffer(
-                buffer,
-                &font,
-                "By what name shalt thou be known?",
-                3,
-                17,
-                false,
-            );
-            overlay_fixed_cell_text_intro_buffer(buffer, &font, input_line, 14, 19, false);
-            buffer.to_rgba()
-        }
-        ChargenSessionStep::PromptGender => {
-            overlay_fixed_cell_text_intro_buffer(
-                buffer,
-                &font,
-                "Art thou Male or Female?",
-                8,
-                21,
-                false,
-            );
+        ChargenSessionStep::PromptName | ChargenSessionStep::PromptGender => {
+            paint_chargen_prompt_screen(buffer, &font, session, input_line);
             buffer.to_rgba()
         }
         ChargenSessionStep::PresentIntro { record, text } => {
@@ -9534,8 +9767,12 @@ fn render_chargen_intro_graphics(
                     option_b,
                 ],
             );
-            overlay_fixed_cell_text_intro_buffer(buffer, &font, "A", 3, 2, false);
-            overlay_fixed_cell_text_intro_buffer(buffer, &font, "B", 26, 2, false);
+            // The original question screen draws no separate `A` / `B`
+            // letter glyphs beside the virtue panels - `chargen.md
+            // §5.1`'s draw order never mentions them and the option
+            // letters exist only inside the QUESTION.DAT prose
+            // ("Dost thou A) ... or B) ..."). The two glyphs the engine
+            // used to stamp at cells (3,2) and (26,2) were invented.
             overlay_proportional_text_from_assets_buffer(
                 buffer,
                 game_dir,
@@ -10995,6 +11232,33 @@ fn write_visual_play_report_with_input(
     )
 }
 
+/// Headless render of the `chargen.md §5.1` name/gender prompt screen
+/// over the intro menu backdrop it is drawn into.
+fn write_visual_chargen_prompt_report(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    session: &ChargenSession,
+    input_line: &str,
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+) -> io::Result<VisualFrameReport> {
+    let font_slots = u5_runtime::load_intro_font_slots(game_dir, DisplayDriverFamily::Ega)?;
+    let mut buffer = new_intro_display_buffer();
+    draw_visual_intro_start_menu_art_to_buffer(&mut buffer, game_dir, raster_depth);
+    draw_visual_intro_menu_text_window_frame(&mut buffer, font_slots.active_font());
+    let font = load_ibm_ch_font(game_dir)?;
+    paint_chargen_prompt_screen(&mut buffer, &font, session, input_line);
+    write_visual_report(
+        out_dir,
+        label,
+        INTRO_FRAMEBUFFER_WIDTH,
+        INTRO_FRAMEBUFFER_HEIGHT,
+        frame_kind,
+        buffer.to_rgba(),
+    )
+}
+
 fn write_visual_intro_report(
     out_dir: &Path,
     label: &str,
@@ -11152,19 +11416,61 @@ fn render_visual_play_frame_with_input_and_cursor(
     rgba
 }
 
+/// `systems/endgame.md §3` step 2 / `§10`: the endgame owns the whole
+/// 320x200 surface. It is *not* a gameplay mode, so this path never
+/// calls the gameplay stats-panel painter — live party gold, food,
+/// date and moon phases must not be painted over the terminal ending
+/// — and it starts from a cleared surface every frame rather than from
+/// the play text-window layout.
+///
+/// Layout note (cleak/u5-spec#82): `§3`/`§5`/`§9` do not publish the
+/// endgame's own pixel geometry — where the throne-room tableau sits
+/// on the surface, nor the rectangles that carry the Lord British
+/// dialogue, the two box-delivery Y/N prompts, the `ENDMSG.DAT` rite
+/// beats, the six `END.DAT` windows and the certificate. Rather than
+/// leave the prose provably occluded (the tableau blit is 176x176 at
+/// the origin, so a full-width text window is completely covered),
+/// this picks the minimal non-occluding split that needs no invented
+/// numbers: the tableau keeps the origin it already had, and endgame
+/// text is confined to the columns the blit cannot reach while the
+/// tableau is up, expanding to the full screen on the beats that drop
+/// it. Replace both rectangles with the published geometry when #82
+/// lands.
 fn render_endgame_framebuffer(
     state: &mut PlayState,
     atlas: &TileAtlas,
     input_line: &str,
-    default_message: &str,
+    // The gameplay "ready" hint is not endgame text: `§10` takes the
+    // scene byte out of play, so an empty beat leaves an empty
+    // rectangle rather than borrowing the play-mode default message.
+    _default_message: &str,
     font: &FixedCellFont,
 ) -> Vec<u8> {
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let mut rgba = render_status_framebuffer(state, input_line, default_message, font);
-    if endgame_frame_should_show_tableau(state) {
+    let show_tableau = endgame_frame_should_show_tableau(state);
+
+    let display_state = state.clone();
+    let mut message = display_state.message.clone();
+    if !input_line.is_empty() {
+        message.push('\n');
+        message.push_str(input_line);
+    }
+
+    let system = endgame_text_window_system(&message, show_tableau);
+    let mut rgba = render_text_window_rgba(&system, font)
+        .unwrap_or_else(|err| panic!("visual endgame text window render failed: {err}"));
+    apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
+
+    if show_tableau {
         let viewport = render_endgame_tableau_viewport(state, atlas)
             .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"));
+        assert!(
+            viewport.width <= ENDGAME_TEXT_WINDOW_LEFT_COLUMN as usize * CH_CELL_SIDE,
+            "endgame tableau blit ({} px wide) would occlude the endgame text rectangle starting at column {}",
+            viewport.width,
+            ENDGAME_TEXT_WINDOW_LEFT_COLUMN
+        );
         blit_rgba(
             &mut rgba,
             width,
@@ -11177,6 +11483,38 @@ fn render_endgame_framebuffer(
         );
     }
     rgba
+}
+
+/// cleak/u5-spec#82: first text column the 11x11 / 16-px-per-cell
+/// tableau blit cannot reach (`11 * 16 / 8`). Provisional — this is the
+/// minimal non-occluding choice, not published geometry.
+const ENDGAME_TEXT_WINDOW_LEFT_COLUMN: u8 =
+    ((ENDGAME_TABLEAU_WIDTH * TILE_ATLAS_SIDE) / CH_CELL_SIDE) as u8;
+
+fn endgame_text_window_left(show_tableau: bool) -> u8 {
+    if show_tableau {
+        ENDGAME_TEXT_WINDOW_LEFT_COLUMN
+    } else {
+        0
+    }
+}
+
+/// `endgame.md §3` step 2 "reset the screen": a fresh window system
+/// means every cell outside the endgame's own text rectangle renders
+/// as cleared background, so nothing of the gameplay layout - the
+/// stats panel above all - survives into an endgame frame.
+fn endgame_text_window_system(message: &str, show_tableau: bool) -> TextWindowSystem {
+    let mut system = TextWindowSystem::new();
+    system.set_window_rect(
+        MAIN_TEXT_WINDOW_INDEX,
+        endgame_text_window_left(show_tableau),
+        0,
+        TEXT_SCREEN_COLUMNS - 1,
+        TEXT_SCREEN_ROWS - 1,
+    );
+    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    paint_message_text_window(&mut system, message);
+    system
 }
 
 fn endgame_frame_should_show_tableau(state: &PlayState) -> bool {
@@ -11228,6 +11566,12 @@ fn render_endgame_tableau_viewport(
         if object.x >= ENDGAME_TABLEAU_WIDTH || object.y >= ENDGAME_TABLEAU_HEIGHT {
             continue;
         }
+        // cleak/u5-spec#82: `endgame.md §4` gives the class -> tableau
+        // type/tile bytes but not the index space they live in. Drawn
+        // through the world tile atlas they are terrain/furniture, and
+        // `0x44` (Bard) is the tableau's own authored floor byte, so a
+        // Bard is pixel-identical to the floor. The bytes are kept
+        // verbatim rather than guessing a sprite-bank translation.
         let tile = if object.tile == u5_runtime::PLAYER_TILE {
             PLAYER_SPRITE_TILE
         } else {
@@ -11951,6 +12295,12 @@ fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut 
 }
 
 fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
+    // `endgame.md §4`/`§7`: the dead-member restoration beats and the
+    // one-cell-per-call tableau walk-in are frame-driven presentation,
+    // not keypress-driven, so the wait frame pumps them first.
+    if state.advance_endgame_entry_presentation() {
+        return true;
+    }
     state
         .endgame
         .as_mut()
@@ -13026,9 +13376,7 @@ mod tests {
 
         // Horizontal rule at y = 127, columns 7..312 inclusive.
         let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
-        for x in
-            usize::from(INTRO_MENU_FRAME_RULE_X0)..=usize::from(INTRO_MENU_FRAME_RULE_X1)
-        {
+        for x in usize::from(INTRO_MENU_FRAME_RULE_X0)..=usize::from(INTRO_MENU_FRAME_RULE_X1) {
             assert_eq!(
                 buffer.pixels[rule_y * buffer.width + x],
                 0x0f,
@@ -14259,18 +14607,28 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_missing_u4_transfer_source_panics() {
+    fn visual_intro_missing_u4_transfer_source_returns_to_menu_without_writing() {
+        // `u4-transfer.md §3`: missing or wrong media is a retryable
+        // condition, not a hard process failure, and `§5`'s "no
+        // transferable data" branch is presented in the intro too.
+        // Either way the path shows a message, waits for a key and
+        // returns to menu polling without writing a save.
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            resolve_visual_intro_subflow(&mut intro, IntroSubflow::UltimaIvTransfer);
-        }));
+        assert!(resolve_visual_intro_subflow(
+            &mut intro,
+            IntroSubflow::UltimaIvTransfer
+        ));
 
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message_waiting_for_key);
         assert!(
-            result.is_err(),
-            "Ultima IV transfer must panic when PARTY4.SAV cannot be loaded"
+            intro.message.contains("Transfer source rejected"),
+            "{}",
+            intro.message
         );
+        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -14663,7 +15021,13 @@ mod tests {
             true,
             true,
             true,
-            "Certificate".to_string(),
+            u5_runtime::endgame_certificate_fields(
+                "AVATAR",
+                u5_runtime::GameClock::with_date(141, 5, 6, 12, 0).unwrap(),
+            ),
+            u5_runtime::endgame_final_report(
+                u5_runtime::GameClock::with_date(141, 5, 6, 12, 0).unwrap(),
+            ),
             None,
             None,
         ));
@@ -14700,6 +15064,70 @@ mod tests {
         );
     }
 
+    /// Column of the leftmost non-space cell the endgame text window
+    /// painted, if any.
+    fn endgame_text_first_painted_column(system: &TextWindowSystem) -> Option<u8> {
+        let mut first = None;
+        for row in 0..TEXT_SCREEN_ROWS {
+            for column in 0..TEXT_SCREEN_COLUMNS {
+                let Some(cell) = system.cell(column, row) else {
+                    continue;
+                };
+                if cell.byte != b' ' && cell.byte != 0 {
+                    first = Some(first.map_or(column, |current: u8| current.min(column)));
+                }
+            }
+        }
+        first
+    }
+
+    #[test]
+    fn endgame_text_never_lands_under_the_tableau_blit() {
+        // `endgame.md §3`/`§5`: the Lord British dialogue and the
+        // box-delivery Y/N prompts are blocking prompts the player has
+        // to read. The tableau blit is 11 cells at 16 px, i.e. the
+        // whole left 176 px of the surface, so the endgame text window
+        // has to start at the first column it cannot reach.
+        // cleak/u5-spec#82 still owes the published rectangles.
+        assert_eq!(
+            ENDGAME_TEXT_WINDOW_LEFT_COLUMN as usize * CH_CELL_SIDE,
+            ENDGAME_TABLEAU_WIDTH * TILE_ATLAS_SIDE
+        );
+        assert_eq!(
+            endgame_text_window_left(true),
+            ENDGAME_TEXT_WINDOW_LEFT_COLUMN
+        );
+        assert_eq!(endgame_text_window_left(false), 0);
+
+        let system = endgame_text_window_system(
+            "Lord British asks whether thou hast brought his box. (Y/N)",
+            true,
+        );
+        let first = endgame_text_first_painted_column(&system)
+            .expect("endgame prompt must paint at least one glyph");
+        assert!(
+            first >= ENDGAME_TEXT_WINDOW_LEFT_COLUMN,
+            "endgame prompt glyph at column {first} is under the tableau blit"
+        );
+    }
+
+    #[test]
+    fn endgame_frame_never_paints_the_gameplay_stats_panel() {
+        // `endgame.md §3`/`§10`: the endgame is not a gameplay mode.
+        // Live party gold / food / date / moon phases must not be
+        // painted over the terminal ending.
+        let system = endgame_text_window_system("Rite of Avatarhood", false);
+        for row in 0..TEXT_SCREEN_ROWS {
+            let mut line = String::new();
+            for column in STATS_PANEL_TEXT_LEFT..TEXT_SCREEN_COLUMNS {
+                if let Some(cell) = system.cell(column, row) {
+                    line.push(cell.byte as char);
+                }
+            }
+            assert!(!line.contains("STATS"), "row {row}: {line}");
+        }
+    }
+
     #[test]
     fn visual_play_frame_composes_endgame_tableau_over_modal_surface() {
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
@@ -14728,6 +15156,10 @@ mod tests {
         state.enter_endgame();
         state.resolve_endgame_confirmation(true);
         state.resolve_endgame_confirmation(true);
+        // `endgame.md §8` narrative windows are END.DAT-backed; a
+        // missing record is now a loud contract failure, so the beat
+        // needs real text to walk through.
+        state.endgame.as_mut().unwrap().final_narrative = Some(bevy_test_end_narrative());
         for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
             state.resolve_endgame_confirmation(true);
             if matches!(
@@ -14741,12 +15173,43 @@ mod tests {
             state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
             Some(u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0))
         ));
+        assert!(!endgame_frame_should_show_tableau(&state));
 
-        let mut expected_state = state.clone();
-        let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
         let rgba = render_visual_play_frame(&mut state, &atlas, &font);
 
-        assert_eq!(rgba, expected);
+        // With the tableau dropped the endgame text owns the full
+        // width, and the gameplay stats panel is still absent.
+        let mut stats_state = state.clone();
+        let stats = render_status_framebuffer(&mut stats_state, "", READY_HINT, &font);
+        assert_ne!(rgba, stats);
+        assert_eq!(
+            rgba.len(),
+            (VISUAL_PLAY_FRAME_WIDTH as usize) * (VISUAL_PLAY_FRAME_HEIGHT as usize) * 4
+        );
+    }
+
+    /// Six-window synthetic `END.DAT` narrative (`endgame.md §8`).
+    fn bevy_test_end_narrative() -> u5_runtime::EndNarrative {
+        let labels = [
+            "Window one",
+            "Window two",
+            "Window three",
+            "Window four",
+            "Window five",
+            "Window six",
+        ];
+        let mut raw = Vec::new();
+        let mut table = String::new();
+        for (index, label) in labels.iter().enumerate() {
+            let start = raw.len();
+            raw.push(b'{');
+            raw.extend_from_slice(label.as_bytes());
+            raw.push(0);
+            let end = raw.len();
+            table.push_str(&format!("{} {start} {end}\n", index + 1));
+        }
+        let ranges = u5_runtime::parse_end_narrative_window_ranges(&table).unwrap();
+        u5_runtime::EndNarrative::new(raw).with_window_ranges(ranges)
     }
 
     #[test]
@@ -14942,8 +15405,7 @@ mod tests {
         assert!(
             message.contains("visual proportional text requires")
                 || message.contains("sparse strip")
-                || message
-                    .contains("refuses the generated title-tick animation fallback")
+                || message.contains("refuses the generated title-tick animation fallback")
                 || message
                     .contains("title-tick animation requires published authored frame pixels"),
             "{message}"
@@ -14962,7 +15424,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 518);
+        assert_eq!(cases.len(), 519);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -15752,7 +16214,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1780);
+        assert_eq!(reports.len(), 1804);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -15760,7 +16222,7 @@ mod tests {
             assert!(report.nonblack_pixels > 0);
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1780"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1804"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t89"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -17161,9 +17623,10 @@ mod tests {
 
         let message = panic_message(result.expect_err("acknowledgements render must panic"));
         assert!(
-            message.contains("placeholder credits are a forbidden fallback"),
+            message.contains("end-screen file/slot binding for the credits artwork"),
             "{message}"
         );
+        assert!(message.contains("forbidden fallback"), "{message}");
         assert!(message.contains("cleak/u5-spec#72"), "{message}");
         let _ = fs::remove_dir_all(dir);
     }
@@ -17180,9 +17643,10 @@ mod tests {
 
         let message = panic_message(result.expect_err("acknowledgements input must panic"));
         assert!(
-            message.contains("placeholder credits are a forbidden fallback"),
+            message.contains("end-screen file/slot binding for the credits artwork"),
             "{message}"
         );
+        assert!(message.contains("forbidden fallback"), "{message}");
         assert!(message.contains("cleak/u5-spec#72"), "{message}");
         let _ = fs::remove_dir_all(dir);
     }
@@ -17199,9 +17663,10 @@ mod tests {
 
         let message = panic_message(result.expect_err("acknowledgements cancel must panic"));
         assert!(
-            message.contains("placeholder credits are a forbidden fallback"),
+            message.contains("end-screen file/slot binding for the credits artwork"),
             "{message}"
         );
+        assert!(message.contains("forbidden fallback"), "{message}");
         assert!(message.contains("cleak/u5-spec#72"), "{message}");
         let _ = fs::remove_dir_all(dir);
     }

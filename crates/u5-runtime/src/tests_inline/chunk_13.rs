@@ -17021,13 +17021,17 @@ fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
     assert_eq!(endgame.first_confirmation, Some(false));
     assert_eq!(endgame.final_confirmation, Some(true));
     assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
-    assert!(endgame.certificate.as_ref().unwrap().contains("MARIA"));
-    assert!(victory.message.contains("sixth day of the fifth month"));
-    assert!(victory.message.contains("one hundred forty-one"));
-    assert!(victory.message.contains("2 years, 1 month, 1 day"));
-    assert!(victory
-        .message
-        .contains("Report this completed quest to Origin"));
+    // endgame.md §9: the engine carries the certificate's published
+    // data-derived fields; the fixed prose that binds them stays a
+    // loud gate (cleak/u5-spec#82), so nothing is asserted about
+    // engine-composed sentences here.
+    let certificate = endgame.certificate.as_ref().unwrap();
+    assert_eq!(certificate.leader_name, "MARIA");
+    assert_eq!(certificate.day_ordinal, "sixth");
+    assert_eq!(certificate.month_ordinal, "fifth");
+    assert_eq!(certificate.year_words, "one hundred forty-one");
+    let report = endgame.final_report.unwrap();
+    assert_eq!(report.elapsed_label(), "2 years, 1 month, 1 day");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -17083,24 +17087,27 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     victory.enter_endgame_with_messages(Some(messages));
     victory.resolve_endgame_confirmation(true);
     victory.resolve_endgame_confirmation(true);
+    victory.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
     assert_eq!(victory.message, "Rite 1");
     for expected in ["Rite 2", "Rite 3", "Rite 4", "Rite 5", "Rite 6", "Rite 7"] {
         victory.resolve_endgame_confirmation(true);
         assert_eq!(victory.message, expected);
     }
     victory.resolve_endgame_confirmation(true);
-    assert_eq!(victory.message, "Throne-room tableau");
+    // The throne-tableau beat has no prose of its own; the debug
+    // banner label is no longer shown to the player.
+    assert_eq!(victory.message, "");
     assert_eq!(
         victory.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
         ENDGAME_TABLEAU_LORD_BRITISH_TYPE
     );
     for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
         victory.resolve_endgame_confirmation(true);
-        if victory.message != "Throne-room tableau" {
+        if !victory.message.is_empty() {
             break;
         }
     }
-    assert_eq!(victory.message, "Return-home arc (1)");
+    assert_eq!(victory.message, "Window one");
 }
 
 #[test]
@@ -17112,6 +17119,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     state.enter_endgame();
     state.resolve_endgame_confirmation(true);
     state.resolve_endgame_confirmation(true);
+    state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
 
     // Victory now active. Each additional confirmation advances
     // the cinematic by one panel until it reaches the terminal final
@@ -17131,7 +17139,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     // the first fixed narrative panel appears. The Lord British `0x08` phase
     // must be observable before the slot clears.
     state.resolve_endgame_confirmation(true);
-    assert_eq!(state.message, "Throne-room tableau");
+    assert_eq!(state.message, "");
     assert!(matches!(
         state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
         Some(crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau)
@@ -17174,11 +17182,19 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
             && state.active_objects[slot].tile == 0));
 
     state.resolve_endgame_confirmation(true);
-    assert_eq!(state.message, "Return-home arc (1)");
+    assert_eq!(state.message, "Window one");
 
-    for _ in 0..6 {
+    for expected in [
+        "Window two",
+        "Window three",
+        "Window four",
+        "Window five",
+        "Window six",
+    ] {
         state.resolve_endgame_confirmation(true);
+        assert_eq!(state.message, expected);
     }
+    state.resolve_endgame_confirmation(true);
     {
         let endgame = state.endgame.as_mut().unwrap();
         assert_eq!(
@@ -17186,21 +17202,92 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
             crate::endgame_cinematic::EndgameCinematicStep::CertificateRectOperation
         );
         assert!(endgame.advance_cinematic_frame_operation());
+        assert_eq!(
+            endgame.cinematic.step,
+            crate::endgame_cinematic::EndgameCinematicStep::Certificate
+        );
+        // endgame.md §9: the engine carries the certificate's published
+        // data-derived fields, but its fixed prose stays a loud gate
+        // (see the two unpublished-prose gate tests below).
+        let certificate = endgame.certificate.as_ref().unwrap();
+        assert_eq!(certificate.leader_name, "AVATAR");
+        assert_eq!(certificate.day_ordinal, "sixth");
+        assert_eq!(certificate.month_ordinal, "fifth");
+        assert_eq!(certificate.year_words, "one hundred forty-one");
+        assert_eq!(
+            endgame.final_report.unwrap().elapsed_label(),
+            "2 years, 1 month, 1 day"
+        );
     }
-    for _ in 0..2 {
-        state.resolve_endgame_confirmation(true);
-    }
-    let endgame = state.endgame.as_ref().unwrap();
-    assert!(endgame.cinematic_is_finished());
-    assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
-    assert!(state
-        .message
-        .contains("Report this completed quest to Origin"));
+}
 
-    let message = state.message.clone();
-    state.resolve_endgame_confirmation(true);
-    assert!(state.endgame.as_ref().unwrap().cinematic_is_finished());
-    assert_eq!(state.message, message);
+#[test]
+#[should_panic(expected = "cleak/u5-spec#82")]
+fn endgame_certificate_beat_is_a_loud_unpublished_prose_gate() {
+    // endgame.md §9 lists the certificate's fields but not its wording;
+    // composing the sentence in Rust would ship invented text.
+    let mut endgame = EndgameState::terminal(
+        true,
+        true,
+        true,
+        endgame_certificate_fields("AVATAR", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        None,
+        Some(synthetic_end_narrative()),
+    );
+    for _ in 0..(1 + crate::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT) {
+        endgame.cinematic.advance();
+    }
+    assert!(endgame.advance_cinematic_frame_operation());
+    let _ = endgame.current_cinematic_text();
+}
+
+#[test]
+#[should_panic(expected = "cleak/u5-spec#82")]
+fn endgame_final_report_beat_is_a_loud_unpublished_prose_gate() {
+    // endgame.md §9's separate final report panel: the elapsed-time
+    // arithmetic is published, the Origin report line's wording is not.
+    let mut endgame = EndgameState::terminal(
+        true,
+        true,
+        true,
+        endgame_certificate_fields("AVATAR", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        None,
+        Some(synthetic_end_narrative()),
+    );
+    for _ in 0..(1 + crate::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT) {
+        endgame.cinematic.advance();
+    }
+    assert!(endgame.advance_cinematic_frame_operation());
+    endgame.cinematic.advance();
+    assert_eq!(
+        endgame.cinematic.step,
+        crate::endgame_cinematic::EndgameCinematicStep::FinalReport
+    );
+    let _ = endgame.current_cinematic_text();
+}
+
+#[test]
+#[should_panic(expected = "forbidden fallback")]
+fn endgame_narrative_window_without_end_dat_text_fails_loudly() {
+    // endgame.md §8: six fixed END.DAT windows. A missing record used
+    // to print the step's debug banner label at the player.
+    let mut endgame = EndgameState::terminal(
+        true,
+        true,
+        true,
+        endgame_certificate_fields("AVATAR", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        None,
+        None,
+    );
+    endgame.cinematic.advance();
+    assert_eq!(
+        endgame.cinematic.step,
+        crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0)
+    );
+    let _ = endgame.current_cinematic_text();
 }
 
 #[test]
@@ -20847,11 +20934,13 @@ fn end_narrative_window_ranges_select_pages_for_cinematic() {
         true,
         true,
         true,
-        "Certificate text".to_string(),
+        endgame_certificate_fields("MARIA", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
         None,
         Some(narrative),
     );
-    assert_eq!(endgame.current_cinematic_text(), "Throne-room tableau");
+    // The throne tableau beat carries no prose of its own.
+    assert_eq!(endgame.current_cinematic_text(), "");
     endgame.advance_cinematic();
     assert_eq!(endgame.current_cinematic_text(), "Window one");
     endgame.advance_cinematic();
@@ -21405,6 +21494,33 @@ fn endgame_tableau_test_grid() -> Vec<u8> {
     grid
 }
 
+/// Six-window synthetic `END.DAT` narrative for endgame cinematic
+/// tests. `endgame.md §8` fixes the window count at six; a missing
+/// window is now a loud contract failure rather than a debug banner,
+/// so tests that walk the narrative beats must supply real text.
+fn synthetic_end_narrative() -> EndNarrative {
+    let labels = [
+        "Window one",
+        "Window two",
+        "Window three",
+        "Window four",
+        "Window five",
+        "Window six",
+    ];
+    let mut raw = Vec::new();
+    let mut table = String::new();
+    for (index, label) in labels.iter().enumerate() {
+        let start = raw.len();
+        raw.push(b'{');
+        raw.extend_from_slice(label.as_bytes());
+        raw.push(0);
+        let end = raw.len();
+        table.push_str(&format!("{} {start} {end}\n", index + 1));
+    }
+    let ranges = parse_end_narrative_window_ranges(&table).unwrap();
+    EndNarrative::new(raw).with_window_ranges(ranges)
+}
+
 #[test]
 fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     // endgame.md §3-§4: the endgame clears the live active-object table
@@ -21427,6 +21543,17 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     state.enter_endgame();
 
     assert_eq!(state.active_objects.len(), OOL_SLOTS);
+    // endgame.md §4/§7: the tableau walk-in is a rendered sequence, so
+    // entry leaves the party actors on their published start cell and
+    // owes one frame per one-cell step.
+    assert!(state.endgame_entry_presentation_pending());
+    assert!(!state.endgame_tableau_is_settled());
+    assert_eq!(
+        (state.active_objects[0].x, state.active_objects[0].y),
+        ENDGAME_TABLEAU_PARTY_START
+    );
+    assert!(state.finish_endgame_entry_presentation() > 0);
+    assert!(!state.endgame_entry_presentation_pending());
     assert!(state.endgame_tableau_is_settled());
     assert_eq!(
         endgame_tableau_role_for_slot(0, state.active_objects[0]),

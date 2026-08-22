@@ -638,9 +638,20 @@ pub const MISCMAPS_RTV_COMMAND_SECTION_OFFSET: usize =
 /// 16-command preview bytecode, not the gameplay TLK runner.
 pub const RTV_COMMAND_COUNT: usize = 16;
 
+/// `intro.md §11` describes the acknowledgements path as an artwork
+/// screen: load a graphics resource from the end-screen asset family,
+/// draw the credits artwork at a fixed position, reveal it with a
+/// bottom-up slab wipe at a fixed pixel stride, wait for a key, wipe
+/// it away top-to-bottom, then reload `STARTSC` and redraw the menu.
+/// What is missing is the binding and the numbers, not prose: which
+/// file and directory slot carries the credits artwork, its fixed
+/// top-left origin, the slab height / pixel stride and per-slab tick
+/// cadence for the two wipes, and whether any text is drawn over the
+/// artwork at all (`§15` still defers text and pagination to a
+/// source-free transcription, which `§11` may have made moot).
 pub fn require_acknowledgements_contract() -> ! {
     panic!(
-        "intro acknowledgements require published original text, pagination, and layout; clean-room-authored placeholder credits are a forbidden fallback; see cleak/u5-spec#72"
+        "intro acknowledgements require the published end-screen file/slot binding for the credits artwork, its fixed draw origin, and the slab stride and cadence of the bottom-up entry and top-down exit wipes (intro.md §11); guessing the resource slot or geometry, or substituting clean-room-authored placeholder credits, is a forbidden fallback; see cleak/u5-spec#72 and cleak/u5-spec#82"
     )
 }
 

@@ -175,6 +175,20 @@ impl ChargenSession {
         }
     }
 
+    /// `chargen.md §5.1` step 2: the accepted entered name, empty
+    /// until the name prompt is answered. The chargen screen keeps it
+    /// visible at cell (14, 19) while the gender prompt is up.
+    pub fn entered_name(&self) -> &[u8] {
+        &self.entered_name
+    }
+
+    /// `chargen.md §5.1` step 4: the accepted `M`/`F` key the chargen
+    /// screen echoes after the gender prompt, or `None` while the
+    /// prompt is still polling.
+    pub fn accepted_gender_key(&self) -> Option<u8> {
+        self.male.map(|male| if male { b'M' } else { b'F' })
+    }
+
     pub fn submit_name(&mut self, name: &str) -> ChargenSessionStep {
         if !matches!(self.phase, ChargenSessionPhase::AwaitingName) {
             return ChargenSessionStep::Ignored;
