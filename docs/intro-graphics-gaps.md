@@ -8,25 +8,35 @@ minimum intro implementation under the strict no-fallback rule. If a behavior is
 listed here, `u5-engine` should fail loudly rather than render invented text,
 generated animation, cropped buffers, or diagnostic substitutes.
 
-## Awaiting Spec Response
+## Still Open
 
-| Issue | Blocking contract | Current engine behavior |
+Spec head `8192d67` answered every prior intro issue, so the list below is what
+is genuinely left. Everything else that used to sit here is now implemented; the
+corrections it landed under are recorded in "Reconciled With Spec Head" below.
+
+| Issue | What is still missing | Current engine behavior |
 |---:|---|---|
-| [#54](https://github.com/cleak/u5-spec/issues/54) | Return-to-View preview pixel origin, preview-cell size/source, actor pixel mapping, wipe alignment, and full-clear vs dirty-rect behavior. | Bevy validates command playback, then rejects the invalid full-tile `64x304` preview instead of cropping/scaling. Terminal `--intro` rejects Return-to-View diagnostics when `MISCMAPS.DAT` exists. |
-| [#68](https://github.com/cleak/u5-spec/issues/68) | Phase-specific intro animation cadence and host catch-up behavior for title flourish, signature path, STARTSC reveal, story reveal, and Return-to-View ticks. | Bevy rejects wall-clock-driven intro playback instead of using the temporary shared-pump assumption. |
-| [#69](https://github.com/cleak/u5-spec/issues/69) | Exact inline doorway text and layout for intro story step 6. | Bevy rejects rendering, advancing, or cancelling past step 6; terminal story diagnostics are rejected when `STORY.DAT` exists. |
-| [#70](https://github.com/cleak/u5-spec/issues/70) | Resident proportional width table, spacing/wrap/centering rules, and Return-to-View caption text layout. | Bevy rejects proportional intro text and caption fallback rendering. |
-| [#71](https://github.com/cleak/u5-spec/issues/71) | Initial title/rune screen visual contract and input behavior before `TITLE.BIT` flourish. | Bevy rejects initial title render, ticks, and key input instead of skipping to the menu. |
-| [#72](https://github.com/cleak/u5-spec/issues/72) | Entry/exit wipe cadence for the acknowledgements parchment. | Bevy draws the observed artwork (see below) and blits it immediately instead of inventing a sweep. Terminal `--intro` still rejects placeholder acknowledgements, having no way to draw the art. |
-| [#73](https://github.com/cleak/u5-spec/issues/73) | Ultima IV transfer roster/status preview, prompt window, confirmation prompts, redraw timing, and page behavior. | Bevy and terminal `--intro` reject transfer preview fallbacks before save commit. |
+| [#72](https://github.com/cleak/u5-spec/issues/72) | Entry/exit slab-wipe cadence for the acknowledgements screen. The artwork, its origin and the restore-on-any-key behavior are answered and implemented; only the two wipes are unpublished. | Bevy draws the credits composition directly, with no invented sweep. |
+| [#73](https://github.com/cleak/u5-spec/issues/73) | Ultima IV transfer roster/status preview: per-field cursor positions, text attributes, redraw timing, and the name-replace / gender-flip / abort / commit prompt wording. `§6` fixes the region level (eight-column slot-heading strip written to both pages, full-width lower prompt window with a three-row interior, two character-info panels at x=0 and x=168), so the gap is per-field geometry and prompt text. | Bevy reaches the preview only with a *valid* `PARTY.SAV` and then fails loudly. Missing or unreadable media is the `§3` retryable branch: message in the intro window, wait for a key, back to the menu, nothing written. |
+| [#78](https://github.com/cleak/u5-spec/issues/78) | Our own correction request for the intro/menu contracts we settled by black-box observation (menu backing art, title-tick frames, acknowledgements art, lower menu frame). Filed, private trace complete, spec pass queued - not yet answered. | The engine implements the observed behaviour; every affected path carries a `cleak/u5-spec#78` comment. See "Resolved By Runtime Observation". |
+
+Two loud gates remain in the **terminal** shell only, and they are not spec gaps:
+story slides (`#69`/`#70`), Return-to-View (`#54`), acknowledgements (`#72`) and
+the transfer preview (`#73`) are graphical screens, and `--intro` has no surface
+to draw them on. Each refuses rather than printing a diagnostic substitute.
 
 ## Answered Or Non-Blocking For This Pass
 
 | Issue | Status |
 |---:|---|
 | [#52](https://github.com/cleak/u5-spec/issues/52) / [#65](https://github.com/cleak/u5-spec/issues/65) / [#63](https://github.com/cleak/u5-spec/issues/63) | Resolved by clean runtime observation of the shipped assets, pending the spec correction requested as [#78](https://github.com/cleak/u5-spec/issues/78). See "Resolved By Runtime Observation" below. |
-| [#64](https://github.com/cleak/u5-spec/issues/64) | CREATE/chargen presentation was published and implemented; no current response is needed for the chargen graphics contract. |
-| [#66](https://github.com/cleak/u5-spec/issues/66) / [#67](https://github.com/cleak/u5-spec/issues/67) | Title bitmap layering and flourish slot presentation were answered and implemented; remaining title blockers are now the initial screen and cadence above; the title-tick frame content is resolved by runtime observation. |
+| [#64](https://github.com/cleak/u5-spec/issues/64) | CREATE/chargen panel placements published and implemented. The paragraph rectangles `§5.1` never published were measured off a capture instead of invented - `CHARGEN_GYPSY_PARAGRAPH_BOX`, `CHARGEN_QUESTION_PARAGRAPH_BOX`, `CHARGEN_RESULT_PARAGRAPH_BOX` in `crates/u5-runtime/src/story_layout.rs`. The name/gender prompts use `§5.1`'s published cells and share one uncleared screen. |
+| [#66](https://github.com/cleak/u5-spec/issues/66) / [#67](https://github.com/cleak/u5-spec/issues/67) | Title bitmap layering, flourish script, palette and final pre-menu frame are answered and implemented; see the reconciliation table below. |
+| [#68](https://github.com/cleak/u5-spec/issues/68) / [#77](https://github.com/cleak/u5-spec/issues/77) | Intro animation cadence is published (`timing.md §5`) and implemented: the flourish is the calibrated animation-script entry at 14 ms per presentation step, the signature advances one 32-stroke chunk per BIOS user-tick, and a no-key menu poll pass costs two ticks. |
+| [#69](https://github.com/cleak/u5-spec/issues/69) | Inline doorway text for story step 6 is published and rendered; all 21 story steps draw. |
+| [#70](https://github.com/cleak/u5-spec/issues/70) | Proportional font metrics are resolved. Line stride is 9 rows (`u5_runtime::PROPORTIONAL_LINE_STRIDE`) and the story/chargen paragraph regions derive from art placement rather than hard-coded rectangles. |
+| [#71](https://github.com/cleak/u5-spec/issues/71) | Withdrawn as a visual contract by spec commit `6f9132f`: the "initial title/rune text" phase is the non-visual pre-flourish preparation pass (`intro.md §3` step 2), implemented in `crates/u5-runtime/src/intro_preflourish.rs`. The former panic gate is gone. |
+| [#54](https://github.com/cleak/u5-spec/issues/54) | Return-to-View preview geometry is published and implemented; the graphical preview renders and `--visual-frame-suite` now runs to completion instead of aborting on it. |
 
 ## Reconciled With Spec Head `8192d67`
 
@@ -80,8 +90,16 @@ needed.
 
 ## Verification Notes
 
-- The current strict path intentionally makes the intro less runnable until the
-  contracts above are published; this prevents broken graphics from being hidden
-  behind text or generated-art substitutes.
+- The strict no-fallback rule still holds: where a contract is unpublished the
+  engine refuses rather than rendering invented text, generated animation,
+  cropped buffers, or diagnostic substitutes.
 - When one of these issues is answered, remove only the corresponding panic and
   add focused tests that prove the published contract is being followed.
+- Read contracts from the `cleak/u5-spec` GitHub issues. The local checkout at
+  `C:\Projects\Rust\u5-clean\u5-spec` is read-only from this workspace and is
+  stale at `9a898d1`, which predates several of the retractions above - the
+  reconciliation table would look wrong if checked against it.
+- Intro evidence in `--visual-frame-suite`: `intro-menu`, `intro-finished-menu`,
+  `intro-story-00`..`intro-story-20`, `intro-return-to-view`,
+  `intro-chargen-name-prompt`, `intro-chargen-gender-prompt`,
+  `intro-chargen-gender-echo`. 186 PNGs total on 2026-08-22.
