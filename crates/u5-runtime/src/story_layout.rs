@@ -27,6 +27,11 @@ use crate::{
 /// every step, independent of margins and band.
 pub const PROPORTIONAL_LINE_STRIDE: u16 = PCS_GLYPH_HEIGHT as u16 + 1;
 
+/// `text-output.md §8.5`: glyph drawing is clipped at the bottom. Once the pen
+/// row reaches 192 glyphs stop being drawn, but the pen still advances exactly
+/// as if they were, so layout does not change when text runs off the bottom.
+pub const PROPORTIONAL_DRAW_CLIP_Y: u16 = 192;
+
 /// `text-output.md §8.2`: `{` is a first-line indent marker measured as a flat
 /// fifteen pixels. The renderer draws nothing and the pen still advances.
 pub const PROPORTIONAL_BRACE_INDENT: u16 = 15;
@@ -263,12 +268,13 @@ enum LineStop {
 /// justified, with the truncating division's remainder landing on the last
 /// spaces; and the pen advances nine pixels per line.
 ///
-/// `bottom_limit` is the first pixel row the glyph cell may not reach.
+/// `draw_clip_y` is the pen row at which glyph drawing stops; layout continues
+/// past it unchanged. Callers pass [`PROPORTIONAL_DRAW_CLIP_Y`].
 pub fn layout_proportional_paragraph_glyphs(
     widths: &ProportionalWidthTable,
     descriptor: &ProportionalLayoutDescriptor,
     text: &[u8],
-    bottom_limit: u16,
+    draw_clip_y: u16,
 ) -> io::Result<Vec<PlacedProportionalGlyph>> {
     let space_advance = u16::from(descriptor.space_advance);
     // `text-output.md` section 8.3: the fit test uses the hyphen's raw
@@ -282,7 +288,7 @@ pub fn layout_proportional_paragraph_glyphs(
     let mut index = 0usize;
     let mut first_line = true;
 
-    while pen_y.saturating_add(PCS_GLYPH_HEIGHT as u16) <= bottom_limit {
+    loop {
         let (left, right) = descriptor.margins_for(pen_y);
         let available = right.saturating_sub(left);
         // §8.1: only the entry pen may sit right of the margin, and the
@@ -395,16 +401,20 @@ pub fn layout_proportional_paragraph_glyphs(
                     }
                 }
                 byte => {
-                    placed.push(PlacedProportionalGlyph {
-                        x,
-                        y: pen_y,
-                        code: byte,
-                    });
+                    // §8.5: past the clip the pen still advances, so the walk
+                    // is identical - only the glyph is dropped.
+                    if pen_y < draw_clip_y {
+                        placed.push(PlacedProportionalGlyph {
+                            x,
+                            y: pen_y,
+                            code: byte,
+                        });
+                    }
                     x = x.saturating_add(glyph_advance(widths, byte)?);
                 }
             }
         }
-        if draw_hyphen {
+        if draw_hyphen && pen_y < draw_clip_y {
             placed.push(PlacedProportionalGlyph {
                 x,
                 y: pen_y,

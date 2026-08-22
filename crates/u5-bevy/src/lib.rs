@@ -64,8 +64,8 @@ use u5_runtime::{
     NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
     PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
     PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome,
+    PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX,
+    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome,
     ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
     REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
     RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
@@ -11615,11 +11615,17 @@ struct ProportionalTextPlacement {
     shadow: bool,
 }
 
-/// `cleak/u5-spec#70`: the intro story text is drawn as plain EGA-white
-/// glyphs with no shadow pass. Confirmed on the one slide where narrative
-/// text overlaps coloured art (step 0's last two lines run over the bottom of
-/// the STORY1.16 window frame): none of the 85 pixels a one-pixel drop shadow
-/// would have blackened is black in the capture.
+/// Intro overlay ink, palette index 15, as published in `cleak/u5-spec#78`.
+///
+/// The index is the spec's, not a colour sampled from a capture - the DOSBox
+/// capture pipeline shifts colour, so the "pale yellow" those PNGs show is an
+/// artefact. What the captures were used for is the *absence* of a shadow
+/// pass, which survives a colour shift because it is a black-versus-not-black
+/// test: on the one slide where narrative text overlaps coloured art (step 0's
+/// last two lines run over the bottom of the STORY1.16 window frame), none of
+/// the 85 pixels a one-pixel drop shadow would have blackened is black.
+/// `systems/text-output.md §8` confirms the renderer has no shadow, outline or
+/// per-caller colour override.
 const INTRO_STORY_TEXT_COLOR: u8 = 15;
 
 /// Draws one NUL-terminated proportional paragraph into the intro
@@ -11647,7 +11653,7 @@ fn draw_proportional_paragraph_with_font(
         &PROPORTIONAL_WIDTH_TABLE,
         descriptor,
         text,
-        u16::try_from(dst.height).unwrap_or(u16::MAX),
+        PROPORTIONAL_DRAW_CLIP_Y,
     )?;
     for glyph in placed {
         let ink_width = PROPORTIONAL_WIDTH_TABLE.width_for_byte(glyph.code)?;
