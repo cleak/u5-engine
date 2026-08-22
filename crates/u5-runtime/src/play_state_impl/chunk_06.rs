@@ -298,7 +298,10 @@ impl PlayState {
 
     pub fn render_active_jimmy(&self) -> String {
         let last = self.party.len().min(6);
-        format!("Who picks? _\nChoose party member 1-{last}; Space/Esc cancels.")
+        let _ = last;
+        // cleak/u5-spec#81: the party-member prompt literal is unpublished;
+        // the invented instructional suffix is removed until it is.
+        "Who picks? _".to_string()
     }
 
     pub fn step_active_jimmy(
@@ -349,7 +352,10 @@ impl PlayState {
 
     pub fn render_active_surface_chest(&self) -> String {
         let last = self.party.len().min(6);
-        format!("Who opens? _\nChoose party member 1-{last}; Space/Esc cancels.")
+        let _ = last;
+        // cleak/u5-spec#81: the party-member prompt literal is unpublished;
+        // the invented instructional suffix is removed until it is.
+        "Who opens? _".to_string()
     }
 
     pub fn step_active_surface_chest(

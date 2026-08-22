@@ -130,6 +130,9 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         sail_stall_pending: false,
         turn: 0,
         message: String::new(),
+        message_transcript: Vec::new(),
+        message_transcript_revision: 0,
+        pending_command_echo: None,
         pending_hourly_status_message: None,
         debug_enter: None,
         return_world: None,
@@ -148,6 +151,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         active_conversation: None,
         active_conversation_join_candidate: None,
         active_z_stats: None,
+        active_party_selector: None,
         active_ready: None,
         active_use: None,
         active_cast: None,
@@ -278,6 +282,9 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         sail_stall_pending: false,
         turn: 0,
         message: String::new(),
+        message_transcript: Vec::new(),
+        message_transcript_revision: 0,
+        pending_command_echo: None,
         pending_hourly_status_message: None,
         debug_enter: None,
         return_world: None,
@@ -296,6 +303,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         active_conversation: None,
         active_conversation_join_candidate: None,
         active_z_stats: None,
+        active_party_selector: None,
         active_ready: None,
         active_use: None,
         active_cast: None,
@@ -429,6 +437,9 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         sail_stall_pending: false,
         turn: 0,
         message: String::new(),
+        message_transcript: Vec::new(),
+        message_transcript_revision: 0,
+        pending_command_echo: None,
         pending_hourly_status_message: None,
         debug_enter: None,
         return_world: None,
@@ -447,6 +458,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         active_conversation: None,
         active_conversation_join_candidate: None,
         active_z_stats: None,
+        active_party_selector: None,
         active_ready: None,
         active_use: None,
         active_cast: None,
@@ -497,7 +509,11 @@ pub fn debug_game_dir() -> PathBuf {
     // blank (all-zero) fixture would silently pass the size check
     // but produce empty rendered pixels, breaking downstream
     // tests that assert on visible chargen / menu output.
-    fs::write(dir.join(crate::IBM_CH_FILE), vec![0xffu8; crate::CH_FONT_LEN]).unwrap();
+    fs::write(
+        dir.join(crate::IBM_CH_FILE),
+        vec![0xffu8; crate::CH_FONT_LEN],
+    )
+    .unwrap();
     fs::write(
         dir.join(crate::RUNES_CH_FILE),
         vec![0xffu8; crate::CH_FONT_LEN],

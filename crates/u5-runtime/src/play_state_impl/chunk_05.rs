@@ -182,8 +182,8 @@ impl PlayState {
                 entry.x,
                 entry.y,
                 scene.key(),
-                entry.level,
-                entry.to_level,
+                dungeon_display_level(entry.level),
+                dungeon_display_level(entry.to_level),
                 entry.to_x,
                 entry.to_y
             )
@@ -193,8 +193,8 @@ impl PlayState {
                 entry.x,
                 entry.y,
                 scene.key(),
-                entry.level,
-                entry.to_level,
+                dungeon_display_level(entry.level),
+                dungeon_display_level(entry.to_level),
                 entry.to_x,
                 entry.to_y
             )
@@ -664,9 +664,10 @@ impl PlayState {
             self.advance_turn();
         }
         self.message = format!(
-            "Fell {drops} level(s) through pit trap to {} ({}) level {level}.",
+            "Fell {drops} level(s) through pit trap to {} ({}) level {}.",
             scene.key(),
-            scene.name()
+            scene.name(),
+            dungeon_display_level(level)
         );
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel { scene, level },

@@ -89,6 +89,20 @@ pub struct PlayState {
     pub sail_stall_pending: bool,
     pub turn: u64,
     pub message: String,
+    /// `text-output.md §2` + `commands.md §5`: the scrolling message
+    /// window is a transcript, not a single line. Each command turn opens
+    /// one entry with the command's verb echo, and the handler's own
+    /// prompt or result either continues that entry or starts the next
+    /// one. Renderers read it through [`PlayState::message_entries`];
+    /// `message` above remains the newest handler text for the many
+    /// call sites and tests that assert on it directly.
+    pub(crate) message_transcript: Vec<MessageEntry>,
+    /// Bumped on every transcript push so callers can tell whether a
+    /// dispatch already recorded its own output.
+    pub(crate) message_transcript_revision: u64,
+    /// The verb echo opened for the command currently being dispatched,
+    /// if any, plus the message text that stood when it was opened.
+    pub(crate) pending_command_echo: Option<PendingCommandEcho>,
     pub pending_hourly_status_message: Option<String>,
     pub debug_enter: Option<PlayTarget>,
     pub return_world: Option<WorldReturn>,
@@ -107,6 +121,13 @@ pub struct PlayState {
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
     pub active_conversation_join_candidate: Option<String>,
     pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
+    /// `inventory.md §4`: the outside-combat party-member selector that
+    /// Z-stats opens before it binds a character. While it is live the
+    /// roster box carries the `Select:` border label and its candidate
+    /// row is drawn in inverse video; see
+    /// [`PlayState::selector_highlight`] and
+    /// [`PlayState::roster_box_label`].
+    pub active_party_selector: Option<crate::z_stats::PartySelectorSession>,
     pub active_ready: Option<crate::z_stats::ReadySession>,
     pub active_use: Option<crate::z_stats::UseSession>,
     pub active_cast: Option<crate::z_stats::CastSession>,
@@ -222,3 +243,31 @@ pub struct WorldReturn {
     pub active_objects: Vec<ActiveObject>,
     pub pending_vehicle: Option<PendingVehicleAcquisition>,
 }
+
+/// One line of the scrolling message-window transcript.
+///
+/// `commands.md §5` requires each command block to print a resident verb
+/// prefix before its handler runs; the original renders those lines with
+/// a leading `>` glyph and continuation lines without one. `is_command_echo`
+/// carries that distinction to the renderer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MessageEntry {
+    pub text: String,
+    pub is_command_echo: bool,
+}
+
+/// Bookkeeping for a verb echo that has been written to the transcript
+/// but whose handler has not finished yet.
+#[derive(Clone, Debug)]
+pub(crate) struct PendingCommandEcho {
+    pub(crate) echo: CommandEcho,
+    /// `PlayState::message` as it stood when the echo was opened, so the
+    /// commit step can tell whether the handler wrote anything at all.
+    pub(crate) message_at_entry: String,
+}
+
+/// How many transcript entries are retained. The original scrolls its
+/// twelve-row message window; keeping a few screens of history lets a
+/// renderer scroll back without the buffer growing without bound over a
+/// long session.
+pub const MESSAGE_TRANSCRIPT_CAPACITY: usize = 64;
