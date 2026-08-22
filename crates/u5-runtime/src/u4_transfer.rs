@@ -22,21 +22,20 @@ pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = crate::BRIT_OOL_FILENAME;
 pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
 pub const U4_PARTY_SAV_LEN: usize = 532;
 pub const U4_PARTY_SAV_MOVE_COUNTER_OFFSET: usize = 0x0000;
-// cleak/u5-spec#82: `u4-transfer.md §5` says the "no transferable
-// data" gate skips the predecessor's party-wide food and gold fields
-// and *then* tests eight consecutive virtue/karma standing WORDS. The
-// offset and element width below do not satisfy that description and
-// are known to be wrong in at least one place: eight bytes at 0x0002
-// run through the moon counter (0x0006), the dungeon counter (0x0007)
-// and the low half of the 16-bit gold field (0x0008), and they sit
-// *before* food (0x000A) and gold rather than after them. Consequence:
-// an all-zero-virtue save with nonzero gold or moon counters passes
-// the guard. The record offsets are also internally inconsistent -
-// PLAYER0 (0x08) + CHARACTER_NAME (0x14) implies a leading name at
-// 0x1C while LEADING_CHARACTER_NAME says 0x1A. Left as-is rather than
-// guessing new offsets; fix once #82 publishes the block's offset and
-// element width.
-pub const U4_PARTY_SAV_VIRTUE_STANDING_OFFSET: usize = 0x0002;
+/// `u4-transfer.md §5.3` (published in answer to `cleak/u5-spec#82`):
+/// the eight virtue/karma standings are **16-bit** values at stride 2
+/// starting at file offset `0x0146`, ending at `0x0155`.
+///
+/// The engine previously read eight *bytes* at `0x0002`. That was wrong
+/// on offset, element width and span: it landed on the moon counter,
+/// the dungeon counter and the 16-bit gold field, none of which this
+/// path ever reads. The read that supplies the block starts at `0x0140`
+/// and covers 182 bytes, so the party-wide food and gold fields at the
+/// head of the block are skipped by construction rather than by an
+/// explicit step.
+pub const U4_PARTY_SAV_VIRTUE_STANDING_OFFSET: usize = 0x0146;
+/// `u4-transfer.md §5.3`: stride between consecutive standings.
+pub const U4_PARTY_SAV_VIRTUE_STANDING_STRIDE: usize = 2;
 pub const U4_PARTY_SAV_MOON_COUNTER_OFFSET: usize = 0x0006;
 pub const U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET: usize = 0x0007;
 pub const U4_PARTY_SAV_GOLD_OFFSET: usize = 0x0008;
@@ -191,8 +190,13 @@ pub const U4_TRANSFER_VIRTUE_STANDING_COUNT: usize = crate::VIRTUE_COUNT;
 /// normal preview. The guard fires only when every virtue-standing
 /// byte in the supplied buffer is zero. Any nonzero byte allows
 /// the normal transfer preview to proceed.
-pub fn u4_transfer_no_transferable_data(virtue_standings: &[u8]) -> bool {
-    virtue_standings.iter().all(|&byte| byte == 0)
+/// `u4-transfer.md §5.3`: eight independent comparisons against zero -
+/// no loop accumulator, no summation. All eight zero means the source
+/// character is an Avatar. It is not a rejection gate: neither outcome
+/// aborts the transfer or changes what is written from the source
+/// record, and the resulting flag is a one-shot latch per attempt.
+pub fn u4_transfer_no_transferable_data(virtue_standings: &[u16]) -> bool {
+    virtue_standings.iter().all(|&standing| standing == 0)
 }
 
 pub fn u4_transfer_class_byte(class_index: u8) -> Option<u8> {
@@ -321,8 +325,14 @@ pub fn parse_u4_transfer_source_from_party_sav(
         u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
     )?;
 
-    let virtue_bytes = &bytes[U4_PARTY_SAV_VIRTUE_STANDING_OFFSET
-        ..U4_PARTY_SAV_VIRTUE_STANDING_OFFSET + U4_TRANSFER_VIRTUE_STANDING_COUNT];
+    let virtue_standings: Vec<u16> = (0..U4_TRANSFER_VIRTUE_STANDING_COUNT)
+        .map(|index| {
+            let at =
+                U4_PARTY_SAV_VIRTUE_STANDING_OFFSET + index * U4_PARTY_SAV_VIRTUE_STANDING_STRIDE;
+            u16::from_le_bytes([bytes[at], bytes[at + 1]])
+        })
+        .collect();
+    let virtue_bytes = &virtue_standings[..];
     if u4_transfer_no_transferable_data(virtue_bytes) {
         return Err(U4TransferError::NoTransferableData);
     }
