@@ -157,7 +157,7 @@
             let mut text = line.as_bytes().to_vec();
             text.push(0);
             let placed =
-                layout_proportional_paragraph_glyphs(&PROPORTIONAL_WIDTH_TABLE, boxed, &text, 200)
+                layout_proportional_paragraph_glyphs(&PROPORTIONAL_WIDTH_TABLE, boxed, &text, PROPORTIONAL_DRAW_CLIP_Y)
                     .unwrap();
             assert!(
                 placed.iter().all(|glyph| glyph.y == boxed.pen_y),
@@ -200,8 +200,7 @@
         let widths = uniform_width_table(4);
         let boxed = ProportionalLayoutDescriptor::full_width(0, 20);
         let placed =
-            layout_proportional_paragraph_glyphs(&widths, &boxed, b"
-{ab cd ", 200).unwrap();
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"\n{ab cd\0", PROPORTIONAL_DRAW_CLIP_Y).unwrap();
         // The leading line feed ends an empty line and is consumed, so the
         // text lands one stride down; `{` then advances a flat 15 and draws
         // nothing.
@@ -220,12 +219,9 @@
         // one line feed just ends the line.
         let widths = uniform_width_table(4);
         let boxed = ProportionalLayoutDescriptor::full_width(0, 0);
-        let single = layout_proportional_paragraph_glyphs(&widths, &boxed, b"a
-b ", 200).unwrap();
+        let single = layout_proportional_paragraph_glyphs(&widths, &boxed, b"a\nb\0", PROPORTIONAL_DRAW_CLIP_Y).unwrap();
         assert_eq!(single[1].y, PROPORTIONAL_LINE_STRIDE);
-        let double = layout_proportional_paragraph_glyphs(&widths, &boxed, b"a
-
-b ", 200).unwrap();
+        let double = layout_proportional_paragraph_glyphs(&widths, &boxed, b"a\n\nb\0", PROPORTIONAL_DRAW_CLIP_Y).unwrap();
         assert_eq!(double[1].y, 2 * PROPORTIONAL_LINE_STRIDE);
     }
 
@@ -242,7 +238,7 @@ b ", 200).unwrap();
             ..ProportionalLayoutDescriptor::full_width(0, 0)
         };
         let placed =
-            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb cc dd ee ", 200).unwrap();
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb cc dd ee\0", PROPORTIONAL_DRAW_CLIP_Y).unwrap();
         let first_line: Vec<_> = placed.iter().filter(|glyph| glyph.y == 0).collect();
         assert_eq!(first_line.len(), 8);
         // Justified: the pen ends exactly on the exclusive right margin, so
@@ -279,7 +275,7 @@ b ", 200).unwrap();
             ..ProportionalLayoutDescriptor::full_width(0, 0)
         };
         let placed =
-            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb_cc_dd ", 200).unwrap();
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb_cc_dd\0", PROPORTIONAL_DRAW_CLIP_Y).unwrap();
         let first: String = placed
             .iter()
             .filter(|glyph| glyph.y == 0)
@@ -312,7 +308,7 @@ b ", 200).unwrap();
             ..ProportionalLayoutDescriptor::full_width(0, 0)
         };
         let placed =
-            layout_proportional_paragraph_glyphs(&widths, &boxed, b"abcd ", 200).unwrap();
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"abcd\0", PROPORTIONAL_DRAW_CLIP_Y).unwrap();
         assert_eq!(placed.len(), 4);
         // One byte per line while the walk keeps overflowing...
         assert_eq!((placed[0].code, placed[0].x, placed[0].y), (b'a', 0, 0));
@@ -339,7 +335,7 @@ b ", 200).unwrap();
             ..ProportionalLayoutDescriptor::full_width(0, 0)
         };
         let placed =
-            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb cc ", 200).unwrap();
+            layout_proportional_paragraph_glyphs(&widths, &boxed, b"aa bb cc\0", PROPORTIONAL_DRAW_CLIP_Y).unwrap();
         assert_eq!(placed[0].x, 20, "the first line starts at the pen");
         let wrapped = placed.iter().find(|glyph| glyph.y > 0).unwrap();
         assert_eq!(wrapped.x, 0, "later lines start at the margin");
@@ -400,7 +396,7 @@ b ", 200).unwrap();
                 &PROPORTIONAL_WIDTH_TABLE,
                 &boxed,
                 text.as_bytes(),
-                200,
+                PROPORTIONAL_DRAW_CLIP_Y,
             )
             .unwrap_or_else(|err| panic!("intro story step {step} layout: {err}"));
 
@@ -487,7 +483,7 @@ b ", 200).unwrap();
                 &PROPORTIONAL_WIDTH_TABLE,
                 &boxed,
                 text.as_bytes(),
-                200,
+                PROPORTIONAL_DRAW_CLIP_Y,
             )
             .unwrap_or_else(|err| panic!("chargen record {record} layout: {err}"));
 
@@ -621,4 +617,66 @@ b ", 200).unwrap();
         assert_eq!(visited, caller.pixel_count() as usize);
         assert!(driver.next_pixel().is_none());
         assert!(driver.is_finished() && caller.is_complete());
+    }
+
+    #[test]
+    fn story_layout_clips_drawing_at_pen_row_192_without_changing_layout() {
+        // `text-output.md` section 8.5: once the pen row reaches 192 glyphs
+        // stop being drawn, but the pen still advances exactly as if they
+        // were, so the walk through the text is identical.
+        let widths = uniform_width_table(4);
+        let boxed = ProportionalLayoutDescriptor::full_width(0, 180);
+        let text = b"aa\naa\naa\naa\naa\0";
+
+        let clipped =
+            layout_proportional_paragraph_glyphs(&widths, &boxed, text, PROPORTIONAL_DRAW_CLIP_Y)
+                .unwrap();
+        // Lines land at 180, 189, 198, 207, 216; only the first two are drawn.
+        assert_eq!(clipped.len(), 4);
+        assert!(clipped.iter().all(|glyph| glyph.y < PROPORTIONAL_DRAW_CLIP_Y));
+        assert_eq!(clipped[0].y, 180);
+        assert_eq!(clipped[2].y, 189);
+
+        // Raising the clip proves the layout itself never changed: the same
+        // walk simply keeps drawing.
+        let unclipped =
+            layout_proportional_paragraph_glyphs(&widths, &boxed, text, u16::MAX).unwrap();
+        assert_eq!(unclipped.len(), 10);
+        assert_eq!(&unclipped[..4], &clipped[..]);
+        assert_eq!(unclipped[9].y, 180 + 4 * PROPORTIONAL_LINE_STRIDE);
+    }
+
+    #[test]
+    fn story_records_preserve_the_published_markup_counts() {
+        // `cleak/u5-spec#70` publishes counts taken from the shipped file: 654
+        // author-placed soft hyphens and 36 paragraph-indent braces across the
+        // twenty story records. The renderer never hyphenates on its own, so a
+        // loader that strips either marker cannot reproduce the original's
+        // line breaks - these counts catch that regression directly.
+        let Some(dir) = local_clean_assets() else {
+            return;
+        };
+        let Some(records) = load_story_records(&dir).expect("STORY.DAT loads") else {
+            return;
+        };
+        let soft_breaks: usize = records
+            .iter()
+            .map(|record| {
+                record
+                    .bytes()
+                    .filter(|byte| *byte == STORY_SOFT_BREAK_MARKER)
+                    .count()
+            })
+            .sum();
+        let braces: usize = records
+            .iter()
+            .map(|record| {
+                record
+                    .bytes()
+                    .filter(|byte| *byte == STORY_PARAGRAPH_START_MARKER)
+                    .count()
+            })
+            .sum();
+        assert_eq!(soft_breaks, 654, "author-placed soft hyphens");
+        assert_eq!(braces, 36, "paragraph-indent braces");
     }
