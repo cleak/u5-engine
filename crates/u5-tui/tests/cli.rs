@@ -1043,7 +1043,10 @@ fn cli_binary_play_script_confirmed_save_round_trips_to_temp_save() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("Script mode: 3 command(s)."));
-    assert!(stdout.contains("Saving... Done"));
+    // The message window is fifteen columns wide, so the confirmation
+    // wraps across two rows.
+    let squished: String = stdout.chars().filter(|ch| !ch.is_whitespace()).collect();
+    assert!(squished.contains("Yes.Saving...Done."), "{stdout}");
     assert!(String::from_utf8(output.stderr).unwrap().is_empty());
 
     let reloaded = load_play_options_from_save(&dir).unwrap();

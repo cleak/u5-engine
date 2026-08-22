@@ -58,10 +58,10 @@ use u5_runtime::{
     NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
     PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
     PLAYER_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX,
-    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
+    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions,
+    PlayState, PlayTarget, PreFlourishOutcome, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
+    REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
     RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
     SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
     SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
@@ -71,25 +71,23 @@ use u5_runtime::{
     SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
     SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
-    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
-    SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
-    TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
-    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_SOURCE_WIDTH, TITLE_TICK_SOURCE_X, TLK_TEXT_XOR_MASK,
-    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern,
-    TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem, TileAtlas, TileGraphicsDepth,
-    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TitleTickFrameSet,
-    TransportState, U4TransferOverrides, U4TransferSource, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT,
-    ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
-    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
-    ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    blit_tile_id_to_viewport, combat_actor_is_active_not_dead, combat_class_stats,
-    commit_chargen_save, configure_talk_shop_text_window,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_LEFT,
+    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable,
+    StoryRecords, TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH,
+    TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
+    TITLE_BIT_INITIAL_SOURCE_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_SOURCE_WIDTH, TITLE_TICK_SOURCE_X,
+    TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
+    Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, ULTIMA_LOGO_HEIGHT,
+    ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST,
+    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
+    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
+    combat_class_stats, commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -105,11 +103,10 @@ use u5_runtime::{
     load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
     load_title_bit, load_ultima_title_tick_frames,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    paint_inn_pickup_register_text_window, paint_message_text_window,
-    paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
-    paint_talk_shop_text_window, published_world_location_entries, read_save_image_file,
-    read_u4_transfer_source_from_party_sav, render_play_text_window_system, render_text_panel_rgba,
-    render_text_window_rgba, run_intro_pre_flourish_phase,
+    paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
+    paint_stats_panel_text_window, paint_talk_shop_text_window, published_world_location_entries,
+    read_save_image_file, read_u4_transfer_source_from_party_sav, render_play_text_window_system,
+    render_text_panel_rgba, render_text_window_rgba, run_intro_pre_flourish_phase,
     run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
@@ -122,6 +119,14 @@ use u5_runtime::{
     terrain_combat_tile_for_spawn_index, title_tick_next_frame, town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
+};
+// Gameplay-screen border chrome and the message/command window.
+use u5_runtime::{
+    CHROME_RULE_INDEX, ChromeFonts, GameplayMessageLog, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
+    VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter, configure_play_text_windows,
+    gameplay_chrome_content, layout_message_window, load_runes_ch_font,
+    message_is_scene_entry_narration, paint_fixed_cell_glyph, paint_fixed_cell_text,
+    paint_gameplay_frame_chrome, paint_message_line_cap,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -679,11 +684,13 @@ pub fn run_visual_loop(
     let state = PlayState::load_scene(game_dir, options)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let text_font = load_ibm_ch_font(game_dir)?;
+    let rune_font = load_runes_ch_font(game_dir)?;
     let bootstrap = Bootstrap {
         game_dir: game_dir.to_path_buf(),
         state,
         atlas,
         text_font,
+        rune_font,
     };
 
     let display_w = VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE;
@@ -833,6 +840,13 @@ pub fn visual_frame_suite(
     std::fs::create_dir_all(out_dir)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let font = load_ibm_ch_font(game_dir)?;
+    let runes = load_runes_ch_font(game_dir)?;
+    let suite_log = GameplayMessageLog::new();
+    let ctx = PlayFrameContext {
+        ibm: &font,
+        runes: &runes,
+        log: &suite_log,
+    };
     let mut reports = Vec::new();
 
     for case in visual_gameplay_frame_cases() {
@@ -857,11 +871,11 @@ pub fn visual_frame_suite(
             case.frame_kind,
             &mut state,
             &atlas,
-            &font,
+            ctx,
         )?);
     }
-    push_visual_combat_gallery_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
-    push_visual_surface_view_class_gallery_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
+    push_visual_combat_gallery_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
+    push_visual_surface_view_class_gallery_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
 
     reports.push(write_visual_intro_report(
         out_dir,
@@ -926,6 +940,13 @@ pub fn visual_route_suite(
     std::fs::create_dir_all(out_dir)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let font = load_ibm_ch_font(game_dir)?;
+    let runes = load_runes_ch_font(game_dir)?;
+    let suite_log = GameplayMessageLog::new();
+    let ctx = PlayFrameContext {
+        ibm: &font,
+        runes: &runes,
+        log: &suite_log,
+    };
     let mut reports = Vec::new();
 
     for case in visual_route_suite_cases() {
@@ -944,7 +965,7 @@ pub fn visual_route_suite(
             case.frame_kind,
             &mut state,
             &atlas,
-            &font,
+            ctx,
         )?;
         let mut previous_hash = initial.byte_hash;
         reports.push(initial);
@@ -966,7 +987,7 @@ pub fn visual_route_suite(
                 case.frame_kind,
                 &mut state,
                 &atlas,
-                &font,
+                ctx,
             )?;
             if report.byte_hash == previous_hash
                 && !visual_route_allows_unchanged_step(case.label, index + 1)
@@ -986,7 +1007,7 @@ pub fn visual_route_suite(
             let _ = std::fs::remove_dir_all(dir);
         }
     }
-    push_visual_key_route_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
+    push_visual_key_route_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
 
     for report in &reports {
         if report.nonblack_pixels == 0 {
@@ -1059,7 +1080,7 @@ fn push_visual_key_route_reports(
     game_dir: &Path,
     out_dir: &Path,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     reports: &mut Vec<VisualFrameReport>,
 ) -> io::Result<()> {
     for case in visual_key_route_suite_cases() {
@@ -1075,7 +1096,7 @@ fn push_visual_key_route_reports(
             case.frame_kind,
             &mut state,
             atlas,
-            font,
+            ctx,
             &input_line,
             prompt_cursor_visible,
         )?;
@@ -1091,7 +1112,7 @@ fn push_visual_key_route_reports(
                 case.frame_kind,
                 &mut state,
                 atlas,
-                font,
+                ctx,
                 &input_line,
                 prompt_cursor_visible,
             )?;
@@ -1854,7 +1875,7 @@ fn push_visual_surface_view_class_gallery_reports(
     game_dir: &Path,
     out_dir: &Path,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     reports: &mut Vec<VisualFrameReport>,
 ) -> io::Result<()> {
     for (label, mode) in [
@@ -1876,7 +1897,7 @@ fn push_visual_surface_view_class_gallery_reports(
             "visual surface view class gallery frame",
             &mut state,
             atlas,
-            font,
+            ctx,
         )?);
     }
     Ok(())
@@ -1886,7 +1907,7 @@ fn push_visual_combat_gallery_reports(
     game_dir: &Path,
     out_dir: &Path,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     reports: &mut Vec<VisualFrameReport>,
 ) -> io::Result<()> {
     let bank = load_brit_cbt(game_dir)?;
@@ -1940,7 +1961,7 @@ fn push_visual_combat_gallery_reports(
             "combat outdoor arena replacement gallery",
             &mut state,
             atlas,
-            font,
+            ctx,
         )?);
     }
 
@@ -1981,7 +2002,7 @@ fn push_visual_combat_gallery_reports(
             "combat dungeon-room arena gallery",
             &mut state,
             atlas,
-            font,
+            ctx,
         )?);
     }
 
@@ -1999,7 +2020,7 @@ fn push_visual_combat_gallery_reports(
         "combat death and marker gallery",
         &mut marker_state,
         atlas,
-        font,
+        ctx,
     )?);
     Ok(())
 }
@@ -7733,8 +7754,12 @@ fn screenshot_system(
             }
             // Re-render the framebuffer to reflect the new state.
             let v: &mut VisualState = visual.as_mut();
-            let rgba =
-                render_visual_play_frame_with_input(&mut v.state, &v.atlas, &v.text_font, "", "");
+            let ctx = PlayFrameContext {
+                ibm: &v.text_font,
+                runes: &v.rune_font,
+                log: &v.message_log,
+            };
+            let rgba = render_visual_play_frame_with_input(&mut v.state, &v.atlas, ctx, "", "");
             replace_visual_image_data(&mut images, &v.image_handle, rgba, "screenshot preset play");
             state.preset_keys_applied = true;
         } else if let Some(mut intro) = intro {
@@ -7794,6 +7819,7 @@ struct Bootstrap {
     state: PlayState,
     atlas: TileAtlas,
     text_font: FixedCellFont,
+    rune_font: FixedCellFont,
 }
 
 #[derive(Resource)]
@@ -7806,6 +7832,11 @@ struct VisualState {
     atlas: TileAtlas,
     image_handle: Handle<Image>,
     text_font: FixedCellFont,
+    /// `RUNES.CH`, the alphabet the sky strip's moon phases and hour
+    /// marker are drawn from.
+    rune_font: FixedCellFont,
+    /// Scrolling command/output history for the message window.
+    message_log: GameplayMessageLog,
     input_line: String,
     prompt_cursor_visible: bool,
 }
@@ -7956,10 +7987,15 @@ fn animate_static_tiles(
     }
     let v: &mut VisualState = visual.as_mut();
     let input_line = v.input_line.clone();
+    let ctx = PlayFrameContext {
+        ibm: &v.text_font,
+        runes: &v.rune_font,
+        log: &v.message_log,
+    };
     let rgba = render_visual_play_frame_with_input_and_cursor(
         &mut v.state,
         &v.atlas,
-        &v.text_font,
+        ctx,
         &input_line,
         "",
         v.prompt_cursor_visible,
@@ -7983,9 +8019,21 @@ fn setup(
         mut state,
         atlas,
         text_font,
+        rune_font,
     } = bootstrap;
 
-    let rgba = render_visual_play_frame_with_input(&mut state, &atlas, &text_font, "", READY_HINT);
+    let message_log = GameplayMessageLog::new();
+    let rgba = render_visual_play_frame_with_input(
+        &mut state,
+        &atlas,
+        PlayFrameContext {
+            ibm: &text_font,
+            runes: &rune_font,
+            log: &message_log,
+        },
+        "",
+        READY_HINT,
+    );
     let mut image = Image::new(
         Extent3d {
             width: VISUAL_PLAY_FRAME_WIDTH,
@@ -8018,6 +8066,8 @@ fn setup(
         atlas,
         image_handle,
         text_font,
+        rune_font,
+        message_log,
         input_line: String::new(),
         prompt_cursor_visible: false,
     });
@@ -8143,16 +8193,28 @@ fn transition_visual_intro_to_gameplay(
     let launch = PlayState::load_scene(&game_dir, options).and_then(|state| {
         let atlas = load_tile_atlas(&game_dir, intro.raster_depth)?;
         let text_font = load_ibm_ch_font(&game_dir)?;
-        Ok((state, atlas, text_font))
+        let rune_font = load_runes_ch_font(&game_dir)?;
+        Ok((state, atlas, text_font, rune_font))
     });
-    let (mut state, atlas, text_font) =
+    let (mut state, atlas, text_font, rune_font) =
         launch.unwrap_or_else(|err| panic!("Journey Onward launch failed: {err}"));
+    let message_log = GameplayMessageLog::new();
     let image_handle = intro
         .image_handle
         .clone()
         .expect("Journey Onward requires the intro visual framebuffer handle");
     intro.image_handle = None;
-    let rgba = render_visual_play_frame_with_input(&mut state, &atlas, &text_font, "", READY_HINT);
+    let rgba = render_visual_play_frame_with_input(
+        &mut state,
+        &atlas,
+        PlayFrameContext {
+            ibm: &text_font,
+            runes: &rune_font,
+            log: &message_log,
+        },
+        "",
+        READY_HINT,
+    );
     replace_visual_image_data(images, &image_handle, rgba, "Journey Onward");
     for mut sprite in sprites.iter_mut() {
         sprite.custom_size = Some(Vec2::new(
@@ -8174,6 +8236,8 @@ fn transition_visual_intro_to_gameplay(
         atlas,
         image_handle,
         text_font,
+        rune_font,
+        message_log,
         input_line: String::new(),
         prompt_cursor_visible: false,
     });
@@ -9020,6 +9084,7 @@ fn drive_visual(
             continue;
         };
         let game_dir = visual.game_dir.clone();
+        echo_play_command_into_log(visual.as_mut(), ch);
         match handle_play_key_input(&mut visual.state, ch, "", &game_dir) {
             Ok(PlayInputDisposition::Quit) => {
                 exit.write(AppExit::Success);
@@ -9039,15 +9104,47 @@ fn drive_visual(
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
     let input_line = v.input_line.clone();
+    let ctx = PlayFrameContext {
+        ibm: &v.text_font,
+        runes: &v.rune_font,
+        log: &v.message_log,
+    };
     let rgba = render_visual_play_frame_with_input_and_cursor(
         &mut v.state,
         &v.atlas,
-        &v.text_font,
+        ctx,
         &input_line,
         "",
         v.prompt_cursor_visible,
     );
     replace_visual_image_data(&mut images, &v.image_handle, rgba, "play input redraw");
+}
+
+/// Commit the previous turn's output and echo the new command into
+/// the message log, matching the observed one-blank-row-per-turn
+/// cadence. Only a fresh command key echoes: keys consumed by an open
+/// modal or line prompt are that command's continuation, not new
+/// commands of their own.
+fn echo_play_command_into_log(visual: &mut VisualState, key: char) {
+    if visual_modal_prompt_active(&visual.state) {
+        return;
+    }
+    let Some(byte) = u8::try_from(u32::from(key)).ok() else {
+        return;
+    };
+    let Some(command) = command_for_letter(byte) else {
+        return;
+    };
+    // Carry the previous turn's output into history before echoing the
+    // new command. An empty log means the only message so far is the
+    // unspecified scene-entry narration, which is dropped rather than
+    // logged.
+    let carried = visual.state.message.clone();
+    if !visual.message_log.is_empty() && !carried.trim().is_empty() {
+        visual.message_log.push_output(&carried);
+    }
+    visual.message_log.end_turn();
+    visual.message_log.push_command(command.verb_prefix());
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
@@ -11155,9 +11252,9 @@ fn write_visual_play_report(
     frame_kind: &'static str,
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
 ) -> io::Result<VisualFrameReport> {
-    let rgba = render_visual_play_frame(state, atlas, font);
+    let rgba = render_visual_play_frame(state, atlas, ctx);
     write_visual_report(
         out_dir,
         label,
@@ -11174,14 +11271,14 @@ fn write_visual_play_report_with_input(
     frame_kind: &'static str,
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     input_line: &str,
     prompt_cursor_visible: bool,
 ) -> io::Result<VisualFrameReport> {
     let rgba = render_visual_play_frame_with_input_and_cursor(
         state,
         atlas,
-        font,
+        ctx,
         input_line,
         READY_HINT,
         prompt_cursor_visible,
@@ -11286,57 +11383,127 @@ fn write_visual_intro_report_inner(
 
 const VISUAL_PLAY_FRAME_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
 const VISUAL_PLAY_FRAME_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
-const VISUAL_MAIN_TEXT_TOP: u8 = 22;
-const VISUAL_MAIN_TEXT_RIGHT: u8 = 22;
 const VISUAL_OVERLAY_SIDE_PANEL_X: usize = STATS_PANEL_TEXT_LEFT as usize * 8;
 const VISUAL_OVERLAY_SIDE_PANEL_Y: usize = 0;
+
+/// Everything the gameplay frame compositor needs beyond the tile
+/// atlas: both fixed-cell fonts (`IBM.CH` for text and the ribbon end
+/// caps, `RUNES.CH` for the sky strip) and the scrolling message log.
+#[derive(Clone, Copy)]
+struct PlayFrameContext<'a> {
+    ibm: &'a FixedCellFont,
+    runes: &'a FixedCellFont,
+    log: &'a GameplayMessageLog,
+}
+
+impl<'a> PlayFrameContext<'a> {
+    fn chrome_fonts(&self) -> ChromeFonts<'a> {
+        ChromeFonts {
+            ibm: self.ibm,
+            runes: self.runes,
+        }
+    }
+}
+
+/// The composed text-cell surface plus the message-window rows that
+/// take the two-colour ribbon end-cap prefix, which the fixed-cell
+/// text pipeline cannot express.
+struct IntegratedStatusSurface {
+    rgba: Vec<u8>,
+    message_rows: Vec<MessageWindowRow>,
+}
+
+/// `systems/text-output.md §4`: text row 24 (pixel rows 192..=199) is
+/// never written by the gameplay screen.
+const VISUAL_PLAY_BACKGROUND_RGBA: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
+
+fn visual_play_background_framebuffer() -> Vec<u8> {
+    let mut rgba =
+        vec![0u8; VISUAL_PLAY_FRAME_WIDTH as usize * VISUAL_PLAY_FRAME_HEIGHT as usize * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&VISUAL_PLAY_BACKGROUND_RGBA);
+    }
+    rgba
+}
+
+/// Composite a same-sized RGBA surface, skipping its black pixels so
+/// the border chrome underneath survives.
+fn overlay_nonblack_rgba(dst: &mut [u8], src: &[u8]) {
+    assert_eq!(
+        dst.len(),
+        src.len(),
+        "non-black overlay requires identically sized surfaces"
+    );
+    for (dst_pixel, src_pixel) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+        if src_pixel[0] == 0 && src_pixel[1] == 0 && src_pixel[2] == 0 {
+            continue;
+        }
+        dst_pixel.copy_from_slice(src_pixel);
+    }
+}
 
 fn render_visual_play_frame(
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
 ) -> Vec<u8> {
-    render_visual_play_frame_with_input(state, atlas, font, "", READY_HINT)
+    render_visual_play_frame_with_input(state, atlas, ctx, "", READY_HINT)
 }
 
 fn render_visual_play_frame_with_input(
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     input_line: &str,
     default_message: &str,
 ) -> Vec<u8> {
     render_visual_play_frame_with_input_and_cursor(
         state,
         atlas,
-        font,
+        ctx,
         input_line,
         default_message,
         false,
     )
 }
 
+/// Compose one gameplay frame.
+///
+/// Order matters: the border chrome is painted first, the text-cell
+/// surface is composited over it skipping black so the ribbon shows
+/// through every box interior, the message window's rows and their
+/// end-cap prefixes go on next, and the tile viewport is blitted last
+/// at its measured origin inside the white frame rule.
 fn render_visual_play_frame_with_input_and_cursor(
     state: &mut PlayState,
     atlas: &TileAtlas,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     input_line: &str,
     default_message: &str,
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
     if state.endgame.is_some() {
-        return render_endgame_framebuffer(state, atlas, input_line, default_message, font);
+        return render_endgame_framebuffer(state, atlas, input_line, default_message, ctx);
     }
 
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let mut rgba = render_integrated_status_framebuffer(
+
+    let mut chrome_state = state.clone();
+    chrome_state.refresh_cached_moon_glyphs();
+    let chrome = gameplay_chrome_content(&chrome_state);
+    let mut rgba = visual_play_background_framebuffer();
+    paint_gameplay_frame_chrome(&mut rgba, width, height, &chrome, ctx.chrome_fonts());
+
+    let surface = render_integrated_status_framebuffer(
         state,
         input_line,
         default_message,
-        font,
+        ctx,
         prompt_cursor_visible,
     );
+    overlay_nonblack_rgba(&mut rgba, &surface.rgba);
+    paint_message_window_rows(&mut rgba, width, height, ctx, &surface.message_rows);
 
     let viewport = render_base_framebuffer(state, atlas);
     blit_rgba(
@@ -11346,11 +11513,41 @@ fn render_visual_play_frame_with_input_and_cursor(
         &viewport,
         VIEWPORT_SIZE_PX as usize,
         VIEWPORT_SIZE_PX as usize,
-        0,
-        0,
+        VIEWPORT_ORIGIN_X,
+        VIEWPORT_ORIGIN_Y,
     );
     blit_active_view_overlay_rgba(&mut rgba, width, height, state, atlas.depth);
     rgba
+}
+
+/// Draw the message window's placed rows straight into the frame.
+///
+/// The window is painted here rather than through a text window
+/// because each echoed command line carries the two-colour ribbon
+/// end-cap sprite in column 24, which the 1-bit fixed-cell text
+/// pipeline has no way to express.
+fn paint_message_window_rows(
+    rgba: &mut [u8],
+    width: usize,
+    height: usize,
+    ctx: PlayFrameContext<'_>,
+    rows: &[MessageWindowRow],
+) {
+    for row in rows {
+        if row.prefixed {
+            paint_message_line_cap(rgba, width, height, ctx.ibm, row.row);
+        }
+        paint_fixed_cell_text(
+            rgba,
+            width,
+            height,
+            ctx.ibm,
+            &row.text,
+            row.column,
+            row.row,
+            CHROME_RULE_INDEX,
+        );
+    }
 }
 
 fn render_endgame_framebuffer(
@@ -11358,11 +11555,11 @@ fn render_endgame_framebuffer(
     atlas: &TileAtlas,
     input_line: &str,
     default_message: &str,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
 ) -> Vec<u8> {
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let mut rgba = render_status_framebuffer(state, input_line, default_message, font);
+    let mut rgba = render_status_framebuffer(state, input_line, default_message, ctx.ibm);
     if endgame_frame_should_show_tableau(state) {
         let viewport = render_endgame_tableau_viewport(state, atlas)
             .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"));
@@ -11373,8 +11570,8 @@ fn render_endgame_framebuffer(
             &viewport.to_rgba(),
             viewport.width,
             viewport.height,
-            0,
-            0,
+            VIEWPORT_ORIGIN_X,
+            VIEWPORT_ORIGIN_Y,
         );
     }
     rgba
@@ -11890,9 +12087,9 @@ fn render_integrated_status_framebuffer(
     state: &mut PlayState,
     input_line: &str,
     default_message: &str,
-    font: &FixedCellFont,
+    ctx: PlayFrameContext<'_>,
     prompt_cursor_visible: bool,
-) -> Vec<u8> {
+) -> IntegratedStatusSurface {
     let active_cursor = state.active_player;
     let mut display_state = state.clone();
     display_state.refresh_cached_moon_glyphs();
@@ -11911,53 +12108,45 @@ fn render_integrated_status_framebuffer(
         None
     };
     let mut system = TextWindowSystem::new();
-    system.set_window_rect(
-        MAIN_TEXT_WINDOW_INDEX,
-        0,
-        VISUAL_MAIN_TEXT_TOP,
-        VISUAL_MAIN_TEXT_RIGHT,
-        TEXT_SCREEN_ROWS - 1,
-    );
-    system.set_window_rect(
-        STATS_PANEL_TEXT_WINDOW_INDEX,
-        STATS_PANEL_TEXT_LEFT,
-        0,
-        STATS_PANEL_TEXT_RIGHT,
-        STATS_PANEL_TEXT_BOTTOM,
-    );
-    system.set_window_rect(
-        PROMPT_TEXT_WINDOW_INDEX,
-        0,
-        TEXT_SCREEN_ROWS - 2,
-        VISUAL_MAIN_TEXT_RIGHT,
-        TEXT_SCREEN_ROWS - 1,
-    );
-    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    configure_play_text_windows(&mut system);
     let message = display_state
         .active_shop
         .as_ref()
         .map(|shop| shop.modal_text(&display_state.message))
         .unwrap_or_else(|| display_state.message.clone());
+    let mut message_rows = Vec::new();
     if display_state.active_shop.is_some() {
         configure_talk_shop_text_window(&mut system);
-        system.set_window_rect(
-            TALK_SHOP_TEXT_WINDOW_INDEX,
-            0,
-            VISUAL_MAIN_TEXT_TOP,
-            VISUAL_MAIN_TEXT_RIGHT,
-            TEXT_SCREEN_ROWS - 1,
-        );
         paint_talk_shop_text_window(&mut system, &message);
     } else {
-        paint_message_text_window(&mut system, &message);
+        // The message window is drawn straight into the framebuffer by
+        // the compositor: its echoed lines carry the two-colour ribbon
+        // end cap, which text cells cannot represent.
+        //
+        // The engine's scene-entry narration prints raw map
+        // coordinates, is specified by no `systems/` document, and the
+        // original never shows it, so it is kept out of the window.
+        // Every other message is shown normally.
+        let mut log = ctx.log.clone();
+        if !message_is_scene_entry_narration(
+            &message,
+            display_state.player.x,
+            display_state.player.y,
+        ) {
+            log.push_output(&message);
+        }
+        message_rows = layout_message_window(&log, Some(input_echo.unwrap_or(""))).rows;
     }
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
     if display_state.active_shop.is_some() {
         paint_inn_pickup_register_text_window(&mut system, &display_state);
-    }
-    if let Some(input_echo) = input_echo {
-        let cursor_glyph = prompt_cursor_visible.then_some(PROMPT_CURSOR_GLYPH);
-        paint_prompt_text_window_with_cursor(&mut system, input_echo, cursor_glyph);
+        // Shop line prompts keep their own prompt window on the message
+        // window's bottom row; the non-shop live line is placed by the
+        // message-window layout instead.
+        if let Some(input_echo) = input_echo {
+            let cursor_glyph = prompt_cursor_visible.then_some(PROMPT_CURSOR_GLYPH);
+            paint_prompt_text_window_with_cursor(&mut system, input_echo, cursor_glyph);
+        }
     }
     if display_state.active_shop.is_some() {
         system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
@@ -11967,10 +12156,25 @@ fn render_integrated_status_framebuffer(
     if stats_panel_active_cursor_visible(state, active_cursor) {
         state.active_player = None;
     }
-    let mut rgba = render_text_window_rgba(&system, font)
+    let mut rgba = render_text_window_rgba(&system, ctx.ibm)
         .unwrap_or_else(|err| panic!("visual integrated text window render failed: {err}"));
     apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
-    rgba
+    if prompt_cursor_visible && display_state.active_shop.is_none() {
+        if let Some(live) = message_rows.last() {
+            let column = live.column + live.text.chars().count().min(15) as u8;
+            paint_fixed_cell_glyph(
+                &mut rgba,
+                VISUAL_PLAY_FRAME_WIDTH as usize,
+                VISUAL_PLAY_FRAME_HEIGHT as usize,
+                ctx.ibm,
+                PROMPT_CURSOR_GLYPH,
+                column.min(MESSAGE_WINDOW_RIGHT),
+                live.row,
+                CHROME_RULE_INDEX,
+            );
+        }
+    }
+    IntegratedStatusSurface { rgba, message_rows }
 }
 
 fn visual_display_message(state: &PlayState) -> String {
@@ -12382,6 +12586,17 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
 
 #[cfg(test)]
 mod tests {
+
+    /// Frame context for tests: the synthetic fixed-cell font stands in
+    /// for both alphabets, with an empty message log.
+    fn play_ctx<'a>(font: &'a FixedCellFont, log: &'a GameplayMessageLog) -> PlayFrameContext<'a> {
+        PlayFrameContext {
+            ibm: font,
+            runes: font,
+            log,
+        }
+    }
+
     use super::*;
     use std::fs;
     use std::path::Path;
@@ -12864,12 +13079,18 @@ mod tests {
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
 
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        // The viewport is blitted at its measured origin inside the
+        // white frame rule, so tile centres are offset by (8, 8).
         let cell_center = |x: usize, y: usize| {
             (
-                x * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
-                y * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
+                VIEWPORT_ORIGIN_X + x * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
+                VIEWPORT_ORIGIN_Y + y * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
             )
         };
 
@@ -12886,7 +13107,12 @@ mod tests {
         let (x, y) = cell_center(3, 4);
         assert_eq!(rgba_pixel(&rgba, width, x, y), ega_rgba(11));
         assert_eq!(
-            rgba_pixel(&rgba, width, 5 * TILE_ATLAS_SIDE, 8 * TILE_ATLAS_SIDE),
+            rgba_pixel(
+                &rgba,
+                width,
+                VIEWPORT_ORIGIN_X + 5 * TILE_ATLAS_SIDE,
+                VIEWPORT_ORIGIN_Y + 8 * TILE_ATLAS_SIDE
+            ),
             ega_rgba(14)
         );
     }
@@ -13152,7 +13378,13 @@ mod tests {
         let ibm = load_ibm_ch_font(&dir).unwrap();
         let slots = IntroFontSlots::new(ibm.clone(), ibm);
         let mut text_windows = TextWindowSystem::new();
-        text_windows.set_window_rect(0, 0, 0, TEXT_SCREEN_COLUMNS - 1, TEXT_SCREEN_ROWS - 1);
+        text_windows.set_window_rect(
+            0,
+            0,
+            0,
+            TEXT_SCREEN_COLUMNS - 1,
+            u5_runtime::TEXT_SCREEN_ROWS - 1,
+        );
         text_windows.set_active_window(0);
         let mut intro = VisualIntroState {
             game_dir: dir.clone(),
@@ -13368,7 +13600,13 @@ mod tests {
         // font as both since the runes path isn't exercised here.
         let slots = IntroFontSlots::new(ibm_font.clone(), ibm_font);
         let mut text_windows = TextWindowSystem::new();
-        text_windows.set_window_rect(0, 0, 0, TEXT_SCREEN_COLUMNS - 1, TEXT_SCREEN_ROWS - 1);
+        text_windows.set_window_rect(
+            0,
+            0,
+            0,
+            TEXT_SCREEN_COLUMNS - 1,
+            u5_runtime::TEXT_SCREEN_ROWS - 1,
+        );
         text_windows.set_active_window(0);
         let mut intro = VisualIntroState {
             game_dir: dir.clone(),
@@ -15245,7 +15483,11 @@ mod tests {
 
         let mut expected_state = state.clone();
         let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
 
         assert_ne!(rgba, expected);
         assert_nonblack_rgba(&rgba);
@@ -15280,7 +15522,11 @@ mod tests {
 
         let mut expected_state = state.clone();
         let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
 
         assert_eq!(rgba, expected);
     }
@@ -15338,7 +15584,11 @@ mod tests {
         let mut state = world_state(open_world_grid(), 10, 20);
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
 
         assert_eq!(
             rgba.len(),
@@ -15346,6 +15596,137 @@ mod tests {
         );
         assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
         assert_nonblack_rgba(&rgba);
+    }
+
+    #[test]
+    fn visual_play_frame_paints_border_chrome_before_the_viewport_and_text() {
+        // The measured 320x200 chrome: blue ribbon bands, white 1px
+        // rules, the viewport at (8, 8), and a black text row 24. See
+        // `u5_runtime::gameplay_chrome` for provenance.
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+
+        assert_eq!(rgba_pixel(&rgba, width, 3, 100), ega_rgba(1));
+        assert_eq!(rgba_pixel(&rgba, width, 187, 100), ega_rgba(1));
+        assert_eq!(rgba_pixel(&rgba, width, 7, 100), ega_rgba(15));
+        assert_eq!(rgba_pixel(&rgba, width, 184, 100), ega_rgba(15));
+        assert_eq!(rgba_pixel(&rgba, width, 191, 30), ega_rgba(15));
+        assert_eq!(rgba_pixel(&rgba, width, 312, 30), ega_rgba(15));
+        // The right band is absent below y=86: the message box runs to
+        // the screen edge.
+        assert_eq!(rgba_pixel(&rgba, width, 316, 30), ega_rgba(1));
+        assert_eq!(rgba_pixel(&rgba, width, 316, 100), ega_rgba(0));
+        // Text row 24 stays black in every column.
+        for x in 0..width {
+            for y in 192..VISUAL_PLAY_FRAME_HEIGHT as usize {
+                assert_eq!(rgba_pixel(&rgba, width, x, y), ega_rgba(0), "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn visual_play_frame_blits_the_viewport_at_its_measured_origin() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = render_base_framebuffer(&mut state.clone(), &atlas);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let side = VIEWPORT_SIZE_PX as usize;
+
+        for (x, y) in [
+            (0usize, 0usize),
+            (1, 0),
+            (0, 1),
+            (side - 1, side - 1),
+            (88, 88),
+        ] {
+            let src = (y * side + x) * 4;
+            assert_eq!(
+                rgba_pixel(&rgba, width, VIEWPORT_ORIGIN_X + x, VIEWPORT_ORIGIN_Y + y),
+                [
+                    viewport[src],
+                    viewport[src + 1],
+                    viewport[src + 2],
+                    viewport[src + 3]
+                ],
+                "viewport pixel ({x}, {y}) must land at ({}, {})",
+                VIEWPORT_ORIGIN_X + x,
+                VIEWPORT_ORIGIN_Y + y
+            );
+        }
+    }
+
+    #[test]
+    fn scene_entry_narration_is_hidden_but_later_messages_still_change_the_frame() {
+        // The engine's "Entered <scene> at (x, y)." narration prints
+        // raw map coordinates, is specified by no `systems/` document,
+        // and the original never shows it, so the message window stays
+        // empty on the opening frame. Every other message renders, so
+        // a turn that produces one still changes the frame -- which is
+        // the invariant `visual_route_suite` checks per command.
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let log = GameplayMessageLog::new();
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = format!(
+            "Entered CASTLE:0 at ({}, {}).",
+            state.player.x, state.player.y
+        );
+        assert!(message_is_scene_entry_narration(
+            &state.message,
+            state.player.x,
+            state.player.y
+        ));
+        let initial = render_visual_play_frame(&mut state.clone(), &atlas, play_ctx(&font, &log));
+
+        let mut passed = state.clone();
+        passed.message = "Passed.".to_string();
+        assert!(!message_is_scene_entry_narration(
+            &passed.message,
+            passed.player.x,
+            passed.player.y
+        ));
+        let after = render_visual_play_frame(&mut passed, &atlas, play_ctx(&font, &log));
+
+        assert_ne!(
+            hash_bytes(&initial),
+            hash_bytes(&after),
+            "a turn that produces a message must change the frame"
+        );
+
+        // The narration frame really is message-free: every cell of the
+        // message window body is background.
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        for row in u5_runtime::MESSAGE_WINDOW_TOP..u5_runtime::MESSAGE_WINDOW_BOTTOM {
+            for column in u5_runtime::MESSAGE_WINDOW_LEFT..=MESSAGE_WINDOW_RIGHT {
+                for y in 0..8 {
+                    for x in 0..8 {
+                        let px = usize::from(column) * 8 + x;
+                        let py = usize::from(row) * 8 + y;
+                        assert_eq!(
+                            rgba_pixel(&initial, width, px, py),
+                            ega_rgba(0),
+                            "message window cell ({column}, {row}) must be empty"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -15385,7 +15766,11 @@ mod tests {
         let overlay_sample_x = overlay_index % overlay.width;
         let overlay_sample_y = overlay_index / overlay.width;
 
-        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            play_ctx(&font, &GameplayMessageLog::new()),
+        );
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
         let base_pixel = rgba_pixel(
             &rgba,
@@ -16788,12 +17173,23 @@ mod tests {
         install_test_conversation(&mut state);
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
 
-        let hidden =
-            render_integrated_status_framebuffer(&mut state.clone(), "job", "", &font, false);
-        let visible =
-            render_integrated_status_framebuffer(&mut state.clone(), "job", "", &font, true);
+        let log = GameplayMessageLog::new();
+        let hidden = render_integrated_status_framebuffer(
+            &mut state.clone(),
+            "job",
+            "",
+            play_ctx(&font, &log),
+            false,
+        );
+        let visible = render_integrated_status_framebuffer(
+            &mut state.clone(),
+            "job",
+            "",
+            play_ctx(&font, &log),
+            true,
+        );
 
-        assert_ne!(hash_bytes(&hidden), hash_bytes(&visible));
+        assert_ne!(hash_bytes(&hidden.rgba), hash_bytes(&visible.rgba));
     }
 
     #[test]
@@ -16908,7 +17304,15 @@ mod tests {
 
         assert_eq!(input_line, "j");
         let summary = summarize(&mut state, "", &input_line);
-        assert!(summary.contains("\n> j"));
+        // Column 24 carries the ribbon end-cap sprite rather than an
+        // ASCII "> ", so the echo starts at column 25 of the message
+        // window's bottom row.
+        let echo_column = usize::from(u5_runtime::MESSAGE_WINDOW_LEFT) + 1;
+        let echo_row = summary
+            .lines()
+            .find(|line| line.trim() == "j" && line.len() > echo_column)
+            .unwrap_or_else(|| panic!("{summary}"));
+        assert_eq!(echo_row.as_bytes()[echo_column], b'j', "{summary}");
     }
 
     #[test]
@@ -17093,10 +17497,13 @@ mod tests {
 
         let summary = summarize(&mut state, "", "");
 
-        assert!(summary.contains("Iolo"), "{summary}");
-        assert!(summary.contains("Item 1 costs 42 gold"), "{summary}");
-        assert!(summary.contains("Mace costs 42 gold."), "{summary}");
-        assert!(summary.contains("STATS"), "{summary}");
+        let squished: String = summary.chars().filter(|ch| !ch.is_whitespace()).collect();
+        assert!(squished.contains("Iolo"), "{summary}");
+        assert!(squished.contains("Item1costs42gold"), "{summary}");
+        assert!(squished.contains("Macecosts42gold."), "{summary}");
+        // The invented "STATS" header is gone; the roster starts at the
+        // panel's first row.
+        assert!(squished.contains("Avatar"), "{summary}");
     }
 
     #[test]
@@ -17105,13 +17512,24 @@ mod tests {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
-        let before =
-            render_integrated_status_framebuffer(&mut state.clone(), "", READY_HINT, &font, false);
+        let log = GameplayMessageLog::new();
+        let before = render_integrated_status_framebuffer(
+            &mut state.clone(),
+            "",
+            READY_HINT,
+            play_ctx(&font, &log),
+            false,
+        );
         handle_play_key_input(&mut state, 'M', "ANTRA", Path::new("")).unwrap();
-        let after =
-            render_integrated_status_framebuffer(&mut state.clone(), "", READY_HINT, &font, false);
+        let after = render_integrated_status_framebuffer(
+            &mut state.clone(),
+            "",
+            READY_HINT,
+            play_ctx(&font, &log),
+            false,
+        );
 
-        assert_ne!(hash_bytes(&before), hash_bytes(&after));
+        assert_ne!(hash_bytes(&before.rgba), hash_bytes(&after.rgba));
     }
 
     #[test]

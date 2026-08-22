@@ -202,7 +202,12 @@ pub const INTRO_MENU_FRAME_BOTTOM_Y: u16 =
 /// the band. Rows past the profile start at column 0, and the bottom
 /// six rows mirror the profile in reverse. The right edge mirrors
 /// each entry about the surface centre.
-pub const INTRO_MENU_FRAME_CORNER_PROFILE: [u16; 6] = [5, 3, 2, 1, 1, 0];
+///
+/// The gameplay border frame carves its outer corners with the same
+/// measured staircase, so the numbers live once in
+/// [`crate::gameplay_chrome::CHROME_CORNER_PROFILE`] and this name
+/// stays as the `§6.1`-facing alias.
+pub const INTRO_MENU_FRAME_CORNER_PROFILE: [u16; 6] = crate::gameplay_chrome::CHROME_CORNER_PROFILE;
 /// `intro.md §6.1` horizontal-rule pixel coordinates. Observation
 /// confirms the published top rule and adds the matching bottom rule
 /// plus the two verticals that close the rectangle.
