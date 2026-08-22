@@ -677,11 +677,13 @@
         let mut body = Vec::new();
         body.extend_from_slice(&2u16.to_le_bytes());
         body.extend_from_slice(&6u16.to_le_bytes());
-        body.extend_from_slice(&18u16.to_le_bytes());
-        body.push(0);
+        body.extend_from_slice(&(6 + PCS_GLYPH_BLOCK_LEN as u16).to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(&(PCS_GLYPH_HEIGHT as u16).to_le_bytes());
         body.extend_from_slice(&[0; PCS_GLYPH_HEIGHT]);
-        body.push(5);
-        body.extend_from_slice(&[0b1010_0000, 0b0101_0000, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        body.extend_from_slice(&5u16.to_le_bytes());
+        body.extend_from_slice(&(PCS_GLYPH_HEIGHT as u16).to_le_bytes());
+        body.extend_from_slice(&[0b1010_0000, 0b0101_0000, 0, 0, 0, 0, 0, 0]);
 
         let font = parse_proportional_font_body(&body, "fixture.pcs").unwrap();
 
@@ -753,16 +755,22 @@
     #[test]
     fn font_graphics_measures_and_rasterizes_proportional_text_line() {
         let mut body = Vec::new();
+        let block = PCS_GLYPH_BLOCK_LEN as u16;
         body.extend_from_slice(&3u16.to_le_bytes());
         body.extend_from_slice(&8u16.to_le_bytes());
-        body.extend_from_slice(&20u16.to_le_bytes());
-        body.extend_from_slice(&32u16.to_le_bytes());
-        body.push(0);
-        body.extend_from_slice(&[0; PCS_GLYPH_HEIGHT]);
-        body.push(2);
-        body.extend_from_slice(&[0b1100_0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        body.push(3);
-        body.extend_from_slice(&[0b1010_0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        body.extend_from_slice(&(8 + block).to_le_bytes());
+        body.extend_from_slice(&(8 + 2 * block).to_le_bytes());
+        for ink_width in [0u16, 2, 3] {
+            body.extend_from_slice(&ink_width.to_le_bytes());
+            body.extend_from_slice(&(PCS_GLYPH_HEIGHT as u16).to_le_bytes());
+            let first_row = match ink_width {
+                0 => 0,
+                2 => 0b1100_0000,
+                _ => 0b1010_0000,
+            };
+            body.push(first_row);
+            body.extend_from_slice(&[0; PCS_GLYPH_HEIGHT - 1]);
+        }
         let font = parse_proportional_font_body(&body, "fixture.pcs").unwrap();
 
         assert_eq!(measure_proportional_text(&font, b"!!").unwrap(), 4);
@@ -867,16 +875,20 @@
         let mut legacy_body = Vec::new();
         legacy_body.extend_from_slice(&1u16.to_le_bytes());
         legacy_body.extend_from_slice(&4u16.to_le_bytes());
-        legacy_body.push(3);
+        legacy_body.extend_from_slice(&3u16.to_le_bytes());
+        legacy_body.extend_from_slice(&(PCS_GLYPH_HEIGHT as u16).to_le_bytes());
         legacy_body.extend_from_slice(&[0b1110_0000; PCS_GLYPH_HEIGHT]);
         let wrapped = lzw_envelope_with_literal_body(&legacy_body);
 
         assert!(parse_proportional_font_resource(&wrapped).is_err());
         let legacy_resource = parse_legacy_lzw_proportional_font_resource(&wrapped).unwrap();
         assert_eq!(legacy_resource.strips.len(), 1);
+        // The single-glyph fixture body is also a well-formed one-entry sparse
+        // strip, so the compatibility loader's sparse attempt wins and reports
+        // the glyph's ink width rather than the full 8-pixel bitmap cell.
         assert_eq!(
             legacy_resource.strip(0).map(|strip| (strip.width, strip.height)),
-            Some((PCS_GLYPH_BITMAP_WIDTH, PCS_GLYPH_HEIGHT))
+            Some((3, PCS_GLYPH_HEIGHT))
         );
 
         let legacy_font = parse_legacy_lzw_proportional_font(&wrapped).unwrap();
@@ -900,9 +912,18 @@
         let mut bad_width = Vec::new();
         bad_width.extend_from_slice(&1u16.to_le_bytes());
         bad_width.extend_from_slice(&4u16.to_le_bytes());
-        bad_width.push((PCS_GLYPH_BITMAP_WIDTH + 1) as u8);
+        bad_width.extend_from_slice(&((PCS_GLYPH_BITMAP_WIDTH + 1) as u16).to_le_bytes());
+        bad_width.extend_from_slice(&(PCS_GLYPH_HEIGHT as u16).to_le_bytes());
         bad_width.extend_from_slice(&[0; PCS_GLYPH_HEIGHT]);
         assert!(parse_proportional_font_body(&bad_width, "fixture.pcs").is_err());
+
+        let mut bad_height = Vec::new();
+        bad_height.extend_from_slice(&1u16.to_le_bytes());
+        bad_height.extend_from_slice(&4u16.to_le_bytes());
+        bad_height.extend_from_slice(&3u16.to_le_bytes());
+        bad_height.extend_from_slice(&(PCS_GLYPH_HEIGHT as u16 + 1).to_le_bytes());
+        bad_height.extend_from_slice(&[0; PCS_GLYPH_HEIGHT + 1]);
+        assert!(parse_proportional_font_body(&bad_height, "fixture.pcs").is_err());
 
         let font = parse_fixed_font_body(
             &[0; FIXED_FONT_GLYPH_COUNT * CH_FONT_CELL_HEIGHT],

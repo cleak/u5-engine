@@ -58,6 +58,8 @@ pub mod main_loop;
 pub mod map_decoders;
 pub mod map_io;
 pub mod menu_dispatch;
+pub mod message_transcript;
+pub use message_transcript::{dungeon_command_echo, top_down_command_echo};
 pub mod message_window;
 pub mod misc_tables;
 pub mod misc_tables_io;
@@ -91,6 +93,7 @@ pub mod start_validation;
 pub mod stat_arithmetic;
 pub mod stats_panel;
 pub mod story_io;
+pub mod story_layout;
 pub mod test_fixtures;
 pub mod text_wrap;
 pub mod tile_classes;
@@ -190,15 +193,16 @@ pub use combat_setup::*;
 pub use combat_stats::*;
 pub use commands::{
     BRITANNIA_CHUNK_MAP_COLUMNS, BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE, BRITANNIA_CHUNK_MAP_ROWS,
-    Command, DEATH_VISION_OBJECT_CLASS, DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW,
-    LOCAL_VIEW_CELL_PIXEL_SCALE, LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome,
-    PUSHABLE_CANNON_FLOOR_STAMP, PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily,
-    TOWN_CANNON_TILE_FIRST, TOWN_CANNON_TILE_LAST, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
+    Command, CommandEcho, CommandEchoJoin, DEATH_VISION_OBJECT_CLASS, DEATH_VISION_ROLL_HIGH,
+    DEATH_VISION_ROLL_LOW, DUNGEON_ADVANCE_ECHO, LOCAL_VIEW_CELL_PIXEL_SCALE,
+    LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome, PUSHABLE_CANNON_FLOOR_STAMP,
+    PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily, TOWN_CANNON_TILE_FIRST,
+    TOWN_CANNON_TILE_LAST, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
     WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE,
     YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_for_letter,
-    death_vision_object_class, local_view_class_for_tile, new_order_outcome,
-    new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile, pushable_tile_family,
-    sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
+    death_vision_object_class, dungeon_display_level, local_view_class_for_tile, movement_echo,
+    new_order_outcome, new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile,
+    pushable_tile_family, sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
     surface_wishing_well_look_tile, town_cannon_tile_fire_direction, town_fountain_drink_accepts,
     view_command_outcome, wishing_well_grant_scene, wishing_well_wish, wishing_well_wish_accepted,
 };
@@ -454,8 +458,9 @@ pub use play_state_impl::{
     town_free_roaming_pen_tile_blocks,
 };
 pub use play_state_struct::{
-    CombatPotionPresentation, CombatPotionPresentationKind, PlayState, ViewOverlay,
-    ViewOverlayKind, ViewOverlayMode, WhitePotionSweep, WorldOverlayCache, WorldReturn,
+    CombatPotionPresentation, CombatPotionPresentationKind, MESSAGE_TRANSCRIPT_CAPACITY,
+    MessageEntry, PlayState, ViewOverlay, ViewOverlayKind, ViewOverlayMode, WhitePotionSweep,
+    WorldOverlayCache, WorldReturn,
 };
 pub use predicates::*;
 pub use prng::*;
@@ -476,7 +481,7 @@ pub use question_io::{
     QUESTION_DAT_DILEMMA_COUNT, QUESTION_DAT_FILE, QUESTION_DAT_FIRST_DILEMMA_RECORD,
     QUESTION_DAT_LEN, QUESTION_DAT_RECORDS, QUESTION_PARAGRAPH_START_MARKER,
     QUESTION_SOFT_BREAK_MARKER, QuestionRecords, load_question_records, parse_question_records,
-    question_dat_dilemma_record_for_pair,
+    question_dat_dilemma_record_for_pair, question_record_display_text,
 };
 pub use report::run_report;
 pub use return_to_view::{
@@ -550,7 +555,14 @@ pub use story_io::{
     intro_step_has_story6_secondary_pass, intro_step_has_transition_strip,
     intro_step_transition_strips, intro_story_art_file_for_step,
     intro_story_art_placement_for_step, intro_story_step_waits_for_input,
-    intro_story6_secondary_subimage, load_story_records, parse_story_records, story_text_marker,
+    intro_story6_secondary_subimage, load_story_records, parse_story_records,
+    story_record_display_text, story_text_marker,
+};
+pub use story_layout::{
+    CHARGEN_GYPSY_TEXT_REGION, CHARGEN_QUESTION_TEXT_REGION, CHARGEN_RESULT_TEXT_REGION,
+    INTRO_STORY_TEXT_LEFT, INTRO_STORY_TEXT_RIGHT, PROPORTIONAL_LINE_STRIDE,
+    PROPORTIONAL_PARAGRAPH_INDENT, PlacedProportionalGlyph, ProportionalTextGutter,
+    ProportionalTextRegion, intro_story_text_region, layout_proportional_justified_paragraph,
 };
 pub use text_wrap::{
     EmitterByteKind, ParagraphByteKind, ProportionalRendererByteKind, TEXT_COLOR_BACKGROUND_SHIFT,
@@ -729,4 +741,5 @@ mod tests {
     include!("tests_inline/chunk_25.rs");
     include!("tests_inline/chunk_26.rs");
     include!("tests_inline/chunk_27.rs");
+    include!("tests_inline/chunk_28.rs");
 }

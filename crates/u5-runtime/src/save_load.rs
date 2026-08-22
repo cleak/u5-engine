@@ -175,6 +175,7 @@ pub fn play_options_from_save_bytes_named(
     let party = decode_save_party(bytes);
     let party_size = party.len();
     let party_names = decode_party_names(bytes);
+    validate_party_names(&party_names)?;
     let party_experience = decode_party_experience(bytes, party.len());
     let party_stay_counters = decode_party_stay_counters(bytes, party.len());
     let party_strengths = decode_party_strengths(bytes, party.len());
@@ -689,3 +690,25 @@ pub const OOL_PLANE_TABLE_LEN: usize = crate::OOL_PLANE_LEN;
 /// `save-load.md §3.1`: the "above-ground / no z" sentinel used in the
 /// eight-byte `.OOL` record's `z` byte.
 pub const OOL_NO_Z_SENTINEL: u8 = 0xFF;
+
+/// `stats-panel.md §3`: a party row's name is "printed from the record and
+/// padded to a fixed name column"; only rows *outside* the travelling-party
+/// size are cleared with spaces. An unreadable name record inside the
+/// travelling party is therefore a save/loader fault, not something the
+/// panel may paper over with a synthesised `Party 2`-style placeholder.
+/// [`decode_party_names`] only yields records inside the saved party size,
+/// so every record it returns must be readable.
+pub fn validate_party_names(party_names: &[[u8; SAVE_CHARACTER_NAME_LEN]]) -> io::Result<()> {
+    for (slot, name) in party_names.iter().enumerate() {
+        if party_name_to_string(name).is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "save roster slot {slot} is inside the travelling party of {} but carries an empty character name record",
+                    party_names.len()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}

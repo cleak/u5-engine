@@ -149,15 +149,64 @@ pub const SANDALWOOD_BOX_PICKUP_Z: u8 = 2;
 pub const SANDALWOOD_BOX_PICKUP_OBJECT_SLOT: usize = crate::OOL_SLOTS - 1;
 pub const SANDALWOOD_BOX_PICKUP_TAG: u8 = 0x0E;
 
+/// `endgame.md §9` certificate body components. The spec lists the
+/// fields the overlay's line accumulator composes (ordinal day,
+/// ordinal month number, year in words, the party leader's name, a
+/// short royal salvation statement, and a centered Codex-style
+/// closing title drawn through the sign/tile-glyph path) but
+/// deliberately does not reproduce the fixed wording, the separators,
+/// or the closing title. The engine therefore carries the published
+/// data-derived fields only; composing the surrounding English prose
+/// in Rust would ship invented text. See `cleak/u5-spec#82`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EndgameCertificate {
+    /// `§9`: current saved day rendered as an ordinal word.
+    pub day_ordinal: String,
+    /// `§9`: current saved month *number* rendered as an ordinal word.
+    pub month_ordinal: String,
+    /// `§9`: current saved year rendered in words, hundreds + remainder.
+    pub year_words: String,
+    /// `§9`: the party leader's name.
+    pub leader_name: String,
+}
+
+/// `endgame.md §9` final report panel. Separate from the certificate
+/// body: after the body the scroll clears or advances to this panel,
+/// which prints the elapsed campaign time and then the line asking the
+/// player to report the completed quest to Origin. The elapsed-time
+/// arithmetic and its singular/plural, zero-omitting formatting are
+/// published; the Origin line's wording is not. See `cleak/u5-spec#82`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EndgameFinalReport {
+    pub years: u16,
+    pub months: u8,
+    pub days: u8,
+}
+
+impl EndgameFinalReport {
+    /// `endgame.md §9` elapsed-time rendering: numeric years, months
+    /// and days, zero-value units omitted, singular/plural labels,
+    /// separators only between printed nonzero units.
+    pub fn elapsed_label(&self) -> String {
+        elapsed_time_label(self.years, self.months, self.days)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EndgameState {
     pub first_confirmation: Option<bool>,
     pub final_confirmation: Option<bool>,
     pub outcome: Option<EndgameOutcome>,
-    pub certificate: Option<String>,
+    pub certificate: Option<EndgameCertificate>,
+    pub final_report: Option<EndgameFinalReport>,
     pub cinematic: crate::endgame_cinematic::EndgameCinematic,
     pub messages: Option<EndgameMessages>,
     pub final_narrative: Option<EndNarrative>,
+    /// `endgame.md §4`: one pending restoration-announcement beat per
+    /// party member the tableau setup pass raised from Dead. Each beat
+    /// is a short blocking wait rendered as its own frame before the
+    /// tableau walk-in starts.
+    pub entry_restoration_beats: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -219,9 +268,11 @@ impl EndgameState {
             final_confirmation: None,
             outcome: None,
             certificate: None,
+            final_report: None,
             cinematic: crate::endgame_cinematic::EndgameCinematic::default(),
             messages,
             final_narrative: None,
+            entry_restoration_beats: 0,
         }
     }
 
@@ -238,9 +289,11 @@ impl EndgameState {
             final_confirmation: None,
             outcome: None,
             certificate: None,
+            final_report: None,
             cinematic: crate::endgame_cinematic::EndgameCinematic::default(),
             messages,
             final_narrative: None,
+            entry_restoration_beats: 0,
         }
     }
 
@@ -248,7 +301,8 @@ impl EndgameState {
         first_confirmation: bool,
         final_confirmation: bool,
         has_sandalwood_box: bool,
-        certificate: String,
+        certificate: EndgameCertificate,
+        final_report: EndgameFinalReport,
         messages: Option<EndgameMessages>,
         final_narrative: Option<EndNarrative>,
     ) -> Self {
@@ -267,11 +321,13 @@ impl EndgameState {
             final_confirmation: Some(final_confirmation),
             outcome: Some(outcome),
             certificate: (outcome == EndgameOutcome::Victory).then_some(certificate),
+            final_report: (outcome == EndgameOutcome::Victory).then_some(final_report),
             cinematic,
             messages,
             final_narrative: (outcome == EndgameOutcome::Victory)
                 .then_some(final_narrative)
                 .flatten(),
+            entry_restoration_beats: 0,
         }
     }
 
@@ -338,27 +394,67 @@ impl EndgameState {
             })
     }
 
+    /// Text the current cinematic beat puts on the endgame surface.
+    ///
+    /// `banner_label()` is a debug/pacing aid for tests; it is never a
+    /// display fallback. A missing `ENDMSG.DAT` rite record or a
+    /// missing `END.DAT` narrative window is an asset/contract failure
+    /// (`endgame.md §7`, `§8`) and fails loudly instead of printing a
+    /// label at the player. Beats that carry no prose of their own
+    /// (the throne tableau and the late full-screen rectangle
+    /// operation) return an empty string.
     pub fn current_cinematic_text(&self) -> String {
+        use crate::endgame_cinematic::EndgameCinematicStep as Step;
         match self.cinematic.step {
-            crate::endgame_cinematic::EndgameCinematicStep::RiteMessage(index) => self
+            Step::RiteMessage(index) => self
                 .messages
                 .as_ref()
                 .and_then(|messages| messages.rite_messages().get(index as usize))
                 .cloned()
-                .unwrap_or_else(|| self.cinematic.banner_label().to_string()),
-            crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(index) => self
+                .unwrap_or_else(|| {
+                    panic!(
+                        "endgame victory rite beat {index} has no ENDMSG.DAT record; displaying the step's debug banner label instead is a forbidden fallback (endgame.md §7)"
+                    )
+                }),
+            Step::NarrativeWindow(index) => self
                 .final_narrative
                 .as_ref()
                 .and_then(|narrative| narrative.window_by_number(index.saturating_add(1)))
-                .unwrap_or_else(|| self.cinematic.banner_label().to_string()),
-            crate::endgame_cinematic::EndgameCinematicStep::Certificate
-            | crate::endgame_cinematic::EndgameCinematicStep::Finished => self
-                .certificate
-                .clone()
-                .unwrap_or_else(|| self.cinematic.banner_label().to_string()),
-            _ => self.cinematic.banner_label().to_string(),
+                .unwrap_or_else(|| {
+                    panic!(
+                        "endgame final narrative window {} has no END.DAT text; displaying the step's debug banner label instead is a forbidden fallback (endgame.md §8)",
+                        index.saturating_add(1)
+                    )
+                }),
+            Step::Certificate => require_published_endgame_certificate_prose(),
+            Step::FinalReport | Step::Finished => require_published_endgame_final_report_prose(),
+            Step::Inactive | Step::ThroneTableau | Step::CertificateRectOperation => String::new(),
         }
     }
+}
+
+/// `endgame.md §9` names the certificate body's *fields* but
+/// deliberately does not reproduce its fixed wording, its separators,
+/// or the centered Codex-style closing title (which is drawn through
+/// the sign/tile-glyph text path, not ordinary prose). Composing an
+/// English sentence around [`EndgameCertificate`] in Rust would ship
+/// invented text to the player, so the certificate beat is a loud gate
+/// until the transcription is published. See `cleak/u5-spec#82`.
+pub fn require_published_endgame_certificate_prose() -> ! {
+    panic!(
+        "endgame certificate body requires the published source-free transcription of its fixed wording, separators, and centered Codex-style closing title (plus the sign/tile-glyph path that draws it); composing the sentence in the engine is a forbidden fallback; see cleak/u5-spec#82"
+    )
+}
+
+/// `endgame.md §9`'s final report panel. The elapsed-time arithmetic
+/// and its zero-omitting singular/plural formatting are published (see
+/// [`EndgameFinalReport::elapsed_label`]), but the panel's fixed
+/// wording and the closing "report this quest to Origin" line are not.
+/// See `cleak/u5-spec#82`.
+pub fn require_published_endgame_final_report_prose() -> ! {
+    panic!(
+        "endgame final report panel requires the published source-free transcription of its elapsed-time wording and the closing Origin report line; composing them in the engine is a forbidden fallback; see cleak/u5-spec#82"
+    )
 }
 
 /// `endgame.md §4`: returns `true` when a party slot needs the
@@ -411,15 +507,29 @@ pub fn endgame_elapsed_campaign_time(clock: GameClock) -> (u16, u8, u8) {
     (years, months as u8, days as u8)
 }
 
-pub fn endgame_certificate_summary(leader_name: &str, clock: GameClock) -> String {
+/// `endgame.md §9`: gather the certificate body's data-derived fields.
+/// The ordinal day, ordinal month number and year-in-words helpers are
+/// published; the prose that binds them is not (see
+/// [`require_published_endgame_certificate_prose`] and
+/// `cleak/u5-spec#82`).
+pub fn endgame_certificate_fields(leader_name: &str, clock: GameClock) -> EndgameCertificate {
+    EndgameCertificate {
+        day_ordinal: endgame_ordinal_word(clock.day).unwrap_or_else(|| clock.day.to_string()),
+        month_ordinal: endgame_ordinal_word(clock.month).unwrap_or_else(|| clock.month.to_string()),
+        year_words: endgame_cardinal_word(clock.year),
+        leader_name: leader_name.to_string(),
+    }
+}
+
+/// `endgame.md §9`: the separate final report panel's elapsed campaign
+/// time, measured from the fixed campaign-start baseline.
+pub fn endgame_final_report(clock: GameClock) -> EndgameFinalReport {
     let (years, months, days) = endgame_elapsed_campaign_time(clock);
-    let day = endgame_ordinal_word(clock.day).unwrap_or_else(|| clock.day.to_string());
-    let month = endgame_ordinal_word(clock.month).unwrap_or_else(|| clock.month.to_string());
-    let year = endgame_cardinal_word(clock.year);
-    format!(
-        "Certificate: On the {day} day of the {month} month in the year {year}, {leader_name} restored Lord British, the people, and the land. Quest time: {}. Report this completed quest to Origin.",
-        elapsed_time_label(years, months, days)
-    )
+    EndgameFinalReport {
+        years,
+        months,
+        days,
+    }
 }
 
 pub fn endgame_ordinal_word(value: u8) -> Option<String> {
@@ -593,6 +703,18 @@ pub fn endgame_step_toward_target(
     }
 }
 
+/// `endgame.md §4` class -> tableau type/tile byte table, returned
+/// verbatim as published.
+///
+/// cleak/u5-spec#82: the *index space* of these bytes is still an open
+/// question. Read as top-down world tile ids they are not actor
+/// sprites — `0x44` is exactly the authored walkable floor byte of the
+/// MISCMAPS cutscene record the tableau uses, and `catalogs/
+/// tile-catalog.md` puts `0x0E`/`0x4C` in the terrain/furniture bands.
+/// Until the spec says which bank (world atlas, a per-scene
+/// ENDSC/END1/END2 sprite bank, or an active-object type-to-tile
+/// mapping) these index, the engine keeps the published bytes as-is
+/// rather than guessing a translation.
 pub const fn endgame_tableau_tile_for_class_byte(class_byte: u8) -> u8 {
     match class_byte {
         b'M' => 0x40,
@@ -769,18 +891,105 @@ impl PlayState {
         // endgame.md §10: dead party members are mutated into a present /
         // restored state for the ending tableau, with current health restored
         // from the stored maximum.
-        self.restore_party_for_endgame_tableau();
+        let restored = self.restore_party_for_endgame_tableau();
         self.install_endgame_tableau();
-        self.settle_endgame_tableau_to_targets();
-        self.endgame = Some(EndgameState::awaiting_first_confirmation_with_messages(
-            messages,
-        ));
+        // endgame.md §4/§7: the tableau actors start at (5,9) and the
+        // movement helper steps them one cell per call with one display
+        // tick after each movement, so the walk-in is a sequence of
+        // rendered frames rather than an instantaneous placement. The
+        // frames are pumped by `advance_endgame_entry_presentation`;
+        // any input arriving before the walk-in finishes drains it via
+        // `finish_endgame_entry_presentation`.
+        let mut endgame = EndgameState::awaiting_first_confirmation_with_messages(messages);
+        // endgame.md §4: one short blocking wait per restored member.
+        // cleak/u5-spec#82: the announcement's wording is unpublished,
+        // so the beat is presented as its own held tableau frame and no
+        // clean-room-authored announcement line is composed here.
+        endgame.entry_restoration_beats = restored.min(u8::MAX as usize) as u8;
+        self.endgame = Some(endgame);
         self.message = self
             .endgame
             .as_ref()
             .expect("endgame state was just installed")
             .first_prompt_text(&self.party_leader_name());
         MoveOutcome::EndgameEntered
+    }
+
+    /// `endgame.md §4`/`§7` entry presentation pump. Returns `true`
+    /// while a frame is still owed: first one frame per pending
+    /// dead-member restoration beat, then one frame per single-cell
+    /// step of the tableau movement helper. The caller renders after
+    /// each `true`.
+    pub fn advance_endgame_entry_presentation(&mut self) -> bool {
+        let Some(endgame) = self.endgame.as_mut() else {
+            return false;
+        };
+        // Once the confirmation has resolved, the victory / refusal
+        // scripts own the tableau (endgame.md §6/§7); the entry pump
+        // must not keep pulling actors back to their setup targets.
+        if endgame.is_terminal() {
+            return false;
+        }
+        if endgame.entry_restoration_beats > 0 {
+            endgame.entry_restoration_beats -= 1;
+            self.animation.tick_static_tiles();
+            return true;
+        }
+        self.advance_endgame_entry_tableau_step()
+    }
+
+    /// `endgame.md §4`: the setup loop walks the slots in order and
+    /// steps each one to its target before moving on, so exactly one
+    /// actor moves per pumped frame.
+    fn advance_endgame_entry_tableau_step(&mut self) -> bool {
+        for placement in endgame_tableau_actor_placements(&self.party) {
+            let Some(object) = self
+                .active_objects
+                .get(placement.active_object_slot)
+                .copied()
+            else {
+                continue;
+            };
+            if endgame_tableau_role_for_slot(placement.active_object_slot, object)
+                != Some(placement.role)
+            {
+                continue;
+            }
+            if (object.x, object.y) == placement.target {
+                continue;
+            }
+            return self.step_endgame_tableau_slot_once_to_target(
+                placement.active_object_slot,
+                placement.target,
+            );
+        }
+        false
+    }
+
+    /// Drain any owed entry-presentation frames at once. Used when
+    /// input arrives (or a headless caller needs the settled tableau)
+    /// before the walk-in has finished rendering.
+    pub fn finish_endgame_entry_presentation(&mut self) -> usize {
+        let mut frames = 0;
+        while self.advance_endgame_entry_presentation() {
+            frames += 1;
+            if frames > ENDGAME_TABLEAU_SETTLE_STEP_CAP * OOL_SLOTS {
+                break;
+            }
+        }
+        frames
+    }
+
+    /// `true` while the endgame entry presentation still owes frames.
+    pub fn endgame_entry_presentation_pending(&self) -> bool {
+        self.endgame
+            .as_ref()
+            .is_some_and(|endgame| !endgame.is_terminal())
+            && (self
+                .endgame
+                .as_ref()
+                .is_some_and(|endgame| endgame.entry_restoration_beats > 0)
+                || !self.endgame_tableau_is_settled())
     }
 
     pub fn ensure_endgame_messages_loaded(
@@ -799,15 +1008,18 @@ impl PlayState {
     /// endgame.md section 10: restore Dead travelling-party members to Good status with
     /// HP equal to their stored maximum. Non-Dead statuses keep their entry
     /// state. This mutation is cinematic only and is not committed to disk.
-    pub fn restore_party_for_endgame_tableau(&mut self) {
+    pub fn restore_party_for_endgame_tableau(&mut self) -> usize {
+        let mut restored = 0;
         for member in &mut self.party {
             if character_status_for_byte(member.status)
                 .is_some_and(endgame_needs_tableau_restoration)
             {
                 member.status = CharacterStatus::Good.save_byte();
                 member.hp = member.max_hp;
+                restored += 1;
             }
         }
+        restored
     }
 
     pub fn install_endgame_tableau(&mut self) {
@@ -1175,6 +1387,11 @@ impl PlayState {
         answer: bool,
         final_narrative: Option<EndNarrative>,
     ) -> MoveOutcome {
+        // `endgame.md §4`/`§5`: the tableau setup pass completes before
+        // the dialogue's blocking prompts are answered. If input
+        // arrives while the walk-in is still being rendered, settle it
+        // first so the branch scripts start from the published targets.
+        self.finish_endgame_entry_presentation();
         let Some(current) = self.endgame.clone() else {
             self.message = "No endgame confirmation is pending.".to_string();
             return MoveOutcome::Blocked;
@@ -1212,9 +1429,9 @@ impl PlayState {
                 self.advance_endgame_terminal_tableau_jitter();
             }
             self.message = match current.outcome {
-                Some(EndgameOutcome::Victory) => current
-                    .certificate
-                    .unwrap_or_else(|| "The victory ending is complete.".to_string()),
+                Some(EndgameOutcome::Victory) => {
+                    unreachable!("victory branch returns above")
+                }
                 Some(EndgameOutcome::MissingBoxOrRefused) => {
                     "Lord British waits with thee in the ending tableau.".to_string()
                 }
@@ -1238,12 +1455,14 @@ impl PlayState {
 
         let first = current.first_confirmation.unwrap_or(false);
         let has_box = self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] != 0;
-        let certificate = endgame_certificate_summary(&self.party_leader_name(), self.clock);
+        let certificate = endgame_certificate_fields(&self.party_leader_name(), self.clock);
+        let final_report = endgame_final_report(self.clock);
         let next = EndgameState::terminal(
             first,
             answer,
             has_box,
-            certificate.clone(),
+            certificate,
+            final_report,
             current.messages,
             final_narrative,
         );
@@ -1253,17 +1472,10 @@ impl PlayState {
             None => {}
         }
         self.message = match next.outcome {
-            Some(EndgameOutcome::Victory) => {
-                if next
-                    .messages
-                    .as_ref()
-                    .is_some_and(|messages| !messages.rite_messages().is_empty())
-                {
-                    next.current_cinematic_text()
-                } else {
-                    certificate
-                }
-            }
+            // The victory branch opens on the first rite beat, or on
+            // the throne tableau when `ENDMSG.DAT` carried no rite
+            // records; neither composes certificate prose here.
+            Some(EndgameOutcome::Victory) => next.current_cinematic_text(),
             Some(EndgameOutcome::MissingBoxOrRefused) => next.refusal_text(),
             None => unreachable!("terminal endgame has an outcome"),
         };

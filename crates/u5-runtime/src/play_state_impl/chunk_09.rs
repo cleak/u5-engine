@@ -1399,7 +1399,7 @@ impl PlayState {
                     "{} ({}) level {} facing {} {:02}:{:02} turn {} torch {} spell {}\n",
                     scene.key(),
                     scene.name(),
-                    level,
+                    dungeon_display_level(level),
                     self.player.facing.name(),
                     self.clock.hour,
                     self.clock.minute,

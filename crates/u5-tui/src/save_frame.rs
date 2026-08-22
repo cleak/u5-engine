@@ -99,6 +99,7 @@ pub fn save_frame_suite(
     out_dir: &Path,
 ) -> io::Result<Vec<SavedFrameReport>> {
     let cases = save_frame_suite_cases();
+    u5_runtime::test_fixtures::assert_writable_game_dir(out_dir, "save frame suite output");
     std::fs::create_dir_all(out_dir)?;
     let mut reports = Vec::with_capacity(cases.len());
     for case in cases {

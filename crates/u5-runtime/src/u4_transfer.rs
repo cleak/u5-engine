@@ -22,6 +22,20 @@ pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = crate::BRIT_OOL_FILENAME;
 pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
 pub const U4_PARTY_SAV_LEN: usize = 532;
 pub const U4_PARTY_SAV_MOVE_COUNTER_OFFSET: usize = 0x0000;
+// cleak/u5-spec#82: `u4-transfer.md §5` says the "no transferable
+// data" gate skips the predecessor's party-wide food and gold fields
+// and *then* tests eight consecutive virtue/karma standing WORDS. The
+// offset and element width below do not satisfy that description and
+// are known to be wrong in at least one place: eight bytes at 0x0002
+// run through the moon counter (0x0006), the dungeon counter (0x0007)
+// and the low half of the 16-bit gold field (0x0008), and they sit
+// *before* food (0x000A) and gold rather than after them. Consequence:
+// an all-zero-virtue save with nonzero gold or moon counters passes
+// the guard. The record offsets are also internally inconsistent -
+// PLAYER0 (0x08) + CHARACTER_NAME (0x14) implies a leading name at
+// 0x1C while LEADING_CHARACTER_NAME says 0x1A. Left as-is rather than
+// guessing new offsets; fix once #82 publishes the block's offset and
+// element width.
 pub const U4_PARTY_SAV_VIRTUE_STANDING_OFFSET: usize = 0x0002;
 pub const U4_PARTY_SAV_MOON_COUNTER_OFFSET: usize = 0x0006;
 pub const U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET: usize = 0x0007;

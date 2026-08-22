@@ -9,9 +9,12 @@ const SURFACE_LOOK_VISIBILITY_RADIUS: usize = 5;
 #[derive(Clone, Debug)]
 struct UseItemPickerRow {
     label: String,
-    detail: String,
     request: UseItemRequest,
 }
+
+/// `commands.md §5` + observation: the U-Use handler's message-window
+/// prompt, printed on the line after the `Use item` verb echo.
+pub const USE_ITEM_PROMPT_MESSAGE: &str = "Item:";
 
 impl PlayState {
     pub fn cast_rel_hur(
@@ -190,8 +193,10 @@ impl PlayState {
 
         let cursor = session.cursor.min(rows.len() - 1);
         let panel_start = (cursor / USE_PICKER_PANEL_ROWS) * USE_PICKER_PANEL_ROWS;
-        let mut lines =
-            vec!["Use: Enter activates; </> move; [] page; Space/Esc exits.".to_string()];
+        // commands.md §5 + observation: U-Use echoes `Use item`, then the
+        // handler prompts `Item:` on the next line. The invented keybinding
+        // help line is removed (cleak/u5-spec#81 owns the exact literal).
+        let mut lines = vec![USE_ITEM_PROMPT_MESSAGE.to_string()];
         for (index, row) in rows
             .iter()
             .enumerate()
@@ -199,12 +204,7 @@ impl PlayState {
             .take(USE_PICKER_PANEL_ROWS)
         {
             let marker = if index == cursor { ">" } else { " " };
-            lines.push(format!(
-                "{marker} {:02}: {} ({})",
-                index + 1,
-                row.label,
-                row.detail
-            ));
+            lines.push(format!("{marker} {:02}: {}", index + 1, row.label));
         }
         if rows.len() > panel_start + USE_PICKER_PANEL_ROWS {
             lines.push(format!(
@@ -492,7 +492,6 @@ impl PlayState {
             if count > 0 {
                 rows.push(UseItemPickerRow {
                     label: format!("Scroll {}", scroll_label(index)),
-                    detail: format!("stock {count}"),
                     request: UseItemRequest::Scroll {
                         index,
                         direction: None,
@@ -505,7 +504,6 @@ impl PlayState {
             if count > 0 {
                 rows.push(UseItemPickerRow {
                     label: potion_inventory_name(index).to_string(),
-                    detail: format!("stock {count}"),
                     request: UseItemRequest::Potion {
                         index,
                         target: None,
@@ -517,11 +515,6 @@ impl PlayState {
             for index in 0..MOONSTONE_SLOT_COUNT {
                 rows.push(UseItemPickerRow {
                     label: format!("Moonstone phase {}", index + 1),
-                    detail: if self.moonstone_slots[index].is_valid() {
-                        "buried slot".to_string()
-                    } else {
-                        "carried".to_string()
-                    },
                     request: UseItemRequest::Moonstone(index),
                 });
             }
@@ -541,7 +534,6 @@ impl PlayState {
         if count > 0 {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
-                detail: format!("stock {count}"),
                 request,
             });
         }
@@ -558,11 +550,6 @@ impl PlayState {
         if value > 0 {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
-                detail: if value == SPECIAL_ITEM_WORN_VALUE {
-                    "worn".to_string()
-                } else {
-                    "carried".to_string()
-                },
                 request,
             });
         }
@@ -958,6 +945,24 @@ impl PlayState {
         self.message = format!("{title}:\n{text_map}");
     }
 
+    /// **Contradicted by `cleak/u5-spec#60`; do not trust this output.**
+    ///
+    /// The closing comment retracts the "full Britannia chunk-map
+    /// renderer" this was built from, specifically: it is not an 8x22
+    /// chunk map but eight cells in total, one per row; the party's
+    /// position is never read (the inputs are the saved year, month and
+    /// day); the overlay marker tracks the Shadowlords, not the party;
+    /// and there is no map-edge wrapping, only a 22-slot column ring.
+    /// The retraction says in terms that a party-chunk crosshair
+    /// "paints the wrong cells for the wrong reason".
+    ///
+    /// The corrected contract needs `systems/view.md` section 4.2.3's
+    /// eight-row table (per-row y origin, start column and permitted
+    /// column ring), which the issue says is published but does not
+    /// reproduce, so it is not available to this workspace until the
+    /// read-only spec checkout is refreshed past `9a898d1`. Left in
+    /// place rather than replaced with a guess or a loud failure that
+    /// would red-build the visual route suite; see the report.
     pub fn britannia_chunk_overview_map(&self) -> String {
         let mut out = String::new();
         let current_chunk_x = self.player.x / CHUNK_SIDE;
@@ -1768,7 +1773,7 @@ impl PlayState {
                     "Dungeon view of {} ({}) level {} ({} gem(s) remain; centered flood map)",
                     scene.key(),
                     scene.name(),
-                    level,
+                    dungeon_display_level(level),
                     self.gems
                 );
                 let text_map = self.dungeon_vision_map(level);

@@ -1071,9 +1071,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &[
                 "Y", "Y", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
                 "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
-                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
-                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
-                "empty", "empty", "empty", "empty", "empty", "empty", "empty",
+                "empty", "empty", "empty", "empty", "empty",
             ],
             expected: RouteSmokeExpectation::Endgame(EndgameOutcome::Victory),
             min_turn: 0,
@@ -3041,7 +3039,9 @@ fn copy_route_smoke_save_file(
     source_name: &str,
     destination_name: &str,
 ) -> io::Result<()> {
-    u5_runtime::copy_disk_file_writable(
+    // The reload checkpoints write into `save_dir`, so the seeded copy
+    // must not inherit the pristine install's read-only attribute.
+    u5_runtime::test_fixtures::copy_asset_writable(
         &game_dir.join(source_name),
         &save_dir.join(destination_name),
     )
@@ -4859,16 +4859,25 @@ fn validate_route_smoke_case_state(
                     .active_objects
                     .get(31)
                     .is_none_or(|object| object.is_empty());
+            // `endgame.md §9`: the certificate body and the separate
+            // final report panel are loud cleak/u5-spec#82 gates until
+            // their fixed prose is published, so this route walks the
+            // rite beats, the tableau exit and all six `END.DAT`
+            // narrative windows and stops on the last one.
+            let reached_last_window = matches!(
+                endgame.cinematic.step,
+                u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(index)
+                    if index + 1 == u5_runtime::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT
+            );
             if endgame.outcome != Some(EndgameOutcome::Victory)
-                || !endgame.cinematic_is_finished()
+                || !reached_last_window
                 || endgame.certificate.is_none()
                 || !party_slots_cleared
                 || !cinematic_slots_cleared
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not finish the victory cinematic and clear tableau actors (step={:?}, finished={}, certificate={}, party_slots_cleared={}, cinematic_slots_cleared={})",
+                    "route smoke `{case_name}` did not walk the victory cinematic to the last END.DAT window and clear tableau actors (step={:?}, certificate={}, party_slots_cleared={}, cinematic_slots_cleared={})",
                     endgame.cinematic.step,
-                    endgame.cinematic_is_finished(),
                     endgame.certificate.is_some(),
                     party_slots_cleared,
                     cinematic_slots_cleared
@@ -6098,7 +6107,9 @@ fn validate_route_smoke_case_state(
             }
         }
         "dungeon-ladder-down-up-route" | "reload-dungeon-ladder-down-up-route" => {
-            if state.current_floor() != Some(0) || !state.message.contains("level 0") {
+            // dungeon-mode.md 4.1: the level is presented one-based, so the
+            // zero-based floor 0 reads as  in the message window.
+            if state.current_floor() != Some(0) || !state.message.contains("level 1") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the down/up ladder chain"
                 )));

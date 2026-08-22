@@ -53,7 +53,21 @@ pub fn render_stats_panel(state: &PlayState, active_cursor: Option<usize>) -> St
     lines.join("\n")
 }
 
-/// Lay out the gameplay screen's text windows. The message/command
+/// Lay out the gameplay screen's text windows.
+///
+/// **Divergence, `cleak/u5-spec#62`.** The published census of every
+/// call to the text-window rectangle setter finds windows `2` and `3`
+/// are never passed to it: window `2` keeps its boot-time full-screen
+/// `(0, 0)..(39, 24)` descriptor for the whole session, and nothing
+/// homes its cursor. This engine still installs rectangles for both,
+/// because the observed shop and prompt text plainly render inside the
+/// right-hand column and #62 explicitly declines to resolve whether a
+/// full-screen window `2` is painted under the viewport artwork or
+/// clipped by paint order. Revisit once that paint-order question is
+/// published; the roster/counter geometry below already matches the
+/// issue's `(24, 1)..(38, N)` side-panel idiom exactly.
+///
+/// The message/command
 /// window is the right-hand column below the stats boxes, and the live
 /// input line is its own bottom row rather than a separate bottom-left
 /// prompt window. Text row 24 is never covered by any window.
