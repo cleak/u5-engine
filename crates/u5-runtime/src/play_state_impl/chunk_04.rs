@@ -9,9 +9,12 @@ const SURFACE_LOOK_VISIBILITY_RADIUS: usize = 5;
 #[derive(Clone, Debug)]
 struct UseItemPickerRow {
     label: String,
-    detail: String,
     request: UseItemRequest,
 }
+
+/// `commands.md §5` + observation: the U-Use handler's message-window
+/// prompt, printed on the line after the `Use item` verb echo.
+pub const USE_ITEM_PROMPT_MESSAGE: &str = "Item:";
 
 impl PlayState {
     pub fn cast_rel_hur(
@@ -190,8 +193,10 @@ impl PlayState {
 
         let cursor = session.cursor.min(rows.len() - 1);
         let panel_start = (cursor / USE_PICKER_PANEL_ROWS) * USE_PICKER_PANEL_ROWS;
-        let mut lines =
-            vec!["Use: Enter activates; </> move; [] page; Space/Esc exits.".to_string()];
+        // commands.md §5 + observation: U-Use echoes `Use item`, then the
+        // handler prompts `Item:` on the next line. The invented keybinding
+        // help line is removed (cleak/u5-spec#81 owns the exact literal).
+        let mut lines = vec![USE_ITEM_PROMPT_MESSAGE.to_string()];
         for (index, row) in rows
             .iter()
             .enumerate()
@@ -199,12 +204,7 @@ impl PlayState {
             .take(USE_PICKER_PANEL_ROWS)
         {
             let marker = if index == cursor { ">" } else { " " };
-            lines.push(format!(
-                "{marker} {:02}: {} ({})",
-                index + 1,
-                row.label,
-                row.detail
-            ));
+            lines.push(format!("{marker} {:02}: {}", index + 1, row.label));
         }
         if rows.len() > panel_start + USE_PICKER_PANEL_ROWS {
             lines.push(format!(
@@ -492,7 +492,6 @@ impl PlayState {
             if count > 0 {
                 rows.push(UseItemPickerRow {
                     label: format!("Scroll {}", scroll_label(index)),
-                    detail: format!("stock {count}"),
                     request: UseItemRequest::Scroll {
                         index,
                         direction: None,
@@ -505,7 +504,6 @@ impl PlayState {
             if count > 0 {
                 rows.push(UseItemPickerRow {
                     label: potion_inventory_name(index).to_string(),
-                    detail: format!("stock {count}"),
                     request: UseItemRequest::Potion {
                         index,
                         target: None,
@@ -517,11 +515,6 @@ impl PlayState {
             for index in 0..MOONSTONE_SLOT_COUNT {
                 rows.push(UseItemPickerRow {
                     label: format!("Moonstone phase {}", index + 1),
-                    detail: if self.moonstone_slots[index].is_valid() {
-                        "buried slot".to_string()
-                    } else {
-                        "carried".to_string()
-                    },
                     request: UseItemRequest::Moonstone(index),
                 });
             }
@@ -541,7 +534,6 @@ impl PlayState {
         if count > 0 {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
-                detail: format!("stock {count}"),
                 request,
             });
         }
@@ -558,11 +550,6 @@ impl PlayState {
         if value > 0 {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
-                detail: if value == SPECIAL_ITEM_WORN_VALUE {
-                    "worn".to_string()
-                } else {
-                    "carried".to_string()
-                },
                 request,
             });
         }
@@ -1768,7 +1755,7 @@ impl PlayState {
                     "Dungeon view of {} ({}) level {} ({} gem(s) remain; centered flood map)",
                     scene.key(),
                     scene.name(),
-                    level,
+                    dungeon_display_level(level),
                     self.gems
                 );
                 let text_map = self.dungeon_vision_map(level);
@@ -2537,25 +2524,29 @@ impl PlayState {
         let py = self.player.y as isize;
         match self.area {
             Area::Town { .. } => {
-                let visible_radius = self.surface_visibility_radius(SURFACE_LOOK_VISIBILITY_RADIUS);
-                self.town_cell_visible_with_light_radius(
+                if self.surface_visibility_pitch_dark() {
+                    return false;
+                }
+                self.town_cell_visible_with_light_threshold(
                     px,
                     py,
                     x,
                     y,
                     SURFACE_LOOK_VISIBILITY_RADIUS,
-                    visible_radius,
+                    self.surface_visibility_light_threshold(),
                 )
             }
             Area::World { .. } => {
-                let visible_radius = self.world_visibility_radius(SURFACE_LOOK_VISIBILITY_RADIUS);
-                self.world_cell_visible_with_light_radius(
+                if self.world_visibility_pitch_dark() {
+                    return false;
+                }
+                self.world_cell_visible_with_light_threshold(
                     px,
                     py,
                     x,
                     y,
                     SURFACE_LOOK_VISIBILITY_RADIUS,
-                    visible_radius,
+                    self.world_visibility_light_threshold(),
                 )
             }
             Area::Dungeon { .. } => false,

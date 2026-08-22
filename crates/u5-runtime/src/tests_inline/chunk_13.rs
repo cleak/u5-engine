@@ -16994,13 +16994,17 @@ fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
     assert_eq!(endgame.first_confirmation, Some(false));
     assert_eq!(endgame.final_confirmation, Some(true));
     assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
-    assert!(endgame.certificate.as_ref().unwrap().contains("MARIA"));
-    assert!(victory.message.contains("sixth day of the fifth month"));
-    assert!(victory.message.contains("one hundred forty-one"));
-    assert!(victory.message.contains("2 years, 1 month, 1 day"));
-    assert!(victory
-        .message
-        .contains("Report this completed quest to Origin"));
+    // endgame.md §9: the engine carries the certificate's published
+    // data-derived fields; the fixed prose that binds them stays a
+    // loud gate (cleak/u5-spec#82), so nothing is asserted about
+    // engine-composed sentences here.
+    let certificate = endgame.certificate.as_ref().unwrap();
+    assert_eq!(certificate.leader_name, "MARIA");
+    assert_eq!(certificate.day_ordinal, "sixth");
+    assert_eq!(certificate.month_ordinal, "fifth");
+    assert_eq!(certificate.year_words, "one hundred forty-one");
+    let report = endgame.final_report.unwrap();
+    assert_eq!(report.elapsed_label(), "2 years, 1 month, 1 day");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -17056,24 +17060,27 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     victory.enter_endgame_with_messages(Some(messages));
     victory.resolve_endgame_confirmation(true);
     victory.resolve_endgame_confirmation(true);
+    victory.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
     assert_eq!(victory.message, "Rite 1");
     for expected in ["Rite 2", "Rite 3", "Rite 4", "Rite 5", "Rite 6", "Rite 7"] {
         victory.resolve_endgame_confirmation(true);
         assert_eq!(victory.message, expected);
     }
     victory.resolve_endgame_confirmation(true);
-    assert_eq!(victory.message, "Throne-room tableau");
+    // The throne-tableau beat has no prose of its own; the debug
+    // banner label is no longer shown to the player.
+    assert_eq!(victory.message, "");
     assert_eq!(
         victory.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
         ENDGAME_TABLEAU_LORD_BRITISH_TYPE
     );
     for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
         victory.resolve_endgame_confirmation(true);
-        if victory.message != "Throne-room tableau" {
+        if !victory.message.is_empty() {
             break;
         }
     }
-    assert_eq!(victory.message, "Return-home arc (1)");
+    assert_eq!(victory.message, "Window one");
 }
 
 #[test]
@@ -17085,6 +17092,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     state.enter_endgame();
     state.resolve_endgame_confirmation(true);
     state.resolve_endgame_confirmation(true);
+    state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
 
     // Victory now active. Each additional confirmation advances
     // the cinematic by one panel until it reaches the terminal final
@@ -17104,7 +17112,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     // the first fixed narrative panel appears. The Lord British `0x08` phase
     // must be observable before the slot clears.
     state.resolve_endgame_confirmation(true);
-    assert_eq!(state.message, "Throne-room tableau");
+    assert_eq!(state.message, "");
     assert!(matches!(
         state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
         Some(crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau)
@@ -17147,11 +17155,19 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
             && state.active_objects[slot].tile == 0));
 
     state.resolve_endgame_confirmation(true);
-    assert_eq!(state.message, "Return-home arc (1)");
+    assert_eq!(state.message, "Window one");
 
-    for _ in 0..6 {
+    for expected in [
+        "Window two",
+        "Window three",
+        "Window four",
+        "Window five",
+        "Window six",
+    ] {
         state.resolve_endgame_confirmation(true);
+        assert_eq!(state.message, expected);
     }
+    state.resolve_endgame_confirmation(true);
     {
         let endgame = state.endgame.as_mut().unwrap();
         assert_eq!(
@@ -17159,21 +17175,92 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
             crate::endgame_cinematic::EndgameCinematicStep::CertificateRectOperation
         );
         assert!(endgame.advance_cinematic_frame_operation());
+        assert_eq!(
+            endgame.cinematic.step,
+            crate::endgame_cinematic::EndgameCinematicStep::Certificate
+        );
+        // endgame.md §9: the engine carries the certificate's published
+        // data-derived fields, but its fixed prose stays a loud gate
+        // (see the two unpublished-prose gate tests below).
+        let certificate = endgame.certificate.as_ref().unwrap();
+        assert_eq!(certificate.leader_name, "AVATAR");
+        assert_eq!(certificate.day_ordinal, "sixth");
+        assert_eq!(certificate.month_ordinal, "fifth");
+        assert_eq!(certificate.year_words, "one hundred forty-one");
+        assert_eq!(
+            endgame.final_report.unwrap().elapsed_label(),
+            "2 years, 1 month, 1 day"
+        );
     }
-    for _ in 0..2 {
-        state.resolve_endgame_confirmation(true);
-    }
-    let endgame = state.endgame.as_ref().unwrap();
-    assert!(endgame.cinematic_is_finished());
-    assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
-    assert!(state
-        .message
-        .contains("Report this completed quest to Origin"));
+}
 
-    let message = state.message.clone();
-    state.resolve_endgame_confirmation(true);
-    assert!(state.endgame.as_ref().unwrap().cinematic_is_finished());
-    assert_eq!(state.message, message);
+#[test]
+#[should_panic(expected = "cleak/u5-spec#82")]
+fn endgame_certificate_beat_is_a_loud_unpublished_prose_gate() {
+    // endgame.md §9 lists the certificate's fields but not its wording;
+    // composing the sentence in Rust would ship invented text.
+    let mut endgame = EndgameState::terminal(
+        true,
+        true,
+        true,
+        endgame_certificate_fields("AVATAR", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        None,
+        Some(synthetic_end_narrative()),
+    );
+    for _ in 0..(1 + crate::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT) {
+        endgame.cinematic.advance();
+    }
+    assert!(endgame.advance_cinematic_frame_operation());
+    let _ = endgame.current_cinematic_text();
+}
+
+#[test]
+#[should_panic(expected = "cleak/u5-spec#82")]
+fn endgame_final_report_beat_is_a_loud_unpublished_prose_gate() {
+    // endgame.md §9's separate final report panel: the elapsed-time
+    // arithmetic is published, the Origin report line's wording is not.
+    let mut endgame = EndgameState::terminal(
+        true,
+        true,
+        true,
+        endgame_certificate_fields("AVATAR", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        None,
+        Some(synthetic_end_narrative()),
+    );
+    for _ in 0..(1 + crate::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT) {
+        endgame.cinematic.advance();
+    }
+    assert!(endgame.advance_cinematic_frame_operation());
+    endgame.cinematic.advance();
+    assert_eq!(
+        endgame.cinematic.step,
+        crate::endgame_cinematic::EndgameCinematicStep::FinalReport
+    );
+    let _ = endgame.current_cinematic_text();
+}
+
+#[test]
+#[should_panic(expected = "forbidden fallback")]
+fn endgame_narrative_window_without_end_dat_text_fails_loudly() {
+    // endgame.md §8: six fixed END.DAT windows. A missing record used
+    // to print the step's debug banner label at the player.
+    let mut endgame = EndgameState::terminal(
+        true,
+        true,
+        true,
+        endgame_certificate_fields("AVATAR", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        None,
+        None,
+    );
+    endgame.cinematic.advance();
+    assert_eq!(
+        endgame.cinematic.step,
+        crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0)
+    );
+    let _ = endgame.current_cinematic_text();
 }
 
 #[test]
@@ -20707,6 +20794,53 @@ fn wrap_text_terminates_on_nul_and_handles_hard_newlines() {
 }
 
 #[test]
+fn wrap_text_moves_a_trailing_overlong_word_to_the_next_line() {
+    // text-output.md §5: "When the next character would carry the line past
+    // the window's right edge, the printer backs up to the most recent soft
+    // break". The final word of a string has no following space, so the
+    // width test cannot live on the space path: `Combat status highlight`
+    // in a 22-cell window used to emit `Combat status highligh` + `t`.
+    let lines = wrap_text("Combat status highlight", 22, 0);
+    assert_eq!(lines, vec!["Combat status", "highlight"]);
+    for line in &lines {
+        assert!(line.len() <= 22, "line {line:?} crosses the right edge");
+    }
+}
+
+#[test]
+fn wrap_text_breaks_a_prompt_line_at_the_last_space() {
+    // §5: the same defect hard-split `Choose 1-9; Space/0 cancels.` into
+    // `Choose 1-9; Space/0 c` + `ancels.` in the 22-cell world prompt row.
+    let lines = wrap_text("Choose 1-9; Space/0 cancels.", 22, 0);
+    assert_eq!(lines, vec!["Choose 1-9; Space/0", "cancels."]);
+}
+
+#[test]
+fn wrap_text_matches_the_observed_fifteen_cell_message_window_wrap() {
+    // §5, observed in the original's 15-cell dungeon message window: every
+    // break lands on a space, never mid-word.
+    let lines = wrap_text("Wielding the Sceptre of Lord British...", 15, 0);
+    assert_eq!(
+        lines,
+        vec!["Wielding the", "Sceptre of Lord", "British..."]
+    );
+    for line in &lines {
+        assert!(line.len() <= 15, "line {line:?} crosses the right edge");
+    }
+}
+
+#[test]
+fn wrap_text_emits_a_single_overlong_word_without_losing_characters() {
+    // §6 degenerate case: a word wider than the window has no soft break to
+    // back up to, so the filled line is emitted as-is and assembly restarts.
+    let lines = wrap_text("supercalifragilistic", 8, 0);
+    assert_eq!(lines.concat(), "supercalifragilistic");
+    for line in &lines {
+        assert!(line.len() <= 8, "line {line:?} crosses the right edge");
+    }
+}
+
+#[test]
 fn tile_view_class_matches_spec_lookup_table() {
     // systems/view.md §4: per-tile view class lookup. Spot-check
     // representative tiles from each class plus boundary cases.
@@ -20820,11 +20954,13 @@ fn end_narrative_window_ranges_select_pages_for_cinematic() {
         true,
         true,
         true,
-        "Certificate text".to_string(),
+        endgame_certificate_fields("MARIA", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
         None,
         Some(narrative),
     );
-    assert_eq!(endgame.current_cinematic_text(), "Throne-room tableau");
+    // The throne tableau beat carries no prose of its own.
+    assert_eq!(endgame.current_cinematic_text(), "");
     endgame.advance_cinematic();
     assert_eq!(endgame.current_cinematic_text(), "Window one");
     endgame.advance_cinematic();
@@ -20850,7 +20986,7 @@ fn parse_end_narrative_rejects_bad_or_blank_text() {
 }
 
 #[test]
-fn parse_story_records_walks_twenty_records_and_strips_markup() {
+fn parse_story_records_walks_twenty_records_and_keeps_layout_markup() {
     // formats/story-dat.md §2-§3: 20 NUL-terminated records driving the
     // intro story sequence; `{` and `_` are layout markup.
     let mut bytes = Vec::new();
@@ -20864,8 +21000,12 @@ fn parse_story_records_walks_twenty_records_and_strips_markup() {
     let records = parse_story_records(&bytes).expect("20 records should parse");
 
     assert_eq!(records.records.len(), 20);
-    assert_eq!(records.record(0), Some("Page0break"));
-    assert_eq!(records.record(19), Some("Page19break"));
+    assert_eq!(records.record(0), Some("{Page0_break"));
+    assert_eq!(records.record(19), Some("{Page19_break"));
+    assert_eq!(
+        story_record_display_text(records.record(0).unwrap()),
+        "Page0break"
+    );
     assert_eq!(records.record(20), None);
 }
 
@@ -20902,7 +21042,7 @@ fn parse_story_records_rejects_empty_or_bad_required_record() {
 }
 
 #[test]
-fn parse_question_records_walks_thirty_records_and_strips_markup() {
+fn parse_question_records_walks_thirty_records_and_keeps_layout_markup() {
     // formats/question-dat.md §2-§3: 30 NUL-terminated records;
     // record 0 = gypsy arrival, 1 = gypsy invitation, 2..=29 = dilemmas.
     // `{` is a paragraph marker and `_` is a soft hyphen; both stripped.
@@ -20919,7 +21059,11 @@ fn parse_question_records_walks_thirty_records_and_strips_markup() {
     let records = parse_question_records(&bytes).expect("30 records should parse");
 
     assert_eq!(records.records.len(), 30);
-    assert_eq!(records.gypsy_arrival(), Some("Arrivaltext"));
+    assert_eq!(records.gypsy_arrival(), Some("{Arrival_text"));
+    assert_eq!(
+        question_record_display_text(records.gypsy_arrival().unwrap()),
+        "Arrivaltext"
+    );
     assert_eq!(records.gypsy_invitation(), Some("Invitation"));
     // Dilemma records start at ordinal 2.
     assert_eq!(records.dilemma(2), Some("Dilemma"));
@@ -21378,6 +21522,33 @@ fn endgame_tableau_test_grid() -> Vec<u8> {
     grid
 }
 
+/// Six-window synthetic `END.DAT` narrative for endgame cinematic
+/// tests. `endgame.md §8` fixes the window count at six; a missing
+/// window is now a loud contract failure rather than a debug banner,
+/// so tests that walk the narrative beats must supply real text.
+fn synthetic_end_narrative() -> EndNarrative {
+    let labels = [
+        "Window one",
+        "Window two",
+        "Window three",
+        "Window four",
+        "Window five",
+        "Window six",
+    ];
+    let mut raw = Vec::new();
+    let mut table = String::new();
+    for (index, label) in labels.iter().enumerate() {
+        let start = raw.len();
+        raw.push(b'{');
+        raw.extend_from_slice(label.as_bytes());
+        raw.push(0);
+        let end = raw.len();
+        table.push_str(&format!("{} {start} {end}\n", index + 1));
+    }
+    let ranges = parse_end_narrative_window_ranges(&table).unwrap();
+    EndNarrative::new(raw).with_window_ranges(ranges)
+}
+
 #[test]
 fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     // endgame.md §3-§4: the endgame clears the live active-object table
@@ -21400,6 +21571,17 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     state.enter_endgame();
 
     assert_eq!(state.active_objects.len(), OOL_SLOTS);
+    // endgame.md §4/§7: the tableau walk-in is a rendered sequence, so
+    // entry leaves the party actors on their published start cell and
+    // owes one frame per one-cell step.
+    assert!(state.endgame_entry_presentation_pending());
+    assert!(!state.endgame_tableau_is_settled());
+    assert_eq!(
+        (state.active_objects[0].x, state.active_objects[0].y),
+        ENDGAME_TABLEAU_PARTY_START
+    );
+    assert!(state.finish_endgame_entry_presentation() > 0);
+    assert!(!state.endgame_entry_presentation_pending());
     assert!(state.endgame_tableau_is_settled());
     assert_eq!(
         endgame_tableau_role_for_slot(0, state.active_objects[0]),
@@ -22083,6 +22265,243 @@ fn dungeon_attack_forward_non_class_object_reports_no_combat_class() {
     assert!(!state.message.contains("pending"));
 }
 
+fn transcript_texts(state: &PlayState) -> Vec<String> {
+    state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect()
+}
+
+#[test]
+fn shipped_dungeon_room_party_positions_come_from_the_record_not_arena_origin() {
+    // combat.md section 3 + spec#5/#12/#19: the dungeon-room party entry
+    // coordinates are published record data, not an engine default. The
+    // combat visual suite showed the leader clipped at arena cell (0, 0),
+    // so pin down that the record read actually supplies real cells.
+    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join(DUNGEON_CBT_FILE).exists() {
+        return;
+    }
+    let bank = load_dungeon_cbt(game_dir).expect("shipped DUNGEON.CBT parses");
+    let mut arenas_with_real_leader_cell = 0usize;
+    for arena_index in 0..DUNGEON_CBT_RECORDS {
+        let record = bank
+            .record(arena_index)
+            .expect("record index inside DUNGEON_CBT_RECORDS");
+        let positions = record.dungeon_room_party_positions_for_seed(0);
+        for (slot, (x, y)) in positions.iter().copied().enumerate() {
+            assert!(
+                usize::from(x) < COMBAT_ARENA_SIDE && usize::from(y) < COMBAT_ARENA_SIDE,
+                "dungeon arena {arena_index} party slot {slot} at ({x}, {y}) is outside the arena"
+            );
+        }
+        if positions[0] != (0, 0) {
+            arenas_with_real_leader_cell += 1;
+        }
+    }
+    assert!(
+        arenas_with_real_leader_cell > 0,
+        "every shipped dungeon arena put the party leader at arena cell (0, 0);          the party-position record read is not being honoured"
+    );
+}
+
+#[test]
+fn party_name_records_inside_the_travelling_party_must_be_readable() {
+    // stats-panel.md section 3: a party row's name is "printed from the
+    // record"; only rows outside the travelling-party size are cleared.
+    // An empty record inside the party is a loader fault, not a cue to
+    // synthesise a `Party 2` placeholder.
+    let good = [*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+    assert!(validate_party_names(&good).is_ok());
+
+    let bad = [*b"AVATAR\0\0\0", [0; SAVE_CHARACTER_NAME_LEN]];
+    let error = validate_party_names(&bad).expect_err("empty name record must fail loudly");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(
+        error.to_string().contains("slot 1"),
+        "{}",
+        error
+    );
+}
+
+#[test]
+fn z_stats_selector_cancels_with_the_observed_none_result() {
+    // inventory.md section 4: "Escape cancels the selector." Observed
+    // message window: `Z-stats...`, `Player:`, then `Player: None!`.
+    for cancel in ['\u{1b}', ' '] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert!(
+            state
+                .handle_top_down_key_with_inline('Z', Path::new(""), None, None, None, None)
+                .unwrap()
+        );
+        assert!(state.active_party_selector.is_some());
+        assert_eq!(state.roster_box_label(), Some("Select:"));
+        assert_eq!(transcript_texts(&state), vec!["Z-stats...", "Player:"]);
+        assert!(state.message_entries()[0].is_command_echo);
+        assert!(!state.message_entries()[1].is_command_echo);
+
+        assert!(state.step_active_party_selector(cancel, ""));
+        assert!(state.active_party_selector.is_none());
+        assert_eq!(state.selector_highlight(), None);
+        assert_eq!(state.roster_box_label(), None);
+        assert_eq!(state.message, "Player: None!");
+    }
+}
+
+#[test]
+fn z_stats_selector_rejects_slots_beyond_the_travelling_party() {
+    // inventory.md section 4: "Jumps beyond the active party size are
+    // rejected."
+    let mut state = test_state(open_grid(), 5, 5);
+    assert_eq!(state.z_stats_command(), MoveOutcome::Observed);
+    let party_len = state.party.len();
+    assert!(
+        state.step_active_party_selector(
+            char::from_digit(party_len as u32 + 1, 10).unwrap(),
+            ""
+        )
+    );
+    assert!(state.active_party_selector.is_some());
+    assert!(state.active_z_stats.is_none());
+    assert_eq!(state.message, "Player:");
+}
+
+#[test]
+fn use_picker_labels_the_roster_box_for_the_panel_renderer() {
+    // Observed: the party-roster box's border label becomes `Items:`
+    // while the U-Use picker owns the box.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        state
+            .handle_top_down_key_with_inline('U', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+    assert_eq!(state.roster_box_label(), Some("Items:"));
+    assert_eq!(state.selector_highlight(), None);
+}
+
+#[test]
+fn command_echo_opens_a_transcript_entry_before_the_handler_prompts() {
+    // commands.md §5: "Each command block prints a resident verb prefix
+    // before it invokes the handler or refusal path... commands that
+    // immediately prompt for a direction... do so after the prefix has
+    // been emitted." The direction prompt renders `Look-` itself, so the
+    // transcript must carry one `Look-` line, not two.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        state
+            .handle_top_down_key_with_inline('L', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+    assert_eq!(transcript_texts(&state), vec!["Look-"]);
+    assert!(state.message_entries()[0].is_command_echo);
+}
+
+#[test]
+fn direction_result_continues_the_echoed_verb_line() {
+    // Observed: the verb prefix plus the resolved direction result render
+    // as one message-window line, `Look-Pass`. Open takes the same
+    // direction-prompting shape without needing LOOK2.DAT.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        state
+            .handle_top_down_key_with_inline(
+                'O',
+                Path::new(""),
+                Some(Direction::North),
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+    );
+    let entries = state.message_entries();
+    assert_eq!(entries.len(), 1, "{:?}", transcript_texts(&state));
+    assert!(entries[0].is_command_echo);
+    assert!(
+        entries[0].text.starts_with("Open-"),
+        "{:?}",
+        entries[0].text
+    );
+    assert!(entries[0].text.len() > "Open-".len());
+}
+
+#[test]
+fn use_item_echo_puts_the_item_prompt_on_the_next_line() {
+    // Observed: `>Use item` then `Item: <name>` on the following row.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        state
+            .handle_top_down_key_with_inline('U', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+    let entries = state.message_entries();
+    assert_eq!(entries[0].text, "Use item");
+    assert!(entries[0].is_command_echo);
+    assert_eq!(entries[1].text, "Item:");
+    assert!(!entries[1].is_command_echo);
+}
+
+#[test]
+fn movement_keys_echo_their_cardinal_name() {
+    // Observed: movement echoes `North`/`South`/`East`/`West`.
+    for (key, expected) in [('8', "North"), ('2', "South"), ('6', "East"), ('4', "West")] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert!(
+            state
+                .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
+                .unwrap()
+        );
+        let entries = state.message_entries();
+        assert!(entries[0].is_command_echo);
+        assert!(
+            entries[0].text.starts_with(expected),
+            "{key} echoed {:?}",
+            entries[0].text
+        );
+    }
+}
+
+#[test]
+fn invalid_command_letters_echo_the_stock_refusal_once() {
+    // Observed: an invalid key prints `What?`. The handler prints the same
+    // literal, so the transcript must fold it back into one line.
+    for key in ['D', 'W'] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert!(
+            state
+                .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
+                .unwrap()
+        );
+        assert_eq!(transcript_texts(&state), vec!["What?"]);
+        assert!(state.message_entries()[0].is_command_echo);
+    }
+}
+
+#[test]
+fn unhandled_keys_roll_back_their_speculative_verb_echo() {
+    // A key the active mode does not handle must not leave a dangling
+    // verb echo in the transcript.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(
+        !state
+            .handle_top_down_key_with_inline('!', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+    assert!(state.message_entries().is_empty());
+}
+
+#[test]
+fn transcript_is_capped_so_a_long_session_cannot_grow_without_bound() {
+    let mut state = test_state(open_grid(), 5, 5);
+    for _ in 0..(MESSAGE_TRANSCRIPT_CAPACITY * 2) {
+        state.push_message_entry("line", false);
+    }
+    assert_eq!(state.message_entries().len(), MESSAGE_TRANSCRIPT_CAPACITY);
+}
+
 #[test]
 fn top_down_uppercase_command_letters_preempt_vi_movement() {
     for (key, expected) in [
@@ -22092,9 +22511,9 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
         ('M', MMIX_SPELL_PROMPT_MESSAGE),
         ('N', "New order:"),
         ('Q', "Save game?"),
-        ('U', "Use:"),
+        ('U', "Item:"),
         ('W', "What?"),
-        ('Z', "Z-stats:"),
+        ('Z', "Player:"),
     ] {
         let mut state = test_state(open_grid(), 5, 5);
 
@@ -22433,7 +22852,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('U', "No usable items."),
         ('W', "What?"),
         ('Y', "Yell what?"),
-        ('Z', "Z-stats:"),
+        ('Z', "Player:"),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 

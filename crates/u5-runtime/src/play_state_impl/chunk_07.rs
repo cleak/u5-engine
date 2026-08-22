@@ -1657,7 +1657,7 @@ impl PlayState {
             if (96..=103).contains(&tile) {
                 return TownFireTarget::Door { x, y, tile };
             }
-            if surface_tile_blocks_sight(tile) {
+            if surface_tile_blocks_projectile(tile) {
                 return TownFireTarget::Wall { x, y, tile };
             }
         }

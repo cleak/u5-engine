@@ -1,8 +1,8 @@
 //! Post-victory endgame cinematic state machine per
 //! `systems/endgame.md`. The framer walks through the six fixed
 //! `END.DAT` narrative windows, the late certificate rectangle
-//! operation, the certificate scroll, and the Origin attribution
-//! closer. Narrative panels advance by key; the rectangle operation is
+//! operation, the certificate body scroll, and the separate final
+//! report panel (`endgame.md §9`). Narrative panels advance by key; the rectangle operation is
 //! a display event between the last narrative panel and certificate.
 //!
 //! This is the page-flip presenter only; party restoration, throne-
@@ -27,10 +27,12 @@ pub enum EndgameCinematicStep {
     /// Late full-screen rectangle operation immediately before the
     /// certificate setup. This is not an intro-style timed column wipe.
     CertificateRectOperation,
-    /// Certificate scroll is on screen.
+    /// Certificate body scroll is on screen (`endgame.md §9`).
     Certificate,
-    /// Origin attribution closer is on screen.
-    OriginCloser,
+    /// `endgame.md §9`: after the certificate body the scroll clears or
+    /// advances to a separate final report panel carrying the elapsed
+    /// campaign time and the closing Origin report line.
+    FinalReport,
     /// Cinematic complete; the engine remains on the terminal final panel.
     Finished,
 }
@@ -104,8 +106,8 @@ impl EndgameCinematic {
                 }
             }
             EndgameCinematicStep::CertificateRectOperation => EndgameCinematicStep::Certificate,
-            EndgameCinematicStep::Certificate => EndgameCinematicStep::OriginCloser,
-            EndgameCinematicStep::OriginCloser => EndgameCinematicStep::Finished,
+            EndgameCinematicStep::Certificate => EndgameCinematicStep::FinalReport,
+            EndgameCinematicStep::FinalReport => EndgameCinematicStep::Finished,
         };
         self.step
     }
@@ -144,7 +146,7 @@ impl EndgameCinematic {
             EndgameCinematicStep::NarrativeWindow(_) => "Narrative window",
             EndgameCinematicStep::CertificateRectOperation => "Certificate transition",
             EndgameCinematicStep::Certificate => "Quest certificate",
-            EndgameCinematicStep::OriginCloser => "Origin closer",
+            EndgameCinematicStep::FinalReport => "Final report panel",
             EndgameCinematicStep::Finished => "Cinematic finished",
         }
     }
@@ -217,13 +219,13 @@ mod tests {
     }
 
     #[test]
-    fn certificate_then_origin_closer_then_finished() {
+    fn certificate_then_final_report_then_finished() {
         let mut cin = EndgameCinematic::start();
         for _ in 0..(1 + ENDGAME_NARRATIVE_WINDOW_COUNT) {
             cin.advance();
         }
         assert!(cin.advance_certificate_rect_operation());
-        assert_eq!(cin.advance(), EndgameCinematicStep::OriginCloser);
+        assert_eq!(cin.advance(), EndgameCinematicStep::FinalReport);
         assert_eq!(cin.advance(), EndgameCinematicStep::Finished);
         assert!(cin.is_finished());
     }
@@ -259,7 +261,7 @@ mod tests {
         assert!(cin.advance_certificate_rect_operation());
         assert_eq!(cin.banner_label(), "Quest certificate");
         cin.advance();
-        assert_eq!(cin.banner_label(), "Origin closer");
+        assert_eq!(cin.banner_label(), "Final report panel");
         cin.advance();
         assert_eq!(cin.banner_label(), "Cinematic finished");
     }

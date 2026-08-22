@@ -28,7 +28,9 @@ impl PlayState {
                 } else {
                     "Rest"
                 };
-                format!("{label}- how many hours? _\nChoose 1-9; Space/0 cancels.")
+                // cleak/u5-spec#81: the hours prompt literal is unpublished; the
+                // invented `Choose 1-9; Space/0 cancels.` line is removed.
+                format!("{label}- how many hours? _")
             }
             RestPhase::WatchYesNo => "Set watch? (Y/N)".to_string(),
             RestPhase::WatchSlot => {
@@ -899,9 +901,10 @@ impl PlayState {
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = format!(
-            "Changed to {} ({}) level {next_level}.",
+            "Changed to {} ({}) level {}.",
             scene.key(),
-            scene.name()
+            scene.name(),
+            dungeon_display_level(next_level)
         );
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel {

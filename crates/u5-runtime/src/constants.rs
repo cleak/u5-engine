@@ -241,8 +241,27 @@ pub const HCS_FONT_CELL_WIDTH: usize = HCS_CELL_WIDTH;
 pub const HCS_FONT_CELL_HEIGHT: usize = HCS_CELL_HEIGHT;
 pub const PCS_FIRST_CODE: u8 = 0x20;
 pub const PCS_GLYPH_BITMAP_WIDTH: usize = 8;
-pub const PCS_GLYPH_HEIGHT: usize = 11;
-pub const PCS_GLYPH_BLOCK_LEN: usize = 1 + PCS_GLYPH_HEIGHT;
+/// Observation-derived (`cleak/u5-spec#70`). `formats/font-pcs.md`
+/// never publishes the proportional cell height. Every glyph block
+/// in the shipped `PROPORT.PCS` declares a height word of 8, and the
+/// glyph bands measured off a black-box run of the original intro
+/// story slides are exactly 8 pixel rows tall on a 9-pixel line
+/// stride, so the proportional cell is 8 rows.
+pub const PCS_GLYPH_HEIGHT: usize = 8;
+/// Observation-derived (`cleak/u5-spec#70`). Each glyph record in the
+/// `PROPORT.PCS` glyph directory opens with a width word and a height
+/// word before its row bytes.
+pub const PCS_GLYPH_BLOCK_HEADER_LEN: usize = 4;
+pub const PCS_GLYPH_BLOCK_LEN: usize = PCS_GLYPH_BLOCK_HEADER_LEN + PCS_GLYPH_HEIGHT;
+/// Observation-derived (`cleak/u5-spec#70`). The resident advance for
+/// a printable proportional glyph is its stored ink width plus one
+/// blank separator column; measured over 8,995 glyph placements in
+/// the original's twenty intro story slides.
+pub const PCS_GLYPH_ADVANCE_GAP: u8 = 1;
+/// Observation-derived (`cleak/u5-spec#70`). The space glyph carries a
+/// stored ink width of zero, but the resident table advances a natural
+/// (unjustified) space by 5 pixels.
+pub const PCS_SPACE_ADVANCE: u8 = 5;
 pub const PLAY_SCRIPT_MAX_IDLE_TICKS: usize = 1024;
 /// Runtime count of karma reaction records. The KARMA.DAT parser
 /// uses this same loop bound to walk the six NUL-terminated text

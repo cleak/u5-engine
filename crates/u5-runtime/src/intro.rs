@@ -202,7 +202,12 @@ pub const INTRO_MENU_FRAME_BOTTOM_Y: u16 =
 /// the band. Rows past the profile start at column 0, and the bottom
 /// six rows mirror the profile in reverse. The right edge mirrors
 /// each entry about the surface centre.
-pub const INTRO_MENU_FRAME_CORNER_PROFILE: [u16; 6] = [5, 3, 2, 1, 1, 0];
+///
+/// The gameplay border frame carves its outer corners with the same
+/// measured staircase, so the numbers live once in
+/// [`crate::gameplay_chrome::CHROME_CORNER_PROFILE`] and this name
+/// stays as the `§6.1`-facing alias.
+pub const INTRO_MENU_FRAME_CORNER_PROFILE: [u16; 6] = crate::gameplay_chrome::CHROME_CORNER_PROFILE;
 /// `intro.md §6.1` horizontal-rule pixel coordinates. Observation
 /// confirms the published top rule and adds the matching bottom rule
 /// plus the two verticals that close the rectangle.
@@ -622,9 +627,34 @@ pub const MISCMAPS_RTV_COMMAND_SECTION_OFFSET: usize =
 /// 16-command preview bytecode, not the gameplay TLK runner.
 pub const RTV_COMMAND_COUNT: usize = 16;
 
+/// `intro.md §11` describes the acknowledgements path as an artwork
+/// screen: load a graphics resource from the end-screen asset family,
+/// draw the credits artwork at a fixed position, reveal it with a
+/// bottom-up slab wipe at a fixed pixel stride, wait for a key, wipe
+/// it away top-to-bottom, then reload `STARTSC` and redraw the menu.
+/// What is missing is the binding and the numbers, not prose: which
+/// file and directory slot carries the credits artwork, its fixed
+/// top-left origin, the slab height / pixel stride and per-slab tick
+/// cadence for the two wipes, and whether any text is drawn over the
+/// artwork at all (`§15` still defers text and pagination to a
+/// source-free transcription, which `§11` may have made moot).
+/// `intro.md §11` acknowledgements gate for callers with no graphical
+/// surface.
+///
+/// §11 describes an artwork screen, not a text screen: a graphics
+/// resource drawn at a fixed origin, revealed by a bottom-up slab
+/// wipe, held for a keypress, wiped away top-to-bottom, then `STARTSC`
+/// reloaded and the menu repainted. The graphical intro draws that
+/// artwork; the terminal harness cannot, and printing
+/// clean-room-authored credit lines in its place would be inventing
+/// the one thing §15 reserves for a source-free transcription.
+///
+/// Still unimplemented on the graphical side, and still the reason
+/// `cleak/u5-spec#72` is open: the slab height / pixel stride and the
+/// per-slab tick cadence of the entry and exit wipes.
 pub fn require_acknowledgements_contract() -> ! {
     panic!(
-        "intro acknowledgements require published original text, pagination, and layout; clean-room-authored placeholder credits are a forbidden fallback; see cleak/u5-spec#72"
+        "intro acknowledgements are the §11 credits artwork screen, which needs the graphical intro renderer; the terminal harness has no surface to draw it on, and substituting clean-room-authored placeholder credits is a forbidden fallback. The entry/exit slab wipe stride and cadence are also still unpublished; see cleak/u5-spec#72"
     )
 }
 

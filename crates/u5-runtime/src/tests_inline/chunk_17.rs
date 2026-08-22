@@ -35,17 +35,36 @@
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.turn, 0);
+        // inventory.md §4: "The command starts by choosing a character...
+        // outside combat they use the normal party-member selector."
+        assert!(state.active_z_stats.is_none());
+        assert_eq!(state.selector_highlight(), Some(0));
+        assert_eq!(state.roster_box_label(), Some("Select:"));
+        assert_eq!(state.message, "Player:");
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.turn, 0);
+        assert!(state.active_party_selector.is_none());
+        assert_eq!(state.selector_highlight(), None);
         assert_eq!(
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::Stats)
         );
-        assert!(state.message.contains("Z-stats: Stats page"));
-        assert!(state.message.contains("party member 1 of 2"));
-        assert!(state.message.contains("Name: AVATAR"));
-        assert!(state.message.contains("Class: Bard"));
-        assert!(state.message.contains("Status: good"));
-        assert!(state.message.contains("STR 12 DEX 11 INT 16"));
-        assert!(state.message.contains("HP 10/20 MP 4 XP 1234"));
+        // §4 stats-page field list, with no invented field labels in
+        // front of the class and status label-table values.
+        assert!(state.message.contains("AVATAR"));
+        assert!(state.message.contains("Bard"));
+        assert!(state.message.contains("good"));
+        assert!(state.message.contains("Strength     12"));
+        assert!(state.message.contains("Dexterity    11"));
+        assert!(state.message.contains("Intellect    16"));
+        assert!(state.message.contains("HP        10/20"));
+        assert!(state.message.contains("MP            4"));
+        assert!(state.message.contains("Exp        1234"));
+        assert!(!state.message.contains("STR "));
     }
 
     #[test]
@@ -1399,7 +1418,7 @@
                 .map(|session| (session.selected_party_index, session.page)),
             Some((1, ZStatsPage::Stats))
         );
-        assert!(state.message.contains("Name: MARIA"));
+        assert!(state.message.contains("MARIA"));
     }
 
     #[test]
@@ -1997,7 +2016,7 @@
         assert_eq!(state.turn, 0);
         assert!(state.active_ready.is_some());
         assert!(state.message.contains("Readied Bow"));
-        assert!(state.message.contains("Bow (readied)"));
+        assert!(state.message.contains("26: Bow"));
 
         handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
@@ -3531,7 +3550,7 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(state.message, "Up! Changed to DUNGEON:0 (Deceit) level 2.");
+        assert_eq!(state.message, "Up! Changed to DUNGEON:0 (Deceit) level 3.");
     }
 
     #[test]
@@ -3555,7 +3574,7 @@
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert_eq!(
             state.message,
-            "Down! Changed to DUNGEON:0 (Deceit) level 4."
+            "Down! Changed to DUNGEON:0 (Deceit) level 5."
         );
     }
 

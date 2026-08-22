@@ -44,6 +44,12 @@ pub struct CliArgs {
     /// If set, write representative headless PNG frames and a sanitized
     /// manifest into the supplied directory.
     pub save_frame_suite: Option<PathBuf>,
+    /// If set, compose the whole 320x200 gameplay screen — border
+    /// chrome, stats panel, message window and viewport — after the
+    /// play-script runs and write it to this path as a PNG. Unlike
+    /// `--save-frame`, which writes the bare viewport, this is the
+    /// headless way to verify the frame chrome.
+    pub save_screen: Option<PathBuf>,
     /// If set, write representative Bevy-owned PNG frames and a sanitized
     /// manifest into the supplied directory without opening a window.
     pub visual_frame_suite: Option<PathBuf>,
@@ -91,6 +97,7 @@ where
     let mut help = false;
     let mut save_frame: Option<PathBuf> = None;
     let mut save_frame_suite: Option<PathBuf> = None;
+    let mut save_screen: Option<PathBuf> = None;
     let mut visual_frame_suite: Option<PathBuf> = None;
     let mut visual_route_suite: Option<PathBuf> = None;
     let mut compare_frame_manifests: Option<(PathBuf, PathBuf)> = None;
@@ -118,6 +125,16 @@ where
                     )
                 })?;
                 save_frame = Some(PathBuf::from(value));
+                play = true;
+            }
+            "--save-screen" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--save-screen requires a PNG output path",
+                    )
+                })?;
+                save_screen = Some(PathBuf::from(value));
                 play = true;
             }
             "--save-frame-suite" => {
@@ -375,6 +392,7 @@ where
             help: true,
             save_frame: None,
             save_frame_suite: None,
+            save_screen: None,
             visual_frame_suite: None,
             visual_route_suite: None,
             compare_frame_manifests: None,
@@ -668,6 +686,7 @@ where
         help: false,
         save_frame,
         save_frame_suite,
+        save_screen,
         visual_frame_suite,
         visual_route_suite,
         compare_frame_manifests,

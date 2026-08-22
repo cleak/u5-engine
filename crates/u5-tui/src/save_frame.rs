@@ -8,10 +8,14 @@ use std::path::Path;
 
 use image::{ImageBuffer, Rgba};
 use u5_runtime::{
-    COMBAT_ARENA_SIDE, DungeonScene, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT,
-    Scene, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
-    TileGraphicsDepth, ViewOverlayMode, WorldPlane, hash_bytes, load_tile_atlas,
-    render_text_panel_rgba,
+    CHROME_RULE_INDEX, COMBAT_ARENA_SIDE, ChromeFonts, DungeonScene, FixedCellFont,
+    GameplayMessageLog, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT, Scene,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
+    TextWindowSystem, TileGraphicsDepth, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode,
+    WorldPlane, configure_play_text_windows, gameplay_chrome_content, hash_bytes,
+    layout_message_window, load_ibm_ch_font, load_runes_ch_font, load_tile_atlas,
+    paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
+    paint_stats_panel_text_window, render_text_panel_rgba, render_text_window_rgba,
 };
 
 use crate::{raster_frame_kind, replay_play_script_commands};
@@ -95,6 +99,7 @@ pub fn save_frame_suite(
     out_dir: &Path,
 ) -> io::Result<Vec<SavedFrameReport>> {
     let cases = save_frame_suite_cases();
+    u5_runtime::test_fixtures::assert_writable_game_dir(out_dir, "save frame suite output");
     std::fs::create_dir_all(out_dir)?;
     let mut reports = Vec::with_capacity(cases.len());
     for case in cases {
@@ -759,4 +764,118 @@ mod tests {
         assert!(!manifest.contains("Avatar"));
         let _ = fs::remove_dir_all(dir);
     }
+}
+
+/// `--save-screen`: compose the whole 320x200 gameplay screen headlessly.
+///
+/// Border chrome first, then the text-window surface (stats panel)
+/// composited skipping black, then the message window's rows with
+/// their ribbon end-cap prefixes, then the tile viewport at its
+/// measured origin. Shares every constant and painter with the Bevy
+/// compositor via `u5_runtime::gameplay_chrome`.
+pub fn run_save_screen(
+    game_dir: &Path,
+    options: PlayOptions,
+    raster_depth: TileGraphicsDepth,
+    script: Option<Vec<String>>,
+    out: &Path,
+) -> io::Result<()> {
+    let mut state = PlayState::load_scene(game_dir, options)?;
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    if let Some(commands) = script {
+        replay_play_script_commands(&mut state, game_dir, &commands, |_, _, _| Ok(()))?;
+    }
+    let ibm = load_ibm_ch_font(game_dir)?;
+    let runes = load_runes_ch_font(game_dir)?;
+    let rgba = compose_gameplay_screen(&mut state, &atlas, &ibm, &runes)?;
+    write_rgba_png(
+        out,
+        TEXT_WINDOW_RENDER_WIDTH as u32,
+        TEXT_WINDOW_RENDER_HEIGHT as u32,
+        rgba,
+    )?;
+    println!(
+        "Saved {}x{} composed gameplay screen to {} (player at ({}, {}) facing {}, turn {})",
+        TEXT_WINDOW_RENDER_WIDTH,
+        TEXT_WINDOW_RENDER_HEIGHT,
+        out.display(),
+        state.player.x,
+        state.player.y,
+        u5_runtime::Direction::name(state.player.facing),
+        state.turn,
+    );
+    Ok(())
+}
+
+/// Compose the full gameplay screen into a fresh RGBA buffer.
+pub fn compose_gameplay_screen(
+    state: &mut PlayState,
+    atlas: &u5_runtime::TileAtlas,
+    ibm: &FixedCellFont,
+    runes: &FixedCellFont,
+) -> io::Result<Vec<u8>> {
+    let width = TEXT_WINDOW_RENDER_WIDTH;
+    let height = TEXT_WINDOW_RENDER_HEIGHT;
+    let mut rgba = vec![0u8; width * height * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0, 0, 0, 0xff]);
+    }
+
+    state.refresh_cached_moon_glyphs();
+    let content = gameplay_chrome_content(state);
+    paint_gameplay_frame_chrome(
+        &mut rgba,
+        width,
+        height,
+        &content,
+        ChromeFonts { ibm, runes },
+    );
+
+    // Only the stats panel goes through the text-window pipeline. The
+    // message window is painted directly below, because each echoed
+    // line carries the two-colour ribbon end cap that the 1-bit
+    // fixed-cell text path cannot express.
+    let active_cursor = state.active_player;
+    let mut system = TextWindowSystem::new();
+    configure_play_text_windows(&mut system);
+    paint_stats_panel_text_window(&mut system, state, active_cursor);
+    let text = render_text_window_rgba(&system, ibm)?;
+    for (dst, src) in rgba.chunks_exact_mut(4).zip(text.chunks_exact(4)) {
+        if src[0] == 0 && src[1] == 0 && src[2] == 0 {
+            continue;
+        }
+        dst.copy_from_slice(src);
+    }
+
+    let mut log = GameplayMessageLog::new();
+    log.push_output(&state.message);
+    for row in layout_message_window(&log, Some("")).rows {
+        if row.prefixed {
+            paint_message_line_cap(&mut rgba, width, height, ibm, row.row);
+        }
+        paint_fixed_cell_text(
+            &mut rgba,
+            width,
+            height,
+            ibm,
+            &row.text,
+            row.column,
+            row.row,
+            CHROME_RULE_INDEX,
+        );
+    }
+
+    if let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, atlas)? {
+        blit_rgba(
+            &mut rgba,
+            width,
+            height,
+            &viewport.to_rgba(),
+            viewport.width,
+            viewport.height,
+            VIEWPORT_ORIGIN_X,
+            VIEWPORT_ORIGIN_Y,
+        );
+    }
+    Ok(rgba)
 }

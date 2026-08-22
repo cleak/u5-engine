@@ -898,7 +898,7 @@
 
         assert_eq!(state.turn, 0);
         assert_eq!(state.party[0].hp, 12);
-        assert!(state.message.contains("Z-stats:"));
+        assert!(state.message.contains("Player:"));
         assert!(!state.message.contains("drowning damage"));
         let _ = fs::remove_dir_all(dir);
     }
