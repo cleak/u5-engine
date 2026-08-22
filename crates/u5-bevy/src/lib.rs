@@ -81,13 +81,13 @@ use u5_runtime::{
     STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable,
     StoryRecords, TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
     TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH,
-    TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
-    TITLE_BIT_INITIAL_SOURCE_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
-    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_SOURCE_WIDTH, TITLE_TICK_SOURCE_X,
-    TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
-    Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem, TileAtlas,
-    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_FLOURISH_FRAME_COUNT,
+    TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem,
+    TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
     TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, ULTIMA_LOGO_HEIGHT,
     ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
@@ -125,8 +125,9 @@ use u5_runtime::{
     spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_visible,
     summarize_return_to_view_preview, summoned_active_object_record,
     terrain_combat_instance_from_setup, terrain_combat_raw_replacement_tile_for_arena,
-    terrain_combat_setup_from_record, terrain_combat_tile_for_spawn_index, title_tick_next_frame,
-    town_resident_name,
+    terrain_combat_setup_from_record, terrain_combat_tile_for_spawn_index, title_flourish_band,
+    title_flourish_content_row, title_flourish_step_state, title_flourish_total_steps,
+    title_flourish_visible_rows, title_tick_next_frame, town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
 };
@@ -166,6 +167,21 @@ const INTRO_DISPLAY_SCALE: f32 = 2.5;
 // produces one such tick per advance and drops accumulated time
 // beyond one slot (§5.3, no catch-up).
 const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = 65_536.0 / 1_193_182.0;
+
+/// `systems/timing.md §5.1` (`cleak/u5-spec#77`): the `TITLE.BIT`
+/// flourish is **not** BIOS-tick paced. It is one call into the
+/// driver's animation-script entry, and every presentation step is
+/// paced by a CPU-calibrated busy wait. The published wall-clock
+/// requirement is 14 ms per presentation step — about 1.2 s for the
+/// whole 85-step script. The earlier "one BIOS tick per row-reveal
+/// group" reading was retracted upstream.
+const INTRO_FLOURISH_STEP_INTERVAL_SECS: f32 = 0.014;
+
+/// `systems/intro.md §3` step 2 (`cleak/u5-spec#77`): after the
+/// flourish returns, the finished mark plus the slot-7 "Presents"
+/// line is held briefly before the attribution card replaces it. The
+/// capture in `cleak/u5-spec#78` shows an ~1 s eighteen-tick hold.
+const INTRO_PRESENTS_HOLD_BIOS_TICKS: u16 = 18;
 /// Observation-derived (`cleak/u5-spec#70`): proportional text lines are 9
 /// pixel rows apart. Anchored to the runtime's measured stride.
 #[cfg(test)]
@@ -300,20 +316,17 @@ impl IntroDisplayBuffer {
         }
     }
 
-    /// `systems/display-driver.md §5` + `cleak/u5-spec#78`: copy the
-    /// requested four-frame strip frame into this framebuffer,
-    /// overwriting the whole published `(0, 65)` `320 x 49`
-    /// destination rectangle opaquely. The source band supplied
-    /// through `TitleTickFrameSet` is the 288-wide `ULTIMA` panel, so
-    /// it lands at x = 16 and the 16 columns at each side of the
-    /// rectangle are cleared to palette index 0.
+    /// `systems/display-driver.md §5` + `cleak/u5-spec#65`: copy one
+    /// staged band into this framebuffer, overwriting the whole
+    /// published `(0, 65)` `320 x 49` destination rectangle opaquely.
+    /// There is no transparency key, no mask and no preserved pixel:
+    /// the staged band already carries the cleared flanks at columns
+    /// `0..=15` and `304..=319`.
     fn draw_title_tick(&mut self, frame: u8, frames: &TitleTickFrameSet) {
         let width = TITLE_TICK_FRAME_WIDTH as usize;
         let height = TITLE_TICK_FRAME_HEIGHT as usize;
         let dst_x = TITLE_TICK_FRAME_X as usize;
         let dst_y = TITLE_TICK_FRAME_Y as usize;
-        let source_width = TITLE_TICK_SOURCE_WIDTH as usize;
-        let source_x = dst_x + TITLE_TICK_SOURCE_X as usize;
         assert!(
             dst_x + width <= self.width && dst_y + height <= self.height,
             "title-tick rectangle ({width}x{height} at ({dst_x}, {dst_y})) exceeds framebuffer {}x{}",
@@ -323,12 +336,10 @@ impl IntroDisplayBuffer {
         let frame_pixels = frames.frame_pixels(frame);
         debug_assert_eq!(frame_pixels.len(), TITLE_TICK_FRAME_PIXELS);
         for row in 0..height {
-            let src_start = row * source_width;
-            let row_start = (dst_y + row) * self.width;
-            self.pixels[row_start + dst_x..row_start + source_x].fill(0);
-            self.pixels[row_start + source_x..row_start + source_x + source_width]
-                .copy_from_slice(&frame_pixels[src_start..src_start + source_width]);
-            self.pixels[row_start + source_x + source_width..row_start + dst_x + width].fill(0);
+            let src_start = row * width;
+            let dst_start = (dst_y + row) * self.width + dst_x;
+            self.pixels[dst_start..dst_start + width]
+                .copy_from_slice(&frame_pixels[src_start..src_start + width]);
         }
     }
 
@@ -400,57 +411,55 @@ impl IntroDisplayBuffer {
         }
     }
 
-    fn copy_revealed_columns_from(
+    /// `systems/display-driver-abi.md §9.6` (`cleak/u5-spec#53`): the
+    /// driver's **rectangle dissolve**. One blocking transfer that
+    /// copies `rect` from the hidden surface to the visible page,
+    /// visiting every pixel exactly once in a deterministic
+    /// pseudo-random order — not row-major, not column-major, not a
+    /// spiral. The original's exact scrambling sequence is not
+    /// published, so this reproduces the published *properties*
+    /// (complete, deterministic, every pixel once, scattered) using
+    /// the runtime's coprime-stride walk.
+    ///
+    /// The earlier one-pixel-column-per-title-tick sweep was withdrawn
+    /// upstream in full for both intro callers: there is no per-column
+    /// schedule and no tick pacing on either path.
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn dissolve_rect_from(
         &mut self,
         source: &IntroDisplayBuffer,
-        transition: RectColumnSweepTransition,
-    ) {
+        rect: (u16, u16, u16, u16),
+    ) -> usize {
         assert_eq!(
             (self.width, self.height),
             (source.width, source.height),
-            "intro column reveal requires matching source and destination buffers"
+            "intro rectangle dissolve requires matching source and destination buffers"
         );
-        let (start_x, end_x) = transition.revealed_columns();
-        let (rect_x0, rect_y0, rect_x1, rect_y1) = transition.rect;
+        let (x0, y0, x1, y1) = rect;
         assert!(
-            rect_x0 <= rect_x1 && rect_y0 <= rect_y1,
-            "intro column reveal rectangle is inverted: {:?}",
-            transition.rect
+            x0 <= x1 && y0 <= y1,
+            "intro rectangle dissolve rectangle is inverted: {rect:?}"
         );
         assert!(
-            self.width > 0 && self.height > 0,
-            "intro column reveal requires a non-empty display buffer"
-        );
-        let y0 = usize::from(rect_y0);
-        let y1 = usize::from(rect_y1);
-        let x0 = usize::from(rect_x0);
-        let x1 = usize::from(rect_x1);
-        let revealed_start = usize::from(start_x);
-        let revealed_end = usize::from(end_x);
-        assert!(
-            x1 < self.width && y1 < self.height,
-            "intro column reveal rectangle {:?} exceeds framebuffer {}x{}",
-            transition.rect,
+            usize::from(x1) < self.width && usize::from(y1) < self.height,
+            "intro rectangle dissolve rectangle {rect:?} exceeds framebuffer {}x{}",
             self.width,
             self.height
         );
-        assert!(
-            revealed_start >= x0 && revealed_end <= x1 && revealed_start <= revealed_end,
-            "intro column reveal range {revealed_start}..={revealed_end} is outside rectangle {:?}",
-            transition.rect
-        );
-
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                if x < revealed_start || x > revealed_end {
-                    continue;
-                }
-                let index = y * self.width + x;
-                self.pixels[index] = source.pixels[index];
-            }
+        let mut state = u5_runtime::EgaDissolveState::new(u5_runtime::DisplayPixelRect {
+            x0: usize::from(x0),
+            y0: usize::from(y0),
+            x1: usize::from(x1),
+            y1: usize::from(y1),
+        });
+        let mut copied = 0;
+        while let Some((x, y)) = state.next_pixel() {
+            let index = y * self.width + x;
+            self.pixels[index] = source.pixels[index];
+            copied += 1;
         }
+        copied
     }
-
     fn from_rgba(width: usize, height: usize, rgba: &[u8]) -> Self {
         assert!(
             rgba.len() >= width * height * 4,
@@ -581,7 +590,17 @@ const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
 const INTRO_MENU_DEFAULT_HIGHLIGHT: IntroSubflow = IntroSubflow::JourneyOnward;
 
 const STARTSC_PANEL_HEIGHT: usize = 137;
-const INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS: u16 = 200;
+/// `systems/intro.md §6.2`: after two hundred consecutive no-key
+/// menu poll passes the intro enters the Return-to-View preview as if
+/// `R` had been pressed. This counts *poll passes*, not BIOS ticks.
+const INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES: u16 = 200;
+/// `cleak/u5-spec#78`: one no-key menu idle poll pass costs two DOS
+/// BIOS user-ticks (~110 ms) — the title-tick helper carries a
+/// one-tick wait in its own body (`cleak/u5-spec#68`) and the rest of
+/// the pass costs a second. The 200-pass timeout is therefore ~22 s,
+/// not ~11 s, and the flame band advances once per pass rather than
+/// once per BIOS tick.
+const INTRO_MENU_IDLE_POLL_BIOS_TICKS: u16 = 2;
 
 const CREATE_OPENING_PANEL: ImagePanelSpec = ImagePanelSpec {
     stem: "CREATE",
@@ -7773,13 +7792,13 @@ fn run_visual_intro_menu_app(
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -7989,13 +8008,20 @@ struct VisualIntroState {
     title_flourish_complete: bool,
     title_signature_progress: usize,
     title_signature_complete: bool,
+    /// `systems/intro.md §3` step 2: BIOS ticks left in the hold on
+    /// the finished mark plus the slot-7 "Presents" line, before the
+    /// whole-page publish that starts the attribution card.
+    title_presents_hold_ticks: u16,
     title_tick_frame: u8,
     title_tick_visible_frame: u8,
     surface: IntroDisplayBuffer,
-    start_menu_reveal: Option<RectColumnSweepTransition>,
-    start_menu_reveal_backing: Option<IntroDisplayBuffer>,
     modal_backing: Option<IntroDisplayBuffer>,
+    /// `systems/intro.md §6.2` consecutive no-key menu poll passes.
     menu_idle_ticks: u16,
+    /// `cleak/u5-spec#78` BIOS ticks elapsed inside the current menu
+    /// poll pass; a pass completes every
+    /// [`INTRO_MENU_IDLE_POLL_BIOS_TICKS`] ticks.
+    menu_idle_bios_ticks: u16,
     message_waiting_for_key: bool,
     message: String,
     panel: VisualIntroPanel,
@@ -8261,9 +8287,6 @@ fn drive_visual_intro(
     let Some(mut intro) = intro else {
         return;
     };
-    if visual_intro_start_menu_reveal_active(&intro) {
-        return;
-    }
     let mut handled = false;
     if keyboard.just_pressed(KeyCode::Escape) {
         if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
@@ -8393,6 +8416,11 @@ fn animate_visual_intro_title_effects(
         return;
     };
 
+    // `systems/timing.md §5.1`: the flourish runs on its own
+    // calibrated ~14 ms step; every other intro phase is BIOS-tick
+    // paced (`cleak/u5-spec#68`, `cleak/u5-spec#77`).
+    pump.interval = visual_intro_animation_interval(&intro);
+
     let mut advanced = false;
     if advance_intro_animation_pump(&mut pump, time.delta_secs()) {
         advanced = advance_visual_intro_animation_tick(&mut intro);
@@ -8407,6 +8435,21 @@ fn animate_visual_intro_title_effects(
         .as_ref()
         .expect("intro animation tick requires a visual framebuffer handle");
     replace_visual_image_data(&mut images, handle, rgba, "intro animation tick");
+}
+
+/// `systems/timing.md §5.1`: the per-phase animation step interval.
+/// The `TITLE.BIT` flourish is calibration-paced at ~14 ms per
+/// presentation step (`cleak/u5-spec#77`); the signature walker, the
+/// title tick and the menu idle pump are DOS BIOS user-ticks.
+fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
+    let flourish_phase = matches!(intro.panel, VisualIntroPanel::Menu)
+        && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+        && !intro.title_flourish_complete;
+    if flourish_phase {
+        INTRO_FLOURISH_STEP_INTERVAL_SECS
+    } else {
+        INTRO_ANIMATION_TICK_INTERVAL_SECS
+    }
 }
 
 fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32) -> bool {
@@ -8442,6 +8485,15 @@ fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32)
     true
 }
 
+/// `systems/intro.md §3` step 2: true while the intro is holding on
+/// the finished mark plus the slot-7 line, after the flourish and
+/// before the attribution card's first whole-page publish.
+fn visual_intro_presents_hold_active(intro: &VisualIntroState) -> bool {
+    intro.title_flourish_complete
+        && !intro.title_signature_complete
+        && intro.title_presents_hold_ticks > 0
+}
+
 fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
     // Per-phase cadences are published in `systems/timing.md §5.1`
     // (every intro animation step is driven by the ~18.2065 Hz DOS
@@ -8458,13 +8510,26 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         let mut advanced = false;
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
+        // `cleak/u5-spec#78`: the menu's no-key poll pass spans two
+        // BIOS ticks, and both the clear-carry title tick and the
+        // idle timeout are per *pass*, not per tick.
+        let poll_pass = intro.menu_idle_bios_ticks + 1 >= INTRO_MENU_IDLE_POLL_BIOS_TICKS;
+        intro.menu_idle_bios_ticks = if poll_pass {
+            0
+        } else {
+            intro.menu_idle_bios_ticks + 1
+        };
+
         if !title_phase && !intro.message_waiting_for_key {
-            clear_carry_visual_intro_title_tick(intro);
-            advanced = true;
-            advanced |= advance_visual_intro_start_menu_reveal(intro);
+            if poll_pass {
+                clear_carry_visual_intro_title_tick(intro);
+                advanced = true;
+            }
         }
 
-        advanced |= advance_visual_intro_finished_menu_idle(intro);
+        if poll_pass {
+            advanced |= advance_visual_intro_finished_menu_idle(intro);
+        }
 
         if title_phase && !intro.title_flourish_complete {
             let total_flourish_steps = intro_title_flourish_total_steps();
@@ -8480,9 +8545,15 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
                 .expect("intro title flourish step counter overflowed");
             if next_step >= total_flourish_steps {
                 intro.title_flourish_complete = true;
+                // §3 step 2: hold the finished mark + "Presents"
+                // before the attribution card's whole-page publish.
+                intro.title_presents_hold_ticks = INTRO_PRESENTS_HOLD_BIOS_TICKS;
             } else {
                 intro.title_flourish_step = next_step;
             }
+            advanced = true;
+        } else if title_phase && visual_intro_presents_hold_active(intro) {
+            intro.title_presents_hold_ticks -= 1;
             advanced = true;
         } else if title_phase && !intro.title_signature_complete {
             let signature =
@@ -8540,11 +8611,10 @@ fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
 // and both border captions.
 
 fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
+    intro.title_presents_hold_ticks = 0;
     intro.dispatch.dismiss_title();
     clear_carry_visual_intro_title_tick(intro);
     intro.menu_idle_ticks = 0;
-    intro.start_menu_reveal = None;
-    intro.start_menu_reveal_backing = None;
     intro.modal_backing = None;
     intro.message_waiting_for_key = false;
     intro.message.clear();
@@ -8679,17 +8749,6 @@ fn advance_visual_intro_story_auto_step(panel: &mut VisualIntroPanel) -> bool {
     true
 }
 
-fn advance_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
-    let Some(reveal) = intro.start_menu_reveal.as_mut() else {
-        return false;
-    };
-    if reveal.advance_title_tick() {
-        intro.start_menu_reveal = None;
-        intro.start_menu_reveal_backing = None;
-    }
-    true
-}
-
 fn advance_visual_intro_story_wipe(
     panel: &mut VisualIntroPanel,
     title_tick_frame: &mut u8,
@@ -8762,7 +8821,6 @@ fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
 fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool {
     if !matches!(intro.panel, VisualIntroPanel::Menu)
         || intro.message_waiting_for_key
-        || visual_intro_start_menu_reveal_active(intro)
         || matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
     {
         return false;
@@ -8771,7 +8829,7 @@ fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool
         .menu_idle_ticks
         .checked_add(1)
         .expect("intro menu idle tick counter overflowed");
-    if intro.menu_idle_ticks < INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS {
+    if intro.menu_idle_ticks < INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES {
         return false;
     }
     intro.menu_idle_ticks = 0;
@@ -8816,9 +8874,6 @@ fn move_visual_intro_menu_highlight(intro: &mut VisualIntroState, down: bool) {
 }
 
 fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
-    if visual_intro_start_menu_reveal_active(intro) {
-        return false;
-    }
     if !matches!(intro.panel, VisualIntroPanel::Menu) {
         return step_visual_intro_panel(intro, ch);
     }
@@ -8944,8 +8999,6 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
         } => {
             intro.panel = VisualIntroPanel::Menu;
             intro.dispatch.complete_subflow(subflow, result);
-            intro.start_menu_reveal = None;
-            intro.start_menu_reveal_backing = None;
             intro.modal_backing = None;
             intro.menu_idle_ticks = 0;
             intro.message_waiting_for_key = false;
@@ -9019,8 +9072,6 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
 
     intro.panel = VisualIntroPanel::Menu;
     intro.dispatch.complete_subflow(subflow, result);
-    intro.start_menu_reveal = None;
-    intro.start_menu_reveal_backing = None;
     intro.modal_backing = None;
     intro.menu_idle_ticks = 0;
     intro.message_waiting_for_key = false;
@@ -9091,8 +9142,6 @@ fn step_visual_chargen_panel(
 fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubflow) -> bool {
     intro.menu_idle_ticks = 0;
     intro.message_waiting_for_key = false;
-    intro.start_menu_reveal = None;
-    intro.start_menu_reveal_backing = None;
     if !matches!(subflow, IntroSubflow::ReturnToView) {
         intro.modal_backing = None;
     }
@@ -9569,14 +9618,20 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     if menu_panel {
         let title_flourish_step =
             (title_phase && !intro.title_flourish_complete).then_some(intro.title_flourish_step);
-        let signature_progress = (title_phase && !intro.title_signature_complete)
-            .then_some(intro.title_signature_progress);
+        let signature_progress = (title_phase
+            && !intro.title_signature_complete
+            && !visual_intro_presents_hold_active(intro))
+        .then_some(intro.title_signature_progress);
         if title_phase {
-            intro.surface = visual_intro_title_art_buffer(
-                &intro.game_dir,
-                title_flourish_step,
-                signature_progress,
-            );
+            intro.surface = if visual_intro_presents_hold_active(intro) {
+                visual_intro_presents_hold_buffer(&intro.game_dir)
+            } else {
+                visual_intro_title_art_buffer(
+                    &intro.game_dir,
+                    title_flourish_step,
+                    signature_progress,
+                )
+            };
         } else {
             // Source the title-tick strip once at first render so the
             // ULTIMA directory decode doesn't run every frame.
@@ -9604,28 +9659,19 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         if !title_phase {
             overlay_intro_menu_message_rgba(&mut rgba, &intro.game_dir, &intro.message);
         }
-        if let Some(reveal) = intro.start_menu_reveal {
-            let source_buffer = {
-                let mut source = new_intro_display_buffer();
-                draw_visual_intro_start_menu_art_to_buffer(
-                    &mut source,
-                    &intro.game_dir,
-                    intro.raster_depth,
-                );
-                source
-            };
-            let mut backing_buffer = intro
-                .start_menu_reveal_backing
-                .clone()
-                .expect("STARTSC reveal requires preserved intro backing surface");
-            backing_buffer.copy_revealed_columns_from(&source_buffer, reveal);
-            rgba = backing_buffer.to_rgba();
-        }
         rgba
     } else {
         let summary = summarize_intro(intro);
         panic!("unhandled visual intro panel fell through renderer: {summary}")
     }
+}
+
+/// `systems/intro.md §3` step 1: the finished flourish mark with the
+/// slot-7 "Presents" line published over the lower band.
+fn visual_intro_presents_hold_buffer(game_dir: &Path) -> IntroDisplayBuffer {
+    let title = load_title_bit(game_dir).expect("intro title requires TITLE.BIT");
+    let british = load_british_bit(game_dir).expect("intro title requires BRITISH.BIT");
+    compose_intro_title_art_buffer(&title, &british, IntroTitleCompositionPhase::PresentsHold)
 }
 
 fn visual_intro_final_title_backing_buffer(intro: &VisualIntroState) -> IntroDisplayBuffer {
@@ -9807,6 +9853,14 @@ fn ensure_title_tick_frames(intro: &mut VisualIntroState) -> &TitleTickFrameSet 
 /// index 0 and blit the `ULTIMA` logo panel at the origin. Rows
 /// 61..=64 and 114..=119 stay black; the title-tick band and the
 /// lower menu frame paint the rest.
+///
+/// `systems/intro.md §3` step 4 composes this on the hidden surface
+/// and transfers `(0, 0)..(319, 100)` to the visible page. On the
+/// animated caller path that transfer is the driver's rectangle
+/// dissolve and on the plain path a straight copy, but both are
+/// single blocking calls that finish before anything else runs
+/// (`cleak/u5-spec#53`), so the completed result is this full paint
+/// either way.
 fn draw_visual_intro_start_menu_art_to_buffer(
     buffer: &mut IntroDisplayBuffer,
     game_dir: &Path,
@@ -10411,10 +10465,6 @@ fn visual_intro_title_surface_visible(intro: &VisualIntroState) -> bool {
     matches!(intro.panel, VisualIntroPanel::Menu)
 }
 
-fn visual_intro_start_menu_reveal_active(intro: &VisualIntroState) -> bool {
-    matches!(intro.panel, VisualIntroPanel::Menu) && intro.start_menu_reveal.is_some()
-}
-
 fn visual_intro_title_art_buffer(
     game_dir: &Path,
     flourish_step: Option<usize>,
@@ -10445,101 +10495,26 @@ fn visual_intro_title_art_buffer(
     buffer
 }
 
+/// `systems/intro.md §3` "Two surfaces and whole-page publishes"
+/// (`cleak/u5-spec#66`). The title sequence is a series of whole-page
+/// publishes, so each phase is a complete picture rather than another
+/// transparent layer over the last one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum IntroTitleCompositionPhase {
+    /// One of the 85 flourish presentation steps.
     Flourish { step: usize },
+    /// Steps 1-2: the finished slot-6 mark (still on the visible page)
+    /// plus the slot-7 "Presents" line, published as the partial
+    /// rectangle `(0, 140)..(319, 199)`.
+    PresentsHold,
+    /// Steps 3-6: a whole-page publish cleared down to the slot-8
+    /// ornament, then the signature, then the slot-9 line. The
+    /// slot-6 mark and the slot-7 line are gone from here on.
     Signature { completed_signature: bool },
 }
 
-const TITLE_FLOURISH_ROW_REVEAL_GROUPS: &[&[&[u8]]] = &[
-    &[&[], &[], &[], &[1], &[], &[], &[], &[], &[0, 2], &[]],
-    &[
-        &[],
-        &[],
-        &[1, 5],
-        &[],
-        &[],
-        &[2, 4],
-        &[],
-        &[],
-        &[3],
-        &[],
-        &[0, 6],
-        &[],
-    ],
-    &[
-        &[],
-        &[],
-        &[2, 8],
-        &[3, 7],
-        &[1, 9],
-        &[4, 6],
-        &[5],
-        &[0, 10],
-        &[],
-    ],
-    &[
-        &[],
-        &[4, 15],
-        &[1, 7, 12, 18],
-        &[5, 14],
-        &[2, 8, 11, 17],
-        &[3, 6, 13, 16],
-        &[9, 10],
-        &[0, 19],
-        &[],
-    ],
-    &[
-        &[],
-        &[7, 24],
-        &[2, 12, 19, 29],
-        &[3, 8, 13, 18, 23, 28],
-        &[1, 6, 11, 20, 25, 30],
-        &[4, 9, 14, 17, 22, 27],
-        &[5, 10, 15, 16, 21, 26],
-        &[0, 31],
-        &[],
-    ],
-    &[
-        &[],
-        &[4, 11, 18, 26, 33, 40],
-        &[1, 8, 15, 19, 36, 43],
-        &[6, 13, 20, 24, 31, 38],
-        &[3, 10, 17, 22, 27, 34, 41],
-        &[2, 5, 9, 12, 16, 19, 25, 28, 32, 35, 39, 42],
-        &[7, 14, 21, 23, 30, 37],
-        &[0, 44],
-        &[],
-    ],
-    &[
-        &[],
-        &[28, 23, 18, 13, 8, 3, 32, 37, 42, 47, 52, 57],
-        &[26, 21, 16, 11, 6, 1, 34, 39, 44, 49, 54, 59],
-        &[29, 24, 19, 14, 9, 4, 31, 36, 41, 46, 51, 56],
-        &[27, 22, 17, 12, 7, 2, 33, 38, 43, 48, 53, 58],
-        &[25, 15, 5, 35, 45, 55],
-        &[30, 40, 50, 20, 10],
-        &[0, 60],
-        &[],
-    ],
-];
-
 fn intro_title_flourish_total_steps() -> usize {
-    TITLE_FLOURISH_ROW_REVEAL_GROUPS
-        .iter()
-        .map(|groups| groups.len())
-        .sum()
-}
-
-fn intro_title_flourish_frame_for_step(step: usize) -> Option<(usize, usize)> {
-    let mut remaining = step;
-    for (slot, groups) in TITLE_FLOURISH_ROW_REVEAL_GROUPS.iter().enumerate() {
-        if remaining < groups.len() {
-            return Some((slot, remaining));
-        }
-        remaining -= groups.len();
-    }
-    None
+    title_flourish_total_steps()
 }
 
 #[cfg(test)]
@@ -10559,53 +10534,84 @@ fn compose_intro_title_art_buffer(
     let mut buffer = new_intro_display_buffer();
     buffer.clear(0);
 
-    if let IntroTitleCompositionPhase::Flourish { step } = phase {
-        blit_intro_title_flourish_step_buffer(&mut buffer, title, step);
-        return buffer;
-    }
-
-    if let Some(placement) = TITLE_BIT_INITIAL_PLACEMENTS
-        .iter()
-        .copied()
-        .find(|placement| placement.slot == 6)
-    {
-        blit_intro_title_placement_buffer_with_color(&mut buffer, title, british, placement, 9);
-    }
-    buffer.clear_rect_inclusive(
-        0,
-        TITLE_LOWER_BAND_CLEAR_Y as usize,
-        TITLE_SURFACE_WIDTH as usize - 1,
-        TITLE_SURFACE_HEIGHT as usize - 1,
-        0,
-    );
-    for placement in TITLE_BIT_REMAINING_PLACEMENTS
-        .iter()
-        .copied()
-        .filter(|placement| {
-            matches!(placement.asset, TitleBitAsset::Title) && matches!(placement.slot, 7 | 8)
-        })
-    {
-        blit_intro_title_placement_buffer(&mut buffer, title, british, placement);
-    }
-    if matches!(
-        phase,
-        IntroTitleCompositionPhase::Signature {
-            completed_signature: true
+    match phase {
+        IntroTitleCompositionPhase::Flourish { step } => {
+            blit_intro_title_flourish_step_buffer(&mut buffer, title, step);
         }
-    ) {
-        for placement in TITLE_BIT_REMAINING_PLACEMENTS
-            .iter()
-            .copied()
-            .filter(|placement| {
-                matches!(placement.asset, TitleBitAsset::British)
-                    || (matches!(placement.asset, TitleBitAsset::Title) && placement.slot == 9)
-            })
-        {
-            blit_intro_title_placement_buffer(&mut buffer, title, british, placement);
+        IntroTitleCompositionPhase::PresentsHold => {
+            // The flourish left the finished frame-6 mark on the
+            // visible page; the slot-7 publish only covers
+            // `(0, 140)..(319, 199)`, so the mark survives beneath it.
+            blit_intro_title_flourish_frame_buffer(
+                &mut buffer,
+                title,
+                TITLE_FLOURISH_FRAME_COUNT - 1,
+                TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME,
+            );
+            buffer.clear_rect_inclusive(
+                0,
+                TITLE_LOWER_BAND_CLEAR_Y as usize,
+                TITLE_SURFACE_WIDTH as usize - 1,
+                TITLE_SURFACE_HEIGHT as usize - 1,
+                0,
+            );
+            blit_intro_title_slots(&mut buffer, title, british, &[7]);
+        }
+        IntroTitleCompositionPhase::Signature {
+            completed_signature,
+        } => {
+            // `cleak/u5-spec#66` Q4: the whole-page publish in step 3
+            // clears the page down to the slot-8 ornament, so neither
+            // the slot-6 mark nor the slot-7 line is still present.
+            blit_intro_title_slots(&mut buffer, title, british, &[8]);
+            if completed_signature {
+                // Steps 5 and 6: the finished signature artwork
+                // replaces the live pen strokes, then slot 9 joins it.
+                blit_intro_british_signature_bitmap(&mut buffer, title, british);
+                blit_intro_title_slots(&mut buffer, title, british, &[9]);
+            }
         }
     }
 
     buffer
+}
+
+/// `systems/intro.md §3`: stamp the named `TITLE.BIT` overlay slots at
+/// their published placements. These are published by whole-surface
+/// copies that carry every colour plane, so they appear as palette
+/// index 15 (`cleak/u5-spec#66`).
+fn blit_intro_title_slots(
+    buffer: &mut IntroDisplayBuffer,
+    title: &TitleBitImages,
+    british: &MonochromeBitmap,
+    slots: &[u8],
+) {
+    for placement in TITLE_BIT_REMAINING_PLACEMENTS
+        .iter()
+        .copied()
+        .filter(|placement| {
+            matches!(placement.asset, TitleBitAsset::Title) && slots.contains(&placement.slot)
+        })
+    {
+        blit_intro_title_placement_buffer(buffer, title, british, placement);
+    }
+}
+
+/// `systems/intro.md §3` step 5: the finished `BRITISH.BIT` signature
+/// artwork, published whole and therefore replacing the live pen
+/// strokes rather than sitting under them.
+fn blit_intro_british_signature_bitmap(
+    buffer: &mut IntroDisplayBuffer,
+    title: &TitleBitImages,
+    british: &MonochromeBitmap,
+) {
+    for placement in TITLE_BIT_REMAINING_PLACEMENTS
+        .iter()
+        .copied()
+        .filter(|placement| matches!(placement.asset, TitleBitAsset::British))
+    {
+        blit_intro_title_placement_buffer(buffer, title, british, placement);
+    }
 }
 
 fn blit_intro_title_flourish_step_buffer(
@@ -10613,50 +10619,74 @@ fn blit_intro_title_flourish_step_buffer(
     title: &TitleBitImages,
     step: usize,
 ) {
-    let Some((slot, group_index)) = intro_title_flourish_frame_for_step(step) else {
-        panic!("intro title flourish step {step} has no published reveal group");
+    let Some(state) = title_flourish_step_state(step) else {
+        panic!(
+            "intro title flourish step {step} is outside the published 0..{} script",
+            title_flourish_total_steps()
+        );
     };
-    let Some(placement) = TITLE_BIT_INITIAL_PLACEMENTS
-        .iter()
-        .copied()
-        .find(|placement| usize::from(placement.slot) == slot)
-    else {
-        panic!("intro title flourish slot {slot} has no published placement");
-    };
+    blit_intro_title_flourish_frame_buffer(dst, title, state.frame, state.revealed_columns);
+}
+
+/// `systems/intro.md §3` "Flourish playback" (`cleak/u5-spec#67`).
+///
+/// One presentation repaints the frame's **whole band at the full
+/// 320-pixel screen width**. The currently visible source rows are
+/// packed contiguously and centred inside the band — `floor(c / 2)`
+/// blank rows above, the visible rows in ascending source order, then
+/// `ceil(c / 2)` blank rows — where `c` is the number of hidden rows.
+/// Even frames fill top-down; odd frames fill bottom-up, which draws
+/// them vertically mirrored and shifted one row down.
+fn blit_intro_title_flourish_frame_buffer(
+    dst: &mut IntroDisplayBuffer,
+    title: &TitleBitImages,
+    frame: usize,
+    revealed_columns: usize,
+) {
     let Some(source_placement) = TITLE_BIT_INITIAL_SOURCE_PLACEMENTS
         .iter()
         .copied()
-        .find(|placement| usize::from(placement.slot) == slot)
+        .find(|placement| usize::from(placement.slot) == frame)
     else {
-        panic!("intro title flourish slot {slot} has no hidden source placement");
+        panic!("intro title flourish frame {frame} has no hidden source placement");
     };
-    assert_eq!(
-        (source_placement.width, source_placement.height),
-        (placement.width, placement.height),
-        "intro title flourish slot {slot} source and visible dimensions differ"
+    let (_, height) = title_flourish_band(frame);
+    let source_top = usize::from(source_placement.top_left_y);
+    let visible = title_flourish_visible_rows(frame, revealed_columns);
+    assert!(
+        visible.len() <= height,
+        "intro title flourish frame {frame} reveals {} rows into a {height}-row band",
+        visible.len()
     );
-    let Some(groups) = TITLE_FLOURISH_ROW_REVEAL_GROUPS.get(slot) else {
-        panic!("intro title flourish slot {slot} has no row reveal groups");
-    };
-    let draw_height = usize::from(placement.height);
-    let draw_width = usize::from(placement.width);
+    let hidden = height - visible.len();
+
+    // The packed, centred content column: `floor(c / 2)` blanks, the
+    // visible rows in ascending source order, then `ceil(c / 2)` blanks.
+    let mut content: Vec<Option<u8>> = vec![None; hidden / 2];
+    content.extend(visible.into_iter().map(Some));
+    content.resize(height, None);
+
+    let width = dst.width;
+    assert_eq!(
+        width, TITLE_SURFACE_WIDTH as usize,
+        "intro title flourish repaints the full screen width"
+    );
     let source = compose_intro_title_flourish_source_buffer(title);
-    for group in groups.iter().take(group_index + 1) {
-        for row in group.iter().copied().map(usize::from) {
-            assert!(
-                row < draw_height,
-                "intro title flourish slot {slot} reveal row {row} exceeds height {draw_height}"
-            );
-            copy_intro_title_flourish_row_from_source(
-                dst,
-                &source,
-                usize::from(source_placement.top_left_x),
-                usize::from(source_placement.top_left_y),
-                usize::from(placement.top_left_x),
-                usize::from(placement.top_left_y),
-                draw_width,
-                row,
-            );
+    for (index, entry) in content.iter().enumerate() {
+        let dst_y = title_flourish_content_row(frame, index);
+        assert!(
+            dst_y < dst.height,
+            "intro title flourish frame {frame} band row {dst_y} exceeds framebuffer height {}",
+            dst.height
+        );
+        let dst_start = dst_y * width;
+        match entry {
+            Some(row) => {
+                let src_start = (source_top + usize::from(*row)) * source.width;
+                dst.pixels[dst_start..dst_start + width]
+                    .copy_from_slice(&source.pixels[src_start..src_start + width]);
+            }
+            None => dst.pixels[dst_start..dst_start + width].fill(0),
         }
     }
 }
@@ -10719,46 +10749,6 @@ fn blit_intro_title_source_placement_buffer(
                 foreground & 0x0f
             };
         }
-    }
-}
-
-fn copy_intro_title_flourish_row_from_source(
-    dst: &mut IntroDisplayBuffer,
-    source: &IntroDisplayBuffer,
-    source_base_x: usize,
-    source_base_y: usize,
-    visible_base_x: usize,
-    visible_base_y: usize,
-    draw_width: usize,
-    row: usize,
-) {
-    let source_y = source_base_y + row;
-    let target_y = visible_base_y + row;
-    assert!(
-        source_y < source.height,
-        "intro title source row {source_y} outside hidden framebuffer height {}",
-        source.height
-    );
-    assert!(
-        target_y < dst.height,
-        "intro title row target y {target_y} outside framebuffer height {}",
-        dst.height
-    );
-    for x in 0..draw_width {
-        let source_x = source_base_x + x;
-        let target_x = visible_base_x + x;
-        assert!(
-            source_x < source.width,
-            "intro title source x {source_x} outside hidden framebuffer width {}",
-            source.width
-        );
-        assert!(
-            target_x < dst.width,
-            "intro title row target x {target_x} outside framebuffer width {}",
-            dst.width
-        );
-        dst.pixels[target_y * dst.width + target_x] =
-            source.pixels[source_y * source.width + source_x];
     }
 }
 
@@ -11887,13 +11877,13 @@ fn write_visual_intro_report_inner(
         title_flourish_complete: title_dismissed,
         title_signature_progress: 0,
         title_signature_complete: title_dismissed,
+        title_presents_hold_ticks: 0,
         title_tick_frame: 0,
         title_tick_visible_frame: 0,
         surface: new_intro_display_buffer(),
-        start_menu_reveal: None,
-        start_menu_reveal_backing: None,
         modal_backing: None,
         menu_idle_ticks: 0,
+        menu_idle_bios_ticks: 0,
         message_waiting_for_key: false,
         message: String::new(),
         panel,
@@ -13849,13 +13839,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: "Intro menu smoke".to_string(),
             panel: VisualIntroPanel::Menu,
@@ -13966,13 +13956,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: true,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -14188,13 +14178,13 @@ mod tests {
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -14245,13 +14235,13 @@ mod tests {
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -14352,113 +14342,81 @@ mod tests {
     }
 
     #[test]
-    fn intro_start_menu_reveal_blocks_input_until_full_startsc_rect_completes() {
-        let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
-            raster_depth: TileGraphicsDepth::Ega16,
-            dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: 0,
-            title_flourish_complete: false,
-            title_signature_progress: 0,
-            title_signature_complete: false,
-            title_tick_frame: 0,
-            title_tick_visible_frame: 0,
-            surface: new_intro_display_buffer(),
-            start_menu_reveal: Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT)),
-            start_menu_reveal_backing: None,
-            modal_backing: None,
-            menu_idle_ticks: 0,
-            message_waiting_for_key: false,
-            message: String::new(),
-            panel: VisualIntroPanel::Menu,
-            launch_result: Arc::new(Mutex::new(None)),
-            image_handle: None,
-            font_slots: None,
-            text_windows: TextWindowSystem::new(),
-            pending_pre_flourish_outcome: None,
-            title_tick_frames: None,
-        };
+    fn intro_start_menu_reveal_is_one_blocking_dissolve_of_the_published_rect() {
+        // `cleak/u5-spec#53`: the one-pixel-column-per-title-tick
+        // sweep is withdrawn in full for both intro callers. The
+        // reveal is the driver's rectangle dissolve — a single
+        // blocking transfer that visits every pixel of
+        // `(0, 0)..(319, 100)` exactly once and returns, with no
+        // per-column schedule and no tick pacing.
         assert_eq!(INTRO_START_MENU_REVEAL_RECT, (0, 0, 319, 100));
-        assert!(visual_intro_start_menu_reveal_active(&intro));
+        let (x0, y0, x1, y1) = INTRO_START_MENU_REVEAL_RECT;
 
-        let total_ticks =
-            u5_runtime::intro_rect_transition_tick_count(INTRO_START_MENU_REVEAL_RECT);
-        for expected_tick in 1..total_ticks {
-            assert!(advance_visual_intro_start_menu_reveal(&mut intro));
-            assert_eq!(
-                intro.start_menu_reveal.map(|reveal| reveal.tick),
-                Some(expected_tick)
-            );
-            assert!(visual_intro_start_menu_reveal_active(&intro));
+        let mut source = new_intro_display_buffer();
+        for (index, pixel) in source.pixels.iter_mut().enumerate() {
+            *pixel = (index % 15 + 1) as u8;
         }
+        let mut destination = new_intro_display_buffer();
+        destination.clear(0);
 
-        assert!(advance_visual_intro_start_menu_reveal(&mut intro));
-        assert_eq!(intro.start_menu_reveal, None);
-        assert!(!visual_intro_start_menu_reveal_active(&intro));
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        let copied = destination.dissolve_rect_from(&source, INTRO_START_MENU_REVEAL_RECT);
+
+        let width = usize::from(x1 - x0) + 1;
+        let height = usize::from(y1 - y0) + 1;
+        assert_eq!(
+            copied,
+            width * height,
+            "every pixel is visited exactly once"
+        );
+        for y in 0..INTRO_FRAMEBUFFER_HEIGHT as usize {
+            for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
+                let index = y * destination.width + x;
+                let inside = (usize::from(y0)..=usize::from(y1)).contains(&y)
+                    && (usize::from(x0)..=usize::from(x1)).contains(&x);
+                let expected = if inside { source.pixels[index] } else { 0 };
+                assert_eq!(destination.pixels[index], expected, "({x}, {y})");
+            }
+        }
     }
 
     #[test]
-    fn intro_start_menu_reveal_uses_stable_startsc_source_without_title_tick_phase() {
-        fn reveal_intro_with_title_frame(
-            dir: PathBuf,
-            title_tick_visible_frame: u8,
-        ) -> VisualIntroState {
-            let mut backing = new_intro_display_buffer();
-            backing.clear(3);
-            VisualIntroState {
-                game_dir: dir,
-                raster_depth: TileGraphicsDepth::Ega16,
-                dispatch: UnifiedMenuDispatch::new(),
-                title_flourish_step: intro_title_flourish_total_steps(),
-                title_flourish_complete: true,
-                title_signature_progress: 0,
-                title_signature_complete: true,
-                title_tick_frame: title_tick_visible_frame,
-                title_tick_visible_frame,
-                surface: new_intro_display_buffer(),
-                start_menu_reveal: Some(RectColumnSweepTransition {
-                    rect: INTRO_START_MENU_REVEAL_RECT,
-                    tick: 54,
-                }),
-                start_menu_reveal_backing: Some(backing),
-                modal_backing: None,
-                menu_idle_ticks: 0,
-                message_waiting_for_key: false,
-                message: String::new(),
-                panel: VisualIntroPanel::Menu,
-                launch_result: Arc::new(Mutex::new(None)),
-                image_handle: None,
-                font_slots: None,
-                text_windows: TextWindowSystem::new(),
-                pending_pre_flourish_outcome: None,
-                title_tick_frames: None,
-            }
+    fn intro_rect_dissolve_order_is_scattered_not_row_or_column_major() {
+        // The published contract calls out the order explicitly: not
+        // row-major, not column-major, not a spiral — it reads as
+        // scattered single-pixel updates.
+        let rect = u5_runtime::DisplayPixelRect {
+            x0: 0,
+            y0: 0,
+            x1: 31,
+            y1: 15,
+        };
+        let mut state = u5_runtime::EgaDissolveState::new(rect);
+        let mut visited = Vec::new();
+        while let Some(pixel) = state.next_pixel() {
+            visited.push(pixel);
         }
+        assert_eq!(visited.len(), 32 * 16);
+        let mut sorted = visited.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), visited.len(), "every pixel exactly once");
 
-        let dir = debug_game_dir();
-        install_intro_assets(&dir);
-        let mut frame0_intro = reveal_intro_with_title_frame(dir.clone(), 0);
-        let mut frame1_intro = reveal_intro_with_title_frame(dir.clone(), 1);
-
-        let frame0 = render_intro_frame(&mut frame0_intro);
-        let frame1 = render_intro_frame(&mut frame1_intro);
-
-        assert_eq!(
-            rgba_pixel(
-                &frame0,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                54,
-                TITLE_TICK_FRAME_Y as usize + 20
-            ),
-            rgba_pixel(
-                &frame1,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                54,
-                TITLE_TICK_FRAME_Y as usize + 20
-            )
+        let row_major: Vec<(usize, usize)> =
+            (0..16).flat_map(|y| (0..32).map(move |x| (x, y))).collect();
+        let column_major: Vec<(usize, usize)> =
+            (0..32).flat_map(|x| (0..16).map(move |y| (x, y))).collect();
+        assert_ne!(visited, row_major);
+        assert_ne!(visited, column_major);
+        // Consecutive visits jump around rather than stepping by one.
+        let adjacent = visited
+            .windows(2)
+            .filter(|pair| pair[0].0.abs_diff(pair[1].0) + pair[0].1.abs_diff(pair[1].1) == 1)
+            .count();
+        assert!(
+            adjacent * 4 < visited.len(),
+            "dissolve order should be scattered, {adjacent} adjacent steps of {}",
+            visited.len()
         );
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -14694,13 +14652,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: true,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
@@ -14769,13 +14727,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: true,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
@@ -14866,13 +14824,13 @@ mod tests {
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -14922,13 +14880,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: true,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -14957,13 +14915,13 @@ mod tests {
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -15015,13 +14973,13 @@ mod tests {
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -15057,13 +15015,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 42,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 9,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: "stale".to_string(),
             panel: VisualIntroPanel::Menu,
@@ -15105,13 +15063,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -15145,13 +15103,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: total_steps - 1,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 17,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: "stale title message".to_string(),
             panel: VisualIntroPanel::Menu,
@@ -15225,13 +15183,13 @@ mod tests {
             // tick (which adds SIGNATURE_STEPS_PER_TICK) saturates.
             title_signature_progress: total_steps - 1,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -15263,13 +15221,13 @@ mod tests {
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -15289,16 +15247,38 @@ mod tests {
     }
 
     #[test]
-    fn intro_menu_idle_draws_current_title_tick_then_advances_counter() {
+    fn intro_menu_idle_draws_current_title_tick_once_per_poll_pass() {
+        // `cleak/u5-spec#78`: a no-key menu poll pass costs two DOS
+        // BIOS user-ticks (~110 ms), and the clear-carry title tick
+        // runs once per *pass*, not once per tick.
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         intro.title_tick_frame = 2;
         intro.title_tick_visible_frame = 0;
+        assert_eq!(INTRO_MENU_IDLE_POLL_BIOS_TICKS, 2);
 
+        // First BIOS tick of the pass: nothing advances yet.
+        assert!(!advance_visual_intro_animation_tick(&mut intro));
+        assert_eq!(intro.title_tick_visible_frame, 0);
+        assert_eq!(intro.title_tick_frame, 2);
+
+        // Second BIOS tick completes the pass.
         assert!(advance_visual_intro_animation_tick(&mut intro));
-
         assert_eq!(intro.title_tick_visible_frame, 2);
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(2));
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_idle_return_to_view_timeout_is_two_hundred_poll_passes() {
+        // 200 passes x 2 BIOS ticks x ~54.945 ms is ~22 s, not ~11 s.
+        assert_eq!(INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES, 200);
+        let bios_ticks =
+            f32::from(INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES * INTRO_MENU_IDLE_POLL_BIOS_TICKS);
+        let seconds = bios_ticks * INTRO_ANIMATION_TICK_INTERVAL_SECS;
+        assert!(
+            (21.0..23.0).contains(&seconds),
+            "idle timeout should be ~22 s, got {seconds}"
+        );
     }
 
     #[test]
@@ -15636,21 +15616,21 @@ mod tests {
     #[test]
     fn visual_intro_menu_idle_tick_uses_authored_title_art_without_fallback() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
-        intro.menu_idle_ticks = INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS - 2;
+        intro.menu_idle_ticks = INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES - 2;
         intro.title_tick_frame = 2;
 
         assert!(!advance_visual_intro_finished_menu_idle(&mut intro));
 
         assert_eq!(
             intro.menu_idle_ticks,
-            INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS - 1
+            INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES - 1
         );
         assert_eq!(intro.title_tick_frame, 2);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
     #[test]
-    fn intro_title_art_composition_clears_lower_band_then_draws_remaining_slots() {
+    fn intro_final_pre_menu_frame_is_slot8_signature_and_slot9_only() {
         let blank = solid_bitmap(1, 1, 0);
         let mut blocks = vec![blank; 10];
         blocks[6] = solid_bitmap(280, 61, 1);
@@ -15668,23 +15648,71 @@ mod tests {
             },
         );
         let width = TITLE_SURFACE_WIDTH as usize;
+
+        // `cleak/u5-spec#66` Q4: the whole-page publish that opens the
+        // attribution card cleared the page, so the slot-6 flourish
+        // mark and the slot-7 "Presents" line are both gone. Exactly
+        // three things remain, all at palette index 15.
+        assert_eq!(rgba.len(), width * (TITLE_SURFACE_HEIGHT as usize) * 4);
+        assert_eq!(rgba_pixel(&rgba, width, 152, 0), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 24, 66), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 104, 160), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(
+            rgba_pixel(&rgba, width, 20, 46),
+            [0, 0, 0, 0xff],
+            "the slot-6 flourish mark must not survive into the final frame"
+        );
+        assert_eq!(
+            rgba_pixel(&rgba, width, 108, 140),
+            [0, 0, 0, 0xff],
+            "the slot-7 Presents line must not survive into the final frame"
+        );
+    }
+
+    #[test]
+    fn intro_presents_hold_frame_is_the_finished_mark_plus_slot7() {
+        // `systems/intro.md §3` step 1: the slot-7 publish covers only
+        // `(0, 140)..(319, 199)`, so the finished flourish mark is
+        // still on the visible page beneath it — and nothing from the
+        // later attribution card is present yet.
+        let blank = solid_bitmap(1, 1, 0);
+        let mut blocks = vec![blank; 10];
+        for placement in TITLE_BIT_INITIAL_SOURCE_PLACEMENTS {
+            blocks[usize::from(placement.slot)] = solid_bitmap(
+                usize::from(placement.width),
+                usize::from(placement.height),
+                1,
+            );
+        }
+        blocks[7] = solid_bitmap(104, 33, 1);
+        blocks[8] = solid_bitmap(16, 15, 1);
+        blocks[9] = solid_bitmap(112, 33, 1);
+        let title = TitleBitImages { blocks };
+        let british = solid_bitmap(272, 62, 1);
+
+        let rgba = compose_intro_title_art_rgba(
+            &title,
+            &british,
+            IntroTitleCompositionPhase::PresentsHold,
+        );
+        let width = TITLE_SURFACE_WIDTH as usize;
         let flourish_rgb = EGA_PALETTE_RGB[9];
 
-        assert_eq!(rgba.len(), width * (TITLE_SURFACE_HEIGHT as usize) * 4);
+        // The mark is index 9 (blue); the overlay line is index 15.
         assert_eq!(
             rgba_pixel(&rgba, width, 20, 46),
             [flourish_rgb[0], flourish_rgb[1], flourish_rgb[2], 0xff]
         );
-        assert_eq!(rgba_pixel(&rgba, width, 20, 118), [0, 0, 0, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 20, 140), [0, 0, 0, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 152, 0), [0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 24, 66), [0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 104, 160), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 152, 0), [0, 0, 0, 0xff]);
+        // Probe `BRITISH.BIT`'s rect below the mark's last row (106),
+        // so a hit here would be the signature and not the flourish.
+        assert_eq!(rgba_pixel(&rgba, width, 24, 120), [0, 0, 0, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 104, 160), [0, 0, 0, 0xff]);
     }
 
     #[test]
-    fn intro_title_art_defers_completed_signature_overlays_until_path_finishes() {
+    fn intro_signature_phase_starts_from_the_slot8_ornament_alone() {
         let blank = solid_bitmap(1, 1, 0);
         let mut blocks = vec![blank; 10];
         blocks[6] = solid_bitmap(280, 61, 0);
@@ -15703,14 +15731,17 @@ mod tests {
         );
         let width = TITLE_SURFACE_WIDTH as usize;
 
-        assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0xff, 0xff, 0xff, 0xff]);
+        // `systems/intro.md §3` step 3: the whole-page publish leaves
+        // the page black except for the slot-8 ornament. The signature
+        // and slot 9 arrive in steps 5 and 6.
         assert_eq!(rgba_pixel(&rgba, width, 152, 0), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0, 0, 0, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 24, 66), [0, 0, 0, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 104, 160), [0, 0, 0, 0xff]);
     }
 
     #[test]
-    fn intro_title_flourish_replaces_prior_slots_and_reveals_rows() {
+    fn intro_title_flourish_packs_visible_rows_centred_in_the_band() {
         let blank = solid_bitmap(1, 1, 0);
         let mut blocks = vec![blank; 10];
         blocks[0] = solid_bitmap(24, 3, 1);
@@ -15725,20 +15756,79 @@ mod tests {
         let title = TitleBitImages { blocks };
         let british = solid_bitmap(1, 1, 0);
 
+        let width = TITLE_SURFACE_WIDTH as usize;
+        let flourish_rgb = EGA_PALETTE_RGB[9];
+        let ink = [flourish_rgb[0], flourish_rgb[1], flourish_rgb[2], 0xff];
+        let black = [0, 0, 0, 0xff];
+
+        // Step 0 is frame 0's reveal 1: rows {0, 2} of a 3-row band.
+        // One row is hidden, so `floor(1/2) = 0` blanks come first and
+        // the two visible rows pack into band rows 75 and 76, leaving
+        // 77 blank. Frame 0 is even, so the band is not shifted.
+        let rgba = compose_intro_title_art_rgba(
+            &title,
+            &british,
+            IntroTitleCompositionPhase::Flourish { step: 0 },
+        );
+        assert_eq!(rgba_pixel(&rgba, width, 148, 75), ink);
+        assert_eq!(rgba_pixel(&rgba, width, 148, 76), ink);
+        assert_eq!(rgba_pixel(&rgba, width, 148, 77), black);
+        assert_eq!(rgba_pixel(&rgba, width, 148, 74), black);
+
+        // Step 4 is frame 0's reveal 5, which adds row 1: the whole
+        // 3-row band is now visible.
+        let rgba = compose_intro_title_art_rgba(
+            &title,
+            &british,
+            IntroTitleCompositionPhase::Flourish { step: 4 },
+        );
+        for y in 75..=77 {
+            assert_eq!(rgba_pixel(&rgba, width, 148, y), ink, "row {y}");
+        }
+
+        // Step 12 is frame 0's sixth and last erase step, which walks
+        // the visible set back to reveal 1 — the same {0, 2} picture.
         let rgba = compose_intro_title_art_rgba(
             &title,
             &british,
             IntroTitleCompositionPhase::Flourish { step: 12 },
         );
+        assert_eq!(rgba_pixel(&rgba, width, 148, 75), ink);
+        assert_eq!(rgba_pixel(&rgba, width, 148, 76), ink);
+        assert_eq!(rgba_pixel(&rgba, width, 148, 77), black);
+    }
+
+    #[test]
+    fn intro_title_flourish_odd_frame_band_is_shifted_one_row_down() {
+        // `cleak/u5-spec#67`: odd frames fill bottom-up, so frame 1's
+        // 7-row band occupies 73..=79 rather than 72..=78.
+        let blank = solid_bitmap(1, 1, 0);
+        let mut blocks = vec![blank; 10];
+        for placement in TITLE_BIT_INITIAL_SOURCE_PLACEMENTS {
+            blocks[usize::from(placement.slot)] = solid_bitmap(
+                usize::from(placement.width),
+                usize::from(placement.height),
+                u8::from(placement.slot == 1),
+            );
+        }
+        let title = TitleBitImages { blocks };
+        let british = solid_bitmap(1, 1, 0);
+
+        // Frame 1 fully revealed: 13 steps for frame 0, then reveal 7.
+        let rgba = compose_intro_title_art_rgba(
+            &title,
+            &british,
+            IntroTitleCompositionPhase::Flourish { step: 13 + 6 },
+        );
         let width = TITLE_SURFACE_WIDTH as usize;
         let flourish_rgb = EGA_PALETTE_RGB[9];
+        let ink = [flourish_rgb[0], flourish_rgb[1], flourish_rgb[2], 0xff];
 
-        assert_eq!(rgba_pixel(&rgba, width, 148, 75), [0, 0, 0, 0xff]);
-        assert_eq!(
-            rgba_pixel(&rgba, width, 140, 73),
-            [flourish_rgb[0], flourish_rgb[1], flourish_rgb[2], 0xff]
-        );
         assert_eq!(rgba_pixel(&rgba, width, 140, 72), [0, 0, 0, 0xff]);
+        for y in 73..=79 {
+            assert_eq!(rgba_pixel(&rgba, width, 140, y), ink, "row {y}");
+        }
+        assert_eq!(rgba_pixel(&rgba, width, 140, 80), [0, 0, 0, 0xff]);
     }
 
     #[test]
@@ -15952,12 +16042,12 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "intro column reveal requires matching source and destination buffers"
+        expected = "intro rectangle dissolve requires matching source and destination buffers"
     )]
-    fn intro_display_buffer_rejects_mismatched_column_reveal_buffers() {
+    fn intro_display_buffer_rejects_mismatched_dissolve_buffers() {
         let mut buffer = IntroDisplayBuffer::new(8, 8);
         let source = IntroDisplayBuffer::new(7, 8);
-        buffer.copy_revealed_columns_from(&source, RectColumnSweepTransition::new((0, 0, 1, 1)));
+        let _ = buffer.dissolve_rect_from(&source, (0, 0, 1, 1));
     }
 
     #[test]
@@ -18297,13 +18387,13 @@ mod tests {
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -18603,13 +18693,13 @@ mod tests {
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
@@ -18635,8 +18725,6 @@ mod tests {
         // menu once the final story step is advanced.
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.contains("Ultima V Introduction"));
-        assert_eq!(intro.start_menu_reveal, None);
-        assert_eq!(intro.start_menu_reveal_backing, None);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -18667,13 +18755,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel,
@@ -18701,13 +18789,13 @@ mod tests {
             title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_presents_hold_ticks: 0,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
-            start_menu_reveal: None,
-            start_menu_reveal_backing: None,
             modal_backing: None,
             menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
             panel,
@@ -18977,8 +19065,6 @@ mod tests {
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.contains("Character creation cancelled"));
-        assert_eq!(intro.start_menu_reveal, None);
-        assert_eq!(intro.start_menu_reveal_backing, None);
         assert!(!dir.join(SAVED_GAM_FILENAME).exists());
         assert!(matches!(
             intro.dispatch.submit_menu_key(b'A'),

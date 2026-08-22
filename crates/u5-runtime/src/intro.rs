@@ -162,6 +162,209 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
     },
 ];
 
+/// `intro.md §3` "Flourish playback: seven frames, seven reveal steps,
+/// six erase steps" (`cleak/u5-spec#67`, correcting the earlier
+/// 67-group table).
+///
+/// The shipped presentation script has eight row groups per frame, 56
+/// in total, but the first group of every frame is always empty and
+/// the groups are consumed in reverse, so exactly **seven reveal
+/// steps** per frame are ever presented. Between two consecutive
+/// frames — after frames 0..=5, never after frame 6 — the driver runs
+/// **six erase steps** on the frame just shown. Erase step `j` removes
+/// the rows named in reveal column `8 - j`, so the visible set walks
+/// back down through the same cumulative unions. Total:
+/// `7 * 7 + 6 * 6 = 85` presentation steps.
+///
+/// Row numbers are relative to the frame's own top row, and the sets
+/// are cumulative: reveal step `k` shows the union of columns
+/// `1..=k`.
+pub const TITLE_FLOURISH_FRAME_COUNT: usize = 7;
+pub const TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME: usize = 7;
+pub const TITLE_FLOURISH_ERASE_STEPS_PER_FRAME: usize = 6;
+
+pub const TITLE_FLOURISH_REVEAL_SETS: [[&[u8]; TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME];
+    TITLE_FLOURISH_FRAME_COUNT] = [
+    // Frame 0 (3 rows)
+    [&[0, 2], &[], &[], &[], &[1], &[], &[]],
+    // Frame 1 (7 rows)
+    [&[0, 6], &[3], &[], &[2, 4], &[], &[1, 5], &[]],
+    // Frame 2 (11 rows)
+    [&[0, 10], &[5], &[4, 6], &[1, 9], &[3, 7], &[2, 8], &[]],
+    // Frame 3 (20 rows)
+    [
+        &[0, 19],
+        &[9, 10],
+        &[3, 6, 13, 16],
+        &[2, 8, 11, 17],
+        &[5, 14],
+        &[1, 7, 12, 18],
+        &[4, 15],
+    ],
+    // Frame 4 (32 rows)
+    [
+        &[0, 31],
+        &[5, 10, 15, 16, 21, 26],
+        &[4, 9, 14, 17, 22, 27],
+        &[1, 6, 11, 20, 25, 30],
+        &[3, 8, 13, 18, 23, 28],
+        &[2, 12, 19, 29],
+        &[7, 24],
+    ],
+    // Frame 5 (45 rows). Shipped-data quirk, part of the contract:
+    // row 19 is named twice (reveals 3 and 6) and row 29 is never
+    // named, so row 29 stays blank for the whole of frame 5.
+    [
+        &[0, 44],
+        &[7, 14, 21, 23, 30, 37],
+        &[2, 5, 9, 12, 16, 19, 25, 28, 32, 35, 39, 42],
+        &[3, 10, 17, 22, 27, 34, 41],
+        &[6, 13, 20, 24, 31, 38],
+        &[1, 8, 15, 19, 36, 43],
+        &[4, 11, 18, 26, 33, 40],
+    ],
+    // Frame 6 (61 rows)
+    [
+        &[0, 60],
+        &[30, 40, 50, 20, 10],
+        &[25, 15, 5, 35, 45, 55],
+        &[27, 22, 17, 12, 7, 2, 33, 38, 43, 48, 53, 58],
+        &[29, 24, 19, 14, 9, 4, 31, 36, 41, 46, 51, 56],
+        &[26, 21, 16, 11, 6, 1, 34, 39, 44, 49, 54, 59],
+        &[28, 23, 18, 13, 8, 3, 32, 37, 42, 47, 52, 57],
+    ],
+];
+
+/// `intro.md §3`: total presentation steps in the flourish script.
+pub const fn title_flourish_total_steps() -> usize {
+    TITLE_FLOURISH_FRAME_COUNT * TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME
+        + (TITLE_FLOURISH_FRAME_COUNT - 1) * TITLE_FLOURISH_ERASE_STEPS_PER_FRAME
+}
+
+/// One presentation step of the flourish script: which frame is on
+/// screen, and how many cumulative reveal columns of that frame are
+/// currently visible.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TitleFlourishStep {
+    /// `TITLE.BIT` slot 0..=6.
+    pub frame: usize,
+    /// Visible set is the union of reveal columns `1..=revealed_columns`.
+    /// Reveal step `k` gives `k`; erase step `j` gives `7 - j`, so the
+    /// reveal-1 set is never erased.
+    pub revealed_columns: usize,
+    /// True while the frame is still filling, false during its erase
+    /// tail. Presentation is identical either way; this is only for
+    /// diagnostics and tests.
+    pub revealing: bool,
+}
+
+/// `intro.md §3`: resolve a global presentation-step index to its
+/// frame and cumulative reveal depth. Returns `None` past the end of
+/// the script.
+pub fn title_flourish_step_state(step: usize) -> Option<TitleFlourishStep> {
+    let reveals = TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME;
+    let erases = TITLE_FLOURISH_ERASE_STEPS_PER_FRAME;
+    let mut remaining = step;
+    for frame in 0..TITLE_FLOURISH_FRAME_COUNT {
+        if remaining < reveals {
+            return Some(TitleFlourishStep {
+                frame,
+                revealed_columns: remaining + 1,
+                revealing: true,
+            });
+        }
+        remaining -= reveals;
+        if frame + 1 == TITLE_FLOURISH_FRAME_COUNT {
+            break;
+        }
+        if remaining < erases {
+            return Some(TitleFlourishStep {
+                frame,
+                // Erase step j = remaining + 1 removes reveal column
+                // `8 - j`, leaving columns 1..=(7 - j) visible.
+                revealed_columns: reveals - (remaining + 1),
+                revealing: false,
+            });
+        }
+        remaining -= erases;
+    }
+    None
+}
+
+/// `intro.md §3`: the frame-local source rows visible at a given
+/// cumulative reveal depth, ascending and deduplicated. Frame 5 names
+/// row 19 twice, so deduplication is part of the contract.
+pub fn title_flourish_visible_rows(frame: usize, revealed_columns: usize) -> Vec<u8> {
+    let sets = TITLE_FLOURISH_REVEAL_SETS
+        .get(frame)
+        .unwrap_or_else(|| panic!("title flourish frame {frame} is outside 0..7"));
+    assert!(
+        revealed_columns <= TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME,
+        "title flourish reveal depth {revealed_columns} exceeds {TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME}"
+    );
+    let mut rows: Vec<u8> = sets
+        .iter()
+        .take(revealed_columns)
+        .flat_map(|set| set.iter().copied())
+        .collect();
+    rows.sort_unstable();
+    rows.dedup();
+    rows
+}
+
+/// `intro.md §3`: the inclusive destination band a presentation of
+/// `frame` repaints, as `(top_row, height)`. Rows are copied and
+/// blanked at the full 320-pixel screen width.
+///
+/// Odd frames are filled bottom-up, which draws them vertically
+/// mirrored and shifted one row down: their band is
+/// `band_top + 1 ..= band_top + height` instead of
+/// `band_top ..= band_top + height - 1`.
+pub fn title_flourish_band(frame: usize) -> (usize, usize) {
+    let placement = TITLE_BIT_INITIAL_PLACEMENTS
+        .iter()
+        .find(|placement| usize::from(placement.slot) == frame)
+        .unwrap_or_else(|| panic!("title flourish frame {frame} has no visible placement"));
+    let top = usize::from(placement.top_left_y) + usize::from(title_flourish_band_shift(frame));
+    (top, usize::from(placement.height))
+}
+
+/// `intro.md §3`: odd frames are shifted one row down.
+pub const fn title_flourish_band_shift(frame: usize) -> u8 {
+    (frame % 2) as u8
+}
+
+/// `intro.md §3`: even frames fill top-down, odd frames bottom-up.
+pub const fn title_flourish_fills_top_down(frame: usize) -> bool {
+    frame % 2 == 0
+}
+
+/// `intro.md §3`: the band slot each element of the packed, centred
+/// content column is written to.
+///
+/// The content column is `floor(c / 2)` blank rows, then every visible
+/// source row in ascending order, then `ceil(c / 2)` blank rows, where
+/// `c` is the number of hidden rows. On an even frame element `k`
+/// lands at `band_top + k`; on an odd frame the band is written from
+/// its last row upward, so element `k` lands at `band_top + height - k`.
+pub fn title_flourish_content_row(frame: usize, index: usize) -> usize {
+    let placement = TITLE_BIT_INITIAL_PLACEMENTS
+        .iter()
+        .find(|placement| usize::from(placement.slot) == frame)
+        .unwrap_or_else(|| panic!("title flourish frame {frame} has no visible placement"));
+    let band_top = usize::from(placement.top_left_y);
+    let height = usize::from(placement.height);
+    assert!(
+        index < height,
+        "title flourish content index {index} exceeds frame {frame} height {height}"
+    );
+    if title_flourish_fills_top_down(frame) {
+        band_top + index
+    } else {
+        band_top + height - index
+    }
+}
+
 /// `intro.md §3` four `BRITISH.PTH` pen origins, in the order the
 /// path walker is called.
 pub const BRITISH_PTH_PEN_ORIGINS: [(u8, u8); 4] = [(68, 44), (94, 64), (78, 143), (105, 167)];
@@ -335,12 +538,24 @@ pub const ULTIMA_LOGO_HEIGHT: usize = 61;
 /// 2 and 3 (which match the settled menu), and the four-frame loop
 /// makes any rotation visually equivalent after one cycle.
 pub const ULTIMA_TITLE_TICK_FIRST_SLOT: u8 = 1;
-/// `cleak/u5-spec#78`: horizontal offset of the 288-wide source band
-/// inside the published 320-wide destination rectangle. Columns
-/// `0..=15` and `304..=319` of the destination rows are cleared to
-/// palette index 0 on every tick.
+/// `cleak/u5-spec#65`: staging offset of the 288-wide record inside
+/// the hidden surface. The loader clears the hidden surface and draws
+/// records 1..=4 at `(16, 0)`, `(16, 50)`, `(16, 100)`, `(16, 150)`;
+/// each tick then copies 49 rows at the **full 320-pixel width** from
+/// hidden row `50 * frame` to visible rows `65..=113`. Columns
+/// `0..=15` and `304..=319` are part of the destination rectangle and
+/// carry the cleared staging background, so the tick is an opaque
+/// full-rectangle overwrite.
 pub const TITLE_TICK_SOURCE_X: u16 = 16;
 pub const TITLE_TICK_SOURCE_WIDTH: u16 = 288;
+/// `cleak/u5-spec#65` hidden-surface row pitch between consecutive
+/// staged bands. It is a driver constant, not a record height: in the
+/// `.4` depth every record is 49 rows tall and the 50th row of each
+/// band is simply staging background.
+pub const TITLE_TICK_SOURCE_ROW_PITCH: usize = 50;
+/// `cleak/u5-spec#65` staging background: the hidden surface is
+/// cleared before the records are drawn.
+pub const TITLE_TICK_STAGING_BACKGROUND: u8 = 0;
 /// `cleak/u5-spec#78`: `ULTIMA` slot 4 is authored with a 50th row
 /// that the destination rectangle does not consume; only the upper
 /// [`TITLE_TICK_FRAME_HEIGHT`] rows of each panel are copied, which
@@ -348,8 +563,11 @@ pub const TITLE_TICK_SOURCE_WIDTH: u16 = 288;
 /// copied" rule.
 pub const TITLE_TICK_SOURCE_MAX_HEIGHT: usize = 50;
 
+/// A staged frame is the full published destination rectangle, not
+/// the 288-wide record: `cleak/u5-spec#65` is explicit that the flanks
+/// are part of the rectangle and are repainted every tick.
 pub const TITLE_TICK_FRAME_PIXELS: usize =
-    TITLE_TICK_SOURCE_WIDTH as usize * TITLE_TICK_FRAME_HEIGHT as usize;
+    TITLE_TICK_FRAME_WIDTH as usize * TITLE_TICK_FRAME_HEIGHT as usize;
 pub const TITLE_TICK_FRAME_SET_BYTES: usize =
     TITLE_TICK_FRAME_PIXELS * TITLE_TICK_FRAME_COUNT as usize;
 
@@ -371,7 +589,7 @@ impl TitleTickFrameSet {
                 format!(
                     "{source}: title-tick frame set must be exactly {TITLE_TICK_FRAME_SET_BYTES} bytes ({} frames of {}x{}), found {}",
                     TITLE_TICK_FRAME_COUNT,
-                    TITLE_TICK_SOURCE_WIDTH,
+                    TITLE_TICK_FRAME_WIDTH,
                     TITLE_TICK_FRAME_HEIGHT,
                     pixels.len()
                 ),
@@ -422,9 +640,16 @@ pub fn load_ultima_title_tick_frames(
 pub fn parse_ultima_title_tick_frames(
     directory: &GraphicImageDirectory,
 ) -> io::Result<TitleTickFrameSet> {
-    let width = TITLE_TICK_SOURCE_WIDTH as usize;
+    let record_width = TITLE_TICK_SOURCE_WIDTH as usize;
+    let band_width = TITLE_TICK_FRAME_WIDTH as usize;
     let height = TITLE_TICK_FRAME_HEIGHT as usize;
-    let mut pixels = Vec::with_capacity(TITLE_TICK_FRAME_SET_BYTES);
+    let record_x = TITLE_TICK_SOURCE_X as usize;
+    // `cleak/u5-spec#65` gives two equivalent implementations of the
+    // staging: reproduce the hidden surface literally, or composite
+    // each record onto a background-filled 320-wide canvas at x = 16
+    // and blit that. This takes the second; the result is the exact
+    // 320-by-49 destination rectangle the tick overwrites.
+    let mut pixels = vec![TITLE_TICK_STAGING_BACKGROUND; TITLE_TICK_FRAME_SET_BYTES];
     for frame in 0..TITLE_TICK_FRAME_COUNT {
         let slot = usize::from(ULTIMA_TITLE_TICK_FIRST_SLOT + frame);
         let panel = directory
@@ -439,21 +664,28 @@ pub fn parse_ultima_title_tick_frames(
                     ),
                 )
             })?;
-        if panel.width != width
+        // The `.16` depth stores record 4 with 50 rows and the `.4`
+        // depth stores it with 49; the 50-row pitch is a driver
+        // constant, so either is well-formed and only the upper
+        // `height` rows are ever shown.
+        if panel.width != record_width
             || panel.height < height
             || panel.height > TITLE_TICK_SOURCE_MAX_HEIGHT
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "{ULTIMA_PANEL_STEM} title-tick panel slot {slot} is {}x{}, expected {width} wide and {height}..={TITLE_TICK_SOURCE_MAX_HEIGHT} rows tall",
+                    "{ULTIMA_PANEL_STEM} title-tick panel slot {slot} is {}x{}, expected {record_width} wide and {height}..={TITLE_TICK_SOURCE_MAX_HEIGHT} rows tall",
                     panel.width, panel.height
                 ),
             ));
         }
-        // §5 / `cleak/u5-spec#78`: only the upper `height` rows of the
-        // source band reach the destination rectangle.
-        pixels.extend_from_slice(&panel.pixels[..width * height]);
+        let frame_base = usize::from(frame) * TITLE_TICK_FRAME_PIXELS;
+        for row in 0..height {
+            let dst = frame_base + row * band_width + record_x;
+            let src = row * record_width;
+            pixels[dst..dst + record_width].copy_from_slice(&panel.pixels[src..src + record_width]);
+        }
     }
     TitleTickFrameSet::from_palette_indices(pixels, "ULTIMA title-tick panels")
 }
@@ -787,24 +1019,29 @@ mod tests {
     }
 
     #[test]
-    fn ultima_title_tick_panels_fill_the_288_by_49_frame_buffer() {
+    fn ultima_title_tick_panels_fill_the_320_by_49_destination_band() {
         let Some(directory) = local_ultima_directory() else {
             eprintln!("skipping: local ULTIMA.16 is not present");
             return;
         };
         let frames =
             parse_ultima_title_tick_frames(&directory).expect("ULTIMA title-tick panels decode");
+        // `cleak/u5-spec#65`: a staged frame is the whole published
+        // 320-by-49 destination rectangle, with the 288-wide record
+        // composited at x = 16 over the cleared staging background.
+        let band_width = TITLE_TICK_FRAME_WIDTH as usize;
+        let record_x = TITLE_TICK_SOURCE_X as usize;
+        let record_width = TITLE_TICK_SOURCE_WIDTH as usize;
         assert_eq!(
             TITLE_TICK_FRAME_PIXELS,
-            TITLE_TICK_SOURCE_WIDTH as usize * TITLE_TICK_FRAME_HEIGHT as usize
+            band_width * TITLE_TICK_FRAME_HEIGHT as usize
         );
         for frame in 0..TITLE_TICK_FRAME_COUNT {
             let pixels = frames.frame_pixels(frame);
             assert_eq!(
                 pixels.len(),
                 TITLE_TICK_FRAME_PIXELS,
-                "frame {frame} is {}x{}",
-                TITLE_TICK_SOURCE_WIDTH,
+                "frame {frame} is {band_width}x{}",
                 TITLE_TICK_FRAME_HEIGHT
             );
             assert!(pixels.iter().all(|index| *index <= 0x0f));
@@ -812,6 +1049,21 @@ mod tests {
                 pixels.iter().any(|index| *index != 0),
                 "frame {frame} must carry the flaming band, not an empty strip"
             );
+            for row in 0..TITLE_TICK_FRAME_HEIGHT as usize {
+                let base = row * band_width;
+                assert!(
+                    pixels[base..base + record_x]
+                        .iter()
+                        .all(|index| *index == TITLE_TICK_STAGING_BACKGROUND),
+                    "frame {frame} row {row} left flank is staging background"
+                );
+                assert!(
+                    pixels[base + record_x + record_width..base + band_width]
+                        .iter()
+                        .all(|index| *index == TITLE_TICK_STAGING_BACKGROUND),
+                    "frame {frame} row {row} right flank is staging background"
+                );
+            }
         }
     }
 
@@ -828,13 +1080,19 @@ mod tests {
             .as_ref()
             .expect("last title-tick panel is populated");
         assert_eq!(panel.height, TITLE_TICK_SOURCE_MAX_HEIGHT);
-        let width = TITLE_TICK_SOURCE_WIDTH as usize;
+        let record_width = TITLE_TICK_SOURCE_WIDTH as usize;
+        let band_width = TITLE_TICK_FRAME_WIDTH as usize;
+        let record_x = TITLE_TICK_SOURCE_X as usize;
         let height = TITLE_TICK_FRAME_HEIGHT as usize;
-        assert_eq!(
-            frames.frame_pixels(TITLE_TICK_FRAME_COUNT - 1),
-            &panel.pixels[..width * height],
-            "only the upper {height} rows of the 50-row source band reach the destination"
-        );
+        let staged = frames.frame_pixels(TITLE_TICK_FRAME_COUNT - 1);
+        for row in 0..height {
+            let staged_row = &staged[row * band_width + record_x..][..record_width];
+            assert_eq!(
+                staged_row,
+                &panel.pixels[row * record_width..][..record_width],
+                "only the upper {height} rows of the 50-row source band reach the destination"
+            );
+        }
     }
 
     #[test]
@@ -862,6 +1120,105 @@ mod tests {
         let err = parse_ultima_title_tick_frames(&directory)
             .expect_err("a directory without title-tick panels must fail");
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn title_flourish_script_is_seven_frames_of_seven_reveals_and_six_erases() {
+        // `cleak/u5-spec#67`: 7 x 7 reveal steps + 6 x 6 erase steps.
+        assert_eq!(title_flourish_total_steps(), 85);
+        assert_eq!(TITLE_FLOURISH_FRAME_COUNT, 7);
+        assert_eq!(TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, 7);
+        assert_eq!(TITLE_FLOURISH_ERASE_STEPS_PER_FRAME, 6);
+        assert_eq!(title_flourish_step_state(85), None);
+
+        // Frame 0: seven reveals, then six erases walking back down.
+        for step in 0..7 {
+            let state = title_flourish_step_state(step).unwrap();
+            assert_eq!((state.frame, state.revealed_columns), (0, step + 1));
+            assert!(state.revealing);
+        }
+        for (offset, expected) in (7..13).zip([6, 5, 4, 3, 2, 1]) {
+            let state = title_flourish_step_state(offset).unwrap();
+            assert_eq!((state.frame, state.revealed_columns), (0, expected));
+            assert!(!state.revealing);
+        }
+        // Frame 1 starts on step 13; each of frames 0..=5 owns 13
+        // steps and frame 6 owns only its seven reveals.
+        assert_eq!(title_flourish_step_state(13).unwrap().frame, 1);
+        let last = title_flourish_step_state(84).unwrap();
+        assert_eq!(
+            (last.frame, last.revealed_columns, last.revealing),
+            (6, 7, true)
+        );
+    }
+
+    #[test]
+    fn title_flourish_reveal_sets_partition_each_frame_exactly_once() {
+        // Every frame's seven reveal sets cover its band height, once
+        // each — with the one shipped-data quirk in frame 5.
+        for frame in 0..TITLE_FLOURISH_FRAME_COUNT {
+            let (_, height) = title_flourish_band(frame);
+            let mut named: Vec<u8> = TITLE_FLOURISH_REVEAL_SETS[frame]
+                .iter()
+                .flat_map(|set| set.iter().copied())
+                .collect();
+            named.sort_unstable();
+            let visible = title_flourish_visible_rows(frame, 7);
+            assert!(
+                visible.iter().all(|row| usize::from(*row) < height),
+                "frame {frame} names a row outside its {height}-row band"
+            );
+            if frame == 5 {
+                // Row 19 named twice, row 29 never named.
+                assert_eq!(named.len(), height);
+                assert_eq!(visible.len(), height - 1);
+                assert_eq!(named.iter().filter(|row| **row == 19).count(), 2);
+                assert!(!visible.contains(&29));
+            } else {
+                assert_eq!(named.len(), height, "frame {frame} row count");
+                assert_eq!(visible.len(), height, "frame {frame} distinct row count");
+                for row in 0..height {
+                    assert!(visible.contains(&(row as u8)), "frame {frame} row {row}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn title_flourish_reveal_one_set_is_the_frame_top_and_bottom_rows() {
+        // The reveal-1 set is never erased, so it is what stays on
+        // screen through a frame's whole erase tail.
+        for frame in 0..TITLE_FLOURISH_FRAME_COUNT {
+            let (_, height) = title_flourish_band(frame);
+            assert_eq!(
+                title_flourish_visible_rows(frame, 1),
+                vec![0u8, (height - 1) as u8],
+                "frame {frame} reveal 1"
+            );
+        }
+    }
+
+    #[test]
+    fn title_flourish_odd_frames_are_mirrored_and_shifted_one_row_down() {
+        // `cleak/u5-spec#67`: even frames fill top-down from the band
+        // top; odd frames fill bottom-up, so their band runs
+        // `band_top + 1 ..= band_top + height`.
+        for frame in 0..TITLE_FLOURISH_FRAME_COUNT {
+            let (top, height) = title_flourish_band(frame);
+            let first = title_flourish_content_row(frame, 0);
+            let last = title_flourish_content_row(frame, height - 1);
+            if title_flourish_fills_top_down(frame) {
+                assert_eq!(title_flourish_band_shift(frame), 0, "frame {frame}");
+                assert_eq!((first, last), (top, top + height - 1), "frame {frame}");
+            } else {
+                assert_eq!(title_flourish_band_shift(frame), 1, "frame {frame}");
+                assert_eq!((first, last), (top + height - 1, top), "frame {frame}");
+            }
+        }
+        // Frame 6 is even, so the finished mark is neither mirrored
+        // nor shifted and sits exactly at (20, 46).
+        assert!(title_flourish_fills_top_down(6));
+        assert_eq!(title_flourish_band(6), (46, 61));
     }
 
     #[test]
