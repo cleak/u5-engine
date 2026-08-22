@@ -120,3 +120,54 @@ const fn input_byte_from_char(key: char) -> Option<u8> {
         None
     }
 }
+
+/// `dungeon-mode.md §4.1` (`cleak/u5-spec#81`) dungeon facing-label
+/// field.
+///
+/// The bottom border band prints the literal `Dir:` and then the facing
+/// name in a fixed five-character field. The names are **left**-padded:
+/// `East` and `West` carry their own leading space inside the field and
+/// `North` and `South` do not, which is what produces two spaces after
+/// the colon for east and west and one for north and south. (It is the
+/// mirror image of the wind banner, whose names pad on the right.)
+///
+/// Only the four cardinals can be a dungeon facing; anything else is the
+/// published invalid-facing fallback, which keeps the field's width so
+/// the label never changes length.
+pub const fn dungeon_facing_label_field(facing: Direction) -> &'static str {
+    match facing {
+        Direction::North => "North",
+        Direction::South => "South",
+        Direction::East => " East",
+        Direction::West => " West",
+        _ => DUNGEON_FACING_LABEL_INVALID,
+    }
+}
+
+/// `dungeon-mode.md §4.1`: a leading space followed by four question
+/// marks — the same five-character width as a real facing name.
+pub const DUNGEON_FACING_LABEL_INVALID: &str = " ????";
+/// The literal that precedes the facing field in the bottom band.
+pub const DUNGEON_FACING_LABEL_PREFIX: &str = "Dir:";
+/// `dungeon-mode.md §4.1`: facing is encoded north, east, south, west.
+pub const fn dungeon_facing_from_encoding(byte: u8) -> Option<Direction> {
+    match byte {
+        0 => Some(Direction::North),
+        1 => Some(Direction::East),
+        2 => Some(Direction::South),
+        3 => Some(Direction::West),
+        _ => None,
+    }
+}
+
+/// `dungeon-mode.md §4.1`: the level is stored zero-based and displayed
+/// one-based, range one through eight, printed as a single digit over
+/// the `L` literal's placeholder cell.
+pub const fn dungeon_level_label_digit(level: u8) -> Option<u8> {
+    let shown = level as u16 + 1;
+    if shown >= 1 && shown <= 8 {
+        Some(shown as u8)
+    } else {
+        None
+    }
+}

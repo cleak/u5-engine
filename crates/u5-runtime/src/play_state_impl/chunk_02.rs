@@ -106,7 +106,7 @@ impl PlayState {
             handled!(self.attack_command_with_game_dir(None, Some(game_dir))?);
         }
         if matches!(key, 'D' | 'W') {
-            self.message = "What?".to_string();
+            self.message = unassigned_refusal_echo(key as u8).to_string();
             handled!();
         }
         if let Some(direction) = high_byte_direction_from_key(key) {
@@ -356,7 +356,7 @@ impl PlayState {
                     handled!(self.start_cast_spell_prompt());
                 }
                 'D' | 'W' => {
-                    self.message = "What?".to_string();
+                    self.message = unassigned_refusal_echo(key as u8).to_string();
                     handled!();
                 }
                 'E' => {

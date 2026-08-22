@@ -22501,14 +22501,17 @@ fn movement_keys_echo_their_cardinal_name() {
 fn invalid_command_letters_echo_the_stock_refusal_once() {
     // Observed: an invalid key prints `What?`. The handler prints the same
     // literal, so the transcript must fold it back into one line.
-    for key in ['D', 'W'] {
+    // `commands.md §5.2` (cleak/u5-spec#81): the two sibling refusals
+    // reach the screen with a disambiguating prefix, and the echo is one
+    // line, not the verb followed by a separate refusal.
+    for (key, expected) in [('D', "D-What?"), ('W', "W-What?")] {
         let mut state = test_state(open_grid(), 5, 5);
         assert!(
             state
                 .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
                 .unwrap()
         );
-        assert_eq!(transcript_texts(&state), vec!["What?"]);
+        assert_eq!(transcript_texts(&state), vec![expected]);
         assert!(state.message_entries()[0].is_command_echo);
     }
 }
@@ -22931,4 +22934,42 @@ fn dungeon_lowercase_wasd_remains_facing_relative_movement() {
         assert_eq!(state.player.facing, expected_facing);
         assert_eq!(state.turn, 1);
     }
+}
+
+#[test]
+fn dungeon_facing_label_field_is_left_padded_to_five_cells() {
+    // `dungeon-mode.md §4.1` (cleak/u5-spec#81) corrected our capture's
+    // reading: the facing names are LEFT-padded, not right-padded —
+    // `East` and `West` carry their own leading space inside a
+    // five-character field, which is what gives two spaces after the
+    // colon for east and west and one for north and south.
+    for facing in [
+        Direction::North,
+        Direction::South,
+        Direction::East,
+        Direction::West,
+    ] {
+        assert_eq!(dungeon_facing_label_field(facing).len(), 5);
+    }
+    assert_eq!(dungeon_facing_label_field(Direction::North), "North");
+    assert_eq!(dungeon_facing_label_field(Direction::South), "South");
+    assert_eq!(dungeon_facing_label_field(Direction::East), " East");
+    assert_eq!(dungeon_facing_label_field(Direction::West), " West");
+    // The invalid-facing fallback keeps the field width so the label
+    // never changes length.
+    assert_eq!(dungeon_facing_label_field(Direction::NorthEast), " ????");
+    assert_eq!(DUNGEON_FACING_LABEL_INVALID.len(), 5);
+    assert_eq!(DUNGEON_FACING_LABEL_PREFIX, "Dir:");
+
+    // Facing is encoded north, east, south, west in that order.
+    assert_eq!(dungeon_facing_from_encoding(0), Some(Direction::North));
+    assert_eq!(dungeon_facing_from_encoding(1), Some(Direction::East));
+    assert_eq!(dungeon_facing_from_encoding(2), Some(Direction::South));
+    assert_eq!(dungeon_facing_from_encoding(3), Some(Direction::West));
+    assert_eq!(dungeon_facing_from_encoding(4), None);
+
+    // The level is stored zero-based and displayed one-based, 1..8.
+    assert_eq!(dungeon_level_label_digit(0), Some(1));
+    assert_eq!(dungeon_level_label_digit(7), Some(8));
+    assert_eq!(dungeon_level_label_digit(8), None);
 }

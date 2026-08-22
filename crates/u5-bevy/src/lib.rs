@@ -136,12 +136,12 @@ use u5_runtime::{
 };
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
-    CHROME_RULE_INDEX, ChromeFonts, GameplayMessageLog, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
-    RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter,
+    CHROME_RIBBON_INDEX, CHROME_RULE_INDEX, ChromeFonts, GameplayMessageLog, MESSAGE_WINDOW_RIGHT,
+    MessageWindowRow, RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter,
     configure_play_text_windows, gameplay_chrome_content, layout_message_window,
     load_runes_ch_font, message_is_scene_entry_narration, paint_fixed_cell_glyph,
     paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
-    prompt_cursor_glyph,
+    prompt_cursor_glyph, ribbon_cap_sprite,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -10405,6 +10405,13 @@ const RTV_UI_COLOUR_SLOT_2: u8 = INTRO_MENU_FRAME_BORDER_COLOR;
 const RTV_CAPTION_FOREGROUND: u8 = INTRO_MENU_FRAME_OUTLINE_COLOR;
 const RTV_CAPTION_BACKGROUND: u8 = INTRO_MENU_FRAME_INTERIOR_COLOR;
 
+/// `#54` follow-up: the caption's flanking chrome is a filled repaint in
+/// slot 2 over `y = 193..199` plus a one-pixel rule in slot 1 at
+/// `y = 192`.
+const RTV_CAPTION_RULE_Y: usize = 192;
+const RTV_CAPTION_BAND_TOP_Y: usize = 193;
+const RTV_CAPTION_BAND_BOTTOM_Y: usize = 199;
+
 fn visual_return_to_view_summary(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
@@ -10553,27 +10560,113 @@ fn paint_out_intro_menu_select_caption(buffer: &mut IntroDisplayBuffer) {
     buffer.clear_rect_inclusive(x0, rule_y, x1, rule_y, RTV_UI_COLOUR_SLOT_1);
 }
 
-/// `#54` / `systems/intro.md §12.1`: the chapter caption is fixed-cell
-/// text on text row 24 in the window's bottom border, starting at column
-/// `18 - floor(len / 2)`, and it interrupts the one-pixel rule at
-/// `y = 192`. It is emitted once per chapter, not redrawn per frame, so
-/// this simply keeps it painted for every frame of the chapter.
+/// `systems/intro.md §12.1` (`cleak/u5-spec#54` follow-up): the chapter
+/// caption is a ribbon interruption in the window's bottom border row.
+///
+/// The published layout is: opening wedge at `start_col`, caption
+/// characters at `start_col + 1 ..= start_col + len`, closing wedge at
+/// `start_col + len + 1`, and `end_col = start_col + len + 2` is the
+/// **first cell past** the closing wedge — which is why the right-hand
+/// repaint rectangle begins at `end_col * 8` and leaves the wedge alone.
+/// The opening wedge is a solid right-pointing form and the closing one
+/// its mirror.
+///
+/// The flanking chrome is a filled repaint in user-interface colour slot
+/// 2 over `y = 193..199` plus a one-pixel rule in slot 1 at `y = 192`.
+/// The caption's own colour is the fixed-cell printer's active window
+/// colour, not a caption-specific attribute.
 fn draw_return_to_view_caption(
     buffer: &mut IntroDisplayBuffer,
     font: &FixedCellFont,
     caption: &str,
 ) {
-    let bytes = caption.as_bytes();
-    let start_column = return_to_view_caption_start_column(bytes.len());
-    for (offset, byte) in bytes.iter().enumerate() {
+    let len = caption.len();
+    let start_col = return_to_view_caption_start_column(len);
+    let end_col = start_col + len + 2;
+    let row = RTV_CAPTION_TEXT_ROW;
+
+    // Flanking chrome either side of the caption's cells.
+    let interior_left = usize::from(INTRO_MENU_FRAME_RULE_X0) + 1;
+    let interior_right = usize::from(INTRO_MENU_FRAME_RULE_X1) - 1;
+    let caption_left_px = start_col * CH_CELL_SIDE;
+    let caption_right_px = end_col * CH_CELL_SIDE;
+    for (x0, x1) in [
+        (interior_left, caption_left_px.saturating_sub(1)),
+        (caption_right_px, interior_right),
+    ] {
+        if x0 > x1 || x1 >= buffer.width {
+            continue;
+        }
+        buffer.clear_rect_inclusive(
+            x0,
+            RTV_CAPTION_BAND_TOP_Y,
+            x1,
+            RTV_CAPTION_BAND_BOTTOM_Y,
+            RTV_UI_COLOUR_SLOT_2,
+        );
+        buffer.clear_rect_inclusive(
+            x0,
+            RTV_CAPTION_RULE_Y,
+            x1,
+            RTV_CAPTION_RULE_Y,
+            RTV_UI_COLOUR_SLOT_1,
+        );
+    }
+
+    draw_intro_ribbon_cap(buffer, font, RibbonCapDirection::Right, start_col, row);
+    for (offset, byte) in caption.as_bytes().iter().enumerate() {
         buffer.draw_fixed_glyph_cell(
             font,
             *byte,
-            start_column + offset,
-            RTV_CAPTION_TEXT_ROW,
+            start_col + 1 + offset,
+            row,
             RTV_CAPTION_FOREGROUND,
             RTV_CAPTION_BACKGROUND,
         );
+    }
+    draw_intro_ribbon_cap(
+        buffer,
+        font,
+        RibbonCapDirection::Left,
+        start_col + len + 1,
+        row,
+    );
+}
+
+/// Paint one ribbon end cap into the intro framebuffer.
+///
+/// `cleak/u5-spec#78` / `#81`: the cap is a two-pass composite — the
+/// solid triangle glyph in the ribbon colour, then the accent strokes
+/// along its diagonal in the rule colour. [`ribbon_cap_sprite`] is the
+/// shared primitive that builds both masks, so the RTV caption's wedges
+/// are the same glyph every other ribbon interruption uses.
+fn draw_intro_ribbon_cap(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    direction: RibbonCapDirection,
+    cell_x: usize,
+    cell_y: usize,
+) {
+    let sprite = ribbon_cap_sprite(font, direction);
+    let dst_x = cell_x * CH_CELL_SIDE;
+    let dst_y = cell_y * CH_CELL_SIDE;
+    assert!(
+        dst_x + CH_CELL_SIDE <= buffer.width && dst_y + CH_CELL_SIDE <= buffer.height,
+        "ribbon cap at cell ({cell_x}, {cell_y}) exceeds framebuffer {}x{}",
+        buffer.width,
+        buffer.height
+    );
+    for row in 0..CH_CELL_SIDE {
+        for col in 0..CH_CELL_SIDE {
+            let bit = 1u8 << (7 - col);
+            let index = (dst_y + row) * buffer.width + dst_x + col;
+            if sprite.ribbon[row] & bit != 0 {
+                buffer.pixels[index] = CHROME_RIBBON_INDEX;
+            }
+            if sprite.white[row] & bit != 0 {
+                buffer.pixels[index] = CHROME_RULE_INDEX;
+            }
+        }
     }
 }
 
@@ -19471,12 +19564,20 @@ mod tests {
         let caption = "The Summoning";
         let start_column = return_to_view_caption_start_column(caption.len());
         assert_eq!(start_column, 18 - caption.len() / 2);
+        // `#54` follow-up / intro.md §12.1: `(40 - (len + 2)) / 2` and
+        // `18 - floor(len / 2)` agree for every shipped caption.
+        assert_eq!(start_column, (40 - (caption.len() + 2)) / 2);
+        // Opening wedge at `start_col`, text at `start_col + 1`, closing
+        // wedge at `start_col + len + 1`; `end_col` is the first cell
+        // past the closing wedge.
+        let text_column = start_column + 1;
+        let end_column = start_column + caption.len() + 2;
         let surface = &intro.surface;
         let row_y = RTV_CAPTION_TEXT_ROW * CH_CELL_SIDE;
         let caption_pixels: Vec<u8> = (0..CH_CELL_SIDE)
             .flat_map(|row| (0..caption.len() * CH_CELL_SIDE).map(move |offset| (row, offset)))
             .map(|(row, offset)| {
-                surface.pixels[(row_y + row) * surface.width + start_column * CH_CELL_SIDE + offset]
+                surface.pixels[(row_y + row) * surface.width + text_column * CH_CELL_SIDE + offset]
             })
             .collect();
         // `cleak/u5-spec#78`: the intro's border captions are ordinary
@@ -19501,6 +19602,27 @@ mod tests {
         // through here; pin the colour itself instead.
         assert_eq!(RTV_CAPTION_BACKGROUND, 0, "caption background is black");
         assert_eq!(RTV_CAPTION_FOREGROUND, 0x0f, "caption glyphs are white");
+
+        // The flanking chrome: a slot 2 band over y 193..199 and a slot 1
+        // rule at y 192, left of the opening wedge and from `end_col`
+        // rightwards — the wedges themselves are left alone.
+        let at = |x: usize, y: usize| surface.pixels[y * surface.width + x];
+        assert_eq!(
+            at(start_column * CH_CELL_SIDE - 1, RTV_CAPTION_RULE_Y),
+            RTV_UI_COLOUR_SLOT_1
+        );
+        assert_eq!(
+            at(start_column * CH_CELL_SIDE - 1, RTV_CAPTION_BAND_TOP_Y),
+            RTV_UI_COLOUR_SLOT_2
+        );
+        assert_eq!(
+            at(end_column * CH_CELL_SIDE, RTV_CAPTION_RULE_Y),
+            RTV_UI_COLOUR_SLOT_1
+        );
+        assert_eq!(
+            at(end_column * CH_CELL_SIDE, RTV_CAPTION_BAND_BOTTOM_Y),
+            RTV_UI_COLOUR_SLOT_2
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -108,12 +108,18 @@ impl PlayState {
         let mut lines = message.split('\n');
         let first = lines.next().unwrap_or_default();
 
-        if echo_is_last && first.starts_with(verb) {
-            // The handler re-emitted the verb itself; keep one copy.
+        if echo_is_last && first == verb {
+            // The handler re-emitted exactly the verb; keep one copy.
+            // `#81`: only an exact repeat folds — a refusal that merely
+            // starts with the verb is still a separate line, because the
+            // echo is printed *before* the precondition check.
+        } else if echo_is_last && first.starts_with(verb) && verb.ends_with('-') {
+            // A direction-prompting handler renders its own `Verb-` and
+            // then appends the direction, so keep its fuller line.
             if let Some(last) = self.message_transcript.last_mut() {
                 last.text = first.to_string();
             }
-        } else if echo_is_last && pending.echo.join == CommandEchoJoin::SameLine {
+        } else if echo_is_last && pending.echo.join.continues_line() {
             if let Some(last) = self.message_transcript.last_mut() {
                 last.text.push_str(first);
             }
@@ -133,21 +139,39 @@ impl PlayState {
 /// then the lowercase command aliases — so a legacy movement key such as
 /// lowercase `w` echoes its direction rather than a command name.
 pub fn top_down_command_echo(key: char) -> Option<CommandEcho> {
+    let surface = |command| command_echo(command, CommandEchoMode::Surface);
     if key == ' ' {
-        return Command::Pass.echo();
+        return surface(Command::Pass);
     }
     if key.is_ascii_uppercase() {
-        return command_for_letter(key as u8).and_then(Command::echo);
+        return command_for_letter(key as u8).and_then(unassigned_or(key, surface));
     }
     if let Some(direction) = Direction::from_play_key(key) {
         return movement_echo(direction);
     }
     if key.is_ascii_alphabetic() {
-        return command_for_letter(key as u8).and_then(Command::echo);
+        return command_for_letter(key as u8).and_then(unassigned_or(key, surface));
     }
     match key {
-        '<' | '>' => Command::Klimb.echo(),
+        '<' | '>' => surface(Command::Klimb),
         _ => None,
+    }
+}
+
+/// `commands.md §5.2`: `D` and `W` print a disambiguating refusal rather
+/// than the bare `What?`.
+fn unassigned_or(
+    key: char,
+    resolve: impl Fn(Command) -> Option<CommandEcho>,
+) -> impl Fn(Command) -> Option<CommandEcho> {
+    move |command| {
+        if matches!(command, Command::UnassignedRefusal) {
+            return Some(CommandEcho {
+                text: unassigned_refusal_echo(key as u8),
+                join: CommandEchoJoin::Complete,
+            });
+        }
+        resolve(command)
     }
 }
 
@@ -157,24 +181,32 @@ pub fn top_down_command_echo(key: char) -> Option<CommandEcho> {
 /// keys have no observed literal, so they emit no echo at all rather than
 /// an invented one (`cleak/u5-spec#81`).
 pub fn dungeon_command_echo(key: char) -> Option<CommandEcho> {
+    let dungeon = |command| command_echo(command, CommandEchoMode::Dungeon);
     if key == ' ' {
-        return Command::Pass.echo();
+        return dungeon(Command::Pass);
     }
     if matches!(key, 'S' | 'A' | 'D' | 'W') {
-        return command_for_letter(key as u8).and_then(Command::echo);
+        return command_for_letter(key as u8).and_then(unassigned_or(key, dungeon));
     }
+    // `commands.md §5.2`: dungeon movement carries its own verb set.
     if let Some(direction) = high_byte_direction_from_key(key) {
         return match direction {
-            Direction::North => Some(DUNGEON_ADVANCE_ECHO),
+            Direction::North => Some(DungeonMovementEcho::Advance.echo()),
+            Direction::South => Some(DungeonMovementEcho::BackUp.echo()),
+            Direction::West => Some(DungeonMovementEcho::TurnLeft.echo()),
+            Direction::East => Some(DungeonMovementEcho::TurnRight.echo()),
             _ => None,
         };
     }
     match key.to_ascii_lowercase() {
-        '8' | 'w' | '.' | '\r' | '\n' => Some(DUNGEON_ADVANCE_ECHO),
-        // Back-step, the two turn keys and the rejected diagonals.
-        '2' | 's' | '4' | 'a' | '6' | 'd' | '7' | '9' | '1' | '3' => None,
-        '<' | '>' => Command::Klimb.echo(),
-        other => command_for_letter(other as u8).and_then(Command::echo),
+        '8' | 'w' | '.' | '\r' | '\n' => Some(DungeonMovementEcho::Advance.echo()),
+        '2' | 's' => Some(DungeonMovementEcho::BackUp.echo()),
+        '4' | 'a' => Some(DungeonMovementEcho::TurnLeft.echo()),
+        '6' | 'd' => Some(DungeonMovementEcho::TurnRight.echo()),
+        // The rejected diagonals print the movement-family refusal.
+        '7' | '9' | '1' | '3' => None,
+        '<' | '>' => dungeon(Command::Klimb),
+        other => command_for_letter(other as u8).and_then(unassigned_or(key, dungeon)),
     }
 }
 
@@ -182,7 +214,12 @@ impl PlayState {
     /// Convenience wrapper for the pre-dispatch branches that resolve a
     /// command before the world/dungeon dispatchers see the key.
     pub fn begin_command_echo_for(&mut self, command: Command) {
-        if let Some(echo) = command.echo() {
+        let mode = if matches!(self.area, Area::Dungeon { .. }) {
+            CommandEchoMode::Dungeon
+        } else {
+            CommandEchoMode::Surface
+        };
+        if let Some(echo) = command_echo(command, mode) {
             self.begin_command_echo(echo);
         }
     }

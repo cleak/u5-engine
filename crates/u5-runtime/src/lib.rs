@@ -196,18 +196,24 @@ pub use combat_setup::*;
 pub use combat_stats::*;
 pub use commands::{
     BRITANNIA_CHUNK_MAP_COLUMNS, BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE, BRITANNIA_CHUNK_MAP_ROWS,
-    Command, CommandEcho, CommandEchoJoin, DEATH_VISION_OBJECT_CLASS, DEATH_VISION_ROLL_HIGH,
-    DEATH_VISION_ROLL_LOW, DUNGEON_ADVANCE_ECHO, LOCAL_VIEW_CELL_PIXEL_SCALE,
-    LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome, PUSHABLE_CANNON_FLOOR_STAMP,
-    PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily, TOWN_CANNON_TILE_FIRST,
-    TOWN_CANNON_TILE_LAST, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
-    WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE,
-    YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_for_letter,
-    death_vision_object_class, dungeon_display_level, local_view_class_for_tile, movement_echo,
-    new_order_outcome, new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile,
-    pushable_tile_family, sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
+    Command, CommandEcho, CommandEchoJoin, CommandEchoMode, DEATH_VISION_OBJECT_CLASS,
+    DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW, DIRECTION_PROMPT_CANCEL_LITERAL,
+    DUNGEON_EXIT_TO_BRITANNIA_NARRATION, DUNGEON_EXIT_TO_UNDERWORLD_NARRATION,
+    DUNGEON_MOVEMENT_BLOCKED_REFUSAL, DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL,
+    DUNGEON_ROOM_ENTRY_NARRATION, DungeonMovementEcho, ITEM_SELECTION_PROMPT,
+    LOCAL_VIEW_CELL_PIXEL_SCALE, LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome,
+    PARTY_SELECTION_PROMPT, PUSH_NOT_HERE_REFUSAL, PUSHABLE_CANNON_FLOOR_STAMP,
+    PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily, SELECTION_CANCELLED_LITERAL,
+    TOWN_CANNON_TILE_FIRST, TOWN_CANNON_TILE_LAST, VIEW_NO_GEM_REFUSAL, ViewCommandOutcome,
+    WISHING_WELL_WISH_KEYWORDS, WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, YELL_INPUT_MAX_LEN,
+    YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE,
+    YellInputContext, command_echo, command_for_letter, death_vision_object_class,
+    dungeon_display_level, local_view_class_for_tile, movement_echo, new_order_outcome,
+    new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile, pushable_tile_family,
+    sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
     surface_wishing_well_look_tile, town_cannon_tile_fire_direction, town_fountain_drink_accepts,
-    view_command_outcome, wishing_well_grant_scene, wishing_well_wish, wishing_well_wish_accepted,
+    unassigned_refusal_echo, view_command_outcome, wishing_well_grant_scene, wishing_well_wish,
+    wishing_well_wish_accepted,
 };
 pub use common_words_io::{
     COMMON_WORD_DICTIONARY_FILE, CommonWordDictionary, CommonWordDictionaryError,
@@ -243,7 +249,10 @@ pub use directed_step::{
     Axis, axis_first_choice, directed_step_offsets, terrain_chance_gate_denominator,
     type_bypasses_terrain_chance_gate,
 };
-pub use direction::Direction;
+pub use direction::{
+    DUNGEON_FACING_LABEL_INVALID, DUNGEON_FACING_LABEL_PREFIX, Direction,
+    dungeon_facing_from_encoding, dungeon_facing_label_field, dungeon_level_label_digit,
+};
 pub use disk_io::*;
 pub use display_driver::*;
 pub use dissolve::{

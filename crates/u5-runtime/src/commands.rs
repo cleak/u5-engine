@@ -595,87 +595,203 @@ pub const fn dungeon_display_level(level: u8) -> u16 {
     level as u16 + 1
 }
 
-/// How a handler's own prompt or result joins the verb echo that
-/// `commands.md §5` requires the dispatcher to print before it runs.
+/// `commands.md §5.3` punctuation contract (`cleak/u5-spec#81`): how a
+/// verb literal ends decides what continues the line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandEchoJoin {
-    /// The handler continues the echoed line. Observed for the
-    /// direction-prompting family: `Look-` followed by the resolved
-    /// direction result renders as one line, `Look-Pass`.
-    SameLine,
-    /// The handler's prompt or result starts the next transcript line.
-    /// Observed for `Use item` followed by the `Item:` prompt and for
-    /// `Z-stats...` followed by the `Player:` prompt.
-    NextLine,
+    /// Trailing hyphen — a direction is awaited and its name is appended
+    /// on the same line. `Look-` + `Pass` renders as one line.
+    AwaitsDirection,
+    /// Trailing `...` — a sub-selection is awaited on another surface,
+    /// and the handler's own output starts a fresh line.
+    AwaitsSelection,
+    /// Trailing space — a further keystroke or typed argument continues
+    /// the same line.
+    AwaitsArgument,
+    /// Newline or nothing: the echo is complete on its own line and any
+    /// handler output is a new line.
+    Complete,
+}
+
+impl CommandEchoJoin {
+    /// Whether a handler's output continues the echoed line rather than
+    /// starting a new one.
+    pub const fn continues_line(self) -> bool {
+        matches!(
+            self,
+            CommandEchoJoin::AwaitsDirection | CommandEchoJoin::AwaitsArgument
+        )
+    }
 }
 
 /// One resident verb echo: the literal the dispatcher writes into the
-/// message transcript, plus how the handler's own output joins it.
+/// message transcript, plus how the handler's own output continues it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CommandEcho {
     pub text: &'static str,
     pub join: CommandEchoJoin,
 }
 
-impl Command {
-    /// `commands.md §5`: the literal verb echo the dispatcher prints
-    /// before invoking the handler or refusal path, and how the
-    /// handler's output continues it.
-    ///
-    /// Directly observed forms: `Pass`, `Look-`, `Attack-`, `Use item`,
-    /// `Z-stats...`. Where the literal is not observed this falls back
-    /// to [`Command::verb_prefix`] plus the punctuation convention of
-    /// the command's class — a trailing `-` for the commands that
-    /// immediately prompt for a direction, nothing otherwise. Those
-    /// fallbacks are marked `#81` below; `cleak/u5-spec#81` asks for the
-    /// per-command literal echo strings.
-    ///
-    /// [`Command::UnassignedRefusal`] echoes the stock `What?` refusal
-    /// observed for an invalid key; its handler prints the same literal,
-    /// which the transcript folds back into the one line.
-    pub const fn echo(self) -> Option<CommandEcho> {
-        use CommandEchoJoin::{NextLine, SameLine};
-        let (text, join) = match self {
-            // Observed in the reference message-window transcripts.
-            Command::Pass => ("Pass", SameLine),
-            Command::Look => ("Look-", SameLine),
-            Command::Attack => ("Attack-", SameLine),
-            Command::Use => ("Use item", NextLine),
-            Command::ZStats => ("Z-stats...", NextLine),
-            // #81: direction-prompting class; punctuation follows the
-            // observed `Look-`/`Attack-` convention, verb from §5.
-            Command::Fire => ("Fire-", SameLine),
-            Command::Get => ("Get-", SameLine),
-            Command::Klimb => ("Klimb-", SameLine),
-            Command::Open => ("Open-", SameLine),
-            Command::Push => ("Push-", SameLine),
-            Command::Search => ("Search-", SameLine),
-            Command::Talk => ("Talk-", SameLine),
-            // #81: no direction prompt, so no trailing dash; verb from §5.
-            Command::Board => ("Board", NextLine),
-            Command::Cast => ("Cast", NextLine),
-            Command::Enter => ("Enter", NextLine),
-            Command::HoleUp => ("Hole up", NextLine),
-            Command::Ignite => ("Ignite", NextLine),
-            Command::Jimmy => ("Jimmy", NextLine),
-            Command::Mix => ("Mix", NextLine),
-            Command::NewOrder => ("New order", NextLine),
-            Command::Quit => ("Quit", NextLine),
-            Command::Ready => ("Ready", NextLine),
-            Command::View => ("View", NextLine),
-            Command::Xit => ("X-it", NextLine),
-            Command::Yell => ("Yell", NextLine),
-            // Observed: an invalid key echoes the stock refusal.
-            Command::UnassignedRefusal => ("What?", NextLine),
-        };
-        Some(CommandEcho { text, join })
+/// Which command overlay's copy of the verb literals applies.
+///
+/// `#81`: "each mode overlay carries its own copy of the Attack
+/// literal", and dungeon Look hands off to the look overlay instead of
+/// prompting for a direction, so two verbs differ by mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandEchoMode {
+    /// Overworld and town-family scenes.
+    Surface,
+    /// Dungeon exploration.
+    Dungeon,
+}
+
+/// `commands.md §5.2` per-key verb echo literals (`cleak/u5-spec#81`).
+///
+/// The literals below are the published table, not inferences. Three
+/// points from §5.1/§5.2 shape how a renderer must use them:
+///
+/// * The leading marker is **not** part of any verb literal. The turn
+///   loop opens each input line with a newline plus one right-pointing
+///   solid triangle glyph, so exactly one line per command turn carries
+///   it — see [`MessageEntry::is_command_echo`].
+/// * The echo is printed **before** the precondition check, so a refusal
+///   is a second line rather than a replacement (`View a gem!` then
+///   `You have none!`). The few refusals that do replace the echo fold
+///   the verb into the refusal literal instead.
+/// * `Use item`, `Ready...` and `Mix Reagents` end in **two** newlines,
+///   leaving one blank row before their prompt.
+pub const fn command_echo(command: Command, mode: CommandEchoMode) -> Option<CommandEcho> {
+    use CommandEchoJoin::{AwaitsArgument, AwaitsDirection, AwaitsSelection, Complete};
+    let dungeon = matches!(mode, CommandEchoMode::Dungeon);
+    let (text, join) = match command {
+        Command::Pass => ("Pass", Complete),
+        // §5.2: the dungeon attack takes no direction argument, so its
+        // literal carries no hyphen; every other mode prompts.
+        Command::Attack => {
+            if dungeon {
+                ("Attack", Complete)
+            } else {
+                ("Attack-", AwaitsDirection)
+            }
+        }
+        // §5.2: the stored literal is the bare word `Look`; the
+        // dispatcher appends the hyphen dynamically outside dungeons and
+        // `...` inside them, where it hands off to the look overlay.
+        Command::Look => {
+            if dungeon {
+                ("Look...", AwaitsSelection)
+            } else {
+                ("Look-", AwaitsDirection)
+            }
+        }
+        Command::Fire => ("Fire-", AwaitsDirection),
+        Command::Get => ("Get-", AwaitsDirection),
+        Command::Jimmy => ("Jimmy-", AwaitsDirection),
+        Command::Klimb => ("Klimb-", AwaitsDirection),
+        Command::Open => ("Open-", AwaitsDirection),
+        Command::Push => ("Push-", AwaitsDirection),
+        Command::Search => ("Search-", AwaitsDirection),
+        Command::Talk => ("Talk-", AwaitsDirection),
+        Command::Cast => ("Cast...", AwaitsSelection),
+        Command::Ready => ("Ready...", AwaitsSelection),
+        Command::ZStats => ("Z-stats...", AwaitsSelection),
+        Command::Board => ("Board ", AwaitsArgument),
+        Command::Xit => ("X-it ", AwaitsArgument),
+        Command::Yell => ("Yell ", AwaitsArgument),
+        Command::HoleUp => ("Hole up- ", AwaitsArgument),
+        Command::Ignite => ("Ignite torch!", Complete),
+        Command::Mix => ("Mix Reagents", Complete),
+        Command::Use => ("Use item", Complete),
+        Command::NewOrder => ("New Order", Complete),
+        Command::View => ("View a gem!", Complete),
+        Command::Enter => ("Enter ", AwaitsArgument),
+        Command::Quit => ("Quit", Complete),
+        // §5.2: the two sibling refusals reach the screen with a
+        // disambiguating prefix.
+        Command::UnassignedRefusal => ("What?", Complete),
+    };
+    Some(CommandEcho { text, join })
+}
+
+/// `commands.md §5.2` (`#81`): the `D` and `W` refusals print with a
+/// disambiguating prefix, `D-What?` and `W-What?`, while an unmapped key
+/// prints the bare `What?`.
+pub const fn unassigned_refusal_echo(letter: u8) -> &'static str {
+    match letter {
+        b'D' | b'd' => "D-What?",
+        b'W' | b'w' => "W-What?",
+        _ => "What?",
     }
 }
 
-/// `commands.md §5` + observation: top-down movement echoes the cardinal
-/// name of the step (`North`, `South`, `East`, `West`). Diagonal steps
-/// have no observed echo literal, so they get none rather than an
-/// invented one (`cleak/u5-spec#81`).
+/// `commands.md §5.2` (`#81`): dungeon movement has its own verb set,
+/// separate from the surface direction names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonMovementEcho {
+    Advance,
+    BackUp,
+    TurnLeft,
+    TurnRight,
+    TurnAround,
+}
+
+impl DungeonMovementEcho {
+    pub const fn literal(self) -> &'static str {
+        match self {
+            DungeonMovementEcho::Advance => "Advance",
+            DungeonMovementEcho::BackUp => "Back up",
+            DungeonMovementEcho::TurnLeft => "Turn left",
+            DungeonMovementEcho::TurnRight => "Turn right",
+            // The only one of the five that carries its own full stop.
+            DungeonMovementEcho::TurnAround => "Turn around.",
+        }
+    }
+
+    pub const fn echo(self) -> CommandEcho {
+        CommandEcho {
+            text: self.literal(),
+            join: CommandEchoJoin::Complete,
+        }
+    }
+}
+
+/// `commands.md §5.2` (`#81`) dungeon movement refusals.
+pub const DUNGEON_MOVEMENT_BLOCKED_REFUSAL: &str = "Blocked!";
+/// Published as a movement-family refusal: `#81` could not pin it to a
+/// single key, so it is not bound to one here either.
+pub const DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL: &str = "Not in doorway!";
+/// `#81`: `View a gem!` is echoed before the precondition check, so the
+/// no-gem refusal is always a second line rather than a replacement.
+pub const VIEW_NO_GEM_REFUSAL: &str = "You have none!";
+/// `#81`: two refusals fold the verb into the refusal literal instead of
+/// following the echo, so the verb is not echoed separately for them.
+pub const PUSH_NOT_HERE_REFUSAL: &str = "Not here!";
+
+/// `commands.md §5.4` (`#81`): "The direction prompt prints nothing. The
+/// hyphen *is* the prompt." It ignores every key except the four
+/// directions, Space and Escape; Space and Escape both print `Pass` and
+/// return "no direction", which is why `Look-Pass` renders on one line.
+pub const DIRECTION_PROMPT_CANCEL_LITERAL: &str = "Pass";
+
+/// `commands.md §5.6` (`#81`) selection prompts, each with exactly one
+/// trailing space, printed into the message window on the line after the
+/// verb echo.
+pub const PARTY_SELECTION_PROMPT: &str = "Player: ";
+pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
+/// The cancel result appended to an open selection prompt line.
+pub const SELECTION_CANCELLED_LITERAL: &str = "None!";
+
+/// `commands.md §5.5` (`#81`) dungeon narration. The engine's old
+/// `Entered <name> level N at (x, y).` has no counterpart in the
+/// original; these two lines are the ones that do exist.
+pub const DUNGEON_ROOM_ENTRY_NARRATION: &str = "Entering room...";
+pub const DUNGEON_EXIT_TO_BRITANNIA_NARRATION: &str = "\nExit to Britannia!";
+pub const DUNGEON_EXIT_TO_UNDERWORLD_NARRATION: &str = "\nExit to Underworld!";
+
+/// `commands.md §5.2` (`cleak/u5-spec#81`): surface and town movement
+/// keys echo the direction's name plus a newline — the same four words
+/// the direction prompt appends. Diagonal steps are not part of that
+/// four-word block, so they emit no echo.
 pub const fn movement_echo(direction: Direction) -> Option<CommandEcho> {
     let text = match direction {
         Direction::North => "North",
@@ -689,14 +805,8 @@ pub const fn movement_echo(direction: Direction) -> Option<CommandEcho> {
     };
     Some(CommandEcho {
         text,
-        join: CommandEchoJoin::SameLine,
+        // `commands.md §5.2`: movement echoes the direction name plus a
+        // newline — "the same four words the direction prompt appends".
+        join: CommandEchoJoin::Complete,
     })
 }
-
-/// Observed in the dungeon message window: a forward step echoes
-/// `Advance`. The back-step and the two turn keys have no observed
-/// literal, so they emit no echo (`cleak/u5-spec#81`).
-pub const DUNGEON_ADVANCE_ECHO: CommandEcho = CommandEcho {
-    text: "Advance",
-    join: CommandEchoJoin::SameLine,
-};
