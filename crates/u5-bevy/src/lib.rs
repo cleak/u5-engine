@@ -8123,10 +8123,11 @@ fn animate_static_tiles(
     while pump.accumulator >= pump.interval {
         pump.accumulator -= pump.interval;
         let mut prompt_cursor_visible = visual.prompt_cursor_visible;
-        advanced |= advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
+        advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
         visual.prompt_cursor_visible = prompt_cursor_visible;
         // The live input line's barber pole scrolls one phase per pump
-        // tick whether or not a line prompt is open.
+        // tick whether or not a line prompt is open, so every tick needs
+        // a redraw regardless of what the wait frame itself reported.
         visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
         advanced = true;
     }
@@ -13282,19 +13283,6 @@ mod tests {
     /// Drops the read-only flag `fs::copy` inherits from the source.
     ///
     /// The clean local asset folder is kept read-only so nothing can write
-    /// back into it; the fixture copies these tests then rewrite must not
-    /// inherit that.
-    fn clear_read_only(path: &Path) {
-        if let Ok(metadata) = fs::metadata(path) {
-            let mut permissions = metadata.permissions();
-            if permissions.readonly() {
-                #[allow(clippy::permissions_set_readonly_false)]
-                permissions.set_readonly(false);
-                let _ = fs::set_permissions(path, permissions);
-            }
-        }
-    }
-
     fn install_canonical_intro_bit_asset<T, FC, FV>(
         source_dir: &Path,
         dir: &Path,
@@ -13325,7 +13313,7 @@ mod tests {
                 })
         });
         let destination = dir.join(file_name);
-        clear_read_only(&destination);
+        let _ = u5_runtime::test_fixtures::clear_readonly(&destination);
         fs::write(&destination, encode_sparse_bit_resource(&bitmaps)).unwrap_or_else(|err| {
             panic!("failed to write canonical intro test asset {file_name}: {err}")
         });
