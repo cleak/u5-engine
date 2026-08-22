@@ -910,11 +910,24 @@ pub fn visual_frame_suite(
     push_visual_combat_gallery_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
     push_visual_surface_view_class_gallery_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
 
-    reports.push(write_visual_intro_report(
+    // `systems/intro.md §3`: this case used to be labelled
+    // "intro-menu" while rendering the title phase, because a Menu
+    // panel with an unfinished flourish takes the title branch. Name
+    // it for what it is and seed a mid-flourish step, which exercises
+    // the packed/centred band fill, the odd-frame mirror-and-shift,
+    // and frame 5's never-revealed row 29 in one frame.
+    reports.push(write_visual_intro_flourish_report(
         out_dir,
-        "intro-menu",
-        "intro menu",
-        VisualIntroPanel::Menu,
+        "intro-title-flourish",
+        "intro title flourish",
+        VISUAL_SUITE_FLOURISH_STEP,
+        game_dir,
+        raster_depth,
+    )?);
+    reports.push(write_visual_intro_presents_hold_report(
+        out_dir,
+        "intro-title-presents-hold",
+        "intro title presents hold",
         game_dir,
         raster_depth,
     )?);
@@ -7821,6 +7834,8 @@ fn run_visual_intro_menu_app(
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -8043,6 +8058,17 @@ struct VisualIntroState {
     /// the finished mark plus the slot-7 "Presents" line, before the
     /// whole-page publish that starts the attribution card.
     title_presents_hold_ticks: u16,
+    /// `systems/intro.md §3` "player skipped the title sequence".
+    /// Set by any keystroke during the flourish, the slot-7 hold, or
+    /// the signature strokes. It selects the start/menu loader's
+    /// plain path over its animated one and suppresses the single
+    /// automatic Return-to-View preview.
+    title_sequence_skipped: bool,
+    /// `systems/intro.md §3`: an unskipped run plays the
+    /// Return-to-View preview exactly once, after the start/menu
+    /// loader returns and before the menu is polled for the first
+    /// time. Armed when the menu is entered unskipped.
+    pending_auto_return_to_view: bool,
     title_tick_frame: u8,
     title_tick_visible_frame: u8,
     surface: IntroDisplayBuffer,
@@ -8553,6 +8579,13 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         let mut advanced = false;
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
+        // `systems/intro.md §3`: an unskipped run plays the
+        // Return-to-View preview once, after the start/menu loader
+        // returns and before the menu is polled for the first time.
+        if advance_visual_intro_auto_return_to_view(intro) {
+            return true;
+        }
+
         // `cleak/u5-spec#78`: the menu's no-key poll pass spans two
         // BIOS ticks, and both the clear-carry title tick and the
         // idle timeout are per *pass*, not per tick.
@@ -8597,6 +8630,13 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
             advanced = true;
         } else if title_phase && visual_intro_presents_hold_active(intro) {
             intro.title_presents_hold_ticks -= 1;
+            if intro.title_presents_hold_ticks == 0 && intro.title_sequence_skipped {
+                // §3 step 2: on a skipped run the sequence ends here and
+                // the intro jumps straight to the start/menu load.
+                intro.title_signature_progress = 0;
+                intro.title_signature_complete = true;
+                finish_visual_intro_title_to_menu(intro);
+            }
             advanced = true;
         } else if title_phase && !intro.title_signature_complete {
             let signature =
@@ -8653,8 +8693,63 @@ fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
 // rounded blue chrome, the white inner rectangle, the interior clear,
 // and both border captions.
 
+/// `systems/intro.md §3` "Start/menu screen composition", steps 4, 7
+/// and the flag's Return-to-View consequence.
+///
+/// Whether the loader takes its **animated** or **plain** path is
+/// decided by the same "player skipped the title sequence" flag the
+/// title phase sets: an unskipped run gets the animated path, any
+/// earlier keystroke gets the plain one.
+///
+/// - Step 4 transfers `(0, 0)..(319, 100)` from the hidden surface to
+///   the visible page. The animated path performs it as the driver's
+///   rectangle dissolve and the plain path copies it in one step;
+///   both are single blocking calls, so the completed picture is the
+///   same either way (`cleak/u5-spec#53`).
+/// - Step 7 belongs to the animated path only: load `WD.BIT`, run the
+///   driver's subtitle ignition transition, release it.
+/// - Immediately after the loader returns, an unskipped run plays the
+///   Return-to-View preview once, before the menu is polled for the
+///   first time. Only this first automatic showing is conditional;
+///   the idle timeout and the explicit `R` command are unaffected.
+fn run_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
+    let animated = !intro.title_sequence_skipped;
+    if animated {
+        // Step 7. `WD.BIT` is published (a raw 288x49 one-bit image,
+        // `formats/bit.md §4.3`) and the transition's mechanism is
+        // published too (`display-driver-abi.md`, dispatch `0x69`
+        // carry set: save the hidden surface, clear it, run a
+        // pseudo-random per-pixel reveal interleaved with idle-strip
+        // steps and a percussive effect, then restore the hidden
+        // surface). What is *not* published is where the 288x49
+        // lettering is stamped for the reveal.
+        //
+        // The engine therefore loads the resource — which proves the
+        // asset is present and parses to the published geometry — but
+        // does not play the transition. That omission is provably
+        // lossless for the finished screen rather than a hidden gap:
+        // the entry restores the hidden surface it saved, and step 8
+        // then runs one clear-carry title tick that overwrites the
+        // whole `(0, 65)` `320 x 49` band opaquely, so the ignition
+        // leaves no pixel behind on either surface. Only the transient
+        // animation is missing. See `cleak/u5-spec#78`.
+        let lettering = u5_runtime::load_wd_bit(&intro.game_dir)
+            .unwrap_or_else(|err| panic!("intro animated start/menu path requires WD.BIT: {err}"));
+        assert_eq!(
+            (lettering.width, lettering.height),
+            (
+                u5_runtime::WD_BIT_LETTERING_COLUMNS as usize,
+                u5_runtime::WD_BIT_LETTERING_ROWS as usize
+            ),
+            "WD.BIT must be the published 288x49 lettering image"
+        );
+        intro.pending_auto_return_to_view = true;
+    }
+}
+
 fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
     intro.title_presents_hold_ticks = 0;
+    run_visual_intro_start_menu_loader(intro);
     intro.dispatch.dismiss_title();
     clear_carry_visual_intro_title_tick(intro);
     intro.menu_idle_ticks = 0;
@@ -8860,6 +8955,30 @@ fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
         >= preview_frames.len()
 }
 
+/// `systems/intro.md §3`: the single automatic Return-to-View preview
+/// an unskipped title sequence earns. It runs after the start/menu
+/// loader returns and before the first menu poll; a skipped run never
+/// arms it. Only this first showing is conditional — the two-hundred
+/// pass idle timeout and the explicit `R` command are unaffected.
+fn advance_visual_intro_auto_return_to_view(intro: &mut VisualIntroState) -> bool {
+    if !intro.pending_auto_return_to_view
+        || !matches!(intro.panel, VisualIntroPanel::Menu)
+        || matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+        || intro.message_waiting_for_key
+    {
+        return false;
+    }
+    intro.pending_auto_return_to_view = false;
+    if matches!(
+        intro.dispatch.submit_menu_key(b'R'),
+        UnifiedMenuStep::EnteredSubflow(IntroSubflow::ReturnToView)
+    ) {
+        resolve_visual_intro_subflow(intro, IntroSubflow::ReturnToView);
+        return true;
+    }
+    false
+}
+
 fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool {
     if !matches!(intro.panel, VisualIntroPanel::Menu)
         || intro.message_waiting_for_key
@@ -8928,14 +9047,48 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.title_signature_complete = true;
             intro.title_tick_frame = 0;
             intro.title_tick_visible_frame = 0;
+            intro.title_sequence_skipped = true;
             finish_visual_intro_title_to_menu(intro);
             return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
         }
+        // `systems/intro.md §3` + `cleak/u5-spec#67`: a keystroke does
+        // not cut away mid-picture and does not mean the same thing at
+        // every point in the sequence.
         if !intro.title_flourish_complete {
-            return false;
+            // The driver stops the script, makes the whole final frame
+            // visible and presents it once, so an aborted flourish ends
+            // on exactly the picture a completed one does. The lower-band
+            // clear and the slot-7 publish still happen, so "Presents" is
+            // briefly visible either way; everything after that is
+            // skipped.
+            intro.title_flourish_step = title_flourish_total_steps() - 1;
+            intro.title_flourish_complete = true;
+            intro.title_presents_hold_ticks = INTRO_PRESENTS_HOLD_BIOS_TICKS;
+            intro.title_sequence_skipped = true;
+            return true;
         }
-        intro.title_signature_progress = 0;
-        intro.title_signature_complete = true;
+        if visual_intro_presents_hold_active(intro) {
+            // A key during the step-2 hold skips from there: the slot-8
+            // ornament, the whole BRITISH.PTH animation, BRITISH.BIT and
+            // slot 9 are not drawn at all.
+            intro.title_presents_hold_ticks = 0;
+            intro.title_sequence_skipped = true;
+            intro.title_signature_progress = 0;
+            intro.title_signature_complete = true;
+            intro.title_tick_frame = 0;
+            intro.title_tick_visible_frame = 0;
+            finish_visual_intro_title_to_menu(intro);
+            return true;
+        }
+        if !intro.title_signature_complete {
+            // A key during the strokes abandons the remaining segments
+            // but steps 5 and 6 still run, so the finished signature and
+            // the slot-9 line still appear.
+            intro.title_sequence_skipped = true;
+            intro.title_signature_progress = 0;
+            intro.title_signature_complete = true;
+            return true;
+        }
         intro.title_tick_frame = 0;
         intro.title_tick_visible_frame = 0;
         finish_visual_intro_title_to_menu(intro);
@@ -8951,6 +9104,9 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     }
 
     intro.menu_idle_ticks = 0;
+    // The automatic preview runs *before* the first poll; once a
+    // key has been read the one-shot is spent.
+    intro.pending_auto_return_to_view = false;
     let key = if ch == '\r' { b'\r' } else { ch as u8 };
     // `cleak/u5-spec#78`: besides the published letter hotkeys, the
     // original moves the inverse-video highlight with the arrow keys
@@ -9717,10 +9873,16 @@ fn draw_visual_intro_start_menu_to_buffer(
 ) {
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
     buffer.draw_title_tick(title_tick_frame, title_tick_frames);
-    if let Some(font) = font {
-        draw_visual_intro_menu_text_window_frame(buffer, font);
-        draw_visual_intro_menu_labels(buffer, font, highlighted);
-    }
+    // `systems/intro.md §6.1`/`§6.2`: the lower frame and the six
+    // labels are part of the start/menu screen, not an optional
+    // overlay. Skipping them when no font slot is loaded produced a
+    // menu that was black below row 119 — a silent degradation that
+    // let the headless frame suite disagree with the live renderer.
+    let font = font.expect(
+        "intro menu render requires the pre-flourish font-slot table; drawing the start/menu screen without its §6.1 frame and §6.2 labels is a forbidden fallback",
+    );
+    draw_visual_intro_menu_text_window_frame(buffer, font);
+    draw_visual_intro_menu_labels(buffer, font, highlighted);
 }
 
 /// `systems/intro.md §6.2` published menu labels at the published
@@ -10389,6 +10551,9 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
 /// the blue border, then restore the white rule", so slot 1 binds to the
 /// chrome's rule colour and slot 2 to its border colour.
 const RTV_UI_COLOUR_SLOT_1: u8 = INTRO_MENU_FRAME_OUTLINE_COLOR;
+/// `systems/intro.md §12.1`: the caption helper repaints the window's
+/// bottom border either side of the caption in user-interface colour
+/// slot 2 — the same dark-blue border fill the §6.1 frame uses.
 const RTV_UI_COLOUR_SLOT_2: u8 = INTRO_MENU_FRAME_BORDER_COLOR;
 
 /// `cleak/u5-spec#78`: the intro's border captions are "ordinary
@@ -10558,6 +10723,15 @@ fn paint_out_intro_menu_select_caption(buffer: &mut IntroDisplayBuffer) {
 /// `18 - floor(len / 2)`, and it interrupts the one-pixel rule at
 /// `y = 192`. It is emitted once per chapter, not redrawn per frame, so
 /// this simply keeps it painted for every frame of the chapter.
+/// `systems/intro.md §12.1` centered-caption helper.
+///
+/// The caption is not just printed: **before** the text the helper
+/// repaints the window's bottom border either side of where the
+/// caption will sit, "erasing whatever was there". That erase is
+/// load-bearing here, because the §6.1 menu frame owns that row and
+/// leaves the `>Copyright 1988 Lord British<` caption in it — without
+/// the repaint the preview's caption lands on top of the copyright
+/// line and the two interleave.
 fn draw_return_to_view_caption(
     buffer: &mut IntroDisplayBuffer,
     font: &FixedCellFont,
@@ -10565,6 +10739,40 @@ fn draw_return_to_view_caption(
 ) {
     let bytes = caption.as_bytes();
     let start_column = return_to_view_caption_start_column(bytes.len());
+    // §12.1: `end_col = start_col + len + 2`.
+    let end_column = start_column + bytes.len() + 2;
+    let spans = [
+        (
+            usize::from(INTRO_MENU_FRAME_INTERIOR_LEFT_X),
+            start_column * CH_CELL_SIDE,
+        ),
+        (
+            end_column * CH_CELL_SIDE,
+            usize::from(INTRO_MENU_FRAME_INTERIOR_RIGHT_X),
+        ),
+    ];
+    for (x0, x1) in spans {
+        if x0 > x1 {
+            continue;
+        }
+        // Two filled rectangles in UI colour slot 2 covering
+        // y = 193..=199, then a single-pixel slot-1 rule at y = 192
+        // over the same spans. The caption interrupts the rules.
+        buffer.clear_rect_inclusive(
+            x0,
+            usize::from(INTRO_MENU_FRAME_BOTTOM_RULE_Y) + 1,
+            x1,
+            usize::from(INTRO_MENU_FRAME_BOTTOM_Y),
+            RTV_UI_COLOUR_SLOT_2,
+        );
+        buffer.clear_rect_inclusive(
+            x0,
+            usize::from(INTRO_MENU_FRAME_BOTTOM_RULE_Y),
+            x1,
+            usize::from(INTRO_MENU_FRAME_BOTTOM_RULE_Y),
+            RTV_UI_COLOUR_SLOT_1,
+        );
+    }
     for (offset, byte) in bytes.iter().enumerate() {
         buffer.draw_fixed_glyph_cell(
             font,
@@ -11962,6 +12170,62 @@ fn write_visual_intro_report(
     )
 }
 
+/// A frame partway through frame 5 of the flourish script: an odd
+/// frame, so it is drawn bottom-up, vertically mirrored and shifted
+/// one row down, with its visible rows packed contiguously and
+/// centred inside the band. Frames 0..=5 own thirteen presentation
+/// steps each (seven reveals plus six erases), so frame 5 begins at
+/// step 65 and this is its fourth reveal.
+const VISUAL_SUITE_FLOURISH_STEP: usize = 68;
+
+fn write_visual_intro_flourish_report(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    flourish_step: usize,
+    game_dir: &Path,
+    _raster_depth: TileGraphicsDepth,
+) -> io::Result<VisualFrameReport> {
+    let title = load_title_bit(game_dir)?;
+    let british = load_british_bit(game_dir)?;
+    let buffer = compose_intro_title_art_buffer(
+        &title,
+        &british,
+        IntroTitleCompositionPhase::Flourish {
+            step: flourish_step,
+        },
+    );
+    write_visual_report(
+        out_dir,
+        label,
+        INTRO_FRAMEBUFFER_WIDTH,
+        INTRO_FRAMEBUFFER_HEIGHT,
+        frame_kind,
+        buffer.to_rgba(),
+    )
+}
+
+/// `systems/intro.md §3` steps 1-2: the finished flourish mark with
+/// the slot-7 "Presents" line published over the lower band, held
+/// before the attribution card's whole-page publish replaces it.
+fn write_visual_intro_presents_hold_report(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    game_dir: &Path,
+    _raster_depth: TileGraphicsDepth,
+) -> io::Result<VisualFrameReport> {
+    let buffer = visual_intro_presents_hold_buffer(game_dir);
+    write_visual_report(
+        out_dir,
+        label,
+        INTRO_FRAMEBUFFER_WIDTH,
+        INTRO_FRAMEBUFFER_HEIGHT,
+        frame_kind,
+        buffer.to_rgba(),
+    )
+}
+
 fn write_visual_intro_report_with_title_dismissed(
     out_dir: &Path,
     label: &str,
@@ -11989,6 +12253,12 @@ fn write_visual_intro_report_inner(
     raster_depth: TileGraphicsDepth,
     title_dismissed: bool,
 ) -> io::Result<VisualFrameReport> {
+    // `systems/intro.md §3` step 2 loads the resident font slots
+    // before the title flourish, and every later intro screen draws
+    // through them. Seeding `None` here made the suite's menu frames
+    // omit the §6.1 frame and §6.2 labels entirely.
+    let font_slots =
+        IntroFontSlots::new(load_ibm_ch_font(game_dir)?, load_runes_ch_font(game_dir)?);
     let mut intro = VisualIntroState {
         game_dir: game_dir.to_path_buf(),
         raster_depth,
@@ -11998,6 +12268,8 @@ fn write_visual_intro_report_inner(
         title_signature_progress: 0,
         title_signature_complete: title_dismissed,
         title_presents_hold_ticks: 0,
+        title_sequence_skipped: false,
+        pending_auto_return_to_view: false,
         title_tick_frame: 0,
         title_tick_visible_frame: 0,
         surface: new_intro_display_buffer(),
@@ -12009,7 +12281,7 @@ fn write_visual_intro_report_inner(
         panel,
         launch_result: Arc::new(Mutex::new(None)),
         image_handle: None,
-        font_slots: None,
+        font_slots: Some(font_slots),
         text_windows: TextWindowSystem::new(),
         pending_pre_flourish_outcome: None,
         title_tick_frames: None,
@@ -13373,6 +13645,12 @@ mod tests {
             "TITLE.BIT",
             "BRITISH.BIT",
             "BRITISH.PTH",
+            "WD.BIT",
+            // `systems/intro.md §3`: an unskipped run plays the
+            // Return-to-View preview once before the first menu poll,
+            // so the preview's map source is an intro asset too.
+            "MISCMAPS.DAT",
+            "TILES.16",
             "ULTIMA.16",
             "STARTSC.16",
             "CREATE.16",
@@ -13937,6 +14215,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -14054,6 +14334,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -14334,6 +14616,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -14391,6 +14675,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -14806,6 +15092,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -14881,6 +15169,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -14957,6 +15247,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15004,8 +15296,12 @@ mod tests {
 
     #[test]
     fn intro_title_dismiss_runs_startsc_clear_carry_tick() {
+        // Dismissing the title runs the start/menu loader, and an
+        // unskipped run takes its animated path, which loads `WD.BIT`.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
         let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
+            game_dir: dir,
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
             title_flourish_step: intro_title_flourish_total_steps(),
@@ -15013,6 +15309,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15048,6 +15346,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15096,7 +15396,7 @@ mod tests {
     // `visual_frame_suite_local_clean_panics_on_strict_intro_asset_gap_when_present`.
 
     #[test]
-    fn intro_title_flourish_ignores_non_j_keys_until_signature_phase() {
+    fn intro_title_flourish_key_aborts_to_the_finished_mark_and_sets_the_skip_flag() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
@@ -15106,6 +15406,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15123,22 +15425,35 @@ mod tests {
             title_tick_frames: None,
         };
 
-        assert!(!step_visual_intro(&mut intro, 'x'));
+        // `cleak/u5-spec#67`: a keystroke during the flourish does not
+        // leave a half-built mark. The driver makes the whole final
+        // frame visible and presents it once, so the abort ends on the
+        // same picture a completed run does — and the lower-band clear
+        // plus the slot-7 publish still happen, so "Presents" is
+        // briefly visible either way. It also raises the intro's
+        // "player skipped the title sequence" flag.
+        assert!(step_visual_intro(&mut intro, 'x'));
 
+        assert!(intro.title_flourish_complete);
+        assert_eq!(
+            intro.title_flourish_step,
+            title_flourish_total_steps() - 1,
+            "the abort ends on the finished frame-6 mark"
+        );
+        assert!(intro.title_sequence_skipped);
+        assert!(visual_intro_presents_hold_active(&intro));
+        assert!(!intro.title_signature_complete);
         assert!(matches!(
             intro.dispatch.tick_title(),
             UnifiedMenuStep::PresentTitle
         ));
-        assert_eq!(intro.title_flourish_step, 3);
-        assert!(!intro.title_flourish_complete);
-        assert!(!intro.title_signature_complete);
         assert_eq!(intro.title_tick_frame, 0);
         assert_eq!(intro.title_tick_visible_frame, 0);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
     #[test]
-    fn intro_signature_phase_key_skips_to_start_menu_without_advancing_path() {
+    fn intro_signature_phase_key_abandons_strokes_but_still_draws_the_card() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
@@ -15148,6 +15463,8 @@ mod tests {
             title_signature_progress: 42,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15165,16 +15482,29 @@ mod tests {
             title_tick_frames: None,
         };
 
+        // `systems/intro.md §3` step 4: a key during the strokes
+        // abandons the remaining segments, but steps 5 and 6 still
+        // run — the finished `BRITISH.BIT` signature and the slot-9
+        // line still appear, so the title phase is not left yet.
         assert!(step_visual_intro(&mut intro, 'x'));
 
-        assert!(!matches!(
+        assert!(matches!(
             intro.dispatch.tick_title(),
             UnifiedMenuStep::PresentTitle
         ));
         assert_eq!(intro.title_signature_progress, 0);
         assert!(intro.title_signature_complete);
-        assert_eq!(intro.title_tick_visible_frame, 0);
-        assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
+        assert!(intro.title_sequence_skipped);
+
+        // The next key leaves the title phase for the start/menu
+        // screen, and because the run was skipped the loader takes its
+        // plain path: no automatic Return-to-View preview is armed.
+        assert!(step_visual_intro(&mut intro, 'x'));
+        assert!(!matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert!(!intro.pending_auto_return_to_view);
         assert_eq!(intro.menu_idle_ticks, 0);
         assert!(intro.message.is_empty());
         let _ = fs::remove_dir_all(&intro.game_dir);
@@ -15196,6 +15526,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15236,6 +15568,8 @@ mod tests {
             title_signature_progress: total_steps - 1,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15247,7 +15581,10 @@ mod tests {
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
-            font_slots: None,
+            font_slots: Some(IntroFontSlots::new(
+                load_ibm_ch_font(&dir).expect("intro fixtures require IBM.CH"),
+                load_ibm_ch_font(&dir).expect("intro fixtures require IBM.CH"),
+            )),
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
@@ -15316,6 +15653,8 @@ mod tests {
             title_signature_progress: total_steps - 1,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15354,6 +15693,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -15498,6 +15839,99 @@ mod tests {
             assert_eq!(at(cell, 18), 0x0f, "plain cell {cell} draws foreground");
         }
         assert_eq!(at(31, 18), 0x00, "nothing painted right of row 1");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn unskipped_title_sequence_arms_the_single_automatic_return_to_view() {
+        // `systems/intro.md §3`: whether the start/menu loader takes
+        // its animated or plain path is decided by the "player skipped
+        // the title sequence" flag, and only an unskipped run earns the
+        // one automatic Return-to-View preview before the first poll.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_sequence_skipped = false;
+        intro.pending_auto_return_to_view = false;
+
+        finish_visual_intro_title_to_menu(&mut intro);
+
+        assert!(
+            intro.pending_auto_return_to_view,
+            "an unskipped run arms the automatic preview"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn skipped_title_sequence_takes_the_plain_loader_path() {
+        // A skipped run takes the plain path: `WD.BIT` and the step-7
+        // subtitle ignition are not touched at all, and no automatic
+        // preview is armed.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        // Deleting WD.BIT proves the plain path never reaches step 7 —
+        // the animated path would fail loudly on the missing asset.
+        fs::remove_file(dir.join("WD.BIT")).unwrap();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_sequence_skipped = true;
+
+        finish_visual_intro_title_to_menu(&mut intro);
+
+        assert!(
+            !intro.pending_auto_return_to_view,
+            "a skipped run suppresses the automatic preview"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn armed_automatic_preview_enters_return_to_view_on_the_next_tick() {
+        // End-to-end: the armed one-shot actually dispatches the
+        // preview through the ordinary `R` path before the menu is
+        // polled, and disarms itself so it never fires twice.
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.pending_auto_return_to_view = true;
+
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the armed one-shot must enter the Return-to-View preview"
+        );
+        assert!(!intro.pending_auto_return_to_view);
+        assert_eq!(
+            intro.dispatch.intro.cached_selection,
+            Some(IntroSubflow::ReturnToView)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn intro_menu_keystroke_spends_the_automatic_preview_one_shot() {
+        // The automatic preview runs before the menu is polled for the
+        // first time; once a key has been read the one-shot is spent.
+        // The idle timeout and the explicit `R` command are unaffected.
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.pending_auto_return_to_view = true;
+
+        assert!(step_visual_intro(
+            &mut intro,
+            char::from(u5_runtime::INPUT_CODE_SOUTH)
+        ));
+
+        assert!(!intro.pending_auto_return_to_view);
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -18557,6 +18991,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -18884,6 +19320,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -18946,6 +19384,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -18969,6 +19409,8 @@ mod tests {
         panel: VisualIntroPanel,
     ) -> VisualIntroState {
         install_intro_assets(&dir);
+        let ibm = load_ibm_ch_font(&dir).expect("intro fixtures require IBM.CH");
+        let font_slots = IntroFontSlots::new(ibm.clone(), ibm);
         let mut dispatch = UnifiedMenuDispatch::new();
         dispatch.dismiss_title();
         let mut intro = VisualIntroState {
@@ -18980,6 +19422,8 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
             title_tick_frame: 0,
             title_tick_visible_frame: 0,
             surface: new_intro_display_buffer(),
@@ -18991,7 +19435,7 @@ mod tests {
             panel,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
-            font_slots: None,
+            font_slots: Some(font_slots),
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
@@ -19452,6 +19896,62 @@ mod tests {
         // The pixel just outside the strip still carries the backing.
         assert_eq!(at(RTV_PREVIEW_PIXEL_X - 1, RTV_PREVIEW_PIXEL_Y), 3);
         assert_eq!(at(0, 0), 3);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn return_to_view_caption_repaints_the_border_either_side_of_itself() {
+        // `systems/intro.md §12.1`: before the text, the helper draws
+        // two filled slot-2 rectangles over y = 193..=199 spanning
+        // x = 8..start_col*8 and end_col*8..311, plus two slot-1
+        // single-pixel rules at y = 192 over the same spans. Without
+        // that repaint the preview's caption lands on top of the §6.1
+        // frame's `>Copyright 1988 Lord British<` line and the two
+        // interleave.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let font = load_ibm_ch_font(&dir).unwrap();
+        let mut buffer = new_intro_display_buffer();
+        // Seed the row with the menu frame's copyright caption so the
+        // erase has something to remove.
+        draw_visual_intro_menu_text_window_frame(&mut buffer, &font);
+
+        let caption = "The Summoning";
+        draw_return_to_view_caption(&mut buffer, &font, caption);
+
+        let start_column = return_to_view_caption_start_column(caption.len());
+        let end_column = start_column + caption.len() + 2;
+        let at = |x: usize, y: usize| buffer.pixels[y * buffer.width + x];
+        for x in [
+            usize::from(INTRO_MENU_FRAME_INTERIOR_LEFT_X),
+            start_column * CH_CELL_SIDE - 1,
+            end_column * CH_CELL_SIDE,
+            usize::from(INTRO_MENU_FRAME_INTERIOR_RIGHT_X),
+        ] {
+            for y in 193..=usize::from(INTRO_MENU_FRAME_BOTTOM_Y) {
+                assert_eq!(
+                    at(x, y),
+                    RTV_UI_COLOUR_SLOT_2,
+                    "border repaint at ({x}, {y})"
+                );
+            }
+            assert_eq!(
+                at(x, usize::from(INTRO_MENU_FRAME_BOTTOM_RULE_Y)),
+                RTV_UI_COLOUR_SLOT_1,
+                "flanking rule at x={x}"
+            );
+        }
+        // No fragment of the copyright caption survives either side of
+        // the preview caption.
+        for x in usize::from(INTRO_MENU_FRAME_INTERIOR_LEFT_X)..start_column * CH_CELL_SIDE {
+            for y in 193..=usize::from(INTRO_MENU_FRAME_BOTTOM_Y) {
+                assert_ne!(
+                    at(x, y),
+                    RTV_CAPTION_FOREGROUND,
+                    "stale glyph at ({x}, {y})"
+                );
+            }
+        }
         let _ = fs::remove_dir_all(dir);
     }
 

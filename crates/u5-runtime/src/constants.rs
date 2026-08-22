@@ -95,8 +95,10 @@ pub const BIT_ENTRY_COUNT_WORD_LEN: usize = 2;
 /// entry has no associated strip body (skipped by the driver scan).
 pub const BIT_STRIP_POINTER_NONE: u16 = 0;
 /// `formats/bit.md §4.3`: `WD.BIT` is a single-entry resource whose
-/// "Warriors of Destiny" lettering is exactly 49 rows tall.
+/// "Warriors of Destiny" lettering is exactly 288 by 49 — the same
+/// geometry as the `ULTIMA` title-tick records it ignites into.
 pub const WD_BIT_LETTERING_ROWS: u16 = 49;
+pub const WD_BIT_LETTERING_COLUMNS: u16 = 288;
 /// `formats/bit.md §3` strip-body header word widths. Each strip
 /// body opens with a width-related word and a row-count word before
 /// its packed pixel payload — four bytes of header total. Promote
