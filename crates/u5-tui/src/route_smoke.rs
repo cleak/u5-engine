@@ -3041,7 +3041,10 @@ fn copy_route_smoke_save_file(
     source_name: &str,
     destination_name: &str,
 ) -> io::Result<()> {
-    fs::copy(game_dir.join(source_name), save_dir.join(destination_name)).map(|_| ())
+    u5_runtime::copy_disk_file_writable(
+        &game_dir.join(source_name),
+        &save_dir.join(destination_name),
+    )
 }
 
 fn route_reload_checkpoints(case_name: &str) -> &'static [usize] {

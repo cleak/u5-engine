@@ -65,6 +65,32 @@ pub fn read_disk_file_with_policy(path: &Path, policy: DiskRetryPolicy) -> io::R
     )
 }
 
+/// Copy a file and clear any read-only attribute on the destination.
+///
+/// `fs::copy` carries the source's read-only bit across on Windows,
+/// and a local clean asset directory is legitimately read-only: the
+/// engine only ever reads it. Fixtures and scratch copies taken from
+/// it are then written to, so they must not inherit the flag.
+pub fn copy_disk_file_writable(source: &Path, destination: &Path) -> io::Result<()> {
+    fs::copy(source, destination)?;
+    clear_readonly(destination)
+}
+
+/// Clear a file's read-only attribute, if it has one and it exists.
+pub fn clear_readonly(path: &Path) -> io::Result<()> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err),
+    };
+    let mut permissions = metadata.permissions();
+    if !permissions.readonly() {
+        return Ok(());
+    }
+    permissions.set_readonly(false);
+    fs::set_permissions(path, permissions)
+}
+
 pub fn write_disk_file(path: &Path, bytes: impl AsRef<[u8]>) -> io::Result<usize> {
     write_disk_file_with_policy(path, bytes.as_ref(), DiskRetryPolicy::single_directory())
 }

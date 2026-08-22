@@ -1355,7 +1355,10 @@ fn copy_visual_route_save_file(
     source_name: &str,
     destination_name: &str,
 ) -> io::Result<()> {
-    std::fs::copy(game_dir.join(source_name), save_dir.join(destination_name)).map(|_| ())
+    u5_runtime::copy_disk_file_writable(
+        &game_dir.join(source_name),
+        &save_dir.join(destination_name),
+    )
 }
 
 fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
@@ -12647,7 +12650,7 @@ mod tests {
             );
             let dst = dir.join(file_name);
             if !dst.exists() {
-                fs::copy(&src, &dst).unwrap_or_else(|err| {
+                u5_runtime::copy_disk_file_writable(&src, &dst).unwrap_or_else(|err| {
                     panic!("failed to install intro test asset {file_name}: {err}")
                 });
             }
@@ -12690,9 +12693,13 @@ mod tests {
                     )
                 })
         });
-        fs::write(dir.join(file_name), encode_sparse_bit_resource(&bitmaps)).unwrap_or_else(
-            |err| panic!("failed to write canonical intro test asset {file_name}: {err}"),
-        );
+        let destination = dir.join(file_name);
+        u5_runtime::clear_readonly(&destination).unwrap_or_else(|err| {
+            panic!("failed to make intro test asset {file_name} writable: {err}")
+        });
+        fs::write(&destination, encode_sparse_bit_resource(&bitmaps)).unwrap_or_else(|err| {
+            panic!("failed to write canonical intro test asset {file_name}: {err}")
+        });
     }
 
     trait IntoCanonicalBitmaps {
