@@ -12,9 +12,9 @@ use std::path::Path;
 use u5_runtime::intro_menu::{IntroSubflow, IntroSubflowResult};
 use u5_runtime::menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep};
 use u5_runtime::{
-    DisplayDriverFamily, JOURNEY_ONWARD_SHORTCUT_BANNER, MISCMAPS_DAT_FILE,
-    PreFlourishOutcome, SAVED_GAM_FILENAME, STORY_DAT_FILE, TextWindowSystem, TileGraphicsDepth,
-    disk_io_error_message, load_play_options_from_save, read_u4_transfer_source_from_party_sav,
+    DisplayDriverFamily, JOURNEY_ONWARD_SHORTCUT_BANNER, MISCMAPS_DAT_FILE, PreFlourishOutcome,
+    SAVED_GAM_FILENAME, STORY_DAT_FILE, TextWindowSystem, TileGraphicsDepth, disk_io_error_message,
+    load_play_options_from_save, read_u4_transfer_source_from_party_sav,
     run_intro_pre_flourish_phase,
 };
 
@@ -54,7 +54,10 @@ pub fn run_intro_menu_loop(
 
     let mut dispatch = UnifiedMenuDispatch::new();
     dispatch.dismiss_title();
-    if matches!(pre_flourish_outcome, PreFlourishOutcome::JourneyOnwardShortcut) {
+    if matches!(
+        pre_flourish_outcome,
+        PreFlourishOutcome::JourneyOnwardShortcut
+    ) {
         println!("{JOURNEY_ONWARD_SHORTCUT_BANNER}");
         if let IntroLoopControl::Launched = drive_intro_subflow(
             &mut dispatch,

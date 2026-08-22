@@ -826,7 +826,10 @@ fn cli_intro_non_j_first_key_does_not_take_journey_onward_path() {
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("Intro Menu"), "menu must follow non-J first key");
+    assert!(
+        stdout.contains("Intro Menu"),
+        "menu must follow non-J first key"
+    );
     assert!(
         !stdout.contains("Disk read failed for SAVED.GAM"),
         "non-J first key must not attempt the Journey Onward load: {stdout}"
