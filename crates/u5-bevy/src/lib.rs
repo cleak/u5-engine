@@ -16,6 +16,8 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
+#[cfg(test)]
+use u5_runtime::INTRO_DOORWAY_SECOND_LINE_PEN_Y;
 use u5_runtime::TITLE_TICK_FRAME_Y;
 #[cfg(test)]
 use u5_runtime::placeholder_title_tick_frames;
@@ -132,8 +134,6 @@ use u5_runtime::{
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
 };
-#[cfg(test)]
-use u5_runtime::{INTRO_DOORWAY_SECOND_LINE_PEN_Y, RectColumnSweepTransition};
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, GameplayMessageLog, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
@@ -12933,60 +12933,6 @@ fn apply_endgame_fade_to_black_mask(rgba: &mut [u8], state: &PlayState) {
 }
 
 #[cfg(test)]
-fn apply_rect_column_sweep_reveal_rgba(
-    destination: &mut [u8],
-    source: &[u8],
-    width: usize,
-    height: usize,
-    transition: RectColumnSweepTransition,
-) {
-    assert_eq!(
-        destination.len(),
-        source.len(),
-        "rect column sweep requires matching source/destination buffers"
-    );
-    assert!(
-        destination.len() >= width * height * 4,
-        "rect column sweep target has {} byte(s), expected at least {}",
-        destination.len(),
-        width * height * 4
-    );
-    let (start_x, end_x) = transition.revealed_columns();
-    let (rect_x0, rect_y0, rect_x1, rect_y1) = transition.rect;
-    assert!(
-        rect_x0 <= rect_x1 && rect_y0 <= rect_y1,
-        "rect column sweep rectangle is inverted: {:?}",
-        transition.rect
-    );
-    let y0 = usize::from(rect_y0);
-    let y1 = usize::from(rect_y1);
-    let x0 = usize::from(rect_x0);
-    let x1 = usize::from(rect_x1);
-    let revealed_start = usize::from(start_x);
-    let revealed_end = usize::from(end_x);
-    assert!(
-        x1 < width && y1 < height,
-        "rect column sweep rectangle {:?} exceeds target {width}x{height}",
-        transition.rect
-    );
-    assert!(
-        revealed_start >= x0 && revealed_end <= x1 && revealed_start <= revealed_end,
-        "rect column sweep reveal range {revealed_start}..={revealed_end} is outside {:?}",
-        transition.rect
-    );
-
-    for y in y0..=y1 {
-        for x in x0..=x1 {
-            if x < revealed_start || x > revealed_end {
-                continue;
-            }
-            let offset = (y * width + x) * 4;
-            destination[offset..offset + 4].copy_from_slice(&source[offset..offset + 4]);
-        }
-    }
-}
-
-#[cfg(test)]
 fn summarize(state: &mut PlayState, default_message: &str, input_line: &str) -> String {
     let dungeon_note = if matches!(state.area, u5_runtime::Area::Dungeon { .. }) {
         " [Dungeon first-person panel]"
@@ -16250,45 +16196,6 @@ mod tests {
         );
         assert_nonblack_rgba(&rgba);
         assert!(state.endgame.is_some());
-    }
-
-    #[test]
-    fn rect_column_sweep_reveal_copies_columns_from_source() {
-        let width = 8;
-        let height = 4;
-        let mut destination = vec![0x11; width * height * 4];
-        let source = vec![0xee; width * height * 4];
-        let transition = RectColumnSweepTransition {
-            rect: (2, 1, 6, 2),
-            tick: 1,
-        };
-
-        apply_rect_column_sweep_reveal_rgba(&mut destination, &source, width, height, transition);
-
-        assert_eq!(
-            rgba_pixel(&destination, width, 2, 1),
-            [0xee, 0xee, 0xee, 0xee]
-        );
-        assert_eq!(
-            rgba_pixel(&destination, width, 3, 2),
-            [0xee, 0xee, 0xee, 0xee]
-        );
-        assert_eq!(
-            rgba_pixel(&destination, width, 4, 1),
-            [0x11, 0x11, 0x11, 0x11]
-        );
-        assert_eq!(
-            rgba_pixel(&destination, width, 6, 2),
-            [0x11, 0x11, 0x11, 0x11]
-        );
-        assert_eq!(
-            rgba_pixel(&destination, width, 7, 1),
-            [0x11, 0x11, 0x11, 0x11]
-        );
-        assert_eq!(
-            rgba_pixel(&destination, width, 4, 3),
-            [0x11, 0x11, 0x11, 0x11]
-        );
     }
 
     #[test]

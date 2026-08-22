@@ -137,119 +137,26 @@ pub const fn intro_story6_secondary_subimage(step: usize) -> Option<u8> {
 }
 
 /// `intro.md §10` step 1 post-wait `STORY1.16` extra draw. After the
-/// player advances step 1, the intro draws subimage 2 at this fixed
-/// pixel coordinate, then runs the local rectangular transition over
-/// [`INTRO_STEP_1_RECT_TRANSITION`] (inclusive on both ends).
+/// player advances step 1, the intro composes subimage 2 at this fixed
+/// pixel coordinate on the hidden surface and reveals it with one
+/// blocking rectangle dissolve over [`INTRO_STEP_1_RECT_TRANSITION`]
+/// (inclusive on both ends); see [`crate::RectangleDissolve`].
 pub const INTRO_STEP_1_EXTRA_ART_X: u16 = 40;
 pub const INTRO_STEP_1_EXTRA_ART_Y: u16 = 86;
 pub const INTRO_STEP_1_EXTRA_SUBIMAGE: u8 = 2;
 pub const INTRO_STEP_1_RECT_TRANSITION: (u16, u16, u16, u16) = (40, 86, 75, 120);
-/// `intro.md §10` / `display-driver.md §8`: animated `STARTSC`
+/// `intro.md §10` / `display-driver.md §10`: animated `STARTSC`
 /// start/menu loader reveal rectangle. Callers that pass the nonzero
-/// animated-loader argument reveal this inclusive rectangle from left
-/// to right at one pixel column per title tick, and sample input only
-/// after it completes.
+/// animated-loader argument reveal this inclusive rectangle with one
+/// blocking rectangle dissolve ([`crate::RectangleDissolve`]) and sample
+/// input only after it completes. `cleak/u5-spec#53` withdrew the former
+/// left-to-right one-column-per-title-tick reading, and its 320-tick
+/// figure, in full.
 pub const INTRO_START_MENU_REVEAL_RECT: (u16, u16, u16, u16) = (0, 0, 319, 100);
 
-/// `cleak/u5-spec#53` published wipe contract for the step-1
-/// rectangle transition: a left-to-right column sweep at one pixel
-/// column per title tick, abrupt at each column boundary. Other
-/// callers opt in explicitly with their own published rectangles.
-pub const INTRO_RECT_TRANSITION_COLUMNS_PER_TICK: u16 = 1;
-
-/// `cleak/u5-spec#53`: total ticks needed to reveal an inclusive
-/// rectangle through the published column-sweep helper. Width is
-/// `(x1 - x0 + 1)`; total ticks equals the width when the sweep is
-/// one column per title tick.
-pub const fn intro_rect_transition_tick_count(rect: (u16, u16, u16, u16)) -> u16 {
-    let (x0, _y0, x1, _y1) = rect;
-    assert!(x1 >= x0, "intro rectangle transition has inverted X bounds");
-    let width = x1 - x0 + 1;
-    width / INTRO_RECT_TRANSITION_COLUMNS_PER_TICK
-}
-
-/// `cleak/u5-spec#53`: returns the inclusive X-column range
-/// `[start_x, end_x]` revealed by the column sweep at the given
-/// zero-based `tick` over the published rectangle. Each tick adds
-/// [`INTRO_RECT_TRANSITION_COLUMNS_PER_TICK`] columns. Passing a
-/// tick outside the published range is a caller bug and panics
-/// rather than silently clamping to the completed frame.
-pub fn intro_rect_transition_revealed_columns(rect: (u16, u16, u16, u16), tick: u16) -> (u16, u16) {
-    let (x0, _y0, x1, _y1) = rect;
-    let last_tick = intro_rect_transition_tick_count(rect);
-    assert!(last_tick > 0, "intro rectangle transition is empty");
-    assert!(
-        tick < last_tick,
-        "intro rectangle transition tick {tick} is outside the published range 0..{}",
-        last_tick - 1
-    );
-    let added = tick
-        .checked_mul(INTRO_RECT_TRANSITION_COLUMNS_PER_TICK)
-        .expect("intro rectangle transition tick multiplication overflowed");
-    let end_x = x0
-        .checked_add(added)
-        .expect("intro rectangle transition end column overflowed");
-    assert!(
-        end_x <= x1,
-        "intro rectangle transition end column {end_x} exceeds rectangle x1 {x1}"
-    );
-    (x0, end_x)
-}
-
-/// `intro.md §10` step 6 extra `STORY2.16` doorway-transition art
-/// draw. Step 6 also replaces the usual `STORY.DAT` record with two
-/// inline doorway-transition text lines; the strings are owned by
-/// the intro code itself and are not part of the published spec
-/// text.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// **Retracted contract.** `cleak/u5-spec#53` withdrew the left-to-right
-/// one-pixel-column-per-title-tick sweep in full, for both intro callers; the
-/// 36-tick and 320-tick figures were wrong and are deleted, not adjusted.
-/// Both callers dispatch the driver's rectangle dissolve instead - see
-/// [`crate::RectangleDissolve`] and `systems/display-driver-abi.md` section
-/// 9.6. The intro story step-1 path has been migrated; this type survives only
-/// for the start/menu loader until that caller moves too, and must not be used
-/// for anything new.
-pub struct RectColumnSweepTransition {
-    pub rect: (u16, u16, u16, u16),
-    pub tick: u16,
-}
-
-impl RectColumnSweepTransition {
-    pub const fn new(rect: (u16, u16, u16, u16)) -> Self {
-        Self { rect, tick: 0 }
-    }
-
-    pub const fn total_ticks(self) -> u16 {
-        intro_rect_transition_tick_count(self.rect)
-    }
-
-    pub fn revealed_columns(self) -> (u16, u16) {
-        intro_rect_transition_revealed_columns(self.rect, self.tick)
-    }
-
-    pub fn advance_title_tick(&mut self) -> bool {
-        let total_ticks = self.total_ticks();
-        assert!(total_ticks > 0, "intro rectangle transition is empty");
-        assert!(
-            self.tick < total_ticks,
-            "intro rectangle transition tick {} is outside the published range 0..{}",
-            self.tick,
-            total_ticks - 1
-        );
-        let next_tick = self
-            .tick
-            .checked_add(1)
-            .expect("intro rectangle transition tick counter overflowed");
-        if next_tick < total_ticks {
-            self.tick = next_tick;
-            false
-        } else {
-            true
-        }
-    }
-}
-
+/// `intro.md §10.1` step 6 extra `STORY2.16` doorway-transition art
+/// draw. Step 6 also replaces the usual `STORY.DAT` record with the two
+/// published inline doorway lines; see [`crate::INTRO_DOORWAY_LINES`].
 pub const INTRO_STEP_6_EXTRA_ART_X: u16 = 96;
 pub const INTRO_STEP_6_EXTRA_ART_Y: u16 = 39;
 pub const INTRO_STEP_6_EXTRA_SUBIMAGE: u8 = 3;
