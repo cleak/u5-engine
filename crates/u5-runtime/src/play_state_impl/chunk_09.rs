@@ -1123,8 +1123,18 @@ impl PlayState {
                 if !(0..32).contains(&x) || !(0..32).contains(&y) {
                     return None;
                 }
-                let visible_radius = self.surface_visibility_radius(radius);
-                if !self.town_cell_visible_with_light_radius(px, py, x, y, radius, visible_radius) {
+                if self.surface_visibility_pitch_dark() {
+                    return None;
+                }
+                let light_threshold = self.surface_visibility_light_threshold();
+                if !self.town_cell_visible_with_light_threshold(
+                    px,
+                    py,
+                    x,
+                    y,
+                    radius,
+                    light_threshold,
+                ) {
                     return None;
                 }
                 let xu = x as usize;
@@ -1133,9 +1143,18 @@ impl PlayState {
                 Some((terrain, None))
             }
             TopDownRenderArea::World(_) => {
-                let visible_radius = self.world_visibility_radius(radius);
-                if !self.world_cell_visible_with_light_radius(px, py, x, y, radius, visible_radius)
-                {
+                if self.world_visibility_pitch_dark() {
+                    return None;
+                }
+                let light_threshold = self.world_visibility_light_threshold();
+                if !self.world_cell_visible_with_light_threshold(
+                    px,
+                    py,
+                    x,
+                    y,
+                    radius,
+                    light_threshold,
+                ) {
                     return None;
                 }
                 let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
@@ -1429,33 +1448,58 @@ impl PlayState {
         out
     }
 
-    pub fn surface_visibility_radius(&self, requested: usize) -> usize {
-        if self.ambient_light == 0 || self.ambient_light >= FULL_DAYLIGHT {
-            return requested;
-        }
-
-        let cap = if self.ambient_light >= DAWN_DUSK_LIGHT[5] {
-            requested
-        } else if self.ambient_light >= DAWN_DUSK_LIGHT[4] {
-            4
-        } else if self.ambient_light >= DAWN_DUSK_LIGHT[3] {
-            3
-        } else if self.ambient_light >= DAWN_DUSK_LIGHT[2] {
-            2
-        } else if self.ambient_light >= DAWN_DUSK_LIGHT[1] {
-            1
-        } else {
-            0
-        };
-        requested.min(cap)
+    /// `visibility.md §5` + `lighting.md §3`: the cached ambient-light
+    /// byte *is* the squared-distance threshold handed to the visibility
+    /// carve. It is not a linear cell radius that the carve then squares.
+    ///
+    /// The spec is double-voiced here: §3 calls the byte the player's
+    /// "current effective sight radius", while §5 settles the external
+    /// contract as "the caller-provided light value is a squared-distance
+    /// threshold: cells whose squared distance from the centre is less
+    /// than or equal to that value are inside the main light radius"
+    /// (wording question raised alongside `cleak/u5-spec#79`). Black-box
+    /// observation of the original decides it: at noon on Britannia all
+    /// four corners of the 11x11 viewport are lit, and a corner sits at
+    /// squared distance 50 — exactly [`FULL_DAYLIGHT`]. Read as a linear
+    /// radius, 50 would be absurd; read as a threshold it lands on the
+    /// corner exactly.
+    ///
+    /// `lighting.md §3` keeps ambient on 2..=50 (dawn/dusk levels
+    /// `2, 5, 10, 20, 34, 49`; torch floor 18, spell floor 10), so the
+    /// same byte read as a threshold gives the full viewport at 50, a
+    /// torch disc reaching squared distance 18 at night, and the bare 3x3
+    /// neighbourhood at full darkness. Values above [`FULL_DAYLIGHT`] are
+    /// the skip-recompute sentinels; clamp them so a stale sentinel cannot
+    /// widen the disc past daylight.
+    pub fn surface_visibility_light_threshold(&self) -> u32 {
+        u32::from(self.ambient_light.min(FULL_DAYLIGHT))
     }
 
-    pub fn world_visibility_radius(&self, requested: usize) -> usize {
+    /// `visibility.md §3`/`§4`: light radius zero is the pitch-dark
+    /// branch. The producer "skips both the visibility carve helper and
+    /// the full-fill path" and "the grid stays fully obscured" — the
+    /// player sees nothing at all, not even the cell underfoot. Routed
+    /// through [`light_radius_branch`] so the three signed cases stay in
+    /// one place.
+    pub fn surface_visibility_pitch_dark(&self) -> bool {
+        matches!(
+            light_radius_branch(self.ambient_light),
+            LightRadiusBranch::PitchDark
+        )
+    }
+
+    /// `lighting.md §3`: the overworld special-underfoot override forces
+    /// ambient light to zero, i.e. the pitch-dark branch.
+    pub fn world_visibility_light_threshold(&self) -> u32 {
         if self.world_underfoot_blackout_active() {
             return 0;
         }
 
-        self.surface_visibility_radius(requested)
+        self.surface_visibility_light_threshold()
+    }
+
+    pub fn world_visibility_pitch_dark(&self) -> bool {
+        self.world_underfoot_blackout_active() || self.surface_visibility_pitch_dark()
     }
 
     pub fn world_underfoot_blackout_active(&self) -> bool {
@@ -1483,6 +1527,8 @@ impl PlayState {
         false
     }
 
+    /// Convenience wrapper: carve the whole `visible_radius` disc, i.e.
+    /// use the squared radius as the `visibility.md §5` light threshold.
     pub fn town_cell_visible(
         &self,
         px: isize,
@@ -1491,30 +1537,40 @@ impl PlayState {
         y: isize,
         visible_radius: usize,
     ) -> bool {
-        self.town_cell_visible_with_light_radius(px, py, x, y, visible_radius, visible_radius)
+        let threshold = (visible_radius as u32).saturating_mul(visible_radius as u32);
+        self.town_cell_visible_with_light_threshold(px, py, x, y, visible_radius, threshold)
     }
 
-    pub fn town_cell_visible_with_light_radius(
+    pub fn town_cell_visible_with_light_threshold(
         &self,
         px: isize,
         py: isize,
         x: isize,
         y: isize,
         view_radius: usize,
-        light_radius: usize,
+        light_threshold: u32,
     ) -> bool {
         let Some(index) = visibility_view_index(px, py, x, y, view_radius) else {
             return false;
         };
-        self.surface_visibility_carve_with_light_radius(px, py, view_radius, light_radius, false)
-            [index]
+        self.surface_visibility_carve_with_light_threshold(
+            px,
+            py,
+            view_radius,
+            light_threshold,
+            false,
+        )[index]
     }
 
+    /// `visibility.md §6`: sight blocking is its own tile classifier, not
+    /// the movement/projectile one. Uses the spec propagation-blocker set.
     pub fn town_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
         self.sight_blocking_object_at_current_floor(x, y).is_some()
-            || surface_tile_blocks_sight(self.grid[y * 32 + x])
+            || tile_blocks_sight_propagation(self.grid[y * 32 + x])
     }
 
+    /// Convenience wrapper: carve the whole `visible_radius` disc, i.e.
+    /// use the squared radius as the `visibility.md §5` light threshold.
     pub fn world_cell_visible(
         &self,
         px: isize,
@@ -1523,23 +1579,29 @@ impl PlayState {
         y: isize,
         visible_radius: usize,
     ) -> bool {
-        self.world_cell_visible_with_light_radius(px, py, x, y, visible_radius, visible_radius)
+        let threshold = (visible_radius as u32).saturating_mul(visible_radius as u32);
+        self.world_cell_visible_with_light_threshold(px, py, x, y, visible_radius, threshold)
     }
 
-    pub fn world_cell_visible_with_light_radius(
+    pub fn world_cell_visible_with_light_threshold(
         &self,
         px: isize,
         py: isize,
         x: isize,
         y: isize,
         view_radius: usize,
-        light_radius: usize,
+        light_threshold: u32,
     ) -> bool {
         let Some(index) = visibility_view_index(px, py, x, y, view_radius) else {
             return false;
         };
-        self.surface_visibility_carve_with_light_radius(px, py, view_radius, light_radius, true)
-            [index]
+        self.surface_visibility_carve_with_light_threshold(
+            px,
+            py,
+            view_radius,
+            light_threshold,
+            true,
+        )[index]
     }
 
     pub fn world_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
@@ -1554,19 +1616,23 @@ impl PlayState {
         radius: usize,
         wrap_world: bool,
     ) -> Vec<bool> {
-        self.surface_visibility_carve_with_light_radius(px, py, radius, radius, wrap_world)
+        let threshold = (radius as u32).saturating_mul(radius as u32);
+        self.surface_visibility_carve_with_light_threshold(px, py, radius, threshold, wrap_world)
     }
 
-    pub fn surface_visibility_carve_with_light_radius(
+    /// `visibility.md §5`: `light_threshold` is the squared-distance
+    /// threshold, taken as supplied. Do not square it here — see
+    /// [`Self::surface_visibility_light_threshold`].
+    pub fn surface_visibility_carve_with_light_threshold(
         &self,
         px: isize,
         py: isize,
         view_radius: usize,
-        light_radius: usize,
+        light_threshold: u32,
         wrap_world: bool,
     ) -> Vec<bool> {
         let mut visible =
-            self.surface_visibility_player_carve(px, py, view_radius, light_radius, wrap_world);
+            self.surface_visibility_player_carve(px, py, view_radius, light_threshold, wrap_world);
         let local_light_mask = self.surface_local_light_mask(px, py, wrap_world);
         if !local_light_mask.iter().any(|lit| *lit) {
             return visible;
@@ -1584,7 +1650,6 @@ impl PlayState {
         let mut considered = vec![false; cell_count];
         considered[center] = true;
         let mut queue = std::collections::VecDeque::from([(px, py)]);
-        let light_threshold = (light_radius as u32).saturating_mul(light_radius as u32);
 
         while let Some((cx, cy)) = queue.pop_front() {
             for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
@@ -1602,11 +1667,7 @@ impl PlayState {
                     continue;
                 };
                 let squared_distance = visibility_squared_distance(px, py, x, y);
-                let propagates = if wrap_world {
-                    surface_tile_propagates_visibility(tile, squared_distance)
-                } else {
-                    town_tile_propagates_visibility(tile, squared_distance)
-                };
+                let propagates = surface_tile_propagates_visibility(tile, squared_distance);
                 let in_player_light = visibility_in_radius(squared_distance, light_threshold);
                 if !in_player_light {
                     let locally_lit = Self::surface_local_light_mask_is_lit(
@@ -1638,33 +1699,56 @@ impl PlayState {
         visible
     }
 
-    fn surface_visibility_player_carve(
+    /// `visibility.md §5`: the shared centre-out neighbour carve. Seeds a
+    /// work queue with the centre cell, marks it, then repeatedly pops a
+    /// coordinate and examines its eight neighbours in the fixed ring
+    /// order (west, southwest, south, southeast, east, northeast, north,
+    /// northwest). Candidates that are out of the caller's window, already
+    /// considered, or outside the caller's light region are dropped; the
+    /// rest are carved and, when the tile propagates, enqueued.
+    ///
+    /// The same helper serves the player's viewport carve (§5) and the
+    /// local-light mask's per-source carve (§12) — the spec says the mask
+    /// "runs the same centre-out visibility carve ... using the source as
+    /// the centre and a fixed source radius", and §5 explicitly forbids
+    /// implementing either as a line or shadow caster.
+    ///
+    /// `index_of` maps a world coordinate to a slot in `carved` (`None`
+    /// for out-of-window), `squared_distance` supplies the centre-relative
+    /// squared distance used both by the range test and by the
+    /// adjacent-only propagation rule, and `in_range` decides membership
+    /// of the caller's light region.
+    fn surface_centre_out_carve<FIndex, FDist, FRange>(
         &self,
-        px: isize,
-        py: isize,
-        view_radius: usize,
-        light_radius: usize,
+        center_x: isize,
+        center_y: isize,
         wrap_world: bool,
-    ) -> Vec<bool> {
-        let side = view_radius.saturating_mul(2).saturating_add(1);
-        let cell_count = side.saturating_mul(side);
-        let mut visible = vec![false; cell_count];
-        if cell_count == 0 {
-            return visible;
+        index_of: FIndex,
+        squared_distance: FDist,
+        in_range: FRange,
+        carved: &mut [bool],
+    ) where
+        FIndex: Fn(isize, isize) -> Option<usize>,
+        FDist: Fn(isize, isize) -> u32,
+        FRange: Fn(isize, isize, u32) -> bool,
+    {
+        let Some(center) = index_of(center_x, center_y) else {
+            return;
+        };
+        if center >= carved.len() {
+            return;
         }
+        carved[center] = true;
 
-        let center = view_radius * side + view_radius;
-        visible[center] = true;
-        let mut considered = vec![false; cell_count];
+        let mut considered = vec![false; carved.len()];
         considered[center] = true;
-        let mut queue = std::collections::VecDeque::from([(px, py)]);
-        let light_threshold = (light_radius as u32).saturating_mul(light_radius as u32);
+        let mut queue = std::collections::VecDeque::from([(center_x, center_y)]);
 
         while let Some((cx, cy)) = queue.pop_front() {
             for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
                 let x = cx + isize::from(dx);
                 let y = cy + isize::from(dy);
-                let Some(index) = visibility_view_index(px, py, x, y, view_radius) else {
+                let Some(index) = index_of(x, y) else {
                     continue;
                 };
                 if considered[index] {
@@ -1675,22 +1759,43 @@ impl PlayState {
                 let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
                     continue;
                 };
-                let squared_distance = visibility_squared_distance(px, py, x, y);
-                if !visibility_in_radius(squared_distance, light_threshold) {
+                let squared = squared_distance(x, y);
+                if !in_range(x, y, squared) {
                     continue;
                 }
 
-                visible[index] = true;
-                let propagates = if wrap_world {
-                    surface_tile_propagates_visibility(tile, squared_distance)
-                } else {
-                    town_tile_propagates_visibility(tile, squared_distance)
-                };
-                if propagates {
+                carved[index] = true;
+                if surface_tile_propagates_visibility(tile, squared) {
                     queue.push_back((x, y));
                 }
             }
         }
+    }
+
+    fn surface_visibility_player_carve(
+        &self,
+        px: isize,
+        py: isize,
+        view_radius: usize,
+        light_threshold: u32,
+        wrap_world: bool,
+    ) -> Vec<bool> {
+        let side = view_radius.saturating_mul(2).saturating_add(1);
+        let cell_count = side.saturating_mul(side);
+        let mut visible = vec![false; cell_count];
+        if cell_count == 0 {
+            return visible;
+        }
+
+        self.surface_centre_out_carve(
+            px,
+            py,
+            wrap_world,
+            |x, y| visibility_view_index(px, py, x, y, view_radius),
+            |x, y| visibility_squared_distance(px, py, x, y),
+            |_, _, squared| visibility_in_radius(squared, light_threshold),
+            &mut visible,
+        );
 
         visible
     }
@@ -1733,6 +1838,17 @@ impl PlayState {
         mask
     }
 
+    /// `visibility.md §12`: one local-light source's contribution to the
+    /// 32x32 mask. The spec's refresh pass "runs the same centre-out
+    /// visibility carve into the thirty-two by thirty-two mask, using the
+    /// source as the centre and a fixed source radius", so this reuses
+    /// [`Self::surface_centre_out_carve`] rather than casting a line to
+    /// every cell of the source's square — §5 rules out line casting for
+    /// both carves. Light therefore reaches around an L-shaped wall when
+    /// an eight-neighbour path is open, exactly as the player carve does.
+    ///
+    /// The per-source visited set is local to the helper (§12 step 3), so
+    /// sources accumulate into a shared mask without shadowing each other.
     fn carve_surface_local_light_source(
         &self,
         source_x: isize,
@@ -1742,73 +1858,18 @@ impl PlayState {
         wrap_world: bool,
         mask: &mut [bool],
     ) {
-        let Some(center) =
-            surface_local_light_mask_index(origin_x, origin_y, source_x, source_y, wrap_world)
-        else {
-            return;
-        };
-        mask[center] = true;
-
-        let radius = LOCAL_LIGHT_SOURCE_RADIUS as isize;
-        for target_y in (source_y - radius)..=(source_y + radius) {
-            for target_x in (source_x - radius)..=(source_x + radius) {
-                if target_x == source_x && target_y == source_y {
-                    continue;
-                }
-                if surface_local_light_chebyshev_distance(
-                    source_x, source_y, target_x, target_y, wrap_world,
-                ) > LOCAL_LIGHT_SOURCE_RADIUS
-                {
-                    continue;
-                }
-                self.carve_surface_local_light_line(
-                    source_x, source_y, target_x, target_y, origin_x, origin_y, wrap_world, mask,
-                );
-            }
-        }
-    }
-
-    fn carve_surface_local_light_line(
-        &self,
-        source_x: isize,
-        source_y: isize,
-        target_x: isize,
-        target_y: isize,
-        origin_x: isize,
-        origin_y: isize,
-        wrap_world: bool,
-        mask: &mut [bool],
-    ) {
-        let dx = target_x - source_x;
-        let dy = target_y - source_y;
-        let steps = dx.unsigned_abs().max(dy.unsigned_abs()) as isize;
-        if steps == 0 {
-            return;
-        }
-
-        for step in 1..=steps {
-            let x = source_x + rounded_div(dx * step, steps);
-            let y = source_y + rounded_div(dy * step, steps);
-            let Some(index) = surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world)
-            else {
-                return;
-            };
-            let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
-                return;
-            };
-
-            mask[index] = true;
-            let squared_distance =
-                surface_local_light_squared_distance(source_x, source_y, x, y, wrap_world);
-            let propagates = if wrap_world {
-                surface_tile_propagates_visibility(tile, squared_distance)
-            } else {
-                town_tile_propagates_visibility(tile, squared_distance)
-            };
-            if !propagates {
-                return;
-            }
-        }
+        self.surface_centre_out_carve(
+            source_x,
+            source_y,
+            wrap_world,
+            |x, y| surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world),
+            |x, y| surface_local_light_squared_distance(source_x, source_y, x, y, wrap_world),
+            |x, y, _| {
+                surface_local_light_chebyshev_distance(source_x, source_y, x, y, wrap_world)
+                    <= LOCAL_LIGHT_SOURCE_RADIUS
+            },
+            mask,
+        );
     }
 
     fn surface_local_light_mask_is_lit(
@@ -3518,6 +3579,14 @@ fn surface_local_light_chebyshev_distance(
     dx.max(dy)
 }
 
+/// `visibility.md §5`/`§6`: the one sight-propagation classifier, used
+/// by every 2D scene family. Towns, dwellings, castles and keeps run the
+/// *same* carve as the overworld — §11 says the town branch uses "the
+/// same producer pipeline" — so there is no extra indoor opacity gate
+/// here. An earlier town-only gate ANDed
+/// [`surface_tile_blocks_projectile`] onto this classifier, which made
+/// the interior brick floor `0x44` opaque and collapsed every indoor
+/// scene to the player's own 3x3 neighbourhood.
 pub fn surface_tile_propagates_visibility(tile: u8, squared_distance: u32) -> bool {
     if tile_blocks_sight_propagation(tile) {
         false
@@ -3525,14 +3594,6 @@ pub fn surface_tile_propagates_visibility(tile: u8, squared_distance: u32) -> bo
         squared_distance == 1
     } else {
         true
-    }
-}
-
-pub fn town_tile_propagates_visibility(tile: u8, squared_distance: u32) -> bool {
-    if surface_tile_blocks_sight(tile) {
-        false
-    } else {
-        surface_tile_propagates_visibility(tile, squared_distance)
     }
 }
 

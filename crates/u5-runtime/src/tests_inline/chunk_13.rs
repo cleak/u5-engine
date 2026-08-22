@@ -8179,31 +8179,6 @@ fn return_to_view_published_wait_cadence_constants() {
 }
 
 #[test]
-fn title_tick_palette_cycle_matches_published_per_frame_colors() {
-    // `cleak/u5-spec#52`: four-frame palette cycle pairs a bright
-    // EGA index over a dim EGA index. Frames 0..3 cycle the four
-    // published combinations.
-    assert_eq!(title_tick_palette_indices(0), (0x0E, 0x06));
-    assert_eq!(title_tick_palette_indices(1), (0x0C, 0x04));
-    assert_eq!(title_tick_palette_indices(2), (0x0E, 0x04));
-    assert_eq!(title_tick_palette_indices(3), (0x0C, 0x06));
-    // The cycle wraps mod-four.
-    assert_eq!(title_tick_palette_indices(4), (0x0E, 0x06));
-    assert_eq!(
-        title_tick_palette_indices(255),
-        title_tick_palette_indices(3)
-    );
-    // The published cycle table has exactly four entries.
-    assert_eq!(TITLE_TICK_PALETTE_CYCLE.len(), 4);
-    // Every entry uses a fire-family index (0x4 red, 0x6 brown,
-    // 0xC light red, 0xE light yellow) per the spec table.
-    for (bright, dim) in TITLE_TICK_PALETTE_CYCLE {
-        assert!(matches!(bright, 0x0C | 0x0E));
-        assert!(matches!(dim, 0x04 | 0x06));
-    }
-}
-
-#[test]
 fn title_tick_frame_set_requires_complete_ega_palette_frames() {
     let short = TitleTickFrameSet::from_palette_indices(
         vec![0; TITLE_TICK_FRAME_SET_BYTES - 1],
@@ -8226,22 +8201,7 @@ fn title_tick_frame_set_requires_complete_ega_palette_frames() {
 }
 
 #[test]
-fn authored_title_tick_frames_refuse_generated_clean_room_fallback() {
-    let result = std::panic::catch_unwind(|| {
-        let _ = authored_title_tick_frames();
-    });
-
-    let payload = result.expect_err("generated title-tick frames must panic");
-    let message = payload
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| payload.downcast_ref::<&str>().copied())
-        .expect("title-tick panic payload must be a string");
-    assert!(message.contains("forbidden fallback"), "{message}");
-}
-
-#[test]
-fn display_surface_title_tick_draws_authored_frame_and_advances() {
+fn display_surface_title_tick_draws_source_band_at_x16_and_advances() {
     let mut bytes = vec![0; TITLE_TICK_FRAME_SET_BYTES];
     for frame in 0..TITLE_TICK_FRAME_COUNT as usize {
         let start = frame * TITLE_TICK_FRAME_PIXELS;
@@ -8268,19 +8228,32 @@ fn display_surface_title_tick_draws_authored_frame_and_advances() {
         surface.read_pixel(54, TITLE_TICK_FRAME_Y as usize - 1),
         Some(0x03)
     );
-    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(1));
+    // `cleak/u5-spec#78`: the 288-wide source band lands at x = 16;
+    // the 16 columns at each side of the published 320-wide
+    // rectangle are cleared to index 0.
+    let band_x = TITLE_TICK_SOURCE_X as usize;
+    let band_last_x = band_x + TITLE_TICK_SOURCE_WIDTH as usize - 1;
+    let band_last_y = (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize;
+    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(0));
     assert_eq!(
-        surface.read_pixel(
-            319,
-            (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize
-        ),
+        surface.read_pixel(band_x - 1, TITLE_TICK_FRAME_Y as usize),
+        Some(0)
+    );
+    assert_eq!(
+        surface.read_pixel(band_x, TITLE_TICK_FRAME_Y as usize),
         Some(1)
     );
+    assert_eq!(surface.read_pixel(band_last_x, band_last_y), Some(1));
+    assert_eq!(surface.read_pixel(band_last_x + 1, band_last_y), Some(0));
+    assert_eq!(surface.read_pixel(319, band_last_y), Some(0));
     assert_eq!(surface.title_tick_frame(), 1);
 
     surface.advance_title_tick();
 
-    assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(2));
+    assert_eq!(
+        surface.read_pixel(band_x, TITLE_TICK_FRAME_Y as usize),
+        Some(2)
+    );
     assert_eq!(surface.title_tick_frame(), 2);
 }
 

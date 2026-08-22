@@ -826,7 +826,10 @@ fn cli_intro_non_j_first_key_does_not_take_journey_onward_path() {
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("Intro Menu"), "menu must follow non-J first key");
+    assert!(
+        stdout.contains("Intro Menu"),
+        "menu must follow non-J first key"
+    );
     assert!(
         !stdout.contains("Disk read failed for SAVED.GAM"),
         "non-J first key must not attempt the Journey Onward load: {stdout}"
@@ -1012,7 +1015,14 @@ fn cli_binary_create_character_save_loads_through_play_script() {
     assert!(stdout.contains("Ultima V playable harness"));
     assert!(stdout.contains("Script mode: 1 command(s)."));
     assert!(stdout.contains("State: CASTLE:0"));
-    assert!(String::from_utf8(play.stderr).unwrap().is_empty());
+    // The one tolerated stderr line is the interim spec-gap notice for the
+    // missing location floor-page table (`cleak/u5-spec#80`); the synthetic
+    // fixture dir ships no `location_floor_pages.tsv`.
+    let play_stderr = String::from_utf8(play.stderr).unwrap();
+    assert!(
+        play_stderr.is_empty() || play_stderr.contains("cleak/u5-spec#80"),
+        "{play_stderr}"
+    );
     let _ = fs::remove_dir_all(dir);
 }
 

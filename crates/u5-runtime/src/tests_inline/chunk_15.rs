@@ -284,10 +284,16 @@
         assert_eq!(row[6], ' ');
     }
 
+    /// `lighting.md §3` + `visibility.md §5`: the ambient byte is the
+    /// squared-distance threshold. Night with no personal light is
+    /// `FULL_DARKNESS` (2), which lights exactly the eight cells around
+    /// the party — not nothing. A torch raises ambient to its floor of
+    /// 18, which fills this 5x5 window (max squared distance 8).
     #[test]
     fn world_render_applies_first_playable_visibility_radius() {
         let mut state = world_state(open_world_grid(), 5, 5);
         state.mode_zero_cleanup();
+        assert_eq!(state.ambient_light, FULL_DARKNESS);
 
         let view = state.render_text_view(2);
         let rows: Vec<_> = view.lines().skip(1).take(5).collect();
@@ -299,7 +305,7 @@
                 .flat_map(|row| row.chars())
                 .filter(|ch| !matches!(ch, ' ' | '@'))
                 .count(),
-            0
+            8
         );
 
         state.torch_counter = 1;

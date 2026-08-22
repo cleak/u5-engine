@@ -1488,7 +1488,8 @@ fn overworld_special_underfoot_latch_forces_darkness_and_holds_valid_movement() 
     assert!(state.world_underfoot_blackout_latched);
     assert_eq!(state.ambient_light, 0);
     assert!(state.visibility_dirty);
-    assert_eq!(state.world_visibility_radius(5), 0);
+    assert_eq!(state.world_visibility_light_threshold(), 0);
+    assert!(state.world_visibility_pitch_dark());
 
     state.visibility_dirty = false;
     assert_eq!(
@@ -1525,10 +1526,15 @@ fn overworld_special_underfoot_exempt_tag_skips_latch() {
     let mut grid = open_world_grid();
     grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
     let mut state = britannia_state(grid, 5, 5);
+    state.ambient_light = FULL_DAYLIGHT;
     state.timing_status = TimingStatusTag::Opaque(OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG);
 
     assert!(!state.refresh_world_underfoot_blackout_latch());
-    assert_eq!(state.world_visibility_radius(5), 5);
+    assert_eq!(
+        state.world_visibility_light_threshold(),
+        u32::from(FULL_DAYLIGHT)
+    );
+    assert!(!state.world_visibility_pitch_dark());
     assert_eq!(
         state
             .step_world(Direction::East, 6, 5, WorldPlane::Britannia, None)

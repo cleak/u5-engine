@@ -2524,25 +2524,29 @@ impl PlayState {
         let py = self.player.y as isize;
         match self.area {
             Area::Town { .. } => {
-                let visible_radius = self.surface_visibility_radius(SURFACE_LOOK_VISIBILITY_RADIUS);
-                self.town_cell_visible_with_light_radius(
+                if self.surface_visibility_pitch_dark() {
+                    return false;
+                }
+                self.town_cell_visible_with_light_threshold(
                     px,
                     py,
                     x,
                     y,
                     SURFACE_LOOK_VISIBILITY_RADIUS,
-                    visible_radius,
+                    self.surface_visibility_light_threshold(),
                 )
             }
             Area::World { .. } => {
-                let visible_radius = self.world_visibility_radius(SURFACE_LOOK_VISIBILITY_RADIUS);
-                self.world_cell_visible_with_light_radius(
+                if self.world_visibility_pitch_dark() {
+                    return false;
+                }
+                self.world_cell_visible_with_light_threshold(
                     px,
                     py,
                     x,
                     y,
                     SURFACE_LOOK_VISIBILITY_RADIUS,
-                    visible_radius,
+                    self.world_visibility_light_threshold(),
                 )
             }
             Area::Dungeon { .. } => false,
