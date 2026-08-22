@@ -38,6 +38,7 @@ fn chrome_frame(content: &GameplayChromeContent) -> Vec<u8> {
             ibm: &font,
             runes: &font,
         },
+        ChromePalette::EGA,
     );
     rgba
 }
@@ -401,4 +402,55 @@ fn ribbon_cap_is_one_primitive_for_border_message_and_caption_brackets() {
         assert_eq!(left.white[row], mirror(right.white[row]));
         assert_eq!(left.ribbon[row], mirror(right.ribbon[row]));
     }
+}
+
+#[test]
+fn chrome_paint_takes_its_two_colours_as_parameters() {
+    // The published paint reads no gameplay state - only the chrome and
+    // accent colour-table slots - and every colour index in this module
+    // is provisional pending the spec's colour re-grounding audit. Both
+    // facts are only safe if the painters take the pair as a parameter
+    // rather than reading the constants, so pin that: swapping the
+    // palette must swap the painted indices and nothing else.
+    let font = chrome_test_font();
+    let content = GameplayChromeContent::default();
+    let paint = |palette: ChromePalette| {
+        let mut rgba = vec![0u8; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0, 0, 0, 0xff]);
+        }
+        paint_gameplay_frame_chrome(
+            &mut rgba,
+            TEXT_WINDOW_RENDER_WIDTH,
+            TEXT_WINDOW_RENDER_HEIGHT,
+            &content,
+            ChromeFonts {
+                ibm: &font,
+                runes: &font,
+            },
+            palette,
+        );
+        rgba
+    };
+
+    let ega = paint(ChromePalette::EGA);
+    let swapped = paint(ChromePalette {
+        chrome: 4,
+        accent: 10,
+        background: 0,
+    });
+
+    // Ribbon fill and rule both follow the palette.
+    assert_eq!(chrome_index_at(&ega, 3, 100), ChromePalette::EGA.chrome);
+    assert_eq!(chrome_index_at(&swapped, 3, 100), 4);
+    assert_eq!(chrome_index_at(&ega, 7, 100), ChromePalette::EGA.accent);
+    assert_eq!(chrome_index_at(&swapped, 7, 100), 10);
+    // Background and the untouched viewport interior do not.
+    assert_eq!(chrome_index_at(&swapped, 100, 195), 0);
+    assert_eq!(chrome_index_at(&swapped, 100, 100), 0);
+
+    // The default is the provisional EGA pair.
+    assert_eq!(ChromePalette::default(), ChromePalette::EGA);
+    assert_eq!(ChromePalette::EGA.chrome, CHROME_RIBBON_INDEX);
+    assert_eq!(ChromePalette::EGA.accent, CHROME_RULE_INDEX);
 }

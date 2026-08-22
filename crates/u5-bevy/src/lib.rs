@@ -136,8 +136,8 @@ use u5_runtime::{
 };
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
-    CHROME_RULE_INDEX, ChromeFonts, GameplayMessageLog, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
-    RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter,
+    CHROME_RULE_INDEX, ChromeFonts, ChromePalette, GameplayMessageLog, MESSAGE_WINDOW_RIGHT,
+    MessageWindowRow, RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter,
     configure_play_text_windows, gameplay_chrome_content, layout_message_window,
     load_runes_ch_font, message_is_scene_entry_narration, paint_fixed_cell_glyph,
     paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
@@ -12158,7 +12158,14 @@ fn render_visual_play_frame_with_input_and_cursor(
     chrome_state.refresh_cached_moon_glyphs();
     let chrome = gameplay_chrome_content(&chrome_state);
     let mut rgba = visual_play_background_framebuffer();
-    paint_gameplay_frame_chrome(&mut rgba, width, height, &chrome, ctx.chrome_fonts());
+    paint_gameplay_frame_chrome(
+        &mut rgba,
+        width,
+        height,
+        &chrome,
+        ctx.chrome_fonts(),
+        ChromePalette::EGA,
+    );
 
     let surface = render_integrated_status_framebuffer(
         state,
@@ -12200,7 +12207,7 @@ fn paint_message_window_rows(
 ) {
     for row in rows {
         if row.prefixed {
-            paint_message_line_cap(rgba, width, height, ctx.ibm, row.row);
+            paint_message_line_cap(rgba, width, height, ctx.ibm, row.row, ChromePalette::EGA);
         }
         paint_fixed_cell_text(
             rgba,
