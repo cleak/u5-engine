@@ -167,13 +167,19 @@ pub fn text_cell_rect_to_pixel_rect(
     )
 }
 
+/// The dispatch `0x66` rectangle-dissolve state, carry clear
+/// (`systems/display-driver-abi.md` section 9.6).
+///
+/// This is the driver-surface entry: it walks the rectangle over the surface's
+/// own back and front buffers and supports partial steps, which is what the
+/// dispatch site needs. The visit order itself comes from the shared
+/// [`crate::DissolveVisitOrder`], so this and the caller-side
+/// [`crate::RectangleDissolve`] scatter identically - one published operation,
+/// one order.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EgaDissolveState {
     rect: DisplayPixelRect,
-    cursor: usize,
-    total: usize,
-    stride: usize,
-    offset: usize,
+    order: crate::DissolveVisitOrder,
 }
 
 impl EgaDissolveState {
@@ -181,10 +187,8 @@ impl EgaDissolveState {
         let total = rect.width() * rect.height();
         Self {
             rect,
-            cursor: 0,
-            total,
-            stride: dissolve_stride(total),
-            offset: total / 2,
+            order: crate::DissolveVisitOrder::new(total)
+                .expect("a display rectangle always fits the dissolve tap inventory"),
         }
     }
 
@@ -193,31 +197,23 @@ impl EgaDissolveState {
     }
 
     pub const fn total_pixels(&self) -> usize {
-        self.total
+        self.order.count()
     }
 
     pub const fn copied_pixels(&self) -> usize {
-        self.cursor
+        self.order.visited()
     }
 
     pub const fn remaining_pixels(&self) -> usize {
-        self.total.saturating_sub(self.cursor)
+        self.order.remaining()
     }
 
     pub const fn is_finished(&self) -> bool {
-        self.cursor >= self.total
+        self.order.is_finished()
     }
 
     pub fn next_pixel(&mut self) -> Option<(usize, usize)> {
-        if self.is_finished() {
-            return None;
-        }
-        let visit = (self
-            .cursor
-            .saturating_mul(self.stride)
-            .saturating_add(self.offset))
-            % self.total;
-        self.cursor += 1;
+        let visit = self.order.next_index()?;
         Some((
             self.rect.x0 + (visit % self.rect.width()),
             self.rect.y0 + (visit / self.rect.width()),
@@ -763,20 +759,4 @@ fn assert_display_point_in_bounds(x: i32, y: i32, context: &str) {
             && (0..DISPLAY_SURFACE_HEIGHT as i32).contains(&y),
         "{context} ({x}, {y}) exceeds {DISPLAY_SURFACE_WIDTH}x{DISPLAY_SURFACE_HEIGHT}; clipping is a forbidden fallback"
     );
-}
-
-fn dissolve_stride(total: usize) -> usize {
-    [521, 257, 131, 73, 37, 17, 5, 1]
-        .into_iter()
-        .find(|candidate| *candidate < total && gcd(*candidate, total) == 1)
-        .unwrap_or(1)
-}
-
-fn gcd(mut a: usize, mut b: usize) -> usize {
-    while b != 0 {
-        let rem = a % b;
-        a = b;
-        b = rem;
-    }
-    a
 }
