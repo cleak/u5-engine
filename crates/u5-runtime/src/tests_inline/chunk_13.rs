@@ -23061,3 +23061,73 @@ fn dungeon_facing_label_field_is_left_padded_to_five_cells() {
     assert_eq!(dungeon_level_label_digit(7), Some(8));
     assert_eq!(dungeon_level_label_digit(8), None);
 }
+
+#[test]
+fn shipped_dungeon_billboard_banks_match_the_published_directory() {
+    // `dungeon-mode.md §6.2` (cleak/u5-spec#81): three interchangeable
+    // corridor art files, one per presentation flavour byte, with
+    // byte-identical directories — twenty-eight entries of which two are
+    // deliberately absent, every image 164 rows tall, and per-role
+    // widths that satisfy two self-checking invariants:
+    //   * a side image's width is `hw[b] - hw[b+1]` (24/32/16/8);
+    //   * a forward image's width is `hw[b]` itself (80/56/24/8),
+    //     because each forward billboard is a half wall drawn twice.
+    // The two empty slots are the band-0 entries of the forward wall and
+    // forward flavour-wall families, which the renderer never requests
+    // because band 0 overrides every blocker to one 80-wide image.
+    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join("DNG1.16").exists() {
+        return;
+    }
+
+    let half_aperture = [80usize, 56, 24, 8];
+    let side_widths: Vec<usize> = (0..4)
+        .map(|b| half_aperture[b] - half_aperture.get(b + 1).copied().unwrap_or(0))
+        .collect();
+    assert_eq!(side_widths, vec![24, 32, 16, 8]);
+
+    let mut shapes: Option<Vec<Option<(usize, usize)>>> = None;
+    for stem in ["DNG1", "DNG2", "DNG3"] {
+        let dir = load_graphic_image_directory(game_dir, stem, TileGraphicsDepth::Ega16)
+            .expect("shipped dungeon billboard bank parses");
+        assert_eq!(dir.images.len(), 28, "{stem} slot count");
+
+        let this: Vec<Option<(usize, usize)>> = dir
+            .images
+            .iter()
+            .map(|image| image.as_ref().map(|g| (g.width, g.height)))
+            .collect();
+        // Two deliberately absent slots, and they are the band-0 entries
+        // of the two forward families that share the point-blank image.
+        let empty: Vec<usize> = this
+            .iter()
+            .enumerate()
+            .filter(|(_, shape)| shape.is_none())
+            .map(|(slot, _)| slot)
+            .collect();
+        assert_eq!(empty, vec![8, 24], "{stem} empty slots");
+
+        for (slot, shape) in this.iter().enumerate() {
+            let Some((width, height)) = shape else { continue };
+            assert_eq!(*height, 164, "{stem} slot {slot} height");
+            let band = slot % 4;
+            let expected = if slot / 4 == 3 && band == 0 {
+                // The point-blank forward image that stands in for every
+                // blocker family at band 0.
+                80
+            } else if [2usize, 3, 6].contains(&(slot / 4)) {
+                half_aperture[band]
+            } else {
+                side_widths[band]
+            };
+            assert_eq!(*width, expected, "{stem} slot {slot} width");
+        }
+
+        match &shapes {
+            None => shapes = Some(this),
+            // "All three corridor files have byte-identical directories;
+            // only the pixels differ."
+            Some(first) => assert_eq!(&this, first, "{stem} directory differs from DNG1"),
+        }
+    }
+}

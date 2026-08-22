@@ -160,8 +160,6 @@ const SURFACE_VIEW_CLASS_GALLERY_TILES: [u8; 17] = [
     0x20,
 ];
 
-const READY_HINT: &str =
-    "Arrows/keypad: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
 const INTRO_FRAMEBUFFER_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
 const INTRO_FRAMEBUFFER_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
 const INTRO_DISPLAY_SCALE: f32 = 2.5;
@@ -8269,7 +8267,7 @@ fn setup(
             cursor_frame: 0,
         },
         "",
-        READY_HINT,
+        "",
     );
     let mut image = Image::new(
         Extent3d {
@@ -8450,7 +8448,7 @@ fn transition_visual_intro_to_gameplay(
             cursor_frame: 0,
         },
         "",
-        READY_HINT,
+        "",
     );
     replace_visual_image_data(images, &image_handle, rgba, "Journey Onward");
     for mut sprite in sprites.iter_mut() {
@@ -12234,7 +12232,7 @@ fn write_visual_play_report_with_input(
         atlas,
         ctx,
         input_line,
-        READY_HINT,
+        "",
         prompt_cursor_visible,
     );
     write_visual_report(
@@ -12516,7 +12514,7 @@ fn render_visual_play_frame(
     atlas: &TileAtlas,
     ctx: PlayFrameContext<'_>,
 ) -> Vec<u8> {
-    render_visual_play_frame_with_input(state, atlas, ctx, "", READY_HINT)
+    render_visual_play_frame_with_input(state, atlas, ctx, "", "")
 }
 
 fn render_visual_play_frame_with_input(
@@ -14347,7 +14345,7 @@ mod tests {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_player = Some(0);
 
-        let rgba = render_status_framebuffer(&mut state, "", READY_HINT, &font);
+        let rgba = render_status_framebuffer(&mut state, "", "", &font);
 
         assert_eq!(
             rgba.len(),
@@ -14371,7 +14369,7 @@ mod tests {
         state.clock = GameClock::with_date(12, 5, 18, 17, 0).unwrap();
         state.set_cached_moon_glyph_bytes(b'0', b'0');
 
-        let rgba = render_status_framebuffer(&mut state, "", READY_HINT, &font);
+        let rgba = render_status_framebuffer(&mut state, "", "", &font);
 
         assert!(
             rgba.chunks_exact(4)
@@ -16998,7 +16996,7 @@ mod tests {
         state.enter_endgame();
 
         let mut expected_state = state.clone();
-        let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
+        let expected = render_status_framebuffer(&mut expected_state, "", "", &font);
         let rgba = render_visual_play_frame(
             &mut state,
             &atlas,
@@ -17050,7 +17048,7 @@ mod tests {
         // With the tableau dropped the endgame text owns the full
         // width, and the gameplay stats panel is still absent.
         let mut stats_state = state.clone();
-        let stats = render_status_framebuffer(&mut stats_state, "", READY_HINT, &font);
+        let stats = render_status_framebuffer(&mut stats_state, "", "", &font);
         assert_ne!(rgba, stats);
         assert_eq!(
             rgba.len(),
@@ -19192,7 +19190,7 @@ mod tests {
         let before = render_integrated_status_framebuffer(
             &mut state.clone(),
             "",
-            READY_HINT,
+            "",
             play_ctx(&font, &log),
             false,
         );
@@ -19200,7 +19198,7 @@ mod tests {
         let after = render_integrated_status_framebuffer(
             &mut state.clone(),
             "",
-            READY_HINT,
+            "",
             play_ctx(&font, &log),
             false,
         );
