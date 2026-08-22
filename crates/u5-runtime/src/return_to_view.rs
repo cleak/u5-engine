@@ -10,78 +10,208 @@ use std::path::Path;
 
 use crate::{
     MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_ROW_STRIDE,
-    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MOONGATE_ANIMATION_FRAMES,
-    MOONGATE_TILE_BASE, RTV_COMMAND_COUNT, RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COUNT,
-    TILE_ATLAS_SIDE, TileAtlas, TileViewport, blit_tile_to_viewport, read_optional_disk_file,
+    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_COUNT,
+    RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COUNT, TILE_ATLAS_SIDE, TileAtlas, TileViewport,
+    read_optional_disk_file,
 };
+use crate::{STATIC_TILE_ANIMATION_FRAME_WRAP, static_tile_animation_family};
 
-pub const RTV_PREVIEW_SIDE: usize = 32;
-pub const RTV_PREVIEW_CELLS: usize = RTV_PREVIEW_SIDE * RTV_PREVIEW_SIDE;
-pub const RTV_ACTOR_SLOTS: usize = 32;
-pub const RTV_STRIP_SOURCE_COLUMNS: usize = 4;
-pub const RTV_STRIP_SOURCE_ROWS: usize = 19;
-pub const RTV_STRIP_VISIBLE_COLUMNS: usize = 4;
-pub const RTV_STRIP_VISIBLE_ROWS: usize = 19;
-pub const RTV_STRIP_RECORD_BYTES: usize = MISCMAPS_RTV_STRIP_ROW_STRIDE * RTV_STRIP_SOURCE_COLUMNS;
+/// `cleak/u5-spec#54` (2026-08-22 resolution, spec head `8192d67`).
+///
+/// The published orientation was transposed: each `MISCMAPS.DAT`
+/// Return-to-View record is **four 32-byte rows**, of which the first
+/// nineteen bytes carry tile data and the trailing thirteen are padding.
+/// The preview is nineteen cells across by four down.
+pub const RTV_STRIP_VISIBLE_COLUMNS: usize = 19;
+pub const RTV_STRIP_VISIBLE_ROWS: usize = 4;
+/// One 32-byte source row per preview row.
+pub const RTV_STRIP_SOURCE_ROWS: usize = RTV_STRIP_VISIBLE_ROWS;
+/// Tile bytes carried by each source row before the padding.
+pub const RTV_STRIP_SOURCE_COLUMNS: usize = RTV_STRIP_VISIBLE_COLUMNS;
+pub const RTV_STRIP_RECORD_BYTES: usize = MISCMAPS_RTV_STRIP_ROW_STRIDE * RTV_STRIP_SOURCE_ROWS;
 pub const RTV_STRIP_TILE_COUNT: usize = RTV_STRIP_VISIBLE_COLUMNS * RTV_STRIP_VISIBLE_ROWS;
-pub const RTV_EFFECT_SENTINEL_TILE: u8 = 0xfe;
+/// Every preview plane — terrain, overlay and backing — is 19x4.
+pub const RTV_PREVIEW_CELLS: usize = RTV_STRIP_TILE_COUNT;
+pub const RTV_ACTOR_SLOTS: usize = 32;
+
+/// `#54`: "the viewport's pixel origin is normally `(8, 8)`; the preview
+/// raises it to `(8, 16)` on entry and the intro restores `(8, 8)` on
+/// exit. That single value is the *only* thing written at preview entry".
+pub const RTV_VIEWPORT_ORIGIN_X: usize = 8;
+pub const RTV_VIEWPORT_ORIGIN_Y_NORMAL: usize = 8;
+pub const RTV_VIEWPORT_ORIGIN_Y_PREVIEW: usize = 16;
+/// `#54`: the preview's cells sit seven screen tile rows below the
+/// helper grid origin, so cell `(x, y)` lands at
+/// `(8 + 16x, 16 + 16(y + 7))` and the strip covers the inclusive
+/// rectangle `(8, 128)..(311, 191)` = `304 x 64`.
+pub const RTV_SCREEN_ROW_OFFSET: usize = 7;
+pub const RTV_PREVIEW_PIXEL_X: usize = RTV_VIEWPORT_ORIGIN_X;
+pub const RTV_PREVIEW_PIXEL_Y: usize =
+    RTV_VIEWPORT_ORIGIN_Y_PREVIEW + TILE_ATLAS_SIDE * RTV_SCREEN_ROW_OFFSET;
+pub const RTV_PREVIEW_PIXEL_WIDTH: usize = RTV_STRIP_VISIBLE_COLUMNS * TILE_ATLAS_SIDE;
+pub const RTV_PREVIEW_PIXEL_HEIGHT: usize = RTV_STRIP_VISIBLE_ROWS * TILE_ATLAS_SIDE;
+
+/// `#54` reveal: "the cursor starts on column 9 alone and widens by one
+/// column on each side on every **second** preview tick", reaching the
+/// full strip after eighteen preview ticks.
+pub const RTV_REVEAL_CENTRE_COLUMN: usize = 9;
+pub const RTV_REVEAL_TICKS_PER_STEP: u32 = 2;
+pub const RTV_REVEAL_FULL_EXPOSURE_TICKS: u32 = 18;
+
+/// `#54`: an overlay byte selects tile index `256 + byte`.
+pub const RTV_OVERLAY_TILE_BASE: usize = 256;
+/// `#54` reserved plane values meaning "another helper owns this cell
+/// this frame"; the ordinary repaint skips them.
+pub const RTV_OVERLAY_HELPER_OWNED: u8 = 0x16;
+pub const RTV_TERRAIN_HELPER_OWNED: u8 = 0xfe;
+/// Retained spelling of the two reserved values under their older names.
+pub const RTV_EFFECT_SENTINEL_TILE: u8 = RTV_TERRAIN_HELPER_OWNED;
+pub const RTV_TEMPORARY_ACTOR_TILE: u8 = RTV_OVERLAY_HELPER_OWNED;
+
 pub const RTV_OPEN_EFFECT_FINAL_TILE: u8 = 0xdc;
 pub const RTV_CLOSE_EFFECT_FINAL_TILE: u8 = 0x05;
-pub const RTV_TEMPORARY_ACTOR_TILE: u8 = 0x16;
 pub const RTV_ACTOR_TRANSPARENT_PIXEL: u8 = 0;
+/// `#54`: the local cell effect is the driver's animated-terrain shimmer
+/// entry, stepped `1..15` to open and `15..1` to close, with two ticks
+/// run at the command's tail.
 pub const RTV_CELL_EFFECT_STEPS: u8 = 15;
 pub const RTV_CELL_EFFECT_FINAL_TICKS: u8 = 2;
+/// `#54`: the `0x0B` wipe pairs are `n = 0..4`, and the command runs
+/// three ticks at its tail. There is **no** fixed eight-tick wait: that
+/// was retracted, and the `0x0B` percussive speaker effect is not a
+/// timed pause.
 pub const RTV_FIXED_WIPE_STEPS: u8 = 5;
 pub const RTV_FIXED_WIPE_TRAILING_TICKS: u8 = 3;
+pub const RTV_FIXED_WIPE_TOTAL_TICKS: u8 = RTV_FIXED_WIPE_STEPS + RTV_FIXED_WIPE_TRAILING_TICKS;
+/// `#54`: command `0x0D` runs seven ticks at its tail.
+pub const RTV_MOVE_ACTOR_AND_TICK_TICKS: u8 = 7;
+/// `#54`: the fixed-wipe rectangles are drawn in user-interface colour
+/// slot 1 and are absolute framebuffer pixel rectangles, deliberately
+/// not cell-aligned.
+pub const RTV_FIXED_WIPE_COLOUR_SLOT: u8 = 1;
+
 pub const RTV_STRIP_CAPTIONS: [&str; RTV_STRIP_COUNT] = [
     "The Summoning",
     "The Journey",
     "The Arrival",
     "The Welcoming",
 ];
+/// `#54` / `systems/intro.md §12.1`: the chapter caption is fixed-cell
+/// text on text row 24 in the window's bottom border, starting at column
+/// `18 - floor(len / 2)`.
+pub const RTV_CAPTION_TEXT_ROW: usize = 24;
+pub const RTV_CAPTION_CENTRE_COLUMN: usize = 18;
 
-/// `cleak/u5-spec#54` published Return-to-View wait duration. Per
-/// the spec answer, the helper's `WAIT` beat inserts an eight-title-tick
-/// fixed pause (~1.1 seconds at 30 fps) during which animated tiles
-/// continue cycling at the global title-tick cadence. The
-/// [`ReturnToViewCommand::RunPreviewTick`] opcode (`0x03`) carries
-/// the per-call tick count in the shipped byte stream; verify that
-/// `MISCMAPS.DAT` uses this exact argument when emitting a `WAIT`.
-pub const RTV_WAIT_FIXED_TICKS: u8 = 8;
-pub const RTV_FIXED_WIPE_TOTAL_TICKS: u8 =
-    RTV_FIXED_WIPE_STEPS + RTV_WAIT_FIXED_TICKS + RTV_FIXED_WIPE_TRAILING_TICKS;
-
-/// `systems/intro.md section 12`: the Return-to-View preview exits on any
-/// keypress observed by a wait/tick path, then restores the preserved
-/// title/menu surface.
+/// `#54`: "every preview tick polls the keyboard once, and any pending
+/// key aborts the preview immediately", restoring the saved title/menu
+/// image. There is no uninterruptible phase and no ESC special case.
 pub const RTV_WAIT_EXITS_ON_KEYPRESS: bool = true;
 
-/// `formats/location-dat.md` Return-to-View commands draw special actors in
-/// the visible text/map screen seven tile rows below the script-local actor Y.
-pub const fn return_to_view_actor_screen_y(actor_y: u8) -> u8 {
-    assert!(
-        actor_y <= u8::MAX - 7,
-        "Return-to-View actor screen Y overflows"
-    );
-    actor_y + 7
+/// `#54` / `systems/intro.md §12.1`: the caption's start column for a
+/// caption of `len` cells.
+pub const fn return_to_view_caption_start_column(len: usize) -> usize {
+    RTV_CAPTION_CENTRE_COLUMN - len / 2
 }
 
-/// Resolve a Return-to-View map-cell tile through the title-screen
-/// animation selector published in `cleak/u5-spec#54`.
+/// `formats/location-dat.md §11`: Return-to-View draws its cells and its
+/// actors seven screen tile rows below the script-local Y. `#54`
+/// confirms the `+ 7` is on the row axis, the `0..3` axis, and that
+/// script coordinates never leave `x = 0..18` / `y = 0..3`, so nothing
+/// is ever clipped.
+pub const fn return_to_view_actor_screen_y(actor_y: u8) -> u8 {
+    assert!(
+        actor_y <= u8::MAX - RTV_SCREEN_ROW_OFFSET as u8,
+        "Return-to-View actor screen Y overflows"
+    );
+    actor_y + RTV_SCREEN_ROW_OFFSET as u8
+}
+
+/// `#54`: the pixel rectangle a preview cell occupies on the intro
+/// framebuffer, as `(x, y, width, height)`.
+pub const fn return_to_view_cell_pixel_rect(x: usize, y: usize) -> (usize, usize, usize, usize) {
+    (
+        RTV_VIEWPORT_ORIGIN_X + TILE_ATLAS_SIDE * x,
+        RTV_VIEWPORT_ORIGIN_Y_PREVIEW + TILE_ATLAS_SIDE * (y + RTV_SCREEN_ROW_OFFSET),
+        TILE_ATLAS_SIDE,
+        TILE_ATLAS_SIDE,
+    )
+}
+
+/// `#54` strip reveal: the inclusive column span the repaint cursor
+/// covers after `preview_ticks` preview ticks have elapsed.
 ///
-/// This is intentionally narrower than the gameplay static-tile
-/// animator. Return-to-View uses its own title-loop cadence and includes
-/// special cinematic/effect tiles that are not ordinary overworld water
-/// animation classes.
-pub const fn return_to_view_tile_for_title_tick(tile: u8, title_tick: u32) -> u8 {
-    let phase4 = (title_tick % 4) as u8;
-    match tile {
-        0x80..=0x87 => (tile & 0xfc) + phase4,
-        0xD8..=0xDB => 0xD8 + phase4,
-        0xDC if MOONGATE_ANIMATION_FRAMES > 1 => {
-            MOONGATE_TILE_BASE + ((title_tick % MOONGATE_ANIMATION_FRAMES as u32) as u8)
+/// Ticks 1-2 paint column 9 alone; every second tick thereafter widens
+/// the span by one column on each side, so the whole strip is exposed
+/// from tick 18 onwards. Tick 0 — before the first preview tick of the
+/// chapter — paints nothing.
+pub fn return_to_view_revealed_columns(preview_ticks: u32) -> Option<(usize, usize)> {
+    if preview_ticks == 0 {
+        return None;
+    }
+    let steps = (preview_ticks - 1) / RTV_REVEAL_TICKS_PER_STEP;
+    let steps = usize::try_from(steps).unwrap_or(usize::MAX);
+    let first = RTV_REVEAL_CENTRE_COLUMN.saturating_sub(steps);
+    let last = RTV_REVEAL_CENTRE_COLUMN
+        .saturating_add(steps)
+        .min(RTV_STRIP_VISIBLE_COLUMNS - 1);
+    Some((first, last))
+}
+
+/// `#54`: "a non-zero terrain byte is not a tile id: it indexes the
+/// engine's animated-tile frame table (the same table the world renderer
+/// cycles), and the table's current entry is the tile actually drawn".
+///
+/// The table's contents are not published separately, so the byte is
+/// resolved through the same world-renderer animation family the
+/// gameplay view uses ([`crate::static_tile_animation_family`]). The
+/// earlier `0x80..=0x87` / `0xD8..=0xDB` families that lived here were
+/// retracted by `#54` as fabricated and are gone.
+pub fn return_to_view_terrain_tile_for_frame(terrain: u8, animation_frame: u8) -> u8 {
+    match static_tile_animation_family(terrain) {
+        Some((base, cycle)) => base + (animation_frame % cycle),
+        None => terrain,
+    }
+}
+
+/// What the ordinary per-cell repaint draws for one preview cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReturnToViewCellSource {
+    /// `#54`: reserved `0xFE` terrain / `0x16` overlay — another helper
+    /// owns this cell this frame and the ordinary repaint skips it.
+    HelperOwned,
+    /// Non-zero terrain byte, resolved through the animated-tile table.
+    Terrain(u8),
+    /// Zero terrain byte: the overlay byte selects tile `256 + byte`.
+    Overlay(u8),
+}
+
+/// `#54`: "a cell draws from its terrain byte when that byte is
+/// non-zero, and from its overlay byte otherwise".
+pub const fn return_to_view_cell_source(terrain: u8, overlay: u8) -> ReturnToViewCellSource {
+    if terrain == RTV_TERRAIN_HELPER_OWNED || overlay == RTV_OVERLAY_HELPER_OWNED {
+        return ReturnToViewCellSource::HelperOwned;
+    }
+    if terrain != 0 {
+        return ReturnToViewCellSource::Terrain(terrain);
+    }
+    ReturnToViewCellSource::Overlay(overlay)
+}
+
+/// Resolve one preview cell to an index into the 512-entry tile atlas,
+/// or `None` when a helper owns the cell.
+pub fn return_to_view_cell_tile_index(
+    terrain: u8,
+    overlay: u8,
+    animation_frame: u8,
+) -> Option<usize> {
+    match return_to_view_cell_source(terrain, overlay) {
+        ReturnToViewCellSource::HelperOwned => None,
+        ReturnToViewCellSource::Terrain(terrain) => Some(usize::from(
+            return_to_view_terrain_tile_for_frame(terrain, animation_frame),
+        )),
+        ReturnToViewCellSource::Overlay(overlay) => {
+            Some(RTV_OVERLAY_TILE_BASE + usize::from(overlay))
         }
-        _ => tile,
     }
 }
 
@@ -203,9 +333,19 @@ pub struct ReturnToViewActor {
     pub drawable: bool,
 }
 
+/// `cleak/u5-spec#54`: the preview keeps three `19 x 4` planes.
+///
+/// * `terrain` — non-zero bytes index the animated-tile frame table.
+/// * `overlay` — selects tile `256 + byte` when terrain is zero.
+/// * `backing` — the terrain snapshot a moving actor restores behind it.
+///
+/// The reserved values `0xFE` (terrain) and `0x16` (overlay) mean
+/// "another helper owns this cell this frame"; the ordinary repaint
+/// skips them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReturnToViewPreviewState {
-    pub visible: [u8; RTV_PREVIEW_CELLS],
+    pub terrain: [u8; RTV_PREVIEW_CELLS],
+    pub overlay: [u8; RTV_PREVIEW_CELLS],
     pub backing: [u8; RTV_PREVIEW_CELLS],
     pub actors: [ReturnToViewActor; RTV_ACTOR_SLOTS],
     pub current_strip: Option<u8>,
@@ -214,17 +354,23 @@ pub struct ReturnToViewPreviewState {
     pub loop_start_command: Option<usize>,
     pub cached_effect_cell: Option<(u8, u8)>,
     pub total_ticks: u32,
+    /// `#54` strip reveal: preview ticks elapsed since the current strip
+    /// was loaded. The repaint cursor is derived from this, and `0x06`
+    /// resets it — a strip load followed by a short tick run is still
+    /// part-way revealed when the next beat starts, which is the
+    /// original behaviour and must not be "fixed" by revealing eagerly.
+    pub ticks_since_strip_load: u32,
     pub temporary_actor_draws: u32,
     pub fixed_wipes: u32,
     pub cell_effect_steps: u32,
     pub fixed_wipe_rectangle_steps: u32,
-    pub fixed_wait_ticks: u32,
 }
 
 impl Default for ReturnToViewPreviewState {
     fn default() -> Self {
         Self {
-            visible: [0; RTV_PREVIEW_CELLS],
+            terrain: [0; RTV_PREVIEW_CELLS],
+            overlay: [0; RTV_PREVIEW_CELLS],
             backing: [0; RTV_PREVIEW_CELLS],
             actors: [ReturnToViewActor::default(); RTV_ACTOR_SLOTS],
             current_strip: None,
@@ -233,11 +379,11 @@ impl Default for ReturnToViewPreviewState {
             loop_start_command: None,
             cached_effect_cell: None,
             total_ticks: 0,
+            ticks_since_strip_load: 0,
             temporary_actor_draws: 0,
             fixed_wipes: 0,
             cell_effect_steps: 0,
             fixed_wipe_rectangle_steps: 0,
-            fixed_wait_ticks: 0,
         }
     }
 }
@@ -247,10 +393,47 @@ impl ReturnToViewPreviewState {
         self.actors.iter().filter(|actor| actor.drawable).count()
     }
 
+    /// The terrain byte at a preview cell, or `None` when the cell is
+    /// outside the `19 x 4` strip.
     pub fn cell(&self, x: u8, y: u8) -> Option<u8> {
-        preview_cell_index(x, y).map(|index| self.visible[index])
+        preview_cell_index(x, y).map(|index| self.terrain[index])
     }
 
+    pub fn overlay_cell(&self, x: u8, y: u8) -> Option<u8> {
+        preview_cell_index(x, y).map(|index| self.overlay[index])
+    }
+
+    /// `#54`: the inclusive column span the repaint cursor currently
+    /// covers, or `None` before the first preview tick of the chapter.
+    pub fn revealed_columns(&self) -> Option<(usize, usize)> {
+        return_to_view_revealed_columns(self.ticks_since_strip_load)
+    }
+
+    /// Stamp a playback frame's tick counters. `strip_load_tick` is the
+    /// value `total_ticks` held when the current strip was loaded, so
+    /// the reveal cursor advances correctly across a chapter.
+    fn set_playback_tick(&mut self, elapsed_title_ticks: u32, strip_load_tick: u32) {
+        self.total_ticks = elapsed_title_ticks;
+        self.ticks_since_strip_load = elapsed_title_ticks.saturating_sub(strip_load_tick);
+    }
+
+    /// Advance the shared preview tick: the reveal cursor widens with
+    /// elapsed preview ticks, so every tick-consuming command feeds it.
+    fn advance_preview_ticks(&mut self, ticks: u32) {
+        add_return_to_view_counter(
+            &mut self.total_ticks,
+            ticks,
+            "Return-to-View total tick counter overflowed",
+        );
+        add_return_to_view_counter(
+            &mut self.ticks_since_strip_load,
+            ticks,
+            "Return-to-View strip reveal tick counter overflowed",
+        );
+    }
+}
+
+impl ReturnToViewPreviewState {
     pub fn apply_command(
         &mut self,
         strips: &ReturnToViewMapStrips,
@@ -278,20 +461,16 @@ impl ReturnToViewPreviewState {
                 self.move_actor(slot, direction)?;
             }
             ReturnToViewCommand::RunPreviewTick { ticks } => {
-                add_return_to_view_counter(
-                    &mut self.total_ticks,
-                    u32::from(ticks),
-                    "Return-to-View total tick counter overflowed",
-                );
+                // `#54`: `0x03` runs exactly the number of ticks in its
+                // own argument byte. The retracted fixed eight-tick wait
+                // is gone.
+                self.advance_preview_ticks(u32::from(ticks));
             }
             ReturnToViewCommand::OpenCellEffect { x, y } => {
-                let screen_y = y.checked_add(7).ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Return-to-View open-cell effect Y overflows screen row offset",
-                    )
-                })?;
-                self.open_cell_effect(x, screen_y)?;
+                // `#54`: script coordinates are plane coordinates
+                // (`x = 0..18`, `y = 0..3`); the `+ 7` screen row offset
+                // belongs to the renderer, not to the buffer index.
+                self.open_cell_effect(x, y)?;
             }
             ReturnToViewCommand::CloseCellEffect => {
                 let Some((x, y)) = self.cached_effect_cell else {
@@ -301,20 +480,19 @@ impl ReturnToViewPreviewState {
                     ));
                 };
                 let index = preview_cell_index_checked(x, y)?;
-                self.visible[index] = RTV_EFFECT_SENTINEL_TILE;
-                self.backing[index] = RTV_EFFECT_SENTINEL_TILE;
-                self.visible[index] = RTV_CLOSE_EFFECT_FINAL_TILE;
+                // `#54`: the shimmer owns the cell while it steps
+                // `15..1`, then the caller writes the close tile.
+                self.terrain[index] = RTV_TERRAIN_HELPER_OWNED;
+                self.terrain[index] = RTV_CLOSE_EFFECT_FINAL_TILE;
                 self.backing[index] = RTV_CLOSE_EFFECT_FINAL_TILE;
                 add_return_to_view_counter(
                     &mut self.cell_effect_steps,
                     u32::from(RTV_CELL_EFFECT_STEPS),
                     "Return-to-View cell-effect step counter overflowed",
                 );
-                add_return_to_view_counter(
-                    &mut self.total_ticks,
-                    u32::from(RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS),
-                    "Return-to-View total tick counter overflowed",
-                );
+                self.advance_preview_ticks(u32::from(
+                    RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS,
+                ));
             }
             ReturnToViewCommand::LoadMapStrip { strip } => {
                 self.load_map_strip(strips, strip)?;
@@ -335,7 +513,7 @@ impl ReturnToViewPreviewState {
             }
             ReturnToViewCommand::SetMapCell { tile, x, y } => {
                 let index = preview_cell_index_checked(x, y)?;
-                self.visible[index] = tile;
+                self.terrain[index] = tile;
                 self.backing[index] = tile;
             }
             ReturnToViewCommand::FixedWipeAndActorDraw { slot, .. } => {
@@ -352,27 +530,18 @@ impl ReturnToViewPreviewState {
                     u32::from(RTV_FIXED_WIPE_STEPS),
                     "Return-to-View fixed wipe rectangle counter overflowed",
                 );
-                add_return_to_view_counter(
-                    &mut self.fixed_wait_ticks,
-                    u32::from(RTV_WAIT_FIXED_TICKS),
-                    "Return-to-View fixed wait tick counter overflowed",
-                );
-                add_return_to_view_counter(
-                    &mut self.total_ticks,
-                    u32::from(RTV_FIXED_WIPE_TOTAL_TICKS),
-                    "Return-to-View total tick counter overflowed",
-                );
+                // `#54`: `0x0B` runs three ticks at its tail. The
+                // retracted eight-tick wait is gone, and the command's
+                // percussive speaker effect is not a timed pause.
+                self.advance_preview_ticks(u32::from(RTV_FIXED_WIPE_TOTAL_TICKS));
             }
             ReturnToViewCommand::ClearActors => {
                 self.actors = [ReturnToViewActor::default(); RTV_ACTOR_SLOTS];
             }
             ReturnToViewCommand::MoveActorAndTick { slot, direction } => {
                 self.move_actor(slot, direction)?;
-                add_return_to_view_counter(
-                    &mut self.total_ticks,
-                    1,
-                    "Return-to-View total tick counter overflowed",
-                );
+                // `#54`: `0x0D` runs seven ticks at its tail.
+                self.advance_preview_ticks(u32::from(RTV_MOVE_ACTOR_AND_TICK_TICKS));
             }
             ReturnToViewCommand::LoopStart { count } => {
                 self.loop_count = count;
@@ -404,30 +573,40 @@ impl ReturnToViewPreviewState {
                 format!("Return-to-View map strip {strip} is out of range"),
             )
         })?;
-        self.visible = [0; RTV_PREVIEW_CELLS];
-        self.backing = [0; RTV_PREVIEW_CELLS];
-        for row in 0..RTV_STRIP_VISIBLE_ROWS {
-            for col in 0..RTV_STRIP_VISIBLE_COLUMNS {
-                let tile = source[row * RTV_STRIP_VISIBLE_COLUMNS + col];
-                let index = row * RTV_PREVIEW_SIDE + col;
-                self.visible[index] = tile;
-                self.backing[index] = tile;
-            }
-        }
+        // `#54`: `0x06` fills the planes completely and immediately —
+        // the reveal is a repaint-cursor effect, not incremental buffer
+        // population — and the cursor restarts at the centre column.
+        self.terrain = *source;
+        self.backing = *source;
+        self.overlay = [0; RTV_PREVIEW_CELLS];
         self.current_strip = Some(strip);
         self.current_caption = return_to_view_caption_for_strip(strip);
+        self.ticks_since_strip_load = 0;
         Ok(())
     }
 
     fn restore_actor_backing(&mut self, slot: usize) -> io::Result<()> {
         let actor = self.actors[slot];
+        if !actor.drawable {
+            return Ok(());
+        }
         let index = preview_cell_index_checked(actor.x, actor.y)?;
-        self.visible[index] = self.backing[index];
+        self.terrain[index] = self.backing[index];
         Ok(())
     }
 
     fn move_actor(&mut self, slot: u8, direction: u8) -> io::Result<()> {
         let slot = rtv_slot_index(slot)?;
+        if !self.actors[slot].drawable {
+            // The shipped script moves slot 0 at eleven points where no
+            // actor is live in that slot (verified against the shipped
+            // `MISCMAPS.DAT`: every such move is on an unset slot, and no
+            // *placed* actor ever steps off the strip, which is what
+            // `cleak/u5-spec#54` means by "script coordinates never leave
+            // `x = 0..18` / `y = 0..3`"). An inactive actor-table entry
+            // has nothing on screen to move, so the step is a no-op.
+            return Ok(());
+        }
         self.restore_actor_backing(slot)?;
         let actor = &mut self.actors[slot];
         let (x, y) = rtv_step_coordinate(actor.x, actor.y, direction)?;
@@ -439,20 +618,19 @@ impl ReturnToViewPreviewState {
     fn open_cell_effect(&mut self, x: u8, y: u8) -> io::Result<()> {
         let index = preview_cell_index_checked(x, y)?;
         self.cached_effect_cell = Some((x, y));
-        self.visible[index] = RTV_EFFECT_SENTINEL_TILE;
-        self.backing[index] = RTV_EFFECT_SENTINEL_TILE;
-        self.visible[index] = RTV_OPEN_EFFECT_FINAL_TILE;
+        // `#54`: the shimmer owns the cell for the duration of its
+        // `1..15` steps, then the caller writes `0xDC`.
+        self.terrain[index] = RTV_TERRAIN_HELPER_OWNED;
+        self.terrain[index] = RTV_OPEN_EFFECT_FINAL_TILE;
         self.backing[index] = RTV_OPEN_EFFECT_FINAL_TILE;
         add_return_to_view_counter(
             &mut self.cell_effect_steps,
             u32::from(RTV_CELL_EFFECT_STEPS),
             "Return-to-View cell-effect step counter overflowed",
         );
-        add_return_to_view_counter(
-            &mut self.total_ticks,
-            u32::from(RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS),
-            "Return-to-View total tick counter overflowed",
-        );
+        self.advance_preview_ticks(u32::from(
+            RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS,
+        ));
         Ok(())
     }
 }
@@ -481,7 +659,6 @@ pub struct ReturnToViewPreviewReport {
     pub fixed_wipes: u32,
     pub cell_effect_steps: u32,
     pub fixed_wipe_rectangle_steps: u32,
-    pub fixed_wait_ticks: u32,
     pub cached_effect_cell: Option<(u8, u8)>,
 }
 
@@ -630,13 +807,17 @@ pub fn parse_return_to_view_map_strips(bytes: &[u8]) -> io::Result<ReturnToViewM
             ),
         ));
     }
+    // `#54` retraction 1: each record is four 32-byte *rows*, of which
+    // the first nineteen bytes carry tile data. The previously published
+    // "four 32-byte columns" reading was a transposition and produced an
+    // impossible 4-wide by 19-tall preview.
     let mut strips = [[0u8; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT];
     for (strip_index, strip) in strips.iter_mut().enumerate() {
         let base = strip_index * RTV_STRIP_RECORD_BYTES;
-        for source_col in 0..RTV_STRIP_SOURCE_COLUMNS {
-            let column_start = base + source_col * MISCMAPS_RTV_STRIP_ROW_STRIDE;
-            let source_column = &bytes[column_start..column_start + RTV_STRIP_SOURCE_ROWS];
-            for (source_row, tile) in source_column.iter().copied().enumerate() {
+        for source_row in 0..RTV_STRIP_SOURCE_ROWS {
+            let row_start = base + source_row * MISCMAPS_RTV_STRIP_ROW_STRIDE;
+            let source = &bytes[row_start..row_start + RTV_STRIP_SOURCE_COLUMNS];
+            for (source_col, tile) in source.iter().copied().enumerate() {
                 strip[source_row * RTV_STRIP_VISIBLE_COLUMNS + source_col] = tile;
             }
         }
@@ -881,7 +1062,6 @@ pub fn run_return_to_view_preview_state_until_restart(
         fixed_wipes: state.fixed_wipes,
         cell_effect_steps: state.cell_effect_steps,
         fixed_wipe_rectangle_steps: state.fixed_wipe_rectangle_steps,
-        fixed_wait_ticks: state.fixed_wait_ticks,
         cached_effect_cell: state.cached_effect_cell,
     };
     Ok(ReturnToViewPreviewRun { state, report })
@@ -897,6 +1077,9 @@ pub fn run_return_to_view_playback_until_restart(
     let mut applied_commands = 0usize;
     let mut pc = 0usize;
     let mut restart_seen = false;
+    // `#54` strip reveal: the repaint cursor is measured from the tick
+    // at which the current strip was loaded.
+    let mut strip_load_tick = 0u32;
     while pc < script.commands.len() && applied_commands < max_commands {
         let command_index = pc;
         let command = script.commands[pc];
@@ -919,11 +1102,15 @@ pub fn run_return_to_view_playback_until_restart(
                 break;
             }
         }
+        if matches!(command, ReturnToViewCommand::LoadMapStrip { .. }) {
+            strip_load_tick = state.total_ticks;
+        }
         append_return_to_view_playback_frames(
             &mut frames,
             command_index,
             command,
             before_ticks,
+            strip_load_tick,
             &before_state,
             &state,
         );
@@ -943,7 +1130,6 @@ pub fn run_return_to_view_playback_until_restart(
         fixed_wipes: state.fixed_wipes,
         cell_effect_steps: state.cell_effect_steps,
         fixed_wipe_rectangle_steps: state.fixed_wipe_rectangle_steps,
-        fixed_wait_ticks: state.fixed_wait_ticks,
         cached_effect_cell: state.cached_effect_cell,
     };
     Ok(ReturnToViewPlayback {
@@ -957,6 +1143,7 @@ fn append_return_to_view_playback_frames(
     command_index: usize,
     command: ReturnToViewCommand,
     before_ticks: u32,
+    strip_load_tick: u32,
     before_state: &ReturnToViewPreviewState,
     state: &ReturnToViewPreviewState,
 ) {
@@ -969,14 +1156,15 @@ fn append_return_to_view_playback_frames(
                     before_ticks + u32::from(tick),
                     ReturnToViewFrameKind::PreviewTick,
                     state,
+                    strip_load_tick,
                 );
             }
         }
         ReturnToViewCommand::LoadMapStrip { .. } => {}
         ReturnToViewCommand::OpenCellEffect { x, y } => {
-            let screen_y = y
-                .checked_add(7)
-                .expect("Return-to-View open-cell playback Y overflows screen row offset");
+            // `#54`: `y` is a plane row (`0..3`); the `+ 7` screen row
+            // offset belongs to the renderer.
+            let screen_y = y;
             for step in 0..RTV_CELL_EFFECT_STEPS {
                 push_return_to_view_cell_effect_frame(
                     frames,
@@ -987,6 +1175,7 @@ fn append_return_to_view_playback_frames(
                     x,
                     screen_y,
                     RTV_EFFECT_SENTINEL_TILE,
+                    strip_load_tick,
                 );
             }
             for tick in 0..RTV_CELL_EFFECT_FINAL_TICKS {
@@ -999,6 +1188,7 @@ fn append_return_to_view_playback_frames(
                     x,
                     screen_y,
                     RTV_OPEN_EFFECT_FINAL_TILE,
+                    strip_load_tick,
                 );
             }
         }
@@ -1016,6 +1206,7 @@ fn append_return_to_view_playback_frames(
                     x,
                     y,
                     RTV_EFFECT_SENTINEL_TILE,
+                    strip_load_tick,
                 );
             }
             for tick in 0..RTV_CELL_EFFECT_FINAL_TICKS {
@@ -1028,6 +1219,7 @@ fn append_return_to_view_playback_frames(
                     x,
                     y,
                     RTV_CLOSE_EFFECT_FINAL_TILE,
+                    strip_load_tick,
                 );
             }
         }
@@ -1063,19 +1255,11 @@ fn append_return_to_view_playback_frames(
                     elapsed,
                     ReturnToViewFrameKind::FixedWipeRectangle { step },
                     state,
+                    strip_load_tick,
                 );
             }
             push_return_to_view_fixed_actor_draw_frame(frames, command_index, elapsed, state, slot);
-            for tick in 0..RTV_WAIT_FIXED_TICKS {
-                elapsed += 1;
-                push_return_to_view_frame(
-                    frames,
-                    command_index,
-                    elapsed,
-                    ReturnToViewFrameKind::FixedWait { tick },
-                    state,
-                );
-            }
+            // `#54`: no fixed eight-tick wait — three tail ticks only.
             for tick in 0..RTV_FIXED_WIPE_TRAILING_TICKS {
                 elapsed += 1;
                 push_return_to_view_frame(
@@ -1084,17 +1268,22 @@ fn append_return_to_view_playback_frames(
                     elapsed,
                     ReturnToViewFrameKind::FixedWipeTrailingTick { tick },
                     state,
+                    strip_load_tick,
                 );
             }
         }
         ReturnToViewCommand::MoveActorAndTick { .. } => {
-            push_return_to_view_frame(
-                frames,
-                command_index,
-                before_ticks + 1,
-                ReturnToViewFrameKind::MoveActorTick,
-                state,
-            );
+            // `#54`: `0x0D` runs seven ticks at its tail.
+            for tick in 1..=u32::from(RTV_MOVE_ACTOR_AND_TICK_TICKS) {
+                push_return_to_view_frame(
+                    frames,
+                    command_index,
+                    before_ticks + tick,
+                    ReturnToViewFrameKind::MoveActorTick,
+                    state,
+                    strip_load_tick,
+                );
+            }
         }
         _ => {}
     }
@@ -1109,13 +1298,14 @@ fn push_return_to_view_cell_effect_frame(
     x: u8,
     y: u8,
     tile: u8,
+    strip_load_tick: u32,
 ) {
     let mut state = state.clone();
     let index = preview_cell_index_checked(x, y)
         .expect("Return-to-View cell-effect playback coordinate is outside preview buffer");
-    state.visible[index] = tile;
+    state.terrain[index] = tile;
     state.backing[index] = tile;
-    state.total_ticks = elapsed_title_ticks;
+    state.set_playback_tick(elapsed_title_ticks, strip_load_tick);
     frames.push(ReturnToViewPlaybackFrame {
         command_index,
         elapsed_title_ticks,
@@ -1131,9 +1321,10 @@ fn push_return_to_view_frame(
     elapsed_title_ticks: u32,
     kind: ReturnToViewFrameKind,
     state: &ReturnToViewPreviewState,
+    strip_load_tick: u32,
 ) {
     let mut state = state.clone();
-    state.total_ticks = elapsed_title_ticks;
+    state.set_playback_tick(elapsed_title_ticks, strip_load_tick);
     frames.push(ReturnToViewPlaybackFrame {
         command_index,
         elapsed_title_ticks,
@@ -1233,7 +1424,7 @@ pub fn summarize_return_to_view_preview(
         "reaches end of stream"
     };
     Ok(format!(
-        "Dry run {end} after {} applied command(s); emits {} playback frame(s); current strip {:?}, {} drawable actor(s), {} scheduled tick(s), {} cell-effect step(s), {} temporary draw(s), {} fixed wipe(s), {} fixed-wipe rectangle step(s), {} fixed-wait tick(s).",
+        "Dry run {end} after {} applied command(s); emits {} playback frame(s); current strip {:?}, {} drawable actor(s), {} scheduled tick(s), {} cell-effect step(s), {} temporary draw(s), {} fixed wipe(s), {} fixed-wipe rectangle step(s).",
         report.applied_commands,
         playback.frames.len(),
         report.current_strip,
@@ -1242,8 +1433,7 @@ pub fn summarize_return_to_view_preview(
         report.cell_effect_steps,
         report.temporary_actor_draws,
         report.fixed_wipes,
-        report.fixed_wipe_rectangle_steps,
-        report.fixed_wait_ticks
+        report.fixed_wipe_rectangle_steps
     ))
 }
 
@@ -1265,9 +1455,8 @@ pub fn render_return_to_view_preview_viewport_at_title_tick(
     let viewport = render_return_to_view_state_viewport(
         &run.state,
         atlas,
-        starting_title_tick
-            .checked_add(run.report.total_ticks)
-            .expect("Return-to-View render title tick overflowed"),
+        return_to_view_animation_frame(starting_title_tick, run.report.total_ticks),
+        None,
     )?;
     Ok((viewport, run.report))
 }
@@ -1277,65 +1466,149 @@ pub fn render_return_to_view_playback_frame_viewport(
     atlas: &TileAtlas,
     starting_title_tick: u32,
 ) -> io::Result<TileViewport> {
+    render_return_to_view_playback_frame_over(frame, atlas, starting_title_tick, None)
+}
+
+/// `#54`: painting is cell-granular over preserved backing, so a
+/// playback frame is rendered on top of the previous frame's raster.
+pub fn render_return_to_view_playback_frame_over(
+    frame: &ReturnToViewPlaybackFrame,
+    atlas: &TileAtlas,
+    starting_title_tick: u32,
+    already_painted: Option<&TileViewport>,
+) -> io::Result<TileViewport> {
     render_return_to_view_state_viewport(
         &frame.state,
         atlas,
-        starting_title_tick
-            .checked_add(frame.elapsed_title_ticks)
-            .expect("Return-to-View playback title tick overflowed"),
+        return_to_view_animation_frame(starting_title_tick, frame.elapsed_title_ticks),
+        already_painted,
     )
 }
 
+/// `#54` preview tick: every tick advances the animated-tile frame
+/// table, so the frame selector is the elapsed tick count.
+pub fn return_to_view_animation_frame(starting_title_tick: u32, elapsed_ticks: u32) -> u8 {
+    let total = starting_title_tick
+        .checked_add(elapsed_ticks)
+        .expect("Return-to-View animation frame counter overflowed");
+    (total % u32::from(STATIC_TILE_ANIMATION_FRAME_WRAP)) as u8
+}
+
+/// Render one preview state into the published `304 x 64` strip raster.
+///
+/// `cleak/u5-spec#54`: the strip is nineteen `16 x 16` `TILES` cells
+/// across by four down, drawn through the same viewport tile entry the
+/// world view uses — there is no miniature raster and no scaled resident
+/// path. The caller blits the result at [`RTV_PREVIEW_PIXEL_X`],
+/// [`RTV_PREVIEW_PIXEL_Y`].
+///
+/// Painting is cell-granular over preserved backing: only the cells
+/// inside the reveal cursor's column span are painted, cells a helper
+/// owns are skipped, and there is no clear and no full repaint.
+/// `already_painted` carries the previous frame's raster so untouched
+/// cells keep whatever is already on screen.
 fn render_return_to_view_state_viewport(
     state: &ReturnToViewPreviewState,
     atlas: &TileAtlas,
-    render_title_tick: u32,
+    animation_frame: u8,
+    already_painted: Option<&TileViewport>,
 ) -> io::Result<TileViewport> {
-    let width = RTV_STRIP_VISIBLE_COLUMNS
-        .checked_mul(TILE_ATLAS_SIDE)
-        .ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "RTV viewport width overflows")
-        })?;
-    let height = RTV_STRIP_VISIBLE_ROWS
-        .checked_mul(TILE_ATLAS_SIDE)
-        .ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "RTV viewport height overflows")
-        })?;
-    let pixel_count = width.checked_mul(height).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "RTV viewport pixel count overflows",
-        )
-    })?;
-    let mut viewport = TileViewport {
-        depth: atlas.depth,
-        cells_wide: RTV_STRIP_VISIBLE_COLUMNS,
-        cells_high: RTV_STRIP_VISIBLE_ROWS,
-        width,
-        height,
-        pixels: vec![0; pixel_count],
+    let width = RTV_PREVIEW_PIXEL_WIDTH;
+    let height = RTV_PREVIEW_PIXEL_HEIGHT;
+    let mut viewport = match already_painted {
+        Some(previous) => {
+            if previous.width != width || previous.height != height {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "Return-to-View backing raster is {}x{}, expected {width}x{height}",
+                        previous.width, previous.height
+                    ),
+                ));
+            }
+            previous.clone()
+        }
+        None => TileViewport {
+            depth: atlas.depth,
+            cells_wide: RTV_STRIP_VISIBLE_COLUMNS,
+            cells_high: RTV_STRIP_VISIBLE_ROWS,
+            width,
+            height,
+            pixels: vec![0; width * height],
+        },
     };
+
+    let Some((first_column, last_column)) = state.revealed_columns() else {
+        // Before the chapter's first preview tick the cursor paints
+        // nothing; the previous contents stand.
+        return Ok(viewport);
+    };
+
     for cell_y in 0..RTV_STRIP_VISIBLE_ROWS {
-        for cell_x in 0..RTV_STRIP_VISIBLE_COLUMNS {
-            let tile = state.visible[cell_y * RTV_PREVIEW_SIDE + cell_x];
-            let tile = return_to_view_tile_for_title_tick(tile, render_title_tick);
-            blit_tile_to_viewport(&mut viewport, atlas, tile, cell_x, cell_y)?;
+        for cell_x in first_column..=last_column {
+            let index = cell_y * RTV_STRIP_VISIBLE_COLUMNS + cell_x;
+            let Some(tile) = return_to_view_cell_tile_index(
+                state.terrain[index],
+                state.overlay[index],
+                animation_frame,
+            ) else {
+                // `#54`: another helper owns this cell this frame.
+                continue;
+            };
+            blit_tile_index_to_viewport(&mut viewport, atlas, tile, cell_x, cell_y)?;
         }
     }
+
+    // Drawable actors are the helper that owns their cells; they paint
+    // on top with the sprite's transparent pixel left alone.
     for actor in state.actors.iter().filter(|actor| actor.drawable) {
         let x = usize::from(actor.x);
-        let y = usize::from(return_to_view_actor_screen_y(actor.y));
+        let y = usize::from(actor.y);
         if x >= RTV_STRIP_VISIBLE_COLUMNS || y >= RTV_STRIP_VISIBLE_ROWS {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "Return-to-View actor draw at screen cell ({x}, {y}) falls outside rendered 4x19 preview; clipping was a forbidden fallback"
+                    "Return-to-View actor at preview cell ({x}, {y}) falls outside the {RTV_STRIP_VISIBLE_COLUMNS}x{RTV_STRIP_VISIBLE_ROWS} strip"
                 ),
             ));
         }
-        blit_return_to_view_actor_to_viewport(&mut viewport, atlas, actor.tile0, x, y)?;
+        if x < first_column || x > last_column {
+            continue;
+        }
+        blit_return_to_view_actor_to_viewport(
+            &mut viewport,
+            atlas,
+            RTV_OVERLAY_TILE_BASE + usize::from(actor.tile0),
+            x,
+            y,
+        )?;
     }
     Ok(viewport)
+}
+
+/// Blit one 512-entry atlas tile index into a preview cell.
+fn blit_tile_index_to_viewport(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    tile: usize,
+    cell_x: usize,
+    cell_y: usize,
+) -> io::Result<()> {
+    let tile_pixels = atlas.tile_pixels(tile).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("tile atlas is missing tile {tile}"),
+        )
+    })?;
+    let dst_x = cell_x * TILE_ATLAS_SIDE;
+    let dst_y = cell_y * TILE_ATLAS_SIDE;
+    for row in 0..TILE_ATLAS_SIDE {
+        let dst_start = (dst_y + row) * viewport.width + dst_x;
+        let src_start = row * TILE_ATLAS_SIDE;
+        viewport.pixels[dst_start..dst_start + TILE_ATLAS_SIDE]
+            .copy_from_slice(&tile_pixels[src_start..src_start + TILE_ATLAS_SIDE]);
+    }
+    Ok(())
 }
 
 pub const fn return_to_view_fixed_wipe_rectangles(
@@ -1354,11 +1627,11 @@ pub const fn return_to_view_fixed_wipe_rectangles(
 fn blit_return_to_view_actor_to_viewport(
     viewport: &mut TileViewport,
     atlas: &TileAtlas,
-    tile: u8,
+    tile: usize,
     cell_x: usize,
     cell_y: usize,
 ) -> io::Result<()> {
-    let tile_pixels = atlas.tile_pixels(tile as usize).ok_or_else(|| {
+    let tile_pixels = atlas.tile_pixels(tile).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("tile atlas is missing tile {tile}"),
@@ -1393,17 +1666,19 @@ fn rtv_slot_index(slot: u8) -> io::Result<usize> {
 fn preview_cell_index(x: u8, y: u8) -> Option<usize> {
     let x = usize::from(x);
     let y = usize::from(y);
-    if x >= RTV_PREVIEW_SIDE || y >= RTV_PREVIEW_SIDE {
+    if x >= RTV_STRIP_VISIBLE_COLUMNS || y >= RTV_STRIP_VISIBLE_ROWS {
         return None;
     }
-    Some(y * RTV_PREVIEW_SIDE + x)
+    Some(y * RTV_STRIP_VISIBLE_COLUMNS + x)
 }
 
 fn preview_cell_index_checked(x: u8, y: u8) -> io::Result<usize> {
     preview_cell_index(x, y).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Return-to-View coordinate ({x}, {y}) is outside the 32x32 preview buffer"),
+            format!(
+                "Return-to-View coordinate ({x}, {y}) is outside the {RTV_STRIP_VISIBLE_COLUMNS}x{RTV_STRIP_VISIBLE_ROWS} preview strip"
+            ),
         )
     })
 }
@@ -1421,9 +1696,21 @@ fn rtv_step_coordinate(x: u8, y: u8, direction: u8) -> io::Result<(u8, u8)> {
             ));
         }
     };
-    let side = RTV_PREVIEW_SIDE as i16;
-    let nx = (i16::from(x) + dx).rem_euclid(side);
-    let ny = (i16::from(y) + dy).rem_euclid(side);
+    // `#54`: script coordinates never leave `x = 0..18` / `y = 0..3`,
+    // so a step that would leave the strip is a data fault, not
+    // something to wrap or clip.
+    let nx = i16::from(x) + dx;
+    let ny = i16::from(y) + dy;
+    if !(0..RTV_STRIP_VISIBLE_COLUMNS as i16).contains(&nx)
+        || !(0..RTV_STRIP_VISIBLE_ROWS as i16).contains(&ny)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Return-to-View actor step to ({nx}, {ny}) leaves the {RTV_STRIP_VISIBLE_COLUMNS}x{RTV_STRIP_VISIBLE_ROWS} preview strip"
+            ),
+        ));
+    }
     Ok((nx as u8, ny as u8))
 }
 
@@ -1510,26 +1797,30 @@ mod tests {
 
     #[test]
     fn parse_return_to_view_map_strips_extracts_visible_cells_and_skips_padding() {
+        // `cleak/u5-spec#54` retraction 1: four 32-byte *rows* per
+        // record, nineteen tile bytes each, thirteen bytes of padding.
         let mut bytes = vec![0xee; MISCMAPS_RTV_STRIP_SECTION_BYTES];
         for strip in 0..RTV_STRIP_COUNT {
-            for source_col in 0..RTV_STRIP_SOURCE_COLUMNS {
-                let column_start =
-                    strip * RTV_STRIP_RECORD_BYTES + source_col * MISCMAPS_RTV_STRIP_ROW_STRIDE;
-                for source_row in 0..RTV_STRIP_SOURCE_ROWS {
-                    bytes[column_start + source_row] =
-                        (strip * 100 + source_col * 19 + source_row) as u8;
+            for source_row in 0..RTV_STRIP_SOURCE_ROWS {
+                let row_start =
+                    strip * RTV_STRIP_RECORD_BYTES + source_row * MISCMAPS_RTV_STRIP_ROW_STRIDE;
+                for source_col in 0..RTV_STRIP_SOURCE_COLUMNS {
+                    bytes[row_start + source_col] =
+                        (strip * 100 + source_row * 19 + source_col) as u8;
                 }
             }
         }
 
         let strips = parse_return_to_view_map_strips(&bytes).unwrap();
 
+        assert_eq!(strips.strips[0].len(), 19 * 4);
         assert_eq!(strips.strips[0][0], 0);
-        assert_eq!(strips.strips[0][1], 19);
-        assert_eq!(strips.strips[0][4], 1);
-        assert_eq!(strips.strips[0][19], 61);
+        assert_eq!(strips.strips[0][18], 18);
+        assert_eq!(strips.strips[0][19], 19);
         assert_eq!(strips.strips[0][75], 75);
         assert_eq!(strips.strips[1][0], 100);
+        // The thirteen padding bytes of each source row never reach the
+        // preview.
         assert!(!strips.strips[0].contains(&0xee));
     }
 
@@ -1583,10 +1874,9 @@ mod tests {
         assert_eq!(state.cell(1, 0), Some(0x12));
         assert_eq!(state.actors[3].x, 2);
         assert_eq!(state.actors[3].tile0, 0x44);
-        assert_eq!(state.cell(2, 9), Some(RTV_CLOSE_EFFECT_FINAL_TILE));
+        assert_eq!(state.cell(2, 2), Some(RTV_CLOSE_EFFECT_FINAL_TILE));
         assert_eq!(state.total_ticks, 34);
         assert_eq!(state.cell_effect_steps, 30);
-        assert_eq!(state.fixed_wait_ticks, 0);
     }
 
     #[test]
@@ -1644,11 +1934,12 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(RTV_FIXED_WIPE_TOTAL_TICKS, 16);
+        // `cleak/u5-spec#54` retraction 2: the eight-tick fixed wait was
+        // fabricated. `0x0B` runs five wipe steps plus three tail ticks.
+        assert_eq!(RTV_FIXED_WIPE_TOTAL_TICKS, 8);
         assert_eq!(state.fixed_wipes, 1);
         assert_eq!(state.fixed_wipe_rectangle_steps, 5);
-        assert_eq!(state.fixed_wait_ticks, 8);
-        assert_eq!(state.total_ticks, 16);
+        assert_eq!(state.total_ticks, 8);
         assert_eq!(
             return_to_view_fixed_wipe_rectangles(0),
             Some([((128, 152), (137, 155)), ((128, 153), (137, 156))])
@@ -1661,9 +1952,13 @@ mod tests {
     }
 
     #[test]
-    fn return_to_view_actor_movement_wraps_preview_buffer_edges() {
+    fn return_to_view_actor_movement_off_the_strip_is_a_data_fault() {
+        // `cleak/u5-spec#54`: "script coordinates never leave
+        // `x = 0..18` / `y = 0..3`, so nothing is clipped and no
+        // clipping rule is needed". A step off the edge is therefore a
+        // corrupt-script fault rather than a wrap.
         let strips = ReturnToViewMapStrips {
-            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+            strips: [[0x44; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
         };
         let mut state = ReturnToViewPreviewState::default();
         state
@@ -1679,7 +1974,7 @@ mod tests {
             )
             .unwrap();
 
-        state
+        let err = state
             .apply_command(
                 &strips,
                 1,
@@ -1688,30 +1983,27 @@ mod tests {
                     direction: 3,
                 },
             )
-            .unwrap();
-        state
-            .apply_command(
-                &strips,
-                2,
-                ReturnToViewCommand::MoveActor {
-                    slot: 0,
-                    direction: 0,
-                },
-            )
-            .unwrap();
-
-        assert_eq!(state.actors[0].x, 31);
-        assert_eq!(state.actors[0].y, 31);
+            .expect_err("a westward step off column 0 must fail");
+        assert!(
+            err.to_string().contains("leaves the 19x4 preview strip"),
+            "unexpected error: {err}"
+        );
+        assert_eq!(state.actors[0].x, 0);
+        assert_eq!(state.actors[0].y, 0);
     }
 
     #[test]
-    fn return_to_view_tile_animation_uses_title_tick_families() {
-        assert_eq!(return_to_view_tile_for_title_tick(0x80, 0), 0x80);
-        assert_eq!(return_to_view_tile_for_title_tick(0x80, 3), 0x83);
-        assert_eq!(return_to_view_tile_for_title_tick(0x84, 2), 0x86);
-        assert_eq!(return_to_view_tile_for_title_tick(0xD8, 5), 0xD9);
-        assert_eq!(return_to_view_tile_for_title_tick(0xDC, 9), 0xDC);
-        assert_eq!(return_to_view_tile_for_title_tick(0x05, 9), 0x05);
+    fn return_to_view_terrain_resolves_through_the_world_animation_table() {
+        // `cleak/u5-spec#54` retraction 4: the `0x80..=0x87` /
+        // `0xD8..=0xDB` animated families were fabricated. A non-zero
+        // terrain byte indexes the same animated-tile frame table the
+        // world renderer cycles, so only the real water family moves.
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x01, 0), 0x01);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x01, 2), 0x03);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x03, 4), 0x02);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x80, 3), 0x80);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0xD8, 5), 0xD8);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x05, 9), 0x05);
     }
 
     #[test]
@@ -1736,9 +2028,15 @@ mod tests {
 
         assert!(playback.frames.is_empty());
         assert_eq!(playback.run.report.total_ticks, 0);
-        assert_eq!(playback.run.state.visible[0], 10);
-        assert_eq!(playback.run.state.visible[9 * RTV_PREVIEW_SIDE], 19);
-        assert_eq!(playback.run.state.visible[18 * RTV_PREVIEW_SIDE], 28);
+        assert_eq!(playback.run.state.terrain[0], 10);
+        assert_eq!(
+            playback.run.state.terrain[RTV_STRIP_VISIBLE_COLUMNS + 9],
+            10 + 1 + 9
+        );
+        assert_eq!(
+            playback.run.state.terrain[3 * RTV_STRIP_VISIBLE_COLUMNS + 18],
+            10 + 3 + 18
+        );
     }
 
     #[test]
@@ -1746,7 +2044,7 @@ mod tests {
         let mut strips = ReturnToViewMapStrips {
             strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
         };
-        strips.strips[0][8 * RTV_STRIP_VISIBLE_COLUMNS + 2] = 0x33;
+        strips.strips[0][1 * RTV_STRIP_VISIBLE_COLUMNS + 2] = 0x33;
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
@@ -1757,7 +2055,7 @@ mod tests {
         };
 
         let playback = run_return_to_view_playback_until_restart(&strips, &script, 96).unwrap();
-        let effect_index = preview_cell_index(2, 8).unwrap();
+        let effect_index = preview_cell_index(2, 1).unwrap();
 
         let open_step = playback
             .frames
@@ -1771,7 +2069,7 @@ mod tests {
             })
             .expect("open effect first step");
         assert_eq!(
-            open_step.state.visible[effect_index],
+            open_step.state.terrain[effect_index],
             RTV_EFFECT_SENTINEL_TILE
         );
 
@@ -1787,7 +2085,7 @@ mod tests {
             })
             .expect("open effect final tick");
         assert_eq!(
-            open_final.state.visible[effect_index],
+            open_final.state.terrain[effect_index],
             RTV_OPEN_EFFECT_FINAL_TILE
         );
 
@@ -1803,7 +2101,7 @@ mod tests {
             })
             .expect("close effect first step");
         assert_eq!(
-            close_step.state.visible[effect_index],
+            close_step.state.terrain[effect_index],
             RTV_EFFECT_SENTINEL_TILE
         );
 
@@ -1819,11 +2117,11 @@ mod tests {
             })
             .expect("close effect final tick");
         assert_eq!(
-            close_final.state.visible[effect_index],
+            close_final.state.terrain[effect_index],
             RTV_CLOSE_EFFECT_FINAL_TILE
         );
         assert_eq!(
-            playback.run.state.visible[effect_index],
+            playback.run.state.terrain[effect_index],
             RTV_CLOSE_EFFECT_FINAL_TILE
         );
     }
@@ -1861,7 +2159,10 @@ mod tests {
         let playback = run_return_to_view_playback_until_restart(&strips, &script, 64).unwrap();
 
         assert!(playback.run.report.restart_seen);
-        assert_eq!(playback.run.report.total_ticks, 36);
+        // 2 preview ticks + 8 for the wipe (five steps, three tail
+        // ticks) + 17 for the cell effect + 7 for `0x0D` = 34. The
+        // retracted eight-tick wait used to inflate this to 36.
+        assert_eq!(playback.run.report.total_ticks, 34);
         assert_eq!(
             playback
                 .frames
@@ -1889,13 +2190,14 @@ mod tests {
                 .count(),
             1
         );
+        // `#54` retraction 2: there is no fixed wait phase any more.
         assert_eq!(
             playback
                 .frames
                 .iter()
                 .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::FixedWait { .. }))
                 .count(),
-            RTV_WAIT_FIXED_TICKS as usize
+            0
         );
         assert_eq!(
             playback
@@ -1910,7 +2212,7 @@ mod tests {
                 .frames
                 .last()
                 .map(|frame| frame.elapsed_title_ticks),
-            Some(36)
+            Some(34)
         );
         assert_eq!(playback.run.state.actors[0].x, 2);
 
@@ -1981,12 +2283,107 @@ mod tests {
         assert_eq!(playback.run.state.actors[0].tile0, 0x44);
     }
 
+    /// A full 512-entry atlas where tile `n` is painted solid with the
+    /// low nibble of `n`, so a rendered pixel names the tile it came
+    /// from. `#54` needs the sprite half (`256..511`) as well as the map
+    /// half, because an overlay byte selects tile `256 + byte`.
+    fn rtv_test_atlas() -> TileAtlas {
+        let mut pixels = Vec::with_capacity(crate::TILE_ATLAS_PIXEL_LEN);
+        for tile in 0..crate::TILE_ATLAS_TILE_COUNT {
+            pixels.extend(std::iter::repeat_n(
+                (tile % 16) as u8,
+                TILE_ATLAS_SIDE * TILE_ATLAS_SIDE,
+            ));
+        }
+        TileAtlas {
+            depth: crate::TileGraphicsDepth::Ega16,
+            pixels,
+        }
+    }
+
+    /// A strip whose terrain plane is entirely non-zero, matching the
+    /// shipped records (all four have zero empty cells).
+    fn rtv_filled_strips() -> ReturnToViewMapStrips {
+        ReturnToViewMapStrips {
+            strips: [[0x44; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        }
+    }
+
+    #[test]
+    fn return_to_view_reveal_cursor_widens_one_column_each_side_every_second_tick() {
+        // `cleak/u5-spec#54` strip reveal: the cursor starts on column 9
+        // alone and widens by one column on each side on every second
+        // preview tick, so the strip is fully exposed after eighteen.
+        assert_eq!(return_to_view_revealed_columns(0), None);
+        assert_eq!(return_to_view_revealed_columns(1), Some((9, 9)));
+        assert_eq!(return_to_view_revealed_columns(2), Some((9, 9)));
+        assert_eq!(return_to_view_revealed_columns(3), Some((8, 10)));
+        assert_eq!(return_to_view_revealed_columns(4), Some((8, 10)));
+        assert_eq!(return_to_view_revealed_columns(5), Some((7, 11)));
+        assert_eq!(return_to_view_revealed_columns(17), Some((1, 17)));
+        assert_eq!(return_to_view_revealed_columns(18), Some((1, 17)));
+        assert_eq!(
+            return_to_view_revealed_columns(RTV_REVEAL_FULL_EXPOSURE_TICKS + 1),
+            Some((0, RTV_STRIP_VISIBLE_COLUMNS - 1))
+        );
+        assert_eq!(
+            return_to_view_revealed_columns(1_000),
+            Some((0, RTV_STRIP_VISIBLE_COLUMNS - 1))
+        );
+    }
+
+    #[test]
+    fn return_to_view_preview_geometry_matches_the_published_rectangle() {
+        // `#54`: cell `(x, y)` lands at `(8 + 16x, 16 + 16(y + 7))`, so
+        // the strip covers inclusive `(8, 128)..(311, 191)` = 304 x 64.
+        assert_eq!(RTV_PREVIEW_PIXEL_X, 8);
+        assert_eq!(RTV_PREVIEW_PIXEL_Y, 128);
+        assert_eq!(RTV_PREVIEW_PIXEL_WIDTH, 304);
+        assert_eq!(RTV_PREVIEW_PIXEL_HEIGHT, 64);
+        assert_eq!(RTV_PREVIEW_PIXEL_X + RTV_PREVIEW_PIXEL_WIDTH - 1, 311);
+        assert_eq!(RTV_PREVIEW_PIXEL_Y + RTV_PREVIEW_PIXEL_HEIGHT - 1, 191);
+        assert_eq!(return_to_view_cell_pixel_rect(0, 0), (8, 128, 16, 16));
+        assert_eq!(return_to_view_cell_pixel_rect(18, 3), (296, 176, 16, 16));
+        // The preview raises the viewport origin and the intro restores it.
+        assert_eq!(RTV_VIEWPORT_ORIGIN_Y_NORMAL, 8);
+        assert_eq!(RTV_VIEWPORT_ORIGIN_Y_PREVIEW, 16);
+    }
+
+    #[test]
+    fn return_to_view_cell_source_prefers_terrain_and_skips_helper_owned_cells() {
+        // `#54`: terrain wins when non-zero; otherwise the overlay byte
+        // selects tile `256 + byte`; the reserved values mean another
+        // helper owns the cell and the ordinary repaint skips it.
+        assert_eq!(
+            return_to_view_cell_source(0x44, 0),
+            ReturnToViewCellSource::Terrain(0x44)
+        );
+        assert_eq!(
+            return_to_view_cell_source(0, 0x1f),
+            ReturnToViewCellSource::Overlay(0x1f)
+        );
+        assert_eq!(
+            return_to_view_cell_source(RTV_TERRAIN_HELPER_OWNED, 0),
+            ReturnToViewCellSource::HelperOwned
+        );
+        assert_eq!(
+            return_to_view_cell_source(0x44, RTV_OVERLAY_HELPER_OWNED),
+            ReturnToViewCellSource::HelperOwned
+        );
+        assert_eq!(return_to_view_cell_tile_index(0x44, 0, 0), Some(0x44));
+        assert_eq!(return_to_view_cell_tile_index(0, 0x1f, 0), Some(256 + 0x1f));
+        assert_eq!(
+            return_to_view_cell_tile_index(RTV_TERRAIN_HELPER_OWNED, 0, 0),
+            None
+        );
+    }
+
     #[test]
     fn render_return_to_view_preview_resolves_map_cells_at_elapsed_title_tick() {
-        let mut strips = ReturnToViewMapStrips {
-            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
-        };
-        strips.strips[0][0] = 0xD8;
+        // Only the revealed span paints, so the animated cell sits on
+        // the reveal cursor's opening column.
+        let mut strips = rtv_filled_strips();
+        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0x01;
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
@@ -1994,32 +2391,25 @@ mod tests {
                 ReturnToViewCommand::RestartStream,
             ],
         };
-        let mut pixels = Vec::new();
-        for tile in 0..=0xDBusize {
-            pixels.extend(std::iter::repeat_n(
-                (tile % 16) as u8,
-                TILE_ATLAS_SIDE * TILE_ATLAS_SIDE,
-            ));
-        }
-        let atlas = TileAtlas {
-            depth: crate::TileGraphicsDepth::Ega16,
-            pixels,
-        };
+        let atlas = rtv_test_atlas();
 
         let (viewport, report) =
             render_return_to_view_preview_viewport_at_title_tick(&strips, &script, &atlas, 1)
                 .unwrap();
 
         assert_eq!(report.total_ticks, 2);
-        assert_eq!(viewport.pixel(0, 0), Some(0xDB % 16));
+        // Water resolves through the world animation family: frame
+        // 1 + 2 = 3, so `1 + (3 % 3)` = tile 1.
+        let x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
+        assert_eq!(viewport.pixel(x, 0), Some(1));
+        // Columns outside the cursor span are untouched.
+        assert_eq!(viewport.pixel(0, 0), Some(0));
     }
 
     #[test]
     fn render_return_to_view_playback_frame_uses_frame_title_tick() {
-        let mut strips = ReturnToViewMapStrips {
-            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
-        };
-        strips.strips[0][0] = 0xD8;
+        let mut strips = rtv_filled_strips();
+        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0x01;
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
@@ -2027,17 +2417,7 @@ mod tests {
                 ReturnToViewCommand::RestartStream,
             ],
         };
-        let mut pixels = Vec::new();
-        for tile in 0..=0xDBusize {
-            pixels.extend(std::iter::repeat_n(
-                (tile % 16) as u8,
-                TILE_ATLAS_SIDE * TILE_ATLAS_SIDE,
-            ));
-        }
-        let atlas = TileAtlas {
-            depth: crate::TileGraphicsDepth::Ega16,
-            pixels,
-        };
+        let atlas = rtv_test_atlas();
 
         let playback = run_return_to_view_playback_until_restart(&strips, &script, 32).unwrap();
         let preview_frames = playback
@@ -2050,60 +2430,58 @@ mod tests {
         let second =
             render_return_to_view_playback_frame_viewport(preview_frames[1], &atlas, 0).unwrap();
 
+        let x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
         assert_eq!(preview_frames[0].elapsed_title_ticks, 1);
-        assert_eq!(first.pixel(0, 0), Some(0xD9 % 16));
+        assert_eq!(first.pixel(x, 0), Some(1 + (1 % 3)));
         assert_eq!(preview_frames[1].elapsed_title_ticks, 2);
-        assert_eq!(second.pixel(0, 0), Some(0xDA % 16));
+        assert_eq!(second.pixel(x, 0), Some(1 + (2 % 3)));
     }
 
     #[test]
     fn render_return_to_view_preview_viewport_blits_visible_strip_and_actor() {
-        let mut strips = ReturnToViewMapStrips {
-            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
-        };
-        strips.strips[0][0] = 1;
-        strips.strips[0][1] = 2;
+        let mut strips = rtv_filled_strips();
+        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0x21;
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
                 ReturnToViewCommand::SetActor {
                     slot: 0,
                     tile: 3,
-                    x: 1,
-                    y: 0,
+                    x: RTV_REVEAL_CENTRE_COLUMN as u8,
+                    y: 1,
                 },
+                ReturnToViewCommand::RunPreviewTick { ticks: 2 },
                 ReturnToViewCommand::RestartStream,
             ],
         };
-        let mut pixels = Vec::new();
-        for tile in 0..4 {
-            pixels.extend(std::iter::repeat_n(tile, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
-        }
-        let atlas = TileAtlas {
-            depth: crate::TileGraphicsDepth::Ega16,
-            pixels,
-        };
+        let atlas = rtv_test_atlas();
 
         let (viewport, report) =
             render_return_to_view_preview_viewport(&strips, &script, &atlas).unwrap();
 
         assert_eq!(viewport.cells_wide, RTV_STRIP_VISIBLE_COLUMNS);
         assert_eq!(viewport.cells_high, RTV_STRIP_VISIBLE_ROWS);
-        assert_eq!(viewport.pixel(0, 0), Some(1));
-        assert_eq!(viewport.pixel(TILE_ATLAS_SIDE, 0), Some(2));
+        assert_eq!(viewport.width, RTV_PREVIEW_PIXEL_WIDTH);
+        assert_eq!(viewport.height, RTV_PREVIEW_PIXEL_HEIGHT);
+        let x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
+        assert_eq!(viewport.pixel(x, 0), Some(0x21 % 16));
+        // `#54`: the actor sits on its own plane row — the `+ 7` screen
+        // offset is applied when the strip is blitted, not here — and
+        // its sprite comes from the `256 + byte` half of the atlas.
         assert_eq!(
-            viewport.pixel(TILE_ATLAS_SIDE, 7 * TILE_ATLAS_SIDE),
-            Some(3)
+            viewport.pixel(x, TILE_ATLAS_SIDE),
+            Some(((RTV_OVERLAY_TILE_BASE + 3) % 16) as u8)
         );
         assert_eq!(report.drawable_actor_count, 1);
         assert!(report.restart_seen);
     }
 
     #[test]
-    fn render_return_to_view_preview_rejects_silent_actor_clipping() {
-        let strips = ReturnToViewMapStrips {
-            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
-        };
+    fn return_to_view_actor_placement_outside_the_strip_is_rejected() {
+        // `#54`: script coordinates never leave `x = 0..18` / `y = 0..3`,
+        // so an out-of-strip actor is a data fault, not something to
+        // clip silently.
+        let strips = rtv_filled_strips();
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
@@ -2116,47 +2494,47 @@ mod tests {
                 ReturnToViewCommand::RestartStream,
             ],
         };
-        let pixels = vec![0; 2 * TILE_ATLAS_SIDE * TILE_ATLAS_SIDE];
-        let atlas = TileAtlas {
-            depth: crate::TileGraphicsDepth::Ega16,
-            pixels,
-        };
+        let atlas = rtv_test_atlas();
 
         let err = render_return_to_view_preview_viewport(&strips, &script, &atlas)
-            .expect_err("off-preview actor draw must fail instead of clipping");
+            .expect_err("off-strip actor placement must fail instead of clipping");
 
         assert!(
-            err.to_string().contains("forbidden fallback"),
+            err.to_string().contains("outside the 19x4 preview strip"),
             "unexpected error: {err}"
         );
     }
 
     #[test]
     fn render_return_to_view_preview_actor_zero_pixels_leave_map_visible() {
-        let mut strips = ReturnToViewMapStrips {
-            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
-        };
-        strips.strips[0][0] = 1;
-        strips.strips[0][7 * RTV_STRIP_VISIBLE_COLUMNS] = 1;
+        let mut strips = rtv_filled_strips();
+        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0x05;
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
                 ReturnToViewCommand::SetActor {
                     slot: 0,
                     tile: 3,
-                    x: 0,
+                    x: RTV_REVEAL_CENTRE_COLUMN as u8,
                     y: 0,
                 },
+                ReturnToViewCommand::RunPreviewTick { ticks: 2 },
                 ReturnToViewCommand::RestartStream,
             ],
         };
-        let mut pixels = Vec::new();
-        pixels.extend(std::iter::repeat_n(0, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
-        pixels.extend(std::iter::repeat_n(5, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
-        pixels.extend(std::iter::repeat_n(2, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
-        let mut actor = vec![RTV_ACTOR_TRANSPARENT_PIXEL; TILE_ATLAS_SIDE * TILE_ATLAS_SIDE];
-        actor[0] = 7;
-        pixels.extend(actor);
+        // Sprite `256 + 3` is transparent except for its first pixel, so
+        // the map tile underneath must survive everywhere else.
+        let mut pixels = Vec::with_capacity(crate::TILE_ATLAS_PIXEL_LEN);
+        for tile in 0..crate::TILE_ATLAS_TILE_COUNT {
+            if tile == RTV_OVERLAY_TILE_BASE + 3 {
+                let mut sprite =
+                    vec![RTV_ACTOR_TRANSPARENT_PIXEL; TILE_ATLAS_SIDE * TILE_ATLAS_SIDE];
+                sprite[0] = 7;
+                pixels.extend(sprite);
+            } else {
+                pixels.extend(std::iter::repeat_n(5u8, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
+            }
+        }
         let atlas = TileAtlas {
             depth: crate::TileGraphicsDepth::Ega16,
             pixels,
@@ -2165,8 +2543,8 @@ mod tests {
         let (viewport, _report) =
             render_return_to_view_preview_viewport(&strips, &script, &atlas).unwrap();
 
-        assert_eq!(viewport.pixel(0, 0), Some(5));
-        assert_eq!(viewport.pixel(0, 7 * TILE_ATLAS_SIDE), Some(7));
-        assert_eq!(viewport.pixel(1, 7 * TILE_ATLAS_SIDE), Some(5));
+        let x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
+        assert_eq!(viewport.pixel(x, 0), Some(7));
+        assert_eq!(viewport.pixel(x + 1, 0), Some(5));
     }
 }

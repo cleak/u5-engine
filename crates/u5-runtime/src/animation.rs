@@ -2,6 +2,13 @@
 
 use crate::*;
 
+/// `animation.md §6`: the shared static-tile frame counter wraps at the
+/// least common multiple of the supported cycle lengths (12 covers the
+/// three-frame water cycle and the four-frame lava / fire / wind
+/// cycles), so the counter stays small while every family's modulo
+/// still lands on the same frame.
+pub const STATIC_TILE_ANIMATION_FRAME_WRAP: u8 = 12;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AnimationClock {
     pub frame: u8,
@@ -17,7 +24,7 @@ impl AnimationClock {
         // Wrap at the LCM of supported cycle lengths (12 covers both
         // the 3-frame water cycle and the 4-frame lava / fire / wind
         // cycles) so the counter stays small.
-        self.frame = self.frame.wrapping_add(1) % 12;
+        self.frame = self.frame.wrapping_add(1) % STATIC_TILE_ANIMATION_FRAME_WRAP;
     }
 
     pub fn tick_moongate(&mut self) {
