@@ -37,27 +37,118 @@ use std::io;
 /// pace it by.
 pub const RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL: bool = true;
 
-/// Maximal-length Galois tap words for register widths 2..=17 bits. Each is a
+/// Maximal-length Galois tap words for register widths 2..=24 bits. Each is a
 /// primitive polynomial over GF(2), so the register cycles through every
 /// nonzero state exactly once before repeating.
-const GALOIS_TAPS: [u32; 16] = [
-    0x3,     // 2 bits
-    0x6,     // 3
-    0xC,     // 4
-    0x14,    // 5
-    0x30,    // 6
-    0x60,    // 7
-    0xB8,    // 8
-    0x110,   // 9
-    0x240,   // 10
-    0x500,   // 11
-    0xE08,   // 12
-    0x1C80,  // 13
-    0x3802,  // 14
-    0x6000,  // 15
-    0xD008,  // 16
-    0x12000, // 17
+const GALOIS_TAPS: [u32; 23] = [
+    0x3,      // 2 bits
+    0x6,      // 3
+    0xC,      // 4
+    0x14,     // 5
+    0x30,     // 6
+    0x60,     // 7
+    0xB8,     // 8
+    0x110,    // 9
+    0x240,    // 10
+    0x500,    // 11
+    0xE08,    // 12
+    0x1C80,   // 13
+    0x3802,   // 14
+    0x6000,   // 15
+    0xD008,   // 16
+    0x12000,  // 17
+    0x20400,  // 18
+    0x40023,  // 19
+    0x90000,  // 20
+    0x140000, // 21
+    0x300000, // 22
+    0x420000, // 23
+    0xE10000, // 24
 ];
+
+/// The shared visit order behind every rectangle dissolve in the engine.
+///
+/// Yields each index in `0..count` exactly once, in the pseudo-random order
+/// `display-driver-abi.md` section 9.6 describes, and nothing else needs to
+/// know how that order is produced. Both the driver-surface entry
+/// (`display_driver::EgaDissolveState`, the dispatch `0x66` operation) and the
+/// caller-side [`RectangleDissolve`] wrap this, so a dissolve scatters
+/// identically whichever path issues it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DissolveVisitOrder {
+    state: u32,
+    mask: u32,
+    taps: u32,
+    count: u32,
+    visited: u32,
+}
+
+impl DissolveVisitOrder {
+    /// A generator over `count` indices. A count of zero is immediately
+    /// finished.
+    pub fn new(count: usize) -> io::Result<Self> {
+        let count = u32::try_from(count).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "dissolve pixel count exceeds the addressable range",
+            )
+        })?;
+        let mut bits = 2u32;
+        while bits < 32 && (1u32 << bits) - 1 < count {
+            bits += 1;
+        }
+        let taps = *GALOIS_TAPS.get(bits as usize - 2).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("dissolve pixel count {count} exceeds the published tap inventory"),
+            )
+        })?;
+        Ok(Self {
+            state: 1,
+            mask: (1u32 << bits) - 1,
+            taps,
+            count,
+            visited: 0,
+        })
+    }
+
+    pub const fn count(&self) -> usize {
+        self.count as usize
+    }
+
+    pub const fn visited(&self) -> usize {
+        self.visited as usize
+    }
+
+    pub const fn remaining(&self) -> usize {
+        (self.count - self.visited) as usize
+    }
+
+    pub const fn is_finished(&self) -> bool {
+        self.visited >= self.count
+    }
+
+    /// The next index to copy, or `None` once every index has been visited.
+    pub fn next_index(&mut self) -> Option<usize> {
+        while self.visited < self.count {
+            // Galois step: shift right, xor the taps back in on carry-out.
+            let lsb = self.state & 1;
+            self.state >>= 1;
+            if lsb == 1 {
+                self.state ^= self.taps;
+            }
+            self.state &= self.mask;
+            // The register never reaches 0, so index = state - 1 covers
+            // 0..=mask-1 exactly once; indices past the end are skipped.
+            let index = self.state - 1;
+            if index < self.count {
+                self.visited += 1;
+                return Some(index as usize);
+            }
+        }
+        None
+    }
+}
 
 /// An in-progress rectangle dissolve over an inclusive pixel rectangle.
 ///
@@ -70,10 +161,7 @@ pub struct RectangleDissolve {
     top: u16,
     width: u32,
     height: u32,
-    state: u32,
-    mask: u32,
-    taps: u32,
-    visited: u32,
+    order: DissolveVisitOrder,
 }
 
 impl RectangleDissolve {
@@ -93,24 +181,12 @@ impl RectangleDissolve {
         }
         let width = u32::from(x1 - x0) + 1;
         let height = u32::from(y1 - y0) + 1;
-        let count = width * height;
-        // Smallest register whose nonzero states span every pixel index.
-        let mut bits = 2u32;
-        while (1u32 << bits) - 1 < count {
-            bits += 1;
-        }
-        let taps = *GALOIS_TAPS
-            .get(bits as usize - 2)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "rectangle is too large"))?;
         Ok(Self {
             left: x0,
             top: y0,
             width,
             height,
-            state: 1,
-            mask: (1u32 << bits) - 1,
-            taps,
-            visited: 0,
+            order: DissolveVisitOrder::new((width * height) as usize)?,
         })
     }
 
@@ -121,36 +197,21 @@ impl RectangleDissolve {
 
     /// Pixels visited so far.
     pub fn visited(&self) -> u32 {
-        self.visited
+        self.order.visited() as u32
     }
 
     pub fn is_complete(&self) -> bool {
-        self.visited >= self.pixel_count()
+        self.order.is_finished()
     }
 
     /// The next pixel to copy from the hidden surface to the visible page, or
     /// `None` once every pixel has been visited exactly once.
     pub fn next_pixel(&mut self) -> Option<(u16, u16)> {
-        let count = self.pixel_count();
-        while self.visited < count {
-            // Galois step: shift right, xor the taps back in on carry-out.
-            let lsb = self.state & 1;
-            self.state >>= 1;
-            if lsb == 1 {
-                self.state ^= self.taps;
-            }
-            self.state &= self.mask;
-            // The register never reaches 0, so index = state - 1 covers
-            // 0..=mask-1 exactly once; indices past the end are skipped.
-            let index = self.state - 1;
-            if index < count {
-                self.visited += 1;
-                let x = self.left + (index % self.width) as u16;
-                let y = self.top + (index / self.width) as u16;
-                return Some((x, y));
-            }
-        }
-        None
+        let index = self.order.next_index()? as u32;
+        Some((
+            self.left + (index % self.width) as u16,
+            self.top + (index / self.width) as u16,
+        ))
     }
 
     /// Runs the transfer to completion, handing each visited pixel to `copy`.

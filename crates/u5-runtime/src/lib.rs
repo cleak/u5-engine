@@ -246,7 +246,10 @@ pub use directed_step::{
 pub use direction::Direction;
 pub use disk_io::*;
 pub use display_driver::*;
-pub use dissolve::{DissolveAbortGate, RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL, RectangleDissolve};
+pub use dissolve::{
+    DissolveAbortGate, DissolveVisitOrder, RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL,
+    RectangleDissolve,
+};
 pub use dungeon_tables::*;
 pub use dungeon_tables_io::*;
 pub use dungeon_tables_io_movement::*;
