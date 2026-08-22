@@ -582,7 +582,19 @@ pub fn debug_game_dir() -> PathBuf {
         .as_nanos();
     let dir = std::env::temp_dir().join(format!("u5-engine-test-{}-{unique}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("CASTLE.DAT"), vec![16; 4096]).unwrap();
+    // `formats/location-dat.md` §3: every class file is exactly sixteen
+    // 1024-byte pages. The synthetic file is uniform, but it has to be
+    // full length or scenes whose published base page sits high in the
+    // file (Lord Blackthorn's Castle enters on page 6) cannot load.
+    fs::write(dir.join("CASTLE.DAT"), vec![16; 16 * TOWN_GRID_BYTES]).unwrap();
+    // The synthetic CASTLE.DAT is a few uniform pages, not the shipped
+    // file, so the published `formats/location-dat.md` §4.1 base page for
+    // CASTLE:0 (page 1, with a basement below it and three floors above)
+    // does not describe it. Pin the fixture to page 0 so tests that write
+    // their own page contents keep addressing them as `floor == page`.
+    // Tests that exercise the published table itself must use a directory
+    // without this file.
+    fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 0\n").unwrap();
     fs::write(dir.join("CASTLE.NPC"), vec![0; 2304]).unwrap();
     fs::write(dir.join("CASTLE.TLK"), [1, 0, 0, 0]).unwrap();
     fs::write(dir.join("DUNGEON.DAT"), vec![0; DUNGEON_DAT_LEN]).unwrap();
