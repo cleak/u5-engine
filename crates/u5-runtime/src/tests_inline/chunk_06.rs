@@ -2422,10 +2422,38 @@
 
     /// Mountain tile `0x0c`, which `surface_tile_blocks_projectile` treats as
     /// an obstruction. Tests that only need the shot *not* to connect put one
-    /// on the line, because a connecting shot reaches the unspecified-damage
-    /// seam and refuses.
+    /// on the line, so the `overworld.md §6.2.4` payload never runs and the
+    /// party's hit points stay out of the assertion.
     fn block_projectile_at(state: &mut PlayState, x: usize, y: usize) {
         state.grid[world_cell_index(x, y)] = 0x0c;
+    }
+
+    /// A six-member party of identical, healthy members, so a whole-party
+    /// pass has something to walk.
+    fn six_member_party(hp: u16) -> Vec<PartyMember> {
+        (0..6)
+            .map(|slot| PartyMember {
+                slot: slot as u8,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 8,
+                hp,
+                max_hp: hp,
+                level: 8,
+            })
+            .collect()
+    }
+
+    /// `vehicles.md §2` frigate marker, sails furled, facing north.
+    fn aboard_frigate(state: &mut PlayState, hull: u8, skiffs: u8) {
+        state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull,
+            skiffs,
+        };
     }
 
     #[test]
@@ -2487,15 +2515,423 @@
     }
 
     #[test]
-    #[should_panic(expected = "cleak/u5-spec#90")]
-    fn outdoor_walker_broadside_connecting_shot_refuses_pending_damage_gap() {
-        // With no obstruction the traced line reaches the party and the
-        // attack connects -- at which point §6.2 requires damage that no
-        // spec text specifies. The seam refuses rather than inventing it.
-        // This is the boundary of what was implemented, asserted rather
-        // than described.
+    fn outdoor_walker_broadside_connecting_shot_damages_the_whole_party() {
+        // `overworld.md §6.2.4`: "On a clear line the attack connects, and
+        // the payload below runs." On foot that is the whole-party pass --
+        // "Every qualifying member is damaged."
         let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
-        state.advance_outdoor_active_objects();
+        state.party = six_member_party(40);
+        let report = state
+            .outdoor_first_phase_ranged_attack_detail(1)
+            .expect("the broadside fires whenever the geometry holds");
+        assert_eq!(report.figure, OutdoorRangedAttackFigure::SolidBurst);
+        assert_eq!(report.outcome, OutdoorRangedAttackOutcome::Connects);
+        let OutdoorImpactAbsorption::PartyDamaged(damage) =
+            report.absorption.expect("a clear line runs the payload")
+        else {
+            panic!("on foot the payload is the whole-party pass");
+        };
+        assert_eq!(damage.len(), 6);
+        for entry in &damage {
+            assert!(
+                (OUTDOOR_IMPACT_MEMBER_DAMAGE_LOW..=OUTDOOR_IMPACT_MEMBER_DAMAGE_HIGH)
+                    .contains(&entry.roll),
+                "roll {} outside the closed interval [1, 8]",
+                entry.roll
+            );
+            assert_eq!(state.party[entry.slot].hp, 40 - entry.applied);
+        }
+    }
+
+    #[test]
+    fn outdoor_walker_obstructed_shot_leaves_the_party_untouched() {
+        // `overworld.md §6.2.2`: "*Blocked* means the shot stops where it
+        // stopped and nothing further happens -- no payload, no message,
+        // no state change."
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        state.party = six_member_party(40);
+        block_projectile_at(&mut state, 7, 5);
+        let report = state.outdoor_first_phase_ranged_attack_detail(1).unwrap();
+        assert!(matches!(
+            report.outcome,
+            OutdoorRangedAttackOutcome::Obstructed { .. }
+        ));
+        assert!(report.absorption.is_none());
+        assert!(state.party.iter().all(|member| member.hp == 40));
+    }
+
+    #[test]
+    fn outdoor_walker_sea_serpent_breath_fires_on_the_one_in_eight_gate() {
+        // `overworld.md §6.2.1`: the breath row is "[t]he slot's type byte
+        // **equals** the first frame of the Sea Serpent run (`0x88`) or the
+        // first frame of the Dragon run (`0xDC`)". The serpent half is now
+        // wired alongside the dragon.
+        let mut state = world_state_with_walker(5, 5, 0x88, 8, 5);
+        state.party = six_member_party(40);
+        block_projectile_at(&mut state, 7, 5);
+        let turn = (0u64..256)
+            .find(|turn| {
+                state.turn = *turn;
+                outdoor_serpent_dragon_triggers(state.outdoor_serpent_dragon_breath_roll(1))
+            })
+            .expect("a hitting gate roll exists within 256 turns");
+        state.turn = turn;
+
+        let report = state.outdoor_first_phase_ranged_attack_detail(1).unwrap();
+        assert_eq!(report.figure, OutdoorRangedAttackFigure::SparkCloud);
+        // §6.2.1's announcement column for the breath row is "None".
+        assert!(!state.message.contains("BOOOM"), "message: {}", state.message);
+    }
+
+    #[test]
+    fn outdoor_walker_sea_serpent_sibling_frames_never_breathe() {
+        // §6.2.1: "Sibling animation frames `0x89..0x8B` and `0xDD..0xDF`
+        // never enter the breath branch."
+        for sibling in [0x89u8, 0x8A, 0x8B, 0xDD, 0xDE, 0xDF] {
+            let mut state = world_state_with_walker(5, 5, sibling, 8, 5);
+            state.party = six_member_party(40);
+            for turn in 0u64..64 {
+                state.turn = turn;
+                assert!(
+                    !state.outdoor_first_phase_ranged_attack(1),
+                    "frame {sibling:#x} fired on turn {turn}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn outdoor_impact_payload_takes_no_attacker_and_damages_every_living_member() {
+        // `overworld.md §6.2.4`: "No attacker identity, sprite byte, class
+        // or sentinel participates anywhere on this path". The entry point
+        // below takes no arguments at all, which is that fact in the type
+        // system rather than in a comment.
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(40);
+        // "no active-player selection, no first-living selection, no single
+        // randomly chosen target, and no fixed slot."
+        state.party[2].status = PARTY_STATUS_DEAD;
+        state.party[2].hp = 0;
+
+        let OutdoorImpactAbsorption::PartyDamaged(damage) = state.apply_outdoor_impact() else {
+            panic!("on foot the payload is the whole-party pass");
+        };
+        let slots: Vec<usize> = damage.iter().map(|entry| entry.slot).collect();
+        assert_eq!(slots, vec![0, 1, 3, 4, 5]);
+        assert_eq!(state.party[2].hp, 0);
+    }
+
+    #[test]
+    fn outdoor_impact_draws_one_fresh_roll_per_member() {
+        // §6.2.4: "One roll per damaged member, not one roll shared between
+        // them." A shared roll would make every entry in a pass identical
+        // for every seed.
+        let mut saw_differing_rolls = false;
+        for seed in 0u16..64 {
+            let mut state = world_state(open_world_grid(), 5, 5);
+            state.party = six_member_party(200);
+            state.prng_state = seed;
+            let OutdoorImpactAbsorption::PartyDamaged(damage) = state.apply_outdoor_impact() else {
+                panic!("on foot the payload is the whole-party pass");
+            };
+            assert_eq!(damage.len(), 6);
+            if damage.iter().any(|entry| entry.roll != damage[0].roll) {
+                saw_differing_rolls = true;
+            }
+        }
+        assert!(
+            saw_differing_rolls,
+            "every seed produced one shared roll for the whole pass"
+        );
+    }
+
+    #[test]
+    fn outdoor_impact_skips_the_dead_marker_and_not_a_living_whitelist() {
+        // §6.2.5: "Implement the inequality, not a living-letter
+        // whitelist." Sleeping, poisoned and even an unattested letter are
+        // all damaged; only the dead marker is skipped.
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(40);
+        state.party[0].status = b'G';
+        state.party[1].status = b'P';
+        state.party[2].status = b'S';
+        state.party[3].status = b'C';
+        state.party[4].status = b'A';
+        state.party[5].status = PARTY_STATUS_DEAD;
+
+        let OutdoorImpactAbsorption::PartyDamaged(damage) = state.apply_outdoor_impact() else {
+            panic!("on foot the payload is the whole-party pass");
+        };
+        let slots: Vec<usize> = damage.iter().map(|entry| entry.slot).collect();
+        assert_eq!(slots, vec![0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn outdoor_impact_clamps_at_zero_marks_dead_and_clears_the_active_player() {
+        // §6.2.4: "if the signed result is zero or below, clamps that word
+        // to **zero** and writes the **dead** status letter ... if the
+        // member that just died is the currently selected character, writes
+        // the published 'none selected' value into the active-player index
+        // byte".
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(1);
+        state.active_player = Some(3);
+
+        let OutdoorImpactAbsorption::PartyDamaged(damage) = state.apply_outdoor_impact() else {
+            panic!("on foot the payload is the whole-party pass");
+        };
+        assert_eq!(damage.len(), 6);
+        for entry in &damage {
+            assert!(entry.died);
+            assert_eq!(entry.hp_after, 0);
+            // The clamp: at most the hit points the member actually had.
+            assert_eq!(entry.applied, 1);
+            assert_eq!(state.party[entry.slot].status, PARTY_STATUS_DEAD);
+        }
+        assert_eq!(state.active_player, None);
+        // Fields the helper does not write.
+        assert!(state.party.iter().all(|member| member.max_hp == 1));
+        assert!(state.party.iter().all(|member| member.level == 8));
+        assert!(state.party.iter().all(|member| member.mana == 8));
+    }
+
+    #[test]
+    fn outdoor_impact_leaves_an_unselected_active_player_alone() {
+        // Only "the member that just died" clears the byte.
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(200);
+        state.active_player = Some(2);
+        let _ = state.apply_outdoor_impact();
+        assert_eq!(state.active_player, Some(2));
+    }
+
+    #[test]
+    fn outdoor_impact_hull_bounds_are_closed_and_the_hull_never_reaches_zero() {
+        // `vehicles.md §6`: "The ship survives **only** when the roll is
+        // strictly less than the hull, and the hull is then reduced by
+        // exactly the roll. A roll equal to or greater than the hull
+        // destroys the ship." And: "the least it can hold after a survived
+        // impact is one."
+        assert_eq!(OUTDOOR_IMPACT_HULL_ROLL_LOW, 1);
+        assert_eq!(OUTDOOR_IMPACT_HULL_ROLL_HIGH, 30);
+        for hull in 0u8..=99 {
+            for roll in OUTDOOR_IMPACT_HULL_ROLL_LOW..=OUTDOOR_IMPACT_HULL_ROLL_HIGH {
+                match outdoor_impact_hull_outcome(roll, hull) {
+                    OutdoorImpactHullOutcome::Absorbed { hull_after } => {
+                        assert!(roll < hull, "hull {hull} roll {roll} absorbed");
+                        assert_eq!(hull_after, hull - roll);
+                        assert!(hull_after >= 1, "hull {hull} roll {roll} fell to zero");
+                    }
+                    OutdoorImpactHullOutcome::ShipDestroyed => {
+                        assert!(roll >= hull, "hull {hull} roll {roll} destroyed");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn outdoor_impact_aboard_a_frigate_spends_hull_and_no_hit_points() {
+        // `vehicles.md §6`: "**The hull absorbs the impact entirely: no
+        // party member loses hit points while the ship survives.**"
+        // A hull above the roll's maximum can never be destroyed.
+        for seed in 0u16..32 {
+            let mut state = world_state(open_world_grid(), 5, 5);
+            state.party = six_member_party(40);
+            state.prng_state = seed;
+            aboard_frigate(&mut state, OUTDOOR_IMPACT_HULL_ROLL_HIGH + 1, 2);
+
+            let OutdoorImpactAbsorption::HullAbsorbed { roll, hull_after } =
+                state.apply_outdoor_impact()
+            else {
+                panic!("a hull above the roll ceiling always survives");
+            };
+            assert_eq!(hull_after, OUTDOOR_IMPACT_HULL_ROLL_HIGH + 1 - roll);
+            let TransportState::Ship { hull, .. } = state.player.transport else {
+                panic!("the party is still aboard");
+            };
+            assert_eq!(hull, hull_after);
+            assert!(state.party.iter().all(|member| member.hp == 40));
+        }
+    }
+
+    #[test]
+    fn outdoor_impact_ship_loss_ladder_takes_the_skiff_rung_first() {
+        // `vehicles.md §6`: "**A skiff is aboard.** The party abandons into
+        // a skiff, keeping the ship's current facing".
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(40);
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 3;
+        // Hull one: every roll in [1, 30] is at or above it.
+        aboard_frigate(&mut state, 1, 2);
+        state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST + 2,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE + 2,
+            sails_hoisted: false,
+            hull: 1,
+            skiffs: 2,
+        };
+
+        let OutdoorImpactAbsorption::ShipDestroyed {
+            fallback, drowning, ..
+        } = state.apply_outdoor_impact()
+        else {
+            panic!("hull one is always destroyed");
+        };
+        assert_eq!(fallback, ShipLossFallback::Skiff);
+        assert!(drowning.is_empty());
+        let TransportState::Skiff { type_byte, .. } = state.player.transport else {
+            panic!("the ladder abandons into a skiff");
+        };
+        assert_eq!(type_byte, TRANSPORT_MARKER_SKIFF_FIRST + 2);
+        // The carpet is untouched while a skiff is aboard.
+        assert_eq!(state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 3);
+        // "no party member loses hit points while the ship survives" does
+        // not apply here, but the ladder's first two rungs do no damage of
+        // their own either.
+        assert!(state.party.iter().all(|member| member.hp == 40));
+        assert!(state.message.contains(SHIP_SUNK_MESSAGE));
+    }
+
+    #[test]
+    fn outdoor_impact_ship_loss_ladder_falls_back_to_a_carried_carpet() {
+        // "**Otherwise, a carpet is in stock.** The party deploys a carried
+        // carpet, the carried-carpet count is decremented, and the marker
+        // becomes one of the two carpet frames".
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(40);
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 2;
+        aboard_frigate(&mut state, 1, 0);
+
+        let OutdoorImpactAbsorption::ShipDestroyed {
+            fallback, drowning, ..
+        } = state.apply_outdoor_impact()
+        else {
+            panic!("hull one is always destroyed");
+        };
+        assert_eq!(fallback, ShipLossFallback::Carpet);
+        assert!(drowning.is_empty());
+        let TransportState::Carpet { type_byte, .. } = state.player.transport else {
+            panic!("the ladder deploys a carpet");
+        };
+        assert!(CARPET_MARKER_FRAMES.contains(&type_byte), "{type_byte:#x}");
+        assert_eq!(state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
+        assert!(state.party.iter().all(|member| member.hp == 40));
+    }
+
+    #[test]
+    fn outdoor_impact_ship_loss_ladder_drowns_the_party_last() {
+        // "**Otherwise, the party drowns.** The marker is set to the
+        // sprite-suppressed value and the drowning outcome runs." The loop
+        // repeats the whole-party pass until the living-member scan reports
+        // none remaining.
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(20);
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 0;
+        aboard_frigate(&mut state, 1, 0);
+
+        let OutdoorImpactAbsorption::ShipDestroyed {
+            fallback, drowning, ..
+        } = state.apply_outdoor_impact()
+        else {
+            panic!("hull one is always destroyed");
+        };
+        assert_eq!(fallback, ShipLossFallback::Drown);
+        assert_eq!(state.player.transport, TransportState::SpriteSuppressed);
+        assert!(!drowning.is_empty());
+        assert!(drowning.len() < SHIP_LOSS_DROWNING_ITERATION_GUARD);
+        // Every iteration is one whole-party pass, so it never damages a
+        // member the previous pass already killed.
+        for pass in &drowning {
+            assert!(!pass.is_empty());
+        }
+        assert!(
+            state
+                .party
+                .iter()
+                .all(|member| member.status == PARTY_STATUS_DEAD && member.hp == 0)
+        );
+        assert!(!state.party_has_drowning_loop_survivor());
+    }
+
+    #[test]
+    fn ship_loss_drowning_tests_before_it_damages() {
+        // "A party that is already entirely dead when the ladder reaches
+        // this rung takes no damage at all, because the test comes first."
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(20);
+        for member in state.party.iter_mut() {
+            member.status = PARTY_STATUS_DEAD;
+            member.hp = 0;
+        }
+        aboard_frigate(&mut state, 1, 0);
+
+        let OutdoorImpactAbsorption::ShipDestroyed { drowning, .. } = state.apply_outdoor_impact()
+        else {
+            panic!("hull one is always destroyed");
+        };
+        assert!(drowning.is_empty());
+    }
+
+    #[test]
+    fn ship_loss_fallback_ladder_order_is_skiff_then_carpet_then_drown() {
+        // `vehicles.md §6`: "takes the first option that is available."
+        assert_eq!(ship_loss_fallback(1, 1), ShipLossFallback::Skiff);
+        assert_eq!(ship_loss_fallback(1, 0), ShipLossFallback::Skiff);
+        assert_eq!(ship_loss_fallback(0, 1), ShipLossFallback::Carpet);
+        assert_eq!(ship_loss_fallback(0, 0), ShipLossFallback::Drown);
+    }
+
+    #[test]
+    fn drowning_exit_scan_and_damage_filter_are_deliberately_different() {
+        // `overworld.md §6.2.5` "Drowning-loop asymmetry": "The whole-party
+        // pass skips only dead members, while the living-member scan that
+        // decides whether the drowning loop ... continues counts only good,
+        // poisoned and sleeping members."
+        for status in [b'G', b'P', b'S'] {
+            assert!(party_member_counts_as_living(status));
+            assert!(outdoor_impact_damages_member(status));
+        }
+        // Ashes and charmed are damaged but do not hold the loop open.
+        for status in [b'A', b'C'] {
+            assert!(!party_member_counts_as_living(status));
+            assert!(outdoor_impact_damages_member(status));
+        }
+        assert!(!party_member_counts_as_living(PARTY_STATUS_DEAD));
+        assert!(!outdoor_impact_damages_member(PARTY_STATUS_DEAD));
+    }
+
+    #[test]
+    fn outdoor_impact_party_pass_is_bounded_at_six_slots() {
+        // §6.2.4: "The pass's own hard bound is six slots, indices `0..5`."
+        assert_eq!(OUTDOOR_IMPACT_PARTY_PASS_SLOT_BOUND, 6);
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(40);
+        let mut extra = state.party[0];
+        extra.slot = 6;
+        state.party.push(extra);
+
+        let OutdoorImpactAbsorption::PartyDamaged(damage) = state.apply_outdoor_impact() else {
+            panic!("on foot the payload is the whole-party pass");
+        };
+        assert_eq!(damage.len(), 6);
+        assert_eq!(state.party[6].hp, 40);
+    }
+
+    #[test]
+    fn outdoor_impact_broadside_aboard_a_frigate_spends_hull_not_hit_points() {
+        // The two attacks share one payload path, so the broadside reaches
+        // the same frigate branch the sand trap and the whirlpool do.
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        state.party = six_member_party(40);
+        aboard_frigate(&mut state, OUTDOOR_IMPACT_HULL_ROLL_HIGH + 1, 2);
+
+        let report = state.outdoor_first_phase_ranged_attack_detail(1).unwrap();
+        assert!(matches!(
+            report.absorption,
+            Some(OutdoorImpactAbsorption::HullAbsorbed { .. })
+        ));
+        assert!(state.party.iter().all(|member| member.hp == 40));
     }
 
     #[test]

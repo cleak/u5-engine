@@ -12992,7 +12992,11 @@ fn active_effect_tag_byte_and_install_counter_match_spec() {
 fn spawn_terrain_branch_classifier_matches_spec_table() {
     // encounters.md §4
     assert_eq!(SPAWN_WHIRLPOOL_DENOMINATOR, 7);
-    assert_eq!(SPAWN_SEA_SERPENT_DENOMINATOR, 3);
+    // "**One-in-four** chance of the **Sand Trap** sprite run
+    // `0xE0..0xE3`". The earlier one-in-three is withdrawn: "The draw is
+    // over the closed interval `[0, 3]` accepted on one value, which is
+    // one in four".
+    assert_eq!(SPAWN_SAND_TRAP_DENOMINATOR, 4);
     assert_eq!(SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR, 4);
 
     // Surface tile 1 -> whirlpool/aquatic special branch.
@@ -13010,10 +13014,13 @@ fn spawn_terrain_branch_classifier_matches_spec_table() {
         spawn_terrain_branch(0x04, false),
         SpawnTerrainBranch::LandBucket
     );
-    // Tile 7 -> sea-serpent adjacency.
+    // Tile 7 (parched desert) -> Sand Trap. `active-objects.md §8`:
+    // calling `0xE0..0xE3` an "outdoor sea-serpent adjacency family" "is
+    // withdrawn and was backwards" -- Sea Serpent is `0x88..0x8B` and
+    // reaches the overworld only through the water buckets.
     assert_eq!(
         spawn_terrain_branch(0x07, false),
-        SpawnTerrainBranch::SeaSerpentAdjacency
+        SpawnTerrainBranch::SandTrapParchedDesert
     );
     // Town outline tiles 0x0C / 0x0D -> hard reject.
     assert_eq!(
@@ -23654,9 +23661,8 @@ fn outdoor_ranged_attack_deltas_wrap_across_the_map_seam() {
 
 #[test]
 fn outdoor_broadside_window_requires_alignment_within_three_cells() {
-    // `active-objects.md §8`: "Ship-like water-creature and pirate frames
-    // aligned with the player on the same row or column within three cells
-    // fire a broadside".
+    // `overworld.md §6.2.1`: "Strictly axis-aligned: zero separation on
+    // one axis, separation below four on the other".
     for d in 1..=OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS {
         assert!(outdoor_water_creature_attack_aligned(d, 0), "dx {d}");
         assert!(outdoor_water_creature_attack_aligned(-d, 0), "dx -{d}");
@@ -23675,10 +23681,10 @@ fn outdoor_broadside_window_requires_alignment_within_three_cells() {
 
 #[test]
 fn outdoor_breath_window_is_three_cells_on_both_axes() {
-    // `overworld.md §6.2`: "Within three cells of the party on **both**
-    // axes". Unlike the broadside there is no alignment requirement, so
-    // oblique offsets are inside the window -- which is exactly why the
-    // rasterization gap below bites this case and not the broadside.
+    // `overworld.md §6.2.1`: "Wrapped absolute separation from the party
+    // of at most three on **both** axes, inclusive on each axis". Unlike
+    // the broadside there is no alignment requirement, so oblique offsets
+    // are inside the window.
     assert!(outdoor_breath_attack_in_range(3, 3));
     assert!(outdoor_breath_attack_in_range(-3, 3));
     assert!(outdoor_breath_attack_in_range(3, 1));
@@ -23690,98 +23696,509 @@ fn outdoor_breath_window_is_three_cells_on_both_axes() {
 }
 
 #[test]
-fn outdoor_ranged_attack_trace_excludes_both_endpoint_cells() {
-    // `overworld.md §6.2`: "The attacker's own cell never obstructs its own
-    // shot", and the connect condition is "no *intervening* blocker", so
-    // the party's cell is a destination rather than an obstruction. A
-    // predicate that blocks only the two endpoints must still connect.
-    let outcome = trace_outdoor_ranged_attack((10, 10), (13, 10), |x, y| {
-        (x, y) == (10, 10) || (x, y) == (13, 10)
-    });
-    assert_eq!(outcome, OutdoorRangedAttackOutcome::Connects);
+fn outdoor_breath_geometry_census_matches_the_published_counts() {
+    // `overworld.md §6.2.1`: "with separation of at most three on both
+    // axes, excluding the co-located cell and the four adjacency cells,
+    // **44** signed offsets reach the breath branch. Eight are cardinal,
+    // twelve are exact diagonals, and the remaining **24** are neither".
+    // Adjacency is consumed first, so it is excluded here too.
+    let mut total = 0;
+    let mut cardinal = 0;
+    let mut diagonal = 0;
+    let mut oblique = 0;
+    for dy in -3i32..=3 {
+        for dx in -3i32..=3 {
+            if !outdoor_breath_attack_in_range(dx, dy) {
+                continue;
+            }
+            if (dx, dy) == (0, 0) || dx.abs() + dy.abs() == 1 {
+                continue;
+            }
+            total += 1;
+            if dx == 0 || dy == 0 {
+                cardinal += 1;
+            } else if dx.abs() == dy.abs() {
+                diagonal += 1;
+            } else {
+                oblique += 1;
+            }
+        }
+    }
+    assert_eq!(total, 44);
+    assert_eq!(cardinal, 8);
+    assert_eq!(diagonal, 12);
+    assert_eq!(oblique, 24);
+
+    // "The broadside admits exactly **8** offsets: two and three cells out
+    // along each of the four cardinal directions."
+    let broadside = (-3i32..=3)
+        .flat_map(|dy| (-3i32..=3).map(move |dx| (dx, dy)))
+        .filter(|&(dx, dy)| outdoor_water_creature_attack_aligned(dx, dy))
+        .filter(|&(dx, dy)| dx.abs() + dy.abs() != 1)
+        .count();
+    assert_eq!(broadside, 8);
+}
+
+#[test]
+fn bestiary_sprite_run_first_frame_is_linear_in_class() {
+    // `catalogs/monster-bestiary.md` publishes each class's sprite run
+    // independently. Four of them pin the arithmetic:
+    assert_eq!(bestiary_sprite_run_first_frame(18), Some(0x88)); // Sea Serpent
+    assert_eq!(bestiary_sprite_run_first_frame(39), Some(0xDC)); // Dragon
+    assert_eq!(bestiary_sprite_run_first_frame(40), Some(0xE0)); // Sand Trap
+    assert_eq!(bestiary_sprite_run_first_frame(41), Some(0xE4)); // Troll
+
+    // The two breath first-frames are exactly the two the mapping
+    // predicts, which is what makes the exact-equality test in
+    // `overworld.md §6.2.1` land on real classes.
+    assert_eq!(
+        bestiary_sprite_run_first_frame(18),
+        Some(OUTDOOR_BREATH_ATTACKER_SEA_SERPENT_FIRST_FRAME)
+    );
+    assert_eq!(
+        bestiary_sprite_run_first_frame(39),
+        Some(OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME)
+    );
+    assert_eq!(
+        bestiary_sprite_run_first_frame(40),
+        Some(OUTDOOR_SAND_TRAP_SPRITE_RUN_FIRST)
+    );
+
+    // And the arithmetic agrees with the tree's independent sprite-to-
+    // class table over every class that table covers from the anchor up.
+    for class in 18u8..=47 {
+        let Some(first) = bestiary_sprite_run_first_frame(class) else {
+            continue;
+        };
+        let Some(round_trip) = combat_class_for_sprite_byte(first) else {
+            // Classes 42 and 43 have no published sprite run.
+            continue;
+        };
+        assert_eq!(round_trip, class, "class {class} first frame {first:#x}");
+        for frame in 0..BESTIARY_SPRITE_RUN_FRAMES {
+            assert_eq!(
+                combat_class_for_sprite_byte(first + frame),
+                Some(class),
+                "class {class} frame {frame}"
+            );
+        }
+    }
+}
+
+#[test]
+fn outdoor_breath_recognition_is_exact_equality_not_a_family() {
+    // `overworld.md §6.2.1`: "**The breath test is exact equality — not a
+    // range, not a masked family.** Sibling animation frames `0x89..0x8B`
+    // and `0xDD..0xDF` never enter the breath branch."
+    assert!(outdoor_breath_attacker_class(0x88));
+    assert!(outdoor_breath_attacker_class(0xDC));
+    for sibling in [0x89u8, 0x8A, 0x8B, 0xDD, 0xDE, 0xDF] {
+        assert!(!outdoor_breath_attacker_class(sibling), "{sibling:#x}");
+    }
+    // The Sand Trap run is not a breath class in any frame; an
+    // implementation that spawned sand traps as sea serpents "would also
+    // silently never fire their breath attack".
+    for frame in OUTDOOR_SAND_TRAP_SPRITE_RUN_FIRST..=OUTDOOR_SAND_TRAP_SPRITE_RUN_LAST {
+        assert!(!outdoor_breath_attacker_class(frame), "{frame:#x}");
+        assert!(outdoor_sand_trap_class(frame), "{frame:#x}");
+    }
+    assert!(!outdoor_sand_trap_class(0x88));
+    assert!(!outdoor_sand_trap_class(0xDF));
+}
+
+#[test]
+fn exactly_two_outdoor_ranged_attackers_exist() {
+    // `overworld.md §6.2.1` tabulates two rows and no more. Sweep every
+    // type byte against every in-window offset and check that the only
+    // bytes that ever produce a shot are the two breath first frames and
+    // the four broadside family frames.
+    let mut breath = Vec::new();
+    let mut broadside = Vec::new();
+    for byte in 0u8..=255 {
+        let mut saw_breath = false;
+        let mut saw_broadside = false;
+        for dy in -4i32..=4 {
+            for dx in -4i32..=4 {
+                match outdoor_ranged_attacker_figure(byte, dx, dy) {
+                    Some(OutdoorRangedAttackFigure::SparkCloud) => saw_breath = true,
+                    Some(OutdoorRangedAttackFigure::SolidBurst) => saw_broadside = true,
+                    None => {}
+                }
+            }
+        }
+        if saw_breath {
+            breath.push(byte);
+        }
+        if saw_broadside {
+            broadside.push(byte);
+        }
+    }
+    assert_eq!(breath, vec![0x88, 0xDC]);
+    assert_eq!(broadside, vec![0x2C, 0x2D, 0x2E, 0x2F]);
+    // No byte is both, so the two rows really are separate reactions.
+    assert!(breath.iter().all(|byte| !broadside.contains(byte)));
+}
+
+#[test]
+fn outdoor_ranged_attack_subtile_coordinate_space_matches_the_published_spans() {
+    // `overworld.md §6.2.2`: "cell `c` owns the closed span of positions
+    // `16c + 8` through `16c + 23`, and an endpoint converts to
+    // `16c + 16`."
+    for cell in 0i32..VIEWPORT_SIDE as i32 {
+        assert_eq!(subtile_endpoint(cell), 16 * cell + 16);
+        for position in (16 * cell + 8)..=(16 * cell + 23) {
+            assert_eq!(subtile_to_cell(position), cell, "position {position}");
+        }
+    }
+    // "Positions outside the closed band `[8, 183]` on either axis are off
+    // the eleven-by-eleven viewport".
+    assert_eq!((SUBTILE_BAND_LOW, SUBTILE_BAND_HIGH), (8, 183));
+    assert!(subtile_in_band(8));
+    assert!(subtile_in_band(183));
+    assert!(!subtile_in_band(7));
+    assert!(!subtile_in_band(184));
+}
+
+#[test]
+fn outdoor_ranged_attack_run_reproduces_the_published_worked_example() {
+    // `overworld.md §6.2.2`: "A creature three columns east and one row
+    // south of the party sits at viewport cell (8, 6) with the party at
+    // (5, 5). The generated run holds sixty-five positions. Sampling every
+    // thirteenth gives five visits, whose cells are (8, 6), (7, 6),
+    // (7, 6), (6, 5) and (6, 5) in that order."
+    let attacker = outdoor_ranged_attacker_viewport_cell(-3, -1);
+    assert_eq!(attacker, (8, 6));
+    assert_eq!(OUTDOOR_RANGED_ATTACK_PARTY_CELL, (5, 5));
+
+    let run = generate_outdoor_ranged_attack_run(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+    assert_eq!(run.len(), 65);
+    // "The starting position is itself part of the emitted run."
+    assert_eq!(run[0], (subtile_endpoint(8), subtile_endpoint(6)));
+    // "The run always ends inside the target cell", with no column
+    // overshoot when the shot has a column delta.
+    assert_eq!(
+        *run.last().unwrap(),
+        (subtile_endpoint(5), subtile_endpoint(5))
+    );
+
+    let samples = outdoor_ranged_attack_samples(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+    let cells: Vec<(i32, i32)> = samples.iter().map(|s| (s.column, s.row)).collect();
+    assert_eq!(cells, vec![(8, 6), (7, 6), (7, 6), (6, 5), (6, 5)]);
+    // "The first is the launch cell and is exempt; the next three are
+    // tested; the fifth is the last sample and is not tested."
+    let tested: Vec<bool> = samples.iter().map(|s| s.tested).collect();
+    assert_eq!(tested, vec![true, true, true, true, false]);
+
+    // "Exactly two distinct cells, (7, 6) and (6, 5), can block this
+    // shot." The launch cell (8, 6) is exempted by coordinate comparison.
+    let mut blocking = Vec::new();
+    for candidate in [(8, 6), (7, 6), (6, 5), (8, 5), (7, 5), (6, 6), (5, 5)] {
+        let outcome = trace_outdoor_ranged_attack(
+            attacker,
+            OUTDOOR_RANGED_ATTACK_PARTY_CELL,
+            |column, row| (column, row) == candidate,
+        );
+        if outcome != OutdoorRangedAttackOutcome::Connects {
+            blocking.push(candidate);
+        }
+    }
+    assert_eq!(blocking, vec![(7, 6), (6, 5)]);
+}
+
+#[test]
+fn outdoor_ranged_attack_run_steps_the_row_before_the_column() {
+    // `overworld.md §6.2.2`: "Because the accumulator starts full, the
+    // first thing after the start position is a **row** step whenever the
+    // shot has any row delta at all. The projectile leaves the attacker's
+    // cell vertically before it moves horizontally."
+    for (dx, dy) in [(-3i32, -1i32), (-1, -3), (2, 3), (0, -2), (3, -3)] {
+        let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
+        let run = generate_outdoor_ranged_attack_run(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+        assert_eq!(run[1].0, run[0].0, "offset ({dx}, {dy}) moved the column first");
+        assert_eq!(
+            (run[1].1 - run[0].1).abs(),
+            1,
+            "offset ({dx}, {dy}) did not step the row"
+        );
+    }
+    // A pure-column shot has no row delta, so its first step is the
+    // column instead.
+    let attacker = outdoor_ranged_attacker_viewport_cell(-3, 0);
+    let run = generate_outdoor_ranged_attack_run(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+    assert_eq!(run[1].1, run[0].1);
+    assert_eq!((run[1].0 - run[0].0).abs(), 1);
+}
+
+#[test]
+fn outdoor_ranged_attack_run_moves_one_axis_by_one_unit_per_step() {
+    // `overworld.md §6.2.2`: "Consecutive emitted positions differ on
+    // exactly one axis, by one unit."
+    for dy in -3i32..=3 {
+        for dx in -3i32..=3 {
+            if (dx, dy) == (0, 0) {
+                continue;
+            }
+            let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
+            let run =
+                generate_outdoor_ranged_attack_run(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+            assert!(run.len() < SUBTILE_RUN_BUDGET, "offset ({dx}, {dy}) hit the budget");
+            for pair in run.windows(2) {
+                let (dc, dr) = (pair[1].0 - pair[0].0, pair[1].1 - pair[0].1);
+                assert!(
+                    (dc.abs(), dr.abs()) == (1, 0) || (dc.abs(), dr.abs()) == (0, 1),
+                    "offset ({dx}, {dy}) stepped ({dc}, {dr})"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn outdoor_ranged_attack_run_ends_inside_the_target_cell() {
+    // `overworld.md §6.2.2`: "The run always ends inside the target cell,
+    // but the column coordinate may overshoot the target position by
+    // exactly one sub-tile step **in the direction of travel** ... A shot
+    // with no column delta always ends one such step off on the column
+    // axis."
+    for dy in -3i32..=3 {
+        for dx in -3i32..=3 {
+            if (dx, dy) == (0, 0) {
+                continue;
+            }
+            let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
+            let run =
+                generate_outdoor_ranged_attack_run(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+            let (column, row) = *run.last().unwrap();
+            assert_eq!(
+                (subtile_to_cell(column), subtile_to_cell(row)),
+                OUTDOOR_RANGED_ATTACK_PARTY_CELL,
+                "offset ({dx}, {dy}) ended outside the target cell"
+            );
+            assert_eq!(row, subtile_endpoint(OUTDOOR_RANGED_ATTACK_PARTY_CELL.1));
+            let column_overshoot = (column - subtile_endpoint(OUTDOOR_RANGED_ATTACK_PARTY_CELL.0))
+                .abs();
+            let expected = i32::from(dx == 0);
+            assert_eq!(
+                column_overshoot, expected,
+                "offset ({dx}, {dy}) overshot the column by {column_overshoot}"
+            );
+        }
+    }
+}
+
+#[test]
+fn outdoor_ranged_attack_never_tests_the_party_cell_and_tests_two_to_seven_samples() {
+    // `overworld.md §6.2.2`, swept "exhaustively over the 44 breath
+    // offsets and the 8 broadside offsets": "**the party's own cell is
+    // never obstruction-tested**, and the number of tested samples per
+    // shot lies in the closed interval `[2, 7]`, inclusive. In twelve of
+    // the forty-four breath geometries the sampled path never reaches the
+    // party's cell at all".
+    let mut geometries = 0;
+    let mut never_reaches_party_cell = 0;
+    for dy in -3i32..=3 {
+        for dx in -3i32..=3 {
+            if (dx, dy) == (0, 0) || dx.abs() + dy.abs() == 1 {
+                continue;
+            }
+            geometries += 1;
+            let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
+            let samples = outdoor_ranged_attack_samples(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+            let tested: Vec<&OutdoorRangedAttackSample> =
+                samples.iter().filter(|s| s.tested).collect();
+            assert!(
+                (2..=7).contains(&tested.len()),
+                "offset ({dx}, {dy}) tested {} samples",
+                tested.len()
+            );
+            for sample in &tested {
+                assert_ne!(
+                    (sample.column, sample.row),
+                    OUTDOOR_RANGED_ATTACK_PARTY_CELL,
+                    "offset ({dx}, {dy}) obstruction-tested the party's own cell"
+                );
+            }
+            if !samples
+                .iter()
+                .any(|s| (s.column, s.row) == OUTDOOR_RANGED_ATTACK_PARTY_CELL)
+            {
+                never_reaches_party_cell += 1;
+            }
+        }
+    }
+    assert_eq!(geometries, 44);
+    assert_eq!(never_reaches_party_cell, 12);
+
+    // "a broadside fired three cells away never samples the party's cell
+    // -- the animation visibly stops one cell short and still connects."
+    for (dx, dy) in [(3i32, 0i32), (-3, 0), (0, 3), (0, -3)] {
+        let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
+        let samples = outdoor_ranged_attack_samples(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+        assert!(
+            !samples
+                .iter()
+                .any(|s| (s.column, s.row) == OUTDOOR_RANGED_ATTACK_PARTY_CELL),
+            "broadside offset ({dx}, {dy}) sampled the party's cell"
+        );
+        assert_eq!(
+            trace_outdoor_ranged_attack(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL, |_, _| false),
+            OutdoorRangedAttackOutcome::Connects
+        );
+    }
+}
+
+#[test]
+fn outdoor_ranged_attack_shooter_cell_never_obstructs_its_own_shot() {
+    // `overworld.md §6.2.2`: "A blocking cell whose coordinates equal the
+    // shooter's own starting cell is ignored and the walk continues --
+    // this is a coordinate comparison, not a 'skip the first sample'
+    // rule, and it is why the attacker's own cell never obstructs its own
+    // shot."
+    for dy in -3i32..=3 {
+        for dx in -3i32..=3 {
+            if (dx, dy) == (0, 0) || dx.abs() + dy.abs() == 1 {
+                continue;
+            }
+            let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
+            assert_eq!(
+                trace_outdoor_ranged_attack(
+                    attacker,
+                    OUTDOOR_RANGED_ATTACK_PARTY_CELL,
+                    |column, row| (column, row) == attacker
+                ),
+                OutdoorRangedAttackOutcome::Connects,
+                "offset ({dx}, {dy}) let the shooter block itself"
+            );
+        }
+    }
 }
 
 #[test]
 fn outdoor_ranged_attack_trace_stops_at_the_first_obstruction() {
-    // `overworld.md §6.2`: "If an obstruction is met first, the shot stops
-    // there and nothing further happens." Two blockers on the line report
-    // the nearer one.
-    let outcome = trace_outdoor_ranged_attack((10, 10), (10, 16), |_, y| y == 12 || y == 14);
+    // `overworld.md §6.2.2`: "Any other blocking cell ends the walk and
+    // reports *blocked*." A predicate that blocks the whole column reports
+    // the first tested cell on it.
+    let attacker = outdoor_ranged_attacker_viewport_cell(0, -3);
+    let outcome =
+        trace_outdoor_ranged_attack(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL, |_, row| row < 8);
+    let samples = outdoor_ranged_attack_samples(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
+    // The launch cell is exempt by coordinate comparison even though it is
+    // obstruction-tested, so the first *effective* blocker is the next one.
+    let first_tested = samples
+        .iter()
+        .find(|s| s.tested && (s.column, s.row) != attacker)
+        .unwrap();
     assert_eq!(
         outcome,
-        OutdoorRangedAttackOutcome::Obstructed { x: 10, y: 12 }
+        OutdoorRangedAttackOutcome::Obstructed {
+            column: first_tested.column,
+            row: first_tested.row
+        }
     );
 }
 
 #[test]
-fn outdoor_ranged_attack_trace_is_symmetric_between_endpoints() {
-    // `overworld.md §6.2`: "The player's own ranged attack uses the
-    // identical procedure with the endpoints exchanged, so line-of-fire
-    // rules are symmetric between the party and the creatures."
-    let blocker = |x: u8, _y: u8| x == 12;
+fn outdoor_ranged_attack_trace_is_direction_dependent_only_off_the_axes() {
+    // `overworld.md §6.2.3`: "the symmetry conclusion is withdrawn ...
+    // Sixteen of the forty-four breath geometries have direction-dependent
+    // effective-blocker sets. ... every one of those sixteen is
+    // non-cardinal and non-diagonal; and every cardinal geometry and every
+    // exact-diagonal geometry traces identically in both directions."
+    let centre = OUTDOOR_RANGED_ATTACK_PARTY_CELL;
+    let blockers = |from: (i32, i32), to: (i32, i32)| -> Vec<(i32, i32)> {
+        let mut hits = Vec::new();
+        for row in 0..VIEWPORT_SIDE as i32 {
+            for column in 0..VIEWPORT_SIDE as i32 {
+                let blocked = trace_outdoor_ranged_attack(from, to, |c, r| (c, r) == (column, row));
+                if blocked != OutdoorRangedAttackOutcome::Connects {
+                    hits.push((column, row));
+                }
+            }
+        }
+        hits.sort();
+        hits
+    };
+
+    let mut asymmetric = 0;
+    for dy in -3i32..=3 {
+        for dx in -3i32..=3 {
+            if (dx, dy) == (0, 0) || dx.abs() + dy.abs() == 1 {
+                continue;
+            }
+            let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
+            let forward = blockers(attacker, centre);
+            let reverse = blockers(centre, attacker);
+            let cardinal_or_diagonal = dx == 0 || dy == 0 || dx.abs() == dy.abs();
+            if forward != reverse {
+                asymmetric += 1;
+                assert!(
+                    !cardinal_or_diagonal,
+                    "offset ({dx}, {dy}) is cardinal or diagonal but traced asymmetrically"
+                );
+            } else if cardinal_or_diagonal {
+                // The positive half of the same statement.
+                assert_eq!(forward, reverse);
+            }
+        }
+    }
+    assert_eq!(asymmetric, 16);
+}
+
+#[test]
+fn outdoor_ranged_attack_flight_carries_no_payload() {
+    // `overworld.md §6.2.2` states the return polarity positively: "a run
+    // that reaches the end of the generated line reports clear, and clear
+    // is what both outdoor call sites treat as a hit." The trace's own
+    // output is that one bit; it writes nothing and knows nothing about
+    // damage.
+    let attacker = outdoor_ranged_attacker_viewport_cell(-3, -1);
     assert_eq!(
-        trace_outdoor_ranged_attack((10, 10), (14, 10), blocker),
-        OutdoorRangedAttackOutcome::Obstructed { x: 12, y: 10 }
-    );
-    assert_eq!(
-        trace_outdoor_ranged_attack((14, 10), (10, 10), blocker),
-        OutdoorRangedAttackOutcome::Obstructed { x: 12, y: 10 }
-    );
-    // And a clear line is clear from both ends.
-    let clear = |_x: u8, _y: u8| false;
-    assert_eq!(
-        trace_outdoor_ranged_attack((10, 10), (14, 10), clear),
+        trace_outdoor_ranged_attack(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL, |_, _| false),
         OutdoorRangedAttackOutcome::Connects
     );
     assert_eq!(
-        trace_outdoor_ranged_attack((14, 10), (10, 10), clear),
-        OutdoorRangedAttackOutcome::Connects
+        trace_outdoor_ranged_attack(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL, |_, _| true),
+        OutdoorRangedAttackOutcome::Obstructed { column: 7, row: 6 }
     );
 }
 
 #[test]
-fn outdoor_ranged_attack_trace_walks_the_wrapped_line_across_the_seam() {
-    // The traced line uses the same wrapped deltas as the trigger windows,
-    // so an attacker three cells away across the seam shoots across it
-    // rather than the long way round. Cells 255, 0 and 1 are intervening.
-    let mut visited = Vec::new();
-    let outcome = trace_outdoor_ranged_attack((254, 7), (2, 7), |x, y| {
-        visited.push((x, y));
-        false
-    });
-    assert_eq!(outcome, OutdoorRangedAttackOutcome::Connects);
-    assert_eq!(visited, vec![(255, 7), (0, 7), (1, 7)]);
-}
+fn outdoor_impact_hull_branch_covers_all_eight_frigate_markers() {
+    // `overworld.md §6.2.4`: the frigate branch is "any marker in the
+    // hoisted or furled ship families ..., meaning all four headings and
+    // both sail states, eight values in total."
+    let mut markers = 0;
+    for marker in TRANSPORT_MARKER_SHIP_HOISTED_FIRST..=TRANSPORT_MARKER_SHIP_FURLED_LAST {
+        let transport = transport_from_save_marker(marker);
+        assert!(
+            outdoor_impact_absorbed_by_hull(transport),
+            "marker {marker:#x} did not reach the hull branch"
+        );
+        markers += 1;
+    }
+    assert_eq!(markers, 8);
 
-#[test]
-fn outdoor_ranged_attack_trace_walks_an_exact_diagonal() {
-    // Equal magnitudes are rasterization-independent, so the exact
-    // diagonal is handled rather than refused.
-    let mut visited = Vec::new();
-    let outcome = trace_outdoor_ranged_attack((10, 10), (13, 13), |x, y| {
-        visited.push((x, y));
-        false
-    });
-    assert_eq!(outcome, OutdoorRangedAttackOutcome::Connects);
-    assert_eq!(visited, vec![(11, 11), (12, 12)]);
-}
-
-#[test]
-#[should_panic(expected = "cleak/u5-spec#90")]
-fn outdoor_ranged_attack_trace_refuses_an_oblique_line() {
-    // Spec gap: `overworld.md §6.2` says a straight line is traced and
-    // tested cell by cell, but not how an oblique line is rasterized --
-    // and the breath window admits oblique offsets such as (3, 1).
-    let _ = trace_outdoor_ranged_attack((10, 10), (13, 11), |_, _| false);
-}
-
-#[test]
-#[should_panic(expected = "cleak/u5-spec#90")]
-fn outdoor_ranged_attack_damage_is_unspecified_and_refuses() {
-    // Spec gap: §6.2 says only "damage is applied to the party at its map
-    // coordinates"; no amount, roll, range or member-selection rule exists
-    // in overworld.md, active-objects.md, encounters.md or combat.md.
-    require_outdoor_ranged_attack_damage(OutdoorRangedAttackFigure::SolidBurst);
+    // "Under every other transport marker -- foot, horse, carpet, skiff,
+    // and the sprite-suppressed value -- the whole-party damage pass ...
+    // runs."
+    for transport in [
+        TransportState::Foot,
+        TransportState::SpriteSuppressed,
+        TransportState::Horse {
+            type_byte: HORSE_MOUNTED_FIRST,
+            tile: FIRST_PLAYABLE_HORSE_TILE,
+        },
+        TransportState::Carpet {
+            type_byte: CARPET_MOUNTED,
+            tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+        },
+        TransportState::Skiff {
+            type_byte: TRANSPORT_MARKER_SKIFF_FIRST,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
+        },
+    ] {
+        assert!(!outdoor_impact_absorbed_by_hull(transport), "{transport:?}");
+    }
 }
 
 #[test]

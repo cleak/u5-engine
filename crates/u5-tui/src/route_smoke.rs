@@ -31,9 +31,9 @@ use u5_runtime::{
     MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE,
     NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
-    POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
-    PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
+    OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX,
+    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
+    PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
     QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
     RESURRECT_SPELL_INDEX, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
     SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
@@ -50,11 +50,11 @@ use u5_runtime::{
     TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
     TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_ARREST_JAIL_FLOOR, TOWN_ARREST_JAIL_SCENE,
     TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TownNpcAlarmState, TransportState,
-    UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST,
-    VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X,
-    WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState, WordOfPowerSeal,
-    WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats,
+    TOWN_POISON_GAS_LIVE_TILE, TRANSPORT_MARKER_SHIP_FURLED_FIRST, Tavern, TileGraphicsDepth,
+    TownNpcAlarmState, TransportState, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
+    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState,
+    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters,
     default_party_strengths, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
@@ -941,6 +941,22 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &[],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
             min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-pirate-broadside-damages-the-party",
+            options: world.clone(),
+            script: &["empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-pirate-broadside-spends-ship-hull",
+            options: world.clone(),
+            script: &["empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -3236,6 +3252,15 @@ fn apply_route_smoke_case_setup(
             state.set_cached_moon_glyph_slots(Some(0), None);
             state.mark_visibility_dirty();
         }
+        "britannia-pirate-broadside-damages-the-party" => {
+            seed_outdoor_ranged_attack_route(state, None);
+        }
+        "britannia-pirate-broadside-spends-ship-hull" => {
+            // `vehicles.md §6`: a hull above the `[1, 30]` roll ceiling can
+            // never be destroyed, so this arm always lands on the absorbed
+            // branch and never on the loss-of-ship ladder.
+            seed_outdoor_ranged_attack_route(state, Some(OUTDOOR_IMPACT_HULL_ROLL_HIGH + 1));
+        }
         "britannia-whirlpool-forced-underworld" => {
             if state
                 .apply_world_whirlpool_engagement(game_dir, WorldPlane::Britannia)?
@@ -3719,6 +3744,71 @@ fn seed_town_ordinary_talk_route(state: &mut PlayState) {
     ]);
     state.mark_visibility_dirty();
 }
+
+/// Seeds the `overworld.md §6.2` outdoor ranged attack the ordinary routes
+/// never reach: a pirate ship three cells east of the party, on a cleared
+/// line, so the per-turn walker's broadside fires and the §6.2.4 payload
+/// runs for real.
+///
+/// This exists because no natural route brings a hostile ship or a dragon
+/// into range -- the subsystem's absence survived the whole suite. Passing
+/// a hull puts the party aboard a frigate, which is the payload's other
+/// branch.
+fn seed_outdoor_ranged_attack_route(state: &mut PlayState, hull: Option<u8>) {
+    let Area::World { plane } = state.area else {
+        return;
+    };
+    let (px, py) = (state.player.x, state.player.y);
+
+    // `overworld.md §6.2.2`: a broadside three cells out tests two cells,
+    // one and two steps along the fire axis. Clear both so the line runs
+    // clear and the payload actually runs.
+    for step in 1..=2 {
+        let index = world_cell_index(px + step, py);
+        if let Some(cell) = state.grid.get_mut(index) {
+            *cell = OUTDOOR_RANGED_ATTACK_ROUTE_CLEAR_TILE;
+        }
+    }
+
+    for member in state.party.iter_mut() {
+        member.status = b'G';
+        member.hp = member.max_hp;
+    }
+
+    if let Some(hull) = hull {
+        state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull,
+            skiffs: 2,
+        };
+    }
+
+    // `overworld.md §6.2.1`: the broadside row is a masked family test on
+    // `0x2C..0x2F` and has no gate roll -- "it fires whenever the geometry
+    // holds" -- so this reaches the payload deterministically.
+    state.active_objects.push(ActiveObject {
+        type_byte: OUTDOOR_RANGED_ATTACK_ROUTE_PIRATE_FRAME,
+        tile: OUTDOOR_RANGED_ATTACK_ROUTE_PIRATE_FRAME,
+        x: px + 3,
+        y: py,
+        z: plane.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+/// Open low terrain, well outside `surface_tile_blocks_projectile`'s
+/// blocking bands, so the seeded line is clear whatever the shipped map
+/// holds there.
+const OUTDOOR_RANGED_ATTACK_ROUTE_CLEAR_TILE: u8 = 0x03;
+
+/// `encounters.md §4` pirate-ship / water-creature facing frames.
+const OUTDOOR_RANGED_ATTACK_ROUTE_PIRATE_FRAME: u8 = 0x2C;
 
 fn seed_world_shrine_route(state: &mut PlayState, virtue: ShrineVirtue) {
     state.area = Area::World {
@@ -6173,6 +6263,43 @@ fn validate_route_smoke_case_state(
         }
         "terrain-combat-party-entry" | "dungeon-room-party-entry" | "doom-room-combat-trigger" => {
             validate_combat_party_descriptor_links(state, case_name)?;
+        }
+        "britannia-pirate-broadside-damages-the-party" => {
+            // `overworld.md §6.2.4`: on foot "[e]very qualifying member is
+            // damaged", so the whole party is below full. The boom line
+            // itself is not asserted here: the walker announces it inside
+            // the turn epilogue and the command handler then overwrites
+            // `message` with its own result line, so the payload's effect
+            // on the roster is the durable evidence.
+            let untouched = state
+                .party
+                .iter()
+                .filter(|member| member.hp == member.max_hp)
+                .count();
+            if untouched != 0 {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` left {untouched} party member(s) at full hit points"
+                )));
+            }
+        }
+        "britannia-pirate-broadside-spends-ship-hull" => {
+            // `vehicles.md §6`: "**The hull absorbs the impact entirely: no
+            // party member loses hit points while the ship survives.**"
+            let TransportState::Ship { hull, .. } = state.player.transport else {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not stay aboard the frigate"
+                )));
+            };
+            if hull >= OUTDOOR_IMPACT_HULL_ROLL_HIGH + 1 || hull == 0 {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` left hull at {hull}"
+                )));
+            }
+            if state.party.iter().any(|member| member.hp != member.max_hp) {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` damaged a party member while the ship survived"
+                )));
+            }
         }
         "doom-combat-quit-defeat" => {
             if state.combat_active

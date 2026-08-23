@@ -510,12 +510,25 @@ pub use npc_runtime::{
 };
 pub use ool_audit::*;
 pub use outdoor_ranged_attack::{
-    OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME, OUTDOOR_BROADSIDE_BOOM_MESSAGE,
-    OUTDOOR_RANGED_ATTACK_RANGE_CELLS, OUTDOOR_SERPENT_DRAGON_BREATH_SALT,
-    OutdoorRangedAttackFigure, OutdoorRangedAttackOutcome, outdoor_breath_attack_in_range,
-    outdoor_broadside_attacker_class, require_outdoor_ranged_attack_damage,
-    require_outdoor_ranged_attack_rasterization, trace_outdoor_ranged_attack, wrapped_axis_delta,
-    wrapped_deltas_to_player,
+    BESTIARY_SPRITE_RUN_ANCHOR_CLASS, BESTIARY_SPRITE_RUN_ANCHOR_FIRST_FRAME,
+    BESTIARY_SPRITE_RUN_FRAMES, OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME,
+    OUTDOOR_BREATH_ATTACKER_SEA_SERPENT_FIRST_FRAME, OUTDOOR_BROADSIDE_BOOM_MESSAGE,
+    OUTDOOR_IMPACT_HULL_ROLL_HIGH, OUTDOOR_IMPACT_HULL_ROLL_LOW, OUTDOOR_IMPACT_MEMBER_DAMAGE_HIGH,
+    OUTDOOR_IMPACT_MEMBER_DAMAGE_LOW, OUTDOOR_IMPACT_PARTY_PASS_SLOT_BOUND,
+    OUTDOOR_RANGED_ATTACK_PARTY_CELL, OUTDOOR_RANGED_ATTACK_RANGE_CELLS, OUTDOOR_SAMPLE_INTERVAL,
+    OUTDOOR_SAND_TRAP_SPRITE_RUN_FIRST, OUTDOOR_SAND_TRAP_SPRITE_RUN_LAST,
+    OUTDOOR_SERPENT_DRAGON_BREATH_SALT, OutdoorImpactAbsorption, OutdoorImpactHullOutcome,
+    OutdoorImpactMemberDamage, OutdoorRangedAttackFigure, OutdoorRangedAttackOutcome,
+    OutdoorRangedAttackReport, OutdoorRangedAttackSample, PARTY_STATUS_DEAD, SUBTILE_BAND_HIGH,
+    SUBTILE_BAND_LOW, SUBTILE_CELL_SPAN_BASE, SUBTILE_ENDPOINT_OFFSET, SUBTILE_RUN_BUDGET,
+    SUBTILE_SLOPE_SCALE, SUBTILE_UNITS_PER_CELL, SUBTILE_VERTICAL_SLOPE,
+    bestiary_sprite_run_first_frame, generate_outdoor_ranged_attack_run,
+    outdoor_breath_attack_in_range, outdoor_breath_attacker_class,
+    outdoor_broadside_attacker_class, outdoor_impact_absorbed_by_hull,
+    outdoor_impact_damages_member, outdoor_impact_hull_outcome, outdoor_ranged_attack_samples,
+    outdoor_ranged_attacker_figure, outdoor_ranged_attacker_viewport_cell, outdoor_sand_trap_class,
+    subtile_endpoint, subtile_in_band, subtile_to_cell, trace_outdoor_ranged_attack,
+    wrapped_axis_delta, wrapped_deltas_to_player,
 };
 pub use party::{
     Area, AvatarStats, LEVEL_FROM_EXPERIENCE_BASE_DIVISOR, LEVEL_FROM_EXPERIENCE_HALVING_STEP,
@@ -747,13 +760,15 @@ pub use town_tables_io::*;
 pub use town_tables_io_movement::*;
 pub use transport::{
     BoardVehicleCandidate, BoardableFamily, CARPET_BOARDING_EAST_MARKER,
-    CARPET_BOARDING_NORTH_MARKER, CARPET_MOUNTED, CARPET_PARKED, FRIGATE_PURCHASE_HULL,
-    FRIGATE_PURCHASE_SKIFFS, HORSE_MOUNTED_FIRST, HORSE_MOUNTED_LAST, HORSE_PARKED_FIRST,
-    HORSE_PARKED_LAST, PendingVehicleAcquisition, SHIP_BOARDING_HULL_WARNING_THRESHOLD,
-    SHIP_PARKED_FIRST, SHIP_PARKED_LAST, SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST,
-    ShipBoardingWarnings, TransportState, boardable_family, mount_horse_marker,
+    CARPET_BOARDING_NORTH_MARKER, CARPET_MARKER_FRAMES, CARPET_MOUNTED, CARPET_PARKED,
+    FRIGATE_PURCHASE_HULL, FRIGATE_PURCHASE_SKIFFS, HORSE_MOUNTED_FIRST, HORSE_MOUNTED_LAST,
+    HORSE_PARKED_FIRST, HORSE_PARKED_LAST, PendingVehicleAcquisition,
+    SHIP_BOARDING_HULL_WARNING_THRESHOLD, SHIP_LOSS_DROWNING_ITERATION_GUARD, SHIP_PARKED_FIRST,
+    SHIP_PARKED_LAST, SHIP_SUNK_MESSAGE, SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST,
+    ShipBoardingWarnings, ShipLossFallback, TRANSPORT_MARKER_SPRITE_SUPPRESSED, TransportState,
+    boardable_family, mount_horse_marker, party_member_counts_as_living,
     ship_boarding_precondition_accepts, ship_boarding_stows_carpet, ship_boarding_warnings,
-    vehicle_exit_object_support,
+    ship_loss_fallback, vehicle_exit_object_support,
 };
 pub use traps::*;
 pub use u4_transfer::*;

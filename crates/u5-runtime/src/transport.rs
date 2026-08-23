@@ -29,7 +29,97 @@ pub enum TransportState {
         type_byte: u8,
         tile: u8,
     },
+    /// `vehicles.md §2` marker `0x00`, "Party sprite suppressed": "The
+    /// party is drawn as nothing. As a *persistent* state this is reached
+    /// only by drowning when a ship is lost with no skiff and no carpet
+    /// available; see Section 6."
+    ///
+    /// It is a real transport marker rather than an absence of one, and
+    /// `systems/overworld.md` Section 6.2.4 lists it among the markers
+    /// that take the whole-party damage pass, so it cannot be modelled as
+    /// [`TransportState::Foot`].
+    ///
+    /// [`crate::transport_from_save_marker`] deliberately does **not**
+    /// decode `0x00` into this variant: the shipped chargen template
+    /// leaves the byte zero before the first overworld entry, and §2 names
+    /// `0x1C` as "[t]he clean seed and default state". The variant is
+    /// reached at runtime, by the ladder, and a save that carries `0x00`
+    /// loads as foot.
+    SpriteSuppressed,
 }
+
+/// `vehicles.md §6` loss-of-ship ladder: "When a frigate is destroyed, the
+/// party is not simply killed. The engine walks a fixed fallback ladder
+/// and takes the first option that is available."
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShipLossFallback {
+    /// "**A skiff is aboard.** The party abandons into a skiff, keeping
+    /// the ship's current facing, and the marker becomes the matching
+    /// skiff value."
+    Skiff,
+    /// "**Otherwise, a carpet is in stock.** The party deploys a carried
+    /// carpet, the carried-carpet count is decremented, and the marker
+    /// becomes one of the two carpet frames (chosen at random, since the
+    /// frame is cosmetic)."
+    Carpet,
+    /// "**Otherwise, the party drowns.** The marker is set to the
+    /// sprite-suppressed value and the drowning outcome runs. This is the
+    /// only way the suppressed value becomes persistent state."
+    Drown,
+}
+
+/// `vehicles.md §6`: pick the ladder rung. The order is fixed and the
+/// first available option wins.
+pub const fn ship_loss_fallback(skiffs_aboard: u8, carried_carpets: u8) -> ShipLossFallback {
+    if skiffs_aboard > 0 {
+        ShipLossFallback::Skiff
+    } else if carried_carpets > 0 {
+        ShipLossFallback::Carpet
+    } else {
+        ShipLossFallback::Drown
+    }
+}
+
+/// `vehicles.md §2`: the two magic-carpet marker frames. The loss-of-ship
+/// ladder picks between them at random "since the frame is cosmetic".
+pub const CARPET_MARKER_FRAMES: [u8; 2] = [0x14, 0x15];
+
+/// `vehicles.md §2` marker `0x00`, the sprite-suppressed party.
+pub const TRANSPORT_MARKER_SPRITE_SUPPRESSED: u8 = 0x00;
+
+/// `vehicles.md §6` drowning-loop exit scan: "the scan that ends the loop
+/// counts only good, poisoned and sleeping members".
+///
+/// This is deliberately **not** the same test as
+/// [`crate::outdoor_impact_damages_member`], which skips only the dead
+/// marker. `overworld.md §6.2.5` names the difference as an open gap:
+/// "A member in some other living state would keep taking damage while no
+/// longer being counted alive by the exit test. Whether that state is
+/// reachable is unexamined." Both tests are implemented as published
+/// rather than reconciled into one.
+pub const fn party_member_counts_as_living(status: u8) -> bool {
+    matches!(status, b'G' | b'P' | b'S')
+}
+
+/// `vehicles.md §6` / `overworld.md §6.2.4`: "The ship-sunk line prints"
+/// when the hull roll destroys the frigate.
+///
+/// Neither section fixes the wording, so this follows the precedent of
+/// [`crate::OUTDOOR_BROADSIDE_BOOM_MESSAGE`] and states the published
+/// event in the tree's own voice rather than inventing a second cue for
+/// it. What *is* contract is that this line belongs to the ship-loss
+/// path: §6.2.4 says the payload itself "prints no narration line".
+pub const SHIP_SUNK_MESSAGE: &str = "Thy ship sinks!";
+
+/// Non-contract guard on the `vehicles.md §6` drowning loop.
+///
+/// The loop provably terminates — every iteration either removes at least
+/// one hit point from a member the exit scan counts, or converts a
+/// zero-hit-point member to the dead marker, and neither is reversible
+/// inside the loop. This bound exists so that a future change to the
+/// damage helper cannot turn a spec-faithful loop into a hang; it is not
+/// a published limit and is unreachable for any real roster.
+pub const SHIP_LOSS_DROWNING_ITERATION_GUARD: usize = 4096;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PendingVehicleAcquisition {
@@ -186,6 +276,7 @@ pub fn vehicle_exit_object_support(object: ActiveObject) -> bool {
         })
         | Some(TransportState::Balloon { .. })
         | Some(TransportState::Foot)
+        | Some(TransportState::SpriteSuppressed)
         | None => false,
     }
 }
@@ -255,6 +346,8 @@ impl TransportState {
             | Self::Skiff { tile, .. }
             | Self::Carpet { tile, .. }
             | Self::Balloon { tile, .. } => tile,
+            // vehicles.md §2: "The party is drawn as nothing."
+            Self::SpriteSuppressed => TRANSPORT_MARKER_SPRITE_SUPPRESSED,
         }
     }
 
@@ -271,6 +364,7 @@ impl TransportState {
             Self::Skiff { .. } => "skiff",
             Self::Carpet { .. } => "carpet",
             Self::Balloon { .. } => "balloon",
+            Self::SpriteSuppressed => "drowned",
         }
     }
 
@@ -291,6 +385,7 @@ impl TransportState {
             Self::Skiff { tile, .. } => format!("skiff tile {tile}"),
             Self::Carpet { tile, .. } => format!("magic carpet tile {tile}"),
             Self::Balloon { tile, .. } => format!("balloon tile {tile}"),
+            Self::SpriteSuppressed => "sprite suppressed".to_string(),
         }
     }
 
@@ -299,7 +394,7 @@ impl TransportState {
             Self::Ship { .. } => ship_boarding_precondition_accepts(self.save_marker()),
             Self::Horse { .. } | Self::Skiff { .. } | Self::Carpet { .. } => self.is_foot(),
             Self::Balloon { .. } => false,
-            Self::Foot => false,
+            Self::Foot | Self::SpriteSuppressed => false,
         }
     }
 
@@ -322,6 +417,7 @@ impl TransportState {
                     .unwrap_or(FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER)
             }
             Self::Balloon { .. } => FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER,
+            Self::SpriteSuppressed => TRANSPORT_MARKER_SPRITE_SUPPRESSED,
         }
     }
 
@@ -361,12 +457,13 @@ impl TransportState {
                 tile: tile.unwrap_or(old_tile),
             },
             Self::Balloon { type_byte, tile } => Self::Balloon { type_byte, tile },
+            Self::SpriteSuppressed => Self::SpriteSuppressed,
         }
     }
 
     pub fn parked_object(self, x: usize, y: usize, z: i8) -> Option<ActiveObject> {
         let (type_byte, tile, aux1, aux3) = match self {
-            Self::Foot => return None,
+            Self::Foot | Self::SpriteSuppressed => return None,
             Self::Horse { type_byte, tile } => {
                 let parked_type = if (HORSE_MOUNTED_FIRST..=HORSE_MOUNTED_LAST).contains(&type_byte)
                 {
