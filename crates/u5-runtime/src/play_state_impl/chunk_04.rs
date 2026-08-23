@@ -878,11 +878,25 @@ impl PlayState {
             self.message = "No Sextant!".to_string();
             return MoveOutcome::Blocked;
         }
-        if !matches!(self.area, Area::World { .. }) {
+        // `catalogs/item-list.md` Sextant row / `inventory.md §7`: three
+        // conditions, of which the plane is tested first and
+        // short-circuits. The Underworld is the outdoor world scene on the
+        // other plane, so it fails here and takes the same refusal an
+        // indoor scene takes — no Underworld-specific message, and it
+        // never reaches the night test.
+        let outdoors = match self.area {
+            Area::World { plane } => {
+                sextant_outdoor_position(plane.plane_byte(), self.current_scene_byte())
+            }
+            Area::Town { .. } | Area::Dungeon { .. } => false,
+        };
+        if !outdoors {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
-        if !is_town_night_hour(self.clock.hour) {
+        // The Sextant's night window is `19..=23` / `0..=5`, which is not
+        // the town-lighting window `is_town_night_hour` carries.
+        if !sextant_night_hour(self.clock.hour) {
             self.message = "Cannot see the stars!".to_string();
             return MoveOutcome::Blocked;
         }

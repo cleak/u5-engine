@@ -8914,6 +8914,43 @@ fn sky_strip_composed_cells_respects_plot_order_and_visibility() {
 }
 
 #[test]
+fn acting_member_scan_auto_selects_one_and_prompts_at_two() {
+    // traps.md 2.1 branch 3: zero matches aborts, exactly one match is
+    // auto-selected silently, two or more prompt, and the scan keeps the
+    // last match rather than the first.
+    assert_eq!(acting_member_scan(&[]), ActingMemberSelection::NoneAble);
+    assert_eq!(
+        acting_member_scan(&[b'D', b'A', b'S', b'C']),
+        ActingMemberSelection::NoneAble
+    );
+    assert_eq!(
+        acting_member_scan(&[b'D', b'G', b'S']),
+        ActingMemberSelection::Selected(1)
+    );
+    // Poisoned qualifies alongside Good.
+    assert_eq!(
+        acting_member_scan(&[b'D', b'D', b'P']),
+        ActingMemberSelection::Selected(2)
+    );
+    assert_eq!(
+        acting_member_scan(&[b'G', b'G']),
+        ActingMemberSelection::Prompt
+    );
+    assert_eq!(
+        acting_member_scan(&[b'G', b'D', b'P']),
+        ActingMemberSelection::Prompt
+    );
+
+    // Exactly {Good, Poisoned} qualify; every other status does not.
+    for status in [b'G', b'P'] {
+        assert!(acting_member_status_eligible(status), "status {status}");
+    }
+    for status in [b'D', b'A', b'S', b'C', 0u8, 0xff] {
+        assert!(!acting_member_status_eligible(status), "status {status}");
+    }
+}
+
+#[test]
 fn shared_trap_effect_family_classifies_combat_and_non_combat() {
     // traps.md §3: combat scenes resolve only to Acid (id 0) or
     // Poison (id 1); non-combat scenes follow the 3/2/2/1 outcome
@@ -12629,25 +12666,61 @@ fn hms_cape_plans_usable_only_aboard_ship() {
 }
 
 #[test]
-fn sextant_usable_only_at_overworld_night() {
-    // inventory.md §7
-    // Overworld at night (hours 0..=5 and 19..=23) -> usable.
+fn sextant_usable_only_on_the_surface_outdoor_scene_at_night() {
+    // catalogs/item-list.md Sextant row / inventory.md §7: all three of
+    // surface plane, outdoor world scene, and a night hour must hold.
+    let surface = WorldPlane::Britannia.plane_byte();
+    let underworld = WorldPlane::Underworld.plane_byte();
+
+    // Surface outdoor scene at night (hours 0..=5 and 19..=23) -> usable.
     for h in 0u8..=5 {
-        assert!(sextant_usable(0, h), "hour {h}");
+        assert!(sextant_usable(surface, 0, h), "hour {h}");
     }
     for h in 19u8..=23 {
-        assert!(sextant_usable(0, h), "hour {h}");
+        assert!(sextant_usable(surface, 0, h), "hour {h}");
     }
-    // Overworld during daylight (hours 6..=18) -> refused.
+    // Surface outdoor scene during daylight (hours 6..=18) -> refused.
     for h in 6u8..=18 {
-        assert!(!sextant_usable(0, h), "hour {h}");
+        assert!(!sextant_usable(surface, 0, h), "hour {h}");
     }
-    // Non-overworld scenes refuse regardless of hour.
+    // Non-outdoor scenes refuse regardless of hour, on either plane.
     for scene in [1u8, 17, 33, 0xFF] {
         for h in 0u8..24 {
-            assert!(!sextant_usable(scene, h), "scene {scene} hour {h}");
+            assert!(!sextant_usable(surface, scene, h), "scene {scene} hour {h}");
         }
     }
+    // The Underworld fails the plane condition even on the outdoor scene
+    // at a night hour, and it fails it *first*: the position test alone
+    // rejects it, so the night test is never reached.
+    for h in 0u8..24 {
+        assert!(!sextant_usable(underworld, 0, h), "underworld hour {h}");
+    }
+    assert!(!sextant_outdoor_position(underworld, 0));
+    assert!(sextant_outdoor_position(surface, 0));
+
+    // The threshold form of the plane test: the lower half of the byte
+    // range is the surface, the upper half is not.
+    assert!(sextant_outdoor_position(0x7f, 0));
+    assert!(!sextant_outdoor_position(0x80, 0));
+}
+
+#[test]
+fn sextant_night_hour_window_is_not_the_town_lighting_window() {
+    // catalogs/item-list.md: the Sextant/Spyglass night window is
+    // `19..=23` / `0..=5`. `is_town_night_hour` is town lighting's own
+    // window and disagrees at hours 5 and 19, so the two are not
+    // interchangeable.
+    for h in 0u8..=5 {
+        assert!(sextant_night_hour(h), "hour {h}");
+    }
+    for h in 6u8..=18 {
+        assert!(!sextant_night_hour(h), "hour {h}");
+    }
+    for h in 19u8..=23 {
+        assert!(sextant_night_hour(h), "hour {h}");
+    }
+    assert!(sextant_night_hour(5) && !is_town_night_hour(5));
+    assert!(sextant_night_hour(19) && !is_town_night_hour(19));
 }
 
 #[test]
@@ -23394,16 +23467,19 @@ fn dungeon_q_exit_prompt_is_separate_from_save_command() {
 
 #[test]
 fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
-    for (key, expected) in [
-        ('C', "Spell name:"),
-        ('D', "What?"),
-        ('M', MMIX_SPELL_PROMPT_MESSAGE),
-        ('N', "New order:"),
-        ('R', "Ready:"),
-        ('U', "No usable items."),
-        ('W', "What?"),
-        ('Y', "Yell what?"),
-        ('Z', "Player:"),
+    // `inventory.md §8`: R-Ready costs a turn in **every** mode, dungeon
+    // exploration included, and opening the picker is what spends it. The
+    // other letters here only open a prompt and stay free.
+    for (key, expected, expected_turn) in [
+        ('C', "Spell name:", 0),
+        ('D', "What?", 0),
+        ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
+        ('N', "New order:", 0),
+        ('R', "Ready:", 1),
+        ('U', "No usable items.", 0),
+        ('W', "What?", 0),
+        ('Y', "Yell what?", 0),
+        ('Z', "Player:", 0),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 
@@ -23414,7 +23490,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
             state.message
         );
         assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, expected_turn, "{key} turn");
     }
 
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);

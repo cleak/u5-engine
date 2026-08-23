@@ -2823,7 +2823,7 @@ const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
 // belongs to the eight-row panel (inventory.md 5), not to this text. Two
 // Enter steps in a row therefore produce the same frame, so the route
 // equips once and then exits. Unequip stays covered by the runtime test
-// `active_ready_picker_equips_and_unequips_without_turn`.
+// `active_ready_picker_charges_one_turn_for_the_whole_invocation`.
 const VISUAL_KEY_READY_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_r", KeyCode::KeyR),
     VisualKeyStep::key("digit_1", KeyCode::Digit1),

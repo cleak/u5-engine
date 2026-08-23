@@ -635,15 +635,17 @@
             aux3: 0,
         });
 
+        // `traps.md §2.1` branch 3: this party has exactly one
+        // Good-or-Poisoned member, so the acting member is auto-selected
+        // **silently** - no prompt session opens, and the chosen member's
+        // name is not echoed. An earlier revision of this test asserted a
+        // prompt here, on the invented rule that the site always prompts;
+        // that is withdrawn.
         assert_eq!(
             state.get_town_facing(Path::new(""), Scene::new(0x11).unwrap(), 0).unwrap(),
-            MoveOutcome::Observed
+            MoveOutcome::ContainerOpened
         );
-        assert!(state.active_surface_chest.is_some());
-        assert_eq!(
-            state.step_active_surface_chest('1', "").unwrap(),
-            Some(MoveOutcome::ContainerOpened)
-        );
+        assert!(state.active_surface_chest.is_none());
 
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.grid[32 + 2], 16);
@@ -656,6 +658,18 @@
     fn town_object_chest_member_prompt_can_cancel_without_consuming() {
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
+        // `traps.md §2.1`: the prompt is branch 3's two-or-more case, so
+        // it needs a second Good-or-Poisoned member to appear at all.
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
         state.active_objects.push(ActiveObject {
             type_byte: 0x4f,
             tile: 0x4f,
@@ -677,6 +691,216 @@
         assert!(!state.active_objects[1].is_empty());
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "None!");
+    }
+
+    /// `traps.md §2.1` branch 3: exactly one Good-or-Poisoned member is
+    /// auto-selected **silently**, and it is that member the trap hits -
+    /// not slot 0, and not the first roster position. The invented tail
+    /// this replaces ("active player, else slot 0") got this case wrong.
+    #[test]
+    fn container_trap_auto_selects_the_single_able_member_silently() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x4f;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.party[0].status = b'S';
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0xff,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.surface_container_acting_member(),
+            ActingMemberSelection::Selected(1)
+        );
+        assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+        assert!(state.active_surface_chest.is_none());
+        // The name of the auto-selected member is not echoed; §2.1 is
+        // explicit that only a prompted pick echoes it.
+        assert!(!state.message.contains("Who opens?"));
+    }
+
+    /// `traps.md §2.1` branch 2: a set active character is returned
+    /// directly and silently, with **no status re-check**. The hint screens
+    /// for Dead and Asleep only at the moment it is set, so a member who has
+    /// since become disabled can still be the trap victim. This is one of
+    /// the two override branches that skip the status test, and it is why
+    /// the stronger reading - "a party with no able-bodied member can never
+    /// spring a container trap" - is false without its scope.
+    #[test]
+    fn container_trap_active_hint_wins_without_a_status_recheck() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'S',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+        state.party.push(PartyMember {
+            slot: 2,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+        state.active_player = Some(1);
+
+        // Slot 1 is Asleep and would fail the branch-3 scan outright, yet
+        // the hint delivers it anyway.
+        assert!(!acting_member_status_eligible(state.party[1].status));
+        assert_eq!(
+            state.surface_container_acting_member(),
+            ActingMemberSelection::Selected(1)
+        );
+        assert_eq!(
+            state.dungeon_container_acting_member(),
+            ActingMemberSelection::Selected(1)
+        );
+    }
+
+    /// `traps.md §2.1` branch 3, zero-match case: the command reports that
+    /// nobody is able and aborts **before** the trap can fire. The
+    /// container is left untouched and no turn is spent.
+    #[test]
+    fn container_trap_aborts_when_nobody_is_able() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x4f;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.party[0].status = b'D';
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'A',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0xff,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.surface_container_acting_member(),
+            ActingMemberSelection::NoneAble
+        );
+        assert_eq!(state.open_facing(), MoveOutcome::Blocked);
+        assert!(state.active_surface_chest.is_none());
+        assert_eq!(state.turn, 0);
+        // The trap never ran: the container record is still there.
+        assert!(!state.active_objects[1].is_empty());
+        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
+    }
+
+    /// `traps.md §2.1`/§4: the combat override is branch 1, and the `O`
+    /// dispatcher routes combat-class scenes to the **surface/town**
+    /// handler, so the override can fire there and can never fire at the
+    /// dungeon chest site. It is also silent: no prompt and no status test,
+    /// so it fires even for a party with nobody able.
+    #[test]
+    fn container_trap_combat_override_is_surface_only() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party[0].status = b'D';
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'S',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+        state.combat_active = true;
+        state.pending_combat_actor_slot = Some(1);
+
+        assert_eq!(
+            state.surface_container_acting_member(),
+            ActingMemberSelection::Selected(1)
+        );
+        // Same state, dungeon site: the override is unreachable, so the
+        // selection falls through to the scan, which finds nobody able.
+        assert_eq!(
+            state.dungeon_container_acting_member(),
+            ActingMemberSelection::NoneAble
+        );
+    }
+
+    /// `traps.md §4` / `containers.md`: Open clears the matched container
+    /// record outright - kind, position, and the byte carrying the trap
+    /// flag - after copying that byte and before testing it. So the trap
+    /// fires on this open and **a trapped surface or town container cannot
+    /// spring a second time**: a later Open of the same square matches no
+    /// container at all. `traps.md` §4 published this as an UNVERIFIED gap
+    /// and has since withdrawn that wording.
+    #[test]
+    fn trapped_town_container_cannot_spring_twice() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x4f;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0xff,
+            aux3: 0,
+        });
+
+        assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+        assert!(state.message.contains("trap"));
+
+        // Every field the clear covers is zeroed, the trap flag included.
+        let record = state.active_objects[1];
+        assert!(record.is_empty());
+        assert_eq!(record.type_byte, 0);
+        assert_eq!(record.tile, 0);
+        assert_eq!((record.x, record.y, record.z), (0, 0, 0));
+        assert_eq!(record.aux1, 0);
+        assert!(state.surface_object_chest_slot_at(2, 1).is_none());
+
+        // A second Open matches no container and springs nothing.
+        let hp_after_first = state.party[0].hp;
+        let turn_after_first = state.turn;
+        assert_eq!(state.open_facing(), MoveOutcome::Blocked);
+        assert_eq!(state.message, "Nothing to open!");
+        assert_eq!(state.party[0].hp, hp_after_first);
+        assert_eq!(state.turn, turn_after_first);
     }
 
     #[test]

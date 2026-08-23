@@ -1502,11 +1502,39 @@ impl PlayState {
         true
     }
 
+    /// `inventory.md §5`/§8/§9: R-Ready costs a turn in every mode, and a
+    /// refusal costs exactly what a success costs — there is no free
+    /// retry. The charge is **per invocation**, not per attempt: §5 keeps
+    /// the picker open across repeated attempts within that one turn, so
+    /// this runs at the command's entry points and never inside
+    /// [`Self::ready_equipment`], which the picker calls again for each
+    /// confirmed row.
+    ///
+    /// The charge cannot be reached from the ammunition early exit or any
+    /// other exit inside the cascade: §9 records that the dispatcher's `R`
+    /// arm marks the actor as having acted **at entry** and never rewrites
+    /// that on the route, so the cascade sits below the value the mode
+    /// loop reads.
+    ///
+    /// In combat §8 spends the acting combatant's action instead of a
+    /// world turn, and only an actor that fails the live-actor gate
+    /// escapes the cost; the combat-side action accounting is owned by the
+    /// round walk, so no world turn is charged here.
+    fn charge_ready_equipment_turn(&mut self) {
+        if !self.combat_active {
+            self.advance_turn();
+        }
+    }
+
     pub fn start_ready_equipment(&mut self) -> MoveOutcome {
         if self.party.is_empty() {
             self.message = "No party members are available.".to_string();
             return MoveOutcome::Blocked;
         }
+        // `inventory.md §8`: opening the picker and immediately backing
+        // out still costs the turn, so the charge lands here rather than
+        // on a completed equip.
+        self.charge_ready_equipment_turn();
         self.active_ready = Some(ReadySession::new());
         self.message = self.render_active_ready();
         MoveOutcome::Observed
@@ -1522,6 +1550,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
+        // Reached from combat only after `start_combat_ready_equipment`'s
+        // live-actor gate, which is the one escape `inventory.md §8`
+        // allows; that path charges no world turn.
+        self.charge_ready_equipment_turn();
         let mut session = ReadySession::with_party(party_index);
         self.normalize_ready_cursor(&mut session);
         self.active_ready = Some(session);
@@ -2252,6 +2284,11 @@ impl PlayState {
     }
 
     pub fn ready_equipment_from_suffix(&mut self, suffix: &str) -> MoveOutcome {
+        // `inventory.md §8`: the inline one-shot form is a whole R-Ready
+        // invocation, so it carries the turn charge for every outcome
+        // below — including the silently refused ammunition row, which
+        // leaves no message at all.
+        self.charge_ready_equipment_turn();
         let request = match parse_inline_ready_request(suffix) {
             Ok(Some(request)) => request,
             Ok(None) => {
@@ -2266,6 +2303,12 @@ impl PlayState {
         self.ready_equipment(request)
     }
 
+    /// `inventory.md §6`: the eligibility cascade and the readied-slot
+    /// writes. This charges **no** turn of its own — the picker calls it
+    /// once per confirmed row inside a single R-Ready invocation, and §5
+    /// keeps that invocation to one turn however many rows are attempted.
+    /// [`Self::charge_ready_equipment_turn`] owns the charge at the
+    /// command's entry points.
     pub fn ready_equipment(&mut self, request: InlineReadyRequest) -> MoveOutcome {
         let party_len = self.party.len();
         if request.party_index >= party_len {

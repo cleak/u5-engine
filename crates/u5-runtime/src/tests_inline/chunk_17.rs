@@ -1962,8 +1962,13 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `inventory.md §5`/§8: R-Ready costs a turn in every mode, and a
+    /// refusal costs exactly what a success costs. An earlier revision of
+    /// this suite asserted the equip and the unequip were both free; §8
+    /// was re-challenged and re-derived from the shipped binaries and
+    /// stands as published, so that assertion is withdrawn.
     #[test]
-    fn ready_equipment_equips_and_unequips_without_turn() {
+    fn ready_equipment_equips_and_unequips_charging_one_turn_each() {
         let mut state = test_state(open_grid(), 1, 1);
         state.party_strengths = vec![50];
         state.party_equipment = default_party_equipment(1);
@@ -1980,17 +1985,60 @@
             EQUIPMENT_ID_BOW as u8
         );
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
 
         assert_eq!(state.ready_equipment_from_suffix("1/26"), MoveOutcome::Used);
 
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 2);
     }
 
+    /// `inventory.md §8`: every refusal costs what a success costs. The
+    /// silently refused ammunition row is the interesting one — §9 records
+    /// that the `R` arm marks the actor as having acted at entry, three
+    /// call levels above the ammunition test, so that early exit cannot
+    /// reach the charge. The refusal stays silent; only the turn moves.
     #[test]
-    fn active_ready_picker_equips_and_unequips_without_turn() {
+    fn ready_equipment_charges_a_turn_on_every_refusal() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![50];
+        state.party_equipment = default_party_equipment(1);
+
+        // Silent ammunition-row refusal: no message written, turn spent.
+        state.message = "sentinel".to_string();
+        assert_eq!(
+            state.ready_equipment_from_suffix(&format!("1/{EQUIPMENT_ID_ARROWS}")),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "sentinel");
+        assert_eq!(state.turn, 1);
+
+        // Empty-handed refusal.
+        assert_eq!(
+            state.ready_equipment_from_suffix(&format!("1/{EQUIPMENT_ID_BOW}")),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, format!("No carried {} to ready.", equipment_name(EQUIPMENT_ID_BOW)));
+        assert_eq!(state.turn, 2);
+
+        // Missing-ammunition refusal for a carried ranged weapon.
+        state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+        assert_eq!(
+            state.ready_equipment_from_suffix(&format!("1/{EQUIPMENT_ID_BOW}")),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "No arrows for that weapon.");
+        assert_eq!(state.turn, 3);
+    }
+
+    /// `inventory.md §5`/§8: the charge is **per invocation**, not per
+    /// attempt — the picker stays open across repeated attempts within
+    /// that one turn, so opening it costs one turn and the equip and
+    /// unequip inside it cost nothing further. An earlier revision of this
+    /// suite asserted the whole sequence was free; that is withdrawn.
+    #[test]
+    fn active_ready_picker_charges_one_turn_for_the_whole_invocation() {
         let mut state = test_state(open_grid(), 1, 1);
         state.party_strengths = vec![50];
         state.party_equipment = default_party_equipment(1);
@@ -2003,6 +2051,10 @@
         );
         assert!(state.active_ready.is_some());
         assert!(state.message.contains("choose party member"));
+        // Opening the picker is the invocation, and it is what costs the
+        // turn: `inventory.md §8` charges even for opening it and
+        // immediately backing out.
+        assert_eq!(state.turn, 1);
 
         handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
         assert!(state.message.contains("26: Bow"));
@@ -2013,7 +2065,7 @@
             EQUIPMENT_ID_BOW as u8
         );
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert!(state.active_ready.is_some());
         assert!(state.message.contains("Readied Bow"));
         assert!(state.message.contains("26: Bow"));
@@ -2021,12 +2073,13 @@
         handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert!(state.message.contains("Unequipped Bow"));
 
         handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
         assert!(state.active_ready.is_none());
         assert_eq!(state.message, "Ready closed.");
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
