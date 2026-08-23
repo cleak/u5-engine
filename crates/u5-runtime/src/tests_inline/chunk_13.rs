@@ -3233,27 +3233,27 @@ fn spell_scene_bit_and_mp_cost_route_through_named_constants() {
     // Scene-byte classifier routes through the SCENE_* ranges.
     assert_eq!(
         spell_scene_bit_for_scene_byte(SCENE_OVERWORLD),
-        SPELL_SCENE_OVERWORLD
+        SPELL_SCENE_BIT_OVERWORLD
     );
     assert_eq!(
         spell_scene_bit_for_scene_byte(SCENE_TOWN_FAMILY_FIRST),
-        SPELL_SCENE_INDOOR,
+        SPELL_SCENE_BIT_INDOOR,
     );
     assert_eq!(
         spell_scene_bit_for_scene_byte(SCENE_TOWN_FAMILY_LAST),
-        SPELL_SCENE_INDOOR,
+        SPELL_SCENE_BIT_INDOOR,
     );
     assert_eq!(
         spell_scene_bit_for_scene_byte(SCENE_DUNGEON_FAMILY_FIRST),
-        SPELL_SCENE_DUNGEON,
+        SPELL_SCENE_BIT_DUNGEON,
     );
     assert_eq!(
         spell_scene_bit_for_scene_byte(SCENE_DUNGEON_FAMILY_LAST),
-        SPELL_SCENE_DUNGEON,
+        SPELL_SCENE_BIT_DUNGEON,
     );
     assert_eq!(
         spell_scene_bit_for_scene_byte(SCENE_COMBAT_TEMPORARY),
-        SPELL_SCENE_COMBAT,
+        SPELL_SCENE_BIT_COMBAT,
     );
     // MP cost = (spell_index / SPELLS_PER_CIRCLE) + 1 — circle 1 = 1 MP,
     // circle 8 = 8 MP.
@@ -20827,25 +20827,25 @@ fn spell_mp_cost_follows_eight_circles_of_six_layout() {
 fn spell_scene_bit_for_scene_byte_matches_published_partition() {
     // catalogs/spell-list.md §4: scene-byte to single-bit mapping.
     // 0 -> overworld, 1..=32 -> indoor, 33..=127 -> dungeon, >=0x80 -> combat.
-    assert_eq!(spell_scene_bit_for_scene_byte(0), SPELL_SCENE_OVERWORLD);
+    assert_eq!(spell_scene_bit_for_scene_byte(0), SPELL_SCENE_BIT_OVERWORLD);
     for byte in 1..=32u8 {
         assert_eq!(
             spell_scene_bit_for_scene_byte(byte),
-            SPELL_SCENE_INDOOR,
+            SPELL_SCENE_BIT_INDOOR,
             "byte {byte} should be indoor"
         );
     }
     for byte in [33u8, 40, 100, 127] {
         assert_eq!(
             spell_scene_bit_for_scene_byte(byte),
-            SPELL_SCENE_DUNGEON,
+            SPELL_SCENE_BIT_DUNGEON,
             "byte {byte} should be dungeon"
         );
     }
     for byte in [0x80u8, 0x90, 0xC0, 0xFF] {
         assert_eq!(
             spell_scene_bit_for_scene_byte(byte),
-            SPELL_SCENE_COMBAT,
+            SPELL_SCENE_BIT_COMBAT,
             "byte 0x{byte:02X} should be combat"
         );
     }

@@ -2863,7 +2863,10 @@ impl PlayState {
     }
 
     pub fn cast_x_ray(&mut self, caster_index: usize) -> MoveOutcome {
-        if !spell_allowed_in_area(X_RAY_SPELL_INDEX, self.area) {
+        // `catalogs/spell-list.md §5` id 33 publishes X-Ray as `I/O`, so it
+        // must also reject inside a fight that started in a town. The
+        // area-only helper cannot see `combat_active`.
+        if !self.spell_allowed_in_current_cast_context(X_RAY_SPELL_INDEX) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }

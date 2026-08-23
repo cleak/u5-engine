@@ -419,7 +419,8 @@ pub use magic::{
     heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable, sextant_coordinate_letters,
     spell_allowed_in_scene, spell_charge_add_capped, spell_circle_for, spell_combat_field_kind,
     spell_common_name, spell_field_placement_byte, spell_indoor_absorbs, spell_mana_cost,
-    spell_min_caster_level, spell_route_family, spell_rune_name, spell_selector_is_ignored,
+    spell_min_caster_level, spell_route_family, spell_rune_name, spell_scene_class_for_scene_byte,
+    spell_selector_is_ignored,
 };
 pub use main_loop::{
     CommandDispatchStatus, DUNGEON_DOOM_SCENE_BYTE, DUNGEON_ENTRY_SURFACE_X,

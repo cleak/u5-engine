@@ -710,15 +710,44 @@ impl PlayState {
             && is_probe_walkable(self.combat_terrain[y][x])
     }
 
+    /// `catalogs/spell-list.md §4`: the active scene byte for the cast
+    /// dispatcher's scene gate.
+    ///
+    /// `PlayState` has no stored scene byte during combat — it keeps `area`
+    /// pointed at the map the fight started from and raises the
+    /// `combat_active` flag — so combat is converted back to the published
+    /// combat-class byte [`SCENE_COMBAT_TEMPORARY`] (`0xFF`) here. Both
+    /// world planes report the single published overworld byte `0`; the
+    /// catalog's classification bands do not split Britannia from the
+    /// Underworld.
+    pub fn current_scene_byte(&self) -> u8 {
+        if self.combat_active {
+            return SCENE_COMBAT_TEMPORARY;
+        }
+        match self.area {
+            Area::World { .. } => SCENE_OVERWORLD,
+            Area::Town { scene, .. } => scene.byte,
+            Area::Dungeon { scene, .. } => scene.byte,
+        }
+    }
+
+    /// `magic.md §9` scene class the cast dispatcher's scene gate tests
+    /// against the per-spell allow mask.
+    pub fn current_spell_scene_class(&self) -> SpellSceneClass {
+        spell_scene_class_for_scene_byte(self.current_scene_byte())
+    }
+
+    /// `magic.md §7` gate 5 / `magic.md §9`: does the spell's published
+    /// allow mask carry the active scene's bit? The dispatcher rejects with
+    /// `Not here!` when it does not.
     pub fn spell_allowed_in_current_cast_context(&self, spell_index: usize) -> bool {
         if spell_index >= SPELL_COUNT {
             return false;
         }
-        if self.combat_active {
-            SPELL_SCENE_MASKS[spell_index] & SPELL_SCENE_COMBAT != 0
-        } else {
-            spell_allowed_in_area(spell_index, self.area)
-        }
+        spell_allowed_in_scene(
+            SPELL_SCENE_MASKS[spell_index],
+            self.current_spell_scene_class(),
+        )
     }
 
     pub fn combat_arena_field_placement_callback_accepts(
