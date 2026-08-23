@@ -703,7 +703,74 @@ impl PlayState {
             self.active_objects.push(object);
             return Some(self.active_objects.len() - 1);
         }
+        // `active-objects.md §4`: taking an empty ordinary slot "is not the
+        // whole contract: if the ordinary range is full, acquisition can evict
+        // a lower-priority object." Run the deterministic ten-phase cascade
+        // rather than failing the acquisition.
+        let slot = self.active_object_eviction_victim()?;
+        self.free_active_object_slot(slot);
+        self.active_objects[slot] = object;
+        self.mark_visibility_dirty();
+        Some(slot)
+    }
+
+    /// `active-objects.md §4` eviction cascade. Runs at *acquisition* time --
+    /// the spec places eviction in the allocator ("acquisition can evict a
+    /// lower-priority object"), and §8.1 confirms the split: "Eviction is
+    /// demand-driven - it runs when acquisition needs a slot and the range is
+    /// full - and chooses a victim by class priority. Pruning is time-driven,
+    /// runs every overworld turn regardless of pressure, and chooses by
+    /// position alone." The per-turn sweep is the separate §8.1 prune pass
+    /// ([`Self::prune_far_overworld_objects`]); the two must not be collapsed.
+    /// `encounters.md §4` corroborates the trigger: on a successful spawn "the
+    /// spawner acquires or evicts an active-object slot".
+    ///
+    /// Phases run in published order 1..=10, and within each phase the
+    /// ordinary acquisition range is scanned lowest-index-up, matching the
+    /// allocator's own scan discipline. Only slots whose
+    /// [`active_object_slot_role`] is `OrdinaryAcquisition` are candidates, so
+    /// slot 0 (the player) and the reserved slots 24..=31 can never be taken.
+    /// Type byte [`ACTIVE_OBJECT_PROTECTED_TYPE_BYTE`] (`0xB5`) is the only
+    /// universally protected byte-0 value and is rejected by every phase,
+    /// last-resort phase 10 included.
+    ///
+    /// Phase 1 (the empty-slot phase) is included for completeness; the caller
+    /// has already exhausted it.
+    pub fn active_object_eviction_victim(&self) -> Option<usize> {
+        let mut phase = ACTIVE_OBJECT_EVICTION_PHASE_FIRST;
+        while phase <= ACTIVE_OBJECT_EVICTION_PHASE_LAST {
+            let phase_needs_off_screen = active_object_eviction_phase_is_off_screen(phase);
+            for (slot, candidate) in self.active_objects.iter().enumerate() {
+                if !matches!(
+                    active_object_slot_role(slot),
+                    Some(ActiveObjectSlotRole::OrdinaryAcquisition)
+                ) {
+                    continue;
+                }
+                if !active_object_eviction_byte_accepted(candidate.type_byte, phase) {
+                    continue;
+                }
+                if phase_needs_off_screen && !self.active_object_off_screen(*candidate) {
+                    continue;
+                }
+                return Some(slot);
+            }
+            phase += 1;
+        }
         None
+    }
+
+    /// `active-objects.md §4` off-screen gate for the eviction cascade's
+    /// phases 2..=5: a square window centred on the player's current cell,
+    /// each axis tested independently in unsigned eight-bit arithmetic. Not a
+    /// radius and not a disc.
+    pub fn active_object_off_screen(&self, object: ActiveObject) -> bool {
+        active_object_eviction_off_screen(
+            object.x as u8,
+            object.y as u8,
+            self.player.x as u8,
+            self.player.y as u8,
+        )
     }
 
     #[cfg(test)]

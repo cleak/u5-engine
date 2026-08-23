@@ -1039,10 +1039,15 @@
             scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
             floor: 0,
         };
+        // active-objects.md §4: a full ordinary range is no longer a
+        // failed acquisition on its own -- the eviction cascade takes a
+        // lower-priority victim. Only 0xB5 is universally protected and
+        // rejected by every phase including the last resort, so a table
+        // packed with 0xB5 is the one that genuinely has no slot to give.
         town.active_objects.resize(
             OOL_SLOTS,
             ActiveObject {
-                type_byte: 0x10,
+                type_byte: ACTIVE_OBJECT_PROTECTED_TYPE_BYTE,
                 tile: 0x10,
                 x: 0,
                 y: 0,

@@ -1508,9 +1508,19 @@ pub fn world_scroll_base_axis(position: usize) -> usize {
     }
 }
 
+/// `active-objects.md §8.1`: `true` when `(x, y)` is inside the
+/// loaded overworld window, measured **forward** from `scroll_base`
+/// (the window's origin corner) on both axes independently. The
+/// complement of [`crate::active_object_should_prune`], which owns the
+/// contract and the unsigned eight-bit arithmetic; this wrapper only
+/// adapts the `usize` world-coordinate calling convention.
 pub fn world_scroll_neighborhood_contains(scroll_base: (usize, usize), x: usize, y: usize) -> bool {
-    world_scroll_axis_offset(scroll_base.0, x) <= ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS
-        && world_scroll_axis_offset(scroll_base.1, y) <= ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS
+    !crate::active_object_should_prune(
+        (x % WORLD_SIDE) as u8,
+        (y % WORLD_SIDE) as u8,
+        (scroll_base.0 % WORLD_SIDE) as u8,
+        (scroll_base.1 % WORLD_SIDE) as u8,
+    )
 }
 
 pub fn world_scroll_axis_offset(base: usize, coordinate: usize) -> usize {

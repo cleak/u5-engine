@@ -234,13 +234,13 @@ pub fn parse_world_encounter_entries(text: &str) -> io::Result<Vec<WorldEncounte
                 format!("{WORLD_ENCOUNTER_TABLE_FILE} line {line_number} offset cannot be 0,0"),
             ));
         }
-        if dx.unsigned_abs() > ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS as u8
-            || dy.unsigned_abs() > ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS as u8
+        if dx.unsigned_abs() > WORLD_ENCOUNTER_SPAWN_OFFSET_MAX_AXIS
+            || dy.unsigned_abs() > WORLD_ENCOUNTER_SPAWN_OFFSET_MAX_AXIS
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "{WORLD_ENCOUNTER_TABLE_FILE} line {line_number} offset must stay within +/-{ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS}"
+                    "{WORLD_ENCOUNTER_TABLE_FILE} line {line_number} offset must stay within +/-{WORLD_ENCOUNTER_SPAWN_OFFSET_MAX_AXIS}"
                 ),
             ));
         }

@@ -1044,11 +1044,15 @@
         assert_eq!(poor.gold, 99);
         assert_eq!(poor.active_objects.len(), 1);
 
+        // active-objects.md §4: only 0xB5 is universally protected and
+        // rejected by every eviction phase, last resort included. A table
+        // packed with anything else is now recoverable by the cascade, so
+        // 0xB5 is what a genuine "no slot" case looks like.
         let mut full = test_state(open_grid(), 3, 4);
         full.gold = 500;
         full.active_objects = (0..OOL_SLOTS)
             .map(|slot| ActiveObject {
-                type_byte: 1,
+                type_byte: ACTIVE_OBJECT_PROTECTED_TYPE_BYTE,
                 tile: 1,
                 x: slot,
                 y: 0,
@@ -1068,6 +1072,55 @@
             .active_objects
             .iter()
             .any(|object| object.type_byte == HORSE_PARKED_FIRST));
+    }
+
+    #[test]
+    fn horse_purchase_evicts_a_low_priority_slot_when_the_range_is_full() {
+        // active-objects.md §4: "if the ordinary range is full,
+        // acquisition can evict a lower-priority object." Before this was
+        // wired, a full table silently failed the purchase.
+        let mut state = test_state(open_grid(), 3, 4);
+        state.gold = 500;
+        state.active_objects = (0..OOL_SLOTS)
+            .map(|slot| ActiveObject {
+                type_byte: 0x05,
+                tile: 0x05,
+                x: slot,
+                y: 0,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            })
+            .collect();
+
+        let bought = state
+            .buy_horse(Stable::HorseAndRider, 9, 8)
+            .expect("full ordinary range must evict rather than refuse");
+        assert_eq!(state.gold, 400);
+        // Phase 2 is scenery 0x01..=0x0F **off-screen only**, so it takes
+        // the lowest ordinary slot that is outside the player's square
+        // on-screen window. The fixture puts slot N at (N, 0) with the
+        // player at (3, 4): |N - 3| first exceeds the five-cell half-window
+        // at N = 9, so slot 9 is the victim and slots 1..=8 -- on-screen
+        // and therefore ineligible in phase 2 -- survive. That the
+        // off-screen gate, not merely the lowest index, picks the victim is
+        // the point of this assertion.
+        assert_eq!(bought.active_object_slot, 9);
+        assert_eq!(state.active_objects[9].type_byte, HORSE_PARKED_FIRST);
+        for slot in ACTIVE_OBJECT_ORDINARY_FIRST..9 {
+            assert_eq!(
+                state.active_objects[slot].type_byte, 0x05,
+                "on-screen slot {slot} is not eligible for off-screen phase 2"
+            );
+        }
+        // active-objects.md §4: slot 0 is the player and the reserved
+        // band 24..=31 sits outside the allocator; neither is ever a
+        // victim.
+        assert_eq!(state.active_objects[ACTIVE_OBJECT_PLAYER_SLOT].type_byte, 0x05);
+        for slot in ACTIVE_OBJECT_RESERVED_FIRST..=ACTIVE_OBJECT_RESERVED_LAST {
+            assert_eq!(state.active_objects[slot].type_byte, 0x05);
+        }
     }
 
     #[test]

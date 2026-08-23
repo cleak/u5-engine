@@ -13887,23 +13887,64 @@ fn town_tile_marker_classifies_harvested_bytes() {
 }
 
 #[test]
-fn active_object_eviction_off_screen_matches_spec_radius() {
-    // active-objects.md §4
-    assert_eq!(ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS, 5);
-    // Inside radius -> on-screen.
+fn active_object_eviction_off_screen_is_a_square_window_not_a_radius() {
+    // active-objects.md §4: "a candidate more than roughly five cells
+    // from the player in either axis is considered eligible for the
+    // off-screen phases". Both axes are tested separately against the
+    // same bound; there is no distance, no hypotenuse and no disc.
+    assert_eq!(ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW, 5);
+    // Inside the window -> on-screen.
     assert!(!active_object_eviction_off_screen(50, 50, 50, 50));
     assert!(!active_object_eviction_off_screen(45, 50, 50, 50));
     assert!(!active_object_eviction_off_screen(55, 50, 50, 50));
     assert!(!active_object_eviction_off_screen(50, 55, 50, 50));
-    // At the radius -> still on-screen (strictly greater than).
+    // At the bound -> still on-screen (strictly greater than).
     assert!(!active_object_eviction_off_screen(45, 55, 50, 50));
-    // Past the radius in either axis -> off-screen.
+    // Past the bound in either axis -> off-screen.
     assert!(active_object_eviction_off_screen(44, 50, 50, 50));
     assert!(active_object_eviction_off_screen(56, 50, 50, 50));
     assert!(active_object_eviction_off_screen(50, 44, 50, 50));
     assert!(active_object_eviction_off_screen(50, 56, 50, 50));
     // Far away in both axes.
     assert!(active_object_eviction_off_screen(10, 10, 100, 100));
+}
+
+#[test]
+fn active_object_eviction_off_screen_keeps_the_window_corners() {
+    // active-objects.md §4 / §8.1: the square window's diagonal corner
+    // is 5 cells out on both axes. A Euclidean radius (~7.07) or a
+    // squared-distance threshold (50 > 25) would call it off-screen;
+    // the published per-axis test keeps it. This is the exact shape
+    // error §8.1 calls out, pinned so it cannot regress.
+    for (dx, dy) in [(5i32, 5i32), (-5, 5), (5, -5), (-5, -5)] {
+        let x = (100 + dx) as u8;
+        let y = (100 + dy) as u8;
+        assert!(
+            !active_object_eviction_off_screen(x, y, 100, 100),
+            "square-window corner ({dx},{dy}) must stay on-screen"
+        );
+    }
+    // One cell past the corner on a single axis leaves the window.
+    assert!(active_object_eviction_off_screen(106, 105, 100, 100));
+    assert!(active_object_eviction_off_screen(105, 106, 100, 100));
+}
+
+#[test]
+fn active_object_eviction_off_screen_wraps_across_the_map_seam() {
+    // active-objects.md §8 states the outdoor per-turn walker's
+    // proximity tests in wrapped dx/dy (cf.
+    // outdoor_water_creature_attack_aligned). A player at x=2 and a
+    // slot at x=253 are five cells apart across the 256-cell seam, so
+    // the slot is on-screen. Signed or wider arithmetic would report
+    // ~251 cells and evict it.
+    assert!(!active_object_eviction_off_screen(253, 2, 2, 2));
+    assert!(!active_object_eviction_off_screen(2, 253, 2, 2));
+    // Six cells across the seam is outside the window.
+    assert!(active_object_eviction_off_screen(252, 2, 2, 2));
+    assert!(active_object_eviction_off_screen(2, 252, 2, 2));
+    // Symmetric from the other side of the seam.
+    assert!(!active_object_eviction_off_screen(2, 253, 253, 253));
+    assert!(active_object_eviction_off_screen(3, 253, 253, 253));
 }
 
 #[test]
@@ -19520,22 +19561,72 @@ fn active_object_field_offsets_match_spec() {
 }
 
 #[test]
-fn active_object_should_prune_matches_spec_radius() {
-    // active-objects.md §10
-    assert_eq!(ACTIVE_OBJECT_PRUNE_RADIUS, 32);
+fn active_object_should_prune_is_a_square_window_from_the_scroll_base() {
+    // active-objects.md §8.1: the pass "compares the slot's stored X
+    // and Y against the current scroll base - the top-left corner of
+    // the loaded window - and keeps the slot only when both
+    // differences fall within thirty-two. Failing either axis releases
+    // the slot."
+    //
+    // The base is a CORNER, not a centre: the window runs forward from
+    // it. An earlier revision of this test asserted a centred +/-32
+    // band, which §8.1 refutes.
+    assert_eq!(ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT, 32);
     assert_eq!(ACTIVE_OBJECT_SAVE_BYTES, 256);
-    // Inside the radius: keep
+    // Inside the window (forward from the base on both axes): keep.
     assert!(!active_object_should_prune(100, 100, 100, 100));
     assert!(!active_object_should_prune(132, 100, 100, 100));
-    assert!(!active_object_should_prune(100, 68, 100, 100));
-    // Just outside: prune
+    assert!(!active_object_should_prune(100, 132, 100, 100));
+    assert!(!active_object_should_prune(132, 132, 100, 100));
+    // One past the bound on either axis: prune.
     assert!(active_object_should_prune(133, 100, 100, 100));
-    assert!(active_object_should_prune(67, 100, 100, 100));
     assert!(active_object_should_prune(100, 133, 100, 100));
-    assert!(active_object_should_prune(100, 67, 100, 100));
-    // Either-axis boundary
-    assert!(active_object_should_prune(200, 100, 100, 100));
-    assert!(active_object_should_prune(100, 0, 100, 100));
+    // Behind the base is outside the window, not inside a centred band.
+    assert!(active_object_should_prune(99, 100, 100, 100));
+    assert!(active_object_should_prune(100, 99, 100, 100));
+    assert!(active_object_should_prune(68, 100, 100, 100));
+    assert!(active_object_should_prune(100, 68, 100, 100));
+}
+
+#[test]
+fn active_object_should_prune_keeps_the_window_corners() {
+    // active-objects.md §8.1: "It is a square window, not a radius.
+    // The two axes are tested separately and independently against the
+    // same bound. There is no distance computation, no hypotenuse and
+    // no disc. Naming this quantity a radius invites an implementation
+    // to compute a Euclidean or squared distance, which prunes the
+    // corners of the window that the original keeps."
+    //
+    // The far corner is 32 out on both axes: Euclidean ~45.25 and
+    // squared 2048 both exceed 32, so either metric would prune it.
+    assert!(!active_object_should_prune(132, 132, 100, 100));
+    // And the corner is genuinely the extreme: one further on either
+    // axis leaves the window.
+    assert!(active_object_should_prune(133, 132, 100, 100));
+    assert!(active_object_should_prune(132, 133, 100, 100));
+}
+
+#[test]
+fn active_object_should_prune_wraps_in_unsigned_eight_bit_arithmetic() {
+    // active-objects.md §8.1: "The difference is formed in unsigned
+    // eight-bit arithmetic against the scroll base, so it wraps
+    // naturally with the 256-cell coordinate space rather than needing
+    // a special case at the map seam. An implementation using signed
+    // or wider arithmetic will mis-handle objects across the wrap."
+    //
+    // Scroll base near the top of the coordinate space: the window
+    // runs off the end and resumes at zero.
+    assert!(!active_object_should_prune(240, 240, 240, 240));
+    assert!(!active_object_should_prune(255, 255, 240, 240));
+    assert!(!active_object_should_prune(0, 0, 240, 240)); // 0 - 240 = 16
+    assert!(!active_object_should_prune(16, 16, 240, 240)); // 16 - 240 = 32
+    // One cell past the wrapped bound.
+    assert!(active_object_should_prune(17, 16, 240, 240));
+    assert!(active_object_should_prune(16, 17, 240, 240));
+    // Signed subtraction would make this look like -239 (inside a
+    // +/-32 band on the wrong side); unsigned makes it 17.
+    assert!(active_object_should_prune(1, 1, 240, 240) == false);
+    assert!(active_object_should_prune(240, 1, 1, 1)); // 240 - 1 = 239
 }
 
 #[test]
@@ -20135,15 +20226,16 @@ fn ship_transport_heading_index_decodes_low_two_bits() {
 #[test]
 fn active_object_slot_partition_constants_match_section_four() {
     // active-objects.md §4: slot 0 player; ordinary 1..=23; reserved
-    // 24..=31; 0xB5 is the universally protected byte-0; off-screen
-    // test radius is five cells.
+    // 24..=31; 0xB5 is the universally protected byte-0; the
+    // off-screen eviction window has a five-cell half-extent (a
+    // square window per active-objects.md §8.1, not a radius).
     assert_eq!(ACTIVE_OBJECT_PLAYER_SLOT, 0);
     assert_eq!(ACTIVE_OBJECT_ORDINARY_FIRST, 1);
     assert_eq!(ACTIVE_OBJECT_ORDINARY_LAST, 23);
     assert_eq!(ACTIVE_OBJECT_RESERVED_FIRST, 24);
     assert_eq!(ACTIVE_OBJECT_RESERVED_LAST, 31);
     assert_eq!(ACTIVE_OBJECT_PROTECTED_TYPE_BYTE, 0xB5);
-    assert_eq!(ACTIVE_OBJECT_OFF_SCREEN_RADIUS, 5);
+    assert_eq!(ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW, 5);
 }
 
 #[test]

@@ -1140,10 +1140,12 @@ pub const ACTIVE_OBJECT_RESERVED_LAST: usize = 31;
 /// Universally protected byte-0 value: never an eviction victim, never
 /// recycled by the slot allocator's last-resort phase.
 pub const ACTIVE_OBJECT_PROTECTED_TYPE_BYTE: u8 = 0xB5;
-/// `active-objects.md` §4 off-screen test radius. A candidate more than
-/// roughly five cells from the player in either axis is eligible for the
-/// off-screen eviction phases.
-pub const ACTIVE_OBJECT_OFF_SCREEN_RADIUS: usize = 5;
+// `active-objects.md` §4 off-screen eviction window bound lives beside
+// the predicate that consumes it, as
+// `crate::ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW`. There is no
+// second copy here: one name per quantity, and the dead
+// `ACTIVE_OBJECT_OFF_SCREEN_RADIUS` duplicate that used to sit on this
+// line has been removed.
 
 pub const SPELL_CODES: [&str; SPELL_COUNT] = [
     "IL", "GP", "AZ", "AN", "M", "AY", "AS", "ACX", "HR", "IW", "KX", "IMX", "LV", "FV", "FGI",
@@ -1439,7 +1441,33 @@ pub const TOWN_POISON_GAS_LIVE_TILE: u8 = 0x04;
 /// [`crate::NPC_PATHFIND_QUEUE_CAPACITY`] so the two parallel
 /// names for the same BFS queue size share one source of truth.
 pub const NPC_PATH_QUEUE_LIMIT: usize = crate::NPC_PATHFIND_QUEUE_CAPACITY;
-pub const ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS: usize = 32;
+/// `active-objects.md §8.1` overworld per-turn prune window: the
+/// largest unsigned eight-bit **per-axis** difference from the scroll
+/// base (the loaded window's top-left corner) that an outdoor
+/// active-object slot may have and still survive the prune pass. The
+/// pass "keeps the slot only when both differences fall within
+/// thirty-two."
+///
+/// This is a **square window bound, not a radius**: the two axes are
+/// tested separately and independently, with no distance computation.
+/// The old `ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS` /
+/// `ACTIVE_OBJECT_PRUNE_RADIUS` pair named the same quantity twice and
+/// named it wrongly; both are gone.
+///
+/// It belongs to **pruning only**. Eviction's off-screen window
+/// ([`crate::ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW`]) is a
+/// different mechanism with a different trigger and a different
+/// origin, and §8.1 warns that sharing one distance constant across
+/// the two is a sign they have been conflated.
+pub const ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT: u8 = 32;
+
+/// `encounters.md §4`: the terrain spawner rolls a candidate
+/// coordinate "inside the current 32-by-32 scroll window", so an
+/// encounter-table row's DX/DY offset may not exceed this many cells
+/// on either axis. A separate quantity from the §8.1 prune window
+/// that happens to share its value -- the spawner picks *where* a new
+/// slot goes, the prune pass decides *when* an existing slot dies.
+pub const WORLD_ENCOUNTER_SPAWN_OFFSET_MAX_AXIS: u8 = 32;
 pub const PLAYER_NPC_SLOT: usize = OOL_SLOTS - 1;
 pub const PLAYER_NPC_SENTINEL_TYPE: u8 = 0x7f;
 pub const PLAYER_NPC_DIALOG_ID: u8 = 0;
