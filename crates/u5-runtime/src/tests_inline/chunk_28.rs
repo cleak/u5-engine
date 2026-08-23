@@ -723,3 +723,85 @@
             );
         }
     }
+
+    #[test]
+    fn klimb_offers_the_whole_pit_family_as_an_ordinary_descent() {
+        // dungeon-mode.md §13.1: the pit family `0x6?` is a non-ladder
+        // K-Klimb *descent* case. It enables only the down arm, and that arm
+        // runs the same level-step helper a down ladder does, so it reaches
+        // the §13.2 exit contract only from the deepest level. The earlier
+        // claim that exact `0x60` bypassed the level step and invoked the
+        // surface-reset helper directly is withdrawn.
+        for tile in 0x60u8..=0x6F {
+            assert_eq!(
+                dungeon_ladder_delta(tile, ClimbIntent::Down),
+                Some(1),
+                "pit byte {tile:#04x} steps one level down"
+            );
+            assert_eq!(
+                dungeon_ladder_delta(tile, ClimbIntent::Up),
+                None,
+                "pit byte {tile:#04x} offers no up arm"
+            );
+        }
+        // The ladder arms are unchanged by the pit correction.
+        assert_eq!(dungeon_ladder_delta(0x1F, ClimbIntent::Up), Some(-1));
+        assert_eq!(dungeon_ladder_delta(0x2F, ClimbIntent::Down), Some(1));
+        assert_eq!(dungeon_ladder_delta(0x3F, ClimbIntent::Up), Some(-1));
+        assert_eq!(dungeon_ladder_delta(0x3F, ClimbIntent::Down), Some(1));
+    }
+
+    #[test]
+    fn level_change_spell_destination_test_is_not_shared_with_klimb() {
+        // dungeon-mode.md §13.1: the Up/Down spells refuse a destination in
+        // the base `0x0` class or the wall and door-presentation families
+        // `0xB?` through `0xE?`. A climb never inspects the cell it lands on,
+        // so this predicate has no caller on the K-Klimb path.
+        for tile in [0x00u8, 0x0F, 0xB0, 0xC7, 0xD0, 0xEF] {
+            assert!(
+                !dungeon_level_change_spell_destination_allowed(tile),
+                "{tile:#04x} is refused by the level-change spells"
+            );
+        }
+        for tile in [0x10u8, 0x20, 0x30, 0x60, 0x8F, 0x90, 0xA0, 0xF0] {
+            assert!(
+                dungeon_level_change_spell_destination_allowed(tile),
+                "{tile:#04x} is accepted by the level-change spells"
+            );
+        }
+    }
+
+    #[test]
+    fn shipped_dungeon_data_puts_plain_pits_above_the_bottom_level() {
+        // The withdrawal of the surface-reset pit claim is checkable against
+        // the shipped `DUNGEON.DAT` rather than against the sentence that
+        // announced it: the spec cites Deceit level zero at (1, 3) and
+        // Destard level zero at (7, 3) and (1, 7). If `0x60` ejected the
+        // party to Britannia, those three cells would make the top level of
+        // two dungeons unleavable downward by pit; they are ordinary
+        // descents to level one.
+        let Some(dir) = local_clean_assets() else {
+            return;
+        };
+        let path = dir.join(DUNGEON_DAT_FILENAME);
+        if !path.is_file() {
+            return;
+        }
+        let bytes = std::fs::read(&path).expect("shipped DUNGEON.DAT reads");
+        assert_eq!(bytes.len(), DUNGEON_DAT_LEN, "shipped DUNGEON.DAT length");
+        let level_zero_pits = |record: usize| -> Vec<(usize, usize)> {
+            let base = record * DUNGEON_RECORD_LEN;
+            (0..DUNGEON_SIDE)
+                .flat_map(|y| (0..DUNGEON_SIDE).map(move |x| (x, y)))
+                .filter(|(x, y)| bytes[base + y * DUNGEON_SIDE + x] == 0x60)
+                .collect()
+        };
+        // Record order is the published dungeon order; Deceit is record 0 and
+        // Destard record 2.
+        assert_eq!(level_zero_pits(0), vec![(1, 3)], "Deceit level zero pits");
+        assert_eq!(
+            level_zero_pits(2),
+            vec![(7, 3), (1, 7)],
+            "Destard level zero pits"
+        );
+    }

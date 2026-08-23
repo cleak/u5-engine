@@ -7361,9 +7361,13 @@ fn seed_visual_route_dungeon_ladder(state: &mut PlayState) {
 }
 
 fn seed_visual_route_dungeon_surface_exit(state: &mut PlayState) {
+    // `dungeon-mode.md` §13: the climb-out route is an up ladder on level
+    // zero, which reaches the shared exit contract of §13.2. This seed used
+    // the plain pit `0x60`; that bypass is withdrawn - a pit is an ordinary
+    // descent - so it no longer leaves the dungeon.
     let current = dungeon_cell_index(0, state.player.x, state.player.y);
     if let Some(cell) = state.grid.get_mut(current) {
-        *cell = 0x60;
+        *cell = 0x10;
     }
     state.return_world = Some(WorldReturn {
         plane: WorldPlane::Britannia,

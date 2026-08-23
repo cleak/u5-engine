@@ -4571,8 +4571,8 @@ fn dungeon_pit_fall_and_bomb_trap_byte_constants_match_spec() {
     assert!(is_dungeon_bomb_trap(DUNGEON_PIT_BOMB_TRAP_HIDDEN));
     assert!(!is_dungeon_bomb_trap(DUNGEON_PIT_FALL_TRAP_VISIBLE));
     assert!(!is_dungeon_bomb_trap(DUNGEON_PIT_FALL_TRAP_HIDDEN));
-    // Neighbouring 0x6? bytes are neither — the 0x60 surface-
-    // reset pit and other 0x6? cells keep their own behaviour.
+    // Neighbouring 0x6? bytes are neither - the plain pit 0x60 and
+    // the other 0x6? cells keep their own behaviour.
     assert!(!is_dungeon_fall_trap(0x60));
     assert!(!is_dungeon_bomb_trap(0x60));
 }
@@ -7345,15 +7345,12 @@ fn dungeon_fountain_effect_classifies_subtype_per_spec() {
 }
 
 #[test]
-fn dungeon_klimb_apply_dispatches_by_high_nibble_and_plain_pit() {
-    // dungeon-mode.md §13: K-Klimb reads the underfoot byte's
-    // high nibble (and the exact 0x60 plain-pit byte) to decide
-    // whether to move Z, prompt up/down, fire the surface-reset
-    // helper, or refuse the climb.
+fn dungeon_klimb_apply_dispatches_by_high_nibble_alone() {
+    // dungeon-mode.md §13: K-Klimb reads the underfoot byte's high
+    // nibble - and nothing but the high nibble - to decide whether to
+    // move Z, prompt up/down, or refuse the climb. No outcome reaches
+    // the surface-reset helper directly.
     use DungeonKlimbApply::*;
-    // 0x60 is the surface-reset pit (must be checked before pit
-    // family classifies it as PlainPit).
-    assert_eq!(dungeon_klimb_apply(0x60), SurfaceResetPit);
     // Up ladders.
     for tile in 0x10u8..=0x1F {
         assert_eq!(dungeon_klimb_apply(tile), UpLadder);
@@ -7366,11 +7363,15 @@ fn dungeon_klimb_apply_dispatches_by_high_nibble_and_plain_pit() {
     for tile in 0x30u8..=0x3F {
         assert_eq!(dungeon_klimb_apply(tile), TwoWayPrompt);
     }
-    // Other 0x6? bytes (besides 0x60) are NoLevelChange — K-Klimb
-    // routes pit/bomb/secret traps elsewhere, not into the ladder
-    // apply path.
-    for tile in [0x61u8, 0x69, 0x62, 0x6A, 0x67, 0x6F] {
-        assert_eq!(dungeon_klimb_apply(tile), NoLevelChange);
+    // The whole pit family - the plain byte 0x60 and the marked and
+    // fired variants alike - is a climb-*down* case running the same
+    // level-step helper a down ladder uses. The earlier claim that
+    // exact 0x60 bypassed that helper for the surface-reset exit is
+    // withdrawn, and is contradicted by the shipped DUNGEON.DAT:
+    // Deceit level zero carries 0x60 at (1, 3) and Destard level zero
+    // at (7, 3) and (1, 7), where klimbing descends to level one.
+    for tile in 0x60u8..=0x6F {
+        assert_eq!(dungeon_klimb_apply(tile), PitDescent);
     }
     // Wall/door classes and ordinary passages: no level change.
     for tile in [0x00u8, 0x05, 0x80, 0x90, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0] {

@@ -255,14 +255,37 @@ pub fn town_climb_delta(intent: ClimbIntent) -> i8 {
     }
 }
 
+/// `dungeon-mode.md §13.1`: the level delta K-Klimb applies for the
+/// underfoot cell and the chosen direction, or `None` when that cell
+/// offers nothing in that direction.
+///
+/// The dispatcher masks the underfoot byte to its high nibble before
+/// any comparison, so the whole pit family `0x6?` - not just the exact
+/// byte `0x60`, and including the marked and fired variants - enables
+/// the down arm and steps one level exactly as a down ladder does.
 pub fn dungeon_ladder_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
     match (tile >> 4, intent) {
         (0x1, ClimbIntent::Up) => Some(-1),
         (0x2, ClimbIntent::Down) => Some(1),
         (0x3, ClimbIntent::Up) => Some(-1),
         (0x3, ClimbIntent::Down) => Some(1),
+        (0x6, ClimbIntent::Down) => Some(1),
         _ => None,
     }
+}
+
+/// `dungeon-mode.md §13.1`: the destination test belonging to the
+/// **level-change spells** (Up and Down, `catalogs/spell-list.md` ids
+/// 21 and 22), which refuse a destination cell in the base `0x0`
+/// class or in the wall and door-presentation families `0xB?` through
+/// `0xE?`.
+///
+/// This test is *not* part of K-Klimb: a climb never inspects the cell
+/// it lands on, and the ladder or pit underfoot is treated as proof
+/// enough that the destination is reachable. An earlier spec revision
+/// applied this test to the climb route; that claim is withdrawn.
+pub const fn dungeon_level_change_spell_destination_allowed(tile: u8) -> bool {
+    !matches!(tile >> 4, 0x0 | 0x0b..=0x0e)
 }
 
 pub fn render_glyph(tile: u8) -> char {
@@ -815,9 +838,10 @@ pub const fn dungeon_renderer_paints_wall_cue(tile: u8) -> bool {
 }
 
 /// `dungeon-mode.md §13` K-Klimb apply-path outcome for the underfoot
-/// dungeon cell. The handler reads only the high nibble (and the
-/// exact `0x60` byte) to decide whether to change Z, prompt the
-/// player, fire the surface-reset helper, or refuse the climb.
+/// dungeon cell. The handler reads only the high nibble to decide
+/// whether to change Z, prompt the player, or refuse the climb. No
+/// outcome reaches the surface-reset helper directly: the shared exit
+/// contract of §13.2 runs only when the level step reports an edge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DungeonKlimbApply {
     /// `0x1?` up ladder — decrement Z. Refuses when already on
@@ -829,27 +853,30 @@ pub enum DungeonKlimbApply {
     /// `0x3?` two-way ladder — prompt the player for up or down,
     /// then dispatch.
     TwoWayPrompt,
-    /// Exact byte `0x60` — plain pit. Bypass ordinary ladder apply
-    /// and invoke the surface-reset helper that returns the party to
-    /// the dungeon's exterior coordinate.
-    SurfaceResetPit,
+    /// Pit family `0x6?` - offered as a climb-*down*. The dispatcher
+    /// masks to the high nibble, so the marked and fired variants
+    /// behave the same as the plain byte `0x60`, and the arm calls the
+    /// same level-step helper a down ladder uses. An earlier spec
+    /// revision claimed exact `0x60` bypassed the ordinary apply path
+    /// and invoked the surface-reset helper directly; that claim is
+    /// withdrawn, and it is contradicted by shipped data - Destard
+    /// level zero carries `0x60` at (7, 3) and (1, 7) and Deceit level
+    /// zero at (1, 3), and klimbing there descends to level one.
+    PitDescent,
     /// Any other underfoot byte — K-Klimb returns without a level
     /// change.
     NoLevelChange,
 }
 
 /// `dungeon-mode.md §13`: classify the underfoot dungeon byte into
-/// the K-Klimb apply-path outcome. The plain `0x60` pit is checked
-/// before the high-nibble bucket so it does not fall through to the
-/// pit-family branch.
+/// the K-Klimb apply-path outcome. Every comparison is made on the
+/// high nibble alone, so the whole pit family shares one outcome.
 pub const fn dungeon_klimb_apply(tile: u8) -> DungeonKlimbApply {
-    if tile == 0x60 {
-        return DungeonKlimbApply::SurfaceResetPit;
-    }
     match tile >> 4 {
         0x1 => DungeonKlimbApply::UpLadder,
         0x2 => DungeonKlimbApply::DownLadder,
         0x3 => DungeonKlimbApply::TwoWayPrompt,
+        0x6 => DungeonKlimbApply::PitDescent,
         _ => DungeonKlimbApply::NoLevelChange,
     }
 }

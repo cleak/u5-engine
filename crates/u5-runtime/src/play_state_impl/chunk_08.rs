@@ -851,14 +851,13 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         let tile = self.dungeon_cell(level, self.player.x, self.player.y);
-        if tile == 0x60 {
-            return self.resolve_dungeon_surface_reset(
-                game_dir,
-                scene,
-                level,
-                format!("Exited {} ({})", scene.key(), scene.name()),
-            );
-        }
+        // `dungeon-mode.md` §13.1: the pit family `0x6?` is an ordinary
+        // K-Klimb *descent* case handled by `dungeon_ladder_delta`, not a
+        // shortcut into the exit contract. The earlier claim that exact
+        // `0x60` invoked the surface-reset helper directly is withdrawn,
+        // and is contradicted by the shipped `DUNGEON.DAT`: Deceit level
+        // zero carries `0x60` at (1, 3) and Destard level zero at (7, 3)
+        // and (1, 7), where klimbing descends to level one.
         let Some(delta) = dungeon_ladder_delta(tile, intent) else {
             self.message = "Not climbable!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -882,17 +881,31 @@ impl PlayState {
                 ));
             }
         }
-        if !(0..=7).contains(&next_level) {
+        if next_level < 0 {
+            // `dungeon-mode.md` §13 up-ladder arm: K-Klimb moves Z to Z-1,
+            // "or leaves the dungeon when the current level is already
+            // zero". Hitting a level edge goes through the one shared exit
+            // contract of §13.2 rather than refusing the climb.
+            return self.resolve_dungeon_surface_reset(
+                game_dir,
+                scene,
+                level,
+                format!("Klimbed out of {} ({})", scene.key(), scene.name()),
+            );
+        }
+        if next_level > 7 {
             self.message = "Blocked!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
+        // `dungeon-mode.md` §13.1: a climb **never inspects the cell it
+        // lands on** - the ladder or pit underfoot is proof enough that
+        // the destination is reachable, so a climb cannot be blocked by
+        // what sits on the level above or below. The destination test
+        // belongs to the level-change spells
+        // ([`dungeon_level_change_spell_destination_allowed`]); the
+        // earlier claim that the climb route ran it too is withdrawn.
         let next_level = next_level as u8;
-        let landing = self.dungeon_cell(next_level, self.player.x, self.player.y);
-        if !dungeon_climb_landing_allowed(landing) {
-            self.message = "Blocked!".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
         self.area = Area::Dungeon {
             scene,
             level: next_level,
@@ -1729,8 +1742,4 @@ impl PlayState {
         }
         true
     }
-}
-
-fn dungeon_climb_landing_allowed(tile: u8) -> bool {
-    !matches!(tile >> 4, 0x0 | 0x0b..=0x0f)
 }
