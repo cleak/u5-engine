@@ -109,10 +109,21 @@ pub const TRAP_POISON_STATUS_BYTE: u8 = b'P';
 /// marked Dead is skipped and left Dead; every other status is
 /// rewritten to Poisoned.
 ///
-/// `traps.md §3` names exactly two tests for this helper — in-party
-/// and not-already-Dead — so Ashes is accepted here rather than
-/// skipped. See `cleak/u5-spec` for the open question on whether
-/// Ashes shares the Dead exclusion.
+/// The helper tests **exactly two** things: the slot index against the
+/// live party count, and the status byte against `'D'` alone. If both
+/// pass it writes `'P'`. Nothing else is touched — no HP, no maximum
+/// HP, no mana. Confirmed against the shipped routine in answer to
+/// `cleak/u5-spec#89`, and stated as a positive because the negative
+/// ("it does not test Ashes") is the form a partial reading gets wrong.
+///
+/// Ashes is `'A'`, a distinct value from `'D'`, so an Ashes member
+/// fails the Dead test and **is** written to Poisoned. The asymmetry is
+/// real and deliberate: an Ashes character cannot be resurrected by the
+/// ordinary path, which treats only Dead as a valid target, yet can be
+/// converted to Poisoned by a gas trap. Poisoning a pile of ashes is
+/// odd, which is exactly why it is spelled out here — a reasonable
+/// implementer assumes Ashes shares the Dead exclusion and fixes a
+/// divergence into existence.
 pub const fn trap_poison_accepts(status: crate::CharacterStatus) -> bool {
     trap_poison_accepts_status_byte(status.save_byte())
 }
