@@ -703,6 +703,45 @@ impl PlayState {
             self.active_objects.push(object);
             return Some(self.active_objects.len() - 1);
         }
+        // `active-objects.md §4` / `encounters.md §9`: a full ordinary
+        // range does **not** make acquisition fail. "An earlier revision
+        // of this section said the spawn silently fails when the table is
+        // full; that is withdrawn" - the allocator runs a deterministic
+        // ten-phase priority cascade and evicts a lower-priority object.
+        // Phases 2..=5 are the off-screen passes, 6..=9 repeat the same
+        // classes with the screen test dropped, and phase 10 is the
+        // last-resort pass that takes any byte-0 except the universally
+        // protected `0xB5`. Only the coordinate loop of
+        // `encounters.md §4` may decline to spawn.
+        let victim = self.select_active_object_eviction_victim()?;
+        self.active_objects[victim] = object;
+        Some(victim)
+    }
+
+    /// `active-objects.md §4`: lowest-index victim in the deterministic
+    /// eviction cascade, scanning the ordinary acquisition range
+    /// `1..=23` once per phase from phase 1 (empty) through phase 10
+    /// (last resort). Returns `None` only when every ordinary slot holds
+    /// the protected type byte `0xB5`, which is the one value no phase
+    /// accepts.
+    pub fn select_active_object_eviction_victim(&self) -> Option<usize> {
+        let last = ACTIVE_OBJECT_ACQUISITION_LAST_SLOT.min(self.active_objects.len() - 1);
+        let player_x = self.player.x as i32;
+        let player_y = self.player.y as i32;
+        for phase in 1..=ACTIVE_OBJECT_EVICTION_LAST_PHASE {
+            for slot in 1..=last {
+                let candidate = self.active_objects[slot];
+                let off_screen = active_object_eviction_off_screen(
+                    candidate.x as i32,
+                    candidate.y as i32,
+                    player_x,
+                    player_y,
+                );
+                if active_object_eviction_phase(candidate.type_byte, off_screen) == Some(phase) {
+                    return Some(slot);
+                }
+            }
+        }
         None
     }
 

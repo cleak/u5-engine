@@ -2043,6 +2043,58 @@ fn native_world_encounter_spawner_seeds_sea_creature_auxiliary() {
 }
 
 #[test]
+fn native_world_encounter_spawner_evicts_on_a_full_table_per_encounters_md_9() {
+    // `encounters.md §9`: "A full table does **not** make the spawn
+    // fail. The spawner asks the shared slot allocator for a record, and
+    // that allocator's priority cascade evicts a lower-priority object
+    // [...] rather than returning nothing. An earlier revision of this
+    // section said the spawn silently fails when the table is full; that
+    // is withdrawn. The only silent no-spawn outcome traced in the
+    // spawner itself is the coordinate loop giving up after one hundred
+    // twenty-eight rejected candidate cells."
+    let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+    state.prng_state = 0x0009;
+    state.active_objects.resize(
+        OOL_SLOTS,
+        ActiveObject {
+            type_byte: 0x01,
+            tile: 0x01,
+            x: 200,
+            y: 200,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        },
+    );
+
+    let slot = state
+        .spawn_native_world_encounter(WorldPlane::Britannia)
+        .expect("a full ordinary range must evict, not decline the spawn");
+
+    assert!(
+        (1..=ACTIVE_OBJECT_ACQUISITION_LAST_SLOT).contains(&slot),
+        "eviction must stay inside the ordinary acquisition range, got {slot}"
+    );
+    assert_eq!(state.active_objects[slot].type_byte, 0x2C);
+}
+
+#[test]
+fn native_world_encounter_spawner_declines_only_after_the_128_candidate_loop() {
+    // `encounters.md §4` step 5: "After one hundred twenty-eight
+    // rejected candidates, return silently without spawning." Mountains
+    // (`0x0C`) are a hard terrain reject, so every candidate fails and
+    // the loop is the sole no-spawn path.
+    assert_eq!(ENCOUNTER_SPAWNER_RETRY_LIMIT, 128);
+
+    let mut state = britannia_state(vec![0x0C; WORLD_CELLS], 0, 40);
+    state.prng_state = 0x0009;
+
+    assert_eq!(state.spawn_native_world_encounter(WorldPlane::Britannia), None);
+    assert_eq!(state.active_objects.len(), 1);
+}
+
+#[test]
 fn native_world_encounter_type_handles_special_terrain_branches() {
     let mut state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
 

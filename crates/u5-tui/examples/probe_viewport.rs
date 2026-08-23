@@ -50,7 +50,9 @@ fn main() {
         plane.save_floor()
     );
     for (i, obj) in state.active_objects.iter().enumerate() {
-        if obj.tile == 0 || (obj.x == 0 && obj.y == 0 && obj.tile == 0) {
+        // An empty slot is exactly a zero tile byte; the origin
+        // coordinates carry no extra meaning here.
+        if obj.tile == 0 {
             continue;
         }
         let dx = (obj.x as isize - px).rem_euclid(WORLD_SIDE as isize);

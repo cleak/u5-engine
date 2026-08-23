@@ -1044,6 +1044,11 @@
         assert_eq!(poor.gold, 99);
         assert_eq!(poor.active_objects.len(), 1);
 
+        // `active-objects.md §4` / `encounters.md §9`: a full ordinary
+        // range does not refuse the acquisition - the allocator's
+        // ten-phase cascade evicts a lower-priority object. Byte-0 `1`
+        // is the phase-2/6 scenery class, so the purchase succeeds and
+        // the horse lands in the lowest ordinary slot.
         let mut full = test_state(open_grid(), 3, 4);
         full.gold = 500;
         full.active_objects = (0..OOL_SLOTS)
@@ -1059,12 +1064,45 @@
             })
             .collect();
 
+        let outcome = full
+            .buy_horse(Stable::HorseAndRider, 9, 8)
+            .expect("a full ordinary range must evict, not refuse");
+        // Phase 2 (off-screen scenery) runs before phase 6 (the same
+        // class with the screen test dropped), so the victim is the
+        // lowest ordinary slot that is off-screen rather than the lowest
+        // ordinary slot outright. Objects sit at `(slot, 0)` and the
+        // party at `(3, 4)`, so with the §4 five-cell viewport radius
+        // the first off-screen slot is 9 (`|9 - 3| > 5`).
+        assert_eq!(outcome.active_object_slot, 9);
+        assert_eq!(full.gold, 400);
+        assert!(full
+            .active_objects
+            .iter()
+            .any(|object| object.type_byte == HORSE_PARKED_FIRST));
+
+        // `0xB5` is the only universally protected byte-0 value, so a
+        // table made entirely of it is the single genuine no-slot case.
+        let mut protected = test_state(open_grid(), 3, 4);
+        protected.gold = 500;
+        protected.active_objects = (0..OOL_SLOTS)
+            .map(|slot| ActiveObject {
+                type_byte: ACTIVE_OBJECT_PROTECTED_TYPE_BYTE,
+                tile: ACTIVE_OBJECT_PROTECTED_TYPE_BYTE,
+                x: slot,
+                y: 0,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            })
+            .collect();
+
         assert_eq!(
-            full.buy_horse(Stable::HorseAndRider, 9, 8),
+            protected.buy_horse(Stable::HorseAndRider, 9, 8),
             Err(HorsePurchaseError::NoActiveObjectSlot)
         );
-        assert_eq!(full.gold, 500);
-        assert!(!full
+        assert_eq!(protected.gold, 500);
+        assert!(!protected
             .active_objects
             .iter()
             .any(|object| object.type_byte == HORSE_PARKED_FIRST));
@@ -10198,6 +10236,75 @@
                 assert!(
                     !matches!(action, CombatActorDispatchAction::QuicknessSkipped),
                     "no Quickness tag means no Quickness gate"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn combat_negate_time_skips_self_acting_actors_but_still_prompts_the_party() {
+        // `magic.md` runtime tag `T`: "In combat the automatic actor
+        // driver returns immediately, so every self-acting actor's turn
+        // is skipped outright while the tag lasts; the party is still
+        // prompted normally." Unlike Quickness there is no roll - the
+        // skip holds for every dispatch while the tag is live.
+        let mut state = combat_ai_turn_state(8, 5);
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
+
+        let mut skipped = 0usize;
+        for _ in 0..16 {
+            let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+                8, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true,
+                &[1, 2, 3, 4], &[],
+            );
+            if let CombatActorSlotDispatchApplication::Slot { action, .. } = application {
+                match action {
+                    CombatActorDispatchAction::NegateTimeSkipped => skipped += 1,
+                    // The per-actor phase counter sits upstream of the
+                    // driver, so a not-yet-ready slot still reports
+                    // `Waiting` rather than reaching the gate at all.
+                    CombatActorDispatchAction::Waiting => {}
+                    other => panic!("Negate Time must skip a self-acting dispatch, got {other:?}"),
+                }
+            }
+        }
+        assert!(
+            skipped > 0,
+            "a live Negate Time tag must skip self-acting dispatches"
+        );
+
+        // The party is unaffected: slot 0 is still handed the ordinary
+        // ready dispatch, so the player is prompted as normal. This is
+        // the Quickness bug's shape and must not recur here.
+        let mut party = combat_ai_turn_state(8, 5);
+        party.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        party.active_effect_counter = 3;
+        let application = party.apply_combat_actor_slot_dispatch_with_inputs(
+            0, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
+            &[],
+        );
+        if let CombatActorSlotDispatchApplication::Slot { action, .. } = application {
+            assert_eq!(
+                action,
+                CombatActorDispatchAction::PlayerReady,
+                "Negate Time must not gate the party's own dispatch"
+            );
+        } else {
+            panic!("party slot should produce a slot dispatch");
+        }
+
+        // With no tag the same automatic slot takes its AI turn.
+        let mut clear = combat_ai_turn_state(8, 5);
+        for _ in 0..8 {
+            let application = clear.apply_combat_actor_slot_dispatch_with_inputs(
+                8, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true,
+                &[1, 2, 3, 4], &[],
+            );
+            if let CombatActorSlotDispatchApplication::Slot { action, .. } = application {
+                assert!(
+                    !matches!(action, CombatActorDispatchAction::NegateTimeSkipped),
+                    "no Negate Time tag means no Negate Time gate"
                 );
             }
         }

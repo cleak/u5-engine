@@ -340,6 +340,24 @@ impl EgaDisplaySurface {
         self.render_target = target;
     }
 
+    /// The surface the render-target selector currently names.
+    ///
+    /// `display-driver-abi.md §6`, `§8` and `§9.2`: the clipped
+    /// rectangle fill (`0x3F`), the 16-by-16 tile entry (`0x51`), the
+    /// fixed-cell glyph entry (`0x5D`) and the pixel plot (`0x30`) each
+    /// read the descriptor's render-target selector and branch to a
+    /// *separate, complete* back-buffer body. Every one of those bodies
+    /// draws for real; the spec explicitly withdraws the earlier reading
+    /// that any of them was front-buffer-only or a silent no-op on the
+    /// hidden surface. Routing them all through one accessor keeps that
+    /// contract in a single place.
+    fn render_pixels_mut(&mut self) -> &mut [u8] {
+        match self.render_target {
+            DisplayRenderTarget::Front => &mut self.front_pixels,
+            DisplayRenderTarget::Back => &mut self.back_pixels,
+        }
+    }
+
     pub fn init_back_buffer(&mut self) -> u16 {
         self.back_buffer_active = true;
         0
@@ -401,8 +419,15 @@ impl EgaDisplaySurface {
         }
     }
 
+    /// `display-driver-abi.md §6` dispatch offset `0x3F`. The entry
+    /// reads the render-target selector before filling and writes
+    /// whichever surface it names; both row loops fill for real. The
+    /// endgame fade and the map-viewport fades all point the selector at
+    /// the hidden surface, fill through this entry, then dissolve
+    /// forward, so a no-op here would dissolve stale pixels.
     pub fn fill_rect_current_color(&mut self, rect: DisplayPixelRect) {
-        self.fill_rect(rect, self.current_color);
+        let color = self.current_color & 0x0f;
+        fill_pixels_rect(self.render_pixels_mut(), rect, color);
     }
 
     pub fn fill_rect(&mut self, rect: DisplayPixelRect, color: u8) {
@@ -511,12 +536,17 @@ impl EgaDisplaySurface {
                 format!("tile atlas is missing tile {tile}"),
             )
         })?;
+        let mut staged = [0u8; TILE_ATLAS_SIDE * TILE_ATLAS_SIDE];
+        for (index, slot) in staged.iter_mut().enumerate() {
+            *slot = pixels[index] & 0x0f;
+        }
+        let target = self.render_pixels_mut();
         for row in 0..TILE_ATLAS_SIDE {
             let y = dst_y + row as i32;
             for col in 0..TILE_ATLAS_SIDE {
                 let x = dst_x + col as i32;
-                self.front_pixels[y as usize * DISPLAY_SURFACE_WIDTH + x as usize] =
-                    pixels[row * TILE_ATLAS_SIDE + col] & 0x0f;
+                target[y as usize * DISPLAY_SURFACE_WIDTH + x as usize] =
+                    staged[row * TILE_ATLAS_SIDE + col];
             }
         }
         Ok(())
@@ -556,13 +586,17 @@ impl EgaDisplaySurface {
                 ),
             ));
         }
-        for glyph_y in 0..CH_CELL_SIDE {
-            let row_bits = font.glyph_row(code & 0x7f, glyph_y).ok_or_else(|| {
+        let mut staged = [0u8; CH_CELL_SIDE];
+        for (glyph_y, slot) in staged.iter_mut().enumerate() {
+            *slot = font.glyph_row(code & 0x7f, glyph_y).ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("fixed font glyph {} is missing row {glyph_y}", code & 0x7f),
                 )
             })?;
+        }
+        let target = self.render_pixels_mut();
+        for (glyph_y, row_bits) in staged.into_iter().enumerate() {
             for glyph_x in 0..CH_CELL_SIDE {
                 let color = if row_bits & (1 << (7 - glyph_x)) != 0 {
                     foreground
@@ -571,7 +605,7 @@ impl EgaDisplaySurface {
                 } & 0x0f;
                 let x = dst_x + glyph_x;
                 let y = dst_y + glyph_y;
-                self.front_pixels[y * DISPLAY_SURFACE_WIDTH + x] = color;
+                target[y * DISPLAY_SURFACE_WIDTH + x] = color;
             }
         }
         Ok(())
@@ -669,9 +703,13 @@ impl EgaDisplaySurface {
                 Ok(EgaDispatchResult::None)
             }
             EgaDisplayOperation::DrawLine { x0, y0, x1, y1 } => {
-                if self.render_target == DisplayRenderTarget::Front {
-                    self.draw_line(x0, y0, x1, y1);
-                }
+                // `display-driver-abi.md §9.2` dispatch offset `0x33`:
+                // the line entry re-points the single-pixel writer at the
+                // visible page before every pixel, so lines are
+                // front-buffer-only *regardless of the render-target
+                // selector*. That is a draw to the front buffer, not a
+                // skipped draw.
+                self.draw_line(x0, y0, x1, y1);
                 Ok(EgaDispatchResult::None)
             }
             EgaDisplayOperation::ScrollTextUp { rect, blank_color } => {
@@ -690,9 +728,9 @@ impl EgaDisplaySurface {
                 Ok(EgaDispatchResult::Rect(rect))
             }
             EgaDisplayOperation::FillClippedRect(rect) => {
-                if self.render_target == DisplayRenderTarget::Front {
-                    self.fill_rect_current_color(rect);
-                }
+                // `display-driver-abi.md §6` dispatch offset `0x3F` is
+                // render-target aware; both surfaces fill for real.
+                self.fill_rect_current_color(rect);
                 Ok(EgaDispatchResult::Rect(rect))
             }
             EgaDisplayOperation::CopyBackToFront(rect) => {
@@ -709,9 +747,10 @@ impl EgaDisplaySurface {
                 dst_x,
                 dst_y,
             } => {
-                if self.render_target == DisplayRenderTarget::Front {
-                    self.blit_tile_at_pixel(atlas, tile, dst_x, dst_y)?;
-                }
+                // `display-driver-abi.md §8` dispatch offset `0x51`
+                // branches to a separate, complete back-buffer body when
+                // the selector names the hidden surface.
+                self.blit_tile_at_pixel(atlas, tile, dst_x, dst_y)?;
                 Ok(EgaDispatchResult::None)
             }
             EgaDisplayOperation::DrawGlyph {
@@ -722,9 +761,10 @@ impl EgaDisplaySurface {
                 foreground,
                 background,
             } => {
-                if self.render_target == DisplayRenderTarget::Front {
-                    self.draw_fixed_glyph_cell(font, code, cell_x, cell_y, foreground, background)?;
-                }
+                // `display-driver-abi.md §8` dispatch offset `0x5D` has a
+                // real back-buffer body; selecting the hidden surface is
+                // explicitly *not* a no-op.
+                self.draw_fixed_glyph_cell(font, code, cell_x, cell_y, foreground, background)?;
                 Ok(EgaDispatchResult::None)
             }
             EgaDisplayOperation::AdvanceTitleTick => {

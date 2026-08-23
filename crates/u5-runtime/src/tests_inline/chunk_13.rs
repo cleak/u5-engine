@@ -5313,6 +5313,105 @@ fn display_surface_draws_tiles_and_fixed_glyphs_to_front_buffer() {
 }
 
 #[test]
+fn display_entries_have_real_back_buffer_bodies_per_abi_sections_6_8_and_9_2() {
+    // `display-driver-abi.md §8`: "**Correction: both entries have real
+    // back-buffer paths.** An earlier revision of this section said the
+    // tile entry returned without drawing when the back buffer was
+    // selected [...] and that selecting the back buffer made the glyph
+    // entry a no-op. All three statements are withdrawn: each entry
+    // branches to a dedicated back-buffer body, and both bodies draw for
+    // real." §6 records the same for the clipped rectangle fill `0x3F`
+    // and §9.2 for the pixel plot `0x30`. A no-op on the hidden surface
+    // would leave the endgame and map-viewport fades dissolving stale
+    // pixels.
+    let mut surface = EgaDisplaySurface::new();
+    surface.execute(EgaDisplayOperation::InitBackBuffer).unwrap();
+    surface
+        .execute(EgaDisplayOperation::SetRenderTarget(
+            DisplayRenderTarget::Back,
+        ))
+        .unwrap();
+
+    // `0x3F` clipped rectangle fill.
+    surface.execute(EgaDisplayOperation::SetCurrentColor(0x0c)).unwrap();
+    let rect = normalize_clamp_pixel_rect(0, 0, 3, 3).unwrap();
+    surface
+        .execute(EgaDisplayOperation::FillClippedRect(rect))
+        .unwrap();
+
+    // `0x30` pixel plot.
+    surface.execute(EgaDisplayOperation::SetCurrentColor(0x09)).unwrap();
+    surface
+        .execute(EgaDisplayOperation::PlotPixel { x: 100, y: 100 })
+        .unwrap();
+
+    // `0x51` 16-by-16 tile.
+    let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    surface
+        .execute(EgaDisplayOperation::DrawTile {
+            atlas: &atlas,
+            tile: 3,
+            dst_x: 304,
+            dst_y: 184,
+        })
+        .unwrap();
+
+    // `0x5D` fixed-cell glyph.
+    let mut font_bytes = vec![0u8; CH_FONT_LEN];
+    let glyph = usize::from(b'A') * CH_CELL_SIDE;
+    font_bytes[glyph] = 0b1000_0001;
+    let font = parse_ch_font(&font_bytes, "fixture").unwrap();
+    surface
+        .execute(EgaDisplayOperation::DrawGlyph {
+            font: &font,
+            code: b'A',
+            cell_x: 1,
+            cell_y: 1,
+            foreground: 0x0e,
+            background: 0x01,
+        })
+        .unwrap();
+
+    let back = surface.back_pixels();
+    let at = |x: usize, y: usize| back[y * DISPLAY_SURFACE_WIDTH + x];
+    assert_eq!(at(0, 0), 0x0c, "0x3F must fill the hidden surface for real");
+    assert_eq!(at(3, 3), 0x0c);
+    assert_eq!(at(4, 0), 0x00, "the fill must not spill past the rectangle");
+    assert_eq!(at(100, 100), 0x09, "0x30 must plot on the hidden surface");
+    assert_eq!(at(304, 184), 3, "0x51 must stamp the tile on the hidden surface");
+    assert_eq!(at(319, 199), 3);
+    assert_eq!(at(8, 8), 0x0e, "0x5D must draw the glyph on the hidden surface");
+    assert_eq!(at(9, 8), 0x01, "and its background where the bit is clear");
+
+    // None of it may leak onto the visible page while the selector names
+    // the hidden surface.
+    assert_eq!(surface.read_pixel(0, 0), Some(0));
+    assert_eq!(surface.read_pixel(100, 100), Some(0));
+    assert_eq!(surface.read_pixel(304, 184), Some(0));
+    assert_eq!(surface.read_pixel(8, 8), Some(0));
+
+    // `display-driver-abi.md §9.2` dispatch offset `0x33`: the line entry
+    // re-points its pixel writer at the visible page before every pixel,
+    // so it draws to the FRONT buffer even with the back buffer selected.
+    surface.execute(EgaDisplayOperation::SetCurrentColor(0x0f)).unwrap();
+    surface
+        .execute(EgaDisplayOperation::DrawLine {
+            x0: 0,
+            y0: 60,
+            x1: 3,
+            y1: 60,
+        })
+        .unwrap();
+    assert_eq!(surface.read_pixel(0, 60), Some(0x0f));
+    assert_eq!(surface.read_pixel(3, 60), Some(0x0f));
+    assert_eq!(
+        surface.back_pixels()[60 * DISPLAY_SURFACE_WIDTH],
+        0,
+        "0x33 is front-buffer-only regardless of the selector"
+    );
+}
+
+#[test]
 fn display_surface_rejects_cropped_tile_and_glyph_draws() {
     let mut surface = EgaDisplaySurface::new();
     let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
@@ -12274,7 +12373,8 @@ fn persistent_visibility_lazy_refill_updates_zero_cells_and_restamps_player() {
     let edge_terrain = terrain_band_active_index(0, 1).unwrap();
     state.visibility_grid[edge_grid] = VISIBILITY_CLEAR;
     state.terrain_band[edge_terrain] = 77;
-    state.grid[0 * TOWN_GRID_SIDE + 1] = 88;
+    // Row 0, column 1.
+    state.grid[1] = 88;
 
     state.refresh_top_down_visibility_buffers(TopDownRenderArea::Town, VIEWPORT_PLAYER_ROW);
 
@@ -15473,6 +15573,91 @@ fn sky_strip_renders_only_for_surface_and_town_family() {
     assert!(!sky_strip_renders(127, false));
     // Combat marker is suppressed.
     assert!(!sky_strip_renders(0xFF, false));
+}
+
+#[test]
+fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
+    // `moons.md §3`: "below the surface, nothing is drawn, nothing is
+    // erased, and **nothing is cached**, exactly as for combat and
+    // dungeon scenes." The strip's only caller is the hour-change hook
+    // of the per-turn cleanup, "whose own gate already excludes a party
+    // Z with the high bit set (`systems/time.md` Section 5)". A cache
+    // written underground is therefore a cache the original never
+    // writes - and `moons.md §5` warns consumers not to infer "no
+    // phase" from "not drawn", so a stale-vs-fresh cache is observable.
+    let sentinel = [0xAA, 0xBB];
+
+    // Surface overworld: the hook runs and the cache is written.
+    // (`world_state` seeds the Underworld plane, so name the surface.)
+    let mut surface = world_state(open_world_grid(), 5, 5);
+    surface.area = Area::World {
+        plane: WorldPlane::Britannia,
+    };
+    surface.clock = GameClock::new(11, 0).unwrap();
+    surface.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(surface.sky_strip_hour_refresh_runs());
+    surface.refresh_cached_moon_glyphs();
+    let surface_cache = surface.cached_moon_glyph_bytes;
+    assert_ne!(
+        surface_cache, sentinel,
+        "a surface hour change must refresh the cache"
+    );
+
+    // Underworld plane - party Z has its high bit set.
+    let mut underworld = world_state(open_world_grid(), 5, 5);
+    underworld.area = Area::World {
+        plane: WorldPlane::Underworld,
+    };
+    underworld.clock = GameClock::new(11, 0).unwrap();
+    underworld.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(!underworld.sky_strip_hour_refresh_runs());
+    underworld.refresh_cached_moon_glyphs();
+    assert_eq!(
+        underworld.cached_moon_glyph_bytes, sentinel,
+        "the underworld plane must not reach the strip, so nothing is cached"
+    );
+
+    // Dungeon scene - excluded by the scene-range half of the gate.
+    let mut dungeon = world_state(open_world_grid(), 5, 5);
+    dungeon.area = Area::Dungeon {
+        scene: DungeonScene::new(FIRST_DUNGEON_SCENE_BYTE).unwrap(),
+        level: 0,
+    };
+    dungeon.clock = GameClock::new(11, 0).unwrap();
+    dungeon.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(!dungeon.sky_strip_hour_refresh_runs());
+    dungeon.refresh_cached_moon_glyphs();
+    assert_eq!(
+        dungeon.cached_moon_glyph_bytes, sentinel,
+        "a dungeon scene must not reach the strip, so nothing is cached"
+    );
+
+    // Town basement - a below-entry floor sets the Z high bit too.
+    let mut basement = world_state(open_world_grid(), 5, 5);
+    basement.area = Area::Town {
+        scene: Scene::new(13).unwrap(),
+        floor: -1,
+    };
+    basement.clock = GameClock::new(11, 0).unwrap();
+    basement.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(!basement.sky_strip_hour_refresh_runs());
+    basement.refresh_cached_moon_glyphs();
+    assert_eq!(
+        basement.cached_moon_glyph_bytes, sentinel,
+        "a below-entry town floor must not reach the strip"
+    );
+
+    // The same town at ground level does reach it.
+    let mut ground = world_state(open_world_grid(), 5, 5);
+    ground.area = Area::Town {
+        scene: Scene::new(13).unwrap(),
+        floor: 0,
+    };
+    ground.clock = GameClock::new(11, 0).unwrap();
+    ground.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(ground.sky_strip_hour_refresh_runs());
+    ground.refresh_cached_moon_glyphs();
+    assert_eq!(ground.cached_moon_glyph_bytes, surface_cache);
 }
 
 #[test]

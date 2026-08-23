@@ -28,7 +28,15 @@ impl AnimationClock {
     }
 
     pub fn tick_moongate(&mut self) {
-        self.moongate_frame = self.moongate_frame.wrapping_add(1) % MOONGATE_ANIMATION_FRAMES;
+        // `MOONGATE_ANIMATION_FRAMES` is 1 - `moons.md §3` withdrew the
+        // moongate animator, so the single frame is the whole cycle and
+        // the modulo pins the counter at zero. Keep the modulo rather
+        // than hard-coding the result: it is the frame-count constant
+        // that carries the contract, not this line.
+        #[allow(clippy::modulo_one)]
+        {
+            self.moongate_frame = self.moongate_frame.wrapping_add(1) % MOONGATE_ANIMATION_FRAMES;
+        }
     }
 
     pub fn resolve_static_tile(self, tile: u8) -> u8 {

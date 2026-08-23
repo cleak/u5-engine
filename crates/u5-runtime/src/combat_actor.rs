@@ -2982,6 +2982,20 @@ pub const fn resolve_quickness_dispatch_consumed(tag: Option<u8>, counter: u8, r
     active_effect_is_active(tag, counter, QUICKNESS_ACTIVE_EFFECT_TAG) && roll == 0
 }
 
+/// `magic.md` runtime-tag semantics, `T` Negate Time: "In combat the
+/// automatic actor driver returns immediately, so every self-acting
+/// actor's turn is skipped outright while the tag lasts; the party is
+/// still prompted normally."
+///
+/// Unlike Quickness this takes no roll - the driver returns on entry,
+/// so the skip is unconditional for the whole life of the tag. The gate
+/// belongs at the head of the *automatic* actor driver only; putting it
+/// on the player's command dispatch would skip the party's turns too,
+/// which the same section explicitly rules out.
+pub const fn resolve_negate_time_dispatch_skipped(tag: Option<u8>, counter: u8) -> bool {
+    active_effect_is_active(tag, counter, NEGATE_TIME_ACTIVE_EFFECT_TAG)
+}
+
 pub const fn resolve_negate_magic_absorbs_combat_cast(tag: Option<u8>, counter: u8) -> bool {
     active_effect_is_active(tag, counter, NEGATE_MAGIC_ACTIVE_EFFECT_TAG)
 }
