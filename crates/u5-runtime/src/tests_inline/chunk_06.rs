@@ -2457,6 +2457,81 @@
     }
 
     #[test]
+    fn broadside_announcement_and_command_result_both_reach_the_transcript() {
+        // `text-output.md §11`: the original "has no message slot to
+        // overwrite" -- "[b]oth lines are emitted, in the order they
+        // occur", so "[a] turn that produces an epilogue announcement
+        // *and* a command result shows the announcement first, then the
+        // result beneath it."
+        //
+        // The broadside is announced by the per-turn epilogue, which runs
+        // inside `advance_turn` before `Pass` writes its own result. When
+        // the message slot was the record, the result replaced the
+        // announcement and the player never saw it. This is the case no
+        // test of an individual message could show: each line is correct
+        // on its own.
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+        state.turn = 1;
+
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+
+        let texts: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let boom = texts
+            .iter()
+            .position(|text| text.contains("BOOOM"))
+            .unwrap_or_else(|| panic!("no broadside announcement in {texts:?}"));
+        let result = texts
+            .iter()
+            .position(|text| *text == "Passed.")
+            .unwrap_or_else(|| panic!("no command result in {texts:?}"));
+        assert!(boom < result, "announcement must precede the result: {texts:?}");
+        // `commands.md §5`: the verb echo opens the turn above both.
+        assert!(state.message_entries()[0].is_command_echo);
+    }
+
+    #[test]
+    fn broadside_announcement_and_command_result_both_reach_the_message_window() {
+        // `text-output.md §11`: "model the message area as an append-and-
+        // scroll region, not as a value". The window is drawn from the
+        // transcript, so both of the turn's lines get their own row --
+        // the announcement above, the result beneath.
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+        state.turn = 1;
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+
+        let log = message_log_from_entries(state.message_entries(), |text| {
+            Some(text.to_string())
+        });
+        let layout = layout_message_window(&log, Some(""));
+        let announcement = layout
+            .rows
+            .iter()
+            .position(|row| row.text.contains("BOOOM"))
+            .unwrap_or_else(|| panic!("no announcement row in {:?}", layout.rows));
+        let result = layout
+            .rows
+            .iter()
+            .position(|row| row.text.contains("Passed."))
+            .unwrap_or_else(|| panic!("no result row in {:?}", layout.rows));
+        assert!(
+            layout.rows[announcement].row < layout.rows[result].row,
+            "announcement must sit above the result: {:?}",
+            layout.rows
+        );
+        // `text-output.md §10.2`: the verb echo is the only prefixed row
+        // of the turn; the announcement and the result are pure output
+        // and start unprefixed at column 24.
+        assert!(!layout.rows[announcement].prefixed);
+        assert!(!layout.rows[result].prefixed);
+    }
+
+    #[test]
     fn outdoor_walker_broadside_fires_and_suppresses_cleanup_movement() {
         // active-objects.md §8: "Ship-like water-creature and pirate frames
         // aligned with the player on the same row or column within three

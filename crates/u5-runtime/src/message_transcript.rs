@@ -46,65 +46,58 @@ impl PlayState {
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
-    /// `text-output.md SECTION 11`: emit a line produced by the **turn
-    /// epilogue** rather than by a command handler.
-    ///
-    /// "An implementation that keeps a **single message slot** - one
-    /// string field that the turn epilogue writes and a command handler
-    /// then overwrites - has invented a conflict the original does not
-    /// have, and will silently lose whichever line is written first."
-    /// The original emits both, "in the order they occur": "A turn that
-    /// produces an epilogue announcement *and* a command result shows the
-    /// announcement first, then the result beneath it."
-    ///
-    /// So the epilogue's line enters the append-and-scroll transcript the
-    /// moment it occurs, where no later assignment to
-    /// [`PlayState::message`] can reach it. Two deliberate details:
-    ///
-    /// * It does **not** bump `message_transcript_revision`. That counter
-    ///   means "this dispatch recorded its own output"; an epilogue line
-    ///   is not the dispatch's output, and a handler that printed nothing
-    ///   else must still reach the fallback transcribe path.
-    /// * The line is remembered in `pending_epilogue_transcript_lines` so
-    ///   that a handler which leaves the message slot untouched - and
-    ///   therefore still carrying the epilogue's words - does not
-    ///   transcribe the same line a second time.
-    pub(crate) fn push_epilogue_transcript_line(&mut self, line: &str) {
-        self.append_transcript_entry(line.to_string(), false);
-        self.pending_epilogue_transcript_lines
-            .push(line.to_string());
-    }
-
-    /// Forget any epilogue lines left over from an earlier dispatch.
-    pub fn clear_pending_epilogue_transcript_lines(&mut self) {
-        self.pending_epilogue_transcript_lines.clear();
-    }
-
-    /// Consume a pending epilogue line equal to `line`, reporting whether
-    /// one was found. A match means the transcript already carries this
-    /// text from the epilogue, so the handler must not repeat it.
-    fn take_pending_epilogue_transcript_line(&mut self, line: &str) -> bool {
-        let Some(index) = self
-            .pending_epilogue_transcript_lines
-            .iter()
-            .position(|pending| pending == line)
-        else {
-            return false;
-        };
-        self.pending_epilogue_transcript_lines.remove(index);
-        true
-    }
-
     /// Append a handler message as continuation lines. Embedded newlines
     /// become separate transcript entries, matching the per-cell
     /// emitter's treatment of line-feed bytes (`text-output.md §5`).
     pub fn push_message_transcript_lines(&mut self, text: &str) {
         for line in text.split('\n') {
-            if self.take_pending_epilogue_transcript_line(line) {
-                continue;
-            }
             self.push_message_entry(line, false);
         }
+    }
+
+    /// `text-output.md §11`: emit one line into the transcript *now*,
+    /// rather than leaving it in the slot for a later writer to
+    /// overwrite. The original "has no message slot to overwrite": a
+    /// line reaches the window when it is produced, and a second line
+    /// produced in the same turn prints beneath it. Every producer that
+    /// can run alongside another in one turn — the per-turn epilogue
+    /// above all — must use this rather than assigning `message`.
+    ///
+    /// The slot is still written, because ~300 readers and the terminal
+    /// harness take the newest line from it.
+    pub fn emit_message_line(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.push_message_transcript_lines(&text);
+        self.message = text.clone();
+        self.message_flushed = text;
+    }
+
+    /// `text-output.md §11`: append whatever the slot is holding, if the
+    /// transcript has not already recorded it.
+    ///
+    /// This is the safety net under [`Self::emit_message_line`], for the
+    /// many handlers that still assign `message` directly. It is called
+    /// at the turn-composition boundaries — at the end of the per-turn
+    /// epilogue, and at the end of the key dispatch — so a line written
+    /// before one of those boundaries is on the transcript before the
+    /// next writer can replace the slot.
+    ///
+    /// It infers "a write happened" from the value changing, because a
+    /// plain `String` field cannot report its own writes. That inference
+    /// is exact except for two byte-identical lines emitted back to back
+    /// through direct assignment on a path that opens no verb echo,
+    /// which collapse into one entry. Promote such a producer to
+    /// [`Self::emit_message_line`] to make it exact.
+    ///
+    /// Returns whether anything was appended.
+    pub fn flush_message_slot(&mut self) -> bool {
+        if self.message.is_empty() || self.message == self.message_flushed {
+            return false;
+        }
+        let text = self.message.clone();
+        self.push_message_transcript_lines(&text);
+        self.message_flushed = text;
+        true
     }
 
     /// `commands.md §5`: open a transcript entry with the command's
@@ -116,6 +109,9 @@ impl PlayState {
             echo,
             message_at_entry: std::mem::take(&mut self.message),
         });
+        // The slot is empty again, so the next value in it is a new
+        // emission whatever it says.
+        self.message_flushed.clear();
     }
 
     /// Drop an echo that was opened for a key the active mode turned out
@@ -134,6 +130,7 @@ impl PlayState {
         }
         if self.message.is_empty() {
             self.message = pending.message_at_entry;
+            self.message_flushed = self.message.clone();
         }
     }
 
@@ -154,9 +151,18 @@ impl PlayState {
         let message = std::mem::take(&mut self.message);
         if message.is_empty() {
             self.message = pending.message_at_entry;
+            self.message_flushed = self.message.clone();
+            return true;
+        }
+        if message == self.message_flushed {
+            // The handler emitted through `emit_message_line`, so the
+            // transcript already carries it; only the slot needs
+            // restoring.
+            self.message = message;
             return true;
         }
         self.message = message.clone();
+        self.message_flushed = message.clone();
 
         let verb = pending.echo.text;
         let echo_is_last = self
@@ -181,16 +187,10 @@ impl PlayState {
             if let Some(last) = self.message_transcript.last_mut() {
                 last.text.push_str(first);
             }
-        } else if !self.take_pending_epilogue_transcript_line(first) {
-            // `text-output.md SECTION 11`: when the handler left the slot
-            // still carrying the epilogue's words, that text is already in
-            // the transcript above this point; do not double it.
+        } else {
             self.push_message_entry(first, false);
         }
         for line in lines {
-            if self.take_pending_epilogue_transcript_line(line) {
-                continue;
-            }
             self.push_message_entry(line, false);
         }
         true

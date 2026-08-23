@@ -135,10 +135,10 @@ use u5_runtime::{
 };
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
-    CHROME_RULE_INDEX, ChromeFonts, ChromePalette, GameplayMessageLog, MESSAGE_WINDOW_RIGHT,
-    MessageWindowRow, RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter,
-    configure_play_text_windows, gameplay_chrome_content, layout_message_window,
-    load_runes_ch_font, message_is_scene_entry_narration, paint_fixed_cell_glyph,
+    CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
+    RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, configure_play_text_windows,
+    gameplay_chrome_content, layout_message_window, load_runes_ch_font,
+    message_is_scene_entry_narration, message_log_from_entries, paint_fixed_cell_glyph,
     paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
     prompt_cursor_glyph, ribbon_cap_sprite,
 };
@@ -954,11 +954,9 @@ pub fn visual_frame_suite(
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let font = load_ibm_ch_font(game_dir)?;
     let runes = load_runes_ch_font(game_dir)?;
-    let suite_log = GameplayMessageLog::new();
     let ctx = PlayFrameContext {
         ibm: &font,
         runes: &runes,
-        log: &suite_log,
         game_dir,
         cursor_frame: 0,
     };
@@ -1169,11 +1167,9 @@ pub fn visual_route_suite(
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let font = load_ibm_ch_font(game_dir)?;
     let runes = load_runes_ch_font(game_dir)?;
-    let suite_log = GameplayMessageLog::new();
     let ctx = PlayFrameContext {
         ibm: &font,
         runes: &runes,
-        log: &suite_log,
         game_dir,
         cursor_frame: 0,
     };
@@ -8077,7 +8073,6 @@ fn screenshot_system(
             let ctx = PlayFrameContext {
                 ibm: &v.text_font,
                 runes: &v.rune_font,
-                log: &v.message_log,
                 game_dir: &game_dir,
                 cursor_frame: v.prompt_cursor_frame,
             };
@@ -8184,7 +8179,6 @@ struct VisualState {
     /// marker are drawn from.
     rune_font: FixedCellFont,
     /// Scrolling command/output history for the message window.
-    message_log: GameplayMessageLog,
     /// Live input line's barber-pole cursor animation frame.
     prompt_cursor_frame: u64,
     input_line: String,
@@ -8630,7 +8624,6 @@ fn animate_static_tiles(
     let ctx = PlayFrameContext {
         ibm: &v.text_font,
         runes: &v.rune_font,
-        log: &v.message_log,
         game_dir: &v.game_dir,
         cursor_frame: v.prompt_cursor_frame,
     };
@@ -8664,14 +8657,12 @@ fn setup(
         rune_font,
     } = bootstrap;
 
-    let message_log = GameplayMessageLog::new();
     let rgba = render_visual_play_frame_with_input(
         &mut state,
         &atlas,
         PlayFrameContext {
             ibm: &text_font,
             runes: &rune_font,
-            log: &message_log,
             game_dir: &game_dir,
             cursor_frame: 0,
         },
@@ -8711,7 +8702,6 @@ fn setup(
         image_handle,
         text_font,
         rune_font,
-        message_log,
         prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
@@ -8840,7 +8830,6 @@ fn transition_visual_intro_to_gameplay(
     });
     let (mut state, atlas, text_font, rune_font) =
         launch.unwrap_or_else(|err| panic!("Journey Onward launch failed: {err}"));
-    let message_log = GameplayMessageLog::new();
     let image_handle = intro
         .image_handle
         .clone()
@@ -8852,7 +8841,6 @@ fn transition_visual_intro_to_gameplay(
         PlayFrameContext {
             ibm: &text_font,
             runes: &rune_font,
-            log: &message_log,
             game_dir: &game_dir,
             cursor_frame: 0,
         },
@@ -8881,7 +8869,6 @@ fn transition_visual_intro_to_gameplay(
         image_handle,
         text_font,
         rune_font,
-        message_log,
         prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
@@ -9952,7 +9939,6 @@ fn drive_visual(
             continue;
         };
         let game_dir = visual.game_dir.clone();
-        echo_play_command_into_log(visual.as_mut(), ch);
         match handle_play_key_input(&mut visual.state, ch, "", &game_dir) {
             Ok(PlayInputDisposition::Quit) => {
                 exit.write(AppExit::Success);
@@ -9975,7 +9961,6 @@ fn drive_visual(
     let ctx = PlayFrameContext {
         ibm: &v.text_font,
         runes: &v.rune_font,
-        log: &v.message_log,
         game_dir: &v.game_dir,
         cursor_frame: v.prompt_cursor_frame,
     };
@@ -9988,33 +9973,6 @@ fn drive_visual(
         v.prompt_cursor_visible,
     );
     replace_visual_image_data(&mut images, &v.image_handle, rgba, "play input redraw");
-}
-
-/// Commit the previous turn's output and echo the new command into
-/// the message log, matching the observed one-blank-row-per-turn
-/// cadence. Only a fresh command key echoes: keys consumed by an open
-/// modal or line prompt are that command's continuation, not new
-/// commands of their own.
-fn echo_play_command_into_log(visual: &mut VisualState, key: char) {
-    if visual_modal_prompt_active(&visual.state) {
-        return;
-    }
-    let Some(byte) = u8::try_from(u32::from(key)).ok() else {
-        return;
-    };
-    let Some(command) = command_for_letter(byte) else {
-        return;
-    };
-    // Carry the previous turn's output into history before echoing the
-    // new command. An empty log means the only message so far is the
-    // unspecified scene-entry narration, which is dropped rather than
-    // logged.
-    let carried = visual.state.message.clone();
-    if !visual.message_log.is_empty() && !carried.trim().is_empty() {
-        visual.message_log.push_output(&carried);
-    }
-    visual.message_log.end_turn();
-    visual.message_log.push_command(command.verb_prefix());
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
@@ -12874,12 +12832,16 @@ const VISUAL_OVERLAY_SIDE_PANEL_Y: usize = 0;
 
 /// Everything the gameplay frame compositor needs beyond the tile
 /// atlas: both fixed-cell fonts (`IBM.CH` for text and the ribbon end
-/// caps, `RUNES.CH` for the sky strip) and the scrolling message log.
+/// caps, `RUNES.CH` for the sky strip).
+///
+/// The message window is no longer among them: `text-output.md §11`
+/// makes the transcript on `PlayState` the record of what was printed,
+/// so the compositor projects the window straight from it rather than
+/// from a log the frontend maintained in parallel.
 #[derive(Clone, Copy)]
 struct PlayFrameContext<'a> {
     ibm: &'a FixedCellFont,
     runes: &'a FixedCellFont,
-    log: &'a GameplayMessageLog,
     /// `endgame.md §9.4`: the certificate backdrop is loaded from the
     /// end-screen archive at render time, so the compositor needs the
     /// asset directory. Every other path ignores it.
@@ -13751,17 +13713,30 @@ fn render_integrated_status_framebuffer(
         // the compositor: its echoed lines carry the two-colour ribbon
         // end cap, which text cells cannot represent.
         //
+        // `text-output.md §11`: the window is an append-and-scroll
+        // region over the transcript, not a repaint of one slot, so a
+        // turn that produced an epilogue announcement *and* a command
+        // result draws both. The slot is appended only when the
+        // transcript has not recorded it yet — the line still being
+        // composed.
+        //
         // The engine's scene-entry narration prints raw map
         // coordinates, is specified by no `systems/` document, and the
         // original never shows it, so it is kept out of the window.
         // Every other message is shown normally.
-        let mut log = ctx.log.clone();
-        if !message_is_scene_entry_narration(
-            &message,
-            display_state.player.x,
-            display_state.player.y,
-        ) {
-            log.push_output(&message);
+        let player_x = display_state.player.x;
+        let player_y = display_state.player.y;
+        let keep = |text: &str| {
+            (!text.trim().is_empty() && !message_is_scene_entry_narration(text, player_x, player_y))
+                .then(|| visual_display_line(&display_state, text))
+        };
+        let mut log = message_log_from_entries(display_state.message_entries(), keep);
+        let already_recorded = display_state
+            .message_entries()
+            .last()
+            .is_some_and(|entry| entry.text == message);
+        if let Some(text) = (!already_recorded).then(|| keep(&message)).flatten() {
+            log.push_output(&text);
         }
         message_rows = layout_message_window(&log, Some(input_echo.unwrap_or(""))).rows;
     }
@@ -13812,14 +13787,19 @@ fn render_integrated_status_framebuffer(
 }
 
 fn visual_display_message(state: &PlayState) -> String {
+    visual_display_line(state, &state.message)
+}
+
+/// [`visual_display_message`] for one line of the message transcript,
+/// so history lines carry the same substituted names as the line the
+/// turn just produced.
+fn visual_display_line(state: &PlayState, text: &str) -> String {
     match state.area {
         u5_runtime::Area::Town { scene, .. } => town_resident_name(scene.byte)
-            .map(|name| state.message.replacen(&scene.key(), name, 1))
-            .unwrap_or_else(|| state.message.clone()),
-        u5_runtime::Area::Dungeon { scene, .. } => {
-            state.message.replacen(&scene.key(), scene.name(), 1)
-        }
-        u5_runtime::Area::World { .. } => state.message.clone(),
+            .map(|name| text.replacen(&scene.key(), name, 1))
+            .unwrap_or_else(|| text.to_string()),
+        u5_runtime::Area::Dungeon { scene, .. } => text.replacen(&scene.key(), scene.name(), 1),
+        u5_runtime::Area::World { .. } => text.to_string(),
     }
 }
 
@@ -14186,21 +14166,16 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
 mod tests {
 
     /// Frame context for tests: the synthetic fixed-cell font stands in
-    /// for both alphabets, with an empty message log.
-    fn play_ctx<'a>(font: &'a FixedCellFont, log: &'a GameplayMessageLog) -> PlayFrameContext<'a> {
-        play_ctx_at_frame(font, log, 0)
+    /// for both alphabets.
+    fn play_ctx(font: &FixedCellFont) -> PlayFrameContext<'_> {
+        play_ctx_at_frame(font, 0)
     }
 
     /// Frame context pinned to one barber-pole cursor animation frame.
-    fn play_ctx_at_frame<'a>(
-        font: &'a FixedCellFont,
-        log: &'a GameplayMessageLog,
-        cursor_frame: u64,
-    ) -> PlayFrameContext<'a> {
+    fn play_ctx_at_frame(font: &FixedCellFont, cursor_frame: u64) -> PlayFrameContext<'_> {
         PlayFrameContext {
             ibm: font,
             runes: font,
-            log,
             game_dir: std::path::Path::new("."),
             cursor_frame,
         }
@@ -14662,11 +14637,7 @@ mod tests {
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
 
-        let rgba = render_visual_play_frame(
-            &mut state,
-            &atlas,
-            play_ctx(&font, &GameplayMessageLog::new()),
-        );
+        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
         // The viewport is blitted at its measured origin inside the
         // white frame rule, so tile centres are offset by (8, 8).
@@ -17421,11 +17392,7 @@ mod tests {
 
         let mut expected_state = state.clone();
         let expected = render_status_framebuffer(&mut expected_state, "", "", &font);
-        let rgba = render_visual_play_frame(
-            &mut state,
-            &atlas,
-            play_ctx(&font, &GameplayMessageLog::new()),
-        );
+        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
 
         assert_ne!(rgba, expected);
         assert_nonblack_rgba(&rgba);
@@ -17463,11 +17430,7 @@ mod tests {
         ));
         assert!(!endgame_frame_should_show_tableau(&state));
 
-        let rgba = render_visual_play_frame(
-            &mut state,
-            &atlas,
-            play_ctx(&font, &GameplayMessageLog::new()),
-        );
+        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
 
         // With the tableau dropped the endgame text owns the full
         // width, and the gameplay stats panel is still absent.
@@ -17557,11 +17520,7 @@ mod tests {
         let mut state = world_state(open_world_grid(), 10, 20);
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
-        let rgba = render_visual_play_frame(
-            &mut state,
-            &atlas,
-            play_ctx(&font, &GameplayMessageLog::new()),
-        );
+        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
 
         assert_eq!(
             rgba.len(),
@@ -17580,11 +17539,7 @@ mod tests {
         let mut state = world_state(open_world_grid(), 10, 20);
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
-        let rgba = render_visual_play_frame(
-            &mut state,
-            &atlas,
-            play_ctx(&font, &GameplayMessageLog::new()),
-        );
+        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
 
         assert_eq!(rgba_pixel(&rgba, width, 3, 100), ega_rgba(1));
@@ -17612,11 +17567,7 @@ mod tests {
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
         let viewport = render_base_framebuffer(&mut state.clone(), &atlas);
-        let rgba = render_visual_play_frame(
-            &mut state,
-            &atlas,
-            play_ctx(&font, &GameplayMessageLog::new()),
-        );
+        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
         let side = VIEWPORT_SIZE_PX as usize;
 
@@ -17653,7 +17604,6 @@ mod tests {
         // the invariant `visual_route_suite` checks per command.
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
-        let log = GameplayMessageLog::new();
 
         let mut state = test_state(open_grid(), 1, 1);
         state.message = format!(
@@ -17665,7 +17615,7 @@ mod tests {
             state.player.x,
             state.player.y
         ));
-        let initial = render_visual_play_frame(&mut state.clone(), &atlas, play_ctx(&font, &log));
+        let initial = render_visual_play_frame(&mut state.clone(), &atlas, play_ctx(&font));
 
         let mut passed = state.clone();
         passed.message = "Passed.".to_string();
@@ -17674,7 +17624,7 @@ mod tests {
             passed.player.x,
             passed.player.y
         ));
-        let after = render_visual_play_frame(&mut passed, &atlas, play_ctx(&font, &log));
+        let after = render_visual_play_frame(&mut passed, &atlas, play_ctx(&font));
 
         assert_ne!(
             hash_bytes(&initial),
@@ -17739,11 +17689,7 @@ mod tests {
         let overlay_sample_x = overlay_index % overlay.width;
         let overlay_sample_y = overlay_index / overlay.width;
 
-        let rgba = render_visual_play_frame(
-            &mut state,
-            &atlas,
-            play_ctx(&font, &GameplayMessageLog::new()),
-        );
+        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
         let base_pixel = rgba_pixel(
             &rgba,
@@ -19264,14 +19210,13 @@ mod tests {
         let font = load_ibm_ch_font(game_dir).unwrap();
         let mut state = test_state(open_grid(), 1, 1);
         install_test_conversation(&mut state);
-        let log = GameplayMessageLog::new();
 
         let surface = |frame: u64| {
             render_integrated_status_framebuffer(
                 &mut state.clone(),
                 "job",
                 "",
-                play_ctx_at_frame(&font, &log, frame),
+                play_ctx_at_frame(&font, frame),
                 false,
             )
             .rgba
@@ -19610,12 +19555,11 @@ mod tests {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
-        let log = GameplayMessageLog::new();
         let before = render_integrated_status_framebuffer(
             &mut state.clone(),
             "",
             "",
-            play_ctx(&font, &log),
+            play_ctx(&font),
             false,
         );
         handle_play_key_input(&mut state, 'M', "ANTRA", Path::new("")).unwrap();
@@ -19623,7 +19567,7 @@ mod tests {
             &mut state.clone(),
             "",
             "",
-            play_ctx(&font, &log),
+            play_ctx(&font),
             false,
         );
 

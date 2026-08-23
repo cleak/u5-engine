@@ -181,6 +181,40 @@ impl MessageWindowLayout {
     }
 }
 
+/// Project a `PlayState` message transcript into the window's log.
+///
+/// `text-output.md §11`: the transcript is the record of what was
+/// printed, so the window is drawn from it rather than from the
+/// single-line slot — a turn that produced an announcement *and* a
+/// command result has both entries here, and both are drawn.
+///
+/// `render` decides how each line reaches the window: `None` drops it
+/// (the engine's own scene-entry diagnostics), `Some(text)` supplies
+/// the text to draw, which lets a caller substitute names into it.
+///
+/// The blank row between turns is derived rather than stored, per
+/// `text-output.md §10.4`: it is the next command cycle's leading line
+/// feed landing on a row the previous turn already closed, so one blank
+/// precedes every command echo but the first.
+pub fn message_log_from_entries<'a>(
+    entries: impl IntoIterator<Item = &'a crate::MessageEntry>,
+    mut render: impl FnMut(&str) -> Option<String>,
+) -> GameplayMessageLog {
+    let mut log = GameplayMessageLog::new();
+    for entry in entries {
+        let Some(text) = render(&entry.text) else {
+            continue;
+        };
+        if entry.is_command_echo {
+            log.end_turn();
+            log.push_command(&text);
+        } else {
+            log.push_output(&text);
+        }
+    }
+    log
+}
+
 /// Place a log — and optionally the live input line — into the window.
 ///
 /// History is bottom-anchored just above the live input row, so the

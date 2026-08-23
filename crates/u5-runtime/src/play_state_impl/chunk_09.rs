@@ -2024,6 +2024,11 @@ impl PlayState {
             self.tick_door_tracker();
         }
         self.advance_animation_clock();
+        // `text-output.md §11`: the per-turn epilogue is the one phase
+        // that reliably runs before the command handler writes its
+        // result, so anything it printed is recorded here rather than
+        // left in the slot for the handler to overwrite.
+        self.flush_message_slot();
     }
 
     pub fn advance_presentation_frame(&mut self) {
@@ -2897,33 +2902,16 @@ impl PlayState {
             .any(|member| party_member_counts_as_living(member.status))
     }
 
-    /// Append one impact-path line to the message window, matching the
-    /// broadside announcement's join.
-    /// Emit one turn-epilogue announcement (the broadside boom line, the
-    /// ship-sunk line).
+    /// Emit one impact-path line into the message window.
     ///
-    /// `text-output.md SECTION 11` is explicit that a single message slot
-    /// written by the epilogue and then overwritten by a command handler
-    /// "has invented a conflict the original does not have, and will
-    /// silently lose whichever line is written first" - which is exactly
-    /// what happened here: every command handler assigns
-    /// [`PlayState::message`] after `advance_turn` has run the epilogue,
-    /// so the boom line never reached the player on a real turn. The line
-    /// therefore goes into the transcript as it occurs; the handler's own
-    /// result lands beneath it, which is the published order.
-    ///
-    /// The slot assignment stays for the many direct callers and tests
-    /// that read `message`, and
-    /// [`PlayState::push_epilogue_transcript_line`] keeps an unoverwritten
-    /// slot from transcribing the same line twice.
+    /// `text-output.md §11`: the impact lines are produced by the
+    /// per-turn epilogue, which runs *before* the command handler writes
+    /// its own result, so they must reach the transcript as they are
+    /// produced. Assigning the slot here is what lost the broadside
+    /// announcement: the handler's `Passed.` replaced it and "no test of
+    /// an individual message" could show it.
     fn push_impact_line(&mut self, line: &str) {
-        self.push_epilogue_transcript_line(line);
-        if self.message.is_empty() {
-            self.message = line.to_string();
-        } else {
-            self.message.push(' ');
-            self.message.push_str(line);
-        }
+        self.emit_message_line(line);
     }
 
     pub fn try_drift_active_ship(&mut self, slot: usize, tick: PhaseTick) -> ActiveShipWind {
