@@ -1033,7 +1033,7 @@
     }
 
     #[test]
-    fn y_yell_shadowlord_name_requires_free_active_object_slot() {
+    fn y_yell_shadowlord_name_evicts_rather_than_refusing_on_a_full_table() {
         let mut town = test_state(open_grid(), 5, 5);
         town.area = Area::Town {
             scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
@@ -1060,10 +1060,58 @@
             PlayInputDisposition::Continue
         );
 
+        // `active-objects.md §4`: "if the ordinary range is full,
+        // acquisition can evict a lower-priority object", and
+        // `encounters.md §9` withdraws the earlier "silently fails when
+        // the table is full" reading outright. Byte-0 `0x10` is the
+        // phase-4/8 door/fixture class, so the cascade takes the lowest
+        // ordinary slot rather than refusing. "No Shadowlord answers
+        // here." stays reachable for the wrong-scene case exercised by
+        // the preceding test; a full table is not one of its causes.
         assert_eq!(town.turn, 1);
-        assert!(town.message.contains("No Shadowlord answers here."));
-        assert!(town.active_objects.iter().skip(1).all(|object| object.z == 1));
-        assert!(!town.visibility_dirty);
+        assert!(
+            town.message.contains("appears in active-object slot 1"),
+            "unexpected message: {}",
+            town.message
+        );
+        assert!(town.visibility_dirty);
+
+        // `0xB5` is the one universally protected byte-0 value, so a
+        // table made entirely of it is the single case with no victim.
+        let mut protected = test_state(open_grid(), 5, 5);
+        protected.area = Area::Town {
+            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
+            floor: 0,
+        };
+        protected.active_objects.resize(
+            OOL_SLOTS,
+            ActiveObject {
+                type_byte: ACTIVE_OBJECT_PROTECTED_TYPE_BYTE,
+                tile: ACTIVE_OBJECT_PROTECTED_TYPE_BYTE,
+                x: 0,
+                y: 0,
+                z: 1,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            },
+        );
+        protected.recompute_daylight();
+
+        assert_eq!(
+            handle_play_key_input(&mut protected, 'Y', "faulinei", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(
+            protected.message.contains("No Shadowlord answers here."),
+            "unexpected message: {}",
+            protected.message
+        );
+        assert!(protected
+            .active_objects
+            .iter()
+            .skip(1)
+            .all(|object| object.type_byte == ACTIVE_OBJECT_PROTECTED_TYPE_BYTE));
     }
 
     #[test]

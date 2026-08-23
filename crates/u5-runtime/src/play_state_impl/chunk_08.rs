@@ -1160,7 +1160,39 @@ impl PlayState {
         }
     }
 
+    /// `moons.md §3` / `time.md §5`: the hour-change hook that refreshes
+    /// the sky strip runs only when the active scene is in the
+    /// surface/town-family range *and* the party is not below the
+    /// surface. `moons.md §3`: "below the surface, nothing is drawn,
+    /// nothing is erased, and **nothing is cached**, exactly as for
+    /// combat and dungeon scenes."
+    ///
+    /// The below-surface test is the party's saved Z with its high bit
+    /// set — the Underworld plane outdoors, or a below-entry floor
+    /// inside a town-family location. Ordinary dungeon levels count up
+    /// from zero and never set that bit, so they are excluded by the
+    /// scene-range half of the gate instead.
+    pub fn sky_strip_hour_refresh_runs(&self) -> bool {
+        if self.current_floor().is_none_or(|floor| floor < 0) {
+            return false;
+        }
+        match self.area {
+            Area::World { plane } => sky_strip_renders(0, matches!(plane, WorldPlane::Underworld)),
+            Area::Town { scene, .. } => sky_strip_renders(scene.byte, false),
+            Area::Dungeon { .. } => false,
+        }
+    }
+
+    /// `moons.md §5`: "Each refresh caches the two glyph bytes for the
+    /// current day *before* it tests whether either marker is on the
+    /// visible horizon", so a reached refresh always writes the cache
+    /// even when neither marker is drawn. A refresh that is never
+    /// reached — below the surface, in a dungeon, in combat — writes
+    /// nothing at all.
     pub fn refresh_cached_moon_glyphs(&mut self) {
+        if !self.sky_strip_hour_refresh_runs() {
+            return;
+        }
         self.cached_moon_glyph_bytes = cached_moon_glyph_bytes_for_hour(self.clock.hour);
     }
 

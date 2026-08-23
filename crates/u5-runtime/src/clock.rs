@@ -399,6 +399,12 @@ pub const SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST: u8 = HOURS_PER_DAY - 1;
 pub const SKY_STRIP_FELUCCA_AFTERNOON_OFFSET: u8 = 26;
 
 pub fn sky_strip_marker_position(hour: u8, marker: SkyStripMarker) -> Option<u8> {
+    // Both morning bands in the `moons.md §3` table start at hour 0, so
+    // their lower-bound tests are trivially true for a `u8` hour. Keep
+    // them written out anyway: the guards mirror the published band
+    // table row for row, and dropping the halves that happen to be
+    // vacuous today would hide which bound each row actually names.
+    #[allow(clippy::absurd_extreme_comparisons)]
     let position = match marker {
         SkyStripMarker::FixedHour
             if hour >= SKY_STRIP_FIXED_HOUR_BAND_FIRST

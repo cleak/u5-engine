@@ -565,6 +565,11 @@ pub enum CombatActorDispatchAction {
     /// `combat.md §8`: a self-acting slot whose dispatch the live Quickness
     /// effect consumed. This is the only Quickness gate in the engine.
     QuicknessSkipped,
+    /// `magic.md` runtime tag `T`: a self-acting slot whose turn the live
+    /// Negate Time effect skipped outright. The party is unaffected - it
+    /// is still prompted normally - because this gate sits inside the
+    /// automatic actor driver, past the `PlayerReady` arm.
+    NegateTimeSkipped,
     MonsterAi {
         ai_turn: Option<CombatAiTurnApplication>,
     },
@@ -3652,6 +3657,14 @@ impl PlayState {
 
         let action = if slot < COMBAT_PARTY_ACTOR_SLOTS || actor.is_controlled() {
             CombatActorDispatchAction::PlayerReady
+        } else if resolve_negate_time_dispatch_skipped(
+            self.active_effect_tag,
+            self.active_effect_counter,
+        ) {
+            // `magic.md` tag `T`: the automatic actor driver returns
+            // immediately while Negate Time is live, so every self-acting
+            // actor's turn is skipped outright.
+            CombatActorDispatchAction::NegateTimeSkipped
         } else if resolve_quickness_dispatch_consumed(
             self.active_effect_tag,
             self.active_effect_counter,

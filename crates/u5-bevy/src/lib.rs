@@ -14109,7 +14109,8 @@ mod tests {
         for byte in b'a'..=b'z' {
             glyphs[usize::from(byte - b' ')] = glyph(5, 3);
         }
-        glyphs[usize::from(b' ' - b' ')] = glyph(0, 0);
+        // Space is `first_code`, so it sits at relative index 0.
+        glyphs[0] = glyph(0, 0);
         ProportionalFont {
             first_code: b' ',
             glyphs,

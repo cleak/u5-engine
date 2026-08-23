@@ -186,6 +186,11 @@ pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST: u8 =
 pub const ACTIVE_OBJECT_EVICTION_MIDRANGE_FIRST: u8 = 0x30;
 pub const ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST: u8 = ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST - 1;
 
+/// `active-objects.md §4`: the last (least selective) eviction phase.
+/// Phases run `1..=10`; phase 10 is the last-resort pass that accepts
+/// any type byte except the universally protected `0xB5`.
+pub const ACTIVE_OBJECT_EVICTION_LAST_PHASE: u8 = 10;
+
 /// `active-objects.md §4`: returns `true` when an active-object
 /// type byte is acceptable as a candidate for eviction phase
 /// 2..=5 (the off-screen phases) or 6..=9 (the same classes,
