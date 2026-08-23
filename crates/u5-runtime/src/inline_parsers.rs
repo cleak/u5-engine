@@ -582,26 +582,31 @@ pub fn spell_index_from_code(code: &str) -> Option<usize> {
     SPELL_CODES.iter().position(|known| *known == code)
 }
 
-pub fn spell_scene_bit_for_area(area: Area) -> u8 {
+/// `catalogs/spell-list.md §4` scene class for a non-combat [`Area`].
+///
+/// This is the *area* half of the classification only. `PlayState` models
+/// combat as the `combat_active` flag while keeping `area` pointed at the
+/// map the fight started from, so a caller that needs the real cast context
+/// must use [`crate::PlayState::current_spell_scene_class`] instead — this
+/// helper would report the underlying town/dungeon/world class during a
+/// fight.
+pub const fn spell_scene_class_for_area(area: Area) -> SpellSceneClass {
     match area {
-        Area::World { .. } => SPELL_SCENE_OVERWORLD,
-        Area::Town { .. } => SPELL_SCENE_INDOOR,
-        Area::Dungeon { .. } => SPELL_SCENE_DUNGEON,
+        Area::World { .. } => SpellSceneClass::Overworld,
+        Area::Town { .. } => SpellSceneClass::Indoor,
+        Area::Dungeon { .. } => SpellSceneClass::Dungeon,
     }
 }
 
+pub const fn spell_scene_bit_for_area(area: Area) -> u8 {
+    spell_scene_class_for_area(area).allow_mask_bit()
+}
+
 /// Per `catalogs/spell-list.md` §4: map an active scene byte to the
-/// single-bit scene class used by the spell allow mask. `0` is overworld,
-/// `1..=32` is indoor/town, `33..=127` is dungeon, and `>= 0x80` is the
-/// combat-class scene per the public reader contract that "any value at or
-/// above `0x80` as combat-class".
+/// single-bit scene class used by the spell allow mask. Classification
+/// bands live in [`crate::spell_scene_class_for_scene_byte`].
 pub const fn spell_scene_bit_for_scene_byte(byte: u8) -> u8 {
-    match byte {
-        SCENE_OVERWORLD => SPELL_SCENE_OVERWORLD,
-        SCENE_TOWN_FAMILY_FIRST..=SCENE_TOWN_FAMILY_LAST => SPELL_SCENE_INDOOR,
-        SCENE_DUNGEON_FAMILY_FIRST..=SCENE_DUNGEON_FAMILY_LAST => SPELL_SCENE_DUNGEON,
-        _ => SPELL_SCENE_COMBAT,
-    }
+    spell_scene_class_for_scene_byte(byte).allow_mask_bit()
 }
 
 /// Per `combat.md §10`: spell MP cost is `(spell_id / 6) + 1` for the

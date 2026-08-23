@@ -609,16 +609,19 @@ impl PlayState {
             self.message = "Magic absorbed!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        // `magic.md §5` step 3: the context gate runs before the handler,
+        // so `Not here!` precedes any handler-specific direction/target
+        // prompt and costs neither a charge nor a turn. Blink used to be
+        // exempted here and re-tested inside its own handlers; that let the
+        // dungeon/town "Direction?" prompt appear for a spell whose
+        // published mask is `C/O` (`catalogs/spell-list.md §5`, id 17).
         if let (Some(spell_index), Some(caster_index)) =
             (spell_index, parse_inline_party_index(suffix))
+            && self.party.get(caster_index).is_some()
+            && !self.spell_allowed_in_current_cast_context(spell_index)
         {
-            if spell_index != BLINK_SPELL_INDEX
-                && self.party.get(caster_index).is_some()
-                && !self.spell_allowed_in_current_cast_context(spell_index)
-            {
-                self.message = "Not here!".to_string();
-                return Ok(MoveOutcome::Blocked);
-            }
+            self.message = "Not here!".to_string();
+            return Ok(MoveOutcome::Blocked);
         }
         match spell_code.as_str() {
             "AG" => {

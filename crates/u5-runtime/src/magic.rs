@@ -101,8 +101,10 @@ pub const fn spell_min_caster_level(circle: u8) -> u8 {
 /// labels in `catalogs/spell-list.md` were correct throughout; only the bit
 /// legend was wrong.
 ///
-/// No production caller reads this mask yet - nothing supplies an `allow_mask`
-/// - so the transposition was latent rather than a live bug.
+/// These four constants are the crate's single legend. The per-spell table
+/// [`crate::SPELL_SCENE_MASKS`] is built from them, and
+/// [`crate::PlayState::spell_allowed_in_current_cast_context`] is the only
+/// production reader.
 pub const SPELL_SCENE_BIT_COMBAT: u8 = 0x01;
 pub const SPELL_SCENE_BIT_DUNGEON: u8 = 0x02;
 pub const SPELL_SCENE_BIT_INDOOR: u8 = 0x04;
@@ -113,7 +115,13 @@ pub const SPELL_SCENE_BIT_OVERWORLD: u8 = 0x08;
 pub enum SpellSceneClass {
     /// `0x02` — dungeon scene.
     Dungeon,
-    /// `0x01` — combat-class scene (the temporary 0xFF marker).
+    /// `0x01` — combat-class scene. `catalogs/spell-list.md §4` maps the
+    /// scene byte `0xFF` to this class; the engine's own combat scene byte
+    /// is [`crate::SCENE_COMBAT_TEMPORARY`], which is `0xFF`, so the two
+    /// agree. `PlayState` carries combat as the `combat_active` flag rather
+    /// than a stored scene byte, and
+    /// [`crate::PlayState::current_scene_byte`] is the one place that
+    /// converts the flag back to `0xFF`.
     Combat,
     /// `0x04` — indoor / town-mode scene.
     Indoor,
@@ -131,6 +139,30 @@ impl SpellSceneClass {
             Self::Indoor => SPELL_SCENE_BIT_INDOOR,
             Self::Overworld => SPELL_SCENE_BIT_OVERWORLD,
         }
+    }
+}
+
+/// `catalogs/spell-list.md §4` scene-byte classification bands. The
+/// dispatcher classifies the active scene byte *before* it tests the
+/// per-spell allow mask, and each class selects exactly one bit:
+///
+/// - `0` — overworld (both world planes; the catalog publishes a single
+///   overworld band and does not split Britannia from the Underworld).
+/// - `1..=32` — indoor / town-mode: towns, dwellings, castles, keeps.
+/// - `33..=127` — dungeon.
+/// - `0xFF` — combat-class. The catalog notes that several readers treat
+///   any value at or above `0x80` as combat-class, but the traced gameplay
+///   writers use `0xFF`; this engine only ever writes `0xFF`
+///   ([`crate::SCENE_COMBAT_TEMPORARY`]), so the remaining `128..=254` hole
+///   is unreachable here and is classified as combat for reader parity.
+pub const fn spell_scene_class_for_scene_byte(byte: u8) -> SpellSceneClass {
+    match byte {
+        crate::SCENE_OVERWORLD => SpellSceneClass::Overworld,
+        crate::SCENE_TOWN_FAMILY_FIRST..=crate::SCENE_TOWN_FAMILY_LAST => SpellSceneClass::Indoor,
+        crate::SCENE_DUNGEON_FAMILY_FIRST..=crate::SCENE_DUNGEON_FAMILY_LAST => {
+            SpellSceneClass::Dungeon
+        }
+        _ => SpellSceneClass::Combat,
     }
 }
 
@@ -518,14 +550,25 @@ impl CastGateOutcome {
 }
 
 /// `magic.md §7`: run the four dispatcher gates in order. Returns the
-/// outcome the dispatcher reports back to the player. Caller passes:
+/// outcome the dispatcher reports back to the player. This is the crate's
+/// single implementation of the C-Cast decision;
+/// [`crate::PlayState::cast_spell_resource_gate`] is the live caller and
+/// applies the resource debits this function's outcome describes.
+///
+/// Caller passes:
 ///   - `scene_allowed`: per-spell scene-allow mask matched the current
 ///     scene byte (the scene gate's only input);
 ///   - `charges`: pre-decrement per-spell charge counter;
 ///   - `mana`: caster's MP before this cast;
 ///   - `level`: caster's level;
-///   - `circle`: spell circle index in `0..=7` (mana cost and level
-///     requirement).
+///   - `circle`: spell circle `1..=8` per [`spell_circle_for`], which is
+///     both the mana cost (`magic.md §7` gate 7) and the minimum caster
+///     level (gate 8).
+///
+/// Gate order is normative: `magic.md §7` states "the scene gate runs
+/// before charge consumption, so `Not here!` does not spend a charge",
+/// then "the charge counter is decremented before mana and level
+/// validation".
 pub const fn cast_dispatcher_gate(
     scene_allowed: bool,
     charges: u8,

@@ -672,19 +672,22 @@ BRITANNIA 11 21
 
     #[test]
     fn spell_scene_bits_match_published_mask_values() {
-        assert_eq!(SPELL_SCENE_DUNGEON, 0x01);
-        assert_eq!(SPELL_SCENE_COMBAT, 0x02);
-        assert_eq!(SPELL_SCENE_INDOOR, 0x04);
-        assert_eq!(SPELL_SCENE_OVERWORLD, 0x08);
+        // `catalogs/spell-list.md §4` corrected legend: `0x01` C,
+        // `0x02` D, `0x04` I, `0x08` O. The transposed `0x01` dungeon /
+        // `0x02` combat legend this test used to assert is withdrawn.
+        assert_eq!(SPELL_SCENE_BIT_COMBAT, 0x01);
+        assert_eq!(SPELL_SCENE_BIT_DUNGEON, 0x02);
+        assert_eq!(SPELL_SCENE_BIT_INDOOR, 0x04);
+        assert_eq!(SPELL_SCENE_BIT_OVERWORLD, 0x08);
 
         let gp = spell_index_from_code("GP").unwrap();
-        assert_eq!(SPELL_SCENE_MASKS[gp], SPELL_SCENE_COMBAT);
+        assert_eq!(SPELL_SCENE_MASKS[gp], SPELL_SCENE_BIT_COMBAT);
         assert!(!spell_allowed_in_area(gp, test_state(open_grid(), 1, 1).area));
 
         let fgi = spell_index_from_code("FGI").unwrap();
         assert_eq!(
             SPELL_SCENE_MASKS[fgi],
-            SPELL_SCENE_COMBAT | SPELL_SCENE_DUNGEON
+            SPELL_SCENE_BIT_COMBAT | SPELL_SCENE_BIT_DUNGEON
         );
         assert!(spell_allowed_in_area(
             fgi,

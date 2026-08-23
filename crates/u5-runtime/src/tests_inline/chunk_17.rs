@@ -3350,7 +3350,11 @@
 
     #[test]
     fn cast_blink_rejections_preserve_public_resource_ordering() {
-        let mut missing_direction = test_state(open_grid(), 1, 1);
+        // `catalogs/spell-list.md §5` id 17 publishes Blink as `C/O`, so the
+        // direction prompt is only reachable in a scene the mask allows.
+        // This case used to run in an indoor scene, where `magic.md §5`
+        // step 3's context gate now refuses first.
+        let mut missing_direction = britannia_state(open_world_grid(), 1, 1);
         missing_direction.spell_charges[BLINK_SPELL_INDEX] = 1;
         missing_direction.party[0].mana = BLINK_COST;
         missing_direction.party[0].level = BLINK_COST;
@@ -3364,6 +3368,24 @@
         assert_eq!(missing_direction.party[0].mana, BLINK_COST);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(missing_direction.message, "Direction? Use C1IP6.");
+
+        // `magic.md §5` step 3: the context gate runs before the handler's
+        // direction prompt, so an indoor Blink reports `Not here!` rather
+        // than asking for a direction, and spends nothing.
+        let mut indoor = test_state(open_grid(), 1, 1);
+        indoor.spell_charges[BLINK_SPELL_INDEX] = 1;
+        indoor.party[0].mana = BLINK_COST;
+        indoor.party[0].level = BLINK_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut indoor, 'C', "1IP", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(indoor.spell_charges[BLINK_SPELL_INDEX], 1);
+        assert_eq!(indoor.party[0].mana, BLINK_COST);
+        assert_eq!(indoor.turn, 0);
+        assert_eq!(indoor.message, "Not here!");
 
         let mut passed = britannia_state(open_world_grid(), 1, 1);
         passed.spell_charges[BLINK_SPELL_INDEX] = 1;

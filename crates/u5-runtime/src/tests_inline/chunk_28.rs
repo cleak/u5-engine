@@ -805,3 +805,370 @@
             "Destard level zero pits"
         );
     }
+
+    /// `catalogs/spell-list.md §5` `Allowed` column, transcribed verbatim
+    /// for spell ids `0..=47` in table order. `magic.md §9` states these
+    /// `C`/`D`/`I`/`O` labels "were published correctly throughout" and
+    /// that only the numeric bit legend needed correcting, so the labels
+    /// are the authority for the per-spell mask table.
+    const PUBLISHED_SPELL_SCENE_LABELS: [&str; SPELL_COUNT] = [
+        "D/I/O",   // 0  IL   In Lor            Light
+        "C",       // 1  GP   Grav Por          Magic Missile
+        "C/D/I/O", // 2  AZ   An Zu             Awaken
+        "C/D/I/O", // 3  AN   An Nox            Cure
+        "C/D/I/O", // 4  M    Mani              Heal
+        "C/I",     // 5  AY   An Ylem           Vanish
+        "C/D/I/O", // 6  AS   An Sanct          Open
+        "C",       // 7  ACX  An Xen Corp       Repel Undead
+        "O",       // 8  HR   Rel Hur           Wind Change
+        "O",       // 9  IW   In Wis            Locate
+        "C",       // 10 KX   Kal Xen           Conjure
+        "C/D/I/O", // 11 IMX  In Xen Mani       Create Food
+        "D/I/O",   // 12 LV   Vas Lor           Great Light
+        "C",       // 13 FV   Vas Flam          Fireball
+        "C/D",     // 14 FGI  In Flam Grav      Fire Field
+        "C/D",     // 15 GIN  In Nox Grav       Poison Field
+        "C/D",     // 16 GIZ  In Zu Grav        Sleep Field
+        "C/O",     // 17 IP   In Por            Blink
+        "C/D",     // 18 AG   An Grav           Dispel Field
+        "C/D/I/O", // 19 IS   In Sanct          Protection
+        "C/D",     // 20 GIS  In Sanct Grav     Energy Field
+        "D",       // 21 PU   Uus Por           Up
+        "D",       // 22 DP   Des Por           Down
+        "C",       // 23 QW   Wis Quas          Reveal
+        "C",       // 24 BIX  In Bet Xen        Swarm
+        "C/I",     // 25 AEP  An Ex Por         Magic Lock
+        "C/I",     // 26 EIP  In Ex Por         Unlock Magic
+        "C/D/I/O", // 27 MV   Vas Mani          Great Heal
+        "C",       // 28 IZ   In Zu             Sleep
+        "C/D/I/O", // 29 RT   Rel Tym           Quickness
+        "C",       // 30 IPVY In Vas Por Ylem   Tremor
+        "C",       // 31 AQW  Quas An Wis       Mass Charm
+        "C/D/I/O", // 32 AI   In An             Negate Magic
+        "I/O",     // 33 AWY  Wis An Ylem       X-Ray
+        "C",       // 34 AEX  An Xen Ex         Charm
+        "C",       // 35 BRX  Rel Xen Bet       Polymorph
+        "C",       // 36 LS   Sanct Lor         Invisibility
+        "C",       // 37 CX   Xen Corp          Kill
+        "C",       // 38 IQX  In Quas Xen       Clone
+        "D/I/O",   // 39 IQW  In Quas Wis       Peer
+        "C",       // 40 HIN  In Nox Hur        Poison Wind
+        "C",       // 41 CIQ  In Quas Corp      Cause Fear
+        "D/I/O",   // 42 CIM  In Mani Corp      Resurrect
+        "C",       // 43 CKX  Kal Xen Corp      Summon
+        "C",       // 44 CGIV In Vas Grav Corp  Death Wind
+        "C",       // 45 FHI  In Flam Hur       Flame Wind
+        "D/I/O",   // 46 PRV  Vas Rel Por       Gate Travel
+        "C/D/I/O", // 47 AT   An Tym            Negate Time
+    ];
+
+    fn published_scene_mask(labels: &str) -> u8 {
+        labels.split('/').fold(0u8, |mask, label| {
+            mask | match label {
+                "C" => SPELL_SCENE_BIT_COMBAT,
+                "D" => SPELL_SCENE_BIT_DUNGEON,
+                "I" => SPELL_SCENE_BIT_INDOOR,
+                "O" => SPELL_SCENE_BIT_OVERWORLD,
+                other => panic!("unpublished scene label {other:?}"),
+            }
+        })
+    }
+
+    #[test]
+    fn spell_scene_masks_match_published_catalog_labels_for_every_spell() {
+        for (index, labels) in PUBLISHED_SPELL_SCENE_LABELS.iter().enumerate() {
+            assert!(
+                !labels.is_empty(),
+                "catalogs/spell-list.md §5 row {index} has no Allowed labels; refusing to \
+                 invent a mask",
+            );
+            assert_eq!(
+                SPELL_SCENE_MASKS[index],
+                published_scene_mask(labels),
+                "spell {index} ({}) mask disagrees with catalogs/spell-list.md §5 Allowed \
+                 column {labels}",
+                SPELL_CODES[index],
+            );
+        }
+
+        // `magic.md §9`'s stated confirmation of the corrected legend: the
+        // two dungeon-only level-change spells carry `0x02` alone, and the
+        // named combat-only attack spells carry `0x01` alone.
+        assert_eq!(SPELL_SCENE_MASKS[UUS_POR_SPELL_INDEX], 0x02);
+        assert_eq!(SPELL_SCENE_MASKS[DES_POR_SPELL_INDEX], 0x02);
+        assert_eq!(SPELL_SCENE_MASKS[MAGIC_MISSILE_SPELL_INDEX], 0x01);
+        assert_eq!(SPELL_SCENE_MASKS[REPEL_UNDEAD_SPELL_INDEX], 0x01);
+        assert_eq!(SPELL_SCENE_MASKS[KILL_SPELL_INDEX], 0x01);
+    }
+
+    #[test]
+    fn spell_scene_class_derivation_covers_every_play_scene() {
+        // `catalogs/spell-list.md §4` classification bands.
+        assert_eq!(
+            spell_scene_class_for_scene_byte(SCENE_OVERWORLD),
+            SpellSceneClass::Overworld
+        );
+        assert_eq!(
+            spell_scene_class_for_scene_byte(SCENE_TOWN_FAMILY_FIRST),
+            SpellSceneClass::Indoor
+        );
+        assert_eq!(
+            spell_scene_class_for_scene_byte(SCENE_TOWN_FAMILY_LAST),
+            SpellSceneClass::Indoor
+        );
+        assert_eq!(
+            spell_scene_class_for_scene_byte(SCENE_DUNGEON_FAMILY_FIRST),
+            SpellSceneClass::Dungeon
+        );
+        assert_eq!(
+            spell_scene_class_for_scene_byte(SCENE_DUNGEON_FAMILY_LAST),
+            SpellSceneClass::Dungeon
+        );
+        assert_eq!(
+            spell_scene_class_for_scene_byte(SCENE_COMBAT_TEMPORARY),
+            SpellSceneClass::Combat
+        );
+
+        // Live scenes. Both world planes report the single published
+        // overworld byte; the catalog does not split Britannia from the
+        // Underworld.
+        let overworld = britannia_state(open_world_grid(), 1, 1);
+        assert_eq!(overworld.current_scene_byte(), SCENE_OVERWORLD);
+        assert_eq!(
+            overworld.current_spell_scene_class(),
+            SpellSceneClass::Overworld
+        );
+
+        let underworld = world_state(open_world_grid(), 1, 1);
+        assert!(matches!(
+            underworld.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        ));
+        assert_eq!(underworld.current_scene_byte(), SCENE_OVERWORLD);
+        assert_eq!(
+            underworld.current_spell_scene_class(),
+            SpellSceneClass::Overworld
+        );
+
+        let town = test_state(open_grid(), 1, 1);
+        assert_eq!(town.current_spell_scene_class(), SpellSceneClass::Indoor);
+
+        let dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        assert_eq!(dungeon.current_spell_scene_class(), SpellSceneClass::Dungeon);
+
+        // `PlayState` stores no combat scene byte — combat is the
+        // `combat_active` flag, and the flag maps back to the published
+        // `0xFF` combat-class byte regardless of the map underneath.
+        for mut fighting in [
+            britannia_state(open_world_grid(), 1, 1),
+            test_state(open_grid(), 1, 1),
+            dungeon_state(open_dungeon_record(), 0, 1, 1),
+        ] {
+            fighting.combat_active = true;
+            assert_eq!(fighting.current_scene_byte(), SCENE_COMBAT_TEMPORARY);
+            assert_eq!(
+                fighting.current_spell_scene_class(),
+                SpellSceneClass::Combat
+            );
+        }
+    }
+
+    #[test]
+    fn cast_context_accepts_exactly_the_published_scenes_for_every_spell() {
+        let scenes: [(SpellSceneClass, PlayState); 4] = [
+            (
+                SpellSceneClass::Overworld,
+                britannia_state(open_world_grid(), 1, 1),
+            ),
+            (SpellSceneClass::Indoor, test_state(open_grid(), 1, 1)),
+            (
+                SpellSceneClass::Dungeon,
+                dungeon_state(open_dungeon_record(), 0, 1, 1),
+            ),
+            (SpellSceneClass::Combat, {
+                let mut fighting = britannia_state(open_world_grid(), 1, 1);
+                fighting.combat_active = true;
+                fighting
+            }),
+        ];
+
+        for (class, state) in &scenes {
+            assert_eq!(state.current_spell_scene_class(), *class);
+            for index in 0..SPELL_COUNT {
+                let expected = published_scene_mask(PUBLISHED_SPELL_SCENE_LABELS[index])
+                    & class.allow_mask_bit()
+                    != 0;
+                assert_eq!(
+                    state.spell_allowed_in_current_cast_context(index),
+                    expected,
+                    "spell {index} ({}) in {class:?}: catalogs/spell-list.md §5 publishes {}",
+                    SPELL_CODES[index],
+                    PUBLISHED_SPELL_SCENE_LABELS[index],
+                );
+            }
+        }
+
+        // Out-of-range ids never pass the gate.
+        assert!(
+            !scenes[0]
+                .1
+                .spell_allowed_in_current_cast_context(SPELL_COUNT)
+        );
+    }
+
+    #[test]
+    fn cast_scene_gate_refuses_dungeon_only_spell_on_the_overworld() {
+        // `catalogs/spell-list.md §5` ids 21/22 publish Up and Down as `D`.
+        for spell_index in [UUS_POR_SPELL_INDEX, DES_POR_SPELL_INDEX] {
+            let mut state = britannia_state(open_world_grid(), 1, 1);
+            state.spell_charges[spell_index] = 3;
+            state.party[0].mana = 20;
+            state.party[0].level = 8;
+
+            let outcome =
+                state.cast_spell_resource_gate(0, spell_index, DUNGEON_LEVEL_SPELL_COST);
+
+            assert_eq!(outcome, Some(MoveOutcome::Blocked));
+            assert_eq!(state.message, "Not here!");
+            // `magic.md §7`: the scene gate runs before charge consumption.
+            assert_eq!(state.spell_charges[spell_index], 3);
+            assert_eq!(state.party[0].mana, 20);
+            // `magic.md §5` step 3: no time is consumed on this rejection.
+            assert_eq!(state.turn, 0);
+        }
+
+        // The same spell in a dungeon passes the scene gate and spends.
+        let mut dungeon = dungeon_state(open_dungeon_record(), 1, 1, 1);
+        dungeon.spell_charges[UUS_POR_SPELL_INDEX] = 3;
+        dungeon.party[0].mana = 20;
+        dungeon.party[0].level = 8;
+        assert_eq!(
+            dungeon.cast_spell_resource_gate(0, UUS_POR_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST),
+            None
+        );
+        assert_eq!(dungeon.spell_charges[UUS_POR_SPELL_INDEX], 2);
+        assert_eq!(dungeon.party[0].mana, 20 - DUNGEON_LEVEL_SPELL_COST);
+    }
+
+    #[test]
+    fn cast_scene_gate_refuses_combat_only_spell_outside_combat() {
+        // `catalogs/spell-list.md §5` id 1 publishes Magic Missile as `C`.
+        for mut state in [
+            britannia_state(open_world_grid(), 1, 1),
+            test_state(open_grid(), 1, 1),
+            dungeon_state(open_dungeon_record(), 0, 1, 1),
+        ] {
+            state.spell_charges[MAGIC_MISSILE_SPELL_INDEX] = 2;
+            state.party[0].mana = 9;
+            state.party[0].level = 8;
+
+            let outcome = state.cast_spell_resource_gate(0, MAGIC_MISSILE_SPELL_INDEX, 1);
+
+            assert_eq!(outcome, Some(MoveOutcome::Blocked));
+            assert_eq!(state.message, "Not here!");
+            assert_eq!(state.spell_charges[MAGIC_MISSILE_SPELL_INDEX], 2);
+            assert_eq!(state.party[0].mana, 9);
+            assert_eq!(state.turn, 0);
+        }
+
+        let mut fighting = britannia_state(open_world_grid(), 1, 1);
+        fighting.combat_active = true;
+        fighting.spell_charges[MAGIC_MISSILE_SPELL_INDEX] = 2;
+        fighting.party[0].mana = 9;
+        fighting.party[0].level = 8;
+        assert_eq!(
+            fighting.cast_spell_resource_gate(0, MAGIC_MISSILE_SPELL_INDEX, 1),
+            None
+        );
+        assert_eq!(fighting.spell_charges[MAGIC_MISSILE_SPELL_INDEX], 1);
+        assert_eq!(fighting.party[0].mana, 8);
+    }
+
+    #[test]
+    fn cast_scene_rejection_precedes_the_charges_gate() {
+        // `magic.md §7`: gate order is scene, then charges. A dungeon-only
+        // spell cast on the overworld with zero charges still reports the
+        // scene refusal, not `None mixed!`.
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.spell_charges[UUS_POR_SPELL_INDEX] = 0;
+        state.party[0].mana = 20;
+        state.party[0].level = 8;
+
+        assert_eq!(
+            state.cast_spell_resource_gate(0, UUS_POR_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST),
+            Some(MoveOutcome::Blocked)
+        );
+        assert_eq!(state.message, "Not here!");
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn cast_level_gate_compares_caster_level_against_the_spell_circle() {
+        // `catalogs/spell-list.md §1`: `mana_cost(id) = circle(id)` and
+        // `minimum_level(id) = circle(id)`. Great Heal (id 27) is circle 5
+        // and is published `C/D/I/O`, so an indoor cast clears the scene
+        // gate and exercises the mana and level gates alone.
+        let circle = spell_circle_for(GREAT_HEAL_SPELL_INDEX as u8).unwrap();
+        assert_eq!(circle, 5);
+        assert_eq!(spell_mana_cost(circle), circle);
+        assert_eq!(spell_min_caster_level(circle), circle);
+
+        // Level below the circle: `magic.md §7` gate 8 — charge and mana
+        // are both spent, and the turn advances.
+        let mut under_level = test_state(open_grid(), 1, 1);
+        under_level.spell_charges[GREAT_HEAL_SPELL_INDEX] = 1;
+        under_level.party[0].mana = 9;
+        under_level.party[0].level = circle - 1;
+        assert_eq!(
+            under_level.cast_spell_resource_gate(0, GREAT_HEAL_SPELL_INDEX, GREAT_HEAL_COST),
+            Some(MoveOutcome::Blocked)
+        );
+        assert_eq!(under_level.message, "M.P. too low!");
+        assert_eq!(under_level.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
+        assert_eq!(under_level.party[0].mana, 9 - circle);
+        assert_eq!(under_level.turn, 1);
+
+        // Level exactly at the circle passes, even though the caster's
+        // level is far below their mana pool.
+        let mut at_level = test_state(open_grid(), 1, 1);
+        at_level.spell_charges[GREAT_HEAL_SPELL_INDEX] = 1;
+        at_level.party[0].mana = 40;
+        at_level.party[0].level = circle;
+        assert_eq!(
+            at_level.cast_spell_resource_gate(0, GREAT_HEAL_SPELL_INDEX, GREAT_HEAL_COST),
+            None
+        );
+        assert_eq!(at_level.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
+        assert_eq!(at_level.party[0].mana, 40 - circle);
+
+        // Mana below the circle: `magic.md §7` gate 7 — the charge is gone
+        // but no mana is debited.
+        let mut under_mana = test_state(open_grid(), 1, 1);
+        under_mana.spell_charges[GREAT_HEAL_SPELL_INDEX] = 1;
+        under_mana.party[0].mana = circle - 1;
+        under_mana.party[0].level = 8;
+        assert_eq!(
+            under_mana.cast_spell_resource_gate(0, GREAT_HEAL_SPELL_INDEX, GREAT_HEAL_COST),
+            Some(MoveOutcome::Blocked)
+        );
+        assert_eq!(under_mana.message, "M.P. too low!");
+        assert_eq!(under_mana.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
+        assert_eq!(under_mana.party[0].mana, circle - 1);
+        assert_eq!(under_mana.turn, 1);
+    }
+
+    #[test]
+    fn every_published_spell_cost_equals_its_circle() {
+        // `catalogs/spell-list.md §1`: `circle(id) = (id / 6) + 1`, and both
+        // the mana cost and the minimum caster level equal that circle. The
+        // live gate re-derives the circle from the spell id, so this is the
+        // invariant that lets callers keep passing a mana cost.
+        for index in 0..SPELL_COUNT {
+            let circle = spell_circle_for(index as u8).unwrap();
+            assert_eq!(circle, (index / SPELLS_PER_CIRCLE) as u8 + 1);
+            assert_eq!(spell_mana_cost(circle), spell_min_caster_level(circle));
+        }
+        assert_eq!(spell_circle_for(SPELL_COUNT as u8), None);
+    }

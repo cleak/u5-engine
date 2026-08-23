@@ -764,7 +764,7 @@ impl PlayState {
         if radius != VIEWPORT_PLAYER_ROW {
             return;
         }
-        let scene_byte = self.world_tick_scene_byte();
+        let scene_byte = self.current_scene_byte();
         let path = if self.visibility_buffers_ready {
             world_tick_path(scene_byte, self.visibility_dirty)
         } else {
@@ -780,17 +780,6 @@ impl PlayState {
             WorldTickPath::LazyRefill => {
                 self.lazy_refill_top_down_visibility_buffers(area, radius);
             }
-        }
-    }
-
-    fn world_tick_scene_byte(&self) -> u8 {
-        if self.combat_active {
-            return SCENE_COMBAT_TEMPORARY;
-        }
-        match self.area {
-            Area::World { .. } => SCENE_OVERWORLD,
-            Area::Town { scene, .. } => scene.byte,
-            Area::Dungeon { scene, .. } => scene.byte,
         }
     }
 

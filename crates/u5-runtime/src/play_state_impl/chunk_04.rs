@@ -1488,6 +1488,31 @@ impl PlayState {
         }
     }
 
+    /// `magic.md §5` steps 1 and 3-6 / `magic.md §7`: the live C-Cast
+    /// dispatcher gate. Returns `Some(outcome)` when the cast was refused
+    /// and the caller must stop, `None` when the spell handler should run.
+    ///
+    /// The gate decision itself is [`cast_dispatcher_gate`], the crate's one
+    /// implementation of the spec's ordering; this method supplies the state
+    /// it reads and applies the resource debits its outcome describes:
+    ///
+    /// - **Step 1, active-player resolve.** A missing or unconscious caster
+    ///   aborts before any gate.
+    /// - **Gate 5, scene.** `magic.md §7`: "the scene gate runs before
+    ///   charge consumption, so `Not here!` does not spend a charge", and
+    ///   `magic.md §5` step 3: "Time is *not* consumed on this rejection".
+    ///   So `Not here!` debits nothing and does not advance the turn.
+    /// - **Gate 6, charges.** `None mixed!` when the counter is zero;
+    ///   otherwise the charge is spent immediately.
+    /// - **Gate 7, mana.** `M.P. too low!` with the charge already gone.
+    /// - **Gate 8, level.** `M.P. too low!` with charge *and* mana gone.
+    ///
+    /// `mana_cost` is the spell's circle: `catalogs/spell-list.md §1`
+    /// publishes `mana_cost(id) = circle(id)` and
+    /// `minimum_level(id) = circle(id)`, so the mana gate and the level gate
+    /// compare against the same number. The circle is re-derived from
+    /// `spell_index` here rather than trusted from the caller, so the level
+    /// gate is a level-vs-circle test by construction.
     pub fn cast_spell_resource_gate(
         &mut self,
         caster_index: usize,
@@ -1502,25 +1527,46 @@ impl PlayState {
             self.message = "Nobody can cast!".to_string();
             return Some(MoveOutcome::Blocked);
         }
-        if self.spell_charges[spell_index] == 0 {
-            self.message = "None mixed!".to_string();
+        let Some(circle) = spell_circle_for(spell_index as u8) else {
+            self.message = "No effect!".to_string();
             return Some(MoveOutcome::Blocked);
-        }
+        };
+        debug_assert_eq!(
+            mana_cost, circle,
+            "cast_spell_resource_gate: caller passed mana cost {mana_cost} for spell \
+             {spell_index}, but catalogs/spell-list.md §1 publishes mana_cost(id) = \
+             circle(id) = {circle}",
+        );
 
-        self.spell_charges[spell_index] = self.spell_charges[spell_index].saturating_sub(1);
-        if self.party[caster_index].mana < mana_cost {
-            self.message = "M.P. too low!".to_string();
-            self.advance_turn();
-            return Some(MoveOutcome::Blocked);
+        let outcome = cast_dispatcher_gate(
+            self.spell_allowed_in_current_cast_context(spell_index),
+            self.spell_charges[spell_index],
+            caster.mana,
+            caster.level,
+            circle,
+        );
+        if outcome.consumed_charge() {
+            self.spell_charges[spell_index] = self.spell_charges[spell_index].saturating_sub(1);
         }
-        self.party[caster_index].mana -= mana_cost;
-        if self.party[caster_index].level < mana_cost {
-            self.message = "M.P. too low!".to_string();
-            self.advance_turn();
-            return Some(MoveOutcome::Blocked);
+        if outcome.consumed_mana() {
+            self.party[caster_index].mana = self.party[caster_index].mana.saturating_sub(circle);
         }
-
-        None
+        match outcome {
+            CastGateOutcome::Cast => None,
+            // `magic.md §5` step 3: the scene rejection costs no time. The
+            // charges rejection keeps this crate's existing no-turn
+            // behaviour; the spec does not settle whether `None mixed!`
+            // advances the clock.
+            CastGateOutcome::NotHere | CastGateOutcome::NoneMixed => {
+                self.message = outcome.message().to_string();
+                Some(MoveOutcome::Blocked)
+            }
+            CastGateOutcome::ManaTooLowChargeOnly | CastGateOutcome::LevelTooLowChargeAndMana => {
+                self.message = outcome.message().to_string();
+                self.advance_turn();
+                Some(MoveOutcome::Blocked)
+            }
+        }
     }
 
     pub fn apply_gate_travel(
