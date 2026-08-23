@@ -1096,39 +1096,34 @@ fn cli_intro_u4_transfer_refuses_terminal_preview_fallback() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// A **synthetic** `PARTY.SAV` built from the published
+/// `u4-transfer.md §5.1` layout by the engine's single fixture builder.
+///
+/// This used to be a second, hand-written fixture that placed the name
+/// at file offset `0x001A` and the class at `0x0019` and filled nine
+/// party-wide counters the transfer never reads - the same wrong layout
+/// the retired parser used, so the pair agreed with each other and with
+/// nothing else (`cleak/u5-spec#88`). It is replaced by
+/// `synthetic_party_sav_fixture`, which writes the `§5.1` offsets the
+/// one surviving parser reads.
+///
+/// No Ultima IV installation or genuine `PARTY.SAV` exists on this
+/// machine, and none was fabricated and treated as real data.
 fn u4_transfer_party_sav_fixture() -> Vec<u8> {
-    let mut bytes = vec![0; U4_PARTY_SAV_REQUIRED_LEN];
-    let record = U4_PARTY_SAV_PLAYER0_OFFSET;
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET
-        ..U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET + U4_PARTY_SAV_CHARACTER_NAME_LEN]
-        .copy_from_slice(b"AVATAR\0\0\0\0\0\0\0\0\0\0");
-    bytes[record + U4_PARTY_SAV_CHARACTER_SEX_OFFSET] = U4_PARTY_SAV_MALE_BYTE;
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET] = 6;
-    bytes[U4_PARTY_SAV_MOVE_COUNTER_OFFSET..U4_PARTY_SAV_MOVE_COUNTER_OFFSET + 2]
-        .copy_from_slice(&70u16.to_le_bytes());
-    bytes[U4_PARTY_SAV_MOON_COUNTER_OFFSET] = 70;
-    bytes[U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET] = 70;
-    bytes[U4_PARTY_SAV_FOOD_OFFSET..U4_PARTY_SAV_FOOD_OFFSET + 2]
-        .copy_from_slice(&9999u16.to_le_bytes());
-    bytes[U4_PARTY_SAV_GOLD_OFFSET..U4_PARTY_SAV_GOLD_OFFSET + 2]
-        .copy_from_slice(&9999u16.to_le_bytes());
-    bytes[U4_PARTY_SAV_GEMS_OFFSET] = 99;
-    bytes[U4_PARTY_SAV_TORCHES_OFFSET] = 99;
-    bytes[U4_PARTY_SAV_KEYS_OFFSET] = 99;
-    bytes[U4_PARTY_SAV_SEXTANTS_OFFSET] = 1;
-    bytes[U4_PARTY_SAV_VIRTUE_STANDING_OFFSET + 2] = 1;
-    bytes[record + U4_PARTY_SAV_CHARACTER_XP_OFFSET..record + U4_PARTY_SAV_CHARACTER_XP_OFFSET + 2]
-        .copy_from_slice(&4321u16.to_le_bytes());
-    bytes[record + U4_PARTY_SAV_CHARACTER_STR_OFFSET
-        ..record + U4_PARTY_SAV_CHARACTER_STR_OFFSET + 2]
-        .copy_from_slice(&29u16.to_le_bytes());
-    bytes[record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET
-        ..record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET + 2]
-        .copy_from_slice(&30u16.to_le_bytes());
-    bytes[record + U4_PARTY_SAV_CHARACTER_INT_OFFSET
-        ..record + U4_PARTY_SAV_CHARACTER_INT_OFFSET + 2]
-        .copy_from_slice(&9u16.to_le_bytes());
-    bytes
+    synthetic_party_sav_fixture(&U4PreviewSource {
+        name: "AVATAR".to_string(),
+        male: true,
+        class_index: 6,
+        strength: 29,
+        dexterity: 30,
+        intelligence: 9,
+        experience: 4321,
+        max_hit_points: 300,
+        // `§5.3`: one nonzero standing, so this source is not an
+        // Avatar. All-zero standings would be accepted too - they are
+        // the Avatar success condition, never a rejection.
+        is_avatar: false,
+    })
 }
 
 #[test]

@@ -431,10 +431,17 @@ Current worktree context when this TODO was refreshed:
   multiplying by the billable stay counter. Paid inn rest advances eight hours,
   wakes sleepers, cures poison, and applies class-based night restoration: full
   HP/MP targets for Avatar/Mage-style classes and half targets for Bards.
-- U4 transfer source validation now follows public `cleak/u5-spec#16`:
-  fixed 532-byte `PARTY.SAV`, public offsets for move/moon/dungeon counters,
-  gold/food/keys/torches/gems/sextants counters, leading class/name, and the
-  eight-byte no-transferable-data virtue gate.
+- U4 transfer source validation follows `u4-transfer.md §5.1`/`§5.2`/`§5.3`
+  as re-derived in `cleak/u5-spec#88`. The transfer makes exactly two reads of
+  `PARTY.SAV` - `0x0008` for 40 bytes, then `0x0140` for 182 bytes - and the
+  gate tests only six leading-record fields: HP, max HP and experience at
+  `0..9999`, STR/DEX/INT at `0..70`, class index at `0..7`, and the first eight
+  name bytes each NUL or `>= 0x20`. No party-wide counter is read, so none can
+  reject. All-zero virtue standings are the **Avatar success condition**, not a
+  rejection. The earlier entry here described the `#16` reading - counter
+  offsets near the head of the file, a leading name at `0x001A` with the class
+  at `0x0019`, and an eight-byte "no transferable data" virtue gate - and every
+  part of it is withdrawn.
 - Rest/camp ordinary HP/MP recovery follows the latest public guidance in
   `cleak/u5-spec#47`: rest advances time without a separate direct recovery
   grant. Hourly Ring of Regeneration is time-owned, non-combat only, checks the

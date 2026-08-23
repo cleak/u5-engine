@@ -24,16 +24,13 @@ fn visibility_hidden_anchors_to_u8_max() {
 
 #[test]
 fn u4_transfer_virtue_standing_count_aliases_to_virtue_count() {
-    // u4-transfer.md §5: the transfer "no transferable data"
-    // guard reads the eight consecutive virtue/karma standing
-    // words — one word per published virtue. u4_transfer.rs
-    // declared U4_TRANSFER_VIRTUE_STANDING_COUNT = 8 as a
-    // bare literal in parallel with constants::VIRTUE_COUNT
-    // = 8. Anchor the transfer-guard word count through to
+    // u4-transfer.md §5.3: the Avatarhood test reads eight
+    // consecutive virtue/karma standing words — one word per
+    // published virtue. Anchor the standing count through to
     // VIRTUE_COUNT so the count and the published virtue
     // count share one source of truth.
-    assert_eq!(U4_TRANSFER_VIRTUE_STANDING_COUNT, VIRTUE_COUNT);
-    assert_eq!(U4_TRANSFER_VIRTUE_STANDING_COUNT, 8);
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_COUNT, VIRTUE_COUNT);
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_COUNT, 8);
 }
 
 #[test]
@@ -947,34 +944,30 @@ fn combat_class_and_field_kind_consecutive_runs_chain() {
 }
 
 #[test]
-fn u4_transfer_gold_gem_food_max_anchors_to_party_gold_cap() {
-    // u4-transfer.md §5: the accepted source-side
-    // gold/gems/food range is 0..=9999 — matching the U5
-    // word-counter cap inventory.md §2 documents, so a U4
-    // character at the cap transfers without truncation.
-    // u4_transfer.rs declared U4_TRANSFER_GOLD_GEM_FOOD_MAX
-    // = 9999 as a bare literal in parallel with PARTY_GOLD_CAP.
-    // Anchor the U4-transfer source bound to PARTY_GOLD_CAP so
-    // both share one source of truth.
-    assert_eq!(U4_TRANSFER_GOLD_GEM_FOOD_MAX, PARTY_GOLD_CAP);
-    assert_eq!(U4_PARTY_SAV_LEN, 532);
-    assert_eq!(U4_PARTY_SAV_REQUIRED_LEN, U4_PARTY_SAV_LEN);
-    assert_eq!(U4_PARTY_SAV_MOVE_COUNTER_OFFSET, 0x0000);
-    // §5.3 (cleak/u5-spec#82): the standings block is 16-bit words
-    // at 0x0146, not bytes at 0x0002 - the old offset collided with
-    // the moon/dungeon counters and the gold field below.
-    assert_eq!(U4_PARTY_SAV_VIRTUE_STANDING_OFFSET, 0x0146);
-    assert_eq!(U4_PARTY_SAV_MOON_COUNTER_OFFSET, 0x0006);
-    assert_eq!(U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET, 0x0007);
-    assert_eq!(U4_PARTY_SAV_GOLD_OFFSET, 0x0008);
-    assert_eq!(U4_PARTY_SAV_FOOD_OFFSET, 0x000A);
-    assert_eq!(U4_PARTY_SAV_KEYS_OFFSET, 0x000D);
-    assert_eq!(U4_PARTY_SAV_TORCHES_OFFSET, 0x000E);
-    assert_eq!(U4_PARTY_SAV_GEMS_OFFSET, 0x000F);
-    assert_eq!(U4_PARTY_SAV_SEXTANTS_OFFSET, 0x0011);
-    assert_eq!(U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET, 0x0019);
-    assert_eq!(U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET, 0x001A);
-    assert_eq!(U4_TRANSFER_GOLD_GEM_FOOD_MAX, 9999);
+fn u4_transfer_source_gate_has_no_party_wide_counter_bounds() {
+    // u4-transfer.md §5.2 / cleak/u5-spec#88: "No party-wide counter
+    // is validated." This test used to assert a gold/gems/food bound
+    // anchored to PARTY_GOLD_CAP, plus offsets for the move, moon,
+    // dungeon, gold, food, keys, torches, gems and sextants counters,
+    // and a leading-record name at 0x001A with the class at 0x0019.
+    // Every one of those constants described a read the transfer never
+    // makes, so all of them are deleted along with the parser that
+    // used them. What §5.2 does gate is six leading-record fields:
+    assert_eq!(U4_PREVIEW_PROGRESS_MAX, 9999);
+    assert_eq!(U4_PREVIEW_ATTRIBUTE_MAX, 70);
+    assert_eq!(U4_PREVIEW_CLASS_INDEX_MAX, 7);
+    assert_eq!(U4_PREVIEW_VALIDATED_NAME_BYTES, 8);
+    // §5.1/§5.4: the record base is the first read's seek target, so
+    // the name is at file 0x001C and the class byte at 0x002D.
+    assert_eq!(U4_PREVIEW_RECORD_OFFSET, 0x0008);
+    assert_eq!(
+        U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_NAME_OFFSET,
+        0x001C
+    );
+    assert_eq!(
+        U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_CLASS_OFFSET,
+        0x002D
+    );
 }
 
 #[test]
@@ -11357,31 +11350,54 @@ fn chest_secondary_pool_attempts_uses_floor_half_plus_one() {
 }
 
 #[test]
-fn u4_transfer_no_transferable_data_fires_only_when_all_zero() {
+fn u4_transfer_avatar_latch_fires_only_when_all_eight_standings_are_zero() {
     // u4-transfer.md §5.3: eight 16-bit standings at stride 2 from
     // 0x0146, tested as eight independent comparisons against zero.
-    assert_eq!(U4_TRANSFER_VIRTUE_STANDING_COUNT, 8);
-    assert_eq!(U4_PARTY_SAV_VIRTUE_STANDING_OFFSET, 0x0146);
-    assert_eq!(U4_PARTY_SAV_VIRTUE_STANDING_STRIDE, 2);
+    // This test was named for the withdrawn "no transferable data"
+    // gate; cleak/u5-spec#88 settles that all-zero is the Avatar
+    // success condition and never a rejection, so it now checks the
+    // latch through the one parser instead of a standalone predicate.
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_COUNT, 8);
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_OFFSET, 0x0146);
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_STRIDE, 2);
     // The block ends at 0x0155, inclusive.
     assert_eq!(
-        U4_PARTY_SAV_VIRTUE_STANDING_OFFSET
-            + U4_TRANSFER_VIRTUE_STANDING_COUNT * U4_PARTY_SAV_VIRTUE_STANDING_STRIDE
+        U4_PREVIEW_VIRTUE_STANDING_OFFSET
+            + U4_PREVIEW_VIRTUE_STANDING_COUNT * U4_PREVIEW_VIRTUE_STANDING_STRIDE
             - 1,
         0x0155
     );
+
+    let source = U4PreviewSource {
+        name: "AVATAR".to_string(),
+        male: true,
+        class_index: 2,
+        strength: 20,
+        dexterity: 20,
+        intelligence: 20,
+        experience: 100,
+        max_hit_points: 200,
+        is_avatar: false,
+    };
+    let standings = |values: [u16; 8]| {
+        let mut bytes = synthetic_party_sav_fixture(&source);
+        for (index, value) in values.into_iter().enumerate() {
+            let at = U4_PREVIEW_VIRTUE_STANDING_OFFSET
+                + index * U4_PREVIEW_VIRTUE_STANDING_STRIDE;
+            bytes[at..at + 2].copy_from_slice(&value.to_le_bytes());
+        }
+        parse_u4_preview_source(&bytes).unwrap().is_avatar
+    };
+
     // All zero -> the Avatar latch fires.
-    assert!(u4_transfer_no_transferable_data(&[0u16; 8]));
-    assert!(u4_transfer_no_transferable_data(&[]));
-    // Any nonzero standing allows the normal preview.
-    assert!(!u4_transfer_no_transferable_data(&[1u16, 0, 0, 0, 0, 0, 0, 0]));
-    assert!(!u4_transfer_no_transferable_data(&[0u16, 0, 0, 0, 0, 0, 0, 50]));
-    assert!(!u4_transfer_no_transferable_data(&[
-        10u16, 20, 30, 40, 50, 60, 70, 80
-    ]));
+    assert!(standings([0; 8]));
+    // Any nonzero standing clears it, and none of these reject.
+    assert!(!standings([1, 0, 0, 0, 0, 0, 0, 0]));
+    assert!(!standings([0, 0, 0, 0, 0, 0, 0, 50]));
+    assert!(!standings([10, 20, 30, 40, 50, 60, 70, 80]));
     // A standing whose low byte is zero but high byte is not must still
-    // count - the reason the old eight-byte read was wrong.
-    assert!(!u4_transfer_no_transferable_data(&[0x0100u16, 0, 0, 0, 0, 0, 0, 0]));
+    // count - the reason a byte-wide or eight-byte read is wrong.
+    assert!(!standings([0x0100, 0, 0, 0, 0, 0, 0, 0]));
 }
 
 #[test]
@@ -13885,39 +13901,42 @@ fn blackthorn_challenge_prompt_table_matches_spec() {
 
 #[test]
 fn u4_transfer_source_validation_gates_match_spec() {
-    // u4-transfer.md §5
-    assert_eq!(U4_TRANSFER_GOLD_GEM_FOOD_MAX, 9999);
-    assert_eq!(U4_TRANSFER_MOVE_MOON_DUNGEON_MAX, 70);
-    assert_eq!(U4_TRANSFER_CLASS_INDEX_MAX, 7);
+    // u4-transfer.md §5.2 / cleak/u5-spec#88. This test used to check
+    // four standalone predicates on u4_transfer.rs, two of which gated
+    // party-wide counters §5.2 says are never read, and one of which
+    // rejected name bytes 0x7F and 0xFF. §5.2's rule is "NUL or at
+    // least 0x20" with no upper bound, so those two bytes are accepted.
+    // The gates now live in the one parser and are checked through it.
+    assert_eq!(U4_PREVIEW_PROGRESS_MAX, 9999);
+    assert_eq!(U4_PREVIEW_ATTRIBUTE_MAX, 70);
+    assert_eq!(U4_PREVIEW_CLASS_INDEX_MAX, 7);
 
-    // Gold/gem/food range gate.
-    assert!(u4_transfer_gold_gem_food_in_range(0));
-    assert!(u4_transfer_gold_gem_food_in_range(9999));
-    assert!(!u4_transfer_gold_gem_food_in_range(10000));
-    assert!(!u4_transfer_gold_gem_food_in_range(65535));
+    let source = U4PreviewSource {
+        name: "AVATAR".to_string(),
+        male: true,
+        class_index: 2,
+        strength: 20,
+        dexterity: 20,
+        intelligence: 20,
+        experience: 100,
+        max_hit_points: 200,
+        is_avatar: false,
+    };
+    let accepts_name_byte = |byte: u8| {
+        let mut bytes = synthetic_party_sav_fixture(&source);
+        bytes[U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_NAME_OFFSET] = byte;
+        parse_u4_preview_source(&bytes).is_ok()
+    };
 
-    // Move/moon/dungeon range gate.
-    assert!(u4_transfer_move_moon_dungeon_in_range(0));
-    assert!(u4_transfer_move_moon_dungeon_in_range(70));
-    assert!(!u4_transfer_move_moon_dungeon_in_range(71));
-    assert!(!u4_transfer_move_moon_dungeon_in_range(255));
-
-    // Class index range gate.
-    for c in 0u8..=7 {
-        assert!(u4_transfer_class_index_in_range(c));
-    }
-    assert!(!u4_transfer_class_index_in_range(8));
-    assert!(!u4_transfer_class_index_in_range(255));
-
-    // Name-byte gate: NUL + printable accepted; control bytes rejected.
-    assert!(u4_transfer_name_byte_accepted(0));
-    assert!(u4_transfer_name_byte_accepted(b'A'));
-    assert!(u4_transfer_name_byte_accepted(b' '));
-    assert!(u4_transfer_name_byte_accepted(b'~'));
-    assert!(!u4_transfer_name_byte_accepted(0x01));
-    assert!(!u4_transfer_name_byte_accepted(0x1F));
-    assert!(!u4_transfer_name_byte_accepted(0x7F));
-    assert!(!u4_transfer_name_byte_accepted(0xFF));
+    // Name-byte gate: NUL or >= 0x20 accepted; other control bytes reject.
+    assert!(accepts_name_byte(0));
+    assert!(accepts_name_byte(b' '));
+    assert!(accepts_name_byte(b'A'));
+    assert!(accepts_name_byte(b'~'));
+    assert!(accepts_name_byte(0x7F));
+    assert!(accepts_name_byte(0xFF));
+    assert!(!accepts_name_byte(0x01));
+    assert!(!accepts_name_byte(0x1F));
 }
 
 #[test]

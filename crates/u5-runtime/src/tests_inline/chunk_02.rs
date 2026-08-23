@@ -470,120 +470,362 @@ fn chargen_blank_name_does_not_rewrite_saved_files() {
 }
 
 #[test]
-fn u4_transfer_parses_party_sav_player_zero_and_virtue_gate() {
-    let mut bytes = vec![0; U4_PARTY_SAV_REQUIRED_LEN];
-    let record = U4_PARTY_SAV_PLAYER0_OFFSET;
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET
-        ..U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET + 16]
-        .copy_from_slice(b"AVATAR\0\0\0\0\0\0\0\0\0\0");
-    bytes[record + U4_PARTY_SAV_CHARACTER_SEX_OFFSET] = U4_PARTY_SAV_MALE_BYTE;
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET] = 6;
-    bytes[U4_PARTY_SAV_MOVE_COUNTER_OFFSET..U4_PARTY_SAV_MOVE_COUNTER_OFFSET + 2]
-        .copy_from_slice(&70u16.to_le_bytes());
-    bytes[U4_PARTY_SAV_MOON_COUNTER_OFFSET] = 70;
-    bytes[U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET] = 70;
-    bytes[U4_PARTY_SAV_FOOD_OFFSET..U4_PARTY_SAV_FOOD_OFFSET + 2]
-        .copy_from_slice(&9999u16.to_le_bytes());
-    bytes[U4_PARTY_SAV_GOLD_OFFSET..U4_PARTY_SAV_GOLD_OFFSET + 2]
-        .copy_from_slice(&9999u16.to_le_bytes());
-    bytes[U4_PARTY_SAV_VIRTUE_STANDING_OFFSET + 2] = 1;
-    bytes[record + U4_PARTY_SAV_CHARACTER_XP_OFFSET..record + U4_PARTY_SAV_CHARACTER_XP_OFFSET + 2]
-        .copy_from_slice(&4321u16.to_le_bytes());
-    bytes[record + U4_PARTY_SAV_CHARACTER_STR_OFFSET
-        ..record + U4_PARTY_SAV_CHARACTER_STR_OFFSET + 2]
-        .copy_from_slice(&29u16.to_le_bytes());
-    bytes[record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET
-        ..record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET + 2]
-        .copy_from_slice(&30u16.to_le_bytes());
-    bytes[record + U4_PARTY_SAV_CHARACTER_INT_OFFSET
-        ..record + U4_PARTY_SAV_CHARACTER_INT_OFFSET + 2]
-        .copy_from_slice(&9u16.to_le_bytes());
+fn u4_transfer_party_sav_parser_reads_the_leading_record_at_the_published_offsets() {
+    // `u4-transfer.md §5.1` / `§5.4` (`cleak/u5-spec#88`): the record
+    // base *is* the first read's seek target `0x0008` - there is no
+    // record header - so the name sits at file offset `0x001C` and the
+    // class byte at `0x002D`. The retired parser read the name at
+    // `0x001A` and the class at `0x0019`; those are a different record
+    // model, not this one with a different base.
+    assert_eq!(U4_PREVIEW_RECORD_OFFSET, 0x0008);
+    assert_eq!(
+        U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_NAME_OFFSET,
+        0x001C
+    );
+    assert_eq!(
+        U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_CLASS_OFFSET,
+        0x002D
+    );
 
-    let source = parse_u4_transfer_source_from_party_sav(&bytes).unwrap();
+    let mut bytes = synthetic_party_sav_fixture(&U4PreviewSource {
+        name: "AVATAR".to_string(),
+        male: true,
+        class_index: 6,
+        strength: 29,
+        dexterity: 30,
+        intelligence: 9,
+        experience: 4321,
+        max_hit_points: 300,
+        is_avatar: false,
+    });
+    // The published offsets are where the fixture actually wrote.
+    assert_eq!(&bytes[0x001C..0x0022], b"AVATAR");
+    assert_eq!(bytes[0x002D], 6);
+    // Nothing the parser reads lives in the eight skipped header bytes.
+    for byte in &mut bytes[..U4_PREVIEW_RECORD_OFFSET] {
+        *byte = 0xff;
+    }
 
-    assert_eq!(source.name, b"AVATAR\0\0\0\0\0\0\0\0\0\0");
+    let source = parse_u4_preview_source(&bytes).unwrap();
+
+    assert_eq!(source.name, "AVATAR");
     assert!(source.male);
     assert_eq!(source.class_index, 6);
     assert_eq!(source.strength, 29);
     assert_eq!(source.dexterity, 30);
     assert_eq!(source.intelligence, 9);
     assert_eq!(source.experience, 4321);
+    assert!(!source.is_avatar);
 }
 
 #[test]
-fn u4_transfer_party_sav_parser_rejects_empty_virtues_and_bad_fields() {
-    let mut bytes = vec![0; U4_PARTY_SAV_REQUIRED_LEN];
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET
-        ..U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET + 16]
-        .copy_from_slice(b"AVATAR\0\0\0\0\0\0\0\0\0\0");
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET] = 0;
-
-    bytes[U4_PARTY_SAV_GOLD_OFFSET..U4_PARTY_SAV_GOLD_OFFSET + 2]
-        .copy_from_slice(&10000u16.to_le_bytes());
+fn u4_transfer_party_sav_parser_makes_exactly_two_published_reads() {
+    // `u4-transfer.md §5.1`/`§5.4` (`cleak/u5-spec#88`): "There are
+    // exactly two reads of `PARTY.SAV`, and no others" - seek `0x0008`
+    // for 40 bytes, then seek `0x0140` for 182 bytes. The geometry
+    // closes: `0x0008 + 8 * 39 = 0x0140`.
+    assert_eq!(U4_PREVIEW_RECORD_OFFSET, 0x0008);
+    assert_eq!(U4_PREVIEW_RECORD_READ_LEN, 40);
+    assert_eq!(U4_PREVIEW_RECORD_LEN, 39);
+    assert_eq!(U4_PREVIEW_RECORD_COUNT, 8);
     assert_eq!(
-        parse_u4_transfer_source_from_party_sav(&bytes).err(),
-        Some(U4TransferError::SourceCounterOutOfRange {
-            field: "gold",
-            value: 10000,
-            max: 9999,
+        U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_COUNT * U4_PREVIEW_RECORD_LEN,
+        0x0140
+    );
+    assert_eq!(U4_PREVIEW_PARTY_BLOCK_OFFSET, 0x0140);
+    assert_eq!(U4_PREVIEW_PARTY_BLOCK_LEN, 182);
+    // A source image has to cover both reads.
+    assert_eq!(U4_PREVIEW_REQUIRED_LEN, 0x0140 + 182);
+
+    let bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+    assert_eq!(bytes.len(), U4_PREVIEW_REQUIRED_LEN);
+    assert!(parse_u4_preview_source(&bytes).is_ok());
+    assert_eq!(
+        parse_u4_preview_source(&bytes[..U4_PREVIEW_REQUIRED_LEN - 1]).err(),
+        Some(U4PreviewSourceRejection::TooShort(
+            U4_PREVIEW_REQUIRED_LEN - 1
+        ))
+    );
+}
+
+#[test]
+fn u4_transfer_all_zero_standings_are_accepted_and_latch_the_avatar_flag() {
+    // `u4-transfer.md §5.3` / `cleak/u5-spec#88`: "**If all eight are
+    // zero the transferred character is marked an Avatar; otherwise it
+    // is not.**" and "all-zero is the *success* condition for
+    // Avatarhood, and no value of this block ever prevents a
+    // transfer". The retired parser returned `NoTransferableData` for
+    // exactly this input - it turned away the completed Ultima IV
+    // Avatar the path exists to import.
+    let mut bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+    zero_u4_standings(&mut bytes);
+
+    let source = parse_u4_preview_source(&bytes).expect("all-zero standings are accepted");
+
+    assert!(source.is_avatar);
+    // `§7`: the Avatar latch overrides the translated class letter.
+    let mut save = saved_game_seed_bytes(0, 0, 10, 20);
+    let avatar = apply_u4_transfer_to_save(&mut save, &source.to_transfer_source(), None).unwrap();
+    assert_eq!(avatar.class_byte, b'A');
+    assert_eq!(avatar.class_byte, U4_TRANSFER_AVATAR_CLASS_BYTE);
+    assert_eq!(save[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_CLASS_OFFSET], b'A');
+    // `§6.3`/`§6.5`/`§6.6`: the alternate display strings.
+    assert_eq!(source.class_text(), "Avatar");
+    let session = U4PreviewSession::new(source);
+    assert_eq!(session.verdict_text(), "Avatar");
+    assert!(
+        session
+            .found_page_lines()
+            .iter()
+            .any(|line| line.text.ends_with("is an Avatar."))
+    );
+}
+
+#[test]
+fn u4_transfer_nonzero_standings_are_accepted_without_the_avatar_flag() {
+    // `u4-transfer.md §5.3`: "Nothing about this test aborts or diverts
+    // the transfer: both outcomes produce the normal preview." The test
+    // is satisfied only when each of the eight values is individually
+    // zero, so one nonzero standing anywhere in the block clears it.
+    for index in 0..U4_PREVIEW_VIRTUE_STANDING_COUNT {
+        let mut bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+        zero_u4_standings(&mut bytes);
+        let at = U4_PREVIEW_VIRTUE_STANDING_OFFSET + index * U4_PREVIEW_VIRTUE_STANDING_STRIDE;
+        bytes[at..at + 2].copy_from_slice(&1u16.to_le_bytes());
+
+        let source = parse_u4_preview_source(&bytes).expect("nonzero standings are accepted too");
+
+        assert!(!source.is_avatar, "standing {index}");
+        let mut save = saved_game_seed_bytes(0, 0, 10, 20);
+        let avatar =
+            apply_u4_transfer_to_save(&mut save, &source.to_transfer_source(), None).unwrap();
+        // Class index 2 is Fighter; the latch did not override it.
+        assert_eq!(avatar.class_byte, b'F');
+        assert_eq!(source.class_text(), "Fighter");
+        assert_eq!(U4PreviewSession::new(source).verdict_text(), "Non-Avatar");
+    }
+}
+
+#[test]
+fn u4_transfer_avatarhood_test_is_sixteen_bytes_six_into_the_party_block() {
+    // `u4-transfer.md §5.3`: "read the sixteen bytes that begin six
+    // bytes into the party-wide block and require every one of them to
+    // be zero"; element width 16 bits, stride two, file offsets
+    // `0x0146` through `0x0155`. "**A byte-wide test, an eight-byte
+    // span, or any offset near the head of the file is wrong.**"
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_OFFSET, 0x0146);
+    assert_eq!(
+        U4_PREVIEW_VIRTUE_STANDING_OFFSET,
+        U4_PREVIEW_PARTY_BLOCK_OFFSET + 6
+    );
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_STRIDE, 2);
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_COUNT, VIRTUE_COUNT);
+    assert_eq!(U4_PREVIEW_VIRTUE_STANDING_COUNT, 8);
+    assert_eq!(
+        U4_PREVIEW_VIRTUE_STANDING_OFFSET
+            + U4_PREVIEW_VIRTUE_STANDING_COUNT * U4_PREVIEW_VIRTUE_STANDING_STRIDE
+            - 1,
+        0x0155
+    );
+
+    // The high byte of a standing counts: a byte-wide test would miss it.
+    let mut bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+    zero_u4_standings(&mut bytes);
+    bytes[U4_PREVIEW_VIRTUE_STANDING_OFFSET + 1] = 1;
+    assert!(!parse_u4_preview_source(&bytes).unwrap().is_avatar);
+
+    // The block's leading food and gold fields sit before the
+    // standings and are not part of the test, and neither are the item
+    // counters after them.
+    bytes[U4_PREVIEW_VIRTUE_STANDING_OFFSET + 1] = 0;
+    for byte in &mut bytes[U4_PREVIEW_PARTY_BLOCK_OFFSET..U4_PREVIEW_VIRTUE_STANDING_OFFSET] {
+        *byte = 0xff;
+    }
+    for byte in &mut bytes[U4_PREVIEW_VIRTUE_STANDING_OFFSET
+        + U4_PREVIEW_VIRTUE_STANDING_COUNT * U4_PREVIEW_VIRTUE_STANDING_STRIDE..]
+    {
+        *byte = 0xff;
+    }
+    assert!(
+        parse_u4_preview_source(&bytes).unwrap().is_avatar,
+        "a completed Avatar still carrying equipment is still an Avatar"
+    );
+}
+
+#[test]
+fn u4_transfer_party_wide_counters_never_reject_a_source_save() {
+    // `u4-transfer.md §5.2`: "No party-wide counter is validated. In
+    // particular the predecessor's gold, food, gems, torches, keys,
+    // sextants, move count, moon phase and dungeon-progress fields are
+    // never read on this path, and an implementation must not reject a
+    // transfer because of them." `§5.4` adds that the original
+    // structurally cannot validate them. The retired parser validated
+    // nine of them and so rejected saves the original accepts.
+    let clean = synthetic_party_sav_fixture(&plain_u4_preview_source());
+    let expected = parse_u4_preview_source(&clean).unwrap();
+
+    // Saturate every byte outside the leading record and the standings.
+    let mut bytes = clean.clone();
+    for byte in &mut bytes[..U4_PREVIEW_RECORD_OFFSET] {
+        *byte = 0xff;
+    }
+    for byte in &mut bytes
+        [U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_READ_LEN..U4_PREVIEW_VIRTUE_STANDING_OFFSET]
+    {
+        *byte = 0xff;
+    }
+    for byte in &mut bytes[U4_PREVIEW_VIRTUE_STANDING_OFFSET
+        + U4_PREVIEW_VIRTUE_STANDING_COUNT * U4_PREVIEW_VIRTUE_STANDING_STRIDE..]
+    {
+        *byte = 0xff;
+    }
+
+    let parsed = parse_u4_preview_source(&bytes).expect("party-wide counters are never read");
+    assert_eq!(parsed, expected);
+}
+
+#[test]
+fn u4_transfer_validation_gate_enforces_exactly_the_six_published_limits() {
+    // `u4-transfer.md §5.2`: three words bounded at 9999 (current hit
+    // points, maximum hit points, experience), three at 70 (Strength,
+    // Dexterity, Intelligence), a class byte at most 7, and the first
+    // eight name bytes each NUL or at least `0x20`. Each accepted range
+    // is zero through the stated maximum, tested on the raw source
+    // value before `§7`'s translations.
+    assert_eq!(U4_PREVIEW_PROGRESS_MAX, 9999);
+    assert_eq!(U4_PREVIEW_ATTRIBUTE_MAX, 70);
+    assert_eq!(U4_PREVIEW_CLASS_INDEX_MAX, 7);
+    assert_eq!(U4_PREVIEW_VALIDATED_NAME_BYTES, 8);
+
+    let word_limits = [
+        (
+            U4_PREVIEW_RECORD_HP_OFFSET,
+            "current hit points",
+            U4_PREVIEW_PROGRESS_MAX,
+        ),
+        (
+            U4_PREVIEW_RECORD_MAX_HP_OFFSET,
+            "maximum hit points",
+            U4_PREVIEW_PROGRESS_MAX,
+        ),
+        (
+            U4_PREVIEW_RECORD_EXPERIENCE_OFFSET,
+            "experience",
+            U4_PREVIEW_PROGRESS_MAX,
+        ),
+        (
+            U4_PREVIEW_RECORD_STRENGTH_OFFSET,
+            "strength",
+            U4_PREVIEW_ATTRIBUTE_MAX,
+        ),
+        (
+            U4_PREVIEW_RECORD_DEXTERITY_OFFSET,
+            "dexterity",
+            U4_PREVIEW_ATTRIBUTE_MAX,
+        ),
+        (
+            U4_PREVIEW_RECORD_INTELLIGENCE_OFFSET,
+            "intelligence",
+            U4_PREVIEW_ATTRIBUTE_MAX,
+        ),
+    ];
+    for (offset, field, max) in word_limits {
+        let at = U4_PREVIEW_RECORD_OFFSET + offset;
+
+        let mut inside = synthetic_party_sav_fixture(&plain_u4_preview_source());
+        inside[at..at + 2].copy_from_slice(&max.to_le_bytes());
+        assert!(
+            parse_u4_preview_source(&inside).is_ok(),
+            "{field} must accept {max}"
+        );
+
+        let mut outside = synthetic_party_sav_fixture(&plain_u4_preview_source());
+        outside[at..at + 2].copy_from_slice(&(max + 1).to_le_bytes());
+        assert_eq!(
+            parse_u4_preview_source(&outside).err(),
+            Some(U4PreviewSourceRejection::OutOfRange {
+                field,
+                value: max + 1,
+                max,
+            }),
+            "{field} must reject {}",
+            max + 1
+        );
+    }
+
+    // Class index: 7 accepted, 8 rejected.
+    let class_at = U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_CLASS_OFFSET;
+    let mut bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+    bytes[class_at] = U4_PREVIEW_CLASS_INDEX_MAX;
+    assert!(parse_u4_preview_source(&bytes).is_ok());
+    bytes[class_at] = U4_PREVIEW_CLASS_INDEX_MAX + 1;
+    assert_eq!(
+        parse_u4_preview_source(&bytes).err(),
+        Some(U4PreviewSourceRejection::OutOfRange {
+            field: "class index",
+            value: u16::from(U4_PREVIEW_CLASS_INDEX_MAX) + 1,
+            max: u16::from(U4_PREVIEW_CLASS_INDEX_MAX),
         })
     );
-    bytes[U4_PARTY_SAV_GOLD_OFFSET..U4_PARTY_SAV_GOLD_OFFSET + 2]
-        .copy_from_slice(&0u16.to_le_bytes());
 
-    assert_eq!(
-        parse_u4_transfer_source_from_party_sav(&bytes).err(),
-        Some(U4TransferError::NoTransferableData)
+    // Name bytes: NUL and `0x20` accepted, `0x1f` rejected, at each of
+    // the eight validated positions; byte nine is loaded, never examined.
+    let name_at = U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_NAME_OFFSET;
+    for index in 0..U4_PREVIEW_VALIDATED_NAME_BYTES {
+        for accepted in [0u8, 0x20] {
+            let mut bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+            bytes[name_at + index] = accepted;
+            assert!(
+                parse_u4_preview_source(&bytes).is_ok(),
+                "name byte {index} must accept {accepted:#04x}"
+            );
+        }
+        let mut bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+        bytes[name_at + index] = 0x1f;
+        assert_eq!(
+            parse_u4_preview_source(&bytes).err(),
+            Some(U4PreviewSourceRejection::NameByte(0x1f)),
+            "name byte {index} must reject 0x1f"
+        );
+    }
+    let mut bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+    bytes[name_at + U4_PREVIEW_VALIDATED_NAME_BYTES] = 0x01;
+    assert!(
+        parse_u4_preview_source(&bytes).is_ok(),
+        "only the first eight name bytes are validated"
     );
+}
 
-    bytes[U4_PARTY_SAV_MOVE_COUNTER_OFFSET..U4_PARTY_SAV_MOVE_COUNTER_OFFSET + 2]
-        .copy_from_slice(&71u16.to_le_bytes());
-    assert_eq!(
-        parse_u4_transfer_source_from_party_sav(&bytes).err(),
-        Some(U4TransferError::SourceCounterOutOfRange {
-            field: "move",
-            value: 71,
-            max: 70,
-        })
-    );
-    bytes[U4_PARTY_SAV_MOVE_COUNTER_OFFSET..U4_PARTY_SAV_MOVE_COUNTER_OFFSET + 2]
-        .copy_from_slice(&0u16.to_le_bytes());
+/// A `§5.1`-shaped, non-Avatar source for the parser tests.
+///
+/// Nothing here is a captured Ultima IV save: there is no Ultima IV
+/// installation and no genuine `PARTY.SAV` on this machine, and none
+/// was fabricated and treated as evidence. The bytes come from
+/// [`synthetic_party_sav_fixture`], which builds an image from the
+/// published `§5.1` layout. A synthetic fixture tests that the engine
+/// matches the spec; it cannot test that the spec matches Ultima IV.
+fn plain_u4_preview_source() -> U4PreviewSource {
+    U4PreviewSource {
+        name: "AVATAR".to_string(),
+        male: true,
+        class_index: 2,
+        strength: 29,
+        dexterity: 30,
+        intelligence: 9,
+        experience: 4321,
+        max_hit_points: 300,
+        is_avatar: false,
+    }
+}
 
-    bytes[U4_PARTY_SAV_MOON_COUNTER_OFFSET] = 71;
-    assert_eq!(
-        parse_u4_transfer_source_from_party_sav(&bytes).err(),
-        Some(U4TransferError::SourceCounterOutOfRange {
-            field: "moon",
-            value: 71,
-            max: 70,
-        })
-    );
-    bytes[U4_PARTY_SAV_MOON_COUNTER_OFFSET] = 0;
-
-    bytes[U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET] = 71;
-    assert_eq!(
-        parse_u4_transfer_source_from_party_sav(&bytes).err(),
-        Some(U4TransferError::SourceCounterOutOfRange {
-            field: "dungeon",
-            value: 71,
-            max: 70,
-        })
-    );
-    bytes[U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET] = 0;
-
-    bytes[U4_PARTY_SAV_VIRTUE_STANDING_OFFSET] = 1;
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET] = 8;
-    assert_eq!(
-        parse_u4_transfer_source_from_party_sav(&bytes).err(),
-        Some(U4TransferError::InvalidClassIndex(8))
-    );
-
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET] = 0;
-    bytes[U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET] = 0x1f;
-    assert_eq!(
-        parse_u4_transfer_source_from_party_sav(&bytes).err(),
-        Some(U4TransferError::InvalidNameByte(0x1f))
-    );
+/// `§5.3`: clear the sixteen standings bytes, i.e. make the source a
+/// completed Ultima IV Avatar.
+fn zero_u4_standings(bytes: &mut [u8]) {
+    let end = U4_PREVIEW_VIRTUE_STANDING_OFFSET
+        + U4_PREVIEW_VIRTUE_STANDING_COUNT * U4_PREVIEW_VIRTUE_STANDING_STRIDE;
+    for byte in &mut bytes[U4_PREVIEW_VIRTUE_STANDING_OFFSET..end] {
+        *byte = 0;
+    }
 }
 
 #[test]
@@ -600,6 +842,7 @@ fn u4_transfer_application_maps_avatar_fields_and_preserves_seed_bytes() {
         dexterity: 29,
         intelligence: 30,
         experience: 3500,
+        is_avatar: false,
     };
 
     let avatar = apply_u4_transfer_to_save(&mut save, &source, None).unwrap();
@@ -664,6 +907,7 @@ fn u4_transfer_commit_writes_saved_game_from_init_seed_and_saved_ool_from_init_o
         dexterity: 10,
         intelligence: 11,
         experience: 990,
+        is_avatar: false,
     };
 
     let avatar = commit_u4_transfer_save(&dir, &source, None).unwrap();
@@ -709,6 +953,7 @@ fn u4_transfer_invalid_source_does_not_rewrite_saved_files() {
         dexterity: 20,
         intelligence: 20,
         experience: 0,
+        is_avatar: false,
     };
 
     let err = commit_u4_transfer_save(&dir, &source, None).err().unwrap();

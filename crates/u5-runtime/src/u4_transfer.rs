@@ -31,86 +31,42 @@ pub const U4_TRANSFER_U5_SEED_GAM_FILENAME: &str = crate::INIT_GAM_FILENAME;
 /// canonical filename stay one value.
 pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = crate::INIT_OOL_FILENAME;
 pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
-pub const U4_PARTY_SAV_LEN: usize = 532;
-pub const U4_PARTY_SAV_MOVE_COUNTER_OFFSET: usize = 0x0000;
-/// `u4-transfer.md §5.3` (published in answer to `cleak/u5-spec#82`):
-/// the eight virtue/karma standings are **16-bit** values at stride 2
-/// starting at file offset `0x0146`, ending at `0x0155`.
-///
-/// The engine previously read eight *bytes* at `0x0002`. That was wrong
-/// on offset, element width and span: it landed on the moon counter,
-/// the dungeon counter and the 16-bit gold field, none of which this
-/// path ever reads. The read that supplies the block starts at `0x0140`
-/// and covers 182 bytes, so the party-wide food and gold fields at the
-/// head of the block are skipped by construction rather than by an
-/// explicit step.
-pub const U4_PARTY_SAV_VIRTUE_STANDING_OFFSET: usize = 0x0146;
-/// `u4-transfer.md §5.3`: stride between consecutive standings.
-pub const U4_PARTY_SAV_VIRTUE_STANDING_STRIDE: usize = 2;
-pub const U4_PARTY_SAV_MOON_COUNTER_OFFSET: usize = 0x0006;
-pub const U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET: usize = 0x0007;
-pub const U4_PARTY_SAV_GOLD_OFFSET: usize = 0x0008;
-pub const U4_PARTY_SAV_FOOD_OFFSET: usize = 0x000A;
-pub const U4_PARTY_SAV_KEYS_OFFSET: usize = 0x000D;
-pub const U4_PARTY_SAV_TORCHES_OFFSET: usize = 0x000E;
-pub const U4_PARTY_SAV_GEMS_OFFSET: usize = 0x000F;
-pub const U4_PARTY_SAV_SEXTANTS_OFFSET: usize = 0x0011;
-pub const U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET: usize = 0x0019;
-pub const U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET: usize = 0x001A;
-pub const U4_PARTY_SAV_PLAYER0_OFFSET: usize = 0x08;
-pub const U4_PARTY_SAV_CHARACTER_RECORD_LEN: usize = 39;
-pub const U4_PARTY_SAV_CHARACTER_XP_OFFSET: usize = 0x04;
-pub const U4_PARTY_SAV_CHARACTER_STR_OFFSET: usize = 0x06;
-pub const U4_PARTY_SAV_CHARACTER_DEX_OFFSET: usize = 0x08;
-pub const U4_PARTY_SAV_CHARACTER_INT_OFFSET: usize = 0x0A;
-pub const U4_PARTY_SAV_CHARACTER_NAME_OFFSET: usize = 0x14;
-pub const U4_PARTY_SAV_CHARACTER_NAME_LEN: usize = 16;
-pub const U4_PARTY_SAV_CHARACTER_SEX_OFFSET: usize = 0x24;
-pub const U4_PARTY_SAV_CHARACTER_CLASS_OFFSET: usize = 0x25;
-pub const U4_PARTY_SAV_MALE_BYTE: u8 = 0x0B;
-pub const U4_PARTY_SAV_REQUIRED_LEN: usize = U4_PARTY_SAV_LEN;
+// `u4-transfer.md §5.1`/`§5.2`/`§5.3` (`cleak/u5-spec#88`): the
+// `PARTY.SAV` layout, the validation gate and the Avatarhood test all
+// live in [`crate::u4_transfer_preview`], which is now the only
+// `PARTY.SAV` parser in the engine.
+//
+// This module used to carry a second, older parser
+// (`parse_u4_transfer_source_from_party_sav`) written against a
+// withdrawn revision of §5. It was wrong on three counts and it is
+// retired rather than repaired, because two parsers for one file
+// format are how the disagreement survived review:
+//
+// - It rejected all-zero virtue standings as "no transferable data".
+//   §5.3 settles that this is exactly backwards: **all-zero is the
+//   Avatar success condition**, and "no value of this block ever
+//   prevents a transfer". The old gate turned away precisely the
+//   completed Ultima IV Avatar this path exists to import.
+// - It validated party-wide counters (move, moon, dungeon, gold,
+//   food, gems, torches, keys, sextants). §5.2: "No party-wide counter
+//   is validated", and §5.4 adds that the original structurally cannot
+//   validate them - the party-wide block is not read until after
+//   validation has passed and the leading record has been copied.
+// - It read the name at file offset `0x001A` and the class at
+//   `0x0019`. §5.1/§5.4: the record base **is** the first read's seek
+//   target `0x0008`, so the name is at file offset `0x001C` and the
+//   class byte at `0x002D`.
+//
+// The constants that described those wrong reads are deleted with the
+// parser; the surviving published layout is exported from
+// [`crate::u4_transfer_preview`].
 
-/// `u4-transfer.md §5` accepted source-side counter ranges. The
-/// transfer rejects the entire attempt before writing the
-/// destination save when any leading-record value falls outside
-/// these bounds.
-/// `u4-transfer.md §5` source-side gold/gems/food counter bound.
-/// The accepted range `0..=9999` matches the U5 word-counter
-/// cap inventory.md §2 documents — a U4 character at the cap
-/// transfers without truncation into the U5 carriers. Anchored
-/// to [`crate::PARTY_GOLD_CAP`] so the U4-transfer source bound
-/// and the U5 carrier cap stay one value.
-pub const U4_TRANSFER_GOLD_GEM_FOOD_MAX: u16 = crate::PARTY_GOLD_CAP;
-pub const U4_TRANSFER_MOVE_MOON_DUNGEON_MAX: u16 = 70;
-pub const U4_TRANSFER_CLASS_INDEX_MAX: u8 = 7;
-
-/// `u4-transfer.md §5`: range gate for the `gold`, `gems`, and
-/// `food` source-side counters. Returns `true` when the value is
-/// inside the accepted `0..=9999` range.
-pub const fn u4_transfer_gold_gem_food_in_range(value: u16) -> bool {
-    value <= U4_TRANSFER_GOLD_GEM_FOOD_MAX
-}
-
-/// `u4-transfer.md §5`: range gate for the `move`, `moon`, and
-/// `dungeon` source-side counters. Returns `true` when the value is
-/// inside the accepted `0..=70` range.
-pub const fn u4_transfer_move_moon_dungeon_in_range(value: u16) -> bool {
-    value <= U4_TRANSFER_MOVE_MOON_DUNGEON_MAX
-}
-
-/// `u4-transfer.md §5`: range gate for the source-side class index
-/// (`0..=7`). Caller falls through to the per-class translation only
-/// when this gate accepts.
-pub const fn u4_transfer_class_index_in_range(class_index: u8) -> bool {
-    class_index <= U4_TRANSFER_CLASS_INDEX_MAX
-}
-
-/// `u4-transfer.md §5`: name-byte gate. The transfer accepts only
-/// NUL or printable bytes in the imported name field; any other
-/// control byte rejects the transfer attempt.
-pub const fn u4_transfer_name_byte_accepted(byte: u8) -> bool {
-    byte == 0 || (byte >= 0x20 && byte <= 0x7E)
-}
+/// `u4-transfer.md §7`: when §5.3's Avatarhood test passed, the class
+/// letter translated from the source class index is overwritten with
+/// the Avatar class letter. Anchored to
+/// [`crate::CHARGEN_AVATAR_SEED_CLASS_BYTE`] so chargen and transfer
+/// spell "Avatar" in the save image with one value.
+pub const U4_TRANSFER_AVATAR_CLASS_BYTE: u8 = crate::CHARGEN_AVATAR_SEED_CLASS_BYTE;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct U4TransferSource {
@@ -121,6 +77,13 @@ pub struct U4TransferSource {
     pub dexterity: u16,
     pub intelligence: u16,
     pub experience: u32,
+    /// `u4-transfer.md §5.3`: set when all eight virtue standings are
+    /// individually zero. It never rejects a transfer. Its only
+    /// observable effects are `§7`'s class override to
+    /// [`U4_TRANSFER_AVATAR_CLASS_BYTE`] and `§6.3`/`§6.5`/`§6.6`'s
+    /// alternate display strings. The flag is a one-shot latch per
+    /// transfer attempt and is never cleared.
+    pub is_avatar: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +96,9 @@ pub struct U4TransferOverrides {
 pub struct U4TransferAvatar {
     pub name: [u8; SAVE_CHARACTER_NAME_LEN],
     pub male: bool,
+    /// `u4-transfer.md §7`: the translated class letter, or
+    /// [`U4_TRANSFER_AVATAR_CLASS_BYTE`] when `§5.3`'s Avatarhood test
+    /// passed.
     pub class_byte: u8,
     pub strength: u8,
     pub dexterity: u8,
@@ -148,13 +114,6 @@ pub enum U4TransferError {
     InvalidNameByte(u8),
     BlankName,
     SaveTooShort(usize),
-    PartySaveTooShort(usize),
-    SourceCounterOutOfRange {
-        field: &'static str,
-        value: u32,
-        max: u32,
-    },
-    NoTransferableData,
 }
 
 impl std::fmt::Display for U4TransferError {
@@ -171,44 +130,11 @@ impl std::fmt::Display for U4TransferError {
                 f,
                 "U5 transfer seed must contain slot 0 record, got {len} bytes"
             ),
-            Self::PartySaveTooShort(len) => {
-                write!(f, "U4 PARTY.SAV is too short, got {len} bytes")
-            }
-            Self::SourceCounterOutOfRange { field, value, max } => {
-                write!(
-                    f,
-                    "U4 transfer {field} counter must be 0..{max}, got {value}"
-                )
-            }
-            Self::NoTransferableData => write!(f, "U4 PARTY.SAV has no transferable virtue data"),
         }
     }
 }
 
 impl std::error::Error for U4TransferError {}
-
-/// `u4-transfer.md §5` virtue-standing byte count tested by the
-/// "no transferable data" guard. The transfer reads the eight
-/// consecutive virtue/karma standing bytes for Honesty, Compassion,
-/// Valor, Justice, Sacrifice, Honor, Spirituality, and Humility —
-/// one byte per published virtue. Anchored to
-/// [`crate::VIRTUE_COUNT`] so the transfer-guard word count and
-/// the published virtue count share one source of truth.
-pub const U4_TRANSFER_VIRTUE_STANDING_COUNT: usize = crate::VIRTUE_COUNT;
-
-/// `u4-transfer.md §5`: returns `true` when the transfer guard
-/// should present the "no transferable data" branch instead of the
-/// normal preview. The guard fires only when every virtue-standing
-/// byte in the supplied buffer is zero. Any nonzero byte allows
-/// the normal transfer preview to proceed.
-/// `u4-transfer.md §5.3`: eight independent comparisons against zero -
-/// no loop accumulator, no summation. All eight zero means the source
-/// character is an Avatar. It is not a rejection gate: neither outcome
-/// aborts the transfer or changes what is written from the source
-/// record, and the resulting flag is a one-shot latch per attempt.
-pub fn u4_transfer_no_transferable_data(virtue_standings: &[u16]) -> bool {
-    virtue_standings.iter().all(|&standing| standing == 0)
-}
 
 pub fn u4_transfer_class_byte(class_index: u8) -> Option<u8> {
     match class_index {
@@ -273,106 +199,19 @@ pub fn u4_transfer_experience_to_u5(value: u32) -> u16 {
     (value / U4_TRANSFER_EXPERIENCE_DIVISOR).min(u16::MAX as u32) as u16
 }
 
+/// `u4-transfer.md §5`: read the Ultima IV player disk's `PARTY.SAV`
+/// and return the leading transferable record.
+///
+/// There is exactly one `PARTY.SAV` parser in the engine
+/// ([`parse_u4_preview_source`]); this is the commit-side view of its
+/// result. The terminal path used to call a second parser written
+/// against a withdrawn revision of §5 - see the module note above and
+/// `cleak/u5-spec#88`.
 pub fn read_u4_transfer_source_from_party_sav(game_dir: &Path) -> io::Result<U4TransferSource> {
     let bytes = read_disk_file(&game_dir.join(U4_TRANSFER_U4_SOURCE_FILENAME))?;
-    parse_u4_transfer_source_from_party_sav(&bytes)
-        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
-}
-
-/// `u4-transfer.md §5,§7` source reader for the public DOS
-/// `PARTY.SAV` layout. It imports only the first U4 character record
-/// and validates the party-wide counters/virtue bytes that gate the
-/// transfer preview; campaign state remains owned by the U5 seed.
-pub fn parse_u4_transfer_source_from_party_sav(
-    bytes: &[u8],
-) -> Result<U4TransferSource, U4TransferError> {
-    if bytes.len() < U4_PARTY_SAV_REQUIRED_LEN {
-        return Err(U4TransferError::PartySaveTooShort(bytes.len()));
-    }
-
-    validate_u4_source_counter(
-        "move",
-        u32::from(u16_at(bytes, U4_PARTY_SAV_MOVE_COUNTER_OFFSET)),
-        u32::from(U4_TRANSFER_MOVE_MOON_DUNGEON_MAX),
-    )?;
-    validate_u4_source_counter(
-        "moon",
-        u32::from(bytes[U4_PARTY_SAV_MOON_COUNTER_OFFSET]),
-        u32::from(U4_TRANSFER_MOVE_MOON_DUNGEON_MAX),
-    )?;
-    validate_u4_source_counter(
-        "dungeon",
-        u32::from(bytes[U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET]),
-        u32::from(U4_TRANSFER_MOVE_MOON_DUNGEON_MAX),
-    )?;
-    validate_u4_source_counter(
-        "food",
-        u32::from(u16_at(bytes, U4_PARTY_SAV_FOOD_OFFSET)),
-        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
-    )?;
-    validate_u4_source_counter(
-        "gold",
-        u32::from(u16_at(bytes, U4_PARTY_SAV_GOLD_OFFSET)),
-        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
-    )?;
-    validate_u4_source_counter(
-        "gems",
-        u32::from(bytes[U4_PARTY_SAV_GEMS_OFFSET]),
-        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
-    )?;
-    validate_u4_source_counter(
-        "torches",
-        u32::from(bytes[U4_PARTY_SAV_TORCHES_OFFSET]),
-        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
-    )?;
-    validate_u4_source_counter(
-        "keys",
-        u32::from(bytes[U4_PARTY_SAV_KEYS_OFFSET]),
-        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
-    )?;
-    validate_u4_source_counter(
-        "sextants",
-        u32::from(bytes[U4_PARTY_SAV_SEXTANTS_OFFSET]),
-        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
-    )?;
-
-    let virtue_standings: Vec<u16> = (0..U4_TRANSFER_VIRTUE_STANDING_COUNT)
-        .map(|index| {
-            let at =
-                U4_PARTY_SAV_VIRTUE_STANDING_OFFSET + index * U4_PARTY_SAV_VIRTUE_STANDING_STRIDE;
-            u16::from_le_bytes([bytes[at], bytes[at + 1]])
-        })
-        .collect();
-    let virtue_bytes = &virtue_standings[..];
-    if u4_transfer_no_transferable_data(virtue_bytes) {
-        return Err(U4TransferError::NoTransferableData);
-    }
-
-    let record = U4_PARTY_SAV_PLAYER0_OFFSET;
-    let class_index = bytes[U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET];
-    if !u4_transfer_class_index_in_range(class_index) {
-        return Err(U4TransferError::InvalidClassIndex(class_index));
-    }
-
-    let name = bytes[U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET
-        ..U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET + U4_PARTY_SAV_CHARACTER_NAME_LEN]
-        .to_vec();
-    for &byte in &name {
-        if !u4_transfer_name_byte_accepted(byte) {
-            return Err(U4TransferError::InvalidNameByte(byte));
-        }
-    }
-    normalize_u4_transfer_name(&name)?;
-
-    Ok(U4TransferSource {
-        name,
-        male: bytes[record + U4_PARTY_SAV_CHARACTER_SEX_OFFSET] == U4_PARTY_SAV_MALE_BYTE,
-        class_index,
-        strength: u16_at(bytes, record + U4_PARTY_SAV_CHARACTER_STR_OFFSET),
-        dexterity: u16_at(bytes, record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET),
-        intelligence: u16_at(bytes, record + U4_PARTY_SAV_CHARACTER_INT_OFFSET),
-        experience: u32::from(u16_at(bytes, record + U4_PARTY_SAV_CHARACTER_XP_OFFSET)),
-    })
+    let preview = crate::u4_transfer_preview::parse_u4_preview_source(&bytes)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+    Ok(preview.to_transfer_source())
 }
 
 pub fn apply_u4_transfer_to_save(
@@ -383,8 +222,18 @@ pub fn apply_u4_transfer_to_save(
     if save.len() < SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN {
         return Err(U4TransferError::SaveTooShort(save.len()));
     }
-    let class_byte = u4_transfer_class_byte(source.class_index)
+    // `u4-transfer.md §7`: the source class index is translated into a
+    // U5 class letter first, and that letter is *then* overwritten with
+    // the Avatar letter when `§5.3`'s Avatarhood test passed. Transfer
+    // therefore leaves roster slot 0 with a non-Avatar class only when
+    // the source character had not attained all eight virtues.
+    let translated = u4_transfer_class_byte(source.class_index)
         .ok_or(U4TransferError::InvalidClassIndex(source.class_index))?;
+    let class_byte = if source.is_avatar {
+        U4_TRANSFER_AVATAR_CLASS_BYTE
+    } else {
+        translated
+    };
     let name_bytes = overrides
         .and_then(|overrides| overrides.name.as_deref())
         .unwrap_or(&source.name);
@@ -483,22 +332,6 @@ fn normalize_u4_transfer_name(
         return Err(U4TransferError::BlankName);
     }
     Ok(name)
-}
-
-fn validate_u4_source_counter(
-    field: &'static str,
-    value: u32,
-    max: u32,
-) -> Result<(), U4TransferError> {
-    if value <= max {
-        Ok(())
-    } else {
-        Err(U4TransferError::SourceCounterOutOfRange { field, value, max })
-    }
-}
-
-fn u16_at(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
 }
 
 fn read_brit_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
