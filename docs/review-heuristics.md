@@ -175,6 +175,46 @@ the integration suite does not cover it. A feature whose only coverage is unit
 tests over its own helpers is in exactly the position the eviction cascade and
 the ranged attacks were in before they were found.
 
+## 5. Does the *reason* transfer, or only the conclusion?
+
+When a contract says **"X cannot happen"**, the claim is about the original's
+*structure*, not about its behaviour. An implementation can reproduce the
+behaviour exactly and lose the property that made X impossible.
+
+**Worked example.** The spec authors established that the ordering between a
+location's marker scrub and the beacon's indoor source harvest **cannot matter**,
+and the reason was structural: one 32x32 walk, positions converted to resident
+words at load time, and a beacon that never re-reads the map afterwards. All
+true, and a correct statement about the original.
+
+It did not transfer. Our harvest re-read `self.grid`, and five of our six
+location-entry paths handed it an **already-scrubbed** buffer — and our scrub
+rewrites the very byte the beacon looks for. The failure the ordering question
+was about was impossible in the original and real in our tree at the same time.
+
+Worse, **the only path reachable in play was the broken one**: the four floors
+carrying that tile are lighthouse lantern rooms, and a lantern room is reached
+by climbing. The correct entry path was dead code from the player's point of
+view.
+
+**So: a safety property of the original is not inherited by an implementation
+that reproduces the behaviour but not the structure that made it safe.**
+
+Nothing about matching observable behaviour would have surfaced this. Only
+asking *why* the original was safe, and then checking whether that reason still
+holds of our construction.
+
+### Consequence for reading a spec
+
+A contract of the form **"X cannot happen"** is more dangerous than one of the
+form **"X happens when Y"**, because the reader takes the reassurance and skips
+the mechanism. When you meet one, find out *why* — and if the spec does not say
+why, ask. Then check whether your own construction preserves it.
+
+The same applies in reverse when writing: publishing "ordering cannot matter"
+without publishing the reason hands the next implementer a guarantee they cannot
+check.
+
 ## Corollaries
 
 - **Internal consistency is not evidence.** Three mutually-agreeing tests that
