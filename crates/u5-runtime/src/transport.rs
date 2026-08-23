@@ -97,11 +97,42 @@ pub const fn mount_horse_marker(parked_byte: u8) -> Option<u8> {
 pub const FRIGATE_PURCHASE_HULL: u8 = 99;
 pub const FRIGATE_PURCHASE_SKIFFS: u8 = 2;
 
-/// `vehicles.md §3`: ship-boarding precondition — print a warning when
-/// hull is below ten or no skiffs are aboard.
+/// `vehicles.md §4`: on a successful ship board the handler copies the
+/// selected ship object's byte `+5` hull condition and byte `+7` skiff
+/// count into the active vehicle state, then "warns if hull condition
+/// is below ten, warns if no skiffs are aboard" — **two independent
+/// warnings issued by the one boarding path**. Both are presentation
+/// only; the ship boards either way.
 pub const SHIP_BOARDING_HULL_WARNING_THRESHOLD: u8 = 10;
-pub const fn ship_boarding_warns(hull: u8, skiffs: u8) -> bool {
-    hull < SHIP_BOARDING_HULL_WARNING_THRESHOLD || skiffs == 0
+
+/// `vehicles.md §4`: which of the two ship-boarding warnings fired.
+/// Both can fire on the same board (a battered hull with no skiffs
+/// aboard warns twice), so this is a pair of flags rather than one
+/// bool — collapsing them with `||` would tell a caller that the
+/// player was warned but not what about.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ShipBoardingWarnings {
+    /// Hull condition is strictly below
+    /// [`SHIP_BOARDING_HULL_WARNING_THRESHOLD`].
+    pub low_hull: bool,
+    /// No skiffs are aboard.
+    pub no_skiffs: bool,
+}
+
+impl ShipBoardingWarnings {
+    /// `true` when the board issues at least one warning.
+    pub const fn any(self) -> bool {
+        self.low_hull || self.no_skiffs
+    }
+}
+
+/// `vehicles.md §4`: classify the two ship-boarding warnings for the
+/// boarded ship's hull condition and carried-skiff count.
+pub const fn ship_boarding_warnings(hull: u8, skiffs: u8) -> ShipBoardingWarnings {
+    ShipBoardingWarnings {
+        low_hull: hull < SHIP_BOARDING_HULL_WARNING_THRESHOLD,
+        no_skiffs: skiffs == 0,
+    }
 }
 
 /// `vehicles.md §4` ship-boarding starting-state precondition. The

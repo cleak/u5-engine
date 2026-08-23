@@ -246,11 +246,13 @@ pub const SHOPPE_DAT_RECORD_SLOTS: usize = 196;
 /// record count tracks the slot count.
 pub const SHOPPE_DAT_NONEMPTY_RECORDS: usize = SHOPPE_DAT_RECORD_SLOTS - 2;
 
-/// `shops.md §4` per-cluster `SHOPPE.DAT` record-id ranges. Each
-/// constant pair documents a shipped record cluster the per-shop-kind
-/// tables hardcode. Some clusters intentionally overlap (sage rumour
-/// records 84-91 sit inside the 57-88 tavern band) and a few slots
-/// are unused NUL-only records.
+/// `formats/shoppe-dat.md §6` per-cluster `SHOPPE.DAT` record-id
+/// ranges. Bands that the spec publishes as one contiguous run get a
+/// `_FIRST`/`_LAST` pair — that pair *is* the assertion that the run
+/// has no holes. Bands the spec publishes as interleaved or holed
+/// (sage, healer) get an explicit `_BANDS` list instead, because a
+/// `_FIRST`/`_LAST` pair would silently claim records that belong to
+/// another cluster.
 pub const SHOPPE_RECORDS_SHARED_BARKS_FIRST: usize = 0;
 pub const SHOPPE_RECORDS_SHARED_BARKS_LAST: usize = 7;
 
@@ -303,7 +305,7 @@ pub const fn shop_placeholder_kind(byte: u8) -> Option<ShopPlaceholderKind> {
     })
 }
 
-/// `formats/shoppe-dat.md §3`: shoppe-record bands. The shared-
+/// `formats/shoppe-dat.md §6`: shoppe-record bands. The shared-
 /// barks, arms-descriptions, arms-sell, and tavern bands tile
 /// contiguously from record 0 upward. Anchor each *_FIRST to
 /// the previous band's *_LAST + 1 so resizing any band shifts
@@ -314,13 +316,37 @@ pub const SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST: usize = 48;
 pub const SHOPPE_RECORDS_ARMS_SELL_FIRST: usize = SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST + 1;
 pub const SHOPPE_RECORDS_ARMS_SELL_LAST: usize = 56;
 
+/// `formats/shoppe-dat.md §6`: "Tavern, meal-counter, and related
+/// interactive prompts and menus" span records **57-91** as one run,
+/// including the state list records `69-72`, the state follow-ups
+/// `73-76`, the provision quotes `77-82`, and the table-scraps
+/// outcome `90`. The sage records interleaved inside it (below) do
+/// not shorten the tavern band.
 pub const SHOPPE_RECORDS_TAVERN_FIRST: usize = SHOPPE_RECORDS_ARMS_SELL_LAST + 1;
-pub const SHOPPE_RECORDS_TAVERN_LAST: usize = 88;
+pub const SHOPPE_RECORDS_TAVERN_LAST: usize = 91;
 
-pub const SHOPPE_RECORDS_SAGE_FIRST: usize = 84;
-pub const SHOPPE_RECORDS_SAGE_LAST: usize = 91;
+/// `formats/shoppe-dat.md §6`: the sage rumour records are
+/// **interleaved inside** the tavern band and are **not contiguous**:
+/// `84` fee quote, `85-88` success templates, `91` paying-customers
+/// refusal. Records `89` and `90` sitting between them belong to
+/// tavern branches, not to the sage — so a `_FIRST`/`_LAST` pair
+/// over `84..=91` would claim two records this cluster does not own.
+/// The published sub-runs are listed explicitly instead.
+pub const SHOPPE_RECORDS_SAGE_BANDS: [(usize, usize); 2] = [
+    (
+        SAGE_RUMOUR_FEE_QUOTE_RECORD,
+        SAGE_RUMOUR_SUCCESS_RECORD_LAST,
+    ),
+    (
+        SAGE_RUMOUR_SHORT_FUNDS_RECORD,
+        SAGE_RUMOUR_SHORT_FUNDS_RECORD,
+    ),
+];
+/// `formats/shoppe-dat.md §6`: the two records that fall between the
+/// sage's sub-runs and belong to tavern branches instead.
+pub const SHOPPE_RECORDS_SAGE_INTERLEAVED_TAVERN: [usize; 2] = [89, 90];
 
-pub const SHOPPE_RECORDS_HORSE_TRADER_FIRST: usize = SHOPPE_RECORDS_SAGE_LAST + 1;
+pub const SHOPPE_RECORDS_HORSE_TRADER_FIRST: usize = SHOPPE_RECORDS_TAVERN_LAST + 1;
 pub const SHOPPE_RECORDS_HORSE_TRADER_LAST: usize = 104;
 
 pub const SHOPPE_RECORDS_SHIP_BROKER_FIRST: usize = SHOPPE_RECORDS_HORSE_TRADER_LAST + 1;
@@ -332,11 +358,24 @@ pub const SHOPPE_RECORDS_REAGENT_LAST: usize = 146;
 pub const SHOPPE_RECORDS_GUILD_FIRST: usize = 148;
 pub const SHOPPE_RECORDS_GUILD_LAST: usize = 162;
 
-pub const SHOPPE_RECORDS_HEALER_FIRST: usize = SHOPPE_RECORDS_GUILD_LAST + 1;
-pub const SHOPPE_RECORDS_HEALER_LAST: usize = 173;
+/// `formats/shoppe-dat.md §6`: the healer/sanctum cluster is
+/// published as "163 and 165-173" — record `164` is **not** part of
+/// it, so a `_FIRST`/`_LAST` pair over `163..=173` would assert a
+/// contiguity the file does not have. The two sub-runs are listed
+/// explicitly instead.
+pub const SHOPPE_RECORDS_HEALER_BANDS: [(usize, usize); 2] = [
+    (SHOPPE_RECORDS_GUILD_LAST + 1, SHOPPE_RECORDS_GUILD_LAST + 1),
+    (165, 173),
+];
+/// `formats/shoppe-dat.md §6`: the record between the healer
+/// cluster's two sub-runs, which the published table does not assign
+/// to the healer.
+pub const SHOPPE_RECORDS_HEALER_EXCLUDED: usize = 164;
 
-pub const SHOPPE_RECORDS_INNKEEPER_FIRST: usize = SHOPPE_RECORDS_HEALER_LAST + 1;
-/// `formats/shoppe-dat.md §3`: the innkeeper band ends at the
+/// `formats/shoppe-dat.md §6`: the innkeeper band starts one past the
+/// end of the healer cluster's last sub-run.
+pub const SHOPPE_RECORDS_INNKEEPER_FIRST: usize = SHOPPE_RECORDS_HEALER_BANDS[1].1 + 1;
+/// `formats/shoppe-dat.md §6`: the innkeeper band ends at the
 /// last non-empty record. Anchored to
 /// SHOPPE_DAT_NONEMPTY_RECORDS - 1 so the last band end
 /// derives from the non-empty record count.
@@ -1340,8 +1379,25 @@ pub const SAGE_RUMOUR_SHORT_FUNDS_RECORD: usize = 91;
 /// harness strings as a separate paid-shop error path.
 pub const SAGE_KEYWORD_INPUT_LIMIT: usize = 15;
 
+/// `formats/shoppe-dat.md §6`: membership test over a published,
+/// possibly non-contiguous record cluster. Bands are inclusive
+/// `(first, last)` pairs.
+pub const fn shoppe_record_in_bands(record_id: usize, bands: &[(usize, usize)]) -> bool {
+    let mut index = 0;
+    while index < bands.len() {
+        let (first, last) = bands[index];
+        if record_id >= first && record_id <= last {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+/// `formats/shoppe-dat.md §6`: the sage owns `84-88` and `91` only.
+/// Records `89` and `90` are tavern branches and are rejected here.
 pub const fn sage_rumour_record_id_accepted(record_id: usize) -> bool {
-    record_id >= SHOPPE_RECORDS_SAGE_FIRST && record_id <= SHOPPE_RECORDS_SAGE_LAST
+    shoppe_record_in_bands(record_id, &SHOPPE_RECORDS_SAGE_BANDS)
 }
 
 /// `shops.md §8.8`: returns `true` when `typed` matches `topic` per

@@ -1,12 +1,15 @@
 //! Per-shop SHOPPE.DAT record selection helpers per
-//! `formats/shoppe-dat.md` §3 and `systems/shops.md` §4.
+//! `formats/shoppe-dat.md` §6 and `systems/shops.md` §4.
 //!
-//! Each shop kind reads from a fixed band of records inside the
-//! shared SHOPPE.DAT file. The bands tile contiguously starting at
-//! record 0 (shared barks 0-7), then per-kind clusters. This module
-//! exposes the per-kind first/last record ids and convenience pickers
-//! that select one record from a band based on a hash, the time of
-//! day, or a fixed offset.
+//! Each shop kind reads from a published cluster of records inside
+//! the shared SHOPPE.DAT file. Most clusters are one contiguous run,
+//! tiling from record 0 upward (shared barks 0-7), but two are not:
+//! the sage records are interleaved inside the tavern band (`84-88`
+//! and `91`, with `89`/`90` belonging to tavern branches) and the
+//! healer cluster skips `164` (`163` and `165-173`). Every band is
+//! therefore modelled as a list of inclusive sub-runs rather than a
+//! single first/last pair, so a cluster can never silently claim
+//! records it does not own.
 
 use crate::shops::*;
 
@@ -27,51 +30,72 @@ pub enum ShoppeBand {
 }
 
 impl ShoppeBand {
-    /// Inclusive (first, last) record-id pair for this band.
-    pub const fn range(self) -> (usize, usize) {
+    /// `formats/shoppe-dat.md §6`: the inclusive `(first, last)`
+    /// sub-runs this band owns, in ascending order. Most bands are
+    /// one run; the sage and healer clusters are published with holes
+    /// and own two runs each.
+    pub const fn bands(self) -> &'static [(usize, usize)] {
         match self {
-            Self::SharedBark => (
+            Self::SharedBark => &[(
                 SHOPPE_RECORDS_SHARED_BARKS_FIRST,
                 SHOPPE_RECORDS_SHARED_BARKS_LAST,
-            ),
-            Self::ArmsDescription => (
+            )],
+            Self::ArmsDescription => &[(
                 SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
                 SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST,
-            ),
-            Self::ArmsSell => (
+            )],
+            Self::ArmsSell => &[(
                 SHOPPE_RECORDS_ARMS_SELL_FIRST,
                 SHOPPE_RECORDS_ARMS_SELL_LAST,
-            ),
-            Self::Tavern => (SHOPPE_RECORDS_TAVERN_FIRST, SHOPPE_RECORDS_TAVERN_LAST),
-            Self::Sage => (SHOPPE_RECORDS_SAGE_FIRST, SHOPPE_RECORDS_SAGE_LAST),
-            Self::HorseTrader => (
+            )],
+            Self::Tavern => &[(SHOPPE_RECORDS_TAVERN_FIRST, SHOPPE_RECORDS_TAVERN_LAST)],
+            Self::Sage => &SHOPPE_RECORDS_SAGE_BANDS,
+            Self::HorseTrader => &[(
                 SHOPPE_RECORDS_HORSE_TRADER_FIRST,
                 SHOPPE_RECORDS_HORSE_TRADER_LAST,
-            ),
-            Self::ShipBroker => (
+            )],
+            Self::ShipBroker => &[(
                 SHOPPE_RECORDS_SHIP_BROKER_FIRST,
                 SHOPPE_RECORDS_SHIP_BROKER_LAST,
-            ),
-            Self::Reagent => (SHOPPE_RECORDS_REAGENT_FIRST, SHOPPE_RECORDS_REAGENT_LAST),
-            Self::Guild => (SHOPPE_RECORDS_GUILD_FIRST, SHOPPE_RECORDS_GUILD_LAST),
-            Self::Healer => (SHOPPE_RECORDS_HEALER_FIRST, SHOPPE_RECORDS_HEALER_LAST),
-            Self::Innkeeper => (
+            )],
+            Self::Reagent => &[(SHOPPE_RECORDS_REAGENT_FIRST, SHOPPE_RECORDS_REAGENT_LAST)],
+            Self::Guild => &[(SHOPPE_RECORDS_GUILD_FIRST, SHOPPE_RECORDS_GUILD_LAST)],
+            Self::Healer => &SHOPPE_RECORDS_HEALER_BANDS,
+            Self::Innkeeper => &[(
                 SHOPPE_RECORDS_INNKEEPER_FIRST,
                 SHOPPE_RECORDS_INNKEEPER_LAST,
-            ),
+            )],
         }
     }
 
-    /// Number of record slots in this band.
+    /// Lowest record id this band owns.
+    pub const fn first(self) -> usize {
+        self.bands()[0].0
+    }
+
+    /// Highest record id this band owns.
+    pub const fn last(self) -> usize {
+        let bands = self.bands();
+        bands[bands.len() - 1].1
+    }
+
+    /// Number of record slots this band owns, summed over its
+    /// sub-runs. Holes between sub-runs are not counted.
     pub const fn len(self) -> usize {
-        let (first, last) = self.range();
-        last - first + 1
+        let bands = self.bands();
+        let mut total = 0;
+        let mut index = 0;
+        while index < bands.len() {
+            let (first, last) = bands[index];
+            total += last - first + 1;
+            index += 1;
+        }
+        total
     }
 
     /// Returns `true` when the record id lies within this band.
     pub const fn contains(self, id: usize) -> bool {
-        let (first, last) = self.range();
-        id >= first && id <= last
+        shoppe_record_in_bands(id, self.bands())
     }
 
     /// Classify a record id into its band, picking the most specific
@@ -95,10 +119,26 @@ impl ShoppeBand {
     }
 
     /// Select one record-id from the band by hashing the supplied
-    /// seed against the band's length.
+    /// seed against the band's slot count. Slots are walked across
+    /// the band's sub-runs in order, so a holed band never returns a
+    /// record it does not own.
     pub const fn pick_by_seed(self, seed: u64) -> usize {
-        let (first, _) = self.range();
-        first + (seed % (self.len() as u64)) as usize
+        let bands = self.bands();
+        let mut slot = (seed % (self.len() as u64)) as usize;
+        let mut index = 0;
+        while index < bands.len() {
+            let (first, last) = bands[index];
+            let width = last - first + 1;
+            if slot < width {
+                return first + slot;
+            }
+            slot -= width;
+            index += 1;
+        }
+        // `len()` bounds `slot` to the summed width, so the loop
+        // always returns; fall back to the last owned record rather
+        // than panicking inside a const fn.
+        bands[bands.len() - 1].1
     }
 }
 
@@ -118,7 +158,7 @@ pub const fn shoppe_default_record_for_dialog_id(dialog_id: u8) -> Option<usize>
         0x88 => ShoppeBand::Innkeeper,
         _ => return None,
     };
-    Some(band.range().0)
+    Some(band.first())
 }
 
 /// Pick a shared-bark record id by hashing the supplied seed.
@@ -178,10 +218,54 @@ mod tests {
 
     #[test]
     fn band_ranges_match_published_constants() {
-        assert_eq!(ShoppeBand::SharedBark.range(), (0, 7));
+        assert_eq!(ShoppeBand::SharedBark.bands(), &[(0, 7)]);
+        assert_eq!(ShoppeBand::SharedBark.first(), 0);
+        assert_eq!(ShoppeBand::SharedBark.last(), 7);
         assert!(ShoppeBand::SharedBark.contains(0));
         assert!(ShoppeBand::SharedBark.contains(7));
         assert!(!ShoppeBand::SharedBark.contains(8));
+    }
+
+    #[test]
+    fn published_non_contiguous_bands_exclude_their_holes() {
+        // `formats/shoppe-dat.md §6`: sage owns 84-88 and 91; the
+        // records 89 and 90 between them are tavern branches.
+        assert_eq!(ShoppeBand::Sage.bands(), &[(84, 88), (91, 91)]);
+        assert!(ShoppeBand::Sage.contains(84));
+        assert!(ShoppeBand::Sage.contains(88));
+        assert!(!ShoppeBand::Sage.contains(89));
+        assert!(!ShoppeBand::Sage.contains(90));
+        assert!(ShoppeBand::Sage.contains(91));
+        assert_eq!(ShoppeBand::Sage.len(), 6);
+
+        // The tavern band runs 57-91 and owns the two sage holes.
+        assert_eq!(ShoppeBand::Tavern.bands(), &[(57, 91)]);
+        assert!(ShoppeBand::Tavern.contains(89));
+        assert!(ShoppeBand::Tavern.contains(90));
+        assert!(ShoppeBand::Tavern.contains(91));
+
+        // `formats/shoppe-dat.md §6`: healer owns 163 and 165-173.
+        assert_eq!(ShoppeBand::Healer.bands(), &[(163, 163), (165, 173)]);
+        assert!(ShoppeBand::Healer.contains(163));
+        assert!(!ShoppeBand::Healer.contains(SHOPPE_RECORDS_HEALER_EXCLUDED));
+        assert!(ShoppeBand::Healer.contains(165));
+        assert!(ShoppeBand::Healer.contains(173));
+        assert_eq!(ShoppeBand::Healer.len(), 10);
+    }
+
+    #[test]
+    fn pick_by_seed_never_returns_a_hole_in_a_holed_band() {
+        for band in [ShoppeBand::Sage, ShoppeBand::Healer] {
+            for seed in 0u64..64 {
+                let id = band.pick_by_seed(seed);
+                assert!(band.contains(id), "{band:?} seed {seed} -> id {id}");
+            }
+        }
+        // Every owned slot is reachable.
+        let reached: std::collections::BTreeSet<usize> = (0u64..64)
+            .map(|seed| ShoppeBand::Sage.pick_by_seed(seed))
+            .collect();
+        assert_eq!(reached.len(), ShoppeBand::Sage.len());
     }
 
     #[test]
@@ -197,7 +281,7 @@ mod tests {
     fn classify_returns_the_matching_band_for_each_id() {
         assert_eq!(ShoppeBand::classify(0), Some(ShoppeBand::SharedBark));
         assert_eq!(
-            ShoppeBand::classify(SHOPPE_RECORDS_HEALER_FIRST),
+            ShoppeBand::classify(ShoppeBand::Healer.first()),
             Some(ShoppeBand::Healer)
         );
         assert_eq!(
@@ -208,9 +292,15 @@ mod tests {
 
     #[test]
     fn classify_resolves_sage_tavern_overlap_to_sage() {
-        // Records 84-91 sit inside both Tavern (57-88) and Sage
-        // (84-91). The classifier prefers the narrower Sage band.
+        // `formats/shoppe-dat.md §6`: the sage records are
+        // interleaved inside the tavern band (57-91). The classifier
+        // prefers the narrower Sage band where both own the record,
+        // and falls through to Tavern for 89/90, which the sage does
+        // not own.
         assert_eq!(ShoppeBand::classify(84), Some(ShoppeBand::Sage));
+        assert_eq!(ShoppeBand::classify(88), Some(ShoppeBand::Sage));
+        assert_eq!(ShoppeBand::classify(89), Some(ShoppeBand::Tavern));
+        assert_eq!(ShoppeBand::classify(90), Some(ShoppeBand::Tavern));
         assert_eq!(ShoppeBand::classify(91), Some(ShoppeBand::Sage));
     }
 
@@ -326,7 +416,7 @@ mod tests {
             ShoppeBand::Healer,
             ShoppeBand::Innkeeper,
         ] {
-            let id = band.range().0;
+            let id = band.first();
             assert!(band.contains(id));
         }
     }

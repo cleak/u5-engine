@@ -13638,6 +13638,16 @@ fn blit_active_view_overlay_rgba(
     let Some(overlay) = state.render_active_view_overlay(depth) else {
         return;
     };
+    // `view.md §6`/`dungeon-mode.md §12.1`: the dungeon V-View map
+    // clears and fills the viewport interior `(8,8)`-`(183,183)` —
+    // the same area the first-person view uses — as 22x22 cells of
+    // 8x8 pixels. The surface/Britannia overlays keep the side-panel
+    // placement they were sized for (32 cells x 4 px = 128 px, the
+    // panel's exact width).
+    let (origin_x, origin_y) = match state.active_view_overlay.as_ref().map(|o| o.kind) {
+        Some(u5_runtime::ViewOverlayKind::Dungeon { .. }) => (VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y),
+        _ => (VISUAL_OVERLAY_SIDE_PANEL_X, VISUAL_OVERLAY_SIDE_PANEL_Y),
+    };
     let rgba = overlay.to_rgba();
     blit_rgba(
         dst,
@@ -13646,8 +13656,8 @@ fn blit_active_view_overlay_rgba(
         &rgba,
         overlay.width,
         overlay.height,
-        VISUAL_OVERLAY_SIDE_PANEL_X,
-        VISUAL_OVERLAY_SIDE_PANEL_Y,
+        origin_x,
+        origin_y,
     );
 }
 

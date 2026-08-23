@@ -52,8 +52,19 @@ pub const fn world_tick_path(scene_byte: u8, visibility_dirty: bool) -> WorldTic
     }
 }
 
-/// `main-loop.md §4` outer-loop bookkeeping flags. The router keeps
-/// two single-bit flags between iterations:
+/// `main-loop.md §4` outer-loop bookkeeping flags. The published
+/// outer dispatch is a read-and-route over the scene byte that
+/// carries exactly one piece of mid-iteration state — "a one-bit
+/// 'exit pending' flag that the overworld branch sets when it
+/// returns" — plus "a second flag [that] tracks whether the previous
+/// iteration ran the dungeon branch". Both are modelled here.
+///
+/// **Unwired.** The clean engine has no outer scene router: scene
+/// transitions are driven directly from `PlayState` and the frontend
+/// drivers, so nothing constructs this type in production, exactly as
+/// nothing calls [`scene_route`]. The pair models §4's dispatch, and
+/// the gap is the router itself, not these flags — wiring them means
+/// building the outer read-and-route loop of §4 steps 1-6.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OuterLoopFlags {
     /// Set when the overworld branch returns. Prevents a tight

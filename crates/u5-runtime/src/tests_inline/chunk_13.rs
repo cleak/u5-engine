@@ -1535,24 +1535,24 @@ fn tlk_dictionary_and_control_bands_are_adjacent_but_independent() {
 
 #[test]
 fn shoppe_innkeeper_band_anchors_to_healer_band() {
-    // formats/shoppe-dat.md §3: the innkeeper band sits
-    // immediately after the healer band. Anchor
-    // SHOPPE_RECORDS_INNKEEPER_FIRST to
-    // SHOPPE_RECORDS_HEALER_LAST + 1 so the
-    // healer→innkeeper adjacency has one source of truth.
+    // formats/shoppe-dat.md §6: the innkeeper band sits
+    // immediately after the healer cluster's last sub-run.
+    // Anchor SHOPPE_RECORDS_INNKEEPER_FIRST to that sub-run's
+    // end + 1 so the healer -> innkeeper adjacency has one
+    // source of truth.
     assert_eq!(
         SHOPPE_RECORDS_INNKEEPER_FIRST,
-        SHOPPE_RECORDS_HEALER_LAST + 1,
+        SHOPPE_RECORDS_HEALER_BANDS[1].1 + 1,
     );
     assert_eq!(SHOPPE_RECORDS_INNKEEPER_FIRST, 174);
 }
 
 #[test]
 fn shoppe_record_bands_chain_to_previous_last() {
-    // formats/shoppe-dat.md §3: shoppe-record bands tile
-    // contiguously across the file (with two known gaps —
-    // tavern/sage overlap at 84..=88 and a one-record gap
-    // 147 before the guild band). Anchor each contiguous-band
+    // formats/shoppe-dat.md §6: shoppe-record bands tile
+    // contiguously across the file, with the sage cluster
+    // interleaved inside the tavern band and a one-record gap
+    // at 147 before the guild band. Anchor each contiguous-band
     // *_FIRST to the previous band's *_LAST + 1 so resizing
     // any band shifts the later bands automatically.
     assert_eq!(
@@ -1567,9 +1567,11 @@ fn shoppe_record_bands_chain_to_previous_last() {
         SHOPPE_RECORDS_TAVERN_FIRST,
         SHOPPE_RECORDS_ARMS_SELL_LAST + 1
     );
+    // The horse trader follows the tavern band, not the sage
+    // cluster interleaved inside it.
     assert_eq!(
         SHOPPE_RECORDS_HORSE_TRADER_FIRST,
-        SHOPPE_RECORDS_SAGE_LAST + 1
+        SHOPPE_RECORDS_TAVERN_LAST + 1
     );
     assert_eq!(
         SHOPPE_RECORDS_SHIP_BROKER_FIRST,
@@ -1579,9 +1581,12 @@ fn shoppe_record_bands_chain_to_previous_last() {
         SHOPPE_RECORDS_REAGENT_FIRST,
         SHOPPE_RECORDS_SHIP_BROKER_LAST + 1
     );
-    assert_eq!(SHOPPE_RECORDS_HEALER_FIRST, SHOPPE_RECORDS_GUILD_LAST + 1);
+    assert_eq!(
+        SHOPPE_RECORDS_HEALER_BANDS[0].0,
+        SHOPPE_RECORDS_GUILD_LAST + 1
+    );
     assert_eq!(SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, 8);
-    assert_eq!(SHOPPE_RECORDS_HEALER_FIRST, 163);
+    assert_eq!(SHOPPE_RECORDS_HEALER_BANDS[0].0, 163);
 }
 
 #[test]
@@ -7098,18 +7103,16 @@ fn healer_treatment_fees_match_published_table() {
 
 #[test]
 fn frigate_initial_starting_state_matches_published_table() {
-    // vehicles.md §4: a shipwright-purchased Frigate starts at
-    // hull condition 100 with two skiffs aboard when it is
+    // vehicles.md §5: a shipwright-purchased Frigate starts at
+    // hull condition 99 with two skiffs aboard when it is
     // placed at the stored sale coordinates on the next
     // overworld entry.
-    assert_eq!(FRIGATE_INITIAL_HULL_CONDITION, 100);
-    assert_eq!(FRIGATE_INITIAL_SKIFFS, 2);
+    assert_eq!(FRIGATE_PURCHASE_HULL, 99);
+    assert_eq!(FRIGATE_PURCHASE_SKIFFS, 2);
     // The starting hull is well above the low-hull warning
     // threshold, so a freshly purchased Frigate never prints
     // the low-hull warning on its first board.
-    assert!(!ship_boarding_warns_low_hull(
-        FRIGATE_INITIAL_HULL_CONDITION
-    ));
+    assert!(!ship_boarding_warnings(FRIGATE_PURCHASE_HULL, FRIGATE_PURCHASE_SKIFFS).any());
 }
 
 #[test]
@@ -9390,22 +9393,23 @@ fn text_window_clamp_rectangle_normalises_per_spec() {
 
 #[test]
 fn ship_boarding_warns_low_hull_below_ten() {
-    // vehicles.md §4: low-hull warning fires strictly below 10.
-    assert_eq!(SHIP_HULL_BOARDING_WARNING_THRESHOLD, 10);
+    // vehicles.md §4: low-hull warning fires strictly below 10,
+    // and is reported separately from the no-skiffs warning.
+    assert_eq!(SHIP_BOARDING_HULL_WARNING_THRESHOLD, 10);
     for hull in 0u8..10 {
         assert!(
-            ship_boarding_warns_low_hull(hull),
+            ship_boarding_warnings(hull, 2).low_hull,
             "hull {hull} should warn"
         );
     }
     for hull in 10u8..=20 {
         assert!(
-            !ship_boarding_warns_low_hull(hull),
+            !ship_boarding_warnings(hull, 2).low_hull,
             "hull {hull} should not warn"
         );
     }
-    // The shipped Frigate-purchase hull starts at 100 — no warning.
-    assert!(!ship_boarding_warns_low_hull(100));
+    // The shipped Frigate-purchase hull is well clear of it.
+    assert!(!ship_boarding_warnings(FRIGATE_PURCHASE_HULL, FRIGATE_PURCHASE_SKIFFS).low_hull);
 }
 
 #[test]
@@ -14786,13 +14790,25 @@ fn shoppe_record_cluster_constants_match_spec_table() {
     assert_eq!(SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST, 48);
     assert_eq!(SHOPPE_RECORDS_ARMS_SELL_FIRST, 49);
     assert_eq!(SHOPPE_RECORDS_ARMS_SELL_LAST, 56);
+    // formats/shoppe-dat.md §6: the tavern/meal-counter/
+    // interactive cluster is one contiguous run 57-91.
     assert_eq!(SHOPPE_RECORDS_TAVERN_FIRST, 57);
-    assert_eq!(SHOPPE_RECORDS_TAVERN_LAST, 88);
-    assert_eq!(SHOPPE_RECORDS_SAGE_FIRST, 84);
-    assert_eq!(SHOPPE_RECORDS_SAGE_LAST, 91);
-    // Sage cluster overlaps the tavern band per spec.
-    assert!(SHOPPE_RECORDS_SAGE_FIRST <= SHOPPE_RECORDS_TAVERN_LAST);
-    assert!(SHOPPE_RECORDS_SAGE_LAST > SHOPPE_RECORDS_TAVERN_LAST);
+    assert_eq!(SHOPPE_RECORDS_TAVERN_LAST, 91);
+    // The sage records are interleaved inside it and are not
+    // contiguous: 84-88 and 91, with 89/90 owned by tavern
+    // branches. A _FIRST/_LAST pair cannot express that.
+    assert_eq!(SHOPPE_RECORDS_SAGE_BANDS, [(84, 88), (91, 91)]);
+    assert_eq!(SHOPPE_RECORDS_SAGE_INTERLEAVED_TAVERN, [89, 90]);
+    for (first, last) in SHOPPE_RECORDS_SAGE_BANDS {
+        assert!(first >= SHOPPE_RECORDS_TAVERN_FIRST);
+        assert!(last <= SHOPPE_RECORDS_TAVERN_LAST);
+    }
+    for record in SHOPPE_RECORDS_SAGE_INTERLEAVED_TAVERN {
+        assert!(!shoppe_record_in_bands(record, &SHOPPE_RECORDS_SAGE_BANDS));
+        assert!(!sage_rumour_record_id_accepted(record));
+    }
+    assert!(sage_rumour_record_id_accepted(88));
+    assert!(sage_rumour_record_id_accepted(91));
     assert_eq!(SHOPPE_RECORDS_HORSE_TRADER_FIRST, 92);
     assert_eq!(SHOPPE_RECORDS_HORSE_TRADER_LAST, 104);
     assert_eq!(SHOPPE_RECORDS_SHIP_BROKER_FIRST, 105);
@@ -14801,8 +14817,14 @@ fn shoppe_record_cluster_constants_match_spec_table() {
     assert_eq!(SHOPPE_RECORDS_REAGENT_LAST, 146);
     assert_eq!(SHOPPE_RECORDS_GUILD_FIRST, 148);
     assert_eq!(SHOPPE_RECORDS_GUILD_LAST, 162);
-    assert_eq!(SHOPPE_RECORDS_HEALER_FIRST, 163);
-    assert_eq!(SHOPPE_RECORDS_HEALER_LAST, 173);
+    // formats/shoppe-dat.md §6: healer/sanctum is "163 and
+    // 165-173" — record 164 is not part of the cluster.
+    assert_eq!(SHOPPE_RECORDS_HEALER_BANDS, [(163, 163), (165, 173)]);
+    assert_eq!(SHOPPE_RECORDS_HEALER_EXCLUDED, 164);
+    assert!(!shoppe_record_in_bands(
+        SHOPPE_RECORDS_HEALER_EXCLUDED,
+        &SHOPPE_RECORDS_HEALER_BANDS
+    ));
     assert_eq!(SHOPPE_RECORDS_INNKEEPER_FIRST, 174);
     assert_eq!(SHOPPE_RECORDS_INNKEEPER_LAST, 193);
     // Last innkeeper record fits inside the file's record-slot count.
@@ -18942,13 +18964,43 @@ fn boardable_family_classifier_matches_spec_table() {
     assert_eq!(mount_horse_marker(0x11), Some(0x13));
     assert_eq!(mount_horse_marker(0x12), None);
     assert_eq!(mount_horse_marker(0x1B), None);
-    // Ship boarding warning predicate
+    // vehicles.md §4: one boarding path, two independent warnings.
+    // The classifier reports which of them fired.
     assert_eq!(SHIP_BOARDING_HULL_WARNING_THRESHOLD, 10);
-    assert!(ship_boarding_warns(0, 2)); // hull below 10
-    assert!(ship_boarding_warns(9, 2)); // hull below 10
-    assert!(!ship_boarding_warns(10, 2));
-    assert!(ship_boarding_warns(50, 0)); // no skiffs
-    assert!(!ship_boarding_warns(50, 1));
+    assert_eq!(
+        ship_boarding_warnings(0, 2),
+        ShipBoardingWarnings {
+            low_hull: true,
+            no_skiffs: false
+        }
+    );
+    assert_eq!(
+        ship_boarding_warnings(9, 2),
+        ShipBoardingWarnings {
+            low_hull: true,
+            no_skiffs: false
+        }
+    );
+    assert_eq!(ship_boarding_warnings(10, 2), ShipBoardingWarnings::default());
+    assert_eq!(
+        ship_boarding_warnings(50, 0),
+        ShipBoardingWarnings {
+            low_hull: false,
+            no_skiffs: true
+        }
+    );
+    assert_eq!(ship_boarding_warnings(50, 1), ShipBoardingWarnings::default());
+    // Both warnings can fire on the same board; a single bool
+    // would lose which one the player was shown.
+    assert_eq!(
+        ship_boarding_warnings(0, 0),
+        ShipBoardingWarnings {
+            low_hull: true,
+            no_skiffs: true
+        }
+    );
+    assert!(ship_boarding_warnings(0, 0).any());
+    assert!(!ship_boarding_warnings(10, 1).any());
 }
 
 #[test]
@@ -22694,7 +22746,7 @@ fn dungeon_v_key_routes_to_gem_map() {
     assert_eq!(state.gems, 0);
     assert_eq!(state.turn, 0);
     assert!(state.message.contains("Dungeon view"));
-    assert!(state.message.contains("centered flood map"));
+    assert!(state.message.contains("22x22 flood map"));
 }
 
 #[test]

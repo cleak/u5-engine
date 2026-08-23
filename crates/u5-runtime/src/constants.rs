@@ -1432,7 +1432,37 @@ pub const DUNGEON_RECORD_LEN: usize = DUNGEON_LEVELS_PER_RECORD * DUNGEON_LEVEL_
 /// grid side stay one value.
 pub const DUNGEON_LEVEL_LEN: usize = DUNGEON_SIDE * DUNGEON_SIDE;
 pub const DUNGEON_VIEW_DEPTH: usize = 4;
-pub const DUNGEON_GEM_VIEW_RADIUS: isize = 5;
+/// `dungeon-mode.md §12.1`: the gem V-View minimap is a
+/// twenty-two by twenty-two grid of eight-by-eight-pixel cells —
+/// 484 cells in all. The side is **even**, so this window has no
+/// centre in the radius sense: the party sits eleven cells
+/// left/above and ten right/below. A radius cannot express that
+/// shape, which is why the grid side and the party cell are
+/// published — and modelled here — as two separate values.
+pub const DUNGEON_GEM_VIEW_GRID_SIDE: usize = 22;
+/// `dungeon-mode.md §12.1`: the party always occupies grid cell
+/// `(11, 11)`, which is pre-marked visited before the flood
+/// begins so the flood never paints over the party marker.
+pub const DUNGEON_GEM_VIEW_PARTY_CELL: (usize, usize) = (11, 11);
+/// `dungeon-mode.md §12.1`: each grid cell is eight by eight
+/// pixels. A cell's pixel origin is `x = 8 * grid_x + 8`,
+/// `y = 8 * grid_y + 8`.
+pub const DUNGEON_GEM_VIEW_CELL_PIXELS: usize = 8;
+/// `dungeon-mode.md §12.1`, `§12.6`: the map view clears **only**
+/// the viewport interior `(8,8)` to `(183,183)` — inclusive — so
+/// the border bands and the level/facing labels are never
+/// damaged. Twenty-two cells of eight pixels exactly fill it.
+pub const DUNGEON_GEM_VIEW_CLEAR_RECT_ORIGIN: (usize, usize) = (8, 8);
+/// `dungeon-mode.md §12.1`: inclusive far corner of the cleared
+/// viewport interior; cell `(21,21)` ends here.
+pub const DUNGEON_GEM_VIEW_CLEAR_RECT_END: (usize, usize) = (183, 183);
+/// `dungeon-mode.md §12.2`: the flood frontier is a fixed ring of
+/// two hundred fifty-six entries with no occupancy check. The
+/// spec asks implementations to treat "the frontier never exceeds
+/// 256 pending cells" as a requirement of the contract rather
+/// than as an incidental property, so the walker is bounded here
+/// instead of using an unbounded queue.
+pub const DUNGEON_GEM_VIEW_FRONTIER_CAPACITY: usize = 256;
 pub const WORLD_SIDE: usize = 256;
 pub const WORLD_CELLS: usize = WORLD_SIDE * WORLD_SIDE;
 pub const UNDER_DAT_LEN: usize = WORLD_CELLS;

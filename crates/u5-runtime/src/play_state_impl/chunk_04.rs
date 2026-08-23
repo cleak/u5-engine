@@ -1818,7 +1818,7 @@ impl PlayState {
             Area::Dungeon { scene, level } => {
                 self.gems = self.gems.saturating_sub(1);
                 let title = format!(
-                    "Dungeon view of {} ({}) level {} ({} gem(s) remain; centered flood map)",
+                    "Dungeon view of {} ({}) level {} ({} gem(s) remain; 22x22 flood map)",
                     scene.key(),
                     scene.name(),
                     dungeon_display_level(level),
@@ -1996,9 +1996,8 @@ impl PlayState {
         depth: TileGraphicsDepth,
         mode: ViewOverlayMode,
     ) -> TileViewport {
-        let radius = DUNGEON_GEM_VIEW_RADIUS;
-        let cells = (radius * 2 + 1) as usize;
-        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let cells = DUNGEON_GEM_VIEW_GRID_SIDE;
+        let scale = DUNGEON_GEM_VIEW_CELL_PIXELS;
         let width = cells * scale;
         let mut viewport = TileViewport {
             depth,
@@ -2023,7 +2022,7 @@ impl PlayState {
         glyph: Option<u8>,
         mode: ViewOverlayMode,
     ) -> TileViewport {
-        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let scale = DUNGEON_GEM_VIEW_CELL_PIXELS;
         let mut viewport = TileViewport {
             depth,
             cells_wide: 1,
@@ -2067,14 +2066,20 @@ impl PlayState {
     }
 
     pub fn dungeon_vision_glyphs(&self, level: u8) -> Vec<Option<u8>> {
-        let radius = DUNGEON_GEM_VIEW_RADIUS;
-        let side = (radius * 2 + 1) as usize;
-        let center = radius as usize;
+        let side = DUNGEON_GEM_VIEW_GRID_SIDE;
+        let (party_cell_x, party_cell_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+        // The grid side is even, so the party cell is not a centre:
+        // offsets run `-party_cell` through `side - party_cell - 1`,
+        // i.e. eleven cells left/above and ten right/below.
+        let min_dx = -(party_cell_x as isize);
+        let max_dx = (side - party_cell_x - 1) as isize;
+        let min_dy = -(party_cell_y as isize);
+        let max_dy = (side - party_cell_y - 1) as isize;
         let mut visible = vec![false; side * side];
-        let mut queue = VecDeque::new();
+        let mut queue = VecDeque::with_capacity(DUNGEON_GEM_VIEW_FRONTIER_CAPACITY);
 
-        let center_index = center * side + center;
-        visible[center_index] = true;
+        let party_index = party_cell_y * side + party_cell_x;
+        visible[party_index] = true;
         queue.push_back((0isize, 0isize));
 
         while let Some((sx, sy)) = queue.pop_front() {
@@ -2093,30 +2098,35 @@ impl PlayState {
                     }
                     let next_x = sx + dx;
                     let next_y = sy + dy;
-                    if next_x < -radius || next_x > radius || next_y < -radius || next_y > radius {
+                    if next_x < min_dx || next_x > max_dx || next_y < min_dy || next_y > max_dy {
                         continue;
                     }
-                    let scratch_x = (next_x + radius) as usize;
-                    let scratch_y = (next_y + radius) as usize;
+                    let scratch_x = (next_x + party_cell_x as isize) as usize;
+                    let scratch_y = (next_y + party_cell_y as isize) as usize;
                     let index = scratch_y * side + scratch_x;
                     if !visible[index] {
                         visible[index] = true;
                         queue.push_back((next_x, next_y));
+                        debug_assert!(
+                            queue.len() <= DUNGEON_GEM_VIEW_FRONTIER_CAPACITY,
+                            "dungeon-mode.md §12.2 bounds the V-View flood frontier at                              {DUNGEON_GEM_VIEW_FRONTIER_CAPACITY} pending cells;                              reached {}",
+                            queue.len()
+                        );
                     }
                 }
             }
         }
 
         let mut glyphs = vec![None; side * side];
-        glyphs[center_index] = Some(DUNGEON_VIEW_PARTY_GLYPH);
+        glyphs[party_index] = Some(DUNGEON_VIEW_PARTY_GLYPH);
         for scratch_y in 0..side {
             for scratch_x in 0..side {
                 let index = scratch_y * side + scratch_x;
-                if !visible[index] || index == center_index {
+                if !visible[index] || index == party_index {
                     continue;
                 }
-                let dx = scratch_x as isize - radius;
-                let dy = scratch_y as isize - radius;
+                let dx = scratch_x as isize - party_cell_x as isize;
+                let dy = scratch_y as isize - party_cell_y as isize;
                 let world_x =
                     (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
                 let world_y =
@@ -2128,8 +2138,7 @@ impl PlayState {
     }
 
     pub fn dungeon_vision_map(&self, level: u8) -> String {
-        let radius = DUNGEON_GEM_VIEW_RADIUS;
-        let side = (radius * 2 + 1) as usize;
+        let side = DUNGEON_GEM_VIEW_GRID_SIDE;
         let glyphs = self.dungeon_vision_glyphs(level);
         let mut out = String::new();
         for scratch_y in 0..side {

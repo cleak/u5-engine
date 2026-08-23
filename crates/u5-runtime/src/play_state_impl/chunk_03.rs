@@ -2934,7 +2934,7 @@ impl PlayState {
         match self.area {
             Area::Dungeon { scene, level } => ViewOverlay {
                 title: format!(
-                    "Peer view of {} ({}) level {} (spell; centered flood map)",
+                    "Peer view of {} ({}) level {} (spell; 22x22 flood map)",
                     scene.key(),
                     scene.name(),
                     dungeon_display_level(level)
