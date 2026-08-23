@@ -995,7 +995,6 @@ impl PlayState {
         self.replace_world_active_objects(game_dir, entry.to_plane, entry.to_x, entry.to_y)?;
         self.clear_town_visit_state();
         self.return_world = None;
-        self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.mode_zero_cleanup();
@@ -1017,10 +1016,6 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         };
-
-        if let Some(entry) = self.moongate_at(plane, self.player.x, self.player.y) {
-            return self.enter_moongate(game_dir, plane, entry);
-        }
 
         let (entries, has_sidecar) =
             effective_world_location_entries_with_sidecar_status(game_dir)?;
@@ -1063,101 +1058,6 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         self.enter_world_target(game_dir, plane, target, None, true)
-    }
-
-    pub fn enter_moongate(
-        &mut self,
-        game_dir: &Path,
-        from_plane: WorldPlane,
-        entry: MoongateEntry,
-    ) -> io::Result<MoveOutcome> {
-        self.advance_turn();
-        self.apply_moongate(game_dir, from_plane, entry)
-    }
-
-    pub fn apply_moongate(
-        &mut self,
-        game_dir: &Path,
-        from_plane: WorldPlane,
-        entry: MoongateEntry,
-    ) -> io::Result<MoveOutcome> {
-        self.pending_moongate = None;
-        self.pending_town_arrest = None;
-        self.active_blackthorn = None;
-        if entry.is_single_ended() {
-            self.message = "Entered moongate, but it has no destination.".to_string();
-            return Ok(MoveOutcome::Observed);
-        }
-        let to_plane = entry.destination_plane;
-        if to_plane != from_plane {
-            self.cache_current_world_overlay();
-            self.area = Area::World { plane: to_plane };
-            self.force_foot_transport();
-            self.grid = load_world_map(game_dir, to_plane)?;
-            self.natural_moongate_live_cells.clear();
-            self.npcs.clear();
-            self.replace_world_active_objects(
-                game_dir,
-                to_plane,
-                entry.destination_x,
-                entry.destination_y,
-            )?;
-            self.clear_open_town_door_state();
-            self.return_world = None;
-            self.pending_moongate = None;
-            self.pending_town_arrest = None;
-            self.active_blackthorn = None;
-        }
-        self.player.x = entry.destination_x;
-        self.player.y = entry.destination_y;
-        self.rebuild_world_live_chunks_from_grid(to_plane)?;
-        self.sync_player_object();
-        self.mode_zero_cleanup();
-        self.mark_visibility_dirty();
-        self.message = format!(
-            "Entered moongate to {} at ({}, {}). {}.",
-            to_plane.key(),
-            entry.destination_x,
-            entry.destination_y,
-            self.wind_status_message()
-        );
-        Ok(MoveOutcome::Transition(
-            AreaTransition::MoongateTeleported {
-                from: from_plane,
-                to: to_plane,
-            },
-        ))
-    }
-
-    pub fn resolve_moongate_prompt(
-        &mut self,
-        key: char,
-        game_dir: &Path,
-    ) -> io::Result<Option<MoveOutcome>> {
-        let Some(entry) = self.pending_moongate else {
-            return Ok(None);
-        };
-        match key {
-            'y' | 'Y' => {
-                let Area::World { plane } = self.area else {
-                    self.pending_moongate = None;
-                    self.active_blackthorn = None;
-                    self.message = "Moongate prompt cancelled outside the overworld.".to_string();
-                    return Ok(Some(MoveOutcome::Blocked));
-                };
-                self.apply_moongate(game_dir, plane, entry).map(Some)
-            }
-            'n' | 'N' => {
-                self.pending_moongate = None;
-                self.active_blackthorn = None;
-                self.message = "Moongate ignored.".to_string();
-                Ok(Some(MoveOutcome::PromptDeclined))
-            }
-            _ => {
-                self.message = "Enter moongate? (Y/N).".to_string();
-                Ok(Some(MoveOutcome::Blocked))
-            }
-        }
     }
 
     /// `moons.md §3` / `time.md §5`: the hour-change hook that refreshes
@@ -1495,7 +1395,6 @@ impl PlayState {
         self.sync_player_object();
         self.cache_current_world_overlay();
         self.clear_town_visit_state();
-        self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.mode_zero_cleanup();
@@ -1537,80 +1436,11 @@ impl PlayState {
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.plane, entry.x, entry.y)?;
         self.clear_town_visit_state();
-        self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(true)
-    }
-
-    pub fn moongate_at(&self, plane: WorldPlane, x: usize, y: usize) -> Option<MoongateEntry> {
-        if plane != WorldPlane::Britannia {
-            return None;
-        }
-        if !self.moongates_visible_by_light() {
-            return None;
-        }
-        self.moongates.iter().copied().find(|entry| {
-            entry.x == x
-                && entry.y == y
-                && entry.is_active_at(self.clock.hour)
-                && self.moongate_origin_tile_matches(*entry)
-        })
-    }
-
-    pub fn moongates_visible_by_light(&self) -> bool {
-        self.ambient_light >= FULL_DAYLIGHT
-    }
-
-    pub fn moongate_origin_tile_matches(&self, entry: MoongateEntry) -> bool {
-        entry.matches_origin_tile(self.grid[world_cell_index(entry.x, entry.y)])
-    }
-
-    pub fn visible_moongate_at(&self, plane: WorldPlane, x: usize, y: usize) -> bool {
-        if plane != WorldPlane::Britannia || !self.moongates_visible_by_light() {
-            return false;
-        }
-
-        self.moongates.iter().any(|entry| {
-            entry.is_active_at(self.clock.hour)
-                && self.moongate_origin_tile_matches(*entry)
-                && ((entry.x == x && entry.y == y)
-                    || (!entry.is_single_ended()
-                        && entry.destination_plane == WorldPlane::Britannia
-                        && entry.destination_x == x
-                        && entry.destination_y == y))
-        })
-    }
-
-    pub fn visible_moongate_cells(&self) -> Vec<(usize, usize)> {
-        if !matches!(
-            self.area,
-            Area::World {
-                plane: WorldPlane::Britannia
-            }
-        ) || !self.moongates_visible_by_light()
-        {
-            return Vec::new();
-        }
-
-        let mut cells = Vec::new();
-        for entry in self.moongates.iter().filter(|entry| {
-            entry.is_active_at(self.clock.hour) && self.moongate_origin_tile_matches(**entry)
-        }) {
-            let origin = (entry.x, entry.y);
-            if !cells.contains(&origin) {
-                cells.push(origin);
-            }
-            if !entry.is_single_ended() && entry.destination_plane == WorldPlane::Britannia {
-                let destination = (entry.destination_x, entry.destination_y);
-                if !cells.contains(&destination) {
-                    cells.push(destination);
-                }
-            }
-        }
-        cells
     }
 
     pub fn world_plane_transition_at(

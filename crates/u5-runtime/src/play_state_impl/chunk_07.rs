@@ -2414,26 +2414,9 @@ impl PlayState {
                 return Ok(outcome);
             }
         } else {
-            self.queue_current_moongate_prompt();
             self.append_pending_hourly_status_message();
         }
         Ok(MoveOutcome::Passed)
-    }
-
-    pub fn queue_current_moongate_prompt(&mut self) -> bool {
-        let Area::World { plane } = self.area else {
-            return false;
-        };
-        let Some(entry) = self.moongate_at(plane, self.player.x, self.player.y) else {
-            return false;
-        };
-        self.pending_moongate = Some(entry);
-        if self.message.is_empty() {
-            self.message = "Moongate! Enter? (Y/N).".to_string();
-        } else {
-            self.message.push_str(" Moongate! Enter? (Y/N).");
-        }
-        true
     }
 
     pub fn apply_top_down_post_turn_effects_after_turn(
@@ -2479,7 +2462,7 @@ impl PlayState {
         turn_before: u64,
         game_dir: &Path,
     ) -> io::Result<Option<MoveOutcome>> {
-        if self.turn == turn_before || self.pending_moongate.is_some() {
+        if self.turn == turn_before {
             return Ok(None);
         }
         let Area::World { plane } = self.area else {
@@ -2524,7 +2507,6 @@ impl PlayState {
                     .push_str(&format!(" Wandering encounter spawned in slot {slot}."));
             }
         }
-        self.queue_current_moongate_prompt();
         Ok(None)
     }
 
@@ -2819,7 +2801,6 @@ impl PlayState {
         self.player.x = TOWN_ARREST_JAIL_X as usize;
         self.player.y = TOWN_ARREST_JAIL_Y as usize;
         self.player.transport = TransportState::Foot;
-        self.pending_moongate = None;
         self.clear_town_floor_reload_door_state();
         self.town_npc_alarm_states
             .retain(|marker| marker.scene_byte == scene.byte && marker.floor == floor);
@@ -2854,7 +2835,6 @@ impl PlayState {
         game_dir: &Path,
     ) -> io::Result<Option<MoveOutcome>> {
         self.pending_town_arrest = None;
-        self.pending_moongate = None;
         self.blackthorn_audience_map = None;
         self.clear_non_player_active_objects();
         self.mark_visibility_dirty();
@@ -3153,7 +3133,6 @@ impl PlayState {
         self.player.x = BLACKTHORN_CAPTIVE_CELL_X as usize;
         self.player.y = BLACKTHORN_CAPTIVE_CELL_Y as usize;
         self.player.transport = TransportState::Foot;
-        self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.blackthorn_audience_map = None;
@@ -3198,7 +3177,6 @@ impl PlayState {
         self.player.x = BLACKTHORN_RESCUE_HANDOFF_X as usize;
         self.player.y = BLACKTHORN_RESCUE_HANDOFF_Y as usize;
         self.force_foot_transport();
-        self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.blackthorn_audience_map = None;

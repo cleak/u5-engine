@@ -1654,7 +1654,6 @@ impl PlayState {
         }
         next.force_foot_transport();
         next.sync_player_object();
-        next.pending_moongate = None;
         next.pending_town_arrest = None;
         next.active_blackthorn = None;
         next.message = format!(
@@ -1973,15 +1972,11 @@ impl PlayState {
                     self.animation.resolve_static_tile(tile)
                 }
             }
-            Area::World { plane } => {
+            Area::World { .. } => {
                 let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
                 let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
                 if let Some(object) = self.world_object_at(wx, wy) {
                     object.tile
-                } else if self.visible_moongate_at(plane, wx, wy) {
-                    // `overworld.md §9` (spec HEAD c00bf63): no animator,
-                    // no frame ring - the moon-gate artwork is one tile.
-                    MOONGATE_TILE_BASE
                 } else {
                     let tile = self.grid[world_cell_index(wx, wy)];
                     self.animation.resolve_static_tile(tile)
@@ -2240,7 +2235,7 @@ impl PlayState {
                     out.push('\n');
                 }
             }
-            Area::World { plane } => {
+            Area::World { .. } => {
                 for y in origin_y..origin_y + side {
                     for x in origin_x..origin_x + side {
                         let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
@@ -2249,10 +2244,6 @@ impl PlayState {
                             out.push('@');
                         } else if let Some(object) = self.world_object_at(wx, wy) {
                             out.push(render_surface_view_class(surface_view_class(object.tile)));
-                        } else if self.visible_moongate_at(plane, wx, wy) {
-                            out.push(render_surface_view_class(surface_view_class(
-                                MOONGATE_TILE_BASE,
-                            )));
                         } else {
                             let tile = self.grid[world_cell_index(wx, wy)];
                             let tile = self.animation.resolve_static_tile(tile);

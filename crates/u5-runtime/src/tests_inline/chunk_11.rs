@@ -623,10 +623,6 @@
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("town exit tile"));
         assert!(state.message.contains("world-location table point"));
-        assert_eq!(
-            state.pending_moongate, None,
-            "exit transitions should not queue the previous town cell as a moongate"
-        );
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -360,8 +360,7 @@ pub fn handle_play_script_command(
 }
 
 pub fn play_state_accepts_typeahead(state: &PlayState) -> bool {
-    state.pending_moongate.is_none()
-        && state.pending_town_arrest.is_none()
+    state.pending_town_arrest.is_none()
         && state.endgame.is_none()
         && state.active_blackthorn.is_none()
         && state.active_shop.is_none()

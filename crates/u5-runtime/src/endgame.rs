@@ -1123,7 +1123,6 @@ impl PlayState {
         messages: Option<EndgameMessages>,
         tableau_map: Option<MiscmapsCutsceneMap>,
     ) -> MoveOutcome {
-        self.pending_moongate = None;
         self.combat_active = false;
         self.pending_combat_actor_slot = None;
         self.pending_combat_terrain_trigger_slot = None;

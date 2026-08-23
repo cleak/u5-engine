@@ -2628,20 +2628,11 @@
     }
 
     #[test]
-    fn top_down_viewport_rasterizes_world_wrapping_moongates_and_visibility() {
+    fn top_down_viewport_rasterizes_world_wrapping_and_visibility() {
         let mut grid = open_world_grid();
         grid[world_cell_index(0, 0)] = 17;
         let mut state = britannia_state(grid, 255, 0);
         state.ambient_light = FULL_DAYLIGHT;
-        state.moongates.push(MoongateEntry {
-            x: 254,
-            y: 0,
-            destination_plane: WorldPlane::Underworld,
-            destination_x: 0,
-            destination_y: 0,
-            active_hours: None,
-            expected_tile: None,
-        });
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
         let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
@@ -2653,10 +2644,7 @@
             Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
         );
         assert_eq!(viewport.pixel(32, 16), Some(17 % atlas.depth.pixel_limit()));
-        assert_eq!(
-            viewport.pixel(0, 16),
-            Some(MOONGATE_TILE_BASE % atlas.depth.pixel_limit())
-        );
+        assert_eq!(viewport.pixel(0, 16), Some(5 % atlas.depth.pixel_limit()));
 
         // `visibility.md §3`/`§4`: a zero light radius is the pitch-dark
         // branch — the producer skips the carve and the grid stays fully

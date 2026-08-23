@@ -11,18 +11,14 @@
 
 
     #[test]
-    fn pending_moongate_prompt_consumes_quit_key_without_turn() {
+    fn pending_prompt_consumes_quit_key_without_turn() {
         let mut prompted = world_state(open_world_grid(), 4, 5);
-        let entry = MoongateEntry {
-            x: 4,
-            y: 5,
-            destination_plane: WorldPlane::Britannia,
-            destination_x: 6,
-            destination_y: 7,
-            active_hours: None,
-            expected_tile: None,
+        let prompt = TownArrestPrompt {
+            scene_byte: 1,
+            floor: 0,
+            npc_slot: 1,
         };
-        prompted.pending_moongate = Some(entry);
+        prompted.pending_town_arrest = Some(prompt);
 
         assert_eq!(
             handle_play_key_input(&mut prompted, 'q', "", Path::new("")).unwrap(),
@@ -31,8 +27,8 @@
 
         assert_eq!(prompted.turn, 0);
         assert_eq!((prompted.player.x, prompted.player.y), (4, 5));
-        assert_eq!(prompted.pending_moongate, Some(entry));
-        assert_eq!(prompted.message, "Enter moongate? (Y/N).");
+        assert_eq!(prompted.pending_town_arrest, Some(prompt));
+        assert_eq!(prompted.message, "Surrender? (Y/N).");
 
         let mut unprompted = world_state(open_world_grid(), 4, 5);
 
@@ -44,18 +40,14 @@
     }
 
     #[test]
-    fn pending_moongate_prompt_suppresses_idle_visual_tick() {
+    fn pending_prompt_suppresses_idle_visual_tick() {
         let mut prompted = world_state(open_world_grid(), 4, 5);
-        let entry = MoongateEntry {
-            x: 4,
-            y: 5,
-            destination_plane: WorldPlane::Britannia,
-            destination_x: 6,
-            destination_y: 7,
-            active_hours: None,
-            expected_tile: None,
+        let prompt = TownArrestPrompt {
+            scene_byte: 1,
+            floor: 0,
+            npc_slot: 1,
         };
-        prompted.pending_moongate = Some(entry);
+        prompted.pending_town_arrest = Some(prompt);
         prompted.active_objects.push(ActiveObject {
             type_byte: 168,
             tile: 168,
@@ -73,11 +65,11 @@
         );
 
         assert_eq!(prompted.turn, 0);
-        assert_eq!(prompted.pending_moongate, Some(entry));
+        assert_eq!(prompted.pending_town_arrest, Some(prompt));
         assert_eq!(prompted.animation.frame, 0);
         assert_eq!(prompted.active_objects[1].phase, 0x22);
         assert_eq!(prompted.active_objects[1].tile, 168);
-        assert_eq!(prompted.message, "Enter moongate? (Y/N).");
+        assert_eq!(prompted.message, "Surrender? (Y/N).");
 
         let mut unprompted = world_state(open_world_grid(), 4, 5);
         unprompted.active_objects.push(ActiveObject {

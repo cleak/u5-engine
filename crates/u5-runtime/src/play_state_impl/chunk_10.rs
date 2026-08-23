@@ -280,9 +280,6 @@ impl PlayState {
             }
             Area::World { plane } => {
                 let tile = self.grid[world_cell_index(x, y)];
-                if self.moongate_at(plane, x, y).is_some() {
-                    return Ok(false);
-                }
                 if let Some(game_dir) = game_dir {
                     if self
                         .world_plane_transition_at(game_dir, plane, x, y)?

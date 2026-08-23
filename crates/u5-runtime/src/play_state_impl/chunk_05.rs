@@ -702,7 +702,6 @@ impl PlayState {
             self.sync_player_object();
             self.cache_current_world_overlay();
             self.clear_open_town_door_state();
-            self.pending_moongate = None;
             self.pending_town_arrest = None;
             self.active_blackthorn = None;
             self.mode_zero_cleanup();
@@ -753,7 +752,6 @@ impl PlayState {
             self.npcs.clear();
             self.replace_world_active_objects(game_dir, plane, x, y)?;
             self.clear_open_town_door_state();
-            self.pending_moongate = None;
             self.pending_town_arrest = None;
             self.active_blackthorn = None;
             self.mode_zero_cleanup();
@@ -785,7 +783,6 @@ impl PlayState {
         plane: WorldPlane,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
-        self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         if let Some(outcome) = self.resolve_balloon_wind_step(&mut direction, &mut nx, &mut ny) {
@@ -799,13 +796,12 @@ impl PlayState {
         let nx = nx.rem_euclid(WORLD_SIDE as isize) as usize;
         let ny = ny.rem_euclid(WORLD_SIDE as isize) as usize;
         let tile = self.grid[world_cell_index(nx, ny)];
-        let moongate = self.moongate_at(plane, nx, ny);
         let transition = if let Some(game_dir) = game_dir {
             self.world_plane_transition_at(game_dir, plane, nx, ny)?
         } else {
             None
         };
-        let damage_tile = if transition.is_none() && moongate.is_none() {
+        let damage_tile = if transition.is_none() {
             if let Some(game_dir) = game_dir {
                 self.world_damage_tile_at(game_dir, plane, nx, ny, tile)?
             } else {
@@ -814,7 +810,7 @@ impl PlayState {
         } else {
             None
         };
-        if transition.is_none() && moongate.is_none() {
+        if transition.is_none() {
             if let Some(entry) = damage_tile {
                 if !entry.effect.allows_transport(self.player.transport) {
                     self.message = format!("Blocked by {} at ({nx}, {ny}).", entry.effect.label());
@@ -868,7 +864,6 @@ impl PlayState {
         let final_x = nx;
         let final_y = ny;
         let final_tile = tile;
-        let final_moongate = moongate;
 
         self.player.x = final_x;
         self.player.y = final_y;
@@ -886,24 +881,15 @@ impl PlayState {
             }
         }
         let verb = "Moved";
-        if let Some(entry) = final_moongate {
-            self.pending_moongate = Some(entry);
-            self.message = format!(
-                "{verb} {} to ({final_x}, {final_y}) on {}; moongate! Enter? (Y/N).",
-                direction.name(),
-                plane.key()
-            );
-        } else {
-            self.message = format!(
-                "{verb} {} to ({final_x}, {final_y}) on {}; underfoot {}.",
-                direction.name(),
-                plane.key(),
-                tile_class(final_tile)
-            );
-            self.apply_fixed_narrative_gate_branch(plane);
-            self.append_world_damage_tile_message(game_dir, plane)?;
-            self.append_world_status_tile_message(plane);
-        }
+        self.message = format!(
+            "{verb} {} to ({final_x}, {final_y}) on {}; underfoot {}.",
+            direction.name(),
+            plane.key(),
+            tile_class(final_tile)
+        );
+        self.apply_fixed_narrative_gate_branch(plane);
+        self.append_world_damage_tile_message(game_dir, plane)?;
+        self.append_world_status_tile_message(plane);
         self.append_pending_hourly_status_message();
         Ok(MoveOutcome::Moved)
     }

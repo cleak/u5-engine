@@ -13917,7 +13917,6 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.active_direction_prompt.is_some()
         || state.active_yes_no_prompt.is_some()
         || state.active_shop.is_some()
-        || state.pending_moongate.is_some()
         || state.pending_town_arrest.is_some()
         || state.endgame.is_some()
 }
