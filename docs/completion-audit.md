@@ -105,7 +105,7 @@ clears the read-only bit Windows `fs::copy` propagates into scratch copies.
 | `cargo test -p u5-tui --features visual` | 96 pass (11 + 51 + 34) |
 | `cargo fmt --all -- --check` | clean |
 | `cargo clippy --workspace --all-targets` | **zero errors**; style warnings remain and are not gated |
-| `--route-smoke <asset-copy>` | all **493** scripted cases pass |
+| `--route-smoke <asset-copy>` | all **495** scripted cases pass |
 | `--visual-frame-suite <asset-copy>` | **193** PNGs plus a sanitized manifest |
 | `--visual-route-suite <asset-copy>` | **1814** PNGs plus a sanitized manifest |
 
@@ -137,7 +137,7 @@ sustained-pass hold frames.
 | §4 Enter/exit framing | `combat_frame.rs::CombatFrameSnapshot`, restore logic | snapshot save/restore tests | Implemented |
 | §5 Monster placement | `combat_setup.rs` placement tables A/B; `combat_frame.rs` combat-local ambush/camp reveal-slot records, target stamping, consumption, and ordinary-combat clearing | placement coordinate tests; ambush-reveal helper and post-step integration tests in `chunk_23.rs` | Implemented |
 | §6 Actor table | `combat_actor.rs` (32 slots, 6 party) | actor-slot tests | Implemented |
-| §7 Per-round structure | `combat_driver.rs` round-walk classifier; `combat_frame.rs` combat-only cursor-blink tick | `chunk_23.rs` round-cycle and cursor-blink tests | Implemented. **§7's "post-round maintenance pass" was an invented contract and is retracted.** We had built a row-major sweep classifying each arena cell's terrain byte and dispatching effects, plus a magic-effect timer tick. It was removed in `60ec07c` after being shown inert in our own tree: the report it built was discarded by both call sites and `combat_magic_effect_timer` was write-only. Route-smoke's 493 asset-backed cases pass unchanged without it. What is real is a combat-only cursor highlight (blink toggle, active-actor box, optional secondary marker), which has live renderer consumers. |
+| §7 Per-round structure | `combat_driver.rs` round-walk classifier; `combat_frame.rs` combat-only cursor-blink tick | `chunk_23.rs` round-cycle and cursor-blink tests | Implemented. **§7's "post-round maintenance pass" was an invented contract and is retracted.** We had built a row-major sweep classifying each arena cell's terrain byte and dispatching effects, plus a magic-effect timer tick. It was removed in `60ec07c` after being shown inert in our own tree: the report it built was discarded by both call sites and `combat_magic_effect_timer` was write-only. Route-smoke's asset-backed cases pass unchanged without it. What is real is a combat-only cursor highlight (blink toggle, active-actor box, optional secondary marker), which has live renderer consumers. |
 | §8 Player commands | `combat_scenario.rs` (`CombatScenarioInput`) | command-route smoke (route-smoke combat-*) | Implemented |
 | §9 Monster AI | `combat_frame.rs::combat_ai_actor_fleeing`, `combat_target_group_for_slot`, suppression bypass; `combat_actor.rs::party_name_forces_monster_combat_group`, `first_monster_ability`; `combat_stats.rs` class trait rows | `combat_ai`, `combat_actor_slot_dispatch`, `cause_fear` filters, exhaustive combat stat/ranged/ability-hook row tests in chunk 23 | Implemented |
 | §10 Spells in combat | `magic.rs` (scene-mask `SPELL_SCENE_COMBAT`), `combat_frame.rs` directed-spell dispatch | `directed_spell_status`, spell-route tests in `chunk_23.rs` | Implemented |
@@ -582,6 +582,6 @@ display effect mutating the loaded asset data, never a palette change.
 
 Verified on 2026-08-23 at `9e437d5`: 2902 u5-runtime, 170 u5-bevy, 96 u5-tui
 tests pass, `cargo fmt --all -- --check` is clean, `cargo clippy --workspace
---all-targets` reports zero errors, `--route-smoke` passes all 493 cases,
+--all-targets` reports zero errors, `--route-smoke` passes all 495 cases,
 `--visual-frame-suite` writes 193 PNGs and `--visual-route-suite` writes 1814.
 Every asset-backed run used a copy of the asset directory.

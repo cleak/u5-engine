@@ -25,7 +25,7 @@ modelled and never called:
 - `cargo test -p u5-tui --features visual` 96 passed (11 + 51 + 34).
 - `cargo clippy --workspace --all-targets` **zero errors**. Style warnings
   remain (19 in the `u5-bevy` lib) and are not gated.
-- `--route-smoke` all 493 scripted cases passed.
+- `--route-smoke` all 495 scripted cases passed.
 - `--visual-frame-suite` wrote 193 PNGs and runs to completion.
 - `--visual-route-suite` wrote 1814 PNGs, including the whole victory
   ending through to the certificate. Exactly one is black by contract: the
@@ -89,7 +89,7 @@ Earlier verification detail, kept for history:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 493 scripted route cases and the sanitized
+  2026-05-24 with 495 scripted route cases and the sanitized
   `--route-smoke-manifest` wrote 2183 initial/per-command/final frame rows
   that compare cleanly against themselves (including all 40 published stock
   world-location entry rows, native shrine/Codex quest routes, TLK-backed
@@ -1146,7 +1146,7 @@ as public details become available.
     described here was an invented contract, removed in `60ec07c` after
     `cleak/u5-spec#86`. The row-major terrain/effect sweep never did anything -
     both call sites discarded its report and `combat_magic_effect_timer` was
-    write-only - and route-smoke's 493 cases were unchanged by its removal. What
+    write-only - and route-smoke's cases were unchanged by its removal. What
     is real is the combat-only cursor highlight (blink toggle, active-actor box,
     optional secondary marker), which has live renderer consumers.
   - Combat Vanish, Magic Lock, Unlock Magic, and Open use the public issue

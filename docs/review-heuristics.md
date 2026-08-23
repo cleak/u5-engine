@@ -166,6 +166,17 @@ reader supplies "everything" by default:
 | A bounded scan without its scope | "found zero" | "there are none" |
 | A suite | "493 passed" | "493 things work" |
 
+**Postscript, and the sharpest instance of this page's own rule.** The number in
+that table was `493` when this was written. Two features later it was **495** —
+and the author of this page went on quoting `493` for hours, in status reports
+and in agent briefs, because the figure had been copied forward from an earlier
+run rather than re-measured. Two agents caught it independently, from the
+assertion in `crates/u5-tui/tests/play_loop.rs`.
+
+Nothing was wrong with the suite. The number was simply **stale**, and staleness
+is invisible in a figure the way a boundary is invisible in a measurement. So
+the check has a companion: *when did I last actually run the thing I am quoting?*
+
 Every one of those artefacts is accurate. The failure is entirely in the
 sentence wrapped around it — which is why none of them can be caught by
 re-running the thing that produced it.
