@@ -133,6 +133,47 @@ the most common of the four, because a cross-reference does not read as a claim
 at all. It reads as context. "The same generator the shrine effect uses" slips
 past review that would have caught the same assertion stated plainly.
 
+**A fifth, and the worst: the disclaimer.** A disclaimer claims
+**unavailability** — "this is published but does not reproduce, so it is not
+available to this workspace" — and it is the only one of the five that
+**forecloses** rather than misinforms.
+
+A wrong fact invites correction: someone eventually checks and finds it wrong. A
+wrong *"you can't get this"* removes the reason to try. It does not compete with
+the truth; it prevents anyone going to look. And it **strengthens with age**,
+because its own persistence reads as corroboration — if it were wrong, surely
+someone would have noticed by now. Nobody noticed because nobody could.
+
+We carried exactly that on the Spyglass renderer. The table it declared
+unavailable fetched in one command, and the sentence had been standing between
+the engine and a fully published contract that retracts five separate things we
+had built.
+
+**The check must be the same shape as the claim: re-attempt the thing the
+disclaimer says is impossible, on a schedule, rather than reasoning about
+whether it is still true.** A stale disclaimer is a stale figure whose subject
+is a capability instead of a number.
+
+### The silent-discard default
+
+The same foreclosing shape appears in code as a catch-all that skips:
+
+```rust
+_ => { /* unrecognised byte - skip it */ }
+```
+
+**A missing case cannot announce itself.** Two published control codes were
+living in one such arm: `0x89` (raise moral standing) discarded both its shipped
+runs, and `0x81` (print the Avatar's name) silently dropped a word from **60**
+shipped dialogue lines, rendering "Greetings, , nice". Nothing failed, because
+no test asserted rendered text against shipped blobs.
+
+If the thing being dispatched is exhaustive — and that arm's own comment said
+the original's dispatcher *is* — then an unrecognised input is a defect in the
+implementation, not defensive input, and skipping it is the wrong response.
+Enumerate the cases mechanically against the published set rather than trusting
+the arm to be empty.
+
 ## 4. Which of the things I just changed does this suite actually touch?
 
 A suite reports what it **ran** and is read as reporting what **exists**. Ask of
