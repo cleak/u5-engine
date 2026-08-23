@@ -287,6 +287,25 @@ pub fn require_outdoor_ranged_attack_rasterization(wrapped_dx: i32, wrapped_dy: 
 ///
 /// A damage number invented here would be indistinguishable from a
 /// specified one at every call site that reads it, so it refuses instead.
+///
+/// **Do not fill this in as a uniform damage application.** The contract
+/// has been traced and is being published against `cleak/u5-spec#90`;
+/// ahead of the text landing, the spec authors have flagged the shape so
+/// that we do not scaffold the wrong one:
+///
+/// * The payload is **not** a single "apply damage to the party" step. It
+///   **branches on party transport**, and the outcome differs **in kind**,
+///   not merely in magnitude, between one transport state and the others.
+///   Filling a constant in behind this seam will not be enough — the seam
+///   itself is the wrong shape and wants restructuring.
+/// * **Both attacks share one payload path**, differing only in their
+///   surrounding presentation. This is one contract to implement, not two,
+///   which is why the two triggers converge on this single seam.
+/// * It does **not** route through the combat damage-and-status resolver,
+///   and there is **no attacker sentinel** anywhere on the path. Reusing
+///   the combat resolver with a synthetic attacker id is the obvious move
+///   and it is wrong: the question "which sentinel" has no answer because
+///   the mechanism is a different one.
 pub fn require_outdoor_ranged_attack_damage(figure: OutdoorRangedAttackFigure) -> ! {
     panic!(
         "a {figure:?} outdoor ranged attack connected, but the damage it deals is unspecified: \
