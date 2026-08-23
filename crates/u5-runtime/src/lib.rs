@@ -69,6 +69,7 @@ pub mod misc_tables_io;
 pub mod miscmsg_io;
 pub mod moongate;
 pub mod moongate_phase;
+pub mod moongate_transit;
 pub mod npc_runtime;
 pub mod ool_audit;
 pub mod party;
@@ -465,6 +466,18 @@ pub use moongate_phase::{
     MOONGATE_PHASE_SCRATCH_TILE, MoongatePhaseDraw, compose_moongate_phase_frame,
     moongate_phase_draw, moongate_phase_gate_tile, moongate_phase_ground_tile,
     with_moongate_phase_scratch_tile,
+};
+pub use moongate_transit::{
+    MOONGATE_TRANSIT_ABORT_POLL_ENABLED, MOONGATE_TRANSIT_CLEAR_COLOUR,
+    MOONGATE_TRANSIT_CLEARED_TERRAIN, MOONGATE_TRANSIT_END_COUNTER, MOONGATE_TRANSIT_IS_BLOCKING,
+    MOONGATE_TRANSIT_OPENING_WORLD_TICKS, MOONGATE_TRANSIT_PARTY_VANISH_TILE,
+    MOONGATE_TRANSIT_STAGE_A_DISPATCH_STEPS, MOONGATE_TRANSIT_STAGE_A_PLOTTED_PIXELS,
+    MOONGATE_TRANSIT_STAGE_A_WORLD_TICK_EVERY, MOONGATE_TRANSIT_STAGE_A_WORLD_TICKS,
+    MOONGATE_TRANSIT_STAGE_B_FIRST_PHASE, MOONGATE_TRANSIT_STAGE_B_LAST_PHASE,
+    MOONGATE_TRANSIT_STAGE_B_STEP_BIOS_TICKS, MOONGATE_TRANSIT_STAGE_B_STEPS, MoongateTransitFrame,
+    MoongateTransitPartySprite, MoongateTransitPlayback, MoongateTransitStep,
+    moongate_transit_stage_a_pixel_order, moongate_transit_steps, run_moongate_transit,
+    run_moongate_transit_presentation,
 };
 pub use npc_runtime::{
     DoorTracker, LocationMarkers, NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST,

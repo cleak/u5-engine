@@ -21,6 +21,13 @@ pub struct PlayState {
     pub animation: AnimationClock,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
+    /// `overworld.md §9.2` (spec HEAD `c00bf63`): what the last blocking
+    /// moongate transit spent, or `None` if none has run in this session.
+    ///
+    /// Presentation bookkeeping, not saved state: the transit is blocking
+    /// and unskippable, so this is only ever a record of a sequence that
+    /// already finished, never a resumable position in one.
+    pub last_natural_moongate_transit: Option<MoongateTransitPlayback>,
     pub cached_moon_glyph_bytes: [u8; 2],
     pub food: u16,
     pub gold: u16,
