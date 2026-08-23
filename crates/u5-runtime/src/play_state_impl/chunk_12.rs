@@ -13,6 +13,12 @@ impl PlayState {
             self.player.y,
             |_| false,
         )?);
+        // `visibility.md §12.6`: the beacon's outdoor source is harvested by
+        // the chunk loader, not by the light pass — "the chunk loader scans
+        // each freshly loaded thirty-two-by-thirty-two window for the
+        // lighthouse tile". The Underworld map holds no lighthouse, so this
+        // records the "no beacon" sentinel there every time.
+        self.harvest_outdoor_light_beacon();
         Ok(())
     }
 
@@ -21,6 +27,10 @@ impl PlayState {
             self.rebuild_world_live_chunks_from_grid(plane)
         } else {
             self.world_live_chunks = None;
+            // Off the outdoor map there is no window to scan; the location
+            // and combat paths own the beacon's sources instead
+            // (`visibility.md §12.6`).
+            self.light_beacon.sources = [None; BEACON_SOURCE_SLOTS];
             Ok(())
         }
     }

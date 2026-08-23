@@ -824,6 +824,10 @@ impl PlayState {
             Err(err) => return Err(err),
         };
         self.grid = next_grid;
+        // `visibility.md §12.6`: a new location floor is fresh map setup —
+        // clear both beacon positions and re-record up to two bright-light
+        // hits.
+        self.harvest_location_light_beacon();
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town {
             scene,

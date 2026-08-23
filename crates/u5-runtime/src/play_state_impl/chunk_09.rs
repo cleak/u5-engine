@@ -1825,6 +1825,11 @@ impl PlayState {
             }
         }
 
+        // `visibility.md §12.4`: "local-light refresh first, beacon stamps
+        // second, visibility carve third". The rotating beacon of `§12.6` is
+        // the mask's one other non-combat writer.
+        self.stamp_light_beacon(&mut mask, origin_x, origin_y, wrap_world);
+
         mask
     }
 
@@ -1980,6 +1985,10 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
         self.recompute_daylight();
+        // `visibility.md §12.6`: the beacon's cone advances one sixteenth of a
+        // revolution per world turn, gated on the ambient value the line above
+        // just recomputed.
+        self.advance_light_beacon();
         self.refresh_natural_moongates();
         self.sync_player_object();
         if self.time_stop_counter != 0 {
@@ -3095,7 +3104,7 @@ fn surface_local_light_mask_origin(px: isize, py: isize, wrap_world: bool) -> (i
     }
 }
 
-fn surface_local_light_mask_index(
+pub(crate) fn surface_local_light_mask_index(
     origin_x: isize,
     origin_y: isize,
     x: isize,

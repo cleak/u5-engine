@@ -2796,6 +2796,10 @@ impl PlayState {
         let scene = Scene::new(TOWN_ARREST_JAIL_SCENE)?;
         let floor = TOWN_ARREST_JAIL_FLOOR as i8;
         self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        // `visibility.md §12.6`: a new location floor is fresh map setup —
+        // clear both beacon positions and re-record up to two bright-light
+        // hits.
+        self.harvest_location_light_beacon();
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = TOWN_ARREST_JAIL_X as usize;
@@ -3128,6 +3132,10 @@ impl PlayState {
         let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE)?;
         let floor = 0i8;
         self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        // `visibility.md §12.6`: a new location floor is fresh map setup —
+        // clear both beacon positions and re-record up to two bright-light
+        // hits.
+        self.harvest_location_light_beacon();
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = BLACKTHORN_CAPTIVE_CELL_X as usize;
@@ -3172,6 +3180,10 @@ impl PlayState {
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
         let floor = 0i8;
         self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        // `visibility.md §12.6`: a new location floor is fresh map setup —
+        // clear both beacon positions and re-record up to two bright-light
+        // hits.
+        self.harvest_location_light_beacon();
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = BLACKTHORN_RESCUE_HANDOFF_X as usize;
