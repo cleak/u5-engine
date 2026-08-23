@@ -4005,28 +4005,6 @@ fn save_flow_double_underworld_routes_through_canonical_mode() {
 }
 
 #[test]
-fn combat_post_round_terrain_dispatch_bytes_match_spec() {
-    // combat.md §7: post-round maintenance sweeps the 11x11
-    // combat arena and dispatches based on the terrain/state byte.
-    // A 0x00 byte hands the parallel magic/effect byte to the
-    // cell-effect dispatcher; a 0xDC byte gates the shared
-    // magic-effect timer tick.
-    assert_eq!(COMBAT_POST_ROUND_TERRAIN_EFFECT_DISPATCH_BYTE, 0x00);
-    assert_eq!(COMBAT_POST_ROUND_MAGIC_TIMER_TILE, 0xDC);
-    assert_eq!(COMBAT_POST_ROUND_NO_EFFECT_SENTINEL, 0x16);
-    assert_eq!(COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX, 16);
-    // Timer ticks only in (0, MAX).
-    assert!(!combat_post_round_magic_effect_timer_ticks(0));
-    assert!(combat_post_round_magic_effect_timer_ticks(1));
-    assert!(combat_post_round_magic_effect_timer_ticks(
-        COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX - 1,
-    ));
-    assert!(!combat_post_round_magic_effect_timer_ticks(
-        COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX,
-    ));
-}
-
-#[test]
 fn terrain_combat_early_spawn_threshold_matches_spec() {
     // combat.md §5: early-spawn band is spawn indexes below
     // `count / 4 + 1`. Each early spawn rolls a one-in-nine
@@ -5871,29 +5849,6 @@ fn chargen_starting_calendar_matches_init_gam_seed() {
     assert!((1..=28).contains(&CHARGEN_STARTING_DAY));
     assert!(CHARGEN_STARTING_HOUR < 24);
     assert!(CHARGEN_STARTING_MINUTE < 60);
-}
-
-#[test]
-fn combat_post_round_magic_effect_timer_ticks_in_open_interval() {
-    // combat.md §7: in the post-round maintenance pass, a terrain
-    // byte `0xDC` ticks the shared combat magic-effect timer
-    // while the timer is nonzero and strictly below sixteen.
-    // Promote both edges so a future post-round pass does not
-    // bake them as bare literals.
-    assert_eq!(COMBAT_POST_ROUND_NO_EFFECT_SENTINEL, 0x16);
-    assert_eq!(COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX, 16);
-    // The timer ticks for every value in the open interval
-    // (0, 16). Zero is inert and a timer at the cap stops.
-    assert!(!combat_post_round_magic_effect_timer_ticks(0));
-    for timer in 1u8..COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX {
-        assert!(combat_post_round_magic_effect_timer_ticks(timer));
-    }
-    assert!(!combat_post_round_magic_effect_timer_ticks(
-        COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX
-    ));
-    assert!(!combat_post_round_magic_effect_timer_ticks(
-        COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX + 1
-    ));
 }
 
 #[test]
@@ -8333,8 +8288,6 @@ fn display_surface_title_tick_overwrites_the_full_320_wide_band_and_advances() {
     assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(2));
     assert_eq!(surface.title_tick_frame(), 2);
 }
-
-
 
 
 #[test]
@@ -14479,7 +14432,6 @@ fn monster_wound_classifier_matches_spec_thresholds() {
     assert!(!monster_wound_sets_fleeing(50, 100, 0));
     assert!(!monster_wound_sets_fleeing(80, 100, 251));
 }
-
 
 #[test]
 fn combat_actor_record_offsets_match_spec_row_order() {

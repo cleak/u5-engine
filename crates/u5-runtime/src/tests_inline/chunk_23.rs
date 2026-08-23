@@ -14250,7 +14250,7 @@
     }
 
     #[test]
-    fn combat_post_round_maintenance_sweeps_effects_and_visual_markers_without_field_lifetime() {
+    fn combat_cursor_blink_tick_reports_cursor_and_secondary_marker_cells() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.active_player = Some(0);
@@ -14264,12 +14264,6 @@
             5,
             6,
         ]);
-        state.combat_magic_effects =
-            [[COMBAT_POST_ROUND_NO_EFFECT_SENTINEL; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        state.combat_magic_effects[0][0] = COMBAT_FIELD_KIND_POISON;
-        state.combat_terrain[1][0] = COMBAT_POST_ROUND_MAGIC_TIMER_TILE;
-        state.combat_magic_effect_timer = COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX - 1;
-        state.combat_terrain[2][0] = 0x04;
         state.combat_secondary_marker = Some((3, 4));
         state.active_objects.push(ActiveObject {
             type_byte: COMBAT_FIELD_KIND_FIRE,
@@ -14284,45 +14278,11 @@
         let active_objects_before = state.active_objects.clone();
         let party_before = state.party.clone();
 
-        let report = state.apply_combat_post_round_maintenance();
+        let report = state.apply_combat_cursor_blink_tick();
 
-        assert_eq!(
-            report.cell_dispatches[0],
-            CombatPostRoundCellDispatch {
-                x: 0,
-                y: 0,
-                kind: CombatPostRoundCellDispatchKind::MagicEffectByte {
-                    effect: COMBAT_FIELD_KIND_POISON,
-                },
-            }
-        );
-        assert_eq!(
-            report.cell_dispatches[1],
-            CombatPostRoundCellDispatch {
-                x: 0,
-                y: 1,
-                kind: CombatPostRoundCellDispatchKind::MagicTimerTick {
-                    before: COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX - 1,
-                    after: COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX,
-                },
-            }
-        );
-        assert_eq!(
-            report.cell_dispatches[2],
-            CombatPostRoundCellDispatch {
-                x: 0,
-                y: 2,
-                kind: CombatPostRoundCellDispatchKind::TerrainEffectByte { terrain: 0x04 },
-            }
-        );
-        assert_eq!(report.cell_dispatches.len(), 3);
         assert!(report.cursor_blink_visible);
         assert_eq!(report.cursor_draw_cell, Some((5, 6)));
         assert_eq!(report.secondary_marker_cell, Some((3, 4)));
-        assert_eq!(
-            state.combat_magic_effect_timer,
-            COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX
-        );
         assert_eq!(state.active_objects, active_objects_before);
         assert_eq!(state.party, party_before);
     }

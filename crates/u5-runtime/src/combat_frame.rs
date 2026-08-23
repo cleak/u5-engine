@@ -107,24 +107,11 @@ impl CombatExitOutcome {
     }
 }
 
-/// `combat.md Section 7` row-major post-round maintenance dispatch.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CombatPostRoundCellDispatchKind {
-    MagicEffectByte { effect: u8 },
-    TerrainEffectByte { terrain: u8 },
-    MagicTimerTick { before: u8, after: u8 },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CombatPostRoundCellDispatch {
-    pub x: u8,
-    pub y: u8,
-    pub kind: CombatPostRoundCellDispatchKind,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct CombatPostRoundMaintenanceReport {
-    pub cell_dispatches: Vec<CombatPostRoundCellDispatch>,
+/// Combat cursor blink state after a round boundary: which arena cell
+/// the blinking active-actor cursor should be drawn on, and where the
+/// secondary marker sits when it is inside the arena.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CombatCursorBlinkReport {
     pub cursor_blink_visible: bool,
     pub cursor_draw_cell: Option<(u8, u8)>,
     pub secondary_marker_cell: Option<(u8, u8)>,
@@ -2064,7 +2051,6 @@ impl PlayState {
         self.combat_actors = actors;
         self.combat_terrain = terrain;
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        self.combat_magic_effect_timer = 0;
         self.combat_cursor_blink = false;
         self.combat_secondary_marker = None;
         self.combat_ambush_reveals = reveals;
@@ -2095,7 +2081,6 @@ impl PlayState {
         self.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
         self.combat_terrain = snapshot.combat_terrain;
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        self.combat_magic_effect_timer = 0;
         self.combat_cursor_blink = false;
         self.combat_secondary_marker = None;
         self.combat_ambush_reveals = [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT];
@@ -3794,45 +3779,10 @@ impl PlayState {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn apply_combat_post_round_maintenance(&mut self) -> CombatPostRoundMaintenanceReport {
-        let mut report = CombatPostRoundMaintenanceReport::default();
-
-        for y in 0..COMBAT_ARENA_SIDE {
-            for x in 0..COMBAT_ARENA_SIDE {
-                let terrain = self.combat_terrain[y][x];
-                if terrain == COMBAT_POST_ROUND_TERRAIN_EFFECT_DISPATCH_BYTE {
-                    let effect = self.combat_magic_effects[y][x];
-                    if effect != COMBAT_POST_ROUND_NO_EFFECT_SENTINEL {
-                        report.cell_dispatches.push(CombatPostRoundCellDispatch {
-                            x: x as u8,
-                            y: y as u8,
-                            kind: CombatPostRoundCellDispatchKind::MagicEffectByte { effect },
-                        });
-                    }
-                } else if terrain == COMBAT_POST_ROUND_MAGIC_TIMER_TILE {
-                    if combat_post_round_magic_effect_timer_ticks(self.combat_magic_effect_timer) {
-                        let before = self.combat_magic_effect_timer;
-                        self.combat_magic_effect_timer =
-                            self.combat_magic_effect_timer.saturating_add(1);
-                        report.cell_dispatches.push(CombatPostRoundCellDispatch {
-                            x: x as u8,
-                            y: y as u8,
-                            kind: CombatPostRoundCellDispatchKind::MagicTimerTick {
-                                before,
-                                after: self.combat_magic_effect_timer,
-                            },
-                        });
-                    }
-                } else {
-                    report.cell_dispatches.push(CombatPostRoundCellDispatch {
-                        x: x as u8,
-                        y: y as u8,
-                        kind: CombatPostRoundCellDispatchKind::TerrainEffectByte { terrain },
-                    });
-                }
-            }
-        }
+    /// Toggles the combat cursor blink at a round boundary and reports
+    /// where the cursor and secondary marker should be drawn.
+    pub fn apply_combat_cursor_blink_tick(&mut self) -> CombatCursorBlinkReport {
+        let mut report = CombatCursorBlinkReport::default();
 
         if self.combat_active {
             self.combat_cursor_blink = !self.combat_cursor_blink;
@@ -3905,7 +3855,7 @@ impl PlayState {
 
             match &application {
                 CombatActorSlotDispatchApplication::EndOfRound { .. } => {
-                    self.apply_combat_post_round_maintenance();
+                    self.apply_combat_cursor_blink_tick();
                     applications.push(application);
                     return CombatRoundWalkApplication {
                         start_slot,
@@ -3956,7 +3906,7 @@ impl PlayState {
 
             match &application {
                 CombatActorSlotDispatchApplication::EndOfRound { .. } => {
-                    self.apply_combat_post_round_maintenance();
+                    self.apply_combat_cursor_blink_tick();
                     applications.push(application);
                     return CombatRoundWalkApplication {
                         start_slot,

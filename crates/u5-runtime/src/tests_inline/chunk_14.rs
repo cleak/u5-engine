@@ -2835,7 +2835,7 @@
     }
 
     #[test]
-    fn combat_viewport_renders_post_round_cursor_and_secondary_marker_hooks() {
+    fn combat_viewport_renders_cursor_and_secondary_marker_hooks() {
         let mut combat = test_state(open_grid(), 1, 1);
         combat.combat_active = true;
         combat.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
