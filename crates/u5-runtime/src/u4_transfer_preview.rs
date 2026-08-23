@@ -553,17 +553,44 @@ impl U4PreviewResponse {
 // `§5.1`/`§5.2`/`§5.3` source view the preview needs
 // ---------------------------------------------------------------------------
 
-/// `§5.1`: the leading character record.
+/// `§5.1`/`§5.4`: the leading character record, and the seek target of
+/// the **first** of the transfer's two `PARTY.SAV` reads. The record
+/// base *is* this offset - there is no record header - so `§5.1`'s
+/// record-relative offsets apply to it directly and the name lands at
+/// file offset `0x001C`, the class byte at `0x002D`.
 pub const U4_PREVIEW_RECORD_OFFSET: usize = 0x0008;
+/// `§5.1`: bytes pulled by the first read - the whole 39-byte leading
+/// record plus one slack byte.
+pub const U4_PREVIEW_RECORD_READ_LEN: usize = 40;
+/// `§5.1`: the fixed record stride. Only record 0 is ever read, so the
+/// transfer never exercises this; `§5.4` lists it as corroborated from
+/// the published Ultima IV layout rather than derived from Ultima V.
+pub const U4_PREVIEW_RECORD_LEN: usize = 39;
+/// `§5.1`: records between the file header and the party-wide block.
+/// Not established from Ultima V either - see `§5.4`.
+pub const U4_PREVIEW_RECORD_COUNT: usize = 8;
 /// `§5.1`: the party-wide block begins immediately after the eighth
-/// character record (`0x0008 + 8 * 39`).
-pub const U4_PREVIEW_PARTY_BLOCK_OFFSET: usize = 0x0140;
-/// `§5.1`: bytes read from the party-wide block.
+/// character record (`0x0008 + 8 * 39`), and is the seek target of the
+/// **second** of the transfer's two reads.
+pub const U4_PREVIEW_PARTY_BLOCK_OFFSET: usize =
+    U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_COUNT * U4_PREVIEW_RECORD_LEN;
+/// `§5.1`: bytes read from the party-wide block. Of these 182 bytes
+/// only the sixteen standings bytes are ever examined (`cleak/u5-spec#88`).
 pub const U4_PREVIEW_PARTY_BLOCK_LEN: usize = 182;
+/// `§5.1`/`§5.4`: the transfer makes **exactly two** reads of
+/// `PARTY.SAV` and no others - `0x0008` for 40 bytes, then `0x0140` for
+/// 182 bytes. A source image must therefore cover both reads.
+pub const U4_PREVIEW_REQUIRED_LEN: usize =
+    U4_PREVIEW_PARTY_BLOCK_OFFSET + U4_PREVIEW_PARTY_BLOCK_LEN;
 /// `§5.3`: the eight virtue standings are 16-bit, stride two, six bytes
 /// into the party-wide block, i.e. file offsets `0x0146..=0x0155`.
 pub const U4_PREVIEW_VIRTUE_STANDING_OFFSET: usize = 0x0146;
-pub const U4_PREVIEW_VIRTUE_STANDING_COUNT: usize = 8;
+/// `§5.3`: one standing per published virtue - Honesty, Compassion,
+/// Valor, Justice, Sacrifice, Honor, Spirituality, Humility. Anchored
+/// to [`crate::VIRTUE_COUNT`] so the count has one source of truth.
+pub const U4_PREVIEW_VIRTUE_STANDING_COUNT: usize = crate::VIRTUE_COUNT;
+/// `§5.3`: element stride, two bytes.
+pub const U4_PREVIEW_VIRTUE_STANDING_STRIDE: usize = 2;
 /// `§5.2`: hit points, maximum hit points and experience are gated to
 /// `0..9999`.
 pub const U4_PREVIEW_PROGRESS_MAX: u16 = 9999;
@@ -580,15 +607,41 @@ pub const U4_PREVIEW_MALE_MARKER: u8 = 0x0b;
 /// divided by one hundred, truncating.
 pub const U4_PREVIEW_FOUND_LEVEL_DIVISOR: u16 = 100;
 
-const RECORD_HP: usize = 0x00;
-const RECORD_MAX_HP: usize = 0x02;
-const RECORD_EXPERIENCE: usize = 0x04;
-const RECORD_STRENGTH: usize = 0x06;
-const RECORD_DEXTERITY: usize = 0x08;
-const RECORD_INTELLIGENCE: usize = 0x0a;
-const RECORD_NAME: usize = 0x14;
-const RECORD_SEX: usize = 0x24;
-const RECORD_CLASS: usize = 0x25;
+// `§5.1`: record-relative field offsets, applied directly to
+// `U4_PREVIEW_RECORD_OFFSET`. Public so fixtures and tests outside this
+// module can address the same bytes the parser does - a fixture written
+// to different offsets would "pass" against a wrongly-anchored parser.
+/// `§5.1`: current hit points (`0..9999`).
+pub const U4_PREVIEW_RECORD_HP_OFFSET: usize = 0x00;
+/// `§5.1`: maximum hit points (`0..9999`).
+pub const U4_PREVIEW_RECORD_MAX_HP_OFFSET: usize = 0x02;
+/// `§5.1`: experience (`0..9999`).
+pub const U4_PREVIEW_RECORD_EXPERIENCE_OFFSET: usize = 0x04;
+/// `§5.1`: Strength (`0..70`).
+pub const U4_PREVIEW_RECORD_STRENGTH_OFFSET: usize = 0x06;
+/// `§5.1`: Dexterity (`0..70`).
+pub const U4_PREVIEW_RECORD_DEXTERITY_OFFSET: usize = 0x08;
+/// `§5.1`: Intelligence (`0..70`).
+pub const U4_PREVIEW_RECORD_INTELLIGENCE_OFFSET: usize = 0x0a;
+/// `§5.1`: sixteen name bytes; only the first eight are validated.
+/// File offset `0x001C`.
+pub const U4_PREVIEW_RECORD_NAME_OFFSET: usize = 0x14;
+/// `§5.1`: the full name field width.
+pub const U4_PREVIEW_RECORD_NAME_LEN: usize = 16;
+/// `§5.1`: sex marker; the male byte is [`U4_PREVIEW_MALE_MARKER`].
+pub const U4_PREVIEW_RECORD_SEX_OFFSET: usize = 0x24;
+/// `§5.1`: class index (`0..7`). File offset `0x002D`.
+pub const U4_PREVIEW_RECORD_CLASS_OFFSET: usize = 0x25;
+
+const RECORD_HP: usize = U4_PREVIEW_RECORD_HP_OFFSET;
+const RECORD_MAX_HP: usize = U4_PREVIEW_RECORD_MAX_HP_OFFSET;
+const RECORD_EXPERIENCE: usize = U4_PREVIEW_RECORD_EXPERIENCE_OFFSET;
+const RECORD_STRENGTH: usize = U4_PREVIEW_RECORD_STRENGTH_OFFSET;
+const RECORD_DEXTERITY: usize = U4_PREVIEW_RECORD_DEXTERITY_OFFSET;
+const RECORD_INTELLIGENCE: usize = U4_PREVIEW_RECORD_INTELLIGENCE_OFFSET;
+const RECORD_NAME: usize = U4_PREVIEW_RECORD_NAME_OFFSET;
+const RECORD_SEX: usize = U4_PREVIEW_RECORD_SEX_OFFSET;
+const RECORD_CLASS: usize = U4_PREVIEW_RECORD_CLASS_OFFSET;
 
 /// `§5.2`: why a source save was refused. Every variant lands the
 /// player on `§6.3`'s bad-data page.
@@ -670,6 +723,7 @@ impl U4PreviewSource {
             dexterity: self.dexterity,
             intelligence: self.intelligence,
             experience: u32::from(self.experience),
+            is_avatar: self.is_avatar,
         }
     }
 }
@@ -700,8 +754,7 @@ fn gate(field: &'static str, value: u16, max: u16) -> Result<u16, U4PreviewSourc
 /// them. `§5.3`'s all-zero standings are the *success* condition for
 /// Avatarhood, never a rejection.
 pub fn parse_u4_preview_source(bytes: &[u8]) -> Result<U4PreviewSource, U4PreviewSourceRejection> {
-    let required = U4_PREVIEW_VIRTUE_STANDING_OFFSET + U4_PREVIEW_VIRTUE_STANDING_COUNT * 2;
-    if bytes.len() < required {
+    if bytes.len() < U4_PREVIEW_REQUIRED_LEN {
         return Err(U4PreviewSourceRejection::TooShort(bytes.len()));
     }
 
@@ -765,8 +818,10 @@ pub fn parse_u4_preview_source(bytes: &[u8]) -> Result<U4PreviewSource, U4Previe
     // `§5.3`: satisfied only when each of the eight 16-bit values is
     // individually zero — not a sum, not a total, not a wider
     // aggregate.
-    let is_avatar = (0..U4_PREVIEW_VIRTUE_STANDING_COUNT)
-        .all(|index| u16_at(bytes, U4_PREVIEW_VIRTUE_STANDING_OFFSET + index * 2) == 0);
+    let is_avatar = (0..U4_PREVIEW_VIRTUE_STANDING_COUNT).all(|index| {
+        let at = U4_PREVIEW_VIRTUE_STANDING_OFFSET + index * U4_PREVIEW_VIRTUE_STANDING_STRIDE;
+        u16_at(bytes, at) == 0
+    });
 
     Ok(U4PreviewSource {
         name,
@@ -1279,7 +1334,7 @@ fn value_line(row: u8, text: String) -> U4PreviewPageLine {
 /// install or genuine `PARTY.SAV` is used anywhere in this repository,
 /// and nothing ships this as real data.
 pub fn synthetic_party_sav_fixture(source: &U4PreviewSource) -> Vec<u8> {
-    let mut bytes = vec![0u8; U4_PREVIEW_PARTY_BLOCK_OFFSET + U4_PREVIEW_PARTY_BLOCK_LEN];
+    let mut bytes = vec![0u8; U4_PREVIEW_REQUIRED_LEN];
     let record = U4_PREVIEW_RECORD_OFFSET;
     for (offset, value) in [
         (RECORD_HP, source.max_hit_points),

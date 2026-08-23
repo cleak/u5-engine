@@ -1156,8 +1156,14 @@ mod tests {
             u5_runtime::test_fixtures::saved_game_seed_bytes(0, 0, 10, 20),
         )
         .unwrap();
+        // `u4-transfer.md §4` / `cleak/u5-spec#88`: the U5-side seed
+        // pair is `INIT.GAM` / `INIT.OOL`. This wrote `BRIT.OOL`, which
+        // the commit path has not read since the seed rename, so the
+        // commit failed with a missing-file error.
         std::fs::write(
-            screen.game_dir.join(u5_runtime::BRIT_OOL_FILENAME),
+            screen
+                .game_dir
+                .join(u5_runtime::U4_TRANSFER_U5_SEED_OOL_FILENAME),
             vec![0x55; u5_runtime::OOL_PLANE_LEN],
         )
         .unwrap();
@@ -1191,6 +1197,17 @@ mod tests {
         ));
         let saved = std::fs::read(screen.game_dir.join(u5_runtime::SAVED_GAM_FILENAME)).unwrap();
         assert!(saved[u5_runtime::SAVE_ROSTER_OFFSET..].starts_with(b"Shamino\0"));
+        // `§5.3`/`§7` end to end: this source's virtue standings are
+        // all zero, so the Avatarhood latch fires and overrides the
+        // class letter the source's class index 5 (Paladin) would give.
+        assert_eq!(
+            saved[u5_runtime::SAVE_ROSTER_OFFSET + u5_runtime::SAVE_CHARACTER_CLASS_OFFSET],
+            u5_runtime::U4_TRANSFER_AVATAR_CLASS_BYTE
+        );
+        assert_eq!(
+            saved[u5_runtime::SAVE_ROSTER_OFFSET + u5_runtime::SAVE_CHARACTER_CLASS_OFFSET],
+            b'A'
+        );
         assert!(
             screen
                 .game_dir

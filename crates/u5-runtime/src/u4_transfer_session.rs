@@ -24,7 +24,6 @@ pub enum U4TransferPhase {
 pub enum U4TransferEvent {
     SourceFileMissing,
     SourceFileInvalid(&'static str),
-    NoTransferableData,
     PreviewReady {
         name: String,
         class_index: u8,
@@ -44,7 +43,6 @@ pub enum U4TransferInput {
     SourceFileLoaded,
     ValidationOk,
     ValidationFailed(&'static str),
-    NoTransferableData,
     Confirm(bool),
 }
 
@@ -85,10 +83,6 @@ impl U4TransferSession {
             (U4TransferPhase::Validating, U4TransferInput::ValidationFailed(reason)) => {
                 self.phase = U4TransferPhase::Aborted;
                 U4TransferEvent::SourceFileInvalid(reason)
-            }
-            (U4TransferPhase::Validating, U4TransferInput::NoTransferableData) => {
-                self.phase = U4TransferPhase::Aborted;
-                U4TransferEvent::NoTransferableData
             }
             (U4TransferPhase::PresentingPreview, _) => {
                 // Caller has populated preview via `set_preview`; emit it.
@@ -177,12 +171,19 @@ mod tests {
     }
 
     #[test]
-    fn no_transferable_data_aborts_session() {
+    fn all_zero_standings_have_no_session_branch_of_their_own() {
+        // `u4-transfer.md §5.3` / `cleak/u5-spec#88`: all-zero virtue
+        // standings are the Avatar *success* condition, not a
+        // rejection, and "no value of this block ever prevents a
+        // transfer". The session therefore has no "no transferable
+        // data" abort: a source that parses reaches the preview
+        // whatever its standings say, and the only abort in the whole
+        // path is `§5.2`'s field-validation failure.
         let mut s = U4TransferSession::new();
         s.step(U4TransferInput::SourceFileLoaded);
-        let event = s.step(U4TransferInput::NoTransferableData);
-        assert_eq!(event, U4TransferEvent::NoTransferableData);
-        assert!(s.is_done());
+        let event = s.step(U4TransferInput::ValidationOk);
+        assert_eq!(event, U4TransferEvent::AwaitingInput);
+        assert!(!s.is_done());
     }
 
     #[test]
