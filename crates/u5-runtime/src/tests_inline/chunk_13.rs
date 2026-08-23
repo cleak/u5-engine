@@ -10716,10 +10716,12 @@ fn dungeon_word_of_power_matches_quest_graph_md_section_4() {
 }
 
 #[test]
-fn trap_revive_only_accepts_dead_slots() {
-    // traps.md §3
-    assert_eq!(TRAP_REVIVE_STATUS_BYTE, b'P');
-    assert!(trap_revive_accepts(CharacterStatus::Dead));
+fn trap_poison_helper_skips_only_dead_slots() {
+    // traps.md §3: the helper is a poison primitive, not a revival
+    // primitive. A member already marked Dead is skipped and left Dead;
+    // every other status is rewritten to Poisoned.
+    assert_eq!(TRAP_POISON_STATUS_BYTE, b'P');
+    assert!(!trap_poison_accepts(CharacterStatus::Dead));
     for status in [
         CharacterStatus::Good,
         CharacterStatus::PoisonedOrRevived,
@@ -10728,8 +10730,25 @@ fn trap_revive_only_accepts_dead_slots() {
         CharacterStatus::Ashes,
     ] {
         assert!(
-            !trap_revive_accepts(status),
-            "status {:?} should not be revived",
+            trap_poison_accepts(status),
+            "status {:?} should be poisoned",
+            status
+        );
+    }
+
+    // The raw-byte bridge the resolver uses agrees with the enum form.
+    for status in [
+        CharacterStatus::Good,
+        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Sleeping,
+        CharacterStatus::Charmed,
+        CharacterStatus::Dead,
+        CharacterStatus::Ashes,
+    ] {
+        assert_eq!(
+            trap_poison_accepts_status_byte(status.save_byte()),
+            trap_poison_accepts(status),
+            "byte bridge disagrees for {:?}",
             status
         );
     }
@@ -15289,11 +15308,11 @@ fn rest_status_predicates_match_spec_tables() {
 #[test]
 fn trap_effect_distribution_predicates_match_spec_tables() {
     // traps.md §3
-    // Revive helper families.
-    assert!(!trap_effect_uses_revive_helper(TrapEffect::Acid));
-    assert!(trap_effect_uses_revive_helper(TrapEffect::Poison));
-    assert!(!trap_effect_uses_revive_helper(TrapEffect::Bomb));
-    assert!(trap_effect_uses_revive_helper(TrapEffect::Gas));
+    // Poison-status helper families.
+    assert!(!trap_effect_uses_poison_helper(TrapEffect::Acid));
+    assert!(trap_effect_uses_poison_helper(TrapEffect::Poison));
+    assert!(!trap_effect_uses_poison_helper(TrapEffect::Bomb));
+    assert!(trap_effect_uses_poison_helper(TrapEffect::Gas));
 
     // Non-combat outcome counts (3/8, 2/8, 2/8, 1/8 -> sum 8).
     assert_eq!(trap_non_combat_outcomes(TrapEffect::Acid), 3);

@@ -1170,12 +1170,15 @@ BRITANNIA 11 21
         assert_eq!(state.party[0].status, b'D');
         assert_eq!(state.active_player, None);
 
+        // traps.md §3: effect id 1 is a poison primitive, not a revive.
+        // Slot 0 was just killed by the acid roll, so the helper skips it
+        // and leaves it Dead rather than rewriting it to Poisoned.
         state.turn = 3;
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(0),
-            "Poison trap revived party member 1 as poisoned."
+            "Poison trap had no effect on party member 1."
         );
-        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[0].status, b'D');
         assert_eq!(state.party[0].hp, 0);
 
         state.turn = 5;
@@ -1185,12 +1188,30 @@ BRITANNIA 11 21
         );
         assert_eq!(state.party[1].hp, 3);
 
+        // traps.md §3: effect id 3 poisons every living member of the
+        // six-slot band. The two Dead slots (0 and 2) are skipped and
+        // stay Dead; only the living slot 1 is rewritten.
         state.turn = 7;
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(0),
-            "Gas trap revived 1 dead party member(s) as poisoned."
+            "Gas trap poisoned 1 party member(s)."
         );
-        assert_eq!(state.party[2].status, b'P');
+        assert_eq!(state.party[1].status, b'P');
+        assert_eq!(state.party[0].status, b'D');
+        assert_eq!(state.party[2].status, b'D');
+
+        // A living, in-party member is rewritten to Poisoned, and the
+        // helper touches nothing else - hit points are unchanged.
+        state.party[0].hp = 10;
+        state.party[0].status = b'G';
+        state.turn = 3;
+        assert_eq!(
+            state.apply_shared_trap_effect_to_slot(0),
+            "Poison trap poisoned party member 1."
+        );
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[0].hp, 10);
+        assert_eq!(state.party[0].max_hp, 20);
     }
 
     #[test]
