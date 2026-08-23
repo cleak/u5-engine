@@ -3385,9 +3385,13 @@ fn apply_route_smoke_case_setup(
             state.mark_visibility_dirty();
         }
         "dungeon-surface-exit-return-world" | "reload-dungeon-surface-exit-return-world" => {
+            // `dungeon-mode.md` §13: the climb-out route is an up ladder on
+            // level zero, reaching the shared exit contract of §13.2. The
+            // plain pit `0x60` this seed used is an ordinary descent; the
+            // claim that it bypassed the level step is withdrawn.
             let current = dungeon_cell_index(0, state.player.x, state.player.y);
             if let Some(cell) = state.grid.get_mut(current) {
-                *cell = 0x60;
+                *cell = 0x10;
             }
             state.return_world = Some(WorldReturn {
                 plane: WorldPlane::Britannia,

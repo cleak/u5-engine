@@ -373,25 +373,35 @@
     }
 
     #[test]
-    fn dungeon_ladder_rejects_plain_passage_landing_without_turn() {
+    fn dungeon_ladder_never_inspects_the_cell_it_lands_on() {
+        // dungeon-mode.md §13.1: "A climb **never inspects the cell it lands
+        // on.** The ladder or pit under the party is treated as proof enough
+        // that the destination is reachable, so a climb cannot be blocked by
+        // what is on the level above or below." This test previously pinned
+        // the opposite - a plain-passage landing refusing the climb - which
+        // the spec withdraws; the destination test belongs to the Up/Down
+        // level-change spells instead.
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(1, 1, 1)] = 0x10;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x00;
         let mut state = dungeon_state(grid, 1, 1, 1);
 
         assert_eq!(
             state.climb(Path::new(""), ClimbIntent::Up).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel {
+                scene: DungeonScene::new(33).unwrap(),
+                level: 0,
+            })
         );
 
         assert_eq!(
             state.area,
             Area::Dungeon {
                 scene: DungeonScene::new(33).unwrap(),
-                level: 1,
+                level: 0,
             }
         );
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Blocked!");
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
@@ -452,7 +462,18 @@
     }
 
     #[test]
-    fn dungeon_ladder_changes_level_and_boundary_up_stays_in_dungeon() {
+    fn dungeon_ladder_changes_level_and_boundary_up_leaves_the_dungeon() {
+        // dungeon-mode.md §13: an up ladder moves Z to Z-1, "or leaves the
+        // dungeon when the current level is already zero", through the one
+        // shared exit contract of §13.2. This test previously pinned the
+        // level-zero up climb as a refusal that stayed in the dungeon.
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "UNDERWORLD 10 20 DUNGEON:0
+",
+        )
+        .unwrap();
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(3, 1, 1)] = 0x10;
@@ -473,16 +494,20 @@
         );
         state.area = Area::Dungeon { scene, level: 0 };
         state.sync_player_object();
-        let turn_before_missing_return = state.turn;
 
         assert_eq!(
-            state.climb(Path::new(""), ClimbIntent::Up).unwrap(),
-            MoveOutcome::Blocked
+            state.climb(&dir, ClimbIntent::Up).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
         );
-        assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-        assert_eq!(state.active_objects[0].z, 0);
-        assert_eq!(state.turn, turn_before_missing_return);
-        assert_eq!(state.message, "Blocked!");
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert!(state.message.contains("world-location table return point"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

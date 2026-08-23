@@ -180,8 +180,12 @@
             "UNDERWORLD 10 20 DUNGEON:0\n",
         )
         .unwrap();
+        // dungeon-mode.md §13: the up arm at level zero is a level edge, and
+        // every exit runs the one shared surface-reset contract of §13.2.
+        // (The plain pit `0x60` used to stand in for this route here; that
+        // bypass is withdrawn - a pit is an ordinary descent.)
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 1, 1)] = 0x60;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x10;
         let mut state = dungeon_state(grid, 0, 1, 1);
 
         assert!(state.handle_dungeon_key('k', &dir).unwrap());
@@ -426,7 +430,9 @@
         );
         assert_eq!(state.timing_status, TimingStatusTag::Normal);
 
-        state.grid[dungeon_cell_index(0, 1, 1)] = 0x60;
+        // An up ladder on level zero is the published climb-out route
+        // (dungeon-mode.md §13); the withdrawn `0x60` pit bypass is not.
+        state.grid[dungeon_cell_index(0, 1, 1)] = 0x10;
         assert_eq!(
             state.climb(Path::new(""), ClimbIntent::Up).unwrap(),
             MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
