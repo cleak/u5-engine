@@ -22030,13 +22030,19 @@ fn endgame_tableau_target_step_moves_active_objects_until_settled() {
     let frame_before = state.animation.frame;
     assert!(state.advance_endgame_tableau_toward_targets());
     assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 8));
-    assert_eq!(state.animation.frame, (frame_before + 2) % 12);
+    assert_eq!(
+        state.animation.frame,
+        (frame_before + 2) % STATIC_TILE_ANIMATION_PERIOD_TICKS
+    );
 
     let frame_before = state.animation.frame;
     let steps = state.settle_endgame_tableau_to_targets();
     assert!(steps > 0);
     assert!(state.endgame_tableau_is_settled());
-    assert_eq!(state.animation.frame, (frame_before + steps as u8) % 12);
+    assert_eq!(
+        state.animation.frame,
+        (frame_before + steps as u8) % STATIC_TILE_ANIMATION_PERIOD_TICKS
+    );
 }
 
 #[test]

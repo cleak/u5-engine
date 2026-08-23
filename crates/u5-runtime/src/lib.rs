@@ -126,7 +126,9 @@ pub mod z_stats;
 
 pub use active_object_io::*;
 pub use animation::{
-    ActiveObject, ActiveShipWind, AnimationClock, PhaseTick, STATIC_TILE_ANIMATION_FRAME_WRAP,
+    ActiveObject, ActiveShipWind, AnimationClock, PhaseTick, STATIC_TILE_ANIMATION_FAMILIES,
+    STATIC_TILE_ANIMATION_PERIOD_TICKS, StaticTileAnimationFamily, StaticTileAnimationFamilySpec,
+    StaticTileAnimationPass, static_tile_animation_pass,
 };
 pub use blackthorn::{
     BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
@@ -775,4 +777,5 @@ mod tests {
     include!("tests_inline/chunk_26.rs");
     include!("tests_inline/chunk_27.rs");
     include!("tests_inline/chunk_28.rs");
+    include!("tests_inline/chunk_29.rs");
 }

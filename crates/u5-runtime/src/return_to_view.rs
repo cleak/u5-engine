@@ -8,13 +8,13 @@
 use std::io;
 use std::path::Path;
 
+use crate::{AnimationClock, STATIC_TILE_ANIMATION_PERIOD_TICKS};
 use crate::{
     MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_ROW_STRIDE,
     MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_COUNT,
     RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COUNT, TILE_ATLAS_SIDE, TileAtlas, TileViewport,
     read_optional_disk_file,
 };
-use crate::{STATIC_TILE_ANIMATION_FRAME_WRAP, static_tile_animation_family};
 
 /// `cleak/u5-spec#54` (2026-08-22 resolution, spec head `8192d67`).
 ///
@@ -162,15 +162,13 @@ pub fn return_to_view_revealed_columns(preview_ticks: u32) -> Option<(usize, usi
 /// cycles), and the table's current entry is the tile actually drawn".
 ///
 /// The table's contents are not published separately, so the byte is
-/// resolved through the same world-renderer animation family the
-/// gameplay view uses ([`crate::static_tile_animation_family`]). The
-/// earlier `0x80..=0x87` / `0xD8..=0xDB` families that lived here were
-/// retracted by `#54` as fabricated and are gone.
+/// resolved through the same world-renderer animation families the
+/// gameplay view uses ([`crate::static_tile_animation_family`],
+/// `animation.md §6`). A bespoke `0x80..=0x87` / `0xD8..=0xDB` table
+/// that once lived here was retracted by `#54` as fabricated; the ids
+/// that overlap it now arrive only through the published §6 families.
 pub fn return_to_view_terrain_tile_for_frame(terrain: u8, animation_frame: u8) -> u8 {
-    match static_tile_animation_family(terrain) {
-        Some((base, cycle)) => base + (animation_frame % cycle),
-        None => terrain,
-    }
+    AnimationClock::at_static_tile_phase(animation_frame).resolve_static_tile(terrain)
 }
 
 /// What the ordinary per-cell repaint draws for one preview cell.
@@ -1491,7 +1489,7 @@ pub fn return_to_view_animation_frame(starting_title_tick: u32, elapsed_ticks: u
     let total = starting_title_tick
         .checked_add(elapsed_ticks)
         .expect("Return-to-View animation frame counter overflowed");
-    (total % u32::from(STATIC_TILE_ANIMATION_FRAME_WRAP)) as u8
+    (total % u32::from(STATIC_TILE_ANIMATION_PERIOD_TICKS)) as u8
 }
 
 /// Render one preview state into the published `304 x 64` strip raster.
@@ -1994,16 +1992,34 @@ mod tests {
 
     #[test]
     fn return_to_view_terrain_resolves_through_the_world_animation_table() {
-        // `cleak/u5-spec#54` retraction 4: the `0x80..=0x87` /
-        // `0xD8..=0xDB` animated families were fabricated. A non-zero
-        // terrain byte indexes the same animated-tile frame table the
-        // world renderer cycles, so only the real water family moves.
+        // `cleak/u5-spec#54` retraction 4: this helper has no bespoke
+        // family table of its own. A non-zero terrain byte indexes the
+        // same animated-tile frame table the world renderer cycles, so
+        // the `animation.md §6` families (spec HEAD `c00bf63`) — and
+        // only those — move here.
+
+        // Water is not an animated family; the earlier three-frame water
+        // cycle asserted here is withdrawn by §6.
         assert_eq!(return_to_view_terrain_tile_for_frame(0x01, 0), 0x01);
-        assert_eq!(return_to_view_terrain_tile_for_frame(0x01, 2), 0x03);
-        assert_eq!(return_to_view_terrain_tile_for_frame(0x03, 4), 0x02);
-        assert_eq!(return_to_view_terrain_tile_for_frame(0x80, 3), 0x80);
-        assert_eq!(return_to_view_terrain_tile_for_frame(0xD8, 5), 0xD8);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x01, 2), 0x01);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x03, 4), 0x03);
+        // Grass stays grass at every phase.
         assert_eq!(return_to_view_terrain_tile_for_frame(0x05, 9), 0x05);
+
+        // Waterfall `0xD4..0xD7`: ungated, so the selector has advanced
+        // once per elapsed phase.
+        assert_eq!(return_to_view_terrain_tile_for_frame(0xD4, 0), 0xD4);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0xD4, 1), 0xD5);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0xD4, 6), 0xD6);
+        // Fountain `0xD8..0xDB`, also ungated; the id keeps its own
+        // quarter-cycle offset.
+        assert_eq!(return_to_view_terrain_tile_for_frame(0xD8, 5), 0xD9);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0xDA, 5), 0xDB);
+        // Pendulum `0x80..0x83`: half rate behind the bit-0 gate, so
+        // three elapsed phases (0, 1, 2) are one advance.
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x80, 3), 0x81);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x80, 2), 0x81);
+        assert_eq!(return_to_view_terrain_tile_for_frame(0x80, 1), 0x80);
     }
 
     #[test]
@@ -2384,7 +2400,12 @@ mod tests {
         // Only the revealed span paints, so the animated cell sits on
         // the reveal cursor's opening column.
         let mut strips = rtv_filled_strips();
-        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0x01;
+        // `animation.md §6` (spec HEAD `c00bf63`): water is not an
+        // animated family, so the cell that proves the elapsed title
+        // tick reaches the renderer must be a real family member.
+        // `0xD4` heads the ungated waterfall family, and the synthetic
+        // atlas paints tile `n` as pixel `n % 16`.
+        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0xD4;
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
@@ -2399,10 +2420,10 @@ mod tests {
                 .unwrap();
 
         assert_eq!(report.total_ticks, 2);
-        // Water resolves through the world animation family: frame
-        // 1 + 2 = 3, so `1 + (3 % 3)` = tile 1.
+        // Phase 1 + 2 = 3, and the waterfall family advances every tick,
+        // so the cell shows `0xD7` -> pixel `0xD7 % 16` = 7.
         let x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
-        assert_eq!(viewport.pixel(x, 0), Some(1));
+        assert_eq!(viewport.pixel(x, 0), Some(0xD7 % 16));
         // Columns outside the cursor span are untouched.
         assert_eq!(viewport.pixel(0, 0), Some(0));
     }
@@ -2410,7 +2431,9 @@ mod tests {
     #[test]
     fn render_return_to_view_playback_frame_uses_frame_title_tick() {
         let mut strips = rtv_filled_strips();
-        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0x01;
+        // See above: `0xD4` is the waterfall family's first id, and the
+        // synthetic atlas paints tile `n` as pixel `n % 16`.
+        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0xD4;
         let script = ReturnToViewScript {
             commands: vec![
                 ReturnToViewCommand::LoadMapStrip { strip: 0 },
@@ -2433,9 +2456,9 @@ mod tests {
 
         let x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
         assert_eq!(preview_frames[0].elapsed_title_ticks, 1);
-        assert_eq!(first.pixel(x, 0), Some(1 + (1 % 3)));
+        assert_eq!(first.pixel(x, 0), Some(0xD5 % 16));
         assert_eq!(preview_frames[1].elapsed_title_ticks, 2);
-        assert_eq!(second.pixel(x, 0), Some(1 + (2 % 3)));
+        assert_eq!(second.pixel(x, 0), Some(0xD6 % 16));
     }
 
     #[test]
