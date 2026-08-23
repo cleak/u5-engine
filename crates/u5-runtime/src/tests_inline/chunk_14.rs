@@ -711,6 +711,7 @@
         let atlas = TileAtlas {
             depth: TileGraphicsDepth::Ega16,
             pixels: Vec::new(),
+            dungeon_billboards: None,
         };
         let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
         assert_eq!(viewport.cells_wide, LOCAL_VIEW_OVERLAY_SIDE);
@@ -782,6 +783,7 @@
         let atlas = TileAtlas {
             depth: TileGraphicsDepth::Ega16,
             pixels: vec![2; 512 * TILE_ATLAS_SIDE * TILE_ATLAS_SIDE],
+            dungeon_billboards: None,
         };
         let replacement = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
         let base = state
@@ -2996,7 +2998,13 @@
         let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
 
         assert_eq!(viewport.width, 3 * TILE_ATLAS_SIDE);
-        assert!(viewport.pixels.iter().any(|&pixel| pixel != 0));
+        // The corridor is billboard art now, and the synthetic fixture
+        // directory ships no `DNG*` bank, so a lit dungeon paints
+        // nothing here rather than the wireframe this used to assert.
+        // The light gate itself is covered by
+        // `dungeon_raster_frame_respects_light_gate`, and the corridor
+        // by the geometry contract tests.
+        assert!(viewport.pixels.iter().all(|&pixel| pixel == 0));
     }
 
     /// Uses `0x4D`, a real `visibility.md §6` propagation blocker, and

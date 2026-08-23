@@ -26,7 +26,11 @@ pub fn synthetic_tile_atlas(depth: TileGraphicsDepth) -> TileAtlas {
     for tile in 0..TILE_ATLAS_TILE_COUNT {
         pixels.extend(std::iter::repeat((tile as u8) % pixel_limit).take(TILE_ATLAS_TILE_PIXELS));
     }
-    TileAtlas { depth, pixels }
+    TileAtlas {
+        depth,
+        pixels,
+        dungeon_billboards: None,
+    }
 }
 
 pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {

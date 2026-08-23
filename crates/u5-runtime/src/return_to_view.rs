@@ -2298,6 +2298,7 @@ mod tests {
         TileAtlas {
             depth: crate::TileGraphicsDepth::Ega16,
             pixels,
+            dungeon_billboards: None,
         }
     }
 
@@ -2538,6 +2539,7 @@ mod tests {
         let atlas = TileAtlas {
             depth: crate::TileGraphicsDepth::Ega16,
             pixels,
+            dungeon_billboards: None,
         };
 
         let (viewport, _report) =

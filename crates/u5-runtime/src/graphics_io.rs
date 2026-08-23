@@ -7,18 +7,17 @@ use crate::*;
 
 pub fn load_tile_atlas(game_dir: &Path, depth: TileGraphicsDepth) -> io::Result<TileAtlas> {
     // `dungeon-mode.md §6.2`: the corridor billboard banks come from the
-    // same directory at the same depth, and every shell that renders
-    // already loads the atlas, so they are installed here rather than
-    // threaded through three crates' render signatures. The install is
-    // idempotent.
+    // same directory at the same depth, so they load with the atlas.
     //
     // A game directory without the corridor art is not an error: the
     // fixture directories the tests build have no `DNG*` files, and a
-    // missing bank simply leaves the corridor unpainted rather than
+    // missing bank leaves the corridor unpainted rather than
     // substituting invented geometry for it.
-    let _ = crate::dungeon_view::install_dungeon_billboard_banks(game_dir, depth);
     let file_name = depth.file_name();
-    parse_tile_atlas(&read(&game_dir.join(file_name))?, depth, file_name)
+    let mut atlas = parse_tile_atlas(&read(&game_dir.join(file_name))?, depth, file_name)?;
+    atlas.dungeon_billboards =
+        crate::dungeon_view::load_dungeon_billboard_banks(game_dir, depth).ok();
+    Ok(atlas)
 }
 
 pub fn parse_tile_atlas(
@@ -65,7 +64,11 @@ pub fn unpack_tile_atlas_body(
         }
     }
 
-    Ok(TileAtlas { depth, pixels })
+    Ok(TileAtlas {
+        depth,
+        pixels,
+        dungeon_billboards: None,
+    })
 }
 
 /// Opaque blit for tile ids in the lower 0..=255 map-cell range. Per
