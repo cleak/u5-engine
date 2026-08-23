@@ -392,12 +392,14 @@ pub use karma::{
     shrine_mantra_for,
 };
 pub use light_beacon::{
-    BEACON_BEAM_MAX_REACH, BEACON_BEARING_COUNT, BEACON_BRIGHT_LIGHT_TILE, BEACON_CONE_BEARINGS,
-    BEACON_INITIAL_BEARING, BEACON_LIGHTHOUSE_TILE, BEACON_SOURCE_SLOTS,
-    BEACON_STENCIL_MAX_OFFSETS, BEACON_STENCIL_RECORD_BYTES, BEACON_STENCIL_TABLE_BYTES,
+    BEACON_BEAM_MAX_REACH, BEACON_BEARING_COUNT, BEACON_BRIGHT_LIGHT_TILE, BEACON_CARDINAL_CELLS,
+    BEACON_CONE_BEARINGS, BEACON_DIAGONAL_CELLS, BEACON_HALFWAY_CELLS, BEACON_INITIAL_BEARING,
+    BEACON_LIGHTHOUSE_TILE, BEACON_SOURCE_SLOTS, BEACON_STENCIL_MAX_OFFSETS,
+    BEACON_STENCIL_RECORD_BYTES, BEACON_STENCIL_TABLE_BYTES, BEACON_STENCIL_TABLE_OFFSET,
     BeaconBearingStencils, LightBeaconState, beacon_cone_bearings, beacon_next_bearing,
-    beacon_pass_runs, find_beacon_bearing_stencils, harvest_location_beacon_sources,
+    beacon_pass_runs, beacon_record_cell_count, harvest_location_beacon_sources,
     harvest_outdoor_beacon_sources, load_beacon_bearing_stencils, parse_beacon_bearing_stencils,
+    read_beacon_bearing_stencils, scan_beacon_bearing_stencil_offsets,
 };
 pub use lighting::{
     DAWN_DUSK_LAST_INDEX, DAWN_DUSK_STEP_MINUTES, DAWN_HOUR, DUNGEON_TORCH_INCREMENT_MAX,

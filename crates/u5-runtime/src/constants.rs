@@ -41,12 +41,27 @@ pub const ETERNAL_FLAME_TABLE_FILE: &str = "eternal_flames.tsv";
 pub const LOCATION_FLOOR_TABLE_FILE: &str = "location_floor_pages.tsv";
 pub const LOCATION_ENTRY_Y_TABLE_FILE: &str = "location_entry_y.tsv";
 
-/// `formats/location-dat.md §6` default per-scene town-entry X
-/// coordinate. The published rule fixes the entry X column at
-/// fifteen; the entry Y comes from the per-scene `LocationEntryYTable`
-/// (loaded from `location_entry_y.tsv`) and the entry floor is zero.
-/// Promote the X constant so the town-entry seed sites can name the
-/// column instead of repeating the bare literal `15`.
+/// KNOWN GAP — the harness's town-entry X column, **no longer backed by
+/// published text**.
+///
+/// This used to cite `formats/location-dat.md §6` as fixing the entry
+/// column at fifteen, with the entry Y from the per-scene
+/// `LocationEntryYTable` (`location_entry_y.tsv`) and the entry floor at
+/// zero. Both halves of that citation are now withdrawn at the source:
+/// `§6` says "there is no asterisk-based spawn marker", that the two slots
+/// it described are the beacon's, and that the document "does not specify
+/// where the player is placed on entering a location ... an implementation
+/// should not infer it from this file"; and `systems/town-mode.md §5`
+/// step 6 withdraws the `(15, per-scene row, 0)` wording in full, because
+/// those coordinates belong to the resident-Shadowlord install helper, not
+/// to player placement — it records the player's own default town-entry
+/// cell as "**not currently established** by this spec ... an open item".
+///
+/// The value is kept because it is what the harness and chargen already
+/// seed with and changing it would substitute one unsourced number for
+/// another. It is a harness placement, not a claim about the original, and
+/// the shipped install carries no `location_entry_y.tsv`, so nothing reads
+/// the pair from data today.
 pub const LOCATION_DEFAULT_ENTRY_X: usize = 15;
 pub const TILE_PASSABILITY_FILE: &str = "tile_passability.bin";
 pub const LOOK2_DAT_FILE: &str = "LOOK2.DAT";

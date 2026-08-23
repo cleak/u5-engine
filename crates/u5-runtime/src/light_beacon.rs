@@ -30,7 +30,9 @@
 //!   bearing one due north, five due east, nine due south, thirteen due
 //!   west, four on the diagonals and eight halfway between. Each bearing is
 //!   a fixed set of at most sixteen cell offsets reaching up to seven tiles
-//!   — a stencil, not a computed sweep.
+//!   — a stencil, not a computed sweep. `formats/tiles.md §5.1.1` publishes
+//!   the stencil table's location, structure, per-record heading and every
+//!   offset, so this module *anchors* to it rather than hunting for it.
 //! * **Cadence.** Three adjacent bearings are lit at once (a cone a little
 //!   under seventy degrees wide). Once per world turn the trailing bearing
 //!   is cleared and the next leading bearing lit, so the cone advances one
@@ -72,10 +74,17 @@ pub const BEACON_LIGHTHOUSE_TILE: u8 = 0x1B;
 /// outdoor map, and the only location floors carrying one are the four
 /// lighthouse lantern rooms, three with one cell and one with two.
 ///
-/// The same byte is called a "spawn marker" by
-/// [`crate::is_spawn_marker`] and by `catalogs/tile-catalog.md §13`; the
-/// two readings are not reconciled here, and this module claims only the
-/// `§12.6` role.
+/// **The competing "player spawn marker" reading is withdrawn.**
+/// `formats/location-dat.md §6` used to read this byte as "a player spawn
+/// or stairway-up landing point" harvested into primary/secondary spawn
+/// slots; that section now says in full that "`0x2A` is not a player spawn
+/// marker. It is the night beacon's indoor light source", and settles it
+/// without reference to any code: **`0x2A` appears in zero town, castle and
+/// keep floors** — five cells across four dwelling-class floors, the four
+/// lighthouse lantern rooms — and "a player town-entry spawn marker that
+/// exists in no town is not a spawn marker". Reproduced against the shipped
+/// `TOWNE.DAT`, `DWELLING.DAT`, `CASTLE.DAT` and `KEEP.DAT` by
+/// `shipped_location_files_carry_the_published_beacon_source_layout`.
 pub const BEACON_BRIGHT_LIGHT_TILE: u8 = 0x2A;
 
 /// `visibility.md §12.6`: the beacon holds at most two source positions.
@@ -108,6 +117,48 @@ pub const BEACON_STENCIL_RECORD_BYTES: usize = BEACON_STENCIL_MAX_OFFSETS * 2;
 /// The whole bearing table: one record per bearing.
 pub const BEACON_STENCIL_TABLE_BYTES: usize =
     BEACON_STENCIL_RECORD_BYTES * BEACON_BEARING_COUNT as usize;
+
+/// `formats/tiles.md §5.1.1`: "it lives in the shared data overlay at file
+/// offset `0x1F8E` and is **512 bytes**".
+///
+/// This offset is published contract, not a guess. Earlier revisions of
+/// this module located the table by structural search because the offsets
+/// were unpublished; `§5.1.1` now carries the table's location, structure,
+/// per-record heading mapping and every offset, and the section adds that
+/// "locating it structurally is unnecessary but safe" — the shipped image
+/// holds exactly one region matching the structural rules and it is this
+/// table. [`scan_beacon_bearing_stencil_offsets`] keeps the search alive as
+/// a standing cross-check of that agreement; nothing in the load path uses
+/// it.
+pub const BEACON_STENCIL_TABLE_OFFSET: usize = 0x1F8E;
+
+/// `formats/tiles.md §5.1.1`: "the four **cardinals** (records 1, 5, 9, 13)
+/// light **fifteen** cells".
+pub const BEACON_CARDINAL_CELLS: usize = 15;
+
+/// `formats/tiles.md §5.1.1`: "the four **diagonals** (3, 7, 11, 15) light
+/// **eleven**".
+pub const BEACON_DIAGONAL_CELLS: usize = 11;
+
+/// `formats/tiles.md §5.1.1`: "the eight **halfway** bearings light
+/// **nine**".
+pub const BEACON_HALFWAY_CELLS: usize = 9;
+
+/// `formats/tiles.md §5.1.1`: "cell counts follow the heading class
+/// exactly".
+///
+/// `index` is the record index, and record *r* carries the heading
+/// `(r - 1) * 22.5` degrees clockwise from north — so the step count from
+/// north is `(index - 1) mod 16`, a multiple of four on the cardinals and
+/// an even non-multiple on the diagonals.
+pub const fn beacon_record_cell_count(index: usize) -> usize {
+    let steps = (index + BEACON_BEARING_COUNT as usize - 1) % BEACON_BEARING_COUNT as usize;
+    match steps % 4 {
+        0 => BEACON_CARDINAL_CELLS,
+        2 => BEACON_DIAGONAL_CELLS,
+        _ => BEACON_HALFWAY_CELLS,
+    }
+}
 
 /// `visibility.md §12.6` does not name a numeric initial bearing; it says
 /// only that the rotation "restarts from its initial bearing" whenever the
@@ -261,20 +312,37 @@ pub fn harvest_outdoor_beacon_sources(
 /// "Inside a location, the map setup clears both positions and then
 /// records up to two hits on the bright-light tile." The grid is one 32x32
 /// location floor.
+///
+/// Two published details this walk has to get right, both from
+/// `formats/location-dat.md §6`:
+///
+/// * **Loader order** is column-major — "column 0 north-to-south, then
+///   column 1, and so on". The beacon share the NPC start markers' single
+///   grid walk ("one walk, two purposes"), so they share its order.
+/// * **The slot rule is not first-then-second.** "The walk tests only
+///   whether the *first* slot is still empty. So the **first** hit takes
+///   slot one and, once slot one is filled, **every later hit overwrites
+///   slot two** — meaning the **last** hit wins slot two, not the second."
+///   No shipped floor carries three hits, so this is invisible in shipped
+///   data and observable only in custom data.
+///
+/// The walk never stops early: with both slots filled it keeps overwriting
+/// slot two, which is what makes the last hit win.
 pub fn harvest_location_beacon_sources(grid: &[u8]) -> [Option<(u8, u8)>; BEACON_SOURCE_SLOTS] {
     let mut sources = [None; BEACON_SOURCE_SLOTS];
-    let mut filled = 0;
-    for row in 0..LOCAL_LIGHT_MASK_SIDE {
-        for col in 0..LOCAL_LIGHT_MASK_SIDE {
-            if filled == BEACON_SOURCE_SLOTS {
-                return sources;
-            }
+    for col in 0..LOCAL_LIGHT_MASK_SIDE {
+        for row in 0..LOCAL_LIGHT_MASK_SIDE {
             let Some(&tile) = grid.get(row * LOCAL_LIGHT_MASK_SIDE + col) else {
                 continue;
             };
-            if tile == BEACON_BRIGHT_LIGHT_TILE {
-                sources[filled] = Some((col as u8, row as u8));
-                filled += 1;
+            if tile != BEACON_BRIGHT_LIGHT_TILE {
+                continue;
+            }
+            let position = Some((col as u8, row as u8));
+            if sources[0].is_none() {
+                sources[0] = position;
+            } else {
+                sources[1] = position;
             }
         }
     }
@@ -285,14 +353,12 @@ pub fn harvest_location_beacon_sources(grid: &[u8]) -> [Option<(u8, u8)>; BEACON
 ///
 /// Each bearing is "a fixed set of at most sixteen cell offsets relative to
 /// the source", so a bearing is a stencil, not a computed sweep. The
-/// offsets themselves are shipped data, not published prose: they live in
-/// the shared data overlay as sixteen thirty-two-byte records of sixteen
-/// signed byte pairs (`formats/tiles.md §5.1.1`). This engine therefore
-/// locates the table in the shipped `DATA.OVL` at load time — the same
-/// approach [`crate::find_britannia_chunk_index`] takes for the Britannia
-/// chunk index, and for the same reason: the spec names the table's shape
-/// and role but publishes no offset. The bytes are never copied into this
-/// repository.
+/// offsets live in the shared data overlay as sixteen thirty-two-byte
+/// records of sixteen signed byte pairs, at the published offset
+/// [`BEACON_STENCIL_TABLE_OFFSET`] (`formats/tiles.md §5.1.1`). This engine
+/// reads them out of the shipped `DATA.OVL` at load time rather than
+/// carrying a copy: the table is published prose now, but the bytes stay
+/// where the game ships them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BeaconBearingStencils {
     offsets: [[(i8, i8); BEACON_STENCIL_MAX_OFFSETS]; BEACON_BEARING_COUNT as usize],
@@ -300,7 +366,16 @@ pub struct BeaconBearingStencils {
 }
 
 impl BeaconBearingStencils {
-    /// The offsets for one bearing.
+    /// The whole record for one bearing — **all sixteen pairs**, padding
+    /// included. This is what the stamp iterates.
+    ///
+    /// `formats/tiles.md §5.1.1`: "the stamp always runs **all sixteen
+    /// iterations** of a record - there is no early exit on the `(0, 0)`
+    /// padding, so a padded pair writes at the record's own origin cell,
+    /// which is harmless because that cell is the source". Every shipped
+    /// record has at least one padded pair (the longest lights fifteen
+    /// cells), so the source cell is always among the cells a live beacon
+    /// writes.
     ///
     /// `visibility.md §12.6` numbers bearings from one: "bearing one points
     /// due north, five due east, nine due south, thirteen due west".
@@ -309,7 +384,18 @@ impl BeaconBearingStencils {
     /// zero. Record index `r` therefore carries the heading
     /// `(r - 1) * 22.5` degrees clockwise from north, and this method takes
     /// the wrapped index — [`beacon_cone_bearings`] produces exactly that.
-    pub fn bearing(&self, bearing: u8) -> &[(i8, i8)] {
+    pub fn bearing(&self, bearing: u8) -> &[(i8, i8); BEACON_STENCIL_MAX_OFFSETS] {
+        &self.offsets[(bearing % BEACON_BEARING_COUNT) as usize]
+    }
+
+    /// The live cells of one bearing: the contiguous run of non-padding
+    /// pairs at the head of its record.
+    ///
+    /// This is the published cell list — fifteen entries on a cardinal,
+    /// eleven on a diagonal, nine on a halfway bearing
+    /// ([`beacon_record_cell_count`]). It is the geometry to assert
+    /// against; [`Self::bearing`] is what the stamp walks.
+    pub fn cells(&self, bearing: u8) -> &[(i8, i8)] {
         let index = (bearing % BEACON_BEARING_COUNT) as usize;
         &self.offsets[index][..self.lengths[index] as usize]
     }
@@ -342,7 +428,7 @@ fn beacon_record_heading_degrees(index: usize) -> f64 {
 /// Whether one signed offset points along `index`'s nominal heading, within
 /// [`BEACON_STENCIL_HEADING_TOLERANCE_DEGREES`]. Screen coordinates: `+x`
 /// east, `+y` south, so north is `-y`.
-fn beacon_offset_matches_bearing(dx: i8, dy: i8, index: usize) -> bool {
+pub(crate) fn beacon_offset_matches_bearing(dx: i8, dy: i8, index: usize) -> bool {
     let angle = f64::from(dx)
         .atan2(-f64::from(dy))
         .to_degrees()
@@ -352,14 +438,16 @@ fn beacon_offset_matches_bearing(dx: i8, dy: i8, index: usize) -> bool {
     deviation < BEACON_STENCIL_HEADING_TOLERANCE_DEGREES
 }
 
-/// Validate one thirty-two-byte bearing record and return its offset count.
+/// Validate one thirty-two-byte bearing record and return its cell count.
 ///
-/// Structure, all from `visibility.md §12.6` and `formats/tiles.md §5.1.1`:
-/// sixteen signed `(dx, dy)` pairs; "at most sixteen cell offsets", so a
-/// record may end early, and the unused pairs are zero and sit after every
-/// live pair; every offset reaches at most seven tiles on either axis; and
-/// every offset points along the record's own bearing.
+/// Structure, all from `formats/tiles.md §5.1.1`: sixteen signed
+/// `(dx, dy)` pairs; "live pairs are contiguous from the start of a record;
+/// every remaining pair is exactly `(0, 0)` and means 'no cell'"; "no
+/// component exceeds seven in magnitude, and no record repeats a pair"; the
+/// cell count is fixed by the heading class ([`beacon_record_cell_count`]);
+/// and every offset points along the record's own bearing.
 fn beacon_record_offsets(record: &[u8], index: usize) -> Option<usize> {
+    let mut cells = [(0i8, 0i8); BEACON_STENCIL_MAX_OFFSETS];
     let mut length = 0usize;
     let mut padding_seen = false;
     for pair in record.chunks_exact(2) {
@@ -373,12 +461,14 @@ fn beacon_record_offsets(record: &[u8], index: usize) -> Option<usize> {
             || dx.unsigned_abs() > BEACON_BEAM_MAX_REACH
             || dy.unsigned_abs() > BEACON_BEAM_MAX_REACH
             || !beacon_offset_matches_bearing(dx, dy, index)
+            || cells[..length].contains(&(dx, dy))
         {
             return None;
         }
+        cells[length] = (dx, dy);
         length += 1;
     }
-    (length > 0).then_some(length)
+    (length == beacon_record_cell_count(index)).then_some(length)
 }
 
 /// Parse a candidate [`BEACON_STENCIL_TABLE_BYTES`]-byte window as the
@@ -403,24 +493,56 @@ pub fn parse_beacon_bearing_stencils(bytes: &[u8]) -> Option<BeaconBearingStenci
     Some(table)
 }
 
-/// Locate the sixteen bearing stencils inside a shipped `DATA.OVL` image.
+/// Read the sixteen bearing stencils out of a `DATA.OVL` image, at the
+/// published offset.
 ///
-/// The scan mirrors [`crate::find_britannia_chunk_index`]: walk every
-/// window, keep the ones the structural contract accepts, and refuse to
-/// guess if the answer is not unique. Nothing here is a fallback — an image
-/// that holds no table, or more than one, is an error.
-pub fn find_beacon_bearing_stencils(data: &[u8]) -> io::Result<BeaconBearingStencils> {
-    if data.len() < BEACON_STENCIL_TABLE_BYTES {
-        return Err(io::Error::new(
+/// `formats/tiles.md §5.1.1` puts the table "in the shared data overlay at
+/// file offset `0x1F8E`", 512 bytes. There is nothing to search for and
+/// nothing to guess: the bytes at that offset either match the published
+/// structure or the image is not one this engine can read.
+pub fn read_beacon_bearing_stencils(data: &[u8]) -> io::Result<BeaconBearingStencils> {
+    let end = BEACON_STENCIL_TABLE_OFFSET + BEACON_STENCIL_TABLE_BYTES;
+    let window = data.get(BEACON_STENCIL_TABLE_OFFSET..end).ok_or_else(|| {
+        io::Error::new(
             io::ErrorKind::InvalidData,
-            "DATA.OVL is too short to contain the beacon bearing-stencil table",
-        ));
-    }
+            format!(
+                "{DATA_OVL_FILENAME} is {} bytes, too short to hold the beacon \
+                 bearing-stencil table published at offset {BEACON_STENCIL_TABLE_OFFSET:#x} \
+                 (formats/tiles.md §5.1.1)",
+                data.len()
+            ),
+        )
+    })?;
+    parse_beacon_bearing_stencils(window)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, BEACON_STENCIL_MISMATCH_MESSAGE))
+}
 
-    let mut found: Option<BeaconBearingStencils> = None;
-    // Every byte of the table is a signed offset of at most seven cells
-    // (`visibility.md §12.6`), so only runs of in-range bytes can hold it.
-    // Restricting the window scan to those runs keeps map loading cheap.
+/// The failure `formats/tiles.md §5.1.1` demands be loud: "an
+/// implementation ... should fail loudly on zero candidates rather than
+/// silently lighting nothing".
+const BEACON_STENCIL_MISMATCH_MESSAGE: &str = "DATA.OVL holds no beacon bearing-stencil table matching formats/tiles.md §5.1.1 \
+     at the published offset";
+
+/// Every offset in `data` at which a [`BEACON_STENCIL_TABLE_BYTES`]-byte
+/// window matches the published structural rules.
+///
+/// **Nothing in the load path calls this.** `formats/tiles.md §5.1.1`
+/// publishes the table's offset, so [`read_beacon_bearing_stencils`]
+/// anchors to it; but the same section records that a structural search of
+/// the shipped overlay "yields **exactly one** candidate, and it is this
+/// table", reproduced independently twice. This function exists so that
+/// claim is a standing assertion against the shipped image
+/// (`the_structural_search_agrees_with_the_published_offset`) rather than a
+/// one-off check — a published offset that stopped agreeing with the
+/// structure would otherwise be silent.
+pub fn scan_beacon_bearing_stencil_offsets(data: &[u8]) -> Vec<usize> {
+    let mut found = Vec::new();
+    if data.len() < BEACON_STENCIL_TABLE_BYTES {
+        return found;
+    }
+    // Every byte of the table is a signed offset of at most seven cells,
+    // so only runs of in-range bytes can hold it; restricting the window
+    // scan to those runs keeps the cross-check cheap.
     let in_reach = |byte: u8| (byte as i8).unsigned_abs() <= BEACON_BEAM_MAX_REACH;
     let mut run_start = None;
     for position in 0..=data.len() {
@@ -434,66 +556,31 @@ pub fn find_beacon_bearing_stencils(data: &[u8]) -> io::Result<BeaconBearingSten
                 }
                 for offset in start..=position - BEACON_STENCIL_TABLE_BYTES {
                     let window = &data[offset..offset + BEACON_STENCIL_TABLE_BYTES];
-                    let Some(table) = parse_beacon_bearing_stencils(window) else {
-                        continue;
-                    };
-                    if found.is_some() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            BEACON_STENCIL_AMBIGUOUS_MESSAGE,
-                        ));
+                    if parse_beacon_bearing_stencils(window).is_some() {
+                        found.push(offset);
                     }
-                    found = Some(table);
                 }
             }
             _ => {}
         }
     }
-
-    found.ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            "DATA.OVL contains no beacon bearing-stencil candidate",
-        )
-    })
+    found
 }
 
 /// Read the beacon bearing stencils out of a game directory's `DATA.OVL`.
 ///
-/// `Ok(None)` means "this image carries no bearing table": an absent file,
-/// or a synthetic fixture image built for some other table. A beacon
-/// without stencils lights nothing, which is the honest outcome — the
-/// engine never substitutes an invented geometry for the shipped one, and
-/// `visibility.md §12.6` publishes the beam's shape only as "a fixed set of
-/// at most sixteen cell offsets", never as offsets.
-///
-/// An *ambiguous* image — one holding more than one table matching the
-/// published shape — is an error rather than a guess, and so is an
-/// unreadable file.
-pub fn load_beacon_bearing_stencils(game_dir: &Path) -> io::Result<Option<BeaconBearingStencils>> {
+/// **There is no quiet failure here.** An absent file, a short file, or an
+/// image whose published offset does not carry the published structure are
+/// all errors. This used to return `Ok(None)` for each of those and leave
+/// the beacon lighting nothing, which `formats/tiles.md §5.1.1` names as
+/// the wrong answer: "it should fail loudly on zero candidates rather than
+/// silently lighting nothing". A dark beacon and a missing table are not
+/// distinguishable to a player, which is exactly why the loader has to
+/// distinguish them.
+pub fn load_beacon_bearing_stencils(game_dir: &Path) -> io::Result<BeaconBearingStencils> {
     let path = game_dir.join(DATA_OVL_FILENAME);
-    if !path.exists() {
-        return Ok(None);
-    }
     let data = read(&path)?;
-    match find_beacon_bearing_stencils(&data) {
-        Ok(table) => Ok(Some(table)),
-        Err(err)
-            if err.kind() == io::ErrorKind::InvalidData && !beacon_table_is_ambiguous(&err) =>
-        {
-            Ok(None)
-        }
-        Err(err) => Err(err),
-    }
-}
-
-/// The one [`find_beacon_bearing_stencils`] failure
-/// [`load_beacon_bearing_stencils`] refuses to swallow.
-const BEACON_STENCIL_AMBIGUOUS_MESSAGE: &str =
-    "DATA.OVL contains multiple beacon bearing-stencil candidates";
-
-fn beacon_table_is_ambiguous(err: &io::Error) -> bool {
-    err.to_string() == BEACON_STENCIL_AMBIGUOUS_MESSAGE
+    read_beacon_bearing_stencils(&data)
 }
 
 impl PlayState {
@@ -542,6 +629,12 @@ impl PlayState {
     /// third" — so this runs after the disc-shaped sources of `§12.1` have
     /// filled the same mask, and the producer then reads the union. Cells
     /// outside the 32x32 window are dropped.
+    ///
+    /// The inner loop walks the **whole** sixteen-pair record, padding
+    /// included (`formats/tiles.md §5.1.1`: "the stamp always runs all
+    /// sixteen iterations ... there is no early exit on the `(0, 0)`
+    /// padding"). A padded pair resolves to `(0, 0)` and so writes the
+    /// source cell itself.
     pub(crate) fn stamp_light_beacon(
         &self,
         mask: &mut [bool],
@@ -552,9 +645,7 @@ impl PlayState {
         if !beacon_pass_runs(self.ambient_light) {
             return;
         }
-        let Some(stencils) = self.beacon_bearing_stencils.as_ref() else {
-            return;
-        };
+        let stencils = &self.beacon_bearing_stencils;
         for source in self.light_beacon.sources.iter().flatten() {
             for bearing in beacon_cone_bearings(self.light_beacon.bearing) {
                 for &(dx, dy) in stencils.bearing(bearing) {

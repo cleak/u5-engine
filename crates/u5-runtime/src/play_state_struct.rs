@@ -70,10 +70,14 @@ pub struct PlayState {
     /// beam's current bearing. Map loaders own the positions; the
     /// per-turn pass owns the bearing.
     pub light_beacon: LightBeaconState,
-    /// `visibility.md §12.6` beam stencils, located in the shipped
-    /// `DATA.OVL` at map-load time. `None` only for synthetic fixtures
-    /// built without a game directory.
-    pub beacon_bearing_stencils: Option<BeaconBearingStencils>,
+    /// `visibility.md §12.6` beam stencils, read from the shipped
+    /// `DATA.OVL` at the offset `formats/tiles.md §5.1.1` publishes.
+    ///
+    /// Not optional. A state that reached this point has a table, because
+    /// [`crate::load_beacon_bearing_stencils`] fails loudly rather than
+    /// handing back an absent one — `§5.1.1` asks for exactly that, since
+    /// a silently dark beacon and a missing table look identical in play.
+    pub beacon_bearing_stencils: BeaconBearingStencils,
     pub visibility_dirty: bool,
     pub visibility_grid: [u8; VISIBILITY_GRID_LEN],
     pub terrain_band: [u8; TERRAIN_BAND_LEN],

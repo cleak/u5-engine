@@ -105,7 +105,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         light_spell_counter: 0,
         ambient_light: FULL_DAYLIGHT,
         light_beacon: LightBeaconState::new(),
-        beacon_bearing_stencils: None,
+        beacon_bearing_stencils: synthetic_beacon_bearing_stencils(),
         visibility_dirty: false,
         visibility_grid: [0; VISIBILITY_GRID_LEN],
         terrain_band: [0; TERRAIN_BAND_LEN],
@@ -257,7 +257,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         light_spell_counter: 0,
         ambient_light: 0,
         light_beacon: LightBeaconState::new(),
-        beacon_bearing_stencils: None,
+        beacon_bearing_stencils: synthetic_beacon_bearing_stencils(),
         visibility_dirty: false,
         visibility_grid: [0; VISIBILITY_GRID_LEN],
         terrain_band: [0; TERRAIN_BAND_LEN],
@@ -412,7 +412,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         light_spell_counter: 0,
         ambient_light: FULL_DAYLIGHT,
         light_beacon: LightBeaconState::new(),
-        beacon_bearing_stencils: None,
+        beacon_bearing_stencils: synthetic_beacon_bearing_stencils(),
         visibility_dirty: false,
         visibility_grid: [0; VISIBILITY_GRID_LEN],
         terrain_band: [0; TERRAIN_BAND_LEN],
@@ -688,10 +688,72 @@ pub fn synthetic_britannia_chunk_index() -> [u8; WORLD_CHUNK_COUNT] {
 }
 
 pub fn write_britannia_world_files(dir: &Path, tile: u8) {
-    let table = synthetic_britannia_chunk_index();
-    let mut data = vec![42; 32];
-    data.extend_from_slice(&table);
-    data.extend_from_slice(&[42; 32]);
-    fs::write(dir.join("DATA.OVL"), data).unwrap();
+    fs::write(dir.join("DATA.OVL"), synthetic_data_ovl()).unwrap();
     fs::write(dir.join("BRIT.DAT"), vec![tile; BRIT_DAT_LEN]).unwrap();
+}
+
+/// A synthetic `DATA.OVL` carrying both resident tables the engine reads
+/// out of the overlay: the Britannia chunk index, and the
+/// `visibility.md §12.6` beacon bearing stencils at the offset
+/// `formats/tiles.md §5.1.1` publishes.
+///
+/// The stencils have to be here because
+/// [`crate::load_beacon_bearing_stencils`] no longer answers "no table" —
+/// `§5.1.1` requires it to fail loudly instead, so every game directory a
+/// `PlayState` is built from needs a readable table. The geometry is
+/// synthetic (see [`synthetic_beacon_stencil_table`]); the shipped
+/// offsets stay in the shipped file.
+pub fn synthetic_data_ovl() -> Vec<u8> {
+    let mut data = vec![42; 32];
+    data.extend_from_slice(&synthetic_britannia_chunk_index());
+    data.extend_from_slice(&[42; 32]);
+    // Zero padding out to the published stencil offset. Zeros cannot
+    // form a second Britannia chunk-index candidate (the validator
+    // rejects a repeated non-sentinel entry), so the chunk-index search
+    // stays unambiguous.
+    data.resize(BEACON_STENCIL_TABLE_OFFSET, 0);
+    data.extend_from_slice(&synthetic_beacon_stencil_table());
+    data
+}
+
+/// Sixteen bearing-stencil records matching every published structural
+/// rule of `formats/tiles.md §5.1.1` without reproducing the shipped
+/// geometry.
+///
+/// Each record takes the cells nearest its own heading, in
+/// Chebyshev-distance order, up to the published per-class cell count —
+/// fifteen on a cardinal, eleven on a diagonal, nine on a halfway bearing
+/// — and pads the rest of the sixteen pairs with `(0, 0)`.
+pub fn synthetic_beacon_stencil_table() -> Vec<u8> {
+    let mut bytes = vec![0u8; BEACON_STENCIL_TABLE_BYTES];
+    for index in 0..BEACON_BEARING_COUNT as usize {
+        let reach = i8::try_from(BEACON_BEAM_MAX_REACH).unwrap();
+        let mut cells: Vec<(i8, i8)> = (-reach..=reach)
+            .flat_map(|dy| (-reach..=reach).map(move |dx| (dx, dy)))
+            .filter(|&(dx, dy)| {
+                (dx, dy) != (0, 0)
+                    && crate::light_beacon::beacon_offset_matches_bearing(dx, dy, index)
+            })
+            .collect();
+        cells.sort_by_key(|&(dx, dy)| (dx.unsigned_abs().max(dy.unsigned_abs()), dx, dy));
+        cells.truncate(beacon_record_cell_count(index));
+        assert_eq!(
+            cells.len(),
+            beacon_record_cell_count(index),
+            "record {index} cannot reach its published cell count"
+        );
+        let start = index * BEACON_STENCIL_RECORD_BYTES;
+        for (slot, (dx, dy)) in cells.into_iter().enumerate() {
+            bytes[start + slot * 2] = dx as u8;
+            bytes[start + slot * 2 + 1] = dy as u8;
+        }
+    }
+    bytes
+}
+
+/// The synthetic stencils as a parsed table, for `PlayState` fixtures
+/// built without a game directory.
+pub fn synthetic_beacon_bearing_stencils() -> BeaconBearingStencils {
+    parse_beacon_bearing_stencils(&synthetic_beacon_stencil_table())
+        .expect("the synthetic stencil table must satisfy the published record shape")
 }

@@ -78,12 +78,60 @@ mod light_beacon_sources {
         let grid = floor_with(&[
             ((11, 12), BEACON_BRIGHT_LIGHT_TILE),
             ((19, 12), BEACON_BRIGHT_LIGHT_TILE),
-            ((3, 20), BEACON_BRIGHT_LIGHT_TILE),
         ]);
 
         let sources = harvest_location_beacon_sources(&grid);
         assert_eq!(sources[0], Some((11, 12)));
         assert_eq!(sources[1], Some((19, 12)));
+    }
+
+    /// `formats/location-dat.md §6`, the harvest rule as corrected: "the
+    /// walk tests only whether the *first* slot is still empty. So the
+    /// **first** hit takes slot one and, once slot one is filled, **every
+    /// later hit overwrites slot two** — meaning the **last** hit wins slot
+    /// two, not the second."
+    ///
+    /// This tree implemented first-hit-then-second-hit and stopped walking
+    /// once both slots were filled. No shipped floor carries three sources
+    /// (see `shipped_location_files_carry_the_published_beacon_source_layout`),
+    /// so only custom data can tell the two rules apart — which is why it
+    /// needs a fixture rather than an asset.
+    #[test]
+    fn a_third_bright_light_overwrites_the_second_slot_rather_than_being_ignored() {
+        let grid = floor_with(&[
+            ((3, 20), BEACON_BRIGHT_LIGHT_TILE),
+            ((11, 12), BEACON_BRIGHT_LIGHT_TILE),
+            ((19, 12), BEACON_BRIGHT_LIGHT_TILE),
+        ]);
+
+        let sources = harvest_location_beacon_sources(&grid);
+
+        assert_eq!(sources[0], Some((3, 20)), "the first hit keeps slot one");
+        assert_eq!(
+            sources[1],
+            Some((19, 12)),
+            "the last hit wins slot two - not the second hit, (11, 12)"
+        );
+    }
+
+    /// `formats/location-dat.md §6`: the walk covers "every cell of the
+    /// freshly-read tile grid in loader order (column 0 north-to-south,
+    /// then column 1, and so on)". Column-major order decides which hit is
+    /// first and which is last, so the beacon harvest — which shares the
+    /// NPC markers' single walk, "one walk, two purposes" — shares it.
+    #[test]
+    fn location_harvest_walks_in_column_major_loader_order() {
+        // Row-major order would see (20, 1) first; column-major sees
+        // (1, 20) first, because column one comes before column twenty.
+        let grid = floor_with(&[
+            ((20, 1), BEACON_BRIGHT_LIGHT_TILE),
+            ((1, 20), BEACON_BRIGHT_LIGHT_TILE),
+        ]);
+
+        assert_eq!(
+            harvest_location_beacon_sources(&grid),
+            [Some((1, 20)), Some((20, 1))]
+        );
     }
 
     #[test]
@@ -312,7 +360,7 @@ mod light_beacon_stencils {
     /// A scratch directory holding only the shipped files these tests
     /// read. The pristine install is never opened directly and never
     /// written to (`CLAUDE.md` clean-room rules).
-    fn shipped_asset_copy(files: &[&str]) -> Option<std::path::PathBuf> {
+    pub(super) fn shipped_asset_copy(files: &[&str]) -> Option<std::path::PathBuf> {
         let source = Path::new(DEFAULT_GAME_DIR);
         if files.iter().any(|file| !source.join(file).exists()) {
             return None;
@@ -335,7 +383,14 @@ mod light_beacon_stencils {
         let dir = shipped_asset_copy(&[DATA_OVL_FILENAME])?;
         let table = load_beacon_bearing_stencils(&dir).unwrap();
         let _ = fs::remove_dir_all(&dir);
-        table
+        Some(table)
+    }
+
+    fn shipped_data_ovl() -> Option<Vec<u8>> {
+        let dir = shipped_asset_copy(&[DATA_OVL_FILENAME])?;
+        let bytes = fs::read(dir.join(DATA_OVL_FILENAME)).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+        Some(bytes)
     }
 
     /// `visibility.md §12.6`: "each bearing is a fixed set of at most
@@ -343,10 +398,8 @@ mod light_beacon_stencils {
     /// stencil, not a computed sweep", and the beam reaches "up to seven
     /// tiles from the source".
     ///
-    /// The offsets are shipped data, not published prose, so this locates
-    /// the table structurally in `DATA.OVL` (`formats/tiles.md §5.1.1`:
-    /// sixteen thirty-two-byte records of sixteen signed byte pairs) and
-    /// checks the published shape against it.
+    /// `formats/tiles.md §5.1.1` publishes the table's offset, so this
+    /// reads it there and checks the published shape against it.
     #[test]
     fn shipped_stencils_have_at_most_sixteen_offsets_reaching_seven_tiles() {
         let Some(stencils) = shipped_stencils() else {
@@ -355,7 +408,7 @@ mod light_beacon_stencils {
 
         let mut longest_reach = 0;
         for bearing in 0..BEACON_BEARING_COUNT {
-            let offsets = stencils.bearing(bearing);
+            let offsets = stencils.cells(bearing);
             assert!(!offsets.is_empty(), "bearing {bearing} lights cells");
             assert!(
                 offsets.len() <= BEACON_STENCIL_MAX_OFFSETS,
@@ -372,6 +425,89 @@ mod light_beacon_stencils {
         assert_eq!(
             longest_reach, BEACON_BEAM_MAX_REACH,
             "the beam reaches its full seven tiles somewhere"
+        );
+    }
+
+    /// `formats/tiles.md §5.1.1`: "cell counts follow the heading class
+    /// exactly: the four **cardinals** (records 1, 5, 9, 13) light
+    /// **fifteen** cells, the four **diagonals** (3, 7, 11, 15) light
+    /// **eleven**, and the eight **halfway** bearings light **nine**."
+    ///
+    /// Checked twice over: that our class rule reproduces the published
+    /// per-record numbers, and that the shipped table matches it.
+    #[test]
+    fn shipped_stencil_cell_counts_follow_the_published_heading_class() {
+        let published = [
+            9, 15, 9, 11, 9, 15, 9, 11, 9, 15, 9, 11, 9, 15, 9, 11usize,
+        ];
+        for (index, expected) in published.into_iter().enumerate() {
+            assert_eq!(
+                beacon_record_cell_count(index),
+                expected,
+                "record {index}"
+            );
+        }
+        assert_eq!(beacon_record_cell_count(1), BEACON_CARDINAL_CELLS);
+        assert_eq!(beacon_record_cell_count(3), BEACON_DIAGONAL_CELLS);
+        assert_eq!(beacon_record_cell_count(0), BEACON_HALFWAY_CELLS);
+
+        let Some(stencils) = shipped_stencils() else {
+            return;
+        };
+        for (index, expected) in published.into_iter().enumerate() {
+            assert_eq!(
+                stencils.cells(index as u8).len(),
+                expected,
+                "shipped record {index}"
+            );
+        }
+    }
+
+    /// `formats/tiles.md §5.1.1`: "the stamp always runs **all sixteen
+    /// iterations** of a record - there is no early exit on the `(0, 0)`
+    /// padding, so a padded pair writes at the record's own origin cell".
+    ///
+    /// Every shipped record is padded (the longest lights fifteen of
+    /// sixteen), so the padding path is taken on every bearing.
+    #[test]
+    fn every_shipped_record_carries_padding_the_stamp_still_walks() {
+        let Some(stencils) = shipped_stencils() else {
+            return;
+        };
+        for bearing in 0..BEACON_BEARING_COUNT {
+            let record = stencils.bearing(bearing);
+            let cells = stencils.cells(bearing);
+            assert_eq!(
+                record.len(),
+                BEACON_STENCIL_MAX_OFFSETS,
+                "the stamp walks all sixteen pairs of bearing {bearing}"
+            );
+            assert!(
+                cells.len() < BEACON_STENCIL_MAX_OFFSETS,
+                "bearing {bearing} has no padded pair, so this rule would be untestable"
+            );
+            assert!(
+                record[cells.len()..].iter().all(|pair| *pair == (0, 0)),
+                "bearing {bearing} pads with exactly (0, 0)"
+            );
+        }
+    }
+
+    /// `formats/tiles.md §5.1.1` publishes the offset **and** records that
+    /// a structural search of the shipped overlay "yields **exactly one**
+    /// candidate, and it is this table". This engine anchors to the offset;
+    /// the search is kept only so that agreement stays asserted. If the two
+    /// ever disagree, the published offset is wrong or the shipped image is
+    /// not the one the spec was traced from — either way, loudly.
+    #[test]
+    fn the_structural_search_agrees_with_the_published_offset() {
+        let Some(data) = shipped_data_ovl() else {
+            return;
+        };
+        assert_eq!(
+            scan_beacon_bearing_stencil_offsets(&data),
+            vec![BEACON_STENCIL_TABLE_OFFSET],
+            "exactly one structural candidate, at the published offset"
         );
     }
 
@@ -396,7 +532,7 @@ mod light_beacon_stencils {
             (13, |dx, dy| dx < 0 && dy.abs() <= 1),
         ];
         for (bearing, predicate) in cardinals {
-            for &(dx, dy) in stencils.bearing(bearing) {
+            for &(dx, dy) in stencils.cells(bearing) {
                 assert!(predicate(dx, dy), "bearing {bearing} offset ({dx}, {dy})");
             }
         }
@@ -404,7 +540,7 @@ mod light_beacon_stencils {
         // The four diagonals: 3 north-east, 7 south-east, 11 south-west,
         // 15 north-west.
         for (bearing, sx, sy) in [(3u8, 1i8, -1i8), (7, 1, 1), (11, -1, 1), (15, -1, -1)] {
-            for &(dx, dy) in stencils.bearing(bearing) {
+            for &(dx, dy) in stencils.cells(bearing) {
                 assert_eq!(dx.signum(), sx, "bearing {bearing} offset ({dx}, {dy})");
                 assert_eq!(dy.signum(), sy, "bearing {bearing} offset ({dx}, {dy})");
             }
@@ -412,82 +548,101 @@ mod light_beacon_stencils {
 
         // Bearing sixteen is one step anticlockwise of due north, so it
         // leans west while still pointing north.
-        for &(dx, dy) in stencils.bearing(0) {
+        for &(dx, dy) in stencils.cells(0) {
             assert!(dx < 0 && dy < 0, "bearing sixteen offset ({dx}, {dy})");
         }
     }
 
-    /// The table is located by shape, and the shipped image yields exactly
-    /// one candidate — a rejected or ambiguous image is an error, never a
-    /// silently dark beacon.
+    /// `formats/tiles.md §5.1.1`: an implementation "should fail loudly on
+    /// zero candidates rather than silently lighting nothing".
+    ///
+    /// This used to be the loader's one soft spot: an image with no table
+    /// returned `Ok(None)` and the beacon lit nothing, indistinguishable in
+    /// play from a beacon that was simply never in view. All three ways of
+    /// having no table are errors now.
     #[test]
-    fn stencil_table_location_refuses_an_image_without_a_unique_table() {
-        let err = find_beacon_bearing_stencils(&[0; BEACON_STENCIL_TABLE_BYTES]).unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    fn the_stencil_loader_fails_loudly_when_the_published_offset_has_no_table() {
+        let too_short = read_beacon_bearing_stencils(&[0; 8]).unwrap_err();
+        assert_eq!(too_short.kind(), io::ErrorKind::InvalidData);
 
-        let err = find_beacon_bearing_stencils(&[0; 8]).unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        let all_zero = vec![0u8; BEACON_STENCIL_TABLE_OFFSET + BEACON_STENCIL_TABLE_BYTES];
+        let no_table = read_beacon_bearing_stencils(&all_zero).unwrap_err();
+        assert_eq!(no_table.kind(), io::ErrorKind::InvalidData);
+
+        let dir = debug_game_dir();
+        fs::remove_file(dir.join(DATA_OVL_FILENAME)).unwrap();
+        let missing = load_beacon_bearing_stencils(&dir).unwrap_err();
+        assert_eq!(missing.kind(), io::ErrorKind::NotFound);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The table is read at the published offset and nowhere else: the same
+    /// bytes one byte earlier are not a table.
+    #[test]
+    fn the_stencil_loader_reads_only_the_published_offset() {
+        let table = synthetic_beacon_stencil_table();
+        let mut shifted = vec![0u8; BEACON_STENCIL_TABLE_OFFSET - 1];
+        shifted.extend_from_slice(&table);
+        shifted.resize(BEACON_STENCIL_TABLE_OFFSET + BEACON_STENCIL_TABLE_BYTES, 0);
+        assert!(read_beacon_bearing_stencils(&shifted).is_err());
+
+        let mut anchored = vec![0u8; BEACON_STENCIL_TABLE_OFFSET];
+        anchored.extend_from_slice(&table);
+        assert!(read_beacon_bearing_stencils(&anchored).is_ok());
     }
 
     /// A record whose live pairs are followed by padding is accepted; one
-    /// with a live pair *after* padding, or an offset past seven cells, or
-    /// an offset pointing away from its bearing, is not.
+    /// with a live pair *after* padding, an offset past seven cells, an
+    /// offset pointing away from its bearing, a repeated pair, or a cell
+    /// count that does not match the record's heading class, is not.
     #[test]
     fn stencil_parser_enforces_the_published_record_shape() {
-        let mut bytes = vec![0u8; BEACON_STENCIL_TABLE_BYTES];
-        let write = |bytes: &mut [u8], index: usize, pairs: &[(i8, i8)]| {
-            let start = index * BEACON_STENCIL_RECORD_BYTES;
-            for slot in 0..BEACON_STENCIL_MAX_OFFSETS {
-                let (dx, dy) = pairs.get(slot).copied().unwrap_or((0, 0));
-                bytes[start + slot * 2] = dx as u8;
-                bytes[start + slot * 2 + 1] = dy as u8;
-            }
-        };
-        // Index r carries heading (r - 1) * 22.5 degrees clockwise from
-        // north, so index 1 is due north and index 9 is due south.
-        let heading_offsets: [(i8, i8); BEACON_BEARING_COUNT as usize] = [
-            (-1, -2),
-            (0, -1),
-            (1, -2),
-            (1, -1),
-            (2, -1),
-            (1, 0),
-            (2, 1),
-            (1, 1),
-            (1, 2),
-            (0, 1),
-            (-1, 2),
-            (-1, 1),
-            (-2, 1),
-            (-1, 0),
-            (-2, -1),
-            (-1, -1),
-        ];
-        for (index, offset) in heading_offsets.iter().enumerate() {
-            write(&mut bytes, index, &[*offset]);
-        }
+        let bytes = synthetic_beacon_stencil_table();
         assert!(parse_beacon_bearing_stencils(&bytes).is_some());
 
+        // Record 1 is due north and lights fifteen cells, so its sixteenth
+        // pair is its only padding.
+        let record1 = BEACON_STENCIL_RECORD_BYTES;
+        let last_pair = record1 + (BEACON_CARDINAL_CELLS - 1) * 2;
+
         let mut padded = bytes.clone();
-        padded[BEACON_STENCIL_RECORD_BYTES + 4] = 0;
-        padded[BEACON_STENCIL_RECORD_BYTES + 5] = (-1i8) as u8;
+        padded[last_pair] = 0;
+        padded[last_pair + 1] = 0;
+        padded[record1 + 30] = 0;
+        padded[record1 + 31] = (-1i8) as u8;
         assert!(
             parse_beacon_bearing_stencils(&padded).is_none(),
             "a live pair after padding is rejected"
         );
 
         let mut too_far = bytes.clone();
-        too_far[BEACON_STENCIL_RECORD_BYTES + 1] = (-8i8) as u8;
+        too_far[record1 + 1] = (-8i8) as u8;
         assert!(
             parse_beacon_bearing_stencils(&too_far).is_none(),
             "an offset past seven tiles is rejected"
         );
 
         let mut wrong_way = bytes.clone();
-        wrong_way[BEACON_STENCIL_RECORD_BYTES + 1] = 1;
+        wrong_way[record1 + 1] = 1;
         assert!(
             parse_beacon_bearing_stencils(&wrong_way).is_none(),
             "an offset pointing away from its bearing is rejected"
+        );
+
+        let mut repeated = bytes.clone();
+        repeated[record1 + 2] = repeated[record1];
+        repeated[record1 + 3] = repeated[record1 + 1];
+        assert!(
+            parse_beacon_bearing_stencils(&repeated).is_none(),
+            "a repeated pair inside one record is rejected"
+        );
+
+        let mut short_count = bytes.clone();
+        short_count[last_pair] = 0;
+        short_count[last_pair + 1] = 0;
+        assert!(
+            parse_beacon_bearing_stencils(&short_count).is_none(),
+            "a cardinal record lighting fourteen cells is rejected"
         );
 
         let empty = vec![0u8; BEACON_STENCIL_TABLE_BYTES];
@@ -499,44 +654,38 @@ mod light_beacon_mask_stamp {
     use super::*;
 
     fn stencils_for_test() -> BeaconBearingStencils {
-        let mut bytes = vec![0u8; BEACON_STENCIL_TABLE_BYTES];
-        // One offset per bearing, each along its own heading; enough to
-        // exercise the stamp without depending on shipped geometry.
-        let heading_offsets: [(i8, i8); BEACON_BEARING_COUNT as usize] = [
-            (-1, -2),
-            (0, -1),
-            (1, -2),
-            (1, -1),
-            (2, -1),
-            (1, 0),
-            (2, 1),
-            (1, 1),
-            (1, 2),
-            (0, 1),
-            (-1, 2),
-            (-1, 1),
-            (-2, 1),
-            (-1, 0),
-            (-2, -1),
-            (-1, -1),
-        ];
-        for (index, (dx, dy)) in heading_offsets.iter().enumerate() {
-            let start = index * BEACON_STENCIL_RECORD_BYTES;
-            bytes[start] = *dx as u8;
-            bytes[start + 1] = *dy as u8;
-        }
-        parse_beacon_bearing_stencils(&bytes).unwrap()
+        synthetic_beacon_bearing_stencils()
     }
 
     fn beacon_state_at(source: (u8, u8), bearing: u8, ambient: u8) -> PlayState {
         let mut state = test_state(open_grid(), 16, 16);
-        state.beacon_bearing_stencils = Some(stencils_for_test());
+        state.beacon_bearing_stencils = stencils_for_test();
         state.light_beacon = LightBeaconState {
             sources: [Some(source), None],
             bearing,
         };
         state.ambient_light = ambient;
         state
+    }
+
+    /// Every cell the stamp is expected to write for one source at one
+    /// bearing: the union of all sixteen pairs of each of the three cone
+    /// bearings, padding included (`formats/tiles.md §5.1.1`).
+    fn expected_cone_cells(source: (u8, u8), bearing: u8) -> Vec<(isize, isize)> {
+        let stencils = stencils_for_test();
+        let mut cells: Vec<(isize, isize)> = beacon_cone_bearings(bearing)
+            .into_iter()
+            .flat_map(|bearing| stencils.bearing(bearing).to_owned())
+            .map(|(dx, dy)| {
+                (
+                    isize::from(source.0) + isize::from(dx),
+                    isize::from(source.1) + isize::from(dy),
+                )
+            })
+            .collect();
+        cells.sort_unstable();
+        cells.dedup();
+        cells
     }
 
     fn lit_cells(state: &PlayState) -> Vec<(isize, isize)> {
@@ -562,21 +711,51 @@ mod light_beacon_mask_stamp {
         let mut lit = lit_cells(&state);
         lit.sort_unstable();
 
-        // Bearings 1, 2, 3 of the fixture: (0, -1), (1, -2), (1, -1).
-        let mut expected = vec![(10, 9), (11, 8), (11, 9)];
-        expected.sort_unstable();
-        assert_eq!(lit, expected);
+        assert_eq!(lit, expected_cone_cells((10, 10), 1));
+    }
+
+    /// `formats/tiles.md §5.1.1`: "the stamp always runs **all sixteen
+    /// iterations** of a record - there is no early exit on the `(0, 0)`
+    /// padding, so a padded pair writes at the record's own origin cell,
+    /// which is harmless because that cell is the source."
+    ///
+    /// This tree stopped at the live prefix. Every record is padded, so the
+    /// source cell is written on every bearing, and skipping the padding is
+    /// a real difference in what reaches the mask — one cell, invisible in
+    /// play only because a lit source cell looks like a lit source cell.
+    #[test]
+    fn the_stamp_walks_the_padding_and_so_writes_the_source_cell() {
+        let state = beacon_state_at((10, 10), 1, FULL_DARKNESS);
+        assert!(
+            lit_cells(&state).contains(&(10, 10)),
+            "the padded (0, 0) pairs write at the source"
+        );
+
+        // Not an artefact of some record listing (0, 0) as a live cell.
+        let stencils = stencils_for_test();
+        for bearing in beacon_cone_bearings(1) {
+            assert!(!stencils.cells(bearing).contains(&(0, 0)));
+            assert!(stencils.bearing(bearing).contains(&(0, 0)));
+        }
     }
 
     #[test]
     fn both_source_slots_stamp_and_overlapping_cones_union() {
         let mut state = beacon_state_at((10, 10), 1, FULL_DARKNESS);
-        state.light_beacon.sources[1] = Some((11, 10));
-        let lit = lit_cells(&state);
+        state.light_beacon.sources[1] = Some((14, 10));
+        let mut lit = lit_cells(&state);
+        lit.sort_unstable();
 
-        assert!(lit.contains(&(10, 9)), "first source lit");
-        assert!(lit.contains(&(11, 9)), "shared cell lit once");
-        assert!(lit.contains(&(12, 8)), "second source lit");
+        let mut expected = expected_cone_cells((10, 10), 1);
+        expected.extend(expected_cone_cells((14, 10), 1));
+        expected.sort_unstable();
+        let overlap = expected.len();
+        expected.dedup();
+        assert!(
+            expected.len() < overlap,
+            "the two cones must overlap for this to test the union"
+        );
+        assert_eq!(lit, expected);
     }
 
     /// The gate comes first: at or above full daylight the pass "draws
@@ -607,14 +786,6 @@ mod light_beacon_mask_stamp {
         }
     }
 
-    /// A beacon whose stencils were never loaded lights nothing; the
-    /// engine never substitutes an invented geometry.
-    #[test]
-    fn the_stamp_draws_nothing_without_a_loaded_stencil_table() {
-        let mut state = beacon_state_at((10, 10), 1, FULL_DARKNESS);
-        state.beacon_bearing_stencils = None;
-        assert!(lit_cells(&state).is_empty());
-    }
 }
 
 mod light_beacon_shipped_map_sources {
@@ -723,16 +894,13 @@ mod light_beacon_shipped_map_sources {
 
         let stencils = load_beacon_bearing_stencils(&dir).unwrap();
         let _ = fs::remove_dir_all(&dir);
-        let Some(stencils) = stencils else {
-            return;
-        };
 
         let mut state = world_state(grid, lighthouse_x, lighthouse_y);
         state.area = Area::World {
             plane: WorldPlane::Britannia,
         };
         state.world_live_chunks = Some(buffer);
-        state.beacon_bearing_stencils = Some(stencils);
+        state.beacon_bearing_stencils = stencils;
         state.light_beacon = LightBeaconState {
             sources,
             bearing: BEACON_INITIAL_BEARING,
@@ -787,24 +955,24 @@ mod light_beacon_shipped_map_sources {
 mod light_beacon_floor_transition_harvest {
     use super::*;
 
-    /// `visibility.md §12.6`: a location floor's beacon sources must be
-    /// harvested from the **raw** floor, before the runtime normalisation
-    /// pass rewrites any cell.
+    /// `formats/location-dat.md §6`: "the harvest converts tile positions
+    /// into resident coordinate *words* at load time, and the beacon never
+    /// re-reads the map afterwards. A later pass that rewrites the cell
+    /// therefore cannot switch the source off. **An implementation that
+    /// instead harvests from a normalised or scrubbed copy of the floor
+    /// loses this property**, and will find the source present on one entry
+    /// path and absent on another."
     ///
-    /// This is a regression test for a divergence between our own two entry
-    /// paths, not for a spec disagreement. `load_town_scene` already
-    /// harvested from the raw grid; every floor *transition* loaded through
-    /// `load_town_runtime_floor` and then harvested from the **scrubbed**
-    /// result. `scrub_location_entry_markers` rewrites the marker byte the
-    /// beacon looks for, so a floor reached by stairs found no source while
-    /// the same floor reached by initial load found one.
-    ///
-    /// It mattered because the four shipped floors carrying that tile are
-    /// lighthouse lantern rooms, and a lighthouse lantern room is reached by
-    /// stairs — so the broken path was the only one that could occur in
-    /// play. Nothing in the 493-case route suite reaches it either way.
+    /// We had exactly that divergence, because the scrub claimed `0x2A`
+    /// under the withdrawn spawn-marker reading. The scrub no longer
+    /// touches the byte, so both orders agree on shipped data — but the
+    /// raw-floor harvest is kept, because the published property is about
+    /// *where the harvest reads from*, not about which passes happen to
+    /// rewrite the cell today. This test pins the weaker fact that makes
+    /// the ordering currently indifferent, so that a future pass claiming
+    /// the byte fails here rather than silently darkening the beacon.
     #[test]
-    fn normalisation_scrubs_the_byte_the_beacon_harvests() {
+    fn normalisation_leaves_the_byte_the_beacon_harvests_alone() {
         let mut grid = vec![0u8; 32 * 32];
         grid[5 * 32 + 7] = BEACON_BRIGHT_LIGHT_TILE;
 
@@ -815,21 +983,154 @@ mod light_beacon_floor_transition_harvest {
             "the raw floor must yield the bright-light cell"
         );
 
-        // The normalisation pass rewrites it, so harvesting afterwards finds
-        // nothing. This assertion is the *cause* of the bug, pinned so that
-        // if the scrub ever stops claiming this byte the ordering fix can be
-        // simplified deliberately rather than by accident.
         normalize_town_runtime_floor(&mut grid, 12);
-        assert_ne!(
+        assert_eq!(
             grid[5 * 32 + 7],
             BEACON_BRIGHT_LIGHT_TILE,
-            "normalisation is expected to rewrite the marker byte"
+            "normalisation must not rewrite the beacon's light source"
         );
         assert_eq!(
             harvest_location_beacon_sources(&grid),
-            [None, None],
-            "harvesting after normalisation finds nothing - which is why every \
-             floor-transition path must harvest before it"
+            raw_sources,
+            "so the raw and normalised harvests agree"
         );
+    }
+
+    /// The floor-transition loader harvests from the raw page, whatever the
+    /// normalisation pass does to it afterwards.
+    #[test]
+    fn the_floor_transition_loader_harvests_from_the_raw_page() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        let mut pages = vec![16u8; 16 * 1024];
+        pages[7 * 32 + 5] = BEACON_BRIGHT_LIGHT_TILE;
+        pages[8 * 32 + 6] = 0x48;
+        fs::write(dir.join("CASTLE.DAT"), pages).unwrap();
+
+        let (grid, sources) =
+            load_town_runtime_floor_with_beacon_sources(&dir, scene, 0, 12).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(sources, [Some((5, 7)), None]);
+        assert_eq!(grid[8 * 32 + 6], LOCATION_MARKER_CLEANUP_TILE);
+    }
+}
+
+mod light_beacon_shipped_location_sources {
+    use super::*;
+
+    /// `formats/location-dat.md §6`, the argument that withdraws the spawn
+    /// marker without appealing to any code: "**`0x2A` appears in zero
+    /// town, castle and keep floors.** It occurs **five times across four
+    /// floors, every one of them dwelling-class** ... A player town-entry
+    /// spawn marker that exists in no town is not a spawn marker."
+    ///
+    /// And the fact that makes the second slot worth implementing:
+    /// "**Exactly one shipped floor carries two.** Three of the four carry
+    /// one. So the second slot is exercised in exactly one place in the
+    /// whole shipped data set, and an implementation that silently handles
+    /// one source per floor is correct on three floors and wrong on the
+    /// fourth."
+    ///
+    /// Reproduced here against the shipped class files rather than taken on
+    /// trust.
+    #[test]
+    fn shipped_location_files_carry_the_published_beacon_source_layout() {
+        const PAGE_BYTES: usize = 32 * 32;
+        let classes = ["TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"];
+        // Never read the pristine install in place; work from a scratch
+        // copy, as every other shipped-asset test here does.
+        let Some(source) = super::light_beacon_stencils::shipped_asset_copy(&classes) else {
+            return;
+        };
+
+        let mut cells_by_class = Vec::new();
+        let mut floors_with_one = 0;
+        let mut floors_with_two = 0;
+        let mut floors_with_more = 0;
+        for class in classes {
+            let bytes = fs::read(source.join(class)).unwrap();
+            let mut class_cells = 0;
+            for page in bytes.chunks_exact(PAGE_BYTES) {
+                let hits = page
+                    .iter()
+                    .filter(|tile| **tile == BEACON_BRIGHT_LIGHT_TILE)
+                    .count();
+                class_cells += hits;
+                match hits {
+                    0 => {}
+                    1 => floors_with_one += 1,
+                    2 => floors_with_two += 1,
+                    _ => floors_with_more += 1,
+                }
+                // Whatever the count, the harvest fills at most two slots.
+                let filled = harvest_location_beacon_sources(page)
+                    .iter()
+                    .flatten()
+                    .count();
+                assert_eq!(filled, hits.min(BEACON_SOURCE_SLOTS));
+            }
+            cells_by_class.push((class, class_cells));
+        }
+        let _ = fs::remove_dir_all(&source);
+
+        assert_eq!(
+            cells_by_class,
+            vec![
+                ("TOWNE.DAT", 0),
+                ("DWELLING.DAT", 5),
+                ("CASTLE.DAT", 0),
+                ("KEEP.DAT", 0),
+            ],
+            "zero town, castle and keep floors; five cells, all dwelling-class"
+        );
+        assert_eq!(floors_with_one, 3, "three floors carry one source");
+        assert_eq!(floors_with_two, 1, "exactly one floor carries two");
+        assert_eq!(floors_with_more, 0, "no shipped floor carries three");
+    }
+
+    /// The end-to-end shipped-data case, through the same loader a floor
+    /// transition uses.
+    ///
+    /// `formats/location-dat.md §4.1` gives the four lighthouses page runs
+    /// `0-2`, `3-5`, `6-8` and `9-11`, entering on the lowest page of each,
+    /// so the four pages carrying `0x2A` are exactly their floor `+2` — the
+    /// lantern rooms. `§6` notes "a lantern room is reached by climbing,
+    /// [so] the stairs path is the only one reachable in play", which is
+    /// the path this exercises.
+    ///
+    /// Nothing in the route suite reaches these floors: every
+    /// `stock-location-enter` case stops on floor 0 and none climbs. This
+    /// test is the only end-to-end coverage of the indoor beacon over
+    /// shipped data.
+    #[test]
+    fn every_shipped_lighthouse_lantern_room_lights_its_beacon() {
+        let Some(dir) = super::light_beacon_stencils::shipped_asset_copy(&["DWELLING.DAT"]) else {
+            return;
+        };
+
+        let expected = [
+            (SCENE_FOGSBANE, [Some((8, 16)), None]),
+            (SCENE_STORMCROW, [Some((16, 20)), None]),
+            (SCENE_GREYHAVEN, [Some((15, 15)), None]),
+            // The one shipped floor with two sources.
+            (SCENE_WAVEGUIDE, [Some((11, 12)), Some((19, 12))]),
+        ];
+        for (scene, sources) in expected {
+            let scene = Scene::new(scene).unwrap();
+            let (grid, harvested) =
+                load_town_runtime_floor_with_beacon_sources(&dir, scene, 2, 12).unwrap();
+            assert_eq!(harvested, sources, "{} lantern room", scene.key());
+            for source in harvested.iter().flatten() {
+                assert_eq!(
+                    grid[usize::from(source.1) * TOWN_GRID_SIDE + usize::from(source.0)],
+                    BEACON_BRIGHT_LIGHT_TILE,
+                    "{}: the runtime buffer still carries the source tile",
+                    scene.key()
+                );
+            }
+        }
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

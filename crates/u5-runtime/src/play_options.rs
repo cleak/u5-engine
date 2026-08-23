@@ -353,7 +353,10 @@ pub struct MapStats {
     pub scene: Scene,
     pub floor: usize,
     pub npc_markers: Vec<(usize, usize)>,
-    pub spawn_markers: Vec<(usize, usize)>,
+    /// `visibility.md §12.6` indoor beacon sources for this floor. These
+    /// were reported as "spawn markers" until `formats/location-dat.md §6`
+    /// withdrew that reading of `0x2A`.
+    pub beacon_sources: [Option<(u8, u8)>; 2],
     pub door_count: usize,
     pub stair_count: usize,
     pub render_hash: u64,
