@@ -25,6 +25,7 @@ pub fn handle_play_key_input(
 ) -> io::Result<PlayInputDisposition> {
     let message_before = state.message.clone();
     let revision_before = state.message_transcript_revision();
+    state.clear_pending_epilogue_transcript_lines();
     let result = handle_play_key_input_inner(state, key, suffix, game_dir);
     state.commit_command_echo();
     if state.message_transcript_revision() == revision_before
@@ -33,6 +34,7 @@ pub fn handle_play_key_input(
     {
         state.push_message_transcript_lines(&state.message.clone());
     }
+    state.clear_pending_epilogue_transcript_lines();
     result
 }
 

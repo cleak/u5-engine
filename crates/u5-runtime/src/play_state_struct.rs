@@ -134,8 +134,17 @@ pub struct PlayState {
     /// call sites and tests that assert on it directly.
     pub(crate) message_transcript: Vec<MessageEntry>,
     /// Bumped on every transcript push so callers can tell whether a
-    /// dispatch already recorded its own output.
+    /// dispatch already recorded its own output. The turn epilogue's own
+    /// lines deliberately do *not* bump it — see
+    /// [`PlayState::push_epilogue_transcript_line`].
     pub(crate) message_transcript_revision: u64,
+    /// `text-output.md §11`: lines the turn epilogue emitted during the
+    /// current dispatch and already placed in the transcript. The
+    /// epilogue also leaves them in [`PlayState::message`], which a
+    /// command handler is free to overwrite; this list lets the commit
+    /// path recognise an unoverwritten epilogue line and not transcribe
+    /// it a second time.
+    pub(crate) pending_epilogue_transcript_lines: Vec<String>,
     /// The verb echo opened for the command currently being dispatched,
     /// if any, plus the message text that stood when it was opened.
     pub(crate) pending_command_echo: Option<PendingCommandEcho>,

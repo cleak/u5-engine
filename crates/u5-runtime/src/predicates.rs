@@ -547,7 +547,8 @@ pub const fn sleep_ambush_monster_sprite(monster: SleepAmbushMonster) -> u8 {
 /// `encounters.md §6`: PRNG outcome that flips the rest loop into the
 /// sleep-ambush branch. The shared integer PRNG produces sixty-four
 /// outcomes per eligible predicate invocation; only the zero outcome
-/// interrupts. Caller passes the raw 0..64 roll.
+/// interrupts. Caller passes the raw draw over the closed interval
+/// `[0, 63]` — sixty-four outcomes, not `[0, 64]`.
 pub const SLEEP_AMBUSH_INTERRUPT_DENOMINATOR: u8 = 64;
 pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
     roll == 0
@@ -598,8 +599,9 @@ pub const fn dungeon_room_clear_bit_position(dungeon: u8, room_id: u8) -> Option
 /// Caller supplies the world tile id and the underworld plane flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpawnTerrainBranch {
-    /// Surface tile `0x01` after the low-tile allowance — 1/7 special
-    /// whirlpool roll, otherwise surface default/aquatic bucket.
+    /// Surface tile `0x01` after the low-tile allowance — 1-in-8
+    /// special whirlpool roll, otherwise surface default/aquatic
+    /// bucket.
     SurfaceTile1WhirlpoolOrAquatic,
     /// Terrain tile `0x07` (parched desert) — 1-in-4 Sand Trap special
     /// roll; failure rejects the candidate.
@@ -619,8 +621,8 @@ pub enum SpawnTerrainBranch {
     UnderworldTile4RotWorm,
     /// Surface town-outline tile `0x0C`/`0x0D` — reject.
     HardReject,
-    /// Low/shore/road/bridge tile that needs the 1/4 allowance die
-    /// before bucket selection.
+    /// Water / river / waterfall / open-water tile that needs the
+    /// sixteen-in-sixty-five allowance die before bucket selection.
     LowTileAllowance,
     /// Tile passes through to the land bucket selected by world
     /// plane (`0x00..=0x0F` after the special/hard-reject cases plus
@@ -661,9 +663,15 @@ pub const fn spawn_terrain_branch(tile: u8, underworld: bool) -> SpawnTerrainBra
     SpawnTerrainBranch::HighTileReject
 }
 
-/// `encounters.md §4` whirlpool-special chance gate (1-in-7 on
-/// surface tile 1).
-pub const SPAWN_WHIRLPOOL_DENOMINATOR: u8 = 7;
+/// `encounters.md §4` whirlpool-special chance gate on surface tile 1:
+/// "**One-in-eight** chance of a special animated active-object class
+/// whose outdoor engagement is the whirlpool/forced-underworld
+/// branch". An earlier revision said one-in-seven; that is withdrawn,
+/// "the shared range draw is inclusive on both bounds, so a draw over
+/// the closed interval `[0, 7]` accepted on one value is one in
+/// eight." Passed to `random_mod_u8`, which draws `[0, N - 1]`, so the
+/// denominator is the interval's *size*, not its width.
+pub const SPAWN_WHIRLPOOL_DENOMINATOR: u8 = 8;
 
 /// `encounters.md §4` Sand Trap chance gate on terrain tile 7
 /// (parched desert); failure rejects the candidate. "The draw is over
@@ -672,9 +680,30 @@ pub const SPAWN_WHIRLPOOL_DENOMINATOR: u8 = 7;
 /// the sea-serpent naming.
 pub const SPAWN_SAND_TRAP_DENOMINATOR: u8 = 4;
 
-/// `encounters.md §4` low-tile allowance die (1-in-4 on the low /
-/// shore / road / bridge bands); failure rejects the candidate.
-pub const SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR: u8 = 4;
+/// `encounters.md §4` low-tile allowance die on the water / river /
+/// waterfall / open-water bands; failure rejects the candidate.
+///
+/// This is deliberately **not** a `_DENOMINATOR`, because the
+/// published rule is not one-in-N: "The die is a draw over the closed
+/// interval `[0, 64]`, inclusive, accepted when the result is below
+/// sixteen — **sixteen outcomes in sixty-five**." An earlier revision
+/// called it "one-in-four"; that is withdrawn as an approximation.
+/// `16/65 ~= 0.246` sits close enough to `1/4` that the wrong shape
+/// read as correct — a near miss is harder to spot than a wild one.
+/// See [`spawn_low_tile_allowance_accepts`].
+pub const SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH: u8 = 64;
+/// `encounters.md §4` low-tile allowance acceptance bound: the draw is
+/// accepted when it is strictly below this value.
+pub const SPAWN_LOW_TILE_ALLOWANCE_ACCEPT_BELOW: u8 = 16;
+
+/// `encounters.md §4`: returns `true` when a low-tile allowance draw
+/// over the closed interval
+/// `[0, SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH]` allows the candidate
+/// through to bucket selection. Sixteen of the sixty-five outcomes
+/// accept; the other forty-nine reject the candidate.
+pub const fn spawn_low_tile_allowance_accepts(roll: u8) -> bool {
+    roll < SPAWN_LOW_TILE_ALLOWANCE_ACCEPT_BELOW
+}
 
 /// `encounters.md §4` encounter-spawner retry budget. The retry
 /// loop returns silently after this many rejected candidates.

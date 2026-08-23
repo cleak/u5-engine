@@ -2125,8 +2125,14 @@ fn native_world_encounter_probe_skips_during_active_combat() {
 
 #[test]
 fn native_world_encounter_spawner_seeds_sea_creature_auxiliary() {
+    // The seed selects the pirate-ship family out of the surface aquatic
+    // bucket. It moved from `0x0009` when the low-tile allowance die was
+    // corrected from a one-in-four denominator to the published
+    // sixteen-in-sixty-five draw (`encounters.md SECTION 4`): the allowance
+    // now accepts a different set of candidate cells, so the retry loop
+    // reaches the bucket roll at a different point in the PRNG stream.
     let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
-    state.prng_state = 0x0009;
+    state.prng_state = 0x0007;
     let starting_prng_state = state.prng_state;
 
     let slot = state.spawn_native_world_encounter(WorldPlane::Britannia);
@@ -2152,7 +2158,8 @@ fn native_world_encounter_spawner_evicts_on_a_full_table_per_encounters_md_9() {
     // spawner itself is the coordinate loop giving up after one hundred
     // twenty-eight rejected candidate cells."
     let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
-    state.prng_state = 0x0009;
+    // Same seed as the sea-creature test above, for the same reason.
+    state.prng_state = 0x0007;
     state.active_objects.resize(
         OOL_SLOTS,
         ActiveObject {
@@ -2538,3 +2545,4 @@ fn malformed_retired_waterfall_sidecar_is_ignored_by_runtime_movement() {
     assert!(!state.message.contains("waterfall swept"));
     let _ = fs::remove_dir_all(dir);
 }
+

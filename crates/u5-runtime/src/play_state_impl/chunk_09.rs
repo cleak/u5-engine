@@ -221,10 +221,14 @@ impl PlayState {
             }
             SpawnTerrainBranch::UnderworldTile4RotWorm => Some(0xF8),
             SpawnTerrainBranch::HardReject | SpawnTerrainBranch::HighTileReject => None,
+            // `encounters.md §4`: the low-tile allowance die is "a draw over
+            // the closed interval `[0, 64]`, inclusive, accepted when the
+            // result is below sixteen — **sixteen outcomes in sixty-five**".
+            // Not a one-in-N gate, so it does not go through
+            // `native_world_encounter_mod`.
             SpawnTerrainBranch::LowTileAllowance => {
-                if self.native_world_encounter_mod(0, 0x64, SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR)
-                    != 0
-                {
+                let allowance = self.random_range_u8(0, SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH);
+                if !spawn_low_tile_allowance_accepts(allowance) {
                     return None;
                 }
                 if underworld {
@@ -2895,7 +2899,25 @@ impl PlayState {
 
     /// Append one impact-path line to the message window, matching the
     /// broadside announcement's join.
+    /// Emit one turn-epilogue announcement (the broadside boom line, the
+    /// ship-sunk line).
+    ///
+    /// `text-output.md SECTION 11` is explicit that a single message slot
+    /// written by the epilogue and then overwritten by a command handler
+    /// "has invented a conflict the original does not have, and will
+    /// silently lose whichever line is written first" - which is exactly
+    /// what happened here: every command handler assigns
+    /// [`PlayState::message`] after `advance_turn` has run the epilogue,
+    /// so the boom line never reached the player on a real turn. The line
+    /// therefore goes into the transcript as it occurs; the handler's own
+    /// result lands beneath it, which is the published order.
+    ///
+    /// The slot assignment stays for the many direct callers and tests
+    /// that read `message`, and
+    /// [`PlayState::push_epilogue_transcript_line`] keeps an unoverwritten
+    /// slot from transcribing the same line twice.
     fn push_impact_line(&mut self, line: &str) {
+        self.push_epilogue_transcript_line(line);
         if self.message.is_empty() {
             self.message = line.to_string();
         } else {

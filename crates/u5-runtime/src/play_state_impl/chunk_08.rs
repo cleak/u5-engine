@@ -439,8 +439,12 @@ impl PlayState {
             && sleep_ambush_rest_interrupted(self.dangerous_rest_interrupt_roll())
     }
 
+    // `encounters.md §6`: "the rest handler rolls the shared integer PRNG
+    // across sixty-four outcomes. The zero outcome interrupts". Anchored
+    // to the constant so the interval's *size* (64) and its inclusive
+    // high bound (63) cannot drift apart.
     pub fn dangerous_rest_interrupt_roll(&mut self) -> u8 {
-        self.random_range_u8(0, 63)
+        self.random_mod_u8(SLEEP_AMBUSH_INTERRUPT_DENOMINATOR)
     }
 
     pub fn sleep_ambush_monster_row(&mut self) -> u8 {
