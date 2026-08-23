@@ -438,7 +438,9 @@ impl PlayState {
         }
 
         let Some(area) = self.top_down_render_area() else {
-            return self.render_dungeon_viewport(radius, atlas.depth).map(Some);
+            return self
+                .render_dungeon_viewport(radius, atlas.depth, atlas.dungeon_billboards.as_ref())
+                .map(Some);
         };
         let _ = isize::try_from(radius).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, "viewport radius is too large")
@@ -613,6 +615,7 @@ impl PlayState {
         &self,
         radius: usize,
         depth: TileGraphicsDepth,
+        billboards: Option<&DungeonBillboardBanks>,
     ) -> io::Result<TileViewport> {
         // Clean first-person raster for the current dungeon view. It follows
         // the public light gate and facing-relative wall/feature checks; exact
@@ -649,7 +652,7 @@ impl PlayState {
             return Ok(viewport);
         }
 
-        self.draw_dungeon_corridor(level, &mut viewport);
+        self.draw_dungeon_corridor(level, &mut viewport, billboards);
         Ok(viewport)
     }
 
@@ -668,11 +671,16 @@ impl PlayState {
     /// backward sweep of section 6.5 and sections 6.6-6.8 - are not
     /// drawn yet: they come from a separate art file this engine does
     /// not load. Nothing invented stands in for them.
-    fn draw_dungeon_corridor(&self, level: u8, viewport: &mut TileViewport) {
+    fn draw_dungeon_corridor(
+        &self,
+        level: u8,
+        viewport: &mut TileViewport,
+        billboards: Option<&DungeonBillboardBanks>,
+    ) {
         let Area::Dungeon { scene, .. } = self.area else {
             return;
         };
-        let Some(banks) = dungeon_billboard_banks() else {
+        let Some(banks) = billboards else {
             return;
         };
         let bank = banks.bank(scene.presentation_flavour());

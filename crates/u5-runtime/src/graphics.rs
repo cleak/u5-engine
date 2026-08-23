@@ -69,6 +69,17 @@ impl TileGraphicsDepth {
 pub struct TileAtlas {
     pub depth: TileGraphicsDepth,
     pub pixels: Vec<u8>,
+    /// The three dungeon corridor billboard banks, when the game
+    /// directory ships them.
+    ///
+    /// They live on the atlas because it is exactly the right scope -
+    /// the graphics resources for one game directory at one depth,
+    /// loaded once and passed by reference to every renderer. Putting
+    /// them on `PlayState` would copy megabytes per frame, since the
+    /// compositor clones the state twice per frame; putting them in a
+    /// process global made rendering depend on whether some earlier
+    /// caller happened to load a real game directory.
+    pub dungeon_billboards: Option<crate::dungeon_view::DungeonBillboardBanks>,
 }
 
 impl TileAtlas {

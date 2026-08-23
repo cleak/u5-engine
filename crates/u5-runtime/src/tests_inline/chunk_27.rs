@@ -554,3 +554,124 @@ fn dungeon_billboard_bank_is_chosen_by_flavour_byte_not_declaration_order() {
     assert_eq!(dominant("DNG2"), 4);
     assert_eq!(dominant("DNG3"), 7);
 }
+
+#[test]
+fn dungeon_billboard_slot_table_matches_the_published_addressing_rule() {
+    // `cleak/u5-spec#84`: 0-3 side plain wall, 4-7 side door, 8-11
+    // forward plain wall, 12-15 forward door, 16-19 side opening,
+    // 20-23 side flavour wall, 24-27 forward flavour wall - addressed
+    // as `slot = family_base + band`, so the low two bits of a slot
+    // index are the depth band.
+    use DungeonBillboardRole::*;
+    for (role, base) in [
+        (SideWall, 0usize),
+        (SideDoor, 4),
+        (ForwardWall, 8),
+        (ForwardDoor, 12),
+        (SideOpening, 16),
+        (SideFlavourWall, 20),
+        (ForwardFlavourWall, 24),
+    ] {
+        assert_eq!(role.family_base_slot(), base, "{role:?}");
+        for band in 0..DUNGEON_BANDS {
+            if let Some(slot) = role.slot(band) {
+                assert_eq!(slot, base + band);
+                assert_eq!(slot % 4, band, "the low two bits are the band");
+                assert_eq!(slot / 4, base / 4, "the high bits are the family");
+            }
+        }
+    }
+}
+
+#[test]
+fn decorated_dungeon_families_are_their_plain_counterparts_plus_scenery() {
+    // `cleak/u5-spec#84` offers a self-check that confirms the
+    // plain/flavour pairing without trusting anyone's role names: a
+    // decorated family is its plain counterpart with scenery
+    // composited on top, so 20-23 differs from 0-3 by only a few per
+    // cent of pixels where unrelated families differ by far more.
+    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join("DNG1.16").exists() {
+        return;
+    }
+    let dir = load_graphic_image_directory(game_dir, "DNG1", TileGraphicsDepth::Ega16).unwrap();
+    let difference = |a: usize, b: usize| -> Option<f64> {
+        let (Some(left), Some(right)) = (dir.images[a].as_ref(), dir.images[b].as_ref()) else {
+            return None;
+        };
+        if left.width != right.width || left.height != right.height {
+            return None;
+        }
+        let differing = left
+            .pixels
+            .iter()
+            .zip(right.pixels.iter())
+            .filter(|(x, y)| x != y)
+            .count();
+        Some(100.0 * differing as f64 / left.pixels.len() as f64)
+    };
+
+    // Aggregate over all bands rather than per band: at band 3 every
+    // image is eight pixels wide, so any two families are close there
+    // and a per-band control would not discriminate.
+    let aggregate = |left_base: usize, right_base: usize| -> f64 {
+        let mut differing = 0usize;
+        let mut total = 0usize;
+        for band in 0..DUNGEON_BANDS {
+            let (Some(left), Some(right)) = (
+                dir.images[left_base + band].as_ref(),
+                dir.images[right_base + band].as_ref(),
+            ) else {
+                continue;
+            };
+            differing += left
+                .pixels
+                .iter()
+                .zip(right.pixels.iter())
+                .filter(|(x, y)| x != y)
+                .count();
+            total += left.pixels.len();
+        }
+        100.0 * differing as f64 / total as f64
+    };
+
+    // Side: 20-23 is 0-3 plus scenery; 16-19 is a different image
+    // entirely.
+    let paired = aggregate(
+        DungeonBillboardRole::SideFlavourWall.family_base_slot(),
+        DungeonBillboardRole::SideWall.family_base_slot(),
+    );
+    let unrelated = aggregate(
+        DungeonBillboardRole::SideFlavourWall.family_base_slot(),
+        DungeonBillboardRole::SideOpening.family_base_slot(),
+    );
+    assert!(paired < 10.0, "paired side families differ by {paired:.1}%");
+    assert!(
+        unrelated > 2.0 * paired,
+        "paired {paired:.1}% must be well under unrelated {unrelated:.1}%"
+    );
+    for band in 0..DUNGEON_BANDS {
+        let per_band = difference(
+            DungeonBillboardRole::SideFlavourWall.family_base_slot() + band,
+            DungeonBillboardRole::SideWall.family_base_slot() + band,
+        )
+        .unwrap();
+        assert!(
+            per_band < 10.0,
+            "side flavour band {band} should be plain plus scenery, got {per_band:.1}%"
+        );
+    }
+
+    // Forward: 25-27 against 9-11. Band 0 has no image in either.
+    for band in 1..DUNGEON_BANDS {
+        let paired = difference(
+            DungeonBillboardRole::ForwardFlavourWall.family_base_slot() + band,
+            DungeonBillboardRole::ForwardWall.family_base_slot() + band,
+        )
+        .unwrap();
+        assert!(
+            paired < 10.0,
+            "forward flavour band {band} should be its plain counterpart plus scenery, got {paired:.1}%"
+        );
+    }
+}

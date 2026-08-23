@@ -5643,6 +5643,7 @@ fn display_driver_loaded_tile_graphics_save_restore_and_plane_swap() {
     let mut atlas = TileAtlas {
         depth: TileGraphicsDepth::Ega16,
         pixels: vec![0; TILE_ATLAS_TILE_PIXELS * 3],
+        dungeon_billboards: None,
     };
     atlas.pixels[0] = 0x02;
     atlas.pixels[TILE_ATLAS_TILE_PIXELS] = 0x04;
