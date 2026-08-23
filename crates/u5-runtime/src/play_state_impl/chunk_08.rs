@@ -1127,15 +1127,41 @@ impl PlayState {
             return Ok(None);
         }
 
-        // `overworld.md §9.2` (spec HEAD c00bf63) stage B: the transit
-        // drives the *shared* gate-presence counter from 15 down to 1 and
-        // "the countdown ends with the counter at zero". Because the
-        // counter is shared, a gate that was mid-rise elsewhere in view is
-        // driven to zero by this unrelated transit and rises again from
-        // zero on subsequent turns. §9.1 calls that out explicitly as "the
-        // original's behaviour, not a defect to design around", so it is
-        // reproduced here rather than worked around.
-        self.natural_moongate_counter = 0;
+        // `overworld.md §9.2` (spec HEAD c00bf63): on `0xDC` the hook runs
+        // a **blocking** transition to completion "before the party is
+        // relocated and before any key is read", and the player cannot
+        // skip it. Stage A swallows the party into the gate cell over 256
+        // dispatch steps; stage B drives the *shared* gate-presence
+        // counter from 15 down to 1 and "the countdown ends with the
+        // counter at zero".
+        //
+        // Because the counter is shared, a gate that was mid-rise
+        // elsewhere in view is driven to zero by this unrelated transit
+        // and rises again from zero on subsequent turns. §9.1 calls that
+        // out explicitly as "the original's behaviour, not a defect to
+        // design around", so it is reproduced here rather than worked
+        // around.
+        let playback = self.play_natural_moongate_transit()?;
+        let outcome = self.resolve_natural_moongate_entry_after_transit(game_dir, idx);
+        // The warp below rebuilds the state from `PlayOptions`, which does
+        // not carry presentation bookkeeping; the transit it dropped had
+        // already finished, so restore its record afterwards rather than
+        // letting the destination scene claim none played.
+        self.last_natural_moongate_transit = Some(playback);
+        outcome
+    }
+
+    /// `overworld.md §9.2`: everything the live-gate entry hook does once
+    /// the blocking transition has run to completion - step 4's cell
+    /// rewrite, then the hook's two outcomes (the midnight kneel overlay,
+    /// or a cached-glyph destination through the shared saved-slot warp).
+    fn resolve_natural_moongate_entry_after_transit(
+        &mut self,
+        game_dir: &Path,
+        idx: usize,
+    ) -> io::Result<Option<MoveOutcome>> {
+        // §9.2 step 4: "The gate's live cell is rewritten to terrain `5`,
+        // the viewport is marked dirty, and the cell is repainted."
         self.grid[idx] = NATURAL_MOONGATE_RESTORED_TERRAIN_TILE;
         self.refresh_world_live_chunks_for_current_area()?;
         self.natural_moongate_live_cells
@@ -1180,6 +1206,39 @@ impl PlayState {
                 Ok(Some(MoveOutcome::Blocked))
             }
         }
+    }
+
+    /// `overworld.md §9.2` (spec HEAD c00bf63): play the blocking transit
+    /// transition at the gate cell.
+    ///
+    /// The whole sequence runs here, in one call. `§9.2` makes it blocking
+    /// and unskippable - "the abort poll that some other presentation
+    /// effects offer is disabled in overworld scenes" - so this leaves no
+    /// resumable position behind, only a record of what it spent.
+    ///
+    /// Stage A is "paced by a world tick every eight steps rather than by
+    /// a fixed wait, so it also advances ambient animation while it runs":
+    /// each of those ticks runs the `animation.md §6` static-tile pass,
+    /// which is the ambient animation this engine has. The gate-presence
+    /// counter is deliberately *not* advanced by that pass - `§9.1` states
+    /// it "is not advanced by the animation tick" - so the two remain
+    /// independent while both move during the stage.
+    ///
+    /// Stage B drives the shared counter from 15 down to 1 and ends it at
+    /// zero. The pixel-level presentation of both stages lives in
+    /// [`crate::moongate_transit::run_moongate_transit_presentation`],
+    /// which composes each stage-B frame through the `§9.1` scratch slot.
+    pub fn play_natural_moongate_transit(&mut self) -> io::Result<MoongateTransitPlayback> {
+        let animation = &mut self.animation;
+        let playback =
+            run_moongate_transit(&mut self.natural_moongate_counter, &mut |step, _phase| {
+                for _ in 0..step.world_ticks() {
+                    animation.tick_static_tiles();
+                }
+                Ok(())
+            })?;
+        self.last_natural_moongate_transit = Some(playback);
+        Ok(playback)
     }
 
     pub fn cached_natural_moongate_slot_index(&self) -> Option<usize> {
