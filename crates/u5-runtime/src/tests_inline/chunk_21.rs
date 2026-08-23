@@ -5063,29 +5063,6 @@
     }
 
     #[test]
-    fn animation_clock_cycles_moongate_through_animation_frames() {
-        // Moongate cycles through MOONGATE_ANIMATION_FRAMES sprite frames
-        // starting at MOONGATE_TILE_BASE. The full ring is verified per
-        // u5-spec/catalogs/tile-catalog.md and the LOOK2.DAT moongate
-        // labelling of tile 0xDC.
-        let mut clock = AnimationClock::default();
-        let frames: Vec<_> = (0..MOONGATE_ANIMATION_FRAMES)
-            .map(|_| {
-                let tile = clock.resolve_moongate_tile();
-                clock.tick_moongate();
-                tile
-            })
-            .collect();
-
-        assert_eq!(
-            frames,
-            (MOONGATE_TILE_BASE..MOONGATE_TILE_BASE + MOONGATE_ANIMATION_FRAMES)
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(clock.resolve_moongate_tile(), MOONGATE_TILE_BASE);
-    }
-
-    #[test]
     fn active_object_phase_respects_steady_countdown_and_decision() {
         let mut steady = ActiveObject {
             type_byte: PLAYER_TILE,

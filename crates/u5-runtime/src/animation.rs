@@ -184,16 +184,20 @@ pub const fn static_tile_animation_pass(phase: u8) -> StaticTileAnimationPass {
     }
 }
 
+/// `animation.md §6` global tile-animation clock.
+///
+/// It carries no moongate member. `overworld.md §9.1` (spec HEAD
+/// c00bf63) states the gate-presence counter "is **not** a member of the
+/// global tile-animation families in `systems/animation.md` Section 6.
+/// It is not advanced by the animation tick, it has no frame selector,
+/// and skipping a rendered frame does not advance it." The counter lives
+/// on `PlayState` as save-backed world state instead; see
+/// `crate::moongate_phase`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AnimationClock {
     /// `animation.md §6` shared phase counter, wrapped at
     /// [`STATIC_TILE_ANIMATION_PERIOD_TICKS`].
     pub frame: u8,
-    /// Moongate presence counter. **Not** a member of the §6 families:
-    /// the tile-animation tick never advances it and it has no frame
-    /// selector. See `catalogs/tile-catalog.md §4`, "Moongate graphics
-    /// are **not** animated at all".
-    pub moongate_frame: u8,
 }
 
 impl AnimationClock {
@@ -201,28 +205,13 @@ impl AnimationClock {
     pub const fn at_static_tile_phase(phase: u8) -> Self {
         Self {
             frame: phase % STATIC_TILE_ANIMATION_PERIOD_TICKS,
-            moongate_frame: 0,
         }
     }
 
     /// `animation.md §6`: run the pass once, then increment the shared
     /// phase counter — "whichever path was taken".
-    ///
-    /// This never touches [`Self::moongate_frame`].
     pub fn tick_static_tiles(&mut self) {
         self.frame = self.frame.wrapping_add(1) % STATIC_TILE_ANIMATION_PERIOD_TICKS;
-    }
-
-    pub fn tick_moongate(&mut self) {
-        // `MOONGATE_ANIMATION_FRAMES` is 1 - `moons.md §3` withdrew the
-        // moongate animator, so the single frame is the whole cycle and
-        // the modulo pins the counter at zero. Keep the modulo rather
-        // than hard-coding the result: it is the frame-count constant
-        // that carries the contract, not this line.
-        #[allow(clippy::modulo_one)]
-        {
-            self.moongate_frame = self.moongate_frame.wrapping_add(1) % MOONGATE_ANIMATION_FRAMES;
-        }
     }
 
     /// How many times `family`'s selectors have advanced since phase
@@ -255,10 +244,6 @@ impl AnimationClock {
         let group_base = family.cycle_group_base(tile);
         let own_selector_offset = tile - group_base;
         group_base + (own_selector_offset + self.static_tile_advances(family)) % cycle
-    }
-
-    pub fn resolve_moongate_tile(self) -> u8 {
-        MOONGATE_TILE_BASE + self.moongate_frame
     }
 }
 

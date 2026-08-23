@@ -104,21 +104,14 @@ pub const fn overworld_underfoot_forces_dark(underfoot_tile: u8, opaque_state_ta
         && opaque_state_tag != OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG
 }
 
-/// `overworld.md §natural-gates`: minimum ambient light at which the
-/// per-frame natural-moongate animator may stamp a frame. Below this
-/// threshold the animator resets its phase instead of drawing.
-/// Equal to [`FULL_DAYLIGHT`]: the animator's "daytime threshold"
-/// matches the daytime ambient value the time/lighting cleanup
-/// writes during the surface daytime band.
-pub const MOONGATE_ANIMATOR_DAYTIME_THRESHOLD: u8 = FULL_DAYLIGHT;
-
-/// `overworld.md §natural-gates`: returns `true` when the per-frame
-/// natural-moongate animator may stamp a frame at this ambient
-/// light value. Returns `false` for ambient values below the
-/// daytime threshold, where the animator resets its phase instead.
-pub const fn moongate_animator_render_eligible(ambient_light: u8) -> bool {
-    ambient_light >= MOONGATE_ANIMATOR_DAYTIME_THRESHOLD
-}
+// `overworld.md §9` (spec HEAD c00bf63) withdraws the natural-moongate
+// "daylight threshold" entirely. The threshold was both inverted and
+// misattributed: the scratch block it guarded belongs to the night-time
+// rotating light beacon of `visibility.md §12.6`, whose gate runs only
+// while ambient is *strictly below* full daylight, and which never holds
+// a moongate. Nothing on the moongate path reads ambient light; gate
+// presence is decided by the hour alone through
+// `crate::moongate::natural_moongate_counter_step`.
 
 /// `lighting.md §8`: Ignite outside dungeon scenes sets the torch counter
 /// to a fixed 240-unit value, overwriting any prior burn.

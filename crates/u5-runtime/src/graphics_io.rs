@@ -114,6 +114,38 @@ pub fn blit_tile_id_to_viewport(
     Ok(())
 }
 
+/// Opaque blit of an already-composed tile-sized pixel block, for frames
+/// that are built at draw time rather than read from the atlas.
+///
+/// `overworld.md §9.1` (spec HEAD `c00bf63`) needs this for the moon-gate
+/// transition frame, which is composed into the dedicated scratch tile
+/// `0x116` and drawn from there.
+pub fn blit_tile_pixels_to_viewport(
+    viewport: &mut TileViewport,
+    tile_pixels: &[u8],
+    cell_x: usize,
+    cell_y: usize,
+) -> io::Result<()> {
+    if tile_pixels.len() != TILE_ATLAS_TILE_PIXELS {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "composed tile needs {TILE_ATLAS_TILE_PIXELS} pixels, got {}",
+                tile_pixels.len()
+            ),
+        ));
+    }
+    let dst_x = cell_x * TILE_ATLAS_SIDE;
+    let dst_y = cell_y * TILE_ATLAS_SIDE;
+    for row in 0..TILE_ATLAS_SIDE {
+        let dst_start = (dst_y + row) * viewport.width + dst_x;
+        let src_start = row * TILE_ATLAS_SIDE;
+        viewport.pixels[dst_start..dst_start + TILE_ATLAS_SIDE]
+            .copy_from_slice(&tile_pixels[src_start..src_start + TILE_ATLAS_SIDE]);
+    }
+    Ok(())
+}
+
 pub fn tile_graphics_file_name(stem: &str, depth: TileGraphicsDepth) -> String {
     format!("{stem}.{}", depth.file_suffix())
 }

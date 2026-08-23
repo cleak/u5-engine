@@ -68,6 +68,7 @@ pub mod misc_tables;
 pub mod misc_tables_io;
 pub mod miscmsg_io;
 pub mod moongate;
+pub mod moongate_phase;
 pub mod npc_runtime;
 pub mod ool_audit;
 pub mod party;
@@ -390,11 +391,10 @@ pub use karma::{
 pub use lighting::{
     DAWN_DUSK_LAST_INDEX, DAWN_DUSK_STEP_MINUTES, DAWN_HOUR, DUNGEON_TORCH_INCREMENT_MAX,
     DUNGEON_TORCH_INCREMENT_MIN, DUSK_HOUR, GREAT_LIGHT_SPELL_DURATION, LAST_IN_HOUR_MINUTE,
-    LIGHT_SPELL_DURATION, LightDecayCadence, MOONGATE_ANIMATOR_DAYTIME_THRESHOLD,
-    OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG, OVERWORLD_UNDERFOOT_BLACKOUT_TILE,
-    ambient_is_sentinel, apply_personal_light, daylight_base_value, decay_light_counter,
-    dungeon_blackout, ignite_torch_dungeon, ignite_torch_surface, light_counter_increment,
-    light_counter_spend_with_tag, moongate_animator_render_eligible,
+    LIGHT_SPELL_DURATION, LightDecayCadence, OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG,
+    OVERWORLD_UNDERFOOT_BLACKOUT_TILE, ambient_is_sentinel, apply_personal_light,
+    daylight_base_value, decay_light_counter, dungeon_blackout, ignite_torch_dungeon,
+    ignite_torch_surface, light_counter_increment, light_counter_spend_with_tag,
     overworld_underfoot_forces_dark,
 };
 pub use location_audit::*;
@@ -459,6 +459,12 @@ pub use moongate::{
     natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,
     natural_moongate_counter_step, natural_moongate_dispatches_meditate,
     natural_moongate_slot_eligible, trammel_moonstone_slot_for_hour,
+};
+pub use moongate_phase::{
+    MOONGATE_PHASE_ENDGAME_GROUND_TILE, MOONGATE_PHASE_FULL, MOONGATE_PHASE_GROUND_TILE,
+    MOONGATE_PHASE_SCRATCH_TILE, MoongatePhaseDraw, compose_moongate_phase_frame,
+    moongate_phase_draw, moongate_phase_gate_tile, moongate_phase_ground_tile,
+    with_moongate_phase_scratch_tile,
 };
 pub use npc_runtime::{
     DoorTracker, LocationMarkers, NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST,
@@ -793,4 +799,5 @@ mod tests {
     include!("tests_inline/chunk_27.rs");
     include!("tests_inline/chunk_28.rs");
     include!("tests_inline/chunk_29.rs");
+    include!("tests_inline/chunk_30.rs");
 }

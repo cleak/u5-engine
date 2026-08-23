@@ -274,22 +274,6 @@
         }
     }
 
-    /// `catalogs/tile-catalog.md §4`: "Moongate graphics are **not**
-    /// animated at all." The moongate presence counter is not a member
-    /// of the `animation.md §6` families and the tile-animation tick
-    /// must never advance it.
-    #[test]
-    fn static_tile_tick_does_not_advance_the_moongate_counter() {
-        let mut clock = AnimationClock::default();
-        for _ in 0..(STATIC_TILE_ANIMATION_PERIOD_TICKS * 3) {
-            clock.tick_static_tiles();
-            assert_eq!(
-                clock.moongate_frame, 0,
-                "tick_static_tiles must leave the moongate presence counter alone"
-            );
-        }
-    }
-
     /// `animation.md §6`: "The counter is incremented once at the end of
     /// the pass, whichever path was taken." Eight ticks returns every
     /// family's selectors to phase zero, and nothing shorter does.

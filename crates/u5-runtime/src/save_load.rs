@@ -253,6 +253,10 @@ pub fn play_options_from_save_bytes_named(
         shrine_codex_mask: bytes[SAVE_SHRINE_CODEX_MASK_OFFSET],
         moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],
         toll_progress: bytes[SAVE_TOLL_PROGRESS_OFFSET],
+        // `overworld.md §9.1` (spec HEAD c00bf63): the gate-presence
+        // counter is save-backed, so a game saved mid-rise reloads at
+        // the same gate height.
+        natural_moongate_counter: bytes[SAVE_NATURAL_MOONGATE_COUNTER_OFFSET],
         avatar_stats,
         torches: bytes[SAVE_TORCH_STOCK_OFFSET],
         torch_counter: bytes[SAVE_TORCH_COUNTER_OFFSET],

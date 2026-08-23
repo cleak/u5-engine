@@ -289,9 +289,10 @@ pub const fn dungeon_level_change_spell_destination_allowed(tile: u8) -> bool {
 }
 
 pub fn render_glyph(tile: u8) -> char {
-    // Moongate frames have a dedicated glyph regardless of their numeric
-    // range; the actual sprite ids are 0xD4..=0xD7 (see constants.rs).
-    if (MOONGATE_TILE_BASE..MOONGATE_TILE_BASE + MOONGATE_ANIMATION_FRAMES).contains(&tile) {
+    // The moon-gate tile has a dedicated glyph. `overworld.md §9` (spec
+    // HEAD c00bf63) retracts the frame ring an earlier revision assumed,
+    // so this is one tile id, not a range.
+    if tile == MOONGATE_TILE_BASE {
         return '^';
     }
     match tile {

@@ -291,11 +291,16 @@ pub const PLAYER_TILE: u8 = 0xfc;
 // PLAYER_TILE shows a blacksmith's bellows on the map.
 pub const PLAYER_SPRITE_TILE: usize = 0x144;
 
-// Moongate is a single static sprite at tile id 0xDC per LOOK2.DAT
-// ("a moon gate!"). Earlier guesses at 0x80 and 0xD4 picked the wrong
-// tiles (food/banquet and a waterfall animation respectively).
+// Moongate artwork lives at tile id 0xDC per LOOK2.DAT ("a moon gate!").
+// Earlier guesses at 0x80 and 0xD4 picked the wrong tiles (food/banquet
+// and a waterfall animation respectively).
+//
+// `overworld.md §9` (spec HEAD c00bf63) retracts the per-render-frame
+// moongate animator in full: there is no frame ring here, so there is no
+// frame-count constant either. A gate cell is resolved through the
+// sixteen-step gate-presence phase model of `overworld.md §9.1`; see
+// `crate::moongate_phase`.
 pub const MOONGATE_TILE_BASE: u8 = 0xDC;
-pub const MOONGATE_ANIMATION_FRAMES: u8 = 1;
 pub const NATURAL_MOONGATE_TERRAIN_TILE: u8 = 0xDC;
 pub const NATURAL_MOONGATE_RESTORED_TERRAIN_TILE: u8 = 5;
 pub const NATURAL_MOONGATE_COUNTER_MAX: u8 = 16;
@@ -400,6 +405,14 @@ pub const SAVE_DAY_MIN: u8 = 1;
 pub const SAVE_DAY_MAX: u8 = crate::DAYS_PER_MONTH;
 pub const SAVE_HOUR_MAX: u8 = crate::HOURS_PER_DAY - 1;
 pub const SAVE_MINUTE_MAX: u8 = crate::MINUTES_PER_HOUR - 1;
+/// `overworld.md §9` / `§9.1` (spec HEAD c00bf63): the shared
+/// natural-moongate gate-presence counter is persisted world state, not
+/// scratch. It occupies one byte in the mode-scratch band, immediately
+/// below the moral-standing selector, and the shipped starting save
+/// holds zero there - correct, because the game opens at hour eight with
+/// no gate up. Modelling it as turn-scoped breaks save/load round-trip
+/// and loses the mid-rise state.
+pub const SAVE_NATURAL_MOONGATE_COUNTER_OFFSET: usize = 0x02e1;
 pub const SAVE_MORAL_STANDING_OFFSET: usize = 0x02e2;
 /// `formats/saved-gam.md §10`: toll-progress counter byte adjacent to
 /// the moral-standing selector. Increments per successful three-digit
