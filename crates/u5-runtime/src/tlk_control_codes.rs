@@ -136,10 +136,17 @@ pub const RESERVED_KEYWORD_REBUKE_WORDS: [&[u8]; RESERVED_KEYWORD_REBUKE_COUNT] 
 /// supports up to fifteen distinct label bytes per NPC blob,
 /// occupying values `0x91..=0x9F`. Labels are byte-level flow
 /// markers, not globally unique names; shipped blobs commonly reuse
-/// the same label byte multiple times (transfer + record). Anchored
-/// to `TLK_LABEL_LAST - TLK_LABEL_FIRST + 1` so the label-count
-/// derives from the published label-byte band.
-pub const TLK_LABEL_BYTE_COUNT: usize = (TLK_LABEL_LAST - TLK_LABEL_FIRST + 1) as usize;
+/// the same label byte multiple times (transfer + record).
+///
+/// A **literal**, taken from §7.7's own words ("up to fifteen label
+/// bytes per blob"), not computed from
+/// [`TLK_LABEL_LAST`]` - `[`TLK_LABEL_FIRST`]` + 1`. §7.7 publishes
+/// the count and the band as two statements and then observes that
+/// they agree; a derived count instead *reports* whatever the band
+/// says, so a band read short reports a short count with no test able
+/// to notice. The agreement is asserted as a consequence in
+/// `tlk_label_byte_count_matches_published_band_width`.
+pub const TLK_LABEL_BYTE_COUNT: usize = 15;
 
 /// `conversation.md §7.7`: returns the zero-based label index
 /// `0..=14` for a label byte in the `0x91..=0x9F` range, or `None`
@@ -439,20 +446,55 @@ pub const TLK_CODE_IF_ELSE_ALT: u8 = 0xFE;
 
 // §7.7 labels, GOTO, and scoped prompts (and §7 dispatcher boundaries)
 pub const TLK_CODE_LABEL_RECORD: u8 = 0x90;
+/// `conversation.md §7.7` label / GOTO-LABEL byte band, published as
+/// `0x91..=0x9F`. There is exactly one such band: the bytes the
+/// dispatcher routes into label dispatch, the bytes a `0x90 <label>`
+/// declaration can name, and the bytes an IF/ELSE argument can target
+/// are all the same fifteen values. `TLK_LABEL_FIRST` /
+/// [`TLK_LABEL_LAST`] are the only names for it.
+///
+/// Both boundaries are **literals read off the published text**, and
+/// neither derives from the other or from a neighbouring band. §7
+/// states the rule directly: "Do not derive either band's boundary
+/// from the other. They are adjacent as a fact about the original,
+/// not as a rule either enforces on the other." An earlier revision
+/// of this file defined the GOTO band as
+/// `TLK_CONTROL_CODE_LAST + 1 ..= that + 1`, which turned a wrong
+/// `TLK_CONTROL_CODE_LAST` into a wrong two-value GOTO band into a
+/// wrong `TLK_LABEL_LAST`, with every test in the chain still green.
+///
+/// §7.7 confirms the range from shipped content: scanning the four
+/// shipped `.TLK` files for `0x90 <label>` declarations finds eleven
+/// distinct labels spanning the range end to end, steeply skewed to
+/// the low end. Fifteen values are addressable; the four unexercised
+/// ones are not evidence of a narrower band.
 pub const TLK_LABEL_FIRST: u8 = 0x91;
-/// `conversation.md §7.7`: the label band ends at the last
-/// GOTO-label byte (0x9F). Anchored to
-/// [`TLK_CODE_GOTO_LABEL_LAST`] so the label band end and the
-/// GOTO-label pair end share one source of truth.
-pub const TLK_LABEL_LAST: u8 = TLK_CODE_GOTO_LABEL_LAST;
-/// `conversation.md §7.7`: the GOTO-label pair (0x9E, 0x9F) sits
-/// immediately past the engine-control byte band and forms a
-/// two-byte pair. Anchor the first label to
-/// [`TLK_CONTROL_CODE_LAST`] + 1 and the last label to
-/// FIRST + 1 so the GOTO-label adjacency has one source of
-/// truth.
-pub const TLK_CODE_GOTO_LABEL_FIRST: u8 = TLK_CONTROL_CODE_LAST + 1;
-pub const TLK_CODE_GOTO_LABEL_LAST: u8 = TLK_CODE_GOTO_LABEL_FIRST + 1;
+/// `conversation.md §7.7`: last label / GOTO-LABEL byte. Literal from
+/// the published `0x91..=0x9F`; see [`TLK_LABEL_FIRST`]. In shipped
+/// content `0x9F` is conventionally the blob's final record marker,
+/// which is why it is the second-most common label byte.
+pub const TLK_LABEL_LAST: u8 = 0x9F;
+/// Label byte the runner transfers to after an **accepted** `0x85`
+/// GOLD-PAYMENT, and its refused counterpart.
+///
+/// These are two *particular* label values inside
+/// [`TLK_LABEL_FIRST`]`..=`[`TLK_LABEL_LAST`], not band boundaries.
+/// They previously borrowed the GOTO band's boundary constants, which
+/// is how a two-value band and a two-arm convention came to look like
+/// the same fact; splitting them out is what lets the band widen to
+/// its published fifteen values without silently re-routing every
+/// paid arm to `0x91`, the most common label in shipped content.
+///
+/// **Not published by the spec.** `conversation.md` §7.6 says only
+/// that an unaffordable demand "prints the refusal line, clears its
+/// multi-byte state, and re-enters the keyword prompt rather than
+/// continuing the response" — it names no paid/refused label pair.
+/// The values here preserve this engine's existing behaviour
+/// unchanged; they are an engine convention awaiting a clean-room
+/// answer, not a decoded fact. Do not treat them as spec-backed.
+pub const TLK_GOLD_PAYMENT_PAID_LABEL: u8 = 0x9E;
+/// See [`TLK_GOLD_PAYMENT_PAID_LABEL`]; equally unpublished.
+pub const TLK_GOLD_PAYMENT_REFUSED_LABEL: u8 = 0x9F;
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
 /// `conversation.md §6` keyword-input loop prompt. The conversation
@@ -497,17 +539,19 @@ pub enum TlkByteRunnerClass {
     /// byte indexes the shared 128-entry common-word pointer table
     /// and the pointed word is expanded inline into the output.
     DictionaryToken,
-    /// `0x9E..=0x9F` — GOTO-LABEL codes. Their high bit is set but
+    /// `0x91..=0x9F` — GOTO-LABEL codes. Their high bit is set but
     /// they participate in label dispatch, not the ordinary control
-    /// table.
+    /// table. All fifteen values, not just the top of the range:
+    /// eleven are exercised by shipped content (§7.7).
     GotoLabel,
     /// `0xA0..=0xFD` — high-bit-set printable bytes. The word buffer
     /// strips the high bit before glyph output; the `0x8E` print-mask
     /// toggle controls whether the queued byte keeps that high bit as
     /// a soft-break marker.
     PrintableText,
-    /// `0x80..=0x9D` — engine control codes (the §7.2..§7.6 table).
-    /// `0x9E..=0x9F` are carved out to the `GotoLabel` branch above.
+    /// `0x81..=0x90` — engine control codes (the §7.2..§7.6 table).
+    /// `0x80` below is a dictionary token and `0x91..=0x9F` above is
+    /// the label band; the control codes are what lies between them.
     ControlCode,
     /// `0xFE` — multi-byte command introducer that aliases `0x8C`
     /// IF/ELSE.
@@ -524,40 +568,55 @@ pub enum TlkByteRunnerClass {
 /// `conversation.md §7` printable-text byte range. The byte runner's
 /// printable branch accepts high-bit-set bytes in `0xA0..=0xFD`. The
 /// word-buffer strips the high bit before glyph output.
-/// `conversation.md §7`: the printable-text byte band begins
-/// immediately past the label band end (0x9F). Anchored to
-/// [`TLK_LABEL_LAST`] + 1 so the label→printable-text adjacency
-/// has one source of truth.
-pub const TLK_PRINTABLE_TEXT_FIRST: u8 = TLK_LABEL_LAST + 1;
-pub const TLK_PRINTABLE_TEXT_LAST: u8 = 0xFD;
-
-/// `conversation.md §7` engine-control byte range. The byte runner's
-/// control-code branch accepts `0x80..=0x9D`; the `0x9E..=0x9F` GOTO
-/// label pair is carved out by [`TLK_CODE_GOTO_LABEL_FIRST`] /
-/// [`TLK_CODE_GOTO_LABEL_LAST`] before this range is matched. The
-/// control-code range begins at `0x81`.
 ///
 /// This is a **literal, deliberately not** anchored to
-/// [`TLK_DICTIONARY_TOKEN_LAST`] `+ 1`. The two bands being adjacent
-/// by construction is what let the dictionary band's off-by-one at
-/// `0x80` propagate straight into the control-code band and steal a
-/// token from it. The adjacency is a fact about these two published
-/// values, not a rule either of them enforces on the other.
-pub const TLK_CONTROL_CODE_FIRST: u8 = 0x81;
-pub const TLK_CONTROL_CODE_LAST: u8 = 0x9D;
+/// [`TLK_LABEL_LAST`] `+ 1`. Printable text starting one past the
+/// label band is an observation about two independently published
+/// ranges, not a rule either imposes on the other; deriving it would
+/// silently widen the printable band the moment the label band was
+/// read short. A test asserts the adjacency as a consequence.
+pub const TLK_PRINTABLE_TEXT_FIRST: u8 = 0xA0;
+pub const TLK_PRINTABLE_TEXT_LAST: u8 = 0xFD;
 
-/// `conversation.md §7`: classify a byte by the value-range table that
-/// the byte runner's top-level dispatcher follows in order. The order
-/// matters because `0x9E..=0x9F` would otherwise be subsumed by the
-/// `0x81..=0x9F` control-code range; the dispatcher carves the GOTO
-/// pair out first.
+/// `conversation.md §7` engine-control byte range, `0x81..=0x90`.
+/// §7's dispatcher list publishes the control band as "`0x81..0x9F`
+/// (with the exception of the GOTO range above)", and the GOTO range
+/// is [`TLK_LABEL_FIRST`]`..=`[`TLK_LABEL_LAST`] — `0x91..=0x9F` — so
+/// the control codes proper end at `0x90`. That is also where the
+/// §7.2–§7.6 dispatch table ends: [`TLK_CODE_LABEL_RECORD`] is
+/// `0x90` and is the last row in it. The two readings agree, which is
+/// the coherence check the old value failed.
+///
+/// Both boundaries are **literals, deliberately not** anchored to a
+/// neighbouring band. Anchoring the start to
+/// [`TLK_DICTIONARY_TOKEN_LAST`] `+ 1` is what let the dictionary
+/// band's off-by-one at `0x80` steal a token; anchoring the label
+/// band to this constant `+ 1` is what shrank the label band to two
+/// values. Both adjacencies are facts about independently published
+/// numbers, not rules either imposes on the other, and tests assert
+/// them as consequences rather than definitions.
+pub const TLK_CONTROL_CODE_FIRST: u8 = 0x81;
+pub const TLK_CONTROL_CODE_LAST: u8 = 0x90;
+
+/// `conversation.md §7`: classify a byte by the value-range table the
+/// byte runner's top-level dispatcher follows.
+///
+/// §7 writes the control band as "`0x81..0x9F` with the exception of
+/// the GOTO range", so its listing order carves the label band out
+/// first. The arms here hold their *resolved* bands — `0x81..=0x90`
+/// and `0x91..=0x9F` — which are disjoint, so arm order is no longer
+/// load-bearing and the compiler's exhaustiveness check covers the
+/// byte space with no overlap left to resolve. The arms keep §7's
+/// order for readability only. While the label band was mis-read as
+/// `0x9E..=0x9F` the order *was* load-bearing: it was the only thing
+/// stopping the overlapping control arm from swallowing the labels.
 pub const fn tlk_byte_runner_class(byte: u8) -> TlkByteRunnerClass {
     match byte {
         0x00 => TlkByteRunnerClass::NullByte,
         TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST => {
             TlkByteRunnerClass::DictionaryToken
         }
-        TLK_CODE_GOTO_LABEL_FIRST..=TLK_CODE_GOTO_LABEL_LAST => TlkByteRunnerClass::GotoLabel,
+        TLK_LABEL_FIRST..=TLK_LABEL_LAST => TlkByteRunnerClass::GotoLabel,
         TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST => TlkByteRunnerClass::PrintableText,
         TLK_CONTROL_CODE_FIRST..=TLK_CONTROL_CODE_LAST => TlkByteRunnerClass::ControlCode,
         TLK_CODE_IF_ELSE_ALT => TlkByteRunnerClass::IfElseAlias,
@@ -714,10 +773,15 @@ pub enum TlkByteKind {
     Nul,
     /// Nonzero high-bit-clear `0x01..=0x7F`: common-word dictionary token.
     DictionaryToken,
-    /// `0x80..=0x9F` excluding the GOTO range: engine control byte
-    /// (Sections 7.2-7.6).
+    /// `0x81..=0x90`: engine control byte (Sections 7.2-7.6). §7
+    /// writes this band as `0x81..0x9F` minus the GOTO range; with the
+    /// GOTO range resolved to `0x91..=0x9F` what is left is
+    /// `0x81..=0x90`, ending exactly on the `0x90` LABEL-RECORD row
+    /// that closes the §7.2-§7.6 dispatch table.
     ControlByte,
-    /// `0x9E..=0x9F`: GOTO-LABEL byte (Section 7.7).
+    /// `0x91..=0x9F`: GOTO-LABEL byte (Section 7.7) — the full
+    /// fifteen-value band, of which eleven are exercised in shipped
+    /// content.
     GotoLabel,
     /// `0xA0..=0xFD`: printable text with the high bit set (Section 7.1).
     PrintableText,
@@ -840,15 +904,21 @@ pub fn tlk_keyword_matches(keyword: &[u8], input: &[u8]) -> bool {
 }
 
 /// Classify one `.TLK` byte through the dispatcher table per
-/// `conversation.md §7`. The classification order matters because the
-/// `0x9E..=0x9F` GOTO-LABEL range is a sub-range of the `0x81..=0x9F`
-/// control band and must take precedence.
+/// `conversation.md §7`.
+///
+/// The GOTO-LABEL arm is a **range** over the whole published label
+/// band, not an or-pattern over two values. As an or-pattern it named
+/// the band's two boundary constants, and so silently stopped
+/// covering the band the moment the band was wider than two values —
+/// which it always was. With `0x81..=0x90` and `0x91..=0x9F`
+/// disjoint, arm order no longer decides anything; it follows §7's
+/// listing order.
 pub const fn classify_tlk_byte(byte: u8) -> TlkByteKind {
     match byte {
         0x00 => TlkByteKind::Nul,
         TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST => TlkByteKind::DictionaryToken,
-        TLK_CODE_GOTO_LABEL_FIRST | TLK_CODE_GOTO_LABEL_LAST => TlkByteKind::GotoLabel,
-        TLK_CONTROL_CODE_FIRST..=TLK_CODE_GOTO_LABEL_LAST => TlkByteKind::ControlByte,
+        TLK_LABEL_FIRST..=TLK_LABEL_LAST => TlkByteKind::GotoLabel,
+        TLK_CONTROL_CODE_FIRST..=TLK_CONTROL_CODE_LAST => TlkByteKind::ControlByte,
         TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST => TlkByteKind::PrintableText,
         TLK_CODE_IF_ELSE_ALT => TlkByteKind::IfElseAlias,
         TLK_CODE_END_OF_RESPONSE => TlkByteKind::EndOfResponse,
