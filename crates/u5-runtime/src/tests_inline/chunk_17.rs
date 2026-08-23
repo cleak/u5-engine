@@ -2118,6 +2118,206 @@
     }
 
     #[test]
+    fn ready_equipment_refuses_ammunition_rows_silently() {
+        // inventory.md §6/§8/§9: arrows and quarrels are carried
+        // ammunition stocks, not readied equipment. Selecting either row
+        // exits the cascade at the very top with no mutation and no
+        // message at all - the silent refusal is unique among the
+        // cascade's exits.
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![60];
+        state.party_equipment = default_party_equipment(1);
+
+        for ammo_id in [EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_QUARRELS] {
+            // Carried stock present: still refused, still silent.
+            state.equipment_stock[ammo_id] = 5;
+            state.message = "sentinel".to_string();
+            assert_eq!(
+                state.ready_equipment_from_suffix(&format!("1/{ammo_id}")),
+                MoveOutcome::Blocked
+            );
+            assert_eq!(
+                state.message, "sentinel",
+                "ammunition row {ammo_id} must not print a message"
+            );
+            assert_eq!(state.equipment_stock[ammo_id], 5);
+            assert_eq!(state.party_equipment[0], default_party_equipment(1)[0]);
+
+            // Carried stock empty: the exit is above the stock gate, so it
+            // stays silent rather than printing the no-carried refusal.
+            state.equipment_stock[ammo_id] = 0;
+            state.message = "sentinel".to_string();
+            assert_eq!(
+                state.ready_equipment_from_suffix(&format!("1/{ammo_id}")),
+                MoveOutcome::Blocked
+            );
+            assert_eq!(
+                state.message, "sentinel",
+                "empty ammunition row {ammo_id} must stay silent"
+            );
+            assert_eq!(state.party_equipment[0], default_party_equipment(1)[0]);
+        }
+    }
+
+    #[test]
+    fn ranged_weapon_ammo_gate_matches_published_helper() {
+        // inventory.md §6: the live R-Ready gate and the published
+        // ranged_weapon_required_ammo helper must agree on every item id.
+        assert_eq!(
+            ranged_weapon_required_ammo(ITEM_ID_BOW),
+            Some(ITEM_ID_ARROWS)
+        );
+        assert_eq!(
+            ranged_weapon_required_ammo(ITEM_ID_MAGIC_BOW),
+            Some(ITEM_ID_ARROWS)
+        );
+        assert_eq!(
+            ranged_weapon_required_ammo(ITEM_ID_CROSSBOW),
+            Some(ITEM_ID_QUARRELS)
+        );
+
+        // Every other equipment id carries no ammunition prerequisite.
+        for item_id in 0..EQUIPMENT_COUNT {
+            let expected = matches!(
+                item_id,
+                EQUIPMENT_ID_BOW | EQUIPMENT_ID_MAGIC_BOW | EQUIPMENT_ID_CROSSBOW
+            );
+            assert_eq!(
+                ranged_weapon_required_ammo(item_id as u8).is_some(),
+                expected,
+                "ammunition prerequisite mismatch for item {item_id}"
+            );
+        }
+
+        // Crossbow with no quarrels is refused; adding one clears the gate.
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![60];
+        state.party_equipment = default_party_equipment(1);
+        state.equipment_stock[EQUIPMENT_ID_CROSSBOW] = 1;
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/28"),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "No quarrels for that weapon.");
+        state.equipment_stock[EQUIPMENT_ID_QUARRELS] = 1;
+        assert_eq!(state.ready_equipment_from_suffix("1/28"), MoveOutcome::Used);
+        assert_eq!(
+            state.party_equipment[0][EQUIP_SLOT_WEAPON],
+            EQUIPMENT_ID_CROSSBOW as u8
+        );
+        // The ammunition stock itself is never consumed by readying.
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_QUARRELS], 1);
+    }
+
+    #[test]
+    fn equipment_module_classifiers_agree_with_live_dispatch_constants() {
+        // The equipment module restates published tables that the live
+        // paths also encode as bare constants. These are the drift joins:
+        // if either side is edited alone this test fails rather than the
+        // engine silently diverging from the spec.
+
+        // inventory.md §3.1 class-tag bytes.
+        assert_eq!(EQUIPMENT_CLASS_HELM, EQUIPMENT_TAG_HELM);
+        assert_eq!(EQUIPMENT_CLASS_BODY_ARMOUR, EQUIPMENT_TAG_ARMOUR);
+        assert_eq!(EQUIPMENT_CLASS_ONE_HAND, EQUIPMENT_TAG_ONE_HAND);
+        assert_eq!(EQUIPMENT_CLASS_TWO_HAND, EQUIPMENT_TAG_TWO_HAND);
+        assert_eq!(EQUIPMENT_CLASS_RING, EQUIPMENT_TAG_RING);
+        assert_eq!(EQUIPMENT_CLASS_AMULET, EQUIPMENT_TAG_AMULET);
+        assert_eq!(EQUIPMENT_CLASS_NONE, EQUIPMENT_TAG_AMMO);
+
+        // Every id in the live class table decodes to a published tag,
+        // and only the two ammunition rows carry the no-slot tag.
+        for item_id in 0..EQUIPMENT_COUNT {
+            let tag = equipment_class_tag(EQUIPMENT_CLASS_TAGS[item_id])
+                .unwrap_or_else(|| panic!("item {item_id} has an unpublished class tag"));
+            assert_eq!(
+                tag == EquipmentClassTag::None,
+                matches!(item_id, EQUIPMENT_ID_ARROWS | EQUIPMENT_ID_QUARRELS),
+                "no-slot class tag mismatch for item {item_id}"
+            );
+        }
+
+        // Ranged-weapon ids are shared between the two constant families.
+        assert_eq!(usize::from(ITEM_ID_BOW), EQUIPMENT_ID_BOW);
+        assert_eq!(usize::from(ITEM_ID_MAGIC_BOW), EQUIPMENT_ID_MAGIC_BOW);
+        assert_eq!(usize::from(ITEM_ID_CROSSBOW), EQUIPMENT_ID_CROSSBOW);
+        assert_eq!(usize::from(ITEM_ID_ARROWS), EQUIPMENT_ID_ARROWS);
+        assert_eq!(usize::from(ITEM_ID_QUARRELS), EQUIPMENT_ID_QUARRELS);
+
+        // inventory.md §7: the U-Use potion and scroll counter orders the
+        // live dispatch matches on are the orders the classifiers publish.
+        assert_eq!(POTION_USE_EFFECT_COUNT, POTION_COUNT);
+        assert_eq!(
+            potion_use_effect(POTION_BLUE_INDEX),
+            Some(PotionUseEffect::Wake)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_YELLOW_INDEX),
+            Some(PotionUseEffect::Heal)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_RED_INDEX),
+            Some(PotionUseEffect::CurePoison)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_GREEN_INDEX),
+            Some(PotionUseEffect::Poison)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_ORANGE_INDEX),
+            Some(PotionUseEffect::Sleep)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_PURPLE_INDEX),
+            Some(PotionUseEffect::PoofPresentation)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_BLACK_INDEX),
+            Some(PotionUseEffect::CombatInvisibility)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_WHITE_INDEX),
+            Some(PotionUseEffect::VisibilitySweep)
+        );
+        assert_eq!(potion_use_effect(POTION_COUNT), None);
+
+        assert_eq!(SCROLL_USE_EFFECT_COUNT, SCROLL_COUNT);
+        assert_eq!(
+            scroll_use_effect(SCROLL_LIGHT_INDEX),
+            Some(ScrollUseEffect::Light)
+        );
+        assert_eq!(
+            scroll_use_effect(SCROLL_WIND_CHANGE_INDEX),
+            Some(ScrollUseEffect::WindChange)
+        );
+        assert_eq!(
+            scroll_use_effect(SCROLL_PROTECTION_INDEX),
+            Some(ScrollUseEffect::Protection)
+        );
+        assert_eq!(
+            scroll_use_effect(SCROLL_NEGATE_MAGIC_INDEX),
+            Some(ScrollUseEffect::NegateMagic)
+        );
+        assert_eq!(
+            scroll_use_effect(SCROLL_VIEW_INDEX),
+            Some(ScrollUseEffect::View)
+        );
+        assert_eq!(
+            scroll_use_effect(SCROLL_SUMMON_DAEMON_INDEX),
+            Some(ScrollUseEffect::SummonDaemon)
+        );
+        assert_eq!(
+            scroll_use_effect(SCROLL_RESURRECTION_INDEX),
+            Some(ScrollUseEffect::Resurrection)
+        );
+        assert_eq!(
+            scroll_use_effect(SCROLL_NEGATE_TIME_INDEX),
+            Some(ScrollUseEffect::NegateTime)
+        );
+        assert_eq!(scroll_use_effect(SCROLL_COUNT), None);
+    }
+
+    #[test]
     fn ready_equipment_respects_hand_and_slot_occupancy() {
         let mut state = test_state(open_grid(), 1, 1);
         state.party_strengths = vec![60];

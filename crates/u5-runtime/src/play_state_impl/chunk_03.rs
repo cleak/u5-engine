@@ -2287,6 +2287,20 @@ impl PlayState {
 
         let item_id = request.item_id;
         let name = equipment_name(item_id);
+        // `inventory.md §6`/§8/§9: arrows and quarrels are carried
+        // ammunition stocks, not readied equipment. Selecting either row
+        // exits the cascade at the very top with no mutation and no
+        // message at all - the silent refusal is unique among the
+        // cascade's exits, so `self.message` is deliberately left as it
+        // was rather than overwritten.
+        if EQUIPMENT_CLASS_TAGS
+            .get(item_id)
+            .copied()
+            .and_then(equipment_class_tag)
+            == Some(EquipmentClassTag::None)
+        {
+            return MoveOutcome::Blocked;
+        }
         if self.combat_active && EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_ARMOUR {
             self.message = "Cannot change armour in combat.".to_string();
             return MoveOutcome::Blocked;
@@ -2321,19 +2335,20 @@ impl PlayState {
             self.message = format!("No carried {name} to ready.");
             return MoveOutcome::Blocked;
         }
-        if matches!(item_id, EQUIPMENT_ID_ARROWS | EQUIPMENT_ID_QUARRELS) {
-            self.message = format!("{name} are ammunition, not readied equipment.");
-            return MoveOutcome::Blocked;
-        }
-        if matches!(item_id, EQUIPMENT_ID_BOW | EQUIPMENT_ID_MAGIC_BOW)
-            && self.equipment_stock[EQUIPMENT_ID_ARROWS] == 0
-        {
-            self.message = "No arrows for that weapon.".to_string();
-            return MoveOutcome::Blocked;
-        }
-        if item_id == EQUIPMENT_ID_CROSSBOW && self.equipment_stock[EQUIPMENT_ID_QUARRELS] == 0 {
-            self.message = "No quarrels for that weapon.".to_string();
-            return MoveOutcome::Blocked;
+        // `inventory.md §6`: Bow and Magic Bow readiness requires at least
+        // one arrow in the shared equipment counter band, and Crossbow
+        // readiness at least one quarrel. The item-to-ammunition mapping
+        // is owned by `ranged_weapon_required_ammo` so this gate and the
+        // published helper cannot drift apart.
+        if let Some(ammo_id) = ranged_weapon_required_ammo(item_id as u8) {
+            if self.equipment_stock[usize::from(ammo_id)] == 0 {
+                self.message = if ammo_id == ITEM_ID_ARROWS {
+                    "No arrows for that weapon.".to_string()
+                } else {
+                    "No quarrels for that weapon.".to_string()
+                };
+                return MoveOutcome::Blocked;
+            }
         }
 
         let Some(slot) = self.ready_target_slot(item_id) else {
