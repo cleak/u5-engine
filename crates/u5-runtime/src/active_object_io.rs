@@ -230,34 +230,89 @@ pub const fn active_object_eviction_phase_is_off_screen(phase: u8) -> bool {
     matches!(phase, 2 | 3 | 4 | 5)
 }
 
-/// `active-objects.md §4` viewport-relative off-screen test for the
-/// eviction cascade. A candidate slot more than this many cells from
-/// the player in either axis qualifies for the off-screen phases
-/// (phases 2..=5). The radius matches the visible 11x11 viewport
-/// half-width (5 cells from the centre).
-pub const ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS: i32 = 5;
+/// `active-objects.md §4` on-screen **window** half-extent for the
+/// eviction cascade's off-screen phases (2..=5). Not a radius: the
+/// spec states the gate per axis -- "a candidate more than roughly
+/// five cells from the player **in either axis** is considered
+/// eligible for the off-screen phases" -- so the two axes are tested
+/// separately and independently against this bound. There is no
+/// distance computation, no hypotenuse and no disc; a disc would
+/// treat the corners of the square window as off-screen when the
+/// original keeps them.
+///
+/// The window is centred on the player, so this is its half-extent:
+/// the largest per-axis separation that still counts as on-screen. It
+/// matches the visible 11x11 viewport half-width.
+///
+/// This bound belongs to **eviction only**. The overworld prune pass
+/// of `§8.1` has its own, unrelated window bound
+/// ([`ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT`]) measured from a different
+/// origin on a different trigger; `§8.1` warns that "a single shared
+/// distance constant serving both is a sign the two have been
+/// conflated", so the two names are kept apart deliberately even
+/// though the mechanisms are neighbours.
+pub const ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW: u8 = 5;
 
 /// `active-objects.md §4`: returns `true` when an active-object slot
-/// at `(slot_x, slot_y)` is more than [`ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS`]
-/// cells from the player's current position in either axis (i.e.
-/// outside the viewport's visible footprint).
+/// at `(slot_x, slot_y)` falls outside the square on-screen window of
+/// half-extent [`ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW`] centred
+/// on the player, qualifying it for the off-screen eviction phases.
+/// Each axis is tested separately; failing either axis is off-screen.
+///
+/// Coordinates are the record's stored X/Y bytes (`§3`) and the
+/// separation is formed in **unsigned eight-bit arithmetic**, so it
+/// wraps naturally with the 256-cell coordinate space instead of
+/// needing a map-seam special case. Signed or wider arithmetic
+/// mis-handles a candidate one cell across the seam from the player,
+/// reporting it ~255 cells away and evicting it early.
+///
+/// Spec gap: `§4` states the five-cell window but not its
+/// arithmetic. The unsigned-byte form is carried over from the
+/// prune pass, whose arithmetic `§8.1` does state, on the grounds
+/// that both tests compare stored coordinate bytes on the same
+/// 256-cell torus. If `§4` is ever given an explicit arithmetic that
+/// differs, this is the line to change.
 pub const fn active_object_eviction_off_screen(
-    slot_x: i32,
-    slot_y: i32,
-    player_x: i32,
-    player_y: i32,
+    slot_x: u8,
+    slot_y: u8,
+    player_x: u8,
+    player_y: u8,
 ) -> bool {
-    let dx = if slot_x > player_x {
-        slot_x - player_x
-    } else {
-        player_x - slot_x
-    };
-    let dy = if slot_y > player_y {
-        slot_y - player_y
-    } else {
-        player_y - slot_y
-    };
-    dx > ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS || dy > ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS
+    !window_half_extent_contains(
+        slot_x,
+        player_x,
+        ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW,
+    ) || !window_half_extent_contains(
+        slot_y,
+        player_y,
+        ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW,
+    )
+}
+
+/// One axis of a square window **centred** on `centre` with the given
+/// half-extent, in unsigned eight-bit arithmetic on the 256-cell
+/// coordinate space. `true` when `coordinate` is within
+/// `half_extent` cells of `centre` on either side of the wrap.
+///
+/// Distinct from [`window_extent_contains`], which measures forward
+/// from a corner rather than out from a centre.
+pub const fn window_half_extent_contains(coordinate: u8, centre: u8, half_extent: u8) -> bool {
+    let forward = coordinate.wrapping_sub(centre);
+    let backward = centre.wrapping_sub(coordinate);
+    forward <= half_extent || backward <= half_extent
+}
+
+/// One axis of a square window whose **origin corner** is `base`, in
+/// unsigned eight-bit arithmetic on the 256-cell coordinate space.
+/// `true` when the unsigned difference `coordinate - base` falls
+/// within `extent`.
+///
+/// `active-objects.md §8.1`: "The difference is formed in unsigned
+/// eight-bit arithmetic against the scroll base, so it wraps
+/// naturally with the 256-cell coordinate space rather than needing a
+/// special case at the map seam."
+pub const fn window_extent_contains(coordinate: u8, base: u8, extent: u8) -> bool {
+    coordinate.wrapping_sub(base) <= extent
 }
 
 /// `active-objects.md §2` per-pass iteration order. The renderer
@@ -286,27 +341,46 @@ impl ActiveObjectPassOrder {
     }
 }
 
-/// `active-objects.md §10` overworld off-screen pruning radius. The
-/// per-turn walker frees outdoor active-object slots whose distance
-/// from the scroll bases (Manhattan in either axis) is greater than
-/// this many cells.
-pub const ACTIVE_OBJECT_PRUNE_RADIUS: i32 = 32;
-
-/// `active-objects.md §10`: predicate for the overworld per-turn
-/// pruning sweep. Returns `true` when an outdoor slot at
-/// `(slot_x, slot_y)` is more than [`ACTIVE_OBJECT_PRUNE_RADIUS`] cells
-/// from the scroll base in either axis and should be freed.
+/// `active-objects.md §8.1`: the overworld per-turn prune-pass
+/// position test. Returns `true` when a slot's stored `(slot_x,
+/// slot_y)` falls outside the loaded window and the slot must be
+/// released.
+///
+/// The pass "compares the slot's stored X and Y against the current
+/// **scroll base** - the top-left corner of the loaded window - and
+/// keeps the slot only when **both** differences fall within
+/// thirty-two. Failing either axis releases the slot."
+///
+/// Three properties are contract and are each a place implementations
+/// predictably go wrong:
+///
+/// * **Square window, not a radius.** The two axes are tested
+///   separately and independently against
+///   [`ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT`]. No distance, no
+///   hypotenuse, no disc -- a disc prunes the window corners that the
+///   original keeps.
+/// * **Measured from the scroll base**, the window's origin *corner*,
+///   not the player's cell and not the viewport centre. The window
+///   therefore extends forward from the base; this is
+///   [`window_extent_contains`], not a centred band.
+/// * **Unsigned eight-bit arithmetic**, so the difference wraps with
+///   the 256-cell coordinate space and needs no map-seam special
+///   case. Signed or wider arithmetic mis-handles objects across the
+///   wrap.
+///
+/// Two further contract points live at the call site rather than here,
+/// because they are about *which* slots reach this test: slot zero is
+/// never prunable, and a slot whose type byte does not classify as a
+/// prunable kind is skipped **before** the position test runs. See
+/// `PlayState::prune_far_overworld_objects`.
 pub const fn active_object_should_prune(
-    slot_x: i32,
-    slot_y: i32,
-    scroll_base_x: i32,
-    scroll_base_y: i32,
+    slot_x: u8,
+    slot_y: u8,
+    scroll_base_x: u8,
+    scroll_base_y: u8,
 ) -> bool {
-    let dx = slot_x - scroll_base_x;
-    let dy = slot_y - scroll_base_y;
-    let abs_dx = if dx < 0 { -dx } else { dx };
-    let abs_dy = if dy < 0 { -dy } else { dy };
-    abs_dx > ACTIVE_OBJECT_PRUNE_RADIUS || abs_dy > ACTIVE_OBJECT_PRUNE_RADIUS
+    !window_extent_contains(slot_x, scroll_base_x, ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT)
+        || !window_extent_contains(slot_y, scroll_base_y, ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT)
 }
 
 /// `active-objects.md §11` save-image active-object region length.
@@ -368,36 +442,34 @@ pub const fn animation_phase_step(phase_byte: u8) -> AnimationPhaseStep {
     }
 }
 
+/// `active-objects.md §4` eviction cascade phase bounds. The cascade is
+/// ten one-based phases run in order; phase 1 is the empty-slot path and
+/// phase 10 is the last-resort eviction.
+pub const ACTIVE_OBJECT_EVICTION_PHASE_FIRST: u8 = 1;
+pub const ACTIVE_OBJECT_EVICTION_PHASE_LAST: u8 = 10;
+
 /// `active-objects.md §4`: deterministic eviction phase a candidate
 /// qualifies for, or `None` if the byte-0 / on-screen combination is not
 /// a victim in any phase. Phases 1..=5 are the off-screen passes (with
 /// phase 1 being the empty-slot path); phases 6..=10 are the
 /// any-on-screen passes. Byte 0x00 (empty slot) returns `Some(1)`. Byte
 /// 0xB5 is universally protected and returns `None` regardless.
+///
+/// Derived from [`active_object_eviction_byte_accepted`] and
+/// [`active_object_eviction_phase_is_off_screen`] rather than
+/// re-tabulating the cascade, so this summary view and the allocator's
+/// phase loop cannot drift apart.
 pub const fn active_object_eviction_phase(byte0: u8, off_screen: bool) -> Option<u8> {
-    if byte0 == ACTIVE_OBJECT_PROTECTED_TYPE_BYTE {
-        return None;
-    }
-    if byte0 == 0x00 {
-        return Some(1);
-    }
-    if off_screen {
-        match byte0 {
-            0x01..=0x0F => Some(2),
-            0x80..=0xFF => Some(3), // 0xB5 already returned None above.
-            0x10..=0x11 => Some(4),
-            0x30..=0x7F => Some(5),
-            _ => Some(10),
+    let mut phase = ACTIVE_OBJECT_EVICTION_PHASE_FIRST;
+    while phase <= ACTIVE_OBJECT_EVICTION_PHASE_LAST {
+        if active_object_eviction_byte_accepted(byte0, phase)
+            && (off_screen || !active_object_eviction_phase_is_off_screen(phase))
+        {
+            return Some(phase);
         }
-    } else {
-        match byte0 {
-            0x01..=0x0F => Some(6),
-            0x80..=0xFF => Some(7),
-            0x10..=0x11 => Some(8),
-            0x30..=0x7F => Some(9),
-            _ => Some(10),
-        }
+        phase += 1;
     }
+    None
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -2405,6 +2405,17 @@ impl PlayState {
         }
     }
 
+    /// `active-objects.md §8.1`: "The overworld per-turn epilogue runs two
+    /// passes over the table: the animate pass described above, and then a
+    /// **separate prune pass**."
+    ///
+    /// The two passes are kept visibly separate here because they are separate
+    /// mechanisms. The animate pass is per-mode. The prune pass is
+    /// time-driven, positional, overworld-only, and runs unconditionally after
+    /// the animate pass -- "Pruning is not animation, is not on the render
+    /// tick, and is not driven by the animator." The dungeon loop runs
+    /// neither. Neither pass returns a report: §8.1 forbids a pruning event
+    /// that other systems observe.
     pub fn advance_active_objects(&mut self) {
         match self.area {
             Area::Dungeon { .. } => return,
@@ -2846,19 +2857,66 @@ impl PlayState {
         self.timing_status.world_object_epilogue_runs(turn_before)
     }
 
+    /// `active-objects.md §8.1` overworld off-screen prune pass. Invoked by
+    /// the overworld per-turn epilogue "and by nothing else": not by the
+    /// animator, not by the renderer, not by mode entry, not by the combat
+    /// backup/restore path. Town, dungeon and combat loops do not run it.
+    ///
+    /// Time-driven and positional. It is *not* the §4 eviction cascade, which
+    /// is demand-driven and chooses by class priority
+    /// ([`Self::active_object_eviction_victim`]); §8.1 states the two "must
+    /// not be collapsed" and warns that a shared distance constant across them
+    /// is a sign they have been conflated.
+    ///
+    /// The position test is [`active_object_should_prune`] — a square window
+    /// measured from the **scroll base** in unsigned eight-bit arithmetic, not
+    /// a radius from the player. Releasing uses the ordinary §4 one-byte
+    /// slot-freeing rule, so freed slots are immediately available to
+    /// allocation.
+    ///
+    /// `0xB5` protection deliberately does **not** apply here: §4 scopes that
+    /// byte as "the only universally protected byte-0 value **in this
+    /// allocator**", and this sweep frees by position rather than by eviction
+    /// priority.
+    ///
+    /// Spec gap: §8.1 requires that only slots of a "prunable kind" be
+    /// considered but does not enumerate the classes. The pre-existing
+    /// classification here — anything that is not empty and not vehicle-like —
+    /// is kept unchanged rather than invented afresh; see the report on
+    /// `active-objects.md §8.1` for the open question.
+    ///
+    /// The pass returns nothing: §8.1 forbids building a pruning event other
+    /// systems can observe. The visibility-dirty mark is internal redraw
+    /// bookkeeping, not a result.
     pub fn prune_far_overworld_objects(&mut self) {
         if !matches!(self.area, Area::World { .. }) {
             return;
         }
-        let scroll_base = world_scroll_base(self.player.x, self.player.y);
+        let (scroll_base_x, scroll_base_y) = world_scroll_base(self.player.x, self.player.y);
+        let scroll_base_x = scroll_base_x as u8;
+        let scroll_base_y = scroll_base_y as u8;
         let mut pruned = false;
+        // `active-objects.md §8.1`: "The pass walks the slots above zero
+        // only." Starting at 1 is what keeps the player un-prunable.
         for slot in 1..self.active_objects.len() {
             let object = self.active_objects[slot];
+            // `active-objects.md §8.1`: "A slot whose type byte does not
+            // classify as a prunable kind is skipped **before** the position
+            // test runs, so an out-of-window slot of an unclassified kind
+            // survives." The `||` chain is ordered so classification precedes
+            // `active_object_should_prune`.
             if object.is_empty()
                 || is_vehicle_object_tile(object.type_byte)
                 || is_vehicle_object_tile(object.tile)
-                || world_scroll_neighborhood_contains(scroll_base, object.x, object.y)
             {
+                continue;
+            }
+            if !active_object_should_prune(
+                object.x as u8,
+                object.y as u8,
+                scroll_base_x,
+                scroll_base_y,
+            ) {
                 continue;
             }
             self.free_active_object_slot(slot);

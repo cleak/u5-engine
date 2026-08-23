@@ -1039,6 +1039,11 @@
             scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
             floor: 0,
         };
+        // active-objects.md §4: a full ordinary range is no longer a
+        // failed acquisition on its own -- the eviction cascade takes a
+        // lower-priority victim. Pack an *evictable* class here (0x10 is
+        // the phase-4/8 door/fixture class); the genuinely-no-slot case
+        // packs 0xB5 in the second half of this test.
         town.active_objects.resize(
             OOL_SLOTS,
             ActiveObject {

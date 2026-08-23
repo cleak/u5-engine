@@ -181,6 +181,223 @@
         assert_eq!(object.phase, 0x60);
     }
 
+    // ---------------------------------------------------------------
+    // active-objects.md §8.1 -- overworld off-screen prune pass.
+    // ---------------------------------------------------------------
+
+    /// Steady, non-vehicle world actor that will not wander during the
+    /// animate pass, so a prune assertion measures pruning alone.
+    fn prunable_marker(x: usize, y: usize) -> ActiveObject {
+        ActiveObject {
+            type_byte: 0x05,
+            tile: 0x05,
+            x,
+            y,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        }
+    }
+
+    #[test]
+    fn prune_pass_runs_from_the_overworld_turn_epilogue() {
+        // active-objects.md §8.1: "The overworld per-turn epilogue runs
+        // two passes over the table: the animate pass described above,
+        // and then a separate prune pass." Before this was wired the
+        // predicate existed and nothing called it, so occupancy drifted
+        // from the original over play.
+        //
+        // Player (100, 100) -> scroll base (80, 80); the window is the
+        // 33 cells forward of the base on each axis, i.e. 80..=112.
+        let mut state = world_state(open_world_grid(), 100, 100);
+        assert_eq!(world_scroll_base(100, 100), (80, 80));
+        state.active_objects.push(prunable_marker(112, 100)); // offset 32 -> keep
+        state.active_objects.push(prunable_marker(113, 100)); // offset 33 -> prune
+        state.active_objects.push(prunable_marker(100, 113)); // y fails -> prune
+
+        state.advance_turn();
+
+        assert_eq!(state.active_objects[1], prunable_marker(112, 100));
+        assert!(state.active_objects[2].is_empty());
+        assert!(state.active_objects[3].is_empty());
+    }
+
+    #[test]
+    fn prune_pass_never_releases_slot_zero() {
+        // active-objects.md §8.1: "The pass walks the slots above zero
+        // only. The player slot cannot be released by this path however
+        // far the scroll base moves, and an implementation that
+        // includes slot zero in the sweep can delete the player."
+        let mut state = world_state(open_world_grid(), 100, 100);
+        // Stamp slot zero well outside the window and prune directly, so
+        // the per-turn sync cannot mask an over-broad sweep.
+        state.active_objects[0].x = 200;
+        state.active_objects[0].y = 200;
+        let player_record = state.active_objects[0];
+
+        state.prune_far_overworld_objects();
+
+        assert_eq!(state.active_objects[0], player_record);
+        assert!(!state.active_objects[0].is_empty());
+    }
+
+    #[test]
+    fn prune_pass_skips_unclassified_slots_before_the_position_test() {
+        // active-objects.md §8.1: "A slot whose type byte does not
+        // classify as a prunable kind is skipped before the position
+        // test runs, so an out-of-window slot of an unclassified kind
+        // survives." Ordering is the contract: classification first.
+        let mut state = world_state(open_world_grid(), 100, 100);
+        let mut parked_vehicle = prunable_marker(200, 200);
+        parked_vehicle.type_byte = 160; // vehicle-like: not a prunable kind
+        parked_vehicle.tile = 160;
+        state.active_objects.push(parked_vehicle);
+        state.active_objects.push(prunable_marker(200, 200));
+
+        state.prune_far_overworld_objects();
+
+        assert_eq!(state.active_objects[1], parked_vehicle);
+        assert!(state.active_objects[2].is_empty());
+    }
+
+    #[test]
+    fn prune_pass_wraps_across_the_map_seam() {
+        // active-objects.md §8.1: "The difference is formed in unsigned
+        // eight-bit arithmetic against the scroll base, so it wraps
+        // naturally with the 256-cell coordinate space rather than
+        // needing a special case at the map seam."
+        //
+        // Player (250, 250) -> scroll base (240, 240); the window runs
+        // 240..=255 and then 0..=16. A naive `slot - base` in signed or
+        // wider arithmetic reports ~235 cells for a slot at (5, 5) and
+        // frees the entire far side of the seam.
+        let mut state = world_state(open_world_grid(), 250, 250);
+        assert_eq!(world_scroll_base(250, 250), (240, 240));
+        state.active_objects.push(prunable_marker(5, 5)); // wrapped offset 21 -> keep
+        state.active_objects.push(prunable_marker(16, 16)); // wrapped offset 32 -> keep
+        state.active_objects.push(prunable_marker(17, 5)); // wrapped offset 33 -> prune
+
+        state.prune_far_overworld_objects();
+
+        assert_eq!(state.active_objects[1], prunable_marker(5, 5));
+        assert_eq!(state.active_objects[2], prunable_marker(16, 16));
+        assert!(state.active_objects[3].is_empty());
+    }
+
+    #[test]
+    fn prune_pass_does_not_run_outside_the_overworld() {
+        // active-objects.md §8.1: "Town, dungeon and combat loops do not
+        // run it."
+        let mut town = test_state(town_free_roaming_grid(), 1, 1);
+        town.active_objects.push(prunable_marker(200, 200));
+        let marker = town.active_objects[1];
+
+        town.advance_active_objects();
+
+        assert_eq!(town.active_objects[1], marker);
+    }
+
+    // ---------------------------------------------------------------
+    // active-objects.md §4 -- acquisition-time eviction cascade.
+    // ---------------------------------------------------------------
+
+    /// Fill the whole table with one type byte so the ordinary range is
+    /// full and the cascade must choose a victim.
+    fn table_packed_with(type_byte: u8, x: usize, y: usize) -> Vec<ActiveObject> {
+        (0..OOL_SLOTS)
+            .map(|_| ActiveObject {
+                type_byte,
+                tile: type_byte,
+                x,
+                y,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn eviction_cascade_never_takes_the_protected_type_byte() {
+        // active-objects.md §4: "The last-resort phase can still take any
+        // byte except 0xB5, so 0xB5 is the only universally protected
+        // byte-0 value in this allocator."
+        let mut state = world_state(open_world_grid(), 100, 100);
+        state.active_objects = table_packed_with(ACTIVE_OBJECT_PROTECTED_TYPE_BYTE, 200, 200);
+
+        assert_eq!(state.active_object_eviction_victim(), None);
+        assert_eq!(
+            state.allocate_active_object_slot(prunable_marker(101, 100)),
+            None
+        );
+    }
+
+    #[test]
+    fn eviction_cascade_spares_the_player_slot_and_the_reserved_band() {
+        // active-objects.md §4: the ordinary acquisition path "searches
+        // only slots one through twenty-three. Slot zero is the
+        // canonical player slot, and slots twenty-four through
+        // thirty-one are reserved for setup paths outside this
+        // allocator." Make only slot 0 and 24..=31 evictable-looking;
+        // the cascade must still refuse.
+        let mut state = world_state(open_world_grid(), 100, 100);
+        state.active_objects = table_packed_with(ACTIVE_OBJECT_PROTECTED_TYPE_BYTE, 200, 200);
+        state.active_objects[ACTIVE_OBJECT_PLAYER_SLOT].type_byte = 0x05;
+        for slot in ACTIVE_OBJECT_RESERVED_FIRST..=ACTIVE_OBJECT_RESERVED_LAST {
+            state.active_objects[slot].type_byte = 0x05;
+        }
+
+        assert_eq!(state.active_object_eviction_victim(), None);
+
+        // One ordinary slot made evictable is taken instead.
+        state.active_objects[7].type_byte = 0x05;
+        assert_eq!(state.active_object_eviction_victim(), Some(7));
+    }
+
+    #[test]
+    fn eviction_cascade_prefers_off_screen_phases_over_on_screen_ones() {
+        // active-objects.md §4: phases 2..=5 are the off-screen passes and
+        // 6..=9 repeat the same classes with visible allowed, so an
+        // off-screen dynamic actor (phase 3) outranks an on-screen
+        // scenery byte (phase 6) even though scenery is the
+        // higher-priority class when both are off-screen.
+        let mut state = world_state(open_world_grid(), 100, 100);
+        state.active_objects = table_packed_with(ACTIVE_OBJECT_PROTECTED_TYPE_BYTE, 100, 100);
+        // Slot 3: scenery class, but standing on the player -> on-screen.
+        state.active_objects[3].type_byte = 0x05;
+        // Slot 9: dynamic-actor class, well outside the five-cell window.
+        state.active_objects[9].type_byte = 0x90;
+        state.active_objects[9].x = 140;
+
+        assert_eq!(state.active_object_eviction_victim(), Some(9));
+
+        // With the off-screen candidate gone, phase 6 takes the
+        // on-screen scenery slot.
+        state.active_objects[9].type_byte = ACTIVE_OBJECT_PROTECTED_TYPE_BYTE;
+        assert_eq!(state.active_object_eviction_victim(), Some(3));
+    }
+
+    #[test]
+    fn eviction_cascade_off_screen_gate_wraps_across_the_map_seam() {
+        // active-objects.md §4 + §8: the off-screen window is measured on
+        // the wrapped 256-cell torus. A candidate three cells from the
+        // player across the seam is on-screen and must not be taken by
+        // an off-screen phase.
+        let mut state = world_state(open_world_grid(), 2, 2);
+        state.active_objects = table_packed_with(ACTIVE_OBJECT_PROTECTED_TYPE_BYTE, 2, 2);
+        // Slot 5: dynamic actor three cells away across the seam.
+        state.active_objects[5].type_byte = 0x90;
+        state.active_objects[5].x = 255;
+        // Slot 6: dynamic actor genuinely far away.
+        state.active_objects[6].type_byte = 0x90;
+        state.active_objects[6].x = 100;
+
+        // Phase 3 (off-screen dynamic) must reach slot 6, not slot 5.
+        assert_eq!(state.active_object_eviction_victim(), Some(6));
+    }
+
     fn town_free_roaming_grid() -> Vec<u8> {
         vec![0x05; TOWN_GRID_SIDE * TOWN_GRID_SIDE]
     }
