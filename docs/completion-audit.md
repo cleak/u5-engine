@@ -79,7 +79,7 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#72` | Acknowledgements screen asset and presentation | Implemented (`6db6135`). `§11.1` settles the asset as three `STARTSC` records with every credit line drawn into the bitmap; `§11.2` settles the presentation as compose / rise / part / keypress / close / sink, and **withdraws in full** the "bottom-up entry wipe, top-down exit wipe with horizontal slabs" model this engine carried. Nothing typesets the credits, so there is no text to author |
 | `cleak/u5-spec#73` | Ultima IV transfer preview screen | Implemented (`f3ecfd1`). `§6.1`-`§6.6` publish the window rectangles, prompt-frame cells, both panel geometries, the eight-row field-label column, the pages, the stage machine and the finish. `§6` has no double buffering and no page swap, so the screen is one persistent surface edited in place. `§6.4`'s insert-disk block is dead code in the shipped build and is not drawn |
 | `cleak/u5-spec#84` | Dungeon billboard slot-to-role mapping | Implemented; the corridor draws from its billboard banks and the banks moved onto the atlas. The self-check is scoped to `DNG1` because the mapping is not bank-invariant |
-| `cleak/u5-spec#85` | Moongate transit animation distinct from the static gate tile | Answered. Gate *presence* is the `§9.1` sixteen-step composed-frame model and is implemented; the `§9.2` blocking transit presentation is **not** (see "Published but not implemented") |
+| `cleak/u5-spec#85` | Moongate transit animation distinct from the static gate tile | Answered. Gate *presence* is the `§9.1` sixteen-step composed-frame model and is implemented; the `§9.2` blocking transit presentation is implemented too (`8d41816`) — a 256-step dissolve reusing the shared `DissolveVisitOrder` primitive, then a 15→1 countdown at two BIOS ticks per phase |
 | `cleak/u5-spec#86` | Retract `combat.md §7`'s post-round maintenance pass | Retracted upstream and removed here (`60ec07c`) |
 | `cleak/u5-spec#87` | Clean-room: `animation.md` provenance cited private paths | Resolved on the spec side. No engine change; recorded because a correction pass introduced the breach, which is the failure mode `docs/review-heuristics.md` warns about |
 | `cleak/u5-spec#88` | `PARTY.SAV` field layout and the U5 seed filenames | Implemented (`ee0dc53`). The seed pair is `INIT.GAM`/`INIT.OOL`; `BRIT.GAM` is withdrawn and **does not ship at all**, so the old constant named a file that is never present |
@@ -426,17 +426,25 @@ a phase leaves a column of the band unpublished — not contract gates.
 
 These are honest gaps: the contract is published and the engine does not do it.
 
-- **`visibility.md §12.6` night-time light beacon.** Not implemented at all —
-  no bearing counter, no rotating beam. Its gate runs only while ambient is
-  strictly below full daylight. The engine's only trace of it is a comment in
-  `lighting.rs` recording that the withdrawn `MOONGATE_ANIMATOR_DAYTIME_THRESHOLD`
-  was this beacon's gate, misattributed to moongates and inverted.
-- **`overworld.md §9.2` blocking moongate transit presentation.** The two-stage
-  dissolve around the party-vanishing sprite is absent; transit is instantaneous.
-  Gate *presence* (`§9.1`) is implemented.
-- **`active-objects.md §8` outdoor walker, first phase.** Adjacent hostile
-  engagement, sea-serpent/dragon breath, whirlpool transition and ship broadside
-  exist as predicates with zero production call sites, so none of it runs.
+Three entries left this list on 2026-08-23 — `visibility.md §12.6`'s night
+beacon, `overworld.md §9.2`'s blocking transit, and `active-objects.md §8`'s
+outdoor walker phase — all now implemented. What remains:
+
+- **`overworld.md §6.2`'s ranged-attack payload — partially.** The shared traced
+  line, both triggers and the walker ordering are implemented. The **payload**
+  refuses at one named seam citing `cleak/u5-spec#90`, which is now answered and
+  is being built: it is transport-dependent and differs *in kind* — aboard a
+  frigate the hull absorbs the impact and no member loses hit points, otherwise a
+  whole-party pass rolls **independently per living member**. Also fixed there:
+  the serpent/dragon trigger was one-in-**seven** against a published
+  one-in-eight, and nothing called it, so the wrong value passed its own test.
+
+- **`main-loop.md §4`'s outer scene router.** `OuterLoopFlags` and `scene_route`
+  model §4's dispatch and nothing constructs either, because the clean engine has
+  no outer scene router at all — transitions are driven directly from `PlayState`
+  and the frontend drivers. **The gap is the router, not the flags.** Observable
+  behaviour is correct, so this is an architectural divergence rather than a
+  defect; wiring it means building §4 steps 1–6.
 - **Dungeon first-person wall/scenery tables.** `#84` published the billboard
   slot-to-role mapping and the corridor now draws from its banks, but no
   wall/scenery table exists in `crates/`, so first-person presentation is not
