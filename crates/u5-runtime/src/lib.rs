@@ -110,6 +110,7 @@ pub mod town_tables_io_movement;
 pub mod transport;
 pub mod traps;
 pub mod u4_transfer;
+pub mod u4_transfer_preview;
 pub mod u4_transfer_session;
 pub mod view_classes;
 pub mod visibility;
@@ -701,6 +702,7 @@ pub use transport::{
 };
 pub use traps::*;
 pub use u4_transfer::*;
+pub use u4_transfer_preview::*;
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use visibility::{
     ActiveObjectCompositeResult, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,

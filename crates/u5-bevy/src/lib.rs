@@ -90,12 +90,12 @@ use u5_runtime::{
     TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
     TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem,
     TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TitleTickFrameSet, TransportState, U4TransferOverrides, U4TransferSource, ULTIMA_LOGO_HEIGHT,
-    ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST,
-    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
-    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
-    combat_class_stats, commit_chargen_save, configure_talk_shop_text_window,
+    TitleTickFrameSet, TransportState, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH,
+    ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX,
+    VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, ViewOverlayMode,
+    WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    blit_tile_id_to_viewport, combat_actor_is_active_not_dead, combat_class_stats,
+    commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -115,11 +115,11 @@ use u5_runtime::{
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
     paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
-    published_world_location_entries, read_save_image_file, read_u4_transfer_source_from_party_sav,
-    render_play_text_window_system, render_return_to_view_playback_frame_over,
-    render_text_panel_rgba, render_text_window_rgba, return_to_view_caption_start_column,
-    return_to_view_fixed_wipe_rectangles, run_intro_pre_flourish_phase,
-    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
+    published_world_location_entries, read_save_image_file, render_play_text_window_system,
+    render_return_to_view_playback_frame_over, render_text_panel_rgba, render_text_window_rgba,
+    return_to_view_caption_start_column, return_to_view_fixed_wipe_rectangles,
+    run_intro_pre_flourish_phase, run_return_to_view_playback_until_restart,
+    save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -130,9 +130,8 @@ use u5_runtime::{
     terrain_combat_instance_from_setup, terrain_combat_raw_replacement_tile_for_arena,
     terrain_combat_setup_from_record, terrain_combat_tile_for_spawn_index, title_flourish_band,
     title_flourish_content_row, title_flourish_step_state, title_flourish_total_steps,
-    title_flourish_visible_rows, title_tick_next_frame, town_resident_name,
-    u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
-    u5_prng_range_u16, word_of_power_seal_for_word,
+    title_flourish_visible_rows, title_tick_next_frame, town_resident_name, u5_prng_range_u16,
+    word_of_power_seal_for_word,
 };
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
@@ -150,6 +149,12 @@ use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
 // The endgame builds its own full-screen text window (endgame.md §3),
 // which the gameplay chrome path no longer needs.
 use u5_runtime::{TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS, paint_message_text_window};
+
+/// `systems/u4-transfer.md §6` transfer preview compositor
+/// (`cleak/u5-spec#73`). Kept out of this file because the screen is
+/// self-contained: it owns its own surface, its own stage machine and
+/// its own commit hand-off.
+mod u4_transfer;
 
 const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
@@ -993,6 +998,30 @@ pub fn visual_frame_suite(
             raster_depth,
         )?);
     }
+    // `u4-transfer.md §6` (`cleak/u5-spec#73`): the transfer preview's
+    // two published pages - the "Found" summary and the two-panel
+    // comparison screen with its first stage highlighted. The source
+    // record is synthetic (see `u4_transfer::frame_suite_screen`).
+    for (label, keys) in [
+        ("intro-u4-transfer-found", 0),
+        ("intro-u4-transfer-panels", 1),
+    ] {
+        let mut screen = u4_transfer::frame_suite_screen(game_dir.to_path_buf());
+        for _ in 0..keys {
+            let _ = screen.step(' ');
+        }
+        reports.push(write_visual_intro_report(
+            out_dir,
+            label,
+            "intro u4 transfer preview",
+            VisualIntroPanel::U4Transfer {
+                screen: Box::new(screen),
+            },
+            game_dir,
+            raster_depth,
+        )?);
+    }
+
     let preview = visual_return_to_view_summary(game_dir, raster_depth);
     reports.push(write_visual_intro_report(
         out_dir,
@@ -8119,12 +8148,11 @@ enum VisualIntroPanel {
         session: ChargenSession,
         input_line: String,
     },
+    /// `u4-transfer.md §6` (`cleak/u5-spec#73`). The screen has no
+    /// hidden surface and no page swap, so it owns a persistent
+    /// framebuffer that is drawn once and then edited in place.
     U4Transfer {
-        source: U4TransferSource,
-        preview: U4TransferPreview,
-        overrides: U4TransferOverrides,
-        stage: VisualU4TransferStage,
-        input_line: String,
+        screen: Box<u4_transfer::U4TransferScreen>,
     },
     Story {
         records: StoryRecords,
@@ -8154,11 +8182,6 @@ struct VisualReturnToViewFrameMeta {
     elapsed_title_ticks: u32,
     kind: ReturnToViewFrameKind,
     caption: Option<&'static str>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum VisualU4TransferStage {
-    ConfirmName,
 }
 
 /// Drives the static-tile animator (water cycle) at a fixed wall-clock
@@ -9161,7 +9184,7 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             session,
             input_line,
         } => step_visual_chargen_panel(session, input_line, ch),
-        VisualIntroPanel::U4Transfer { .. } => require_published_u4_transfer_preview_presentation(),
+        VisualIntroPanel::U4Transfer { screen } => screen.step(ch),
         VisualIntroPanel::Story {
             records,
             step,
@@ -9231,8 +9254,13 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
 }
 
 fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
+    // `u4-transfer.md §6.5`: once the drive has been selected no key
+    // aborts the transfer — `Esc` at any confirmation prompt is simply
+    // ignored, and there is no cancel path back to the menu. `§6.3`'s
+    // two full-screen pages do take any key, `Esc` included, so route
+    // it through the ordinary key path rather than special-casing it.
     if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
-        require_published_u4_transfer_preview_presentation();
+        return step_visual_intro_panel(intro, '\x1b');
     }
     let Some((subflow, result, message)) = (match intro.panel {
         VisualIntroPanel::Menu => None,
@@ -9241,7 +9269,7 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
             IntroSubflowResult::Cancelled,
             "Character creation cancelled; returning to the intro menu.",
         )),
-        VisualIntroPanel::U4Transfer { .. } => unreachable!("U4 transfer contract panics"),
+        VisualIntroPanel::U4Transfer { .. } => unreachable!("Esc is handled above"),
         VisualIntroPanel::Story { .. } => Some((
             IntroSubflow::StorySlides,
             IntroSubflowResult::ReturnedToMenu,
@@ -9392,43 +9420,20 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
             intro.message_waiting_for_key = false;
             intro.message.clear();
         }
+        // `u4-transfer.md §6` (`cleak/u5-spec#73`). A source that reads
+        // but fails `§5.2`'s gate is not a media error: it lands on
+        // `§6.3`'s full-screen bad-data page, which the preview owns.
+        // A source that will not read at all is `§3` media, which a
+        // single-directory implementation collapses into an ordinary
+        // file-existence check with no screen of its own.
         IntroSubflow::UltimaIvTransfer => {
-            match read_u4_transfer_source_from_party_sav(&intro.game_dir) {
-                Ok(source) => {
-                    let preview = u4_transfer_preview_from_u4_values(
-                        display_name_bytes(&source.name),
-                        source.class_index,
-                        source.strength,
-                        source.dexterity,
-                        source.intelligence,
-                        0,
-                    );
-                    intro.panel = VisualIntroPanel::U4Transfer {
-                        source,
-                        preview,
-                        overrides: U4TransferOverrides {
-                            name: None,
-                            male: None,
-                        },
-                        stage: VisualU4TransferStage::ConfirmName,
-                        input_line: String::new(),
-                    };
+            match u4_transfer::enter_u4_transfer(intro.game_dir.clone()) {
+                u4_transfer::U4TransferEntry::Screen(screen) => {
+                    intro.panel = VisualIntroPanel::U4Transfer { screen };
                     intro.message_waiting_for_key = false;
                     intro.message.clear();
                 }
-                // `u4-transfer.md §3`: missing or wrong media is a
-                // *retryable* condition, not a hard process failure,
-                // and a single-directory implementation collapses the
-                // floppy prompts into an ordinary file-existence
-                // check. `§5` defines the separate "no transferable
-                // data" branch, also presented in the intro. Either
-                // way the path shows a message, waits for a key and
-                // returns to menu polling without writing anything -
-                // the same behaviour as the terminal path. The
-                // cleak/u5-spec#73 gate stays for the case where a
-                // valid source exists and the preview screen would
-                // actually have to be drawn.
-                Err(_rejected) => {
+                u4_transfer::U4TransferEntry::MediaUnavailable => {
                     intro
                         .dispatch
                         .complete_subflow(subflow, IntroSubflowResult::Cancelled);
@@ -9624,8 +9629,8 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         } => {
             return summarize_visual_chargen(session, input_line);
         }
-        VisualIntroPanel::U4Transfer { .. } => {
-            require_published_u4_transfer_preview_presentation();
+        VisualIntroPanel::U4Transfer { screen } => {
+            return screen.summary();
         }
         VisualIntroPanel::Story { records, step, .. } => {
             return summarize_intro_story(records, *step);
@@ -10396,27 +10401,15 @@ fn paint_chargen_prompt_screen(
     }
 }
 
+/// `u4-transfer.md §6` (`cleak/u5-spec#73`). The transfer preview owns
+/// a persistent surface — `§6` has no double buffering, no page swap
+/// and no deferred flush — so this only flushes whatever page build or
+/// per-stage edits the last keystroke queued.
 fn render_u4_transfer_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    let Some((_source, _preview, _overrides, _stage, _input_line)) = (match &intro.panel {
-        VisualIntroPanel::U4Transfer {
-            source,
-            preview,
-            overrides,
-            stage,
-            input_line,
-        } => Some((source, preview, overrides, *stage, input_line.as_str())),
-        _ => panic!("render_u4_transfer_intro_frame called for non-U4-transfer intro panel"),
-    }) else {
-        unreachable!("U4 transfer intro panel match must either produce data or panic");
+    let VisualIntroPanel::U4Transfer { screen } = &mut intro.panel else {
+        panic!("render_u4_transfer_intro_frame called for non-U4-transfer intro panel");
     };
-
-    require_published_u4_transfer_preview_presentation();
-}
-
-fn require_published_u4_transfer_preview_presentation() -> ! {
-    panic!(
-        "visual U4 transfer preview requires the published slot-heading strip, prompt window, paired character-info panels, prompt text, and redraw timing; drawing a simplified boxed text comparison is a forbidden fallback; see cleak/u5-spec#73"
-    )
+    screen.render()
 }
 
 /// `systems/intro.md §11` acknowledgements screen, as the original
@@ -13791,16 +13784,15 @@ mod tests {
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, ArmsShop, BRIT_OOL_FILENAME, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE,
-        DEFAULT_GAME_DIR, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE,
-        INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT,
-        INTRO_STEP_1_RECT_TRANSITION, OOL_PLANE_LEN, PenStroke, ProportionalFont,
-        ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT, REAGENT_SPIDER_SILK,
-        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
-        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
-        SAVED_GAM_LEN, SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
-        SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
-        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
+        Area, ArmsShop, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR, Direction,
+        EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME,
+        INTRO_START_MENU_REVEAL_RECT, INTRO_STEP_1_RECT_TRANSITION, OOL_PLANE_LEN, PenStroke,
+        ProportionalFont, ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT,
+        REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
+        SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
+        SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN, SAVED_OOL_FILENAME,
+        SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
+        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth, WorldPlane,
         dungeon_cell_index, parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit,
         parse_legacy_lzw_title_bit, parse_title_bit, world_cell_index, wrap_text_panel_lines,
     };
@@ -13836,18 +13828,6 @@ mod tests {
             message.contains("plain black band")
                 && message.contains("forbidden fallback")
                 && message.contains("cleak/u5-spec#63"),
-            "{message}"
-        );
-    }
-
-    fn assert_u4_transfer_preview_gap_panic(result: std::thread::Result<()>) {
-        let payload = result.expect_err("unpublished U4 transfer preview renderer must fail");
-        let message = panic_message(payload);
-        assert!(
-            message.contains("visual U4 transfer preview")
-                && message.contains("simplified boxed text comparison")
-                && message.contains("forbidden fallback")
-                && message.contains("cleak/u5-spec#73"),
             "{message}"
         );
     }
@@ -19935,48 +19915,6 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_u4_transfer_refuses_boxed_text_preview_fallback() {
-        let dir = debug_game_dir();
-        let source = U4TransferSource {
-            name: b"OLDNAME\0\0".to_vec(),
-            male: true,
-            class_index: 6,
-            strength: 35,
-            dexterity: 20,
-            intelligence: 22,
-            experience: 1500,
-        };
-        let preview = u4_transfer_preview_from_u4_values(
-            display_name_bytes(&source.name),
-            source.class_index,
-            source.strength,
-            source.dexterity,
-            source.intelligence,
-            0,
-        );
-        let mut intro = visual_intro_state_with_panel(
-            dir.clone(),
-            VisualIntroPanel::U4Transfer {
-                source,
-                preview,
-                overrides: U4TransferOverrides {
-                    name: None,
-                    male: None,
-                },
-                stage: VisualU4TransferStage::ConfirmName,
-                input_line: String::new(),
-            },
-        );
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = render_intro_frame(&mut intro);
-        }));
-
-        assert_u4_transfer_preview_gap_panic(result);
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn visual_intro_character_creation_escape_returns_to_menu_without_save() {
         let dir = debug_game_dir();
         let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
@@ -19998,100 +19936,6 @@ mod tests {
             intro.dispatch.submit_menu_key(b'A'),
             UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
         ));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn visual_intro_u4_transfer_input_refuses_unpublished_preview() {
-        let dir = debug_game_dir();
-        fs::write(
-            dir.join(U4_TRANSFER_U5_SEED_GAM_FILENAME),
-            saved_game_seed_bytes(0, 0, 10, 20),
-        )
-        .unwrap();
-        fs::write(dir.join(BRIT_OOL_FILENAME), vec![0x55; OOL_PLANE_LEN]).unwrap();
-        let source = U4TransferSource {
-            name: b"OLDNAME\0\0".to_vec(),
-            male: true,
-            class_index: 6,
-            strength: 35,
-            dexterity: 20,
-            intelligence: 22,
-            experience: 1500,
-        };
-        let preview = u4_transfer_preview_from_u4_values(
-            display_name_bytes(&source.name),
-            source.class_index,
-            source.strength,
-            source.dexterity,
-            source.intelligence,
-            0,
-        );
-        let mut intro = visual_intro_state_with_panel(
-            dir.clone(),
-            VisualIntroPanel::U4Transfer {
-                source,
-                preview,
-                overrides: U4TransferOverrides {
-                    name: None,
-                    male: None,
-                },
-                stage: VisualU4TransferStage::ConfirmName,
-                input_line: String::new(),
-            },
-        );
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = step_visual_intro_panel(&mut intro, 'N');
-        }));
-
-        assert_u4_transfer_preview_gap_panic(result);
-        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn visual_intro_u4_transfer_escape_refuses_unpublished_preview() {
-        let dir = debug_game_dir();
-        let source = U4TransferSource {
-            name: b"OLDNAME\0\0".to_vec(),
-            male: true,
-            class_index: 6,
-            strength: 35,
-            dexterity: 20,
-            intelligence: 22,
-            experience: 1500,
-        };
-        let preview = u4_transfer_preview_from_u4_values(
-            display_name_bytes(&source.name),
-            source.class_index,
-            source.strength,
-            source.dexterity,
-            source.intelligence,
-            0,
-        );
-        let mut intro = visual_intro_state_with_panel(
-            dir.clone(),
-            VisualIntroPanel::U4Transfer {
-                source,
-                preview,
-                overrides: U4TransferOverrides {
-                    name: Some(b"New".to_vec()),
-                    male: None,
-                },
-                stage: VisualU4TransferStage::ConfirmName,
-                input_line: String::new(),
-            },
-        );
-        intro.dispatch.submit_menu_key(b'T');
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = cancel_visual_intro_panel(&mut intro);
-        }));
-
-        assert_u4_transfer_preview_gap_panic(result);
-        assert!(matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }));
-        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
         let _ = fs::remove_dir_all(dir);
     }
 
