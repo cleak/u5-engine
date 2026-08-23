@@ -769,7 +769,7 @@ pub const fn healer_treatment_accepts(
     max_hp: u16,
 ) -> bool {
     match treatment {
-        HealerTreatment::Cure => matches!(status, CharacterStatus::PoisonedOrRevived),
+        HealerTreatment::Cure => matches!(status, CharacterStatus::Poisoned),
         HealerTreatment::Heal => !matches!(status, CharacterStatus::Dead) && hp < max_hp,
         HealerTreatment::Resurrect => matches!(status, CharacterStatus::Dead),
     }
@@ -1112,7 +1112,7 @@ pub const fn inn_pickup_bill_for_speaker(
 /// inn prints "Thy friend has died, by the way." Other stored
 /// statuses pass through unchanged.
 pub const fn inn_pickup_status_converts_to_dead(stored_status: CharacterStatus) -> bool {
-    matches!(stored_status, CharacterStatus::PoisonedOrRevived)
+    matches!(stored_status, CharacterStatus::Poisoned)
 }
 
 /// `shops.md §8.4` 28-day month-rollover stay-counter cap. Each

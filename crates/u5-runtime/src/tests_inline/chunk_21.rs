@@ -700,7 +700,7 @@
         let mut grid = open_grid();
         grid[32 + 2] = 0xd9;
         let mut state = test_state(grid, 1, 1);
-        state.party[0].status = CharacterStatus::PoisonedOrRevived.save_byte();
+        state.party[0].status = CharacterStatus::Poisoned.save_byte();
         state.party[0].hp = 12;
         state.party[0].max_hp = 90;
         let before = state.party[0];

@@ -67,13 +67,26 @@ pub const fn character_class_for_byte(byte: u8) -> Option<CharacterClass> {
 }
 
 /// `formats/saved-gam.md §3.1` published status-letter values for the
-/// 32-byte character record's `+0x0B` field. The `'P'` value is shared
-/// by poison and one revive-style helper transitioning a dead slot
-/// back to a live state.
+/// 32-byte character record's `+0x0B` field.
+///
+/// `'P'` is **poisoned**, and nothing else. This doc used to say the
+/// value was "shared by poison and one revive-style helper transitioning
+/// a dead slot back to a live state", and the variant was named
+/// `PoisonedOrRevived` to match. Both came from a draft of
+/// `systems/traps.md §3` that is **withdrawn**: the helper used by trap
+/// effect ids 1 and 3 is a poison primitive, not a revival one. It skips
+/// already-dead slots and leaves them dead.
+///
+/// That wording was not harmless. We implemented it
+/// (`if status == 'D' { status = 'P' }`), so poison traps did nothing at
+/// all to a healthy party and gas traps resurrected the dead instead of
+/// poisoning the living. The variant name is the part worth noting: it
+/// asserted the retracted contract in a place no review reads as a
+/// claim, and it survived the code fix by three commits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CharacterStatus {
     Good,
-    PoisonedOrRevived,
+    Poisoned,
     Sleeping,
     Charmed,
     Dead,
@@ -84,7 +97,7 @@ impl CharacterStatus {
     pub const fn save_byte(self) -> u8 {
         match self {
             CharacterStatus::Good => b'G',
-            CharacterStatus::PoisonedOrRevived => b'P',
+            CharacterStatus::Poisoned => b'P',
             CharacterStatus::Sleeping => b'S',
             CharacterStatus::Charmed => b'C',
             CharacterStatus::Dead => b'D',
@@ -143,7 +156,7 @@ pub const fn save_character_field_offset(slot: usize, field_offset: usize) -> us
 pub const fn rest_with_watch_participates(status: CharacterStatus) -> bool {
     matches!(
         status,
-        CharacterStatus::Good | CharacterStatus::PoisonedOrRevived | CharacterStatus::Sleeping,
+        CharacterStatus::Good | CharacterStatus::Poisoned | CharacterStatus::Sleeping,
     )
 }
 
@@ -183,7 +196,7 @@ pub const fn rest_with_watch_recovers_hp(status: CharacterStatus) -> bool {
 /// rest entry.
 pub const fn sleep_ambush_restored_status(entry_status: CharacterStatus) -> CharacterStatus {
     match entry_status {
-        CharacterStatus::PoisonedOrRevived => CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned => CharacterStatus::Poisoned,
         CharacterStatus::Good | CharacterStatus::Sleeping => CharacterStatus::Good,
         other => other,
     }
@@ -220,7 +233,7 @@ pub const fn rest_duration_input(byte: u8) -> RestDurationInput {
 pub const fn character_status_for_byte(byte: u8) -> Option<CharacterStatus> {
     Some(match byte {
         b'G' => CharacterStatus::Good,
-        b'P' => CharacterStatus::PoisonedOrRevived,
+        b'P' => CharacterStatus::Poisoned,
         b'S' => CharacterStatus::Sleeping,
         b'C' => CharacterStatus::Charmed,
         b'D' => CharacterStatus::Dead,

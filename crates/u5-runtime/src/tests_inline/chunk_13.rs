@@ -8677,8 +8677,8 @@ fn sleep_ambush_restored_status_preserves_poisoned_and_lifts_sleepers() {
     // Good; Charmed/Dead/Ashes pass through (they are not
     // promoted to active combatants).
     assert_eq!(
-        sleep_ambush_restored_status(CharacterStatus::PoisonedOrRevived),
-        CharacterStatus::PoisonedOrRevived
+        sleep_ambush_restored_status(CharacterStatus::Poisoned),
+        CharacterStatus::Poisoned
     );
     assert_eq!(
         sleep_ambush_restored_status(CharacterStatus::Good),
@@ -10531,7 +10531,7 @@ fn rest_with_watch_has_no_direct_hp_recovery() {
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Good));
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Sleeping));
     assert!(!rest_with_watch_recovers_hp(
-        CharacterStatus::PoisonedOrRevived
+        CharacterStatus::Poisoned
     ));
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Charmed));
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Dead));
@@ -10539,7 +10539,7 @@ fn rest_with_watch_has_no_direct_hp_recovery() {
     // Sanity: Poisoned still participates even though it does not
     // recover HP — the two predicates are independent.
     assert!(rest_with_watch_participates(
-        CharacterStatus::PoisonedOrRevived
+        CharacterStatus::Poisoned
     ));
 }
 
@@ -10615,7 +10615,7 @@ fn town_fountain_drink_accepts_excludes_dead_and_asleep() {
     // view.md §3
     for status in [
         CharacterStatus::Good,
-        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned,
         CharacterStatus::Charmed,
         CharacterStatus::Ashes,
     ] {
@@ -10717,7 +10717,7 @@ fn trap_poison_helper_skips_only_dead_slots() {
     assert!(!trap_poison_accepts(CharacterStatus::Dead));
     for status in [
         CharacterStatus::Good,
-        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned,
         CharacterStatus::Sleeping,
         CharacterStatus::Charmed,
         CharacterStatus::Ashes,
@@ -10732,7 +10732,7 @@ fn trap_poison_helper_skips_only_dead_slots() {
     // The raw-byte bridge the resolver uses agrees with the enum form.
     for status in [
         CharacterStatus::Good,
-        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned,
         CharacterStatus::Sleeping,
         CharacterStatus::Charmed,
         CharacterStatus::Dead,
@@ -11627,7 +11627,7 @@ fn blackthorn_captive_cell_handoff_matches_spec_coordinates() {
 fn inn_pickup_morbid_path_targets_only_poisoned() {
     // shops.md §8.4
     assert!(inn_pickup_status_converts_to_dead(
-        CharacterStatus::PoisonedOrRevived
+        CharacterStatus::Poisoned
     ));
     for status in [
         CharacterStatus::Good,
@@ -11652,7 +11652,7 @@ fn healer_treatment_accepts_per_status_and_hp() {
     // Cure: only Poisoned.
     assert!(healer_treatment_accepts(
         HealerTreatment::Cure,
-        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned,
         20,
         30
     ));
@@ -11679,7 +11679,7 @@ fn healer_treatment_accepts_per_status_and_hp() {
     ));
     assert!(healer_treatment_accepts(
         HealerTreatment::Heal,
-        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned,
         10,
         30
     ));
@@ -11776,7 +11776,7 @@ fn endgame_needs_tableau_restoration_targets_only_dead() {
     assert!(endgame_needs_tableau_restoration(CharacterStatus::Dead));
     for status in [
         CharacterStatus::Good,
-        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned,
         CharacterStatus::Sleeping,
         CharacterStatus::Charmed,
         CharacterStatus::Ashes,
@@ -11930,7 +11930,7 @@ fn combat_restore_active_player_slot_clears_on_dead_or_sleeping() {
     // All other statuses restore the saved slot.
     for status in [
         CharacterStatus::Good,
-        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned,
         CharacterStatus::Charmed,
         CharacterStatus::Ashes,
     ] {
@@ -15296,7 +15296,7 @@ fn rest_status_predicates_match_spec_tables() {
     // Rest-with-watch participation.
     assert!(rest_with_watch_participates(CharacterStatus::Good));
     assert!(rest_with_watch_participates(
-        CharacterStatus::PoisonedOrRevived
+        CharacterStatus::Poisoned
     ));
     assert!(rest_with_watch_participates(CharacterStatus::Sleeping));
     assert!(!rest_with_watch_participates(CharacterStatus::Charmed));
@@ -15306,7 +15306,7 @@ fn rest_status_predicates_match_spec_tables() {
     // Town-hours temporary-sleep marking only Good members.
     assert!(town_rest_temp_sleep_marked(CharacterStatus::Good));
     assert!(!town_rest_temp_sleep_marked(
-        CharacterStatus::PoisonedOrRevived
+        CharacterStatus::Poisoned
     ));
     assert!(!town_rest_temp_sleep_marked(CharacterStatus::Sleeping));
     assert!(!town_rest_temp_sleep_marked(CharacterStatus::Charmed));
@@ -15317,7 +15317,7 @@ fn rest_status_predicates_match_spec_tables() {
     assert!(rest_cleanup_transitions_to_good(CharacterStatus::Sleeping));
     assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Good));
     assert!(!rest_cleanup_transitions_to_good(
-        CharacterStatus::PoisonedOrRevived
+        CharacterStatus::Poisoned
     ));
     assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Charmed));
     assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Dead));
@@ -18655,7 +18655,7 @@ fn character_class_and_status_letter_round_trip() {
     // Status round-trip
     for status in [
         CharacterStatus::Good,
-        CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Poisoned,
         CharacterStatus::Sleeping,
         CharacterStatus::Charmed,
         CharacterStatus::Dead,
@@ -18671,7 +18671,7 @@ fn character_class_and_status_letter_round_trip() {
     // different record fields.
     assert_eq!(
         character_status_for_byte(b'P'),
-        Some(CharacterStatus::PoisonedOrRevived)
+        Some(CharacterStatus::Poisoned)
     );
     assert_eq!(
         character_class_for_byte(b'P'),
