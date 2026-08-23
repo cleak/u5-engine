@@ -1,4 +1,4 @@
-//! Misc TSV-table data structures: town fire targets, moongates, tile descriptions, location floor/entry-y.
+//! Misc TSV-table data structures: town fire targets, tile descriptions, location floor/entry-y.
 
 use std::io;
 
@@ -10,36 +10,6 @@ pub enum TownFireTarget {
     Door { x: usize, y: usize, tile: u8 },
     Wall { x: usize, y: usize, tile: u8 },
     None,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MoongateEntry {
-    pub x: usize,
-    pub y: usize,
-    pub destination_plane: WorldPlane,
-    pub destination_x: usize,
-    pub destination_y: usize,
-    pub active_hours: Option<(u8, u8)>,
-    pub expected_tile: Option<u8>,
-}
-
-impl MoongateEntry {
-    pub fn is_active_at(self, hour: u8) -> bool {
-        match self.active_hours {
-            Some((start, end)) if start <= end => (start..=end).contains(&hour),
-            Some((start, end)) => hour >= start || hour <= end,
-            None => true,
-        }
-    }
-
-    pub fn is_single_ended(self) -> bool {
-        self.destination_x == u8::MAX as usize && self.destination_y == u8::MAX as usize
-    }
-
-    pub fn matches_origin_tile(self, tile: u8) -> bool {
-        self.expected_tile
-            .map_or(true, |expected_tile| expected_tile == tile)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

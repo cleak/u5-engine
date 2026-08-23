@@ -288,7 +288,6 @@ impl PlayState {
         self.sync_player_object();
         self.clear_open_town_door_state();
         self.return_world = None;
-        self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.mode_zero_cleanup();
@@ -916,7 +915,6 @@ impl PlayState {
                 else {
                     continue;
                 };
-                let terrain = self.top_down_visibility_base_tile(area, world_x, world_y, terrain);
                 let grid_index = visibility_grid_active_index(row, col).unwrap();
                 let terrain_index = terrain_band_active_index(row, col).unwrap();
                 self.terrain_band[terrain_index] = terrain;
@@ -943,29 +941,11 @@ impl PlayState {
                 else {
                     continue;
                 };
-                let terrain = self.top_down_visibility_base_tile(area, world_x, world_y, terrain);
                 let terrain_index = terrain_band_active_index(row, col).unwrap();
                 self.terrain_band[terrain_index] = terrain;
             }
         }
         self.composite_active_objects_into_visibility_buffers(area, radius);
-    }
-
-    fn top_down_visibility_base_tile(
-        &self,
-        area: TopDownRenderArea,
-        world_x: isize,
-        world_y: isize,
-        terrain: u8,
-    ) -> u8 {
-        if let TopDownRenderArea::World(plane) = area {
-            let wx = world_x.rem_euclid(WORLD_SIDE as isize) as usize;
-            let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
-            if self.visible_moongate_at(plane, wx, wy) {
-                return MOONGATE_TILE_BASE;
-            }
-        }
-        terrain
     }
 
     fn copy_combat_terrain_to_visibility_buffers(&mut self) {
@@ -1107,22 +1087,6 @@ impl PlayState {
                     terrain,
                     grid: terrain,
                 });
-            }
-        }
-
-        if let TopDownRenderArea::World(plane) = area {
-            for cell_y in 0..cells {
-                for cell_x in 0..cells {
-                    let world_x = px + cell_x as isize - r;
-                    let world_y = py + cell_y as isize - r;
-                    let wx = world_x.rem_euclid(WORLD_SIDE as isize) as usize;
-                    let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
-                    if let Some(cell) = prepared[cell_y * cells + cell_x].as_mut() {
-                        if self.visible_moongate_at(plane, wx, wy) {
-                            cell.grid = MOONGATE_TILE_BASE;
-                        }
-                    }
-                }
             }
         }
 
@@ -1994,7 +1958,6 @@ impl PlayState {
         self.turn += 1;
         let previous_day = self.clock.day;
         let previous_hour = self.clock.hour;
-        let previous_moongates = self.visible_moongate_cells();
         self.clock.advance_minutes(effective_minutes);
         if self.clock.day != previous_day {
             self.reroll_shadowlord_hideouts();
@@ -2018,9 +1981,6 @@ impl PlayState {
         }
         self.recompute_daylight();
         self.refresh_natural_moongates();
-        if self.visible_moongate_cells() != previous_moongates {
-            self.mark_visibility_dirty();
-        }
         self.sync_player_object();
         if self.time_stop_counter != 0 {
             self.time_stop_counter = self.time_stop_counter.saturating_sub(1);

@@ -245,14 +245,10 @@ fn typeahead_buffer_pauses_during_modal_prompts() {
     assert!(play_state_accepts_typeahead(&state));
 
     state.typeahead_buffer_enabled = true;
-    state.pending_moongate = Some(MoongateEntry {
-        x: 4,
-        y: 5,
-        destination_plane: WorldPlane::Britannia,
-        destination_x: 6,
-        destination_y: 7,
-        active_hours: None,
-        expected_tile: None,
+    state.pending_town_arrest = Some(TownArrestPrompt {
+        scene_byte: 1,
+        floor: 0,
+        npc_slot: 1,
     });
 
     assert_eq!(play_input_typeahead_chars("12"), Some(vec!['1', '2']));
@@ -264,8 +260,8 @@ fn typeahead_buffer_pauses_during_modal_prompts() {
 
     assert_eq!(state.turn, 0);
     assert_eq!((state.player.x, state.player.y), (4, 5));
-    assert!(state.pending_moongate.is_some());
-    assert_eq!(state.message, "Enter moongate? (Y/N).");
+    assert!(state.pending_town_arrest.is_some());
+    assert_eq!(state.message, "Surrender? (Y/N).");
 }
 
 #[test]
@@ -414,14 +410,10 @@ fn play_script_command_label_sanitizes_control_sequences() {
 #[test]
 fn pending_prompt_consumes_typeahead_toggle_without_changing_buffer_state() {
     let mut prompted = world_state(open_world_grid(), 4, 5);
-    prompted.pending_moongate = Some(MoongateEntry {
-        x: 4,
-        y: 5,
-        destination_plane: WorldPlane::Britannia,
-        destination_x: 6,
-        destination_y: 7,
-        active_hours: None,
-        expected_tile: None,
+    prompted.pending_town_arrest = Some(TownArrestPrompt {
+        scene_byte: 1,
+        floor: 0,
+        npc_slot: 1,
     });
 
     assert_eq!(
@@ -432,30 +424,26 @@ fn pending_prompt_consumes_typeahead_toggle_without_changing_buffer_state() {
     assert!(!prompted.typeahead_buffer_enabled);
     assert_eq!(prompted.turn, 0);
     assert_eq!(prompted.animation.frame, 0);
-    assert!(prompted.pending_moongate.is_some());
-    assert_eq!(prompted.message, "Enter moongate? (Y/N).");
+    assert!(prompted.pending_town_arrest.is_some());
+    assert_eq!(prompted.message, "Surrender? (Y/N).");
 }
 
 // from chunk_19
 #[test]
-fn empty_play_input_repeats_pending_moongate_prompt_without_turn() {
+fn empty_play_input_repeats_pending_prompt_without_turn() {
     let mut prompted = world_state(open_world_grid(), 4, 5);
-    prompted.pending_moongate = Some(MoongateEntry {
-        x: 4,
-        y: 5,
-        destination_plane: WorldPlane::Britannia,
-        destination_x: 6,
-        destination_y: 7,
-        active_hours: None,
-        expected_tile: None,
+    prompted.pending_town_arrest = Some(TownArrestPrompt {
+        scene_byte: 1,
+        floor: 0,
+        npc_slot: 1,
     });
 
     handle_empty_play_input(&mut prompted, Path::new("")).unwrap();
 
     assert_eq!(prompted.turn, 0);
     assert_eq!((prompted.player.x, prompted.player.y), (4, 5));
-    assert!(prompted.pending_moongate.is_some());
-    assert_eq!(prompted.message, "Enter moongate? (Y/N).");
+    assert!(prompted.pending_town_arrest.is_some());
+    assert_eq!(prompted.message, "Surrender? (Y/N).");
 
     let mut unprompted = test_state(open_grid(), 1, 1);
 
@@ -613,14 +601,10 @@ fn play_script_idle_count_replays_no_turn_visual_ticks() {
 #[test]
 fn play_script_idle_count_respects_pending_prompt_freeze() {
     let mut prompted = world_state(open_world_grid(), 4, 5);
-    prompted.pending_moongate = Some(MoongateEntry {
-        x: 4,
-        y: 5,
-        destination_plane: WorldPlane::Britannia,
-        destination_x: 6,
-        destination_y: 7,
-        active_hours: None,
-        expected_tile: None,
+    prompted.pending_town_arrest = Some(TownArrestPrompt {
+        scene_byte: 1,
+        floor: 0,
+        npc_slot: 1,
     });
 
     assert_eq!(
@@ -630,8 +614,8 @@ fn play_script_idle_count_respects_pending_prompt_freeze() {
 
     assert_eq!(prompted.turn, 0);
     assert_eq!(prompted.animation.frame, 0);
-    assert!(prompted.pending_moongate.is_some());
-    assert_eq!(prompted.message, "Enter moongate? (Y/N).");
+    assert!(prompted.pending_town_arrest.is_some());
+    assert_eq!(prompted.message, "Surrender? (Y/N).");
 }
 
 // from chunk_19

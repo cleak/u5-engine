@@ -116,9 +116,6 @@ fn handle_play_key_input_inner(
     if state.resolve_town_arrest_prompt(key, game_dir)?.is_some() {
         return Ok(PlayInputDisposition::Continue);
     }
-    if state.resolve_moongate_prompt(key, game_dir)?.is_some() {
-        return Ok(PlayInputDisposition::Continue);
-    }
     if state.resolve_natural_moongate_entry(game_dir)?.is_some() {
         return Ok(PlayInputDisposition::Continue);
     }

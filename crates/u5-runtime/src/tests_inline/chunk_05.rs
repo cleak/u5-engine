@@ -83,46 +83,6 @@
     }
 
     #[test]
-    fn exit_vehicle_skips_active_moongate_origin_landing_cells() {
-        let mut state = britannia_state(open_world_grid(), 5, 5);
-        state.ambient_light = FULL_DAYLIGHT;
-        state.moongates.push(MoongateEntry {
-            x: 6,
-            y: 5,
-            destination_plane: WorldPlane::Britannia,
-            destination_x: 10,
-            destination_y: 20,
-            active_hours: None,
-            expected_tile: None,
-        });
-        state.player.transport = TransportState::Carpet {
-            type_byte: 184,
-            tile: 184,
-        };
-        state.sync_player_object();
-
-        assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
-
-        assert_eq!(
-            state.area,
-            Area::World {
-                plane: WorldPlane::Britannia
-            }
-        );
-        assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (5, 5));
-        assert!(state.pending_moongate.is_none());
-        assert!(state.active_objects.iter().skip(1).any(|object| {
-            object.type_byte == 184
-                && object.x == 5
-                && object.y == 5
-                && object.z == WorldPlane::Britannia.save_floor()
-        }));
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "carpet!");
-    }
-
-    #[test]
     fn exit_vehicle_skips_town_exit_tile_landing_cells() {
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 2 1 16\n").unwrap();

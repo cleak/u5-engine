@@ -755,7 +755,6 @@ tables are not yet public or not yet encoded.
   - `town_exit_tiles.tsv`
   - `town_locks.tsv`
   - `eternal_flames.tsv` (override/extension for the public native flame table)
-  - `moongates.tsv`
   - `location_floor_pages.tsv`
   - `location_entry_y.tsv`
   - `tile_passability.bin`

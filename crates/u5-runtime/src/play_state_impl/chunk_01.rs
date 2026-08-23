@@ -336,7 +336,6 @@ impl PlayState {
     ) -> io::Result<Self> {
         let mut grid = load_floor(game_dir, scene, options.floor)?;
         let passability = load_tile_passability(game_dir)?;
-        let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
         let markers = harvest_location_markers(&grid);
@@ -407,7 +406,6 @@ impl PlayState {
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),
             passability,
-            moongates,
             grid,
             world_live_chunks: None,
             clock: options.clock,
@@ -492,7 +490,6 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
-            pending_moongate: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,
@@ -585,7 +582,6 @@ impl PlayState {
             grid
         };
         let passability = load_tile_passability(game_dir)?;
-        let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
         let level = options.floor as u8;
         let default_start = (1, 1);
         let saved_active_objects = options.saved_active_objects.clone();
@@ -645,7 +641,6 @@ impl PlayState {
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),
             passability,
-            moongates,
             grid,
             world_live_chunks: None,
             clock: options.clock,
@@ -737,7 +732,6 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
-            pending_moongate: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,
@@ -788,7 +782,6 @@ impl PlayState {
     ) -> io::Result<Self> {
         let grid = load_world_map(game_dir, plane)?;
         let passability = load_tile_passability(game_dir)?;
-        let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
         let damage_tiles = load_world_damage_tile_entries(game_dir)?.unwrap_or_default();
         // Canonical Ultima V starting position: Iolo's Hut on the surface
         // (Britannia), at the cell south of the dwelling entrance. For the
@@ -898,7 +891,6 @@ impl PlayState {
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),
             passability,
-            moongates,
             grid,
             world_live_chunks,
             clock: options.clock,
@@ -987,7 +979,6 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
-            pending_moongate: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,

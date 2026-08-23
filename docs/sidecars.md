@@ -25,7 +25,21 @@ from decompiled code.
 | `town_poison_gas.tsv` | Legacy town poison-gas doorway rows; no longer used by the native #51 tile `0x04` branch. |
 | `town_tile_attributes.tsv` | Legacy clean tile-id attributes; no longer used by the native #51 tile `0x04` branch. |
 | `town_exit_tiles.tsv` | Town exit threshold rows. |
-| `moongates.tsv` | Authored moongate origin/destination rows. |
+| `moongates.tsv` | Removed. Superseded by the published natural-gate system; the runtime no longer reads this file. See below. |
+
+`moongates.tsv` held authored moongate origin/destination rows from the period
+before the natural-gate coordinates were published. `systems/overworld.md` §9
+now specifies the whole feature from the eight saved Moonstone slots in
+`SAVED.GAM`: a once-per-world-turn refresh stamps eligible slots as live `0xDC`
+terrain, the shared sixteen-step presence counter at `SAVED.GAM` `0x02E1` drives
+appearance, and destinations come from the Moonstone slots. The sidecar's model
+contradicted that specification on four points - it gated gates on full daylight
+(§9.2: the live `0xDC` terrain test "is the only precondition"), it asked a
+`Y/N` prompt (§9.2: the entry hook is blocking and cannot be skipped), it drew
+the gate tile unconditionally (§9.1 composes sixteen phases), and it carried
+per-row active-hour windows (§9: one shared counter driven by the hour band).
+The sidecar was also inert: nothing shipped a `moongates.tsv`. It has therefore
+been removed rather than repaired.
 
 `dungeon_deeper_transitions.tsv` rows use:
 

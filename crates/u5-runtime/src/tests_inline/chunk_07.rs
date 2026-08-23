@@ -2383,49 +2383,6 @@ fn waterfall_sidecar_does_not_apply_clean_plane_transition() {
 }
 
 #[test]
-fn waterfall_sidecar_does_not_queue_moongate_landing_prompt() {
-    let dir = debug_game_dir();
-    fs::write(
-        dir.join(WORLD_WATERFALL_TABLE_FILE),
-        "BRITANNIA 1 0 EAST 3 1\n",
-    )
-    .unwrap();
-    let mut state = britannia_state(vec![1; WORLD_CELLS], 0, 0);
-    state.ambient_light = FULL_DAYLIGHT;
-    state.player.transport = TransportState::Ship {
-        type_byte: 168,
-        tile: 168,
-        sails_hoisted: false,
-        hull: 20,
-        skiffs: 1,
-    };
-    state.moongates.push(MoongateEntry {
-        x: 3,
-        y: 0,
-        destination_plane: WorldPlane::Britannia,
-        destination_x: 30,
-        destination_y: 40,
-        active_hours: None,
-        expected_tile: None,
-    });
-    state.sync_player_object();
-
-    assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
-        MoveOutcome::Moved
-    );
-
-    assert_eq!((state.player.x, state.player.y), (1, 0));
-    assert_eq!(state.turn, 1);
-    assert_eq!(state.pending_moongate, None);
-    assert!(!state.message.contains("waterfall swept"));
-    assert!(!state.message.contains("moongate! Enter?"));
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
 fn world_waterfall_tile_guard_mismatch_keeps_normal_movement() {
     let dir = debug_game_dir();
     fs::write(

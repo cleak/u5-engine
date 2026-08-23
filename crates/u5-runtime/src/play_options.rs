@@ -320,10 +320,6 @@ pub enum AreaTransition {
         from: WorldPlane,
         to: WorldPlane,
     },
-    MoongateTeleported {
-        from: WorldPlane,
-        to: WorldPlane,
-    },
     GateTraveled {
         target: PlayTarget,
     },

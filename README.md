@@ -901,35 +901,10 @@ midnight meditation path during hour `0`, minutes `0..9`, or teleports through
 the saved Moonstone phase selected by the cached moon glyph for the current
 half-day.
 
-The clean sidecar `moongates.tsv` remains available for authored transition
-fixtures and rendering smoke tests:
-
-```text
-# ORIGIN_X ORIGIN_Y DEST_PLANE DEST_X DEST_Y [TILE]
-# ORIGIN_X ORIGIN_Y DEST_PLANE DEST_X DEST_Y START_HOUR END_HOUR [TILE]
-10 20 BRITANNIA 30 40 24
-12 22 UNDERWORLD 44 55 22 2 24
-```
-
-Rows are surface origins for the sidecar transition fixture, not the native
-natural-gate placement schedule. Optional hours are inclusive and may wrap
-across midnight; when hours are omitted, a sixth column is treated as an
-optional source-tile guard. When hours are present, an optional eighth column
-provides that same guard. A guarded row is active only while the origin still
-has the expected tile, keeping stale authored coordinates from rendering or
-prompting after local map edits. Active sidecar gates also require full
-daylight from the cached ambient-light state before they render over the world
-view, allow stepping onto their cell, or respond to `E`. The rendered gate
-sprite advances through the public 16-frame moongate animation plate on visual
-ticks at the origin and at Britannia destinations only while a daylight-active
-gate is visible; underworld destinations are transition targets but are not
-rendered on the surface view. A destination coordinate of `255 255` is the
-public single-ended sentinel: the origin can render and prompt, but it does not
-render a destination overlay or teleport the party. Stepping onto a visible
-sidecar origin, or completing any turn-consuming top-down action while already
-standing on one, queues the clean landing prompt; `Y` teleports
-through the queued destination without spending a second turn, while `N` leaves
-the party on the gate.
+That saved-slot path is the only moongate system the engine has. The former
+`moongates.tsv` sidecar - authored origin/destination rows from before the
+natural-gate coordinates were published - has been removed; see
+`docs/sidecars.md`.
 
 Secret-door search metadata can be supplied as a clean-room sidecar while the
 public dungeon low-nibble and town object-table encodings remain open. Place
