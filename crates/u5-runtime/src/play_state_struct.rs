@@ -136,6 +136,15 @@ pub struct PlayState {
     /// Bumped on every transcript push so callers can tell whether a
     /// dispatch already recorded its own output.
     pub(crate) message_transcript_revision: u64,
+    /// `text-output.md §11`: the original "has no message slot to
+    /// overwrite" — text is a stream into a windowed grid, so a turn
+    /// that produces two lines shows both. `message` above cannot
+    /// report its own writes, so this shadows the value most recently
+    /// appended to `message_transcript`: any later value differing from
+    /// it is an emission the transcript has not seen, and
+    /// [`PlayState::flush_message_slot`] appends it before the slot can
+    /// be overwritten again.
+    pub(crate) message_flushed: String,
     /// The verb echo opened for the command currently being dispatched,
     /// if any, plus the message text that stood when it was opened.
     pub(crate) pending_command_echo: Option<PendingCommandEcho>,

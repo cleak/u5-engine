@@ -49,6 +49,51 @@ impl PlayState {
         }
     }
 
+    /// `text-output.md §11`: emit one line into the transcript *now*,
+    /// rather than leaving it in the slot for a later writer to
+    /// overwrite. The original "has no message slot to overwrite": a
+    /// line reaches the window when it is produced, and a second line
+    /// produced in the same turn prints beneath it. Every producer that
+    /// can run alongside another in one turn — the per-turn epilogue
+    /// above all — must use this rather than assigning `message`.
+    ///
+    /// The slot is still written, because ~300 readers and the terminal
+    /// harness take the newest line from it.
+    pub fn emit_message_line(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.push_message_transcript_lines(&text);
+        self.message = text.clone();
+        self.message_flushed = text;
+    }
+
+    /// `text-output.md §11`: append whatever the slot is holding, if the
+    /// transcript has not already recorded it.
+    ///
+    /// This is the safety net under [`Self::emit_message_line`], for the
+    /// many handlers that still assign `message` directly. It is called
+    /// at the turn-composition boundaries — at the end of the per-turn
+    /// epilogue, and at the end of the key dispatch — so a line written
+    /// before one of those boundaries is on the transcript before the
+    /// next writer can replace the slot.
+    ///
+    /// It infers "a write happened" from the value changing, because a
+    /// plain `String` field cannot report its own writes. That inference
+    /// is exact except for two byte-identical lines emitted back to back
+    /// through direct assignment on a path that opens no verb echo,
+    /// which collapse into one entry. Promote such a producer to
+    /// [`Self::emit_message_line`] to make it exact.
+    ///
+    /// Returns whether anything was appended.
+    pub fn flush_message_slot(&mut self) -> bool {
+        if self.message.is_empty() || self.message == self.message_flushed {
+            return false;
+        }
+        let text = self.message.clone();
+        self.push_message_transcript_lines(&text);
+        self.message_flushed = text;
+        true
+    }
+
     /// `commands.md §5`: open a transcript entry with the command's
     /// resident verb echo before the handler prompts or refuses.
     pub fn begin_command_echo(&mut self, echo: CommandEcho) {
@@ -58,6 +103,9 @@ impl PlayState {
             echo,
             message_at_entry: std::mem::take(&mut self.message),
         });
+        // The slot is empty again, so the next value in it is a new
+        // emission whatever it says.
+        self.message_flushed.clear();
     }
 
     /// Drop an echo that was opened for a key the active mode turned out
@@ -76,6 +124,7 @@ impl PlayState {
         }
         if self.message.is_empty() {
             self.message = pending.message_at_entry;
+            self.message_flushed = self.message.clone();
         }
     }
 
@@ -96,9 +145,18 @@ impl PlayState {
         let message = std::mem::take(&mut self.message);
         if message.is_empty() {
             self.message = pending.message_at_entry;
+            self.message_flushed = self.message.clone();
+            return true;
+        }
+        if message == self.message_flushed {
+            // The handler emitted through `emit_message_line`, so the
+            // transcript already carries it; only the slot needs
+            // restoring.
+            self.message = message;
             return true;
         }
         self.message = message.clone();
+        self.message_flushed = message.clone();
 
         let verb = pending.echo.text;
         let echo_is_last = self

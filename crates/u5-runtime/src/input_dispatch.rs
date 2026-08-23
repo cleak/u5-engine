@@ -23,16 +23,12 @@ pub fn handle_play_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
-    let message_before = state.message.clone();
-    let revision_before = state.message_transcript_revision();
     let result = handle_play_key_input_inner(state, key, suffix, game_dir);
     state.commit_command_echo();
-    if state.message_transcript_revision() == revision_before
-        && state.message != message_before
-        && !state.message.is_empty()
-    {
-        state.push_message_transcript_lines(&state.message.clone());
-    }
+    // `text-output.md §11`: whatever is still only in the slot is a line
+    // the original would already have printed, so record it before the
+    // next key can overwrite it.
+    state.flush_message_slot();
     result
 }
 
