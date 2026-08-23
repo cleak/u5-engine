@@ -112,6 +112,21 @@ pub enum TlkRunStop {
     /// execution. The conversation session owns the labelled-record
     /// handler and any scoped prompt that follows.
     LabelTransfer(u8),
+    /// Ran into a `0x90 <label>` record-declaration marker
+    /// (`conversation.md` §7.7) while executing a stream. Both marker
+    /// bytes are consumed; the payload is the declared label.
+    ///
+    /// This is distinct from [`TlkRunStop::LabelTransfer`]: that is a
+    /// GOTO *to* a label, this is arriving at a label's *declaration*,
+    /// which means the current record ended without its own terminator.
+    ///
+    /// **Spec gap.** §7.7 publishes the marker's shape and its role in
+    /// the label scan, but not what the byte runner does on reaching one
+    /// through ordinary in-stream execution. Rather than guess between
+    /// "inert separator, keep running into the next record" and "the
+    /// record ended", the runner surfaces the marker and stops. Callers
+    /// that need the other reading should resume from `consumed`.
+    LabelRecordMarker(u8),
 }
 
 /// One side-effect emitted while running a stream.
@@ -144,6 +159,12 @@ pub enum TlkRunEvent {
     },
     /// A GOTO-LABEL (`0x91..=0x9F`) was followed.
     GotoLabel { from: u8, to: u8 },
+    /// A byte reached the dispatcher's unclassified arm. `conversation.md`
+    /// §7 partitions the whole byte space, so this event means the runner
+    /// is missing a case or the stream is not shipped content. Recorded
+    /// rather than skipped so a missing case cannot stay invisible; debug
+    /// builds also assert on it.
+    UnclassifiedByte { byte: u8, offset: usize },
     /// `0x89` STANDING-UP / `0x8A` STANDING-DOWN wrote the shared
     /// moral-standing selector. `raise` distinguishes the two codes and
     /// `to` is the post-clamp value. One event is recorded per byte even
@@ -438,6 +459,36 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     }
                 }
             }
+            TLK_CODE_LABEL_RECORD => {
+                // `conversation.md` §7.7 / `tlk.md` §9: a label is
+                // *declared* by the two-byte record marker `0x90 <label>`,
+                // and `0x90` is "data structure, not ordinary printable
+                // text". Both bytes belong to the marker, so both are
+                // consumed here.
+                //
+                // Consuming only the `0x90` — which is what the silent
+                // catch-all did — left the declaration's label byte to be
+                // re-dispatched by the arm below, turning a record *header*
+                // into a [`TlkRunStop::LabelTransfer`], i.e. reading a
+                // declaration as a GOTO.
+                let Some(&label) = bytes.get(pos) else {
+                    out.stop = TlkRunStop::MalformedIntroducer(pos);
+                    out.consumed = pos;
+                    return out;
+                };
+                pos += 1;
+                // Reaching a record separator by falling through in-stream
+                // means the current record ran past its own terminator into
+                // the next record's header. §7.7 does not publish what the
+                // dispatcher does here, so the runner refuses to invent
+                // flow: it stops with a named reason and lets the
+                // conversation session, which owns labelled-block and
+                // scoped-prompt handling, decide. See the doc comment on
+                // [`TlkRunStop::LabelRecordMarker`].
+                out.stop = TlkRunStop::LabelRecordMarker(label);
+                out.consumed = pos;
+                return out;
+            }
             _ => {
                 if is_tlk_label_byte(byte) {
                     out.stop = TlkRunStop::LabelTransfer(byte);
@@ -490,9 +541,36 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     out.text.push(glyph as char);
                     last_emitted = Some(glyph);
                 } else {
-                    // Unrecognised byte — skip it; the original engine's
-                    // dispatcher is exhaustive but defensive callers may
-                    // pass partial data.
+                    // No published classification claims this byte.
+                    //
+                    // `conversation.md` §7 partitions the whole byte space
+                    // — NUL, dictionary tokens, the named control codes,
+                    // the label band, printable text, `0xFE` and `0xFF` —
+                    // so the dispatcher above is exhaustive and nothing can
+                    // legitimately arrive here. Reaching this arm therefore
+                    // means one of two things, and both are worth surfacing
+                    // rather than swallowing: a case this runner failed to
+                    // implement, or a `.TLK` stream that is not shipped
+                    // content.
+                    //
+                    // This arm used to skip the byte in silence, which made
+                    // the first of those two undetectable: a missing case
+                    // rendered as absent text with no event, no stop, and no
+                    // failing test. `0x90` LABEL-RECORD lived here unnoticed
+                    // for exactly that reason. The byte is now recorded as an
+                    // event so callers and tests can see it, and `debug_assert`
+                    // turns it into a hard failure in test and dev builds while
+                    // leaving release builds able to survive a malformed
+                    // third-party file mid-conversation.
+                    debug_assert!(
+                        false,
+                        "TLK byte {byte:#04X} at offset {} reached the byte runner's                          unclassified arm; conversation.md §7 partitions the byte                          space, so this is a missing dispatcher case",
+                        pos - 1
+                    );
+                    out.events.push(TlkRunEvent::UnclassifiedByte {
+                        byte,
+                        offset: pos - 1,
+                    });
                 }
             }
         }
@@ -1168,6 +1246,264 @@ mod tests {
     #[test]
     fn find_label_position_rejects_non_label_bytes() {
         assert!(find_label_position(&[0xA1], 0x42).is_none());
+    }
+
+    /// Local clean asset folder, or `None` when it is not installed.
+    /// Same skip discipline as the other asset-backed tests: no asset
+    /// bytes are ever embedded in the crate.
+    fn local_clean_assets() -> Option<std::path::PathBuf> {
+        let dir = std::env::var_os("U5_CLEAN_ASSETS")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(crate::DEFAULT_GAME_DIR));
+        dir.join("CASTLE.TLK").is_file().then_some(dir)
+    }
+
+    const SHIPPED_TLK_FILES: [&str; 4] = ["CASTLE.TLK", "TOWNE.TLK", "DWELLING.TLK", "KEEP.TLK"];
+
+    /// Run every field of every NPC blob in the shipped corpus through
+    /// the dispatcher, resuming past each yielding stop so that every
+    /// byte in a payload position is actually dispatched, and hand each
+    /// stream's output to `visit`.
+    ///
+    /// Bytes consumed as multi-byte introducer arguments are deliberately
+    /// not visited: the dispatcher never classifies them, so they are not
+    /// in a payload position.
+    fn for_each_shipped_stream(
+        dir: &std::path::Path,
+        mut visit: impl FnMut(&str, u16, usize, &TlkRunOutput),
+    ) {
+        for file in SHIPPED_TLK_FILES {
+            let blobs = crate::map_io::parse_tlk_raw(&dir.join(file))
+                .unwrap_or_else(|err| panic!("{file} parses: {err}"));
+            let mut npc_ids: Vec<u16> = blobs.keys().copied().collect();
+            npc_ids.sort_unstable();
+            for npc_id in npc_ids {
+                for (field_idx, field) in blobs[&npc_id].iter().enumerate() {
+                    let mut cursor = 0usize;
+                    // Bounded: every iteration must advance the cursor.
+                    while cursor < field.len() {
+                        let out = run_tlk_stream_from(
+                            field,
+                            cursor,
+                            &TlkRunInputs {
+                                avatar_name: "Avatar",
+                                ..Default::default()
+                            },
+                        );
+                        visit(file, npc_id, field_idx, &out);
+                        let next = out.consumed.max(cursor + 1);
+                        if next <= cursor {
+                            break;
+                        }
+                        cursor = next;
+                    }
+                }
+            }
+        }
+    }
+
+    /// The census that the silent catch-all used to make impossible.
+    ///
+    /// `conversation.md` §7 partitions the byte space, so no byte in a
+    /// payload position may reach the unclassified arm. This asserts it
+    /// mechanically against every shipped stream rather than by reading
+    /// the match arms. `0x90` LABEL-RECORD was the resident this found.
+    #[test]
+    fn shipped_corpus_reaches_no_unclassified_dispatcher_byte() {
+        let Some(dir) = local_clean_assets() else {
+            return;
+        };
+        let mut census: std::collections::BTreeMap<u8, usize> = std::collections::BTreeMap::new();
+        let mut first_site: std::collections::BTreeMap<u8, String> =
+            std::collections::BTreeMap::new();
+        for_each_shipped_stream(&dir, |file, npc_id, field_idx, out| {
+            for event in &out.events {
+                if let TlkRunEvent::UnclassifiedByte { byte, offset } = event {
+                    *census.entry(*byte).or_default() += 1;
+                    first_site.entry(*byte).or_insert_with(|| {
+                        format!("{file} npc {npc_id} field {field_idx} +{offset:#x}")
+                    });
+                }
+            }
+        });
+        assert!(
+            census.is_empty(),
+            "shipped corpus reached the unclassified arm: {}",
+            census
+                .iter()
+                .map(|(byte, count)| format!(
+                    "{byte:#04X} x{count} (first at {})",
+                    first_site[byte]
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    /// Renders real shipped streams and asserts the **expanded text**,
+    /// which is the class of test whose absence let a dropped word
+    /// survive: the route-smoke harness runs real `.TLK` bytes but
+    /// asserts state and frame-kind invariants, and its message-bytes and
+    /// hash values are diagnostics rather than assertions, so no test
+    /// compared rendered characters against shipped content.
+    ///
+    /// It asserts a *property* rather than a transcript: a sentinel
+    /// avatar name must appear in the output once per dispatched `0x81`,
+    /// in every file. No dialogue text is embedded, per the workspace's
+    /// no-committed-content rule.
+    #[test]
+    fn shipped_corpus_renders_the_avatar_name_once_per_print_avatar_name_byte() {
+        let Some(dir) = local_clean_assets() else {
+            return;
+        };
+        // Deliberately not a word any dialogue could contain, so a
+        // substring count cannot be inflated by shipped text.
+        const SENTINEL: &str = "Zzyzx";
+        let mut per_file: std::collections::BTreeMap<&str, (usize, usize)> =
+            std::collections::BTreeMap::new();
+        for file in SHIPPED_TLK_FILES {
+            let blobs = crate::map_io::parse_tlk_raw(&dir.join(file))
+                .unwrap_or_else(|err| panic!("{file} parses: {err}"));
+            let mut npc_ids: Vec<u16> = blobs.keys().copied().collect();
+            npc_ids.sort_unstable();
+            let entry = per_file.entry(file).or_default();
+            for npc_id in npc_ids {
+                for field in &blobs[&npc_id] {
+                    let mut cursor = 0usize;
+                    while cursor < field.len() {
+                        let out = run_tlk_stream_from(
+                            field,
+                            cursor,
+                            &TlkRunInputs {
+                                avatar_name: SENTINEL,
+                                ..Default::default()
+                            },
+                        );
+                        // Count the codes this run actually dispatched,
+                        // not every `0x81` byte in the field: bytes
+                        // consumed as introducer arguments are not
+                        // dispatched, and neither is anything past a stop.
+                        let dispatched = field[cursor..out.consumed.max(cursor)]
+                            .iter()
+                            .filter(|byte| **byte == TLK_CODE_PRINT_AVATAR_NAME)
+                            .count();
+                        let rendered = out.text.matches(SENTINEL).count();
+                        assert!(
+                            rendered >= dispatched.min(1) || dispatched == 0,
+                            "{file} npc {npc_id}: dispatched {dispatched} PRINT-AVATAR-NAME bytes, rendered {rendered} names"
+                        );
+                        entry.0 += dispatched;
+                        entry.1 += rendered;
+                        let next = out.consumed.max(cursor + 1);
+                        if next <= cursor {
+                            break;
+                        }
+                        cursor = next;
+                    }
+                }
+            }
+        }
+        for (file, (dispatched, rendered)) in &per_file {
+            assert_eq!(
+                rendered, dispatched,
+                "{file} dropped the Avatar's name: {dispatched} dispatched, {rendered} rendered"
+            );
+        }
+
+        // Pinned so that a *drop in reach* announces itself too. An
+        // assertion of the form "rendered == dispatched" is satisfied
+        // vacuously by dispatching nothing, which is the same silence
+        // this whole change is removing.
+        //
+        // These are dispatch counts, not the raw byte counts: the four
+        // files hold 16/35/2/7 = 60 `0x81` bytes, and 59 are reached.
+        // The missing one is `CASTLE.TLK` npc 18's second, which sits in
+        // field index 41 — past the 40-field cap in
+        // `map_io::parse_tlk_blob_fields_raw`, so the parser never yields
+        // it. Eleven shipped `CASTLE.TLK` blobs hold 41..=54 fields. That
+        // is an upstream truncation, not a dispatcher fault; when it is
+        // fixed this expectation becomes 16 and this test will say so.
+        let counts: Vec<(&str, usize)> = per_file
+            .iter()
+            .map(|(file, (dispatched, _))| (*file, *dispatched))
+            .collect();
+        assert_eq!(
+            counts,
+            vec![
+                ("CASTLE.TLK", 15),
+                ("DWELLING.TLK", 2),
+                ("KEEP.TLK", 7),
+                ("TOWNE.TLK", 35),
+            ]
+        );
+    }
+
+    /// The static half of the same question. The corpus census can only
+    /// report byte values shipped content happens to contain; this walks
+    /// the entire `0x00..=0xFF` domain so a value no shipped blob uses
+    /// still cannot reach the unclassified arm unnoticed.
+    #[test]
+    fn every_byte_value_has_a_dispatcher_classification() {
+        let unclassified: Vec<String> = (0x00u8..=0xFF)
+            .filter(|byte| {
+                let out = run_tlk_stream(
+                    // Trailing argument bytes so multi-byte introducers
+                    // are well-formed rather than stopping short.
+                    &[*byte, 0xA1, 0xA1, 0xA1],
+                    &TlkRunInputs::default(),
+                );
+                out.events
+                    .iter()
+                    .any(|event| matches!(event, TlkRunEvent::UnclassifiedByte { .. }))
+            })
+            .map(|byte| format!("{byte:#04X}"))
+            .collect();
+        assert!(
+            unclassified.is_empty(),
+            "bytes with no dispatcher classification: {}",
+            unclassified.join(", ")
+        );
+    }
+
+    /// `conversation.md §7.7` / `tlk.md §9`: a label is declared by the
+    /// two-byte marker `0x90 <label>`. Both bytes belong to the marker.
+    ///
+    /// Before `0x90` had a dispatcher case it fell into the unclassified
+    /// arm and was skipped, leaving its label byte to be re-dispatched as
+    /// a GOTO — a record *declaration* read as a transfer. This asserts
+    /// the two outcomes are distinguishable.
+    #[test]
+    fn label_record_marker_consumes_its_label_and_is_not_a_goto_transfer() {
+        let mut bytes = enc("body");
+        bytes.push(TLK_CODE_LABEL_RECORD);
+        bytes.push(0x93);
+        bytes.extend_from_slice(&enc("next record"));
+        let out = render(&bytes);
+
+        assert_eq!(out.text, "body");
+        assert_eq!(out.stop, TlkRunStop::LabelRecordMarker(0x93));
+        // Both marker bytes consumed: 4 text + 0x90 + 0x93.
+        assert_eq!(out.consumed, 6);
+        assert!(
+            !matches!(out.stop, TlkRunStop::LabelTransfer(_)),
+            "a declaration must not read as a transfer"
+        );
+        // And nothing reached the unclassified arm.
+        assert!(
+            !out.events
+                .iter()
+                .any(|event| matches!(event, TlkRunEvent::UnclassifiedByte { .. }))
+        );
+    }
+
+    /// A bare `0x90` with no label byte after it is a truncated marker,
+    /// reported the same way as a short multi-byte introducer argument
+    /// span rather than silently ignored.
+    #[test]
+    fn truncated_label_record_marker_reports_malformed() {
+        let bytes = vec![TLK_CODE_LABEL_RECORD];
+        let out = render(&bytes);
+        assert_eq!(out.stop, TlkRunStop::MalformedIntroducer(1));
     }
 
     #[test]
