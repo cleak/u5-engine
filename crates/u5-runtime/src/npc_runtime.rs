@@ -769,5 +769,4 @@ pub struct DoorTracker {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocationMarkers {
     pub npc_markers: Vec<(usize, usize)>,
-    pub spawn_markers: Vec<(usize, usize)>,
 }

@@ -132,10 +132,8 @@ pub fn decode_britannia_map_bytes(bytes: &[u8], table: &[u8]) -> io::Result<Vec<
 }
 
 pub fn analyze_map(scene: Scene, floor: usize, grid: &[u8]) -> MapStats {
-    let LocationMarkers {
-        npc_markers,
-        spawn_markers,
-    } = harvest_location_markers(grid);
+    let LocationMarkers { npc_markers } = harvest_location_markers(grid);
+    let beacon_sources = harvest_location_beacon_sources(grid);
     let mut door_count = 0;
     let mut stair_count = 0;
     let mut class_histogram: HashMap<&'static str, usize> = HashMap::new();
@@ -160,7 +158,7 @@ pub fn analyze_map(scene: Scene, floor: usize, grid: &[u8]) -> MapStats {
         scene,
         floor,
         npc_markers,
-        spawn_markers,
+        beacon_sources,
         door_count,
         stair_count,
         render_hash: hash,
@@ -168,26 +166,39 @@ pub fn analyze_map(scene: Scene, floor: usize, grid: &[u8]) -> MapStats {
     }
 }
 
+/// `formats/location-dat.md §6` NPC start markers, walked "in loader order
+/// (column 0 north-to-south, then column 1, and so on)".
+///
+/// The asterisk `0x2A` used to be harvested here too, into a
+/// `spawn_markers` list. **That reading is withdrawn in full**: `§6` now
+/// reads "`0x2A` is not a player spawn marker. It is the night beacon's
+/// indoor light source", and the harvest of those two slots belongs to
+/// [`crate::harvest_location_beacon_sources`]. The section settles it
+/// without appeal to any code — the byte "appears in zero town, castle and
+/// keep floors", and "a player town-entry spawn marker that exists in no
+/// town is not a spawn marker".
 pub fn harvest_location_markers(grid: &[u8]) -> LocationMarkers {
     let mut npc_markers = Vec::new();
-    let mut spawn_markers = Vec::new();
     for x in 0..32 {
         for y in 0..32 {
-            let tile = grid[y * 32 + x];
-            if is_npc_start_marker(tile) {
+            if is_npc_start_marker(grid[y * 32 + x]) {
                 npc_markers.push((x, y));
-            }
-            if is_spawn_marker(tile) {
-                spawn_markers.push((x, y));
             }
         }
     }
-    LocationMarkers {
-        npc_markers,
-        spawn_markers,
-    }
+    LocationMarkers { npc_markers }
 }
 
+/// `formats/location-dat.md §6`: "companion passes may then rewrite
+/// selected marker cells in the runtime buffer". Only the NPC start
+/// markers are rewritten here.
+///
+/// The bright-light tile `0x2A` was scrubbed by this pass while it was
+/// misread as a spawn marker, which rewrote the beacon's own light source.
+/// `§6` names that divergence directly: the harvest "converts tile
+/// positions into resident coordinate *words* at load time, and the beacon
+/// never re-reads the map afterwards", so "a later pass that rewrites the
+/// cell therefore cannot switch the source off".
 pub fn scrub_location_entry_markers(grid: &mut [u8]) {
     for tile in grid {
         if is_location_entry_marker(*tile) {
@@ -196,12 +207,10 @@ pub fn scrub_location_entry_markers(grid: &mut [u8]) {
     }
 }
 
+/// The marker bytes the runtime tile buffer replaces on load. Since the
+/// `0x2A` withdrawal this is exactly the NPC start-marker pair.
 pub fn is_location_entry_marker(tile: u8) -> bool {
-    is_spawn_marker(tile) || is_npc_start_marker(tile)
-}
-
-pub fn is_spawn_marker(tile: u8) -> bool {
-    tile == 0x2a
+    is_npc_start_marker(tile)
 }
 
 pub fn is_npc_start_marker(tile: u8) -> bool {
@@ -210,12 +219,12 @@ pub fn is_npc_start_marker(tile: u8) -> bool {
 
 pub fn append_map_stats(report: &mut String, stats: &MapStats) {
     report.push_str(&format!(
-        "- `{}` floor {}: 32x32 loaded, render-hash `{:016x}`, NPC markers {}, spawn markers {}, doors {}, stairs/ladders {}.\n",
+        "- `{}` floor {}: 32x32 loaded, render-hash `{:016x}`, NPC markers {}, beacon sources {}, doors {}, stairs/ladders {}.\n",
         stats.scene.key(),
         stats.floor,
         stats.render_hash,
         stats.npc_markers.len(),
-        stats.spawn_markers.len(),
+        stats.beacon_sources.iter().flatten().count(),
         stats.door_count,
         stats.stair_count
     ));

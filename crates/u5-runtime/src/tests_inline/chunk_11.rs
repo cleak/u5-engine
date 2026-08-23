@@ -1,10 +1,13 @@
+    /// The reloaded floor scrubs its NPC start markers and keeps the
+    /// beacon's `0x2A` light source, which the floor-transition path also
+    /// harvests (`formats/location-dat.md §6`).
     #[test]
-    fn town_climb_scrubs_entry_markers_on_reloaded_floor() {
+    fn town_climb_scrubs_npc_markers_and_keeps_the_beacon_source() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         let mut pages = vec![16; 16 * 1024];
         let floor1 = 1024;
-        pages[floor1] = 0x2a;
+        pages[floor1] = BEACON_BRIGHT_LIGHT_TILE;
         pages[floor1 + 1] = 0x48;
         pages[floor1 + 2] = 0x49;
         pages[floor1 + 3] = 0xc8;
@@ -18,14 +21,14 @@
             MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: 1 })
         );
 
-        assert_eq!(state.grid[0], LOCATION_MARKER_CLEANUP_TILE);
+        assert_eq!(state.grid[0], BEACON_BRIGHT_LIGHT_TILE);
         assert_eq!(state.grid[1], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(state.grid[2], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(state.grid[3], 0xc8);
-        assert!(
-            harvest_location_markers(&state.grid)
-                .spawn_markers
-                .is_empty()
+        assert_eq!(
+            state.light_beacon.sources,
+            [Some((0, 0)), None],
+            "the floor reached by stairs harvests its beacon source"
         );
         assert!(harvest_location_markers(&state.grid).npc_markers.is_empty());
         let _ = fs::remove_dir_all(dir);
@@ -280,12 +283,12 @@
     }
 
     #[test]
-    fn town_trap_door_scrubs_entry_markers_on_reloaded_floor() {
+    fn town_trap_door_scrubs_npc_markers_and_keeps_the_beacon_source() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         let mut pages = vec![16; 16 * 1024];
         let basement = 4 * 1024;
-        pages[basement] = 0x2a;
+        pages[basement] = BEACON_BRIGHT_LIGHT_TILE;
         pages[basement + 1] = 0x48;
         pages[basement + 2] = 0x49;
         pages[basement + 3] = 0xc9;
@@ -307,14 +310,14 @@
             MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: -1 })
         );
 
-        assert_eq!(state.grid[0], LOCATION_MARKER_CLEANUP_TILE);
+        assert_eq!(state.grid[0], BEACON_BRIGHT_LIGHT_TILE);
         assert_eq!(state.grid[1], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(state.grid[2], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(state.grid[3], 0xc9);
-        assert!(
-            harvest_location_markers(&state.grid)
-                .spawn_markers
-                .is_empty()
+        assert_eq!(
+            state.light_beacon.sources,
+            [Some((0, 0)), None],
+            "the floor reached by trapdoor harvests its beacon source"
         );
         assert!(harvest_location_markers(&state.grid).npc_markers.is_empty());
         let _ = fs::remove_dir_all(dir);

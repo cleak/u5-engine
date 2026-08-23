@@ -2297,59 +2297,71 @@
         assert!(decode_britannia_map_bytes(&bytes[..BRIT_DAT_LEN - 1], &table).is_err());
     }
 
+    /// `formats/location-dat.md §6`: the load pass "walks every cell of the
+    /// freshly-read tile grid in loader order (column 0 north-to-south,
+    /// then column 1, and so on)".
     #[test]
     fn location_markers_use_column_major_loader_order() {
         let mut grid = open_grid();
-        grid[5 * 32] = 0x2a;
-        grid[32 + 1] = 0x2a;
         grid[2 * 32 + 4] = 0x48;
         grid[1] = 0x49;
 
         let markers = harvest_location_markers(&grid);
 
-        assert_eq!(markers.spawn_markers, vec![(0, 5), (1, 1)]);
         assert_eq!(markers.npc_markers, vec![(1, 0), (4, 2)]);
     }
 
+    /// `formats/location-dat.md §6` withdrew the `0x2A` spawn-marker
+    /// reading in full: "it is the night beacon's indoor light source". The
+    /// scrub therefore claims only the NPC start-marker pair, and the byte
+    /// the beacon harvests survives the runtime tile buffer — which is what
+    /// makes `§6`'s "ordering cannot disarm it" hold on our side too.
     #[test]
-    fn scrub_location_entry_markers_removes_spawn_and_npc_bytes_only() {
+    fn scrub_location_entry_markers_removes_npc_bytes_and_spares_the_bright_light() {
         let mut grid = open_grid();
-        grid[5 * 32] = 0x2a;
+        grid[5 * 32] = BEACON_BRIGHT_LIGHT_TILE;
         grid[2 * 32 + 4] = 0x48;
         grid[3 * 32 + 5] = 0x49;
         grid[4 * 32 + 6] = 0xc8;
 
         scrub_location_entry_markers(&mut grid);
 
-        assert_eq!(grid[5 * 32], LOCATION_MARKER_CLEANUP_TILE);
+        assert_eq!(
+            grid[5 * 32], BEACON_BRIGHT_LIGHT_TILE,
+            "the beacon's indoor light source is not a marker to scrub"
+        );
         assert_eq!(grid[2 * 32 + 4], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(grid[3 * 32 + 5], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(grid[4 * 32 + 6], 0xc8);
-        assert!(harvest_location_markers(&grid).spawn_markers.is_empty());
+        assert_eq!(
+            harvest_location_beacon_sources(&grid),
+            [Some((0, 5)), None],
+            "and it is still harvestable after the scrub"
+        );
         assert!(harvest_location_markers(&grid).npc_markers.is_empty());
     }
 
     #[test]
-    fn load_town_scene_scrubs_harvested_entry_markers_from_runtime_grid() {
+    fn load_town_scene_scrubs_npc_markers_and_keeps_the_beacon_source() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         let mut grid = open_grid();
-        grid[1 * 32 + 2] = 0x2a;
+        grid[1 * 32 + 2] = BEACON_BRIGHT_LIGHT_TILE;
         grid[2 * 32 + 4] = 0x48;
         grid[3 * 32 + 5] = 0x49;
         fs::write(dir.join("CASTLE.DAT"), grid).unwrap();
 
         let state = PlayState::load_town_scene(&dir, scene, PlayOptions::default()).unwrap();
 
-        assert_eq!((state.player.x, state.player.y), (2, 1));
-        assert_eq!(state.grid[1 * 32 + 2], LOCATION_MARKER_CLEANUP_TILE);
+        // The entry cell is no longer taken from a `0x2A` cell. With no
+        // caller start and no per-scene entry row, what is left is the
+        // first walkable cell — see the KNOWN GAP at the `load_town_scene`
+        // fallback.
+        assert_eq!((state.player.x, state.player.y), (0, 0));
+        assert_eq!(state.grid[1 * 32 + 2], BEACON_BRIGHT_LIGHT_TILE);
         assert_eq!(state.grid[2 * 32 + 4], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(state.grid[3 * 32 + 5], LOCATION_MARKER_CLEANUP_TILE);
-        assert!(
-            harvest_location_markers(&state.grid)
-                .spawn_markers
-                .is_empty()
-        );
+        assert_eq!(state.light_beacon.sources, [Some((2, 1)), None]);
         assert!(harvest_location_markers(&state.grid).npc_markers.is_empty());
         let _ = fs::remove_dir_all(dir);
     }

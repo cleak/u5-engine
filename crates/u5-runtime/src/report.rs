@@ -91,11 +91,12 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
     append_map_stats(&mut report, &stats0);
     append_map_stats(&mut report, &stats1);
 
-    let start = harvest_location_markers(&floor0)
-        .spawn_markers
-        .first()
-        .copied()
-        .or_else(|| first_walkable(&floor0, None))
+    // This diagnostic used to prefer a harvested asterisk "spawn marker"
+    // here; `formats/location-dat.md §6` withdrew that reading of `0x2A`
+    // in full, and the section adds that the document "does not specify
+    // where the player is placed on entering a location". The report only
+    // needs some walkable cell to path from, so it says so plainly.
+    let start = first_walkable(&floor0, None)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no walkable floor-0 start"))?;
     let target = stats0
         .npc_markers

@@ -351,7 +351,6 @@ impl PlayState {
         let passability = load_tile_passability(game_dir)?;
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
-        let markers = harvest_location_markers(&grid);
         // `visibility.md §12.6`: inside a location the map setup clears both
         // beacon positions and records up to two bright-light hits. Harvested
         // from the raw floor, before the runtime normalisation pass rewrites
@@ -383,14 +382,22 @@ impl PlayState {
                 }
                 pos
             }
-            None => markers
-                .spawn_markers
-                .first()
-                .copied()
-                .or_else(|| first_walkable(&grid, passability.as_ref()))
-                .ok_or_else(|| {
-                    io::Error::new(io::ErrorKind::InvalidData, "no playable start cell")
-                })?,
+            // KNOWN GAP — the player's location entry cell is unpublished.
+            // This rung used to be a harvested asterisk "spawn marker".
+            // `formats/location-dat.md §6` withdrew that reading of `0x2A`
+            // in full ("it is the night beacon's indoor light source") and
+            // states that the document "does not specify where the player
+            // is placed on entering a location"; `town-mode.md §5` step 6
+            // withdraws its `(15, per-scene row)` wording too and records
+            // the entry cell as "**not currently established** by this
+            // spec ... an open item". The rung is gone rather than
+            // re-sourced: what remains is the caller's explicit start, the
+            // per-scene entry row when a `location_entry_y.tsv` sidecar
+            // supplies one, and otherwise the first walkable cell — a
+            // harness placement, not a claim about the original.
+            None => first_walkable(&grid, passability.as_ref()).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "no playable start cell")
+            })?,
         };
 
         let world_overlays = initial_world_overlay_cache(&options);
