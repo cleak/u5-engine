@@ -103,33 +103,59 @@ pub const fn outdoor_step_clears_on_destination(destination_tile: u8) -> bool {
 /// requests a directed step toward the player.
 pub const FC_PROXIMITY_AGE_CAP: u8 = 20;
 
-/// `active-objects.md §8` outdoor sea-serpent / dragon adjacency
-/// trigger. The outdoor per-turn walker rolls a one-in-seven gate
-/// for first-frame Sea Serpent and Dragon hostile classes near the
-/// player; on the gate's hit and a clear directed probe the same
-/// per-turn finishers as other outdoor encounter effects run.
-pub const OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR: u8 = 7;
+/// `active-objects.md §8` outdoor sea-serpent / dragon near-range
+/// trigger. The outdoor per-turn walker rolls a **one-in-eight** gate
+/// for first-frame Sea Serpent and Dragon hostile classes within three
+/// cells of the player on both axes; on the gate's hit the creature
+/// looses a breath attack through the shared ranged-attack contract in
+/// [`crate::outdoor_ranged_attack`].
+///
+/// Both specs give the same denominator. `active-objects.md §8`: the
+/// listed classes "roll a one-in-eight trigger, and on success loose a
+/// breath attack". `overworld.md §6.2`'s condition column: "Within
+/// three cells of the party on **both** axes, then a one-in-eight roll
+/// each turn".
+///
+/// This was previously `7`, and the doc comment previously described
+/// the success path as "a clear directed probe". Both were wrong.
+/// `overworld.md §6.1` withdraws the probe outright — "No outdoor
+/// 'directed-step probe' or 'path-clear scan' participates in creature
+/// movement; earlier drafts that described one were wrong, and the
+/// line-tracing routine they were thinking of belongs entirely to the
+/// ranged attacks" — and that line trace is the §6.2 contract.
+pub const OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR: u8 = 8;
 
 /// `active-objects.md §8`: returns `true` when the per-turn walker's
-/// `0..6` PRNG roll triggers the outdoor sea-serpent / dragon
-/// engagement on this tick.
-pub const fn outdoor_serpent_dragon_triggers(roll_0_to_6: u8) -> bool {
-    roll_0_to_6 == 0
+/// `0..=7` PRNG roll triggers the outdoor sea-serpent / dragon breath
+/// attack on this tick.
+pub const fn outdoor_serpent_dragon_triggers(roll_0_to_7: u8) -> bool {
+    roll_0_to_7 == 0
 }
 
 /// `active-objects.md §8` ship-like water-creature and pirate
-/// adjacency window. The outdoor per-turn walker prints the attack
-/// message and runs the water-creature step path when the slot is
-/// aligned with the player within this many cells.
-pub const OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS: i32 = 3;
+/// broadside window, in cells. Same number as the shared ranged-attack
+/// range in [`crate::OUTDOOR_RANGED_ATTACK_RANGE_CELLS`]; anchored to
+/// it so the two windows cannot drift apart.
+pub const OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS: i32 = crate::OUTDOOR_RANGED_ATTACK_RANGE_CELLS;
 
-/// `active-objects.md §8`: returns `true` when a ship-like
-/// water-creature or pirate slot is orthogonally aligned with the
-/// player (sharing the same row or column) and the wrapped distance
-/// along the shared axis is within
-/// [`OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS`]. Diagonal offsets
-/// never trigger the attack-message / water-creature step path,
-/// regardless of distance.
+/// `active-objects.md §8` broadside trigger: returns `true` when a
+/// ship-like water-creature or pirate slot is orthogonally aligned
+/// with the player (sharing the same row or column) and the wrapped
+/// distance along the shared axis is within
+/// [`OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS`].
+///
+/// §8: "Ship-like water-creature and pirate frames aligned with the
+/// player on the same row or column within three cells fire a
+/// broadside: they print the boom message and then resolve the same
+/// traced-line ranged attack as the breath attack above." Diagonal
+/// offsets never trigger it, regardless of distance — which is what
+/// separates this window from the breath attack's, whose window is
+/// three cells on *both* axes with no alignment requirement (see
+/// [`crate::outdoor_breath_attack_in_range`]).
+///
+/// Takes **wrapped** deltas — see [`crate::wrapped_axis_delta`]. Raw
+/// subtraction would read a slot one cell across the map seam as ~255
+/// cells away and never fire.
 pub const fn outdoor_water_creature_attack_aligned(wrapped_dx: i32, wrapped_dy: i32) -> bool {
     let abs_dx = if wrapped_dx < 0 {
         -wrapped_dx

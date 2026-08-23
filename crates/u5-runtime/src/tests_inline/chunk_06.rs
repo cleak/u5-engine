@@ -2394,3 +2394,170 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+
+    /// Places one outdoor walker slot on the default (Underworld) plane of a
+    /// `world_state`, with a movable animation phase.
+    fn world_state_with_walker(
+        px: usize,
+        py: usize,
+        type_byte: u8,
+        ox: usize,
+        oy: usize,
+    ) -> PlayState {
+        let mut state = world_state(open_world_grid(), px, py);
+        state.active_objects.push(ActiveObject {
+            type_byte,
+            tile: type_byte,
+            x: ox,
+            y: oy,
+            z: WorldPlane::Underworld.save_floor(),
+            // Low nibble zero is the decision point, so this slot is
+            // eligible for cleanup movement unless the first phase claims it.
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+        state
+    }
+
+    /// Mountain tile `0x0c`, which `surface_tile_blocks_projectile` treats as
+    /// an obstruction. Tests that only need the shot *not* to connect put one
+    /// on the line, because a connecting shot reaches the unspecified-damage
+    /// seam and refuses.
+    fn block_projectile_at(state: &mut PlayState, x: usize, y: usize) {
+        state.grid[world_cell_index(x, y)] = 0x0c;
+    }
+
+    #[test]
+    fn outdoor_walker_broadside_fires_and_suppresses_cleanup_movement() {
+        // active-objects.md §8: "Ship-like water-creature and pirate frames
+        // aligned with the player on the same row or column within three
+        // cells fire a broadside: they print the boom message and then
+        // resolve the same traced-line ranged attack". §8 also makes the
+        // first phase exclusive with movement -- "[i]f none of those
+        // immediate reactions fires, the cleanup phase decides ordinary
+        // movement" -- so a firing slot does not step this turn.
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+
+        assert!(state.outdoor_first_phase_ranged_attack(1));
+
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+        state.advance_outdoor_active_objects();
+
+        assert!(state.message.contains("BOOOM"), "message: {}", state.message);
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (8, 5));
+    }
+
+    #[test]
+    fn outdoor_walker_broadside_fires_across_the_map_seam() {
+        // The window is measured on wrapped deltas, so a pirate three cells
+        // away across the 256-cell seam is in range. Raw subtraction would
+        // read this slot as 253 cells away and never fire.
+        let mut state = world_state_with_walker(1, 7, 0x2D, 254, 7);
+        block_projectile_at(&mut state, 0, 7);
+        state.advance_outdoor_active_objects();
+
+        assert!(state.message.contains("BOOOM"), "message: {}", state.message);
+        assert_eq!(
+            (state.active_objects[1].x, state.active_objects[1].y),
+            (254, 7)
+        );
+    }
+
+    #[test]
+    fn outdoor_walker_leaves_unaligned_water_creature_to_cleanup_movement() {
+        // §8's broadside needs the same row or column. A diagonal slot one
+        // cell away is closer than the three-cell window but not aligned, so
+        // the first phase does not claim it.
+        let mut state = world_state_with_walker(5, 5, 0x2C, 6, 6);
+        assert!(!state.outdoor_first_phase_ranged_attack(1));
+
+        let mut state = world_state_with_walker(5, 5, 0x2C, 6, 6);
+        state.advance_outdoor_active_objects();
+        assert!(!state.message.contains("BOOOM"), "message: {}", state.message);
+    }
+
+    #[test]
+    fn outdoor_walker_broadside_is_out_of_range_beyond_three_cells() {
+        // Aligned but four cells away: outside §8's "within three cells".
+        let mut state = world_state_with_walker(5, 5, 0x2C, 9, 5);
+        assert!(!state.outdoor_first_phase_ranged_attack(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "cleak/u5-spec#90")]
+    fn outdoor_walker_broadside_connecting_shot_refuses_pending_damage_gap() {
+        // With no obstruction the traced line reaches the party and the
+        // attack connects -- at which point §6.2 requires damage that no
+        // spec text specifies. The seam refuses rather than inventing it.
+        // This is the boundary of what was implemented, asserted rather
+        // than described.
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        state.advance_outdoor_active_objects();
+    }
+
+    #[test]
+    fn outdoor_walker_dragon_breath_fires_on_the_one_in_eight_gate() {
+        // §8: "Sea Serpent and Dragon first-frame hostile classes within
+        // three cells of the player on **both** axes roll a one-in-eight
+        // trigger, and on success loose a breath attack". Only the Dragon
+        // first frame 0xDC is wired; the Sea Serpent half is withheld
+        // pending cleak/u5-spec#90's byte-identity question.
+        let mut state = world_state_with_walker(5, 5, 0xDC, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+        let turn = (0u64..256)
+            .find(|turn| {
+                state.turn = *turn;
+                outdoor_serpent_dragon_triggers(state.outdoor_serpent_dragon_breath_roll(1))
+            })
+            .expect("a hitting gate roll exists within 256 turns");
+        state.turn = turn;
+
+        assert!(state.outdoor_first_phase_ranged_attack(1));
+        // §6.2's breath row announces nothing -- the boom message belongs to
+        // the broadside, and the generic "attacked" message to the
+        // adjacent-engagement path.
+        assert!(!state.message.contains("BOOOM"), "message: {}", state.message);
+    }
+
+    #[test]
+    fn outdoor_walker_dragon_breath_does_not_fire_when_the_gate_misses() {
+        let mut state = world_state_with_walker(5, 5, 0xDC, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+        let turn = (0u64..256)
+            .find(|turn| {
+                state.turn = *turn;
+                !outdoor_serpent_dragon_triggers(state.outdoor_serpent_dragon_breath_roll(1))
+            })
+            .expect("a missing gate roll exists within 256 turns");
+        state.turn = turn;
+
+        assert!(!state.outdoor_first_phase_ranged_attack(1));
+    }
+
+    #[test]
+    fn outdoor_walker_dragon_breath_needs_both_axes_within_three() {
+        // Four cells away on one axis is outside the window regardless of
+        // the gate roll, so the slot is never claimed.
+        let mut state = world_state_with_walker(5, 5, 0xDC, 9, 5);
+        for turn in 0u64..256 {
+            state.turn = turn;
+            assert!(!state.outdoor_first_phase_ranged_attack(1), "turn {turn}");
+        }
+    }
+
+    #[test]
+    fn outdoor_walker_first_phase_ignores_off_plane_and_non_walker_slots() {
+        // The first phase reuses the walker's own eligibility: current
+        // plane, and the outdoor animated/monster predicate.
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        state.active_objects[1].z = WorldPlane::Britannia.save_floor();
+        assert!(!state.outdoor_first_phase_ranged_attack(1));
+
+        // A byte outside the outdoor walker predicate never fires, even
+        // aligned and in range.
+        let mut state = world_state_with_walker(5, 5, 0x05, 8, 5);
+        assert!(!state.outdoor_first_phase_ranged_attack(1));
+    }

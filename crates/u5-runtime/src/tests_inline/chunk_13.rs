@@ -13816,10 +13816,14 @@ fn outdoor_movement_chance_gate_classifies_destination_per_spec() {
 
 #[test]
 fn outdoor_serpent_dragon_trigger_and_whirlpool_constants_match_spec() {
-    // active-objects.md §8
-    assert_eq!(OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR, 7);
+    // active-objects.md §8: the listed classes "roll a one-in-eight
+    // trigger". overworld.md §6.2's condition column agrees: "a
+    // one-in-eight roll each turn". This asserted 7 until the §8 first
+    // phase was implemented; nothing called the helper, so the wrong
+    // denominator went unnoticed.
+    assert_eq!(OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR, 8);
     assert!(outdoor_serpent_dragon_triggers(0));
-    for r in 1u8..=6 {
+    for r in 1u8..=7 {
         assert!(!outdoor_serpent_dragon_triggers(r));
     }
     // Adjacency radius for ship-like water-creature attack message.
@@ -23410,4 +23414,171 @@ fn shipped_dungeon_billboard_banks_match_the_published_directory() {
             Some(first) => assert_eq!(&this, first, "{stem} directory differs from DNG1"),
         }
     }
+}
+
+#[test]
+fn outdoor_ranged_attack_deltas_wrap_across_the_map_seam() {
+    // `active-objects.md §8`'s proximity helper "first computes wrapped
+    // absolute distance to the player", and the overworld is a 256-cell
+    // torus. Raw subtraction would read these pairs as ~255 apart.
+    assert_eq!(wrapped_axis_delta(254, 1), 3);
+    assert_eq!(wrapped_axis_delta(1, 254), -3);
+    assert_eq!(wrapped_axis_delta(0, 0), 0);
+    assert_eq!(wrapped_axis_delta(10, 13), 3);
+    assert_eq!(wrapped_axis_delta(13, 10), -3);
+    // Half-torus tie resolves forward, matching directed_step's
+    // wrapped_step_axis.
+    assert_eq!(wrapped_axis_delta(0, 128), 128);
+    // Both axes at once.
+    assert_eq!(wrapped_deltas_to_player(255, 2, 2, 255), (3, -3));
+}
+
+#[test]
+fn outdoor_broadside_window_requires_alignment_within_three_cells() {
+    // `active-objects.md §8`: "Ship-like water-creature and pirate frames
+    // aligned with the player on the same row or column within three cells
+    // fire a broadside".
+    for d in 1..=OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS {
+        assert!(outdoor_water_creature_attack_aligned(d, 0), "dx {d}");
+        assert!(outdoor_water_creature_attack_aligned(-d, 0), "dx -{d}");
+        assert!(outdoor_water_creature_attack_aligned(0, d), "dy {d}");
+        assert!(outdoor_water_creature_attack_aligned(0, -d), "dy -{d}");
+    }
+    // Out of range along the shared axis.
+    assert!(!outdoor_water_creature_attack_aligned(4, 0));
+    assert!(!outdoor_water_creature_attack_aligned(0, -4));
+    // Diagonal and oblique offsets never trigger it, however close.
+    assert!(!outdoor_water_creature_attack_aligned(1, 1));
+    assert!(!outdoor_water_creature_attack_aligned(3, 1));
+    // Co-located is not an aligned shot.
+    assert!(!outdoor_water_creature_attack_aligned(0, 0));
+}
+
+#[test]
+fn outdoor_breath_window_is_three_cells_on_both_axes() {
+    // `overworld.md §6.2`: "Within three cells of the party on **both**
+    // axes". Unlike the broadside there is no alignment requirement, so
+    // oblique offsets are inside the window -- which is exactly why the
+    // rasterization gap below bites this case and not the broadside.
+    assert!(outdoor_breath_attack_in_range(3, 3));
+    assert!(outdoor_breath_attack_in_range(-3, 3));
+    assert!(outdoor_breath_attack_in_range(3, 1));
+    assert!(outdoor_breath_attack_in_range(0, 0));
+    // Outside on either axis alone is outside.
+    assert!(!outdoor_breath_attack_in_range(4, 0));
+    assert!(!outdoor_breath_attack_in_range(0, -4));
+    assert!(!outdoor_breath_attack_in_range(4, 4));
+}
+
+#[test]
+fn outdoor_ranged_attack_trace_excludes_both_endpoint_cells() {
+    // `overworld.md §6.2`: "The attacker's own cell never obstructs its own
+    // shot", and the connect condition is "no *intervening* blocker", so
+    // the party's cell is a destination rather than an obstruction. A
+    // predicate that blocks only the two endpoints must still connect.
+    let outcome = trace_outdoor_ranged_attack((10, 10), (13, 10), |x, y| {
+        (x, y) == (10, 10) || (x, y) == (13, 10)
+    });
+    assert_eq!(outcome, OutdoorRangedAttackOutcome::Connects);
+}
+
+#[test]
+fn outdoor_ranged_attack_trace_stops_at_the_first_obstruction() {
+    // `overworld.md §6.2`: "If an obstruction is met first, the shot stops
+    // there and nothing further happens." Two blockers on the line report
+    // the nearer one.
+    let outcome = trace_outdoor_ranged_attack((10, 10), (10, 16), |_, y| y == 12 || y == 14);
+    assert_eq!(
+        outcome,
+        OutdoorRangedAttackOutcome::Obstructed { x: 10, y: 12 }
+    );
+}
+
+#[test]
+fn outdoor_ranged_attack_trace_is_symmetric_between_endpoints() {
+    // `overworld.md §6.2`: "The player's own ranged attack uses the
+    // identical procedure with the endpoints exchanged, so line-of-fire
+    // rules are symmetric between the party and the creatures."
+    let blocker = |x: u8, _y: u8| x == 12;
+    assert_eq!(
+        trace_outdoor_ranged_attack((10, 10), (14, 10), blocker),
+        OutdoorRangedAttackOutcome::Obstructed { x: 12, y: 10 }
+    );
+    assert_eq!(
+        trace_outdoor_ranged_attack((14, 10), (10, 10), blocker),
+        OutdoorRangedAttackOutcome::Obstructed { x: 12, y: 10 }
+    );
+    // And a clear line is clear from both ends.
+    let clear = |_x: u8, _y: u8| false;
+    assert_eq!(
+        trace_outdoor_ranged_attack((10, 10), (14, 10), clear),
+        OutdoorRangedAttackOutcome::Connects
+    );
+    assert_eq!(
+        trace_outdoor_ranged_attack((14, 10), (10, 10), clear),
+        OutdoorRangedAttackOutcome::Connects
+    );
+}
+
+#[test]
+fn outdoor_ranged_attack_trace_walks_the_wrapped_line_across_the_seam() {
+    // The traced line uses the same wrapped deltas as the trigger windows,
+    // so an attacker three cells away across the seam shoots across it
+    // rather than the long way round. Cells 255, 0 and 1 are intervening.
+    let mut visited = Vec::new();
+    let outcome = trace_outdoor_ranged_attack((254, 7), (2, 7), |x, y| {
+        visited.push((x, y));
+        false
+    });
+    assert_eq!(outcome, OutdoorRangedAttackOutcome::Connects);
+    assert_eq!(visited, vec![(255, 7), (0, 7), (1, 7)]);
+}
+
+#[test]
+fn outdoor_ranged_attack_trace_walks_an_exact_diagonal() {
+    // Equal magnitudes are rasterization-independent, so the exact
+    // diagonal is handled rather than refused.
+    let mut visited = Vec::new();
+    let outcome = trace_outdoor_ranged_attack((10, 10), (13, 13), |x, y| {
+        visited.push((x, y));
+        false
+    });
+    assert_eq!(outcome, OutdoorRangedAttackOutcome::Connects);
+    assert_eq!(visited, vec![(11, 11), (12, 12)]);
+}
+
+#[test]
+#[should_panic(expected = "cleak/u5-spec#90")]
+fn outdoor_ranged_attack_trace_refuses_an_oblique_line() {
+    // Spec gap: `overworld.md §6.2` says a straight line is traced and
+    // tested cell by cell, but not how an oblique line is rasterized --
+    // and the breath window admits oblique offsets such as (3, 1).
+    let _ = trace_outdoor_ranged_attack((10, 10), (13, 11), |_, _| false);
+}
+
+#[test]
+#[should_panic(expected = "cleak/u5-spec#90")]
+fn outdoor_ranged_attack_damage_is_unspecified_and_refuses() {
+    // Spec gap: §6.2 says only "damage is applied to the party at its map
+    // coordinates"; no amount, roll, range or member-selection rule exists
+    // in overworld.md, active-objects.md, encounters.md or combat.md.
+    require_outdoor_ranged_attack_damage(OutdoorRangedAttackFigure::SolidBurst);
+}
+
+#[test]
+fn outdoor_broadside_attacker_class_is_the_ship_like_facing_family() {
+    // `active-objects.md §8` scopes the broadside to "[s]hip-like
+    // water-creature and pirate frames" as a group -- every frame in
+    // `0x2C..=0x2F`, not just the first, in contrast with the breath
+    // attack's "first-frame hostile classes".
+    for b in 0x2Cu8..=0x2F {
+        assert!(outdoor_broadside_attacker_class(b), "{b:#x}");
+    }
+    assert!(!outdoor_broadside_attacker_class(0x2B));
+    assert!(!outdoor_broadside_attacker_class(0x30));
+    // The Dragon first frame is the breath attacker, not a broadside one.
+    assert!(!outdoor_broadside_attacker_class(
+        OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME
+    ));
+    assert_eq!(OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME, 0xDC);
 }

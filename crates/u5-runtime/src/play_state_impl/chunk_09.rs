@@ -2452,13 +2452,32 @@ impl PlayState {
                 continue;
             }
             let tick = self.active_objects[slot].tick_phase();
-            let ship_wind = if (self.active_objects[slot].phase & 0x0f) == 0 {
-                self.try_drift_active_ship(slot, tick)
-            } else {
-                ActiveShipWind::None
-            };
+            // `active-objects.md §8`: the walker's **first phase** "handles
+            // immediate hostile reactions", and only "[i]f none of those
+            // immediate reactions fires" does "the cleanup phase decide
+            // ordinary movement". A slot claimed by the first phase
+            // therefore takes no wind drift and no directed/random step
+            // this turn.
+            //
+            // Two of §8's four immediate reactions already run in
+            // production, from the world post-turn epilogue rather than
+            // from here: orthogonally adjacent hostile engagement
+            // ([`Self::apply_world_active_object_engagement`]) and adjacent
+            // whirlpool plane transition
+            // ([`Self::apply_world_whirlpool_engagement`]). They are not
+            // duplicated here. What this adds is the ranged half — the
+            // breath attack and the broadside — which had no
+            // implementation at all.
+            let claimed_by_first_phase = self.outdoor_first_phase_ranged_attack(slot);
+            let ship_wind =
+                if !claimed_by_first_phase && (self.active_objects[slot].phase & 0x0f) == 0 {
+                    self.try_drift_active_ship(slot, tick)
+                } else {
+                    ActiveShipWind::None
+                };
             let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
-            let wandered = !ship_wind_changed
+            let wandered = !claimed_by_first_phase
+                && !ship_wind_changed
                 && (self.active_objects[slot].phase & 0x0f) == 0
                 && self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated);
             if wandered {
@@ -2477,6 +2496,146 @@ impl PlayState {
                         self.mark_visibility_dirty();
                     }
                 }
+            }
+        }
+    }
+
+    /// `active-objects.md §8` outdoor per-turn walker, first phase —
+    /// **ranged half**. Returns `true` when the slot's immediate hostile
+    /// reaction fired, which suppresses this turn's cleanup movement.
+    ///
+    /// §8 lists four immediate reactions. In walker order they are adjacent
+    /// hostile engagement, the Sea Serpent / Dragon breath attack, adjacent
+    /// whirlpool plane transition, and the ship-like water-creature /
+    /// pirate broadside. `overworld.md §6` repeats the relative order of
+    /// the ones it names: "adjacent engagement, Sea Serpent/Dragon
+    /// first-frame near-range effects, aligned water-creature attack, and
+    /// cleanup movement".
+    ///
+    /// Engagement and whirlpool are already implemented, on the world
+    /// post-turn epilogue path; this method deliberately does not
+    /// re-implement them. It covers the two ranged reactions, which share
+    /// one routine per `overworld.md §6.2` — see
+    /// [`crate::outdoor_ranged_attack`] for that contract.
+    ///
+    /// Every window here is measured on **wrapped** deltas. §8's own
+    /// proximity helper "first computes wrapped absolute distance to the
+    /// player", and the overworld is a 256-cell torus: raw subtraction
+    /// would read a creature one cell across the map seam as ~255 cells
+    /// away and silently disable both attacks near the seam.
+    pub fn outdoor_first_phase_ranged_attack(&mut self, slot: usize) -> bool {
+        let Area::World { plane } = self.area else {
+            return false;
+        };
+        let object = self.active_objects[slot];
+        if object.z != plane.save_floor() || !is_outdoor_active_object_walker(object) {
+            return false;
+        }
+        let (dx, dy) = wrapped_deltas_to_player(
+            object.x as u8,
+            object.y as u8,
+            self.player.x as u8,
+            self.player.y as u8,
+        );
+
+        // §8 bullet 2, and `overworld.md §6.2`'s first table row: "Sea
+        // Serpent and Dragon first-frame hostile classes within three cells
+        // of the player on **both** axes roll a one-in-eight trigger, and
+        // on success loose a breath attack".
+        //
+        // Only the Dragon first frame is wired. `encounters.md`'s payload
+        // table names `0xDC..0xDF` the "Dragon sprite run" and says of it
+        // that "the first frame also participates in a special outdoor
+        // near-range pull/effect path", which identifies `0xDC`
+        // unambiguously. The Sea Serpent half is withheld: the same table
+        // carries two candidate families, `0x88..0x8B` "Sea Serpent sprite
+        // run" and `0xE0..0xE3` "Outdoor sea-serpent adjacency family", and
+        // no spec text picks between them for this trigger. Guessing would
+        // decide which creature breathes on the party.
+        if object.type_byte == OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME
+            && outdoor_breath_attack_in_range(dx, dy)
+        {
+            if outdoor_serpent_dragon_triggers(self.outdoor_serpent_dragon_breath_roll(slot)) {
+                self.resolve_outdoor_ranged_attack(
+                    object,
+                    OutdoorRangedAttackFigure::SparkCloud,
+                    None,
+                );
+                return true;
+            }
+        }
+
+        // §8 bullet 4: "Ship-like water-creature and pirate frames aligned
+        // with the player on the same row or column within three cells fire
+        // a broadside: they print the boom message and then resolve the
+        // same traced-line ranged attack as the breath attack above. The
+        // generic 'attacked' message belongs to the adjacent-engagement
+        // path, not to this one."
+        if outdoor_broadside_attacker_class(object.type_byte)
+            && outdoor_water_creature_attack_aligned(dx, dy)
+        {
+            self.resolve_outdoor_ranged_attack(
+                object,
+                OutdoorRangedAttackFigure::SolidBurst,
+                Some(OUTDOOR_BROADSIDE_BOOM_MESSAGE),
+            );
+            return true;
+        }
+
+        false
+    }
+
+    /// `active-objects.md §8` one-in-eight breath-attack gate roll, reduced
+    /// into `0..=7` by [`OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR`].
+    /// Named so the gate can be exercised directly rather than inferred
+    /// from whether a breath attack happened to fire.
+    pub fn outdoor_serpent_dragon_breath_roll(&self, slot: usize) -> u8 {
+        self.outdoor_active_object_step_seed(slot, OUTDOOR_SERPENT_DRAGON_BREATH_SALT)
+            % OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR
+    }
+
+    /// `overworld.md §6.2` shared ranged-attack resolution, creature-to-
+    /// party direction. Announces (the broadside's boom message precedes
+    /// the shot; the breath attack has no announcement), traces the line,
+    /// and applies the outcome.
+    ///
+    /// §6.2 on the announcement asymmetry: the breath row's announcement
+    /// column is "None", the broadside row's is "A boom message before the
+    /// shot", and "[t]he firing sound is played by the caller before the
+    /// flight begins, not per cell during it".
+    fn resolve_outdoor_ranged_attack(
+        &mut self,
+        attacker: ActiveObject,
+        figure: OutdoorRangedAttackFigure,
+        announcement: Option<&str>,
+    ) {
+        if let Some(announcement) = announcement {
+            if self.message.is_empty() {
+                self.message = announcement.to_string();
+            } else {
+                self.message.push(' ');
+                self.message.push_str(announcement);
+            }
+        }
+
+        let grid = &self.grid;
+        let outcome = trace_outdoor_ranged_attack(
+            (attacker.x as u8, attacker.y as u8),
+            (self.player.x as u8, self.player.y as u8),
+            |x, y| surface_tile_blocks_projectile(grid[world_cell_index(x as usize, y as usize)]),
+        );
+
+        match outcome {
+            // §6.2: "If an obstruction is met first, the shot stops there
+            // and nothing further happens."
+            OutdoorRangedAttackOutcome::Obstructed { .. } => {}
+            // §6.2: "If the line reaches the party with no intervening
+            // blocker, the attack connects: the world tick runs and damage
+            // is applied to the party at its map coordinates." The amount
+            // is unspecified everywhere; the seam refuses rather than
+            // inventing one.
+            OutdoorRangedAttackOutcome::Connects => {
+                require_outdoor_ranged_attack_damage(figure);
             }
         }
     }

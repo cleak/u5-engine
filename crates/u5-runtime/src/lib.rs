@@ -71,6 +71,7 @@ pub mod moongate;
 pub mod moongate_phase;
 pub mod npc_runtime;
 pub mod ool_audit;
+pub mod outdoor_ranged_attack;
 pub mod party;
 pub mod play_options;
 pub mod play_state_impl;
@@ -486,6 +487,14 @@ pub use npc_runtime::{
     npc_type_byte_class, npc_type_byte_occupied, schedule_floor_state,
 };
 pub use ool_audit::*;
+pub use outdoor_ranged_attack::{
+    OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME, OUTDOOR_BROADSIDE_BOOM_MESSAGE,
+    OUTDOOR_RANGED_ATTACK_RANGE_CELLS, OUTDOOR_SERPENT_DRAGON_BREATH_SALT,
+    OutdoorRangedAttackFigure, OutdoorRangedAttackOutcome, outdoor_breath_attack_in_range,
+    outdoor_broadside_attacker_class, require_outdoor_ranged_attack_damage,
+    require_outdoor_ranged_attack_rasterization, trace_outdoor_ranged_attack, wrapped_axis_delta,
+    wrapped_deltas_to_player,
+};
 pub use party::{
     Area, AvatarStats, LEVEL_FROM_EXPERIENCE_BASE_DIVISOR, LEVEL_FROM_EXPERIENCE_HALVING_STEP,
     MoonstoneGateSlot, POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_INDEX_MASK,
