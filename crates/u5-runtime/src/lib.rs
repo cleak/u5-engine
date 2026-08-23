@@ -32,6 +32,7 @@ pub mod dissolve;
 pub mod dungeon_tables;
 pub mod dungeon_tables_io;
 pub mod dungeon_tables_io_movement;
+pub mod dungeon_view;
 pub mod end_io;
 pub mod endgame;
 pub mod endgame_cinematic;
@@ -262,6 +263,7 @@ pub use dissolve::{
 pub use dungeon_tables::*;
 pub use dungeon_tables_io::*;
 pub use dungeon_tables_io_movement::*;
+pub use dungeon_view::*;
 pub use end_io::{
     END_DAT_FILE, END_DAT_LEN, END_DAT_PUBLISHED_WINDOW_RANGE_OPTIONS,
     END_DAT_PUBLISHED_WINDOW_RANGES, END_DAT_WINDOW_COUNT, END_NARRATIVE_WINDOW_TABLE_FILE,

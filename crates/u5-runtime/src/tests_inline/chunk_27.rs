@@ -508,3 +508,49 @@ fn shipped_palette_is_stock_except_dark_yellow_at_index_six() {
         .collect();
     assert_eq!(deviations, vec![SHIPPED_PALETTE_DEVIATING_INDEX]);
 }
+
+#[test]
+fn dungeon_billboard_bank_is_chosen_by_flavour_byte_not_declaration_order() {
+    // `dungeon-mode.md §6.2`: a three-entry filename table indexed by
+    // the flavour byte - byte 1 the first file, byte 2 the second,
+    // byte 3 the third. `FlavourByte3` is named for its byte, so it
+    // takes DNG3; mapping by the order the variants happen to be
+    // declared puts Deceit on DNG2 and renders the corridor in the
+    // wrong bank's colours.
+    assert_eq!(
+        dungeon_billboard_stem(DungeonPresentationFlavour::Normal),
+        "DNG1"
+    );
+    assert_eq!(
+        dungeon_billboard_stem(DungeonPresentationFlavour::Mine),
+        "DNG2"
+    );
+    assert_eq!(
+        dungeon_billboard_stem(DungeonPresentationFlavour::FlavourByte3),
+        "DNG3"
+    );
+
+    // The three banks are distinguishable by their dominant ink, which
+    // is the whole "different dungeons look different" mechanism: one
+    // geometry, three texture sets.
+    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join("DNG1.16").exists() {
+        return;
+    }
+    let dominant = |stem: &str| {
+        let dir = load_graphic_image_directory(game_dir, stem, TileGraphicsDepth::Ega16).unwrap();
+        let image = dir.images[1].as_ref().unwrap();
+        let mut hist = [0usize; 16];
+        for pixel in &image.pixels {
+            hist[usize::from(*pixel & 0x0f)] += 1;
+        }
+        (0..16)
+            .filter(|index| *index != 0)
+            .max_by_key(|index| hist[*index])
+            .unwrap()
+    };
+    // Ochre, red and grey respectively - three distinct texture sets.
+    assert_eq!(dominant("DNG1"), 6);
+    assert_eq!(dominant("DNG2"), 4);
+    assert_eq!(dominant("DNG3"), 7);
+}

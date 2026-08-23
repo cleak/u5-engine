@@ -14294,20 +14294,18 @@ mod tests {
             rgba.len(),
             (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4
         );
-        assert!(rgba.chunks_exact(4).any(|pixel| pixel
-            == [
-                EGA_PALETTE_RGB[15][0],
-                EGA_PALETTE_RGB[15][1],
-                EGA_PALETTE_RGB[15][2],
-                0xff
-            ]));
-        assert!(rgba.chunks_exact(4).any(|pixel| pixel
-            == [
-                EGA_PALETTE_RGB[8][0],
-                EGA_PALETTE_RGB[8][1],
-                EGA_PALETTE_RGB[8][2],
-                0xff
-            ]));
+        // This used to assert index-15 outlines and index-8 fills from
+        // the sparse/wireframe renderer `dungeon-mode.md §6` withdrew.
+        // The corridor is billboard art now, and the synthetic fixture
+        // directory ships no `DNG*` bank, so the correct behaviour here
+        // is an unpainted viewport rather than invented geometry - the
+        // light gate is exercised by the sibling test below, and the
+        // real corridor by the runtime's geometry contract tests.
+        assert!(
+            rgba.chunks_exact(4)
+                .all(|pixel| pixel == [0x00, 0x00, 0x00, 0xff]),
+            "no billboard bank is installed for the synthetic fixture, so nothing is painted"
+        );
     }
 
     #[test]

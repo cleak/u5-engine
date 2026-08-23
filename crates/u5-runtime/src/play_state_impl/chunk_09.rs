@@ -653,170 +653,101 @@ impl PlayState {
         Ok(viewport)
     }
 
+    /// `dungeon-mode.md` sections 6.1-6.5: paint the corridor from the
+    /// flavour's billboard bank.
+    ///
+    /// Two sweeps. The forward sweep runs band 0 (the party's own cell)
+    /// through band 3, running the forward test at each band and then
+    /// painting the two side cells, stopping at the first band whose
+    /// forward test reports blocked. Every image is drawn twice, once
+    /// at `96 - hw[b]` and once mirrored at `192 - x_left - width`, so
+    /// the two halves of a forward billboard meet exactly on the centre
+    /// line. There is no projection arithmetic and no depth buffer.
+    ///
+    /// Object sprites, fountain water and energy-field strobes - the
+    /// backward sweep of section 6.5 and sections 6.6-6.8 - are not
+    /// drawn yet: they come from a separate art file this engine does
+    /// not load. Nothing invented stands in for them.
     fn draw_dungeon_corridor(&self, level: u8, viewport: &mut TileViewport) {
-        let center_x = (viewport.width / 2) as i32;
-        let center_y = (viewport.height / 2) as i32;
-        let max_radius = (viewport.width.min(viewport.height) as i32 / 2).saturating_sub(8);
-        let depth_rects = dungeon_depth_rects(center_x, center_y, max_radius);
-        let colour_limit = viewport.depth.pixel_limit();
-        let bright = dungeon_palette_index(viewport.depth, 15);
-        let dim = dungeon_palette_index(viewport.depth, 7);
-        let feature = dungeon_palette_index(viewport.depth, 14);
-        let sprite = dungeon_palette_index(viewport.depth, 13);
-        let wall_fill = dungeon_palette_index(viewport.depth, 8);
+        let Area::Dungeon { scene, .. } = self.area else {
+            return;
+        };
+        let Some(banks) = dungeon_billboard_banks() else {
+            return;
+        };
+        let bank = banks.bank(scene.presentation_flavour());
 
         let (fdx, fdy) = self.player.facing.delta();
-        let Some(left) = self.player.facing.turn_left_cardinal() else {
+        let Some(left_facing) = self.player.facing.turn_left_cardinal() else {
             return;
         };
-        let Some(right) = self.player.facing.turn_right_cardinal() else {
+        let Some(right_facing) = self.player.facing.turn_right_cardinal() else {
             return;
         };
-        let (ldx, ldy) = left.delta();
-        let (rdx, rdy) = right.delta();
+        let (ldx, ldy) = left_facing.delta();
+        let (rdx, rdy) = right_facing.delta();
 
-        draw_rect_outline(viewport, depth_rects[0], dim);
-        let mut visible_bands = Vec::with_capacity(DUNGEON_VIEW_DEPTH);
-        let mut visible_objects = Vec::with_capacity(DUNGEON_VIEW_DEPTH * 3);
-        for band in 1..=DUNGEON_VIEW_DEPTH {
-            let band_offset = band as isize;
-            let current = depth_rects[band - 1];
-            let next = depth_rects[band];
-            let line_colour = if band <= 2 { bright } else { dim };
+        let mut point_blank = false;
+        for band in 0..DUNGEON_BANDS {
+            let step = band as isize;
+            let ahead_dx = fdx * step;
+            let ahead_dy = fdy * step;
+            let ahead = self.dungeon_renderer_offset_cell(level, ahead_dx, ahead_dy);
+            let outcome = dungeon_forward_outcome(ahead, band);
+            if outcome.point_blank {
+                point_blank = true;
+            }
 
-            draw_line(
-                viewport,
-                current.left,
-                current.top,
-                next.left,
-                next.top,
-                line_colour,
-            );
-            draw_line(
-                viewport,
-                current.right,
-                current.top,
-                next.right,
-                next.top,
-                line_colour,
-            );
-            draw_line(
-                viewport,
-                current.left,
-                current.bottom,
-                next.left,
-                next.bottom,
-                line_colour,
-            );
-            draw_line(
-                viewport,
-                current.right,
-                current.bottom,
-                next.right,
-                next.bottom,
-                line_colour,
-            );
+            if let Some(role) = outcome.blocker {
+                self.draw_dungeon_billboard(viewport, bank, role, band);
+            }
 
-            let ahead_dx = fdx * band_offset;
-            let ahead_dy = fdy * band_offset;
-            let left_tile =
-                self.dungeon_renderer_offset_cell(level, ahead_dx + ldx, ahead_dy + ldy);
-            let right_tile =
-                self.dungeon_renderer_offset_cell(level, ahead_dx + rdx, ahead_dy + rdy);
-            let ahead_tile = self.dungeon_renderer_offset_cell(level, ahead_dx, ahead_dy);
-            if let Some(object) = self.dungeon_renderer_offset_object(level, ahead_dx, ahead_dy) {
-                visible_objects.push(DungeonVisibleObject {
-                    rect: next,
-                    side: None,
-                    object,
-                });
+            // A point-blank door suppresses the band-0 side cells so the
+            // frame is not boxed in.
+            if !(band == 0 && point_blank) {
+                let left_cell =
+                    self.dungeon_renderer_offset_cell(level, ahead_dx + ldx, ahead_dy + ldy);
+                let right_cell =
+                    self.dungeon_renderer_offset_cell(level, ahead_dx + rdx, ahead_dy + rdy);
+                self.draw_dungeon_billboard(viewport, bank, dungeon_side_role(left_cell), band);
+                self.draw_dungeon_billboard(viewport, bank, dungeon_side_role(right_cell), band);
             }
-            if !dungeon_first_person_blocks(left_tile) {
-                if let Some(object) =
-                    self.dungeon_renderer_offset_object(level, ahead_dx + ldx, ahead_dy + ldy)
-                {
-                    visible_objects.push(DungeonVisibleObject {
-                        rect: next,
-                        side: Some(DungeonViewSide::Left),
-                        object,
-                    });
-                }
-            }
-            if !dungeon_first_person_blocks(right_tile) {
-                if let Some(object) =
-                    self.dungeon_renderer_offset_object(level, ahead_dx + rdx, ahead_dy + rdy)
-                {
-                    visible_objects.push(DungeonVisibleObject {
-                        rect: next,
-                        side: Some(DungeonViewSide::Right),
-                        object,
-                    });
-                }
-            }
-            draw_dungeon_side_cell(
-                viewport,
-                current,
-                next,
-                DungeonViewSide::Left,
-                left_tile,
-                bright,
-                dim,
-                wall_fill.min(colour_limit - 1),
-            );
-            draw_dungeon_side_cell(
-                viewport,
-                current,
-                next,
-                DungeonViewSide::Right,
-                right_tile,
-                bright,
-                dim,
-                wall_fill.min(colour_limit - 1),
-            );
-            draw_rect_outline(viewport, next, line_colour);
-            visible_bands.push(DungeonVisibleBand {
-                rect: next,
-                tile: ahead_tile,
-            });
-            if dungeon_first_person_blocks(ahead_tile) {
+
+            if !outcome.see_through {
                 break;
             }
         }
+    }
 
-        for band in visible_bands.into_iter().rev() {
-            draw_dungeon_front_cell(viewport, band.rect, band.tile, bright, feature, wall_fill);
-        }
-        for visible in visible_objects.into_iter().rev() {
-            draw_dungeon_object_marker(
-                viewport,
-                visible.rect,
-                visible.side,
-                visible.object,
-                sprite,
-            );
-        }
+    /// Blit one billboard and its mirrored copy into the viewport.
+    ///
+    /// The viewport is the 176x176 tile window, which the frame places
+    /// at screen `(8, 8)`; the published placements are in screen
+    /// pixels, so both axes shift by that origin.
+    fn draw_dungeon_billboard(
+        &self,
+        viewport: &mut TileViewport,
+        bank: &DungeonBillboardBank,
+        role: DungeonBillboardRole,
+        band: usize,
+    ) {
+        let Some(slot) = role.slot(band) else {
+            return;
+        };
+        let Some(Some(image)) = bank.images.get(slot) else {
+            return;
+        };
+        let left_x = dungeon_billboard_left_x(band);
+        let width = image.width as i32;
+        let right_x = dungeon_billboard_right_x(left_x, width);
+        blit_dungeon_billboard(viewport, image, left_x, false);
+        blit_dungeon_billboard(viewport, image, right_x, true);
     }
 
     fn dungeon_renderer_offset_cell(&self, level: u8, dx: isize, dy: isize) -> u8 {
         let x = dungeon_floor_wrap_coord(self.player.x as i16 + dx as i16) as usize;
         let y = dungeon_floor_wrap_coord(self.player.y as i16 + dy as i16) as usize;
         dungeon_renderer_cell_byte(self.dungeon_cell(level, x, y))
-    }
-
-    fn dungeon_renderer_offset_object(
-        &self,
-        level: u8,
-        dx: isize,
-        dy: isize,
-    ) -> Option<ActiveObject> {
-        let x = dungeon_floor_wrap_coord(self.player.x as i16 + dx as i16) as usize;
-        let y = dungeon_floor_wrap_coord(self.player.y as i16 + dy as i16) as usize;
-        self.active_objects.iter().copied().skip(1).find(|object| {
-            !object.is_empty()
-                && object.z == level as i8
-                && self.object_occupies(*object, x, y)
-                && active_object_frame_tile(object.type_byte, object.phase).is_some()
-        })
     }
 
     pub fn refresh_top_down_visibility_buffers(&mut self, area: TopDownRenderArea, radius: usize) {
@@ -2826,164 +2757,6 @@ impl PlayState {
     }
 }
 
-#[derive(Clone, Copy)]
-struct DungeonRect {
-    left: i32,
-    top: i32,
-    right: i32,
-    bottom: i32,
-}
-
-#[derive(Clone, Copy)]
-struct DungeonVisibleBand {
-    rect: DungeonRect,
-    tile: u8,
-}
-
-#[derive(Clone, Copy)]
-struct DungeonVisibleObject {
-    rect: DungeonRect,
-    side: Option<DungeonViewSide>,
-    object: ActiveObject,
-}
-
-#[derive(Clone, Copy)]
-enum DungeonViewSide {
-    Left,
-    Right,
-}
-
-fn dungeon_depth_rects(center_x: i32, center_y: i32, max_radius: i32) -> [DungeonRect; 5] {
-    let scales = [100, 70, 46, 28, 14];
-    scales.map(|scale| {
-        let half_w = (max_radius * scale / 100).max(2);
-        let half_h = (max_radius * scale / 100).max(2);
-        DungeonRect {
-            left: center_x - half_w,
-            top: center_y - half_h,
-            right: center_x + half_w,
-            bottom: center_y + half_h,
-        }
-    })
-}
-
-fn dungeon_palette_index(depth: TileGraphicsDepth, ega_index: u8) -> u8 {
-    match depth {
-        TileGraphicsDepth::Ega16 => ega_index,
-        TileGraphicsDepth::Cga4 => match ega_index {
-            0 => 0,
-            8 => 1,
-            14 => 2,
-            _ => 3,
-        },
-    }
-}
-
-fn dungeon_first_person_blocks(tile: u8) -> bool {
-    matches!(
-        dungeon_cell_class_of(tile),
-        DungeonCellClass::RoomHelperState
-            | DungeonCellClass::Wall
-            | DungeonCellClass::HeavyDoorVariant
-            | DungeonCellClass::RoomTrigger
-    )
-}
-
-fn dungeon_first_person_feature_colour(tile: u8) -> Option<u8> {
-    Some(match dungeon_cell_class_of(tile) {
-        DungeonCellClass::UpLadder
-        | DungeonCellClass::DownLadder
-        | DungeonCellClass::TwoWayLadder => 10,
-        DungeonCellClass::Chest => 6,
-        DungeonCellClass::Fountain => 11,
-        DungeonCellClass::PitTrap => 8,
-        DungeonCellClass::EnergyField | DungeonCellClass::EnergyFieldSecondary => 12,
-        DungeonCellClass::RoomHelperState
-        | DungeonCellClass::HeavyDoorVariant
-        | DungeonCellClass::RoomTrigger => 14,
-        DungeonCellClass::Passage | DungeonCellClass::PassageVariant | DungeonCellClass::Wall => {
-            return None;
-        }
-    })
-}
-
-fn draw_dungeon_front_cell(
-    viewport: &mut TileViewport,
-    rect: DungeonRect,
-    tile: u8,
-    bright: u8,
-    feature: u8,
-    wall_fill: u8,
-) {
-    if dungeon_first_person_blocks(tile) {
-        fill_rect(viewport, rect, wall_fill);
-        draw_rect_outline(viewport, rect, bright);
-        if dungeon_first_person_feature_colour(tile).is_some() {
-            draw_door_crossbar(viewport, rect, feature);
-        }
-        return;
-    }
-
-    if matches!(
-        dungeon_cell_class_of(tile),
-        DungeonCellClass::EnergyField | DungeonCellClass::EnergyFieldSecondary
-    ) {
-        draw_field_strobe(viewport, rect, feature);
-    } else if let Some(marker) = dungeon_first_person_feature_colour(tile) {
-        draw_feature_marker(
-            viewport,
-            rect,
-            dungeon_palette_index(viewport.depth, marker),
-        );
-    }
-}
-
-fn draw_dungeon_side_cell(
-    viewport: &mut TileViewport,
-    outer: DungeonRect,
-    inner: DungeonRect,
-    side: DungeonViewSide,
-    tile: u8,
-    bright: u8,
-    dim: u8,
-    wall_fill: u8,
-) {
-    match dungeon_cell_class_of(tile) {
-        DungeonCellClass::Passage | DungeonCellClass::PassageVariant => {
-            draw_side_flat_marker(viewport, outer, inner, side, dim);
-        }
-        DungeonCellClass::RoomHelperState
-        | DungeonCellClass::HeavyDoorVariant
-        | DungeonCellClass::RoomTrigger => {
-            draw_side_wall(viewport, outer, inner, side, wall_fill, bright);
-            draw_side_door_marker(viewport, outer, inner, side, bright);
-        }
-        DungeonCellClass::Wall => {
-            draw_side_wall(viewport, outer, inner, side, wall_fill, bright);
-        }
-        DungeonCellClass::EnergyField | DungeonCellClass::EnergyFieldSecondary => {
-            draw_side_field_strobe(
-                viewport,
-                outer,
-                inner,
-                side,
-                dungeon_palette_index(viewport.depth, 12),
-            );
-        }
-        _ => {
-            if let Some(marker) = dungeon_first_person_feature_colour(tile) {
-                draw_side_feature_marker(
-                    viewport,
-                    outer,
-                    inner,
-                    side,
-                    dungeon_palette_index(viewport.depth, marker),
-                );
-            }
-        }
-    }
-}
-
 fn put_viewport_pixel(viewport: &mut TileViewport, x: i32, y: i32, colour: u8) {
     if x < 0 || y < 0 {
         return;
@@ -3148,343 +2921,6 @@ fn draw_line(viewport: &mut TileViewport, x0: i32, y0: i32, x1: i32, y1: i32, co
             err += dx;
             y0 += sy;
         }
-    }
-}
-
-fn draw_rect_outline(viewport: &mut TileViewport, rect: DungeonRect, colour: u8) {
-    draw_line(viewport, rect.left, rect.top, rect.right, rect.top, colour);
-    draw_line(
-        viewport,
-        rect.left,
-        rect.bottom,
-        rect.right,
-        rect.bottom,
-        colour,
-    );
-    draw_line(
-        viewport,
-        rect.left,
-        rect.top,
-        rect.left,
-        rect.bottom,
-        colour,
-    );
-    draw_line(
-        viewport,
-        rect.right,
-        rect.top,
-        rect.right,
-        rect.bottom,
-        colour,
-    );
-}
-
-fn fill_rect(viewport: &mut TileViewport, rect: DungeonRect, colour: u8) {
-    for y in rect.top..=rect.bottom {
-        for x in rect.left..=rect.right {
-            put_viewport_pixel(viewport, x, y, colour);
-        }
-    }
-}
-
-fn fill_polygon(viewport: &mut TileViewport, points: &[(i32, i32)], colour: u8) {
-    if points.len() < 3 {
-        return;
-    }
-    let min_y = points.iter().map(|(_, y)| *y).min().unwrap_or(0);
-    let max_y = points.iter().map(|(_, y)| *y).max().unwrap_or(0);
-    for y in min_y..=max_y {
-        let mut intersections = Vec::new();
-        for index in 0..points.len() {
-            let (x0, y0) = points[index];
-            let (x1, y1) = points[(index + 1) % points.len()];
-            if y0 == y1 {
-                continue;
-            }
-            let (low_x, low_y, high_x, high_y) = if y0 < y1 {
-                (x0, y0, x1, y1)
-            } else {
-                (x1, y1, x0, y0)
-            };
-            if y < low_y || y >= high_y {
-                continue;
-            }
-            let x = low_x + (y - low_y) * (high_x - low_x) / (high_y - low_y);
-            intersections.push(x);
-        }
-        intersections.sort_unstable();
-        for pair in intersections.chunks_exact(2) {
-            for x in pair[0]..=pair[1] {
-                put_viewport_pixel(viewport, x, y, colour);
-            }
-        }
-    }
-}
-
-fn fill_quad_left(viewport: &mut TileViewport, outer: DungeonRect, inner: DungeonRect, colour: u8) {
-    fill_polygon(
-        viewport,
-        &[
-            (outer.left, outer.top),
-            (inner.left, inner.top),
-            (inner.left, inner.bottom),
-            (outer.left, outer.bottom),
-        ],
-        colour,
-    );
-}
-
-fn fill_quad_right(
-    viewport: &mut TileViewport,
-    outer: DungeonRect,
-    inner: DungeonRect,
-    colour: u8,
-) {
-    fill_polygon(
-        viewport,
-        &[
-            (outer.right, outer.top),
-            (inner.right, inner.top),
-            (inner.right, inner.bottom),
-            (outer.right, outer.bottom),
-        ],
-        colour,
-    );
-}
-
-fn draw_side_wall(
-    viewport: &mut TileViewport,
-    outer: DungeonRect,
-    inner: DungeonRect,
-    side: DungeonViewSide,
-    fill_colour: u8,
-    line_colour: u8,
-) {
-    match side {
-        DungeonViewSide::Left => {
-            fill_quad_left(viewport, outer, inner, fill_colour);
-            draw_line(
-                viewport,
-                outer.left,
-                outer.top,
-                inner.left,
-                inner.top,
-                line_colour,
-            );
-            draw_line(
-                viewport,
-                outer.left,
-                outer.bottom,
-                inner.left,
-                inner.bottom,
-                line_colour,
-            );
-        }
-        DungeonViewSide::Right => {
-            fill_quad_right(viewport, outer, inner, fill_colour);
-            draw_line(
-                viewport,
-                outer.right,
-                outer.top,
-                inner.right,
-                inner.top,
-                line_colour,
-            );
-            draw_line(
-                viewport,
-                outer.right,
-                outer.bottom,
-                inner.right,
-                inner.bottom,
-                line_colour,
-            );
-        }
-    }
-}
-
-fn draw_side_flat_marker(
-    viewport: &mut TileViewport,
-    outer: DungeonRect,
-    inner: DungeonRect,
-    side: DungeonViewSide,
-    colour: u8,
-) {
-    let (x0, x1) = match side {
-        DungeonViewSide::Left => ((outer.left + inner.left) / 2, inner.left),
-        DungeonViewSide::Right => ((outer.right + inner.right) / 2, inner.right),
-    };
-    let y = (inner.top + inner.bottom) / 2;
-    draw_line(viewport, x0, y, x1, y, colour);
-}
-
-fn draw_side_door_marker(
-    viewport: &mut TileViewport,
-    outer: DungeonRect,
-    inner: DungeonRect,
-    side: DungeonViewSide,
-    colour: u8,
-) {
-    let x = match side {
-        DungeonViewSide::Left => (outer.left + inner.left) / 2,
-        DungeonViewSide::Right => (outer.right + inner.right) / 2,
-    };
-    draw_line(viewport, x, inner.top, x, inner.bottom, colour);
-}
-
-fn draw_door_crossbar(viewport: &mut TileViewport, rect: DungeonRect, colour: u8) {
-    let mid_y = (rect.top + rect.bottom) / 2;
-    let inset = ((rect.right - rect.left) / 5).max(1);
-    draw_line(
-        viewport,
-        rect.left + inset,
-        mid_y,
-        rect.right - inset,
-        mid_y,
-        colour,
-    );
-    draw_line(
-        viewport,
-        (rect.left + rect.right) / 2,
-        rect.top + inset,
-        (rect.left + rect.right) / 2,
-        rect.bottom - inset,
-        colour,
-    );
-}
-
-fn draw_field_strobe(viewport: &mut TileViewport, rect: DungeonRect, colour: u8) {
-    let inset = ((rect.right - rect.left) / 6).max(1);
-    for numerator in [2, 3, 4] {
-        let y = rect.top + (rect.bottom - rect.top) * numerator / 6;
-        draw_line(
-            viewport,
-            rect.left + inset,
-            y,
-            rect.right - inset,
-            y,
-            colour,
-        );
-    }
-}
-
-fn draw_feature_marker(viewport: &mut TileViewport, rect: DungeonRect, colour: u8) {
-    let center_x = (rect.left + rect.right) / 2;
-    let center_y = (rect.top + rect.bottom) / 2;
-    let size = ((rect.right - rect.left).min(rect.bottom - rect.top) / 5).max(2);
-    draw_line(
-        viewport,
-        center_x - size,
-        center_y,
-        center_x + size,
-        center_y,
-        colour,
-    );
-    draw_line(
-        viewport,
-        center_x,
-        center_y - size,
-        center_x,
-        center_y + size,
-        colour,
-    );
-}
-
-fn draw_dungeon_object_marker(
-    viewport: &mut TileViewport,
-    rect: DungeonRect,
-    side: Option<DungeonViewSide>,
-    object: ActiveObject,
-    colour: u8,
-) {
-    let frame_tile =
-        active_object_frame_tile(object.type_byte, object.phase).unwrap_or(object.tile);
-    let frame_phase = i32::from(frame_tile & 0x03);
-    let (center_x, center_y, size) = match side {
-        Some(DungeonViewSide::Left) => {
-            let x = rect.left + (rect.right - rect.left) / 4;
-            let y = (rect.top + rect.bottom) / 2;
-            let size = ((rect.right - rect.left).min(rect.bottom - rect.top) / 8).max(2);
-            (x, y, size)
-        }
-        Some(DungeonViewSide::Right) => {
-            let x = rect.right - (rect.right - rect.left) / 4;
-            let y = (rect.top + rect.bottom) / 2;
-            let size = ((rect.right - rect.left).min(rect.bottom - rect.top) / 8).max(2);
-            (x, y, size)
-        }
-        None => {
-            let x = (rect.left + rect.right) / 2;
-            let y = (rect.top + rect.bottom) / 2;
-            let size = ((rect.right - rect.left).min(rect.bottom - rect.top) / 6).max(2);
-            (x, y, size)
-        }
-    };
-    let bob = frame_phase - 1;
-    let y = center_y + bob;
-    draw_line(viewport, center_x, y - size, center_x + size, y, colour);
-    draw_line(viewport, center_x + size, y, center_x, y + size, colour);
-    draw_line(viewport, center_x, y + size, center_x - size, y, colour);
-    draw_line(viewport, center_x - size, y, center_x, y - size, colour);
-    put_viewport_pixel(viewport, center_x, y, colour);
-}
-
-fn side_marker_center(
-    outer: DungeonRect,
-    inner: DungeonRect,
-    side: DungeonViewSide,
-) -> (i32, i32, i32) {
-    let x = match side {
-        DungeonViewSide::Left => (outer.left + inner.left) / 2,
-        DungeonViewSide::Right => (outer.right + inner.right) / 2,
-    };
-    let y = (inner.top + inner.bottom) / 2;
-    let size = ((inner.right - inner.left).min(inner.bottom - inner.top) / 7).max(2);
-    (x, y, size)
-}
-
-fn draw_side_feature_marker(
-    viewport: &mut TileViewport,
-    outer: DungeonRect,
-    inner: DungeonRect,
-    side: DungeonViewSide,
-    colour: u8,
-) {
-    let (center_x, center_y, size) = side_marker_center(outer, inner, side);
-    draw_line(
-        viewport,
-        center_x - size,
-        center_y,
-        center_x + size,
-        center_y,
-        colour,
-    );
-    draw_line(
-        viewport,
-        center_x,
-        center_y - size,
-        center_x,
-        center_y + size,
-        colour,
-    );
-}
-
-fn draw_side_field_strobe(
-    viewport: &mut TileViewport,
-    outer: DungeonRect,
-    inner: DungeonRect,
-    side: DungeonViewSide,
-    colour: u8,
-) {
-    let (center_x, center_y, size) = side_marker_center(outer, inner, side);
-    for offset in [-size, 0, size] {
-        draw_line(
-            viewport,
-            center_x - size,
-            center_y + offset,
-            center_x + size,
-            center_y + offset,
-            colour,
-        );
     }
 }
 

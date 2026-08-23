@@ -229,6 +229,106 @@
     }
 
     #[test]
+    fn dungeon_corridor_geometry_falls_out_of_the_half_aperture_sequence() {
+        // `dungeon-mode.md §6.1-6.3`: every placement constant derives
+        // from one sequence. A side image's width is the ring thickness
+        // `hw[b] - hw[b+1]`; a forward image's width is `hw[b]` itself,
+        // because each forward billboard is a half wall drawn twice.
+        assert_eq!(DUNGEON_HALF_APERTURE, [80, 56, 24, 8]);
+        assert_eq!(
+            (0..DUNGEON_BANDS)
+                .map(|b| dungeon_billboard_width(DungeonBillboardRole::SideWall, b).unwrap())
+                .collect::<Vec<_>>(),
+            vec![24, 32, 16, 8]
+        );
+        assert_eq!(
+            (0..DUNGEON_BANDS)
+                .map(|b| dungeon_billboard_width(DungeonBillboardRole::ForwardWall, b).unwrap())
+                .collect::<Vec<_>>(),
+            vec![80, 56, 24, 8]
+        );
+
+        // Published placement table: left x is `96 - hw[b]` for both
+        // families, and the mirrored copy is `192 - x_left - width`, so
+        // a forward billboard's right half always starts on the centre
+        // line and the two halves meet seamlessly.
+        let mut left = Vec::new();
+        let mut side_right = Vec::new();
+        let mut forward_right = Vec::new();
+        for band in 0..DUNGEON_BANDS {
+            let x = dungeon_billboard_left_x(band);
+            left.push(x);
+            side_right.push(dungeon_billboard_right_x(
+                x,
+                dungeon_billboard_width(DungeonBillboardRole::SideWall, band).unwrap(),
+            ));
+            forward_right.push(dungeon_billboard_right_x(
+                x,
+                dungeon_billboard_width(DungeonBillboardRole::ForwardWall, band).unwrap(),
+            ));
+        }
+        assert_eq!(left, vec![16, 40, 72, 88]);
+        assert_eq!(side_right, vec![152, 120, 104, 96]);
+        assert_eq!(forward_right, vec![96, 96, 96, 96]);
+    }
+
+    #[test]
+    fn dungeon_cell_classes_select_the_published_billboard_families() {
+        use DungeonBillboardRole::*;
+        // Side cells, by high nibble. Every class below the door
+        // families selects the *opening* image - including the unused
+        // `0x9?` class, which is not a wall.
+        for nibble in 0x0..=0x9u8 {
+            assert_eq!(dungeon_side_role(nibble << 4), SideOpening, "{nibble:#x}");
+        }
+        assert_eq!(dungeon_side_role(0xa0), SideDoor);
+        assert_eq!(dungeon_side_role(0xe0), SideDoor);
+        assert_eq!(dungeon_side_role(0xf0), SideDoor);
+        assert_eq!(dungeon_side_role(0xc0), SideFlavourWall);
+        assert_eq!(dungeon_side_role(0xb0), SideWall);
+        assert_eq!(dungeon_side_role(0xd0), SideWall);
+
+        // The forward test is see-through below the door families.
+        for nibble in 0x0..=0x9u8 {
+            let outcome = dungeon_forward_outcome(nibble << 4, 1);
+            assert!(outcome.see_through && outcome.blocker.is_none());
+        }
+        for (cell, role) in [
+            (0xa0u8, ForwardDoor),
+            (0xb0, ForwardWall),
+            (0xc0, ForwardFlavourWall),
+            (0xd0, ForwardWall),
+            (0xe0, ForwardDoor),
+            (0xf0, ForwardDoor),
+        ] {
+            let outcome = dungeon_forward_outcome(cell, 2);
+            assert_eq!(outcome.blocker, Some(role), "{cell:#x}");
+            assert!(!outcome.see_through);
+        }
+    }
+
+    #[test]
+    fn dungeon_band_zero_overrides_every_blocker_to_the_point_blank_image() {
+        // `§6.4`: at band 0 every blocker family uses the single
+        // point-blank image whatever its class, which is why the two
+        // band-0 forward directory entries do not exist. A `0xE?` door
+        // in the party's own cell paints it and reports see-through
+        // anyway, suppressing the band-0 side cells; `0xF?` does not.
+        for cell in [0xa0u8, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0] {
+            let outcome = dungeon_forward_outcome(cell, 0);
+            assert_eq!(outcome.blocker, Some(DungeonBillboardRole::ForwardDoor));
+        }
+        let door = dungeon_forward_outcome(0xe0, 0);
+        assert!(door.see_through && door.point_blank);
+        let trigger = dungeon_forward_outcome(0xf0, 0);
+        assert!(!trigger.see_through && !trigger.point_blank);
+
+        assert_eq!(DungeonBillboardRole::ForwardWall.slot(0), None);
+        assert_eq!(DungeonBillboardRole::ForwardFlavourWall.slot(0), None);
+        assert_eq!(DungeonBillboardRole::ForwardDoor.slot(0), Some(12));
+    }
+
+    #[test]
     fn dungeon_raster_frame_respects_light_gate() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.visibility_dirty = true;
@@ -239,78 +339,6 @@
         assert_eq!(viewport.width, 11 * TILE_ATLAS_SIDE);
         assert!(viewport.pixels.iter().all(|&pixel| pixel == 0));
         assert!(!state.visibility_dirty);
-    }
-
-    #[test]
-    fn dungeon_raster_frame_draws_facing_relative_wall_and_feature_cues() {
-        let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 2, 1)] = 0x40;
-        grid[dungeon_cell_index(0, 2, 0)] = 0xb0;
-        let mut state = dungeon_state(grid, 0, 1, 1);
-        state.player.facing = Direction::East;
-        state.torch_counter = 9;
-        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
-
-        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
-
-        assert!(viewport.pixels.iter().any(|&pixel| pixel == 15));
-        assert!(viewport.pixels.iter().any(|&pixel| pixel == 8));
-        assert!(viewport.pixels.iter().any(|&pixel| pixel == 6));
-    }
-
-    #[test]
-    fn dungeon_raster_room_helper_blocks_far_features() {
-        let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 2, 1)] = 0xa0;
-        grid[dungeon_cell_index(0, 3, 1)] = 0x40;
-        let mut state = dungeon_state(grid, 0, 1, 1);
-        state.player.facing = Direction::East;
-        state.torch_counter = 9;
-        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
-
-        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
-
-        assert!(viewport.pixels.iter().any(|&pixel| pixel == 15));
-        assert!(viewport.pixels.iter().any(|&pixel| pixel == 14));
-        assert!(!viewport.pixels.iter().any(|&pixel| pixel == 6));
-    }
-
-    #[test]
-    fn dungeon_raster_draws_side_feature_and_field_cues() {
-        let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 2, 0)] = 0x80;
-        grid[dungeon_cell_index(0, 2, 2)] = 0x50;
-        let mut state = dungeon_state(grid, 0, 1, 1);
-        state.player.facing = Direction::East;
-        state.light_spell_counter = 9;
-        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
-
-        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
-
-        assert!(viewport.pixels.iter().any(|&pixel| pixel == 12));
-        assert!(viewport.pixels.iter().any(|&pixel| pixel == 11));
-    }
-
-    #[test]
-    fn dungeon_raster_draws_active_monster_overlay_at_visible_depth() {
-        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
-        state.player.facing = Direction::East;
-        state.torch_counter = 9;
-        state.active_objects.push(ActiveObject {
-            type_byte: 0xc0,
-            tile: 0xc0,
-            x: 2,
-            y: 1,
-            z: 0,
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        });
-        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
-
-        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
-
-        assert!(viewport.pixels.iter().any(|&pixel| pixel == 13));
     }
 
     #[test]
