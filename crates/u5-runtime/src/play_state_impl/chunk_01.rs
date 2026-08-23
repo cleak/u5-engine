@@ -45,6 +45,19 @@ impl PlayState {
             .set(plane, self.current_world_overlay_objects());
     }
 
+    /// `save-load.md §3.2`: the save path "writes the underworld half back
+    /// out to `UNDER.OOL` unless the save handler's entry disk-prompt mode
+    /// was already mode 1". The mode is captured on the way *in*, which is
+    /// why it is threaded rather than read at the write site.
+    ///
+    /// We pass `0` deliberately, not as a placeholder. A single-directory
+    /// install has no disk subsystem to derive an entry mode from, so there
+    /// is no honest way to be "in mode 1" here — and inventing a rule for
+    /// when we are would be a fallback. `0 != 1` takes the branch that
+    /// re-writes the mirror, which is the side that keeps `UNDER.OOL`
+    /// consistent with `SAVED.OOL`; skipping the write is the optimisation,
+    /// not the correctness case. `BRIT.OOL` stays read-only to a save
+    /// either way.
     pub fn save_game_command(
         &mut self,
         game_dir: &Path,

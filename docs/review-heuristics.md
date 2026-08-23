@@ -103,6 +103,36 @@ three of four inputs sound, and the fourth was a name.
 
 Renaming is defusing, not tidying. Do it even when the logic is untouched.
 
+## The scope caveat, and a fourth class
+
+**Negative claims have no local evidence.** A positive claim is establishable
+from a fragment — one instruction that writes a byte proves the byte is written,
+and no amount of unexamined code unproves it. A negative claim ("nothing reads
+this", "no branch is conditional", "this is the only test") is a claim about the
+*complement* of what you looked at, so its strength is exactly the boundary of
+the scan and nothing else.
+
+All three checks above are negative claims. So:
+
+**A mechanical check settles a claim only within its stated scope, and a check
+whose scope is unstated settles nothing.** Cheapness makes a check *runnable*;
+stated scope makes its result *mean* something. A one-line grep with an
+unstated blind spot is not stronger evidence than careful reading — it is the
+same weak evidence wearing a false air of rigour, which is worse, because that
+is the shape that stops the next person checking.
+
+State the blind spot when you report the result. Ours: the reference-count sweep
+matches direct identifier references across the three crates, so it would miss a
+read through a trait object, a function pointer, or a macro-generated call site.
+It found two real defects; it is still not a proof of absence.
+
+**A fourth claim class: the cross-reference.** A name claims the referent, a
+citation claims the evidence, a test claims the exercise — and a cross-reference
+claims *a relationship that nobody checks in either direction*. It is probably
+the most common of the four, because a cross-reference does not read as a claim
+at all. It reads as context. "The same generator the shrine effect uses" slips
+past review that would have caught the same assertion stated plainly.
+
 ## Corollaries
 
 - **Internal consistency is not evidence.** Three mutually-agreeing tests that
