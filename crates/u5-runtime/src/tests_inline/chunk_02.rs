@@ -645,13 +645,13 @@ fn u4_transfer_application_maps_avatar_fields_and_preserves_seed_bytes() {
 }
 
 #[test]
-fn u4_transfer_commit_writes_saved_game_from_brit_seed_and_saved_ool_from_brit_ool() {
+fn u4_transfer_commit_writes_saved_game_from_init_seed_and_saved_ool_from_init_ool() {
     let dir = debug_game_dir();
-    let mut brit_gam = saved_game_seed_bytes(0, 0, 22, 33);
-    brit_gam[SAVE_TORCH_STOCK_OFFSET] = 5;
-    fs::write(dir.join("BRIT.GAM"), &brit_gam).unwrap();
-    let brit_ool: Vec<u8> = (0..OOL_PLANE_LEN).map(|index| index as u8).collect();
-    fs::write(dir.join("BRIT.OOL"), &brit_ool).unwrap();
+    let mut init_gam = saved_game_seed_bytes(0, 0, 22, 33);
+    init_gam[SAVE_TORCH_STOCK_OFFSET] = 5;
+    fs::write(dir.join("INIT.GAM"), &init_gam).unwrap();
+    let init_ool: Vec<u8> = (0..OOL_PLANE_LEN).map(|index| index as u8).collect();
+    fs::write(dir.join("INIT.OOL"), &init_ool).unwrap();
     let under_ool = vec![0x44; OOL_PLANE_LEN];
     fs::write(dir.join("UNDER.OOL"), &under_ool).unwrap();
     fs::write(dir.join("SAVED.GAM"), vec![0xcc; SAVED_GAM_LEN]).unwrap();
@@ -684,8 +684,8 @@ fn u4_transfer_commit_writes_saved_game_from_brit_seed_and_saved_ool_from_brit_o
     );
     assert_eq!(saved[SAVE_TORCH_STOCK_OFFSET], 5);
     assert_eq!(&saved_ool[..OOL_PLANE_LEN], vec![0; OOL_PLANE_LEN]);
-    assert_eq!(&saved_ool[OOL_PLANE_LEN..], brit_ool.as_slice());
-    assert_eq!(fs::read(dir.join("BRIT.OOL")).unwrap(), brit_ool);
+    assert_eq!(&saved_ool[OOL_PLANE_LEN..], init_ool.as_slice());
+    assert_eq!(fs::read(dir.join("INIT.OOL")).unwrap(), init_ool);
     assert_eq!(fs::read(dir.join("UNDER.OOL")).unwrap(), under_ool);
     assert_eq!(avatar.class_byte, b'M');
     assert_eq!(avatar.male, false);
@@ -695,8 +695,8 @@ fn u4_transfer_commit_writes_saved_game_from_brit_seed_and_saved_ool_from_brit_o
 #[test]
 fn u4_transfer_invalid_source_does_not_rewrite_saved_files() {
     let dir = debug_game_dir();
-    fs::write(dir.join("BRIT.GAM"), saved_game_seed_bytes(0, 0, 10, 20)).unwrap();
-    fs::write(dir.join("BRIT.OOL"), vec![0x11; OOL_PLANE_LEN]).unwrap();
+    fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0, 10, 20)).unwrap();
+    fs::write(dir.join("INIT.OOL"), vec![0x11; OOL_PLANE_LEN]).unwrap();
     let old_saved = vec![0x22; SAVED_GAM_LEN];
     let old_saved_ool = vec![0x33; SAVED_OOL_LEN];
     fs::write(dir.join("SAVED.GAM"), &old_saved).unwrap();

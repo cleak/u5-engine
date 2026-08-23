@@ -8,17 +8,28 @@ use crate::*;
 pub const U5_TRANSFER_MALE_BYTE: u8 = SAVE_GENDER_MALE_BYTE;
 pub const U5_TRANSFER_FEMALE_BYTE: u8 = SAVE_GENDER_FEMALE_BYTE;
 
-/// `u4-transfer.md §5,§11` published filenames the transfer flow
-/// reads and writes. The U5-side transfer seed pair is `BRIT.GAM`
-/// (save image) and `BRIT.OOL` (object overlay), the U4-side source
-/// is the player disk's `PARTY.SAV`, and the commit destination is
-/// the ordinary U5 save pair `SAVED.GAM` / `SAVED.OOL`. The seeds
-/// are read-only; only the commit step writes anything to disk.
-pub const U4_TRANSFER_U5_SEED_GAM_FILENAME: &str = "BRIT.GAM";
-/// `u4-transfer.md §5,§11` U5-side seed object-overlay filename.
-/// Anchored to [`crate::BRIT_OOL_FILENAME`] so the transfer seed
-/// alias and the canonical filename stay one value.
-pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = crate::BRIT_OOL_FILENAME;
+/// `u4-transfer.md §4` published filenames the transfer flow reads and
+/// writes. The U5-side transfer seed pair is `INIT.GAM` (save image)
+/// and `INIT.OOL` (object overlay), the U4-side source is the player
+/// disk's `PARTY.SAV`, and the commit destination is the ordinary U5
+/// save pair `SAVED.GAM` / `SAVED.OOL`. The seeds are read-only; only
+/// the commit step writes anything to disk.
+///
+/// `BRIT.GAM` is **withdrawn** (`cleak/u5-spec#88`) and this pair used
+/// to name it. It is not merely the wrong seed: `BRIT.GAM` does not
+/// ship at all, so the old constant opened a filename with nothing
+/// behind it and the commit path could never have succeeded. Verified
+/// against the shipped install rather than from the retraction:
+/// `BRIT.GAM` is absent; `INIT.GAM` is 4192 bytes, the same length as
+/// `SAVED.GAM`. The overlay seed was wrong in a quieter way -
+/// `BRIT.OOL` ships as 256 zero bytes, so seeding from it produced an
+/// empty object overlay, while `INIT.OOL` carries the seed records and
+/// is byte-identical to `UNDER.OOL`.
+pub const U4_TRANSFER_U5_SEED_GAM_FILENAME: &str = crate::INIT_GAM_FILENAME;
+/// `u4-transfer.md §4` U5-side seed object-overlay filename. Anchored
+/// to [`crate::INIT_OOL_FILENAME`] so the transfer seed alias and the
+/// canonical filename stay one value.
+pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = crate::INIT_OOL_FILENAME;
 pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
 pub const U4_PARTY_SAV_LEN: usize = 532;
 pub const U4_PARTY_SAV_MOVE_COUNTER_OFFSET: usize = 0x0000;

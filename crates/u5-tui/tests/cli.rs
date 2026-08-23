@@ -1061,8 +1061,10 @@ fn cli_binary_play_script_confirmed_save_round_trips_to_temp_save() {
 #[test]
 fn cli_intro_u4_transfer_refuses_terminal_preview_fallback() {
     let dir = debug_game_dir();
-    fs::write(dir.join("BRIT.GAM"), saved_game_seed_bytes(0, 0, 22, 33)).unwrap();
-    fs::write(dir.join("BRIT.OOL"), vec![0x44; OOL_PLANE_LEN]).unwrap();
+    // `u4-transfer.md §4` / `cleak/u5-spec#88`: the U5-side seed pair is
+    // `INIT.GAM` / `INIT.OOL`. `BRIT.GAM` is withdrawn and does not ship.
+    fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0, 22, 33)).unwrap();
+    fs::write(dir.join("INIT.OOL"), vec![0x44; OOL_PLANE_LEN]).unwrap();
     fs::write(
         dir.join(U4_TRANSFER_U4_SOURCE_FILENAME),
         u4_transfer_party_sav_fixture(),

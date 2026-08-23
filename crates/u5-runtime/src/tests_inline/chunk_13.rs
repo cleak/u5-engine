@@ -1098,17 +1098,17 @@ fn hcs_bytes_per_row_anchors_to_cell_width_div_8() {
 }
 
 #[test]
-fn u4_transfer_u5_seed_ool_filename_anchors_to_brit_ool() {
+fn u4_transfer_u5_seed_ool_filename_anchors_to_init_ool() {
     // u4-transfer.md §5, §11: the U5-side seed object-overlay
     // file is the same BRIT.OOL filename the ordinary engine
     // reads. u4_transfer.rs declared
-    // U4_TRANSFER_U5_SEED_OOL_FILENAME = "BRIT.OOL" as a
+    // U4_TRANSFER_U5_SEED_OOL_FILENAME = "INIT.OOL" as a
     // parallel string literal alongside save_load.rs's
-    // BRIT_OOL_FILENAME. Anchor the transfer seed alias to
+    // INIT_OOL_FILENAME. Anchor the transfer seed alias to
     // the canonical filename so the two share one source of
     // truth.
-    assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, BRIT_OOL_FILENAME);
-    assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, "BRIT.OOL");
+    assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, INIT_OOL_FILENAME);
+    assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, "INIT.OOL");
 }
 
 #[test]
@@ -9946,9 +9946,13 @@ fn combat_arena_file_offsets_match_spec_arithmetic() {
 
 #[test]
 fn u4_transfer_published_filenames_match_spec() {
-    // u4-transfer.md §5,§11
-    assert_eq!(U4_TRANSFER_U5_SEED_GAM_FILENAME, "BRIT.GAM");
-    assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, "BRIT.OOL");
+    // u4-transfer.md §4. `BRIT.GAM` is withdrawn (`cleak/u5-spec#88`);
+    // it does not ship at all, so the old constant named a file that is
+    // never present. Verified against the shipped install: `BRIT.GAM`
+    // absent, `INIT.GAM` 4192 bytes (same length as `SAVED.GAM`),
+    // `BRIT.OOL` 256 zero bytes, `INIT.OOL` byte-identical to `UNDER.OOL`.
+    assert_eq!(U4_TRANSFER_U5_SEED_GAM_FILENAME, "INIT.GAM");
+    assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, "INIT.OOL");
     assert_eq!(U4_TRANSFER_U4_SOURCE_FILENAME, "PARTY.SAV");
 }
 
