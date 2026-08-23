@@ -370,9 +370,16 @@ mod tests {
     #[test]
     fn detects_dictionary_tokens_in_tlk_and_shoppe_streams() {
         assert!(tlk_stream_uses_common_word_dictionary(&[0x01]));
+        // `formats/tlk.md §10`: 0x80 is the LAST dictionary token, not the
+        // first control code, so a stream containing it does use the
+        // dictionary. This assertion used to list 0x80 among the non-token
+        // bytes. The shipped corpus settles it: 0x80 appears mid-payload
+        // thirteen times, always between ordinary text, and entry 127 is
+        // "work" - TOWNE.TLK reads `I <0x80> hard-`.
+        assert!(tlk_stream_uses_common_word_dictionary(&[0x80]));
         assert!(!tlk_stream_uses_common_word_dictionary(&[
             0x00,
-            0x80,
+            0x81,
             b'A' | 0x80
         ]));
         assert!(tlk_fields_use_common_word_dictionary(&[

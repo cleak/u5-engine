@@ -85,12 +85,16 @@ pub const fn mount_horse_marker(parked_byte: u8) -> Option<u8> {
     }
 }
 
-/// `vehicles.md §4` shipwright frigate purchase initial state. A
-/// freshly placed frigate carries full hull condition (100) and two
-/// skiffs aboard; buying a standalone skiff while the frigate is
-/// still queued increments the same carried-skiff payload instead
-/// of placing a second active-object slot.
-pub const FRIGATE_PURCHASE_HULL: u8 = 100;
+/// `vehicles.md` shipwright frigate purchase initial state: hull
+/// condition **99** and two skiffs aboard. Buying a standalone skiff
+/// while the frigate is still queued increments the same carried-skiff
+/// payload instead of placing a second active-object slot.
+///
+/// This was `100`, described in the doc as "full hull condition". The
+/// spec says 99 in two separate places, and "full" was our inference
+/// from the round number rather than anything published - 99 is simply
+/// the value the purchase writes.
+pub const FRIGATE_PURCHASE_HULL: u8 = 99;
 pub const FRIGATE_PURCHASE_SKIFFS: u8 = 2;
 
 /// `vehicles.md §3`: ship-boarding precondition — print a warning when

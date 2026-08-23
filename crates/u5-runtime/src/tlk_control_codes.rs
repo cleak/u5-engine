@@ -336,17 +336,35 @@ pub const COMMON_WORD_DICTIONARY_NUL_SENTINELS: usize = 11;
 pub const SHOPPE_PHRASE_TOKEN_FIRST: u8 = 0x80;
 pub const SHOPPE_PHRASE_TOKEN_LAST: u8 = 0xFF;
 
-/// `conversation.md §8` TLK dialogue dictionary token range. The
-/// byte runner classifies any nonzero high-bit-clear byte as a
-/// dictionary token; the value is the direct 0..=127 index into the
-/// 128-entry common-word pointer table.
+/// `conversation.md §8` / `formats/tlk.md §9,§10` TLK dialogue
+/// dictionary token range: `0x01..=0x80`, biased by one onto the
+/// 128-entry common-word pointer table, so `0x01` is entry zero and
+/// `0x80` is entry 127.
+///
+/// **`0x80` is a dictionary token, not a control code.** The older
+/// framing — "high bit clear means dictionary token", with the band
+/// ending at `0x7F` — is off by one at exactly that boundary, and
+/// `formats/tlk.md §9`'s dispatch table marks `0x80` "not a control
+/// code". Two independent checks:
+///
+/// * **Arithmetic.** The table has 128 entries and needs 128 token
+///   values. `0x01..=0x7F` is 127, so under the old bound the last
+///   entry was unreachable by any token.
+/// * **Shipped bytes.** `0x80` appears mid-payload thirteen times
+///   across the shipped corpus, always between ordinary text, and
+///   entry 127 is `work`: `TOWNE.TLK` has `I <0x80> hard-` and
+///   `We <0x80> long days,`; `CASTLE.TLK` has `Mystic arms <0x80>
+///   near`; `KEEP.TLK` has `reference <0x80> known`. Every one reads
+///   as English only if `0x80` expands to a word, and rendered as a
+///   control byte instead — which is what we did.
 pub const TLK_DICTIONARY_TOKEN_FIRST: u8 = 0x01;
-pub const TLK_DICTIONARY_TOKEN_LAST: u8 = 0x7F;
+pub const TLK_DICTIONARY_TOKEN_LAST: u8 = 0x80;
 
-/// `conversation.md §8`: TLK dialogue dictionary tokens are nonzero
-/// high-bit-clear bytes (`TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST`).
-/// Token `0x01` resolves to dictionary entry zero, matching the shop
-/// renderer's token `0x80` bias.
+/// `conversation.md §8` / `formats/tlk.md §10`: TLK dialogue
+/// dictionary tokens run `TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST`
+/// (`0x01..=0x80`). Token `0x01` resolves to dictionary entry zero and
+/// token `0x80` to entry 127; note the band is **not** "high bit
+/// clear", since its last member has bit seven set.
 pub const fn tlk_dictionary_index(token: u8) -> Option<usize> {
     if token < TLK_DICTIONARY_TOKEN_FIRST || token > TLK_DICTIONARY_TOKEN_LAST {
         None
@@ -517,21 +535,28 @@ pub const TLK_PRINTABLE_TEXT_LAST: u8 = 0xFD;
 /// control-code branch accepts `0x80..=0x9D`; the `0x9E..=0x9F` GOTO
 /// label pair is carved out by [`TLK_CODE_GOTO_LABEL_FIRST`] /
 /// [`TLK_CODE_GOTO_LABEL_LAST`] before this range is matched. The
-/// control-code range begins one byte past the dictionary-token
-/// band; anchor to [`TLK_DICTIONARY_TOKEN_LAST`] + 1 so the
-/// adjacency has one source of truth.
-pub const TLK_CONTROL_CODE_FIRST: u8 = TLK_DICTIONARY_TOKEN_LAST + 1;
+/// control-code range begins at `0x81`.
+///
+/// This is a **literal, deliberately not** anchored to
+/// [`TLK_DICTIONARY_TOKEN_LAST`] `+ 1`. The two bands being adjacent
+/// by construction is what let the dictionary band's off-by-one at
+/// `0x80` propagate straight into the control-code band and steal a
+/// token from it. The adjacency is a fact about these two published
+/// values, not a rule either of them enforces on the other.
+pub const TLK_CONTROL_CODE_FIRST: u8 = 0x81;
 pub const TLK_CONTROL_CODE_LAST: u8 = 0x9D;
 
 /// `conversation.md §7`: classify a byte by the value-range table that
 /// the byte runner's top-level dispatcher follows in order. The order
 /// matters because `0x9E..=0x9F` would otherwise be subsumed by the
-/// `0x80..=0x9F` control-code range; the dispatcher carves the GOTO
+/// `0x81..=0x9F` control-code range; the dispatcher carves the GOTO
 /// pair out first.
 pub const fn tlk_byte_runner_class(byte: u8) -> TlkByteRunnerClass {
     match byte {
         0x00 => TlkByteRunnerClass::NullByte,
-        0x01..=0x7F => TlkByteRunnerClass::DictionaryToken,
+        TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST => {
+            TlkByteRunnerClass::DictionaryToken
+        }
         TLK_CODE_GOTO_LABEL_FIRST..=TLK_CODE_GOTO_LABEL_LAST => TlkByteRunnerClass::GotoLabel,
         TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST => TlkByteRunnerClass::PrintableText,
         TLK_CONTROL_CODE_FIRST..=TLK_CONTROL_CODE_LAST => TlkByteRunnerClass::ControlCode,
@@ -816,12 +841,12 @@ pub fn tlk_keyword_matches(keyword: &[u8], input: &[u8]) -> bool {
 
 /// Classify one `.TLK` byte through the dispatcher table per
 /// `conversation.md §7`. The classification order matters because the
-/// `0x9E..=0x9F` GOTO-LABEL range is a sub-range of the `0x80..=0x9F`
+/// `0x9E..=0x9F` GOTO-LABEL range is a sub-range of the `0x81..=0x9F`
 /// control band and must take precedence.
 pub const fn classify_tlk_byte(byte: u8) -> TlkByteKind {
     match byte {
         0x00 => TlkByteKind::Nul,
-        0x01..=0x7F => TlkByteKind::DictionaryToken,
+        TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST => TlkByteKind::DictionaryToken,
         TLK_CODE_GOTO_LABEL_FIRST | TLK_CODE_GOTO_LABEL_LAST => TlkByteKind::GotoLabel,
         TLK_CONTROL_CODE_FIRST..=TLK_CODE_GOTO_LABEL_LAST => TlkByteKind::ControlByte,
         TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST => TlkByteKind::PrintableText,

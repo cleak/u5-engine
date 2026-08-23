@@ -1444,15 +1444,25 @@ fn tlk_goto_label_pair_anchors_to_control_code_band_end() {
 }
 
 #[test]
-fn tlk_control_code_first_anchors_to_dictionary_token_last() {
-    // conversation.md §7: the engine-control byte band
-    // (0x80..=0x9D) begins one byte past the dictionary-
-    // token band (0x01..=0x7F). Anchor TLK_CONTROL_CODE_FIRST
-    // to TLK_DICTIONARY_TOKEN_LAST + 1 so the adjacency has
-    // one source of truth.
-    assert_eq!(TLK_CONTROL_CODE_FIRST, TLK_DICTIONARY_TOKEN_LAST + 1);
-    assert_eq!(TLK_CONTROL_CODE_FIRST, 0x80);
-    assert_eq!(TLK_DICTIONARY_TOKEN_LAST, 0x7F);
+fn tlk_dictionary_and_control_bands_are_adjacent_but_independent() {
+    // formats/tlk.md §9,§10: the dictionary band ends at 0x80 and the
+    // engine-control band begins at 0x81.
+    //
+    // This test used to assert TLK_CONTROL_CODE_FIRST == LAST + 1 and was
+    // named for that anchoring. The anchoring is what let the dictionary
+    // band's off-by-one at 0x80 propagate straight into the control band
+    // and steal a token from it: one constant was wrong, and the coupling
+    // guaranteed the other was wrong too, with a green test certifying the
+    // pair agreed. They now carry independent literals from the published
+    // text, and this asserts the adjacency as a *consequence* rather than
+    // enforcing it as a rule.
+    assert_eq!(TLK_DICTIONARY_TOKEN_LAST, 0x80);
+    assert_eq!(TLK_CONTROL_CODE_FIRST, 0x81);
+    assert_eq!(
+        TLK_CONTROL_CODE_FIRST,
+        TLK_DICTIONARY_TOKEN_LAST + 1,
+        "the two published bands happen to be adjacent; neither derives the other",
+    );
 }
 
 #[test]
@@ -3350,30 +3360,38 @@ fn prng_state_advance_constants_match_spec() {
 
 #[test]
 fn tlk_dictionary_token_range_matches_spec() {
-    // conversation.md §8: dialogue dictionary tokens are nonzero
-    // high-bit-clear bytes (0x01..=0x7F); token 0x01 maps to
-    // entry zero in the 128-entry common-word table.
+    // formats/tlk.md §9,§10: dialogue dictionary tokens are 0x01..=0x80,
+    // biased by one onto the 128-entry common-word table. The band is NOT
+    // "high bit clear" - its last member 0x80 has bit seven set, and §9's
+    // dispatch table marks 0x80 "not a control code".
+    //
+    // 128 entries need 128 token values; 0x01..=0x7F is 127, so under the
+    // withdrawn bound the last entry was unreachable by any token. The
+    // shipped corpus uses 0x80 mid-payload thirteen times, always between
+    // ordinary text, and entry 127 is "work" - e.g. TOWNE.TLK "I <0x80>
+    // hard-" and CASTLE.TLK "Mystic arms <0x80> near".
     assert_eq!(TLK_DICTIONARY_TOKEN_FIRST, 0x01);
-    assert_eq!(TLK_DICTIONARY_TOKEN_LAST, 0x7F);
-    // Token 0 (NUL) and 0x80..=0xFF are not dictionary tokens
-    // (they hit other byte-runner branches).
+    assert_eq!(TLK_DICTIONARY_TOKEN_LAST, 0x80);
+    // NUL is not a token; 0x80 IS one; 0x81 begins the control band.
     assert_eq!(tlk_dictionary_index(0), None);
-    assert_eq!(tlk_dictionary_index(0x80), None);
+    assert_eq!(tlk_dictionary_index(0x80), Some(127));
+    assert_eq!(tlk_dictionary_index(0x81), None);
     // Boundary tokens round-trip through the index helper.
     assert_eq!(tlk_dictionary_index(TLK_DICTIONARY_TOKEN_FIRST), Some(0),);
     assert_eq!(
         tlk_dictionary_index(TLK_DICTIONARY_TOKEN_LAST),
         Some((TLK_DICTIONARY_TOKEN_LAST - TLK_DICTIONARY_TOKEN_FIRST) as usize),
     );
-    // The shop-renderer token range covers entries 0..=127 (one
-    // more than the dialogue range because the shop renderer
-    // reaches entry zero through its 0x80 bias). Dialogue
-    // excludes the NUL slot — that's why
-    // COMMON_WORD_DICTIONARY_NUL_SENTINELS counts the empty
-    // entries used as leading-space markers.
+    // The corrected band covers the table EXACTLY: 0x01..=0x80 is 128
+    // token values for 128 entries, with no entry unreachable and no
+    // token spare. This assertion previously read `ENTRIES - 1`, which is
+    // the off-by-one stated as arithmetic - the test was not merely
+    // agreeing with the wrong constant, it was independently asserting
+    // that one dictionary entry had no token, which is not a thing a
+    // pointer table does.
     assert_eq!(
         (TLK_DICTIONARY_TOKEN_LAST as usize) - (TLK_DICTIONARY_TOKEN_FIRST as usize) + 1,
-        COMMON_WORD_DICTIONARY_ENTRIES - 1,
+        COMMON_WORD_DICTIONARY_ENTRIES,
     );
 }
 
@@ -3381,11 +3399,11 @@ fn tlk_dictionary_token_range_matches_spec() {
 fn tlk_printable_and_control_byte_ranges_match_spec() {
     // conversation.md §7: byte runner classifies high-bit-set
     // bytes in 0xA0..=0xFD as printable text and bytes in
-    // 0x80..=0x9D as engine control codes (with 0x9E..=0x9F
+    // 0x81..=0x9D as engine control codes (with 0x9E..=0x9F
     // carved out for the GOTO label range).
     assert_eq!(TLK_PRINTABLE_TEXT_FIRST, 0xA0);
     assert_eq!(TLK_PRINTABLE_TEXT_LAST, 0xFD);
-    assert_eq!(TLK_CONTROL_CODE_FIRST, 0x80);
+    assert_eq!(TLK_CONTROL_CODE_FIRST, 0x81);
     assert_eq!(TLK_CONTROL_CODE_LAST, 0x9D);
     // The control-code range ends one byte before the GOTO range
     // begins; the GOTO range ends one byte before the printable
@@ -10458,17 +10476,18 @@ fn sea_creature_spawn_aux_seed_only_for_water_creature_facing_frames() {
 fn tlk_byte_runner_class_partitions_byte_space_per_spec() {
     // conversation.md §7 top-level dispatcher ranges.
     assert_eq!(tlk_byte_runner_class(0x00), TlkByteRunnerClass::NullByte);
-    // 0x01..=0x7F dictionary tokens.
-    for byte in [0x01u8, 0x10, 0x40, 0x7F] {
+    // 0x01..=0x80 dictionary tokens (formats/tlk.md §10: 0x80 is the
+    // last token, not the first control code).
+    for byte in [0x01u8, 0x10, 0x40, 0x7F, 0x80] {
         assert_eq!(
             tlk_byte_runner_class(byte),
             TlkByteRunnerClass::DictionaryToken,
             "{byte:#04x} should be DictionaryToken"
         );
     }
-    // 0x80..=0x9D control codes — the 0x9E..=0x9F GOTO pair is
+    // 0x81..=0x9D control codes — the 0x9E..=0x9F GOTO pair is
     // carved out below.
-    for byte in [0x80u8, 0x83, 0x8C, 0x8E, 0x91, 0x9D] {
+    for byte in [0x81u8, 0x83, 0x8C, 0x8E, 0x91, 0x9D] {
         assert_eq!(
             tlk_byte_runner_class(byte),
             TlkByteRunnerClass::ControlCode,
@@ -11015,7 +11034,9 @@ fn ship_broadside_direction_accepted_only_perpendicular_to_facing() {
 #[test]
 fn frigate_purchase_starts_with_full_hull_and_two_skiffs() {
     // vehicles.md §4
-    assert_eq!(FRIGATE_PURCHASE_HULL, 100);
+    // `vehicles.md` states 99 in two places. This asserted 100, which
+    // was our "full hull" inference from a round number.
+    assert_eq!(FRIGATE_PURCHASE_HULL, 99);
     assert_eq!(FRIGATE_PURCHASE_SKIFFS, 2);
 }
 
@@ -15810,11 +15831,13 @@ fn tlk_per_class_npc_counts_match_shipped_data() {
 fn common_word_dictionary_index_helpers_match_spec() {
     // conversation.md §8
     assert_eq!(COMMON_WORD_DICTIONARY_ENTRIES, 128);
-    // TLK dictionary tokens are 0x01..=0x7F; NUL and high-bit bytes are not tokens.
+    // TLK dictionary tokens are 0x01..=0x80 (formats/tlk.md §10). The 128
+    // entries need 128 token values, and 0x80 reaches the last one.
     assert_eq!(tlk_dictionary_index(0x00), None);
     assert_eq!(tlk_dictionary_index(0x01), Some(0));
     assert_eq!(tlk_dictionary_index(0x7F), Some(126));
-    assert_eq!(tlk_dictionary_index(0x80), None);
+    assert_eq!(tlk_dictionary_index(0x80), Some(127));
+    assert_eq!(tlk_dictionary_index(0x81), None);
     assert_eq!(tlk_dictionary_index(0xFF), None);
     // Shoppe phrase tokens use 0x80..=0xFF; shop token 0x80 maps
     // to the same logical entry zero.
@@ -20510,13 +20533,14 @@ fn tile_class_partitions_byte_range_per_catalog_section_three() {
 #[test]
 fn classify_tlk_byte_partitions_dispatcher_table_per_section_seven() {
     // conversation.md §7 dispatcher classification order: 0x00 NUL,
-    // 0x01..=0x7F dictionary, 0x9E..=0x9F GOTO label (precedes the
-    // 0x80..=0x9F control band), 0x80..=0x9F control, 0xA0..=0xFD
+    // 0x01..=0x80 dictionary, 0x9E..=0x9F GOTO label (precedes the
+    // 0x81..=0x9F control band), 0x81..=0x9F control, 0xA0..=0xFD
     // printable, 0xFE IF-ELSE alias, 0xFF end-of-response.
     assert_eq!(classify_tlk_byte(0x00), TlkByteKind::Nul);
     assert_eq!(classify_tlk_byte(0x01), TlkByteKind::DictionaryToken);
     assert_eq!(classify_tlk_byte(0x7F), TlkByteKind::DictionaryToken);
-    assert_eq!(classify_tlk_byte(0x80), TlkByteKind::ControlByte);
+    assert_eq!(classify_tlk_byte(0x80), TlkByteKind::DictionaryToken);
+    assert_eq!(classify_tlk_byte(0x81), TlkByteKind::ControlByte);
     assert_eq!(classify_tlk_byte(0x9D), TlkByteKind::ControlByte);
     assert_eq!(classify_tlk_byte(0x9E), TlkByteKind::GotoLabel);
     assert_eq!(classify_tlk_byte(0x9F), TlkByteKind::GotoLabel);
