@@ -13,6 +13,7 @@
 //! per-stream engine: feed bytes in, get rendered text and side effects
 //! out.
 
+use crate::karma::{KarmaAction, apply_karma_action};
 use crate::map_io::talk_branch_flag_is_set;
 use crate::tlk_control_codes::*;
 
@@ -143,6 +144,13 @@ pub enum TlkRunEvent {
     },
     /// A GOTO-LABEL (`0x91..=0x9F`) was followed.
     GotoLabel { from: u8, to: u8 },
+    /// `0x89` STANDING-UP / `0x8A` STANDING-DOWN wrote the shared
+    /// moral-standing selector. `raise` distinguishes the two codes and
+    /// `to` is the post-clamp value. One event is recorded per byte even
+    /// when the clamp swallowed the step, because scripts stack the
+    /// bytes and the count of writers that ran is what a caller checking
+    /// `conversation.md §7.4`'s reaction records wants to see.
+    MoralStandingWrite { raise: bool, from: u8, to: u8 },
 }
 
 impl Default for TlkRunStop {
@@ -172,6 +180,12 @@ pub struct TlkRunOutput {
     /// and for the keyword-loop wrapper that needs to detect when to
     /// prompt for input or end the conversation.
     pub events: Vec<TlkRunEvent>,
+    /// Shared moral-standing selector after the stream's `0x89` / `0x8A`
+    /// writes, or `None` when the stream ran neither code.
+    /// `conversation.md §7.4` makes those two the byte runner's only
+    /// direct writers of the selector, so a caller applies this by
+    /// assignment rather than by re-deriving a delta.
+    pub moral_standing: Option<u8>,
     /// Why the runner stopped.
     pub stop: TlkRunStop,
     /// Byte index just past the last byte consumed.
@@ -199,6 +213,10 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
     let mut leading_space_pending = false;
     // Curse check is reset when the runner starts and may flip later.
     let mut curse_pending = inputs.curse_seen;
+    // §7.4: `0x89` and `0x8A` write the shared moral-standing selector
+    // in-stream, so a later `0xFE` threshold test in the same stream must
+    // read the updated value rather than the caller's entry snapshot.
+    let mut moral_standing = inputs.moral_standing;
 
     while pos < bytes.len() {
         let byte = bytes[pos];
@@ -228,7 +246,29 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 out.text.push_str(inputs.avatar_name);
                 last_emitted = inputs.avatar_name.bytes().last();
             }
-            TLK_CODE_PANEL_NEWLINE | TLK_CODE_LITERAL_NEWLINE => {
+            TLK_CODE_STANDING_UP | TLK_CODE_STANDING_DOWN => {
+                // §7.4: both codes emit no text and do not touch the word
+                // buffer. `0x8A` is *not* a newline here — the literal
+                // newline is `0x8D` and only `0x8D`; `0x8A` only means
+                // newline inside the word buffer, downstream of this
+                // dispatch, where the printable-text path rewrites `0x8D`
+                // to `0x8A`.
+                let raise = byte == TLK_CODE_STANDING_UP;
+                let action = if raise {
+                    KarmaAction::ConversationStandingUp
+                } else {
+                    KarmaAction::ConversationStandingDown
+                };
+                let from = moral_standing;
+                moral_standing = apply_karma_action(from, action);
+                out.moral_standing = Some(moral_standing);
+                out.events.push(TlkRunEvent::MoralStandingWrite {
+                    raise,
+                    from,
+                    to: moral_standing,
+                });
+            }
+            TLK_CODE_LITERAL_NEWLINE => {
                 out.text.push('\n');
                 last_emitted = Some(b'\n');
             }
@@ -376,7 +416,7 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 let arg_end = pos;
                 let threshold = span[0];
                 let target_label = span[1];
-                let branched = tlk_if_else_alt_branches(inputs.moral_standing, threshold);
+                let branched = tlk_if_else_alt_branches(moral_standing, threshold);
                 out.events.push(TlkRunEvent::IfElseAltDecision {
                     threshold,
                     target_label,
@@ -566,15 +606,135 @@ mod tests {
         assert_eq!(out.stop, TlkRunStop::NulTerminator);
     }
 
+    /// `conversation.md §7.4`: "the literal-newline code is `0x8D` and
+    /// only `0x8D`". This test used to push `0x8A` as a second newline
+    /// byte and assert it rendered one; §7.4 withdraws that reading, so
+    /// the byte is now asserted to emit no text at all. The `0x8A`
+    /// newline meaning exists only *inside* the word buffer, where the
+    /// printable-text path rewrites `0x8D` to `0x8A` after control-code
+    /// dispatch has already been passed — a different stage from this
+    /// dispatcher.
     #[test]
-    fn newline_control_bytes_emit_newline() {
+    fn literal_newline_is_the_only_newline_control_byte() {
         let mut bytes = enc("a");
-        bytes.push(TLK_CODE_PANEL_NEWLINE);
-        bytes.extend_from_slice(&enc("b"));
         bytes.push(TLK_CODE_LITERAL_NEWLINE);
-        bytes.extend_from_slice(&enc("c"));
+        bytes.extend_from_slice(&enc("b"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
-        assert_eq!(render(&bytes).text, "a\nb\nc");
+        assert_eq!(render(&bytes).text, "a\nb");
+
+        let mut standing = enc("a");
+        standing.push(TLK_CODE_STANDING_DOWN);
+        standing.extend_from_slice(&enc("b"));
+        standing.push(TLK_CODE_END_OF_RESPONSE);
+        let out = render(&standing);
+        assert_eq!(out.text, "ab", "0x8A emits no text and no newline");
+    }
+
+    /// `conversation.md §7.4` / `karma.md §4`: `0x89` and `0x8A` are the
+    /// byte runner's only direct writers of the shared moral-standing
+    /// selector, moving it by one through the capped-add / capped-subtract
+    /// writers and emitting no text.
+    #[test]
+    fn standing_codes_write_the_shared_moral_standing_selector() {
+        let mut bytes = vec![TLK_CODE_STANDING_UP; 5];
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                moral_standing: 50,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.moral_standing, Some(55));
+        assert!(out.text.is_empty());
+        assert_eq!(
+            out.events
+                .iter()
+                .filter(|event| matches!(
+                    event,
+                    TlkRunEvent::MoralStandingWrite { raise: true, .. }
+                ))
+                .count(),
+            5
+        );
+
+        let mut down = vec![TLK_CODE_STANDING_DOWN; 3];
+        down.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &down,
+            &TlkRunInputs {
+                moral_standing: 50,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.moral_standing, Some(47));
+        assert!(out.text.is_empty());
+    }
+
+    /// §7.4 clamps: the raise is capped at ninety-nine and the lower is
+    /// floored at zero, both through the ordinary capped writers.
+    #[test]
+    fn standing_codes_clamp_at_the_published_bounds() {
+        let mut up = vec![TLK_CODE_STANDING_UP; 3];
+        up.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &up,
+            &TlkRunInputs {
+                moral_standing: crate::MORAL_STANDING_MAX - 1,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.moral_standing, Some(crate::MORAL_STANDING_MAX));
+
+        let mut down = vec![TLK_CODE_STANDING_DOWN; 3];
+        down.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &down,
+            &TlkRunInputs {
+                moral_standing: 1,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.moral_standing, Some(0));
+    }
+
+    /// A stream that runs neither code leaves the selector alone, so the
+    /// caller can tell "wrote the entry value back" from "did not write".
+    #[test]
+    fn stream_without_standing_codes_reports_no_standing_write() {
+        let mut bytes = enc("Hail!");
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        assert_eq!(render(&bytes).moral_standing, None);
+    }
+
+    /// §7.4 says `0x89`/`0x8A` write "the shared moral-standing
+    /// selector", which is the same value `0xFE` IF-ELSE-ALT tests. A
+    /// write earlier in a stream must therefore be visible to a later
+    /// threshold test in that same stream.
+    #[test]
+    fn if_else_alt_threshold_reads_the_in_stream_standing_write() {
+        // Entry standing 50; three STANDING-DOWN bytes take it to 47,
+        // which is below the threshold 48, so the branch is not taken.
+        let mut bytes = vec![TLK_CODE_STANDING_DOWN; 3];
+        bytes.push(TLK_CODE_IF_ELSE_ALT);
+        bytes.push(48);
+        bytes.push(0x91);
+        bytes.extend_from_slice(&enc("fall-through"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                moral_standing: 50,
+                ..Default::default()
+            },
+        );
+        assert!(out.events.iter().any(|event| matches!(
+            event,
+            TlkRunEvent::IfElseAltDecision {
+                branched: false,
+                ..
+            }
+        )));
     }
 
     #[test]

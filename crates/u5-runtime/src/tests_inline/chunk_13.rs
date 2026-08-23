@@ -6581,37 +6581,123 @@ fn wind_drift_named_constants_match_spec() {
     );
 }
 
+/// `dungeon-mode.md §12.4` class-to-glyph-and-font table, in full.
+///
+/// Two rows here previously asserted the wrong output. Class `0x5?`
+/// asserted glyph `0x12`, which is exact byte `0x68`'s published
+/// up-and-down arrow — two classes mapping to one glyph code — where
+/// §12.4 gives `0x5?` a **vector** fountain drawing. Class `0x8?`
+/// asserted glyph `0x18`, the `0x0?` up-arrow, where §12.4 gives it the
+/// **vector** energy-field drawing. Both are published in §12.5.
 #[test]
 fn dungeon_minimap_glyph_matches_published_class_table() {
-    // dungeon-mode.md §12: spot-check the published high-nibble
-    // class -> minimap glyph map. Blank classes return None.
+    use DungeonMinimapGlyph as G;
+
     // Passage detail glyphs require bit 0x08 set on a 0x0? cell.
     assert_eq!(dungeon_minimap_glyph(0x00), None);
-    assert_eq!(dungeon_minimap_glyph(0x08), Some(0x18));
-    assert_eq!(dungeon_minimap_glyph(0x10), Some(0x2E)); // Up ladder
-    assert_eq!(dungeon_minimap_glyph(0x20), Some(0x2D)); // Down ladder
-    assert_eq!(dungeon_minimap_glyph(0x30), Some(0x2F)); // Two-way ladder
-    assert_eq!(dungeon_minimap_glyph(0x40), Some(0x70)); // Closed chest
-    assert_eq!(dungeon_minimap_glyph(0x50), Some(0x12)); // Fountain anchor
-                                                         // Exact 0x6? bytes carve out specific glyphs before band.
-    assert_eq!(dungeon_minimap_glyph(0x60), Some(0x19)); // Plain pit
-    assert_eq!(dungeon_minimap_glyph(0x61), Some(0x71)); // Hidden/fall pit
-    assert_eq!(dungeon_minimap_glyph(0x69), Some(0x71)); // Hidden/fall pit
-    assert_eq!(dungeon_minimap_glyph(0x68), Some(0x12)); // Fired pit
-    assert_eq!(dungeon_minimap_glyph(0x62), Some(0x72)); // Other 0x6?
-    assert_eq!(dungeon_minimap_glyph(0x6F), Some(0x72));
+    assert_eq!(dungeon_minimap_glyph(0x08), Some(G::text(0x18))); // Up arrow
+    assert_eq!(dungeon_minimap_glyph(0x10), Some(G::runic(0x2E))); // Up ladder
+    assert_eq!(dungeon_minimap_glyph(0x20), Some(G::runic(0x2D))); // Down ladder
+    assert_eq!(dungeon_minimap_glyph(0x30), Some(G::runic(0x2F))); // Two-way ladder
+    assert_eq!(dungeon_minimap_glyph(0x40), Some(G::runic(0x70))); // Closed chest
+    // §12.4: the fountain class is a vector drawing, not a font glyph.
+    assert_eq!(dungeon_minimap_glyph(0x50), Some(G::Fountain));
+    assert_eq!(dungeon_minimap_glyph(0x5F), Some(G::Fountain));
+    // Exact 0x6? bytes carve out specific glyphs before the band.
+    assert_eq!(dungeon_minimap_glyph(0x60), Some(G::text(0x19))); // Down arrow
+    assert_eq!(dungeon_minimap_glyph(0x61), Some(G::runic(0x71))); // Hidden/fall pit
+    assert_eq!(dungeon_minimap_glyph(0x69), Some(G::runic(0x71))); // Hidden/fall pit
+    assert_eq!(dungeon_minimap_glyph(0x68), Some(G::text(0x12))); // Up-and-down arrow
+    assert_eq!(dungeon_minimap_glyph(0x62), Some(G::runic(0x72))); // Other 0x6?
+    assert_eq!(dungeon_minimap_glyph(0x6F), Some(G::runic(0x72)));
     // Blank classes.
     assert_eq!(dungeon_minimap_glyph(0x70), None);
     assert_eq!(dungeon_minimap_glyph(0x90), None);
+    // §12.4: the energy-field class is a vector drawing too.
+    assert_eq!(dungeon_minimap_glyph(0x80), Some(G::EnergyField));
+    assert_eq!(dungeon_minimap_glyph(0x8F), Some(G::EnergyField));
     // Wall classes.
-    assert_eq!(dungeon_minimap_glyph(0xB0), Some(0x7F));
-    assert_eq!(dungeon_minimap_glyph(0xB1), Some(0x74));
-    assert_eq!(dungeon_minimap_glyph(0xC0), Some(0x75));
-    assert_eq!(dungeon_minimap_glyph(0xD0), Some(0x76));
-    assert_eq!(dungeon_minimap_glyph(0xE0), Some(0x77));
+    assert_eq!(dungeon_minimap_glyph(0xB0), Some(G::text(0x7F)));
+    assert_eq!(dungeon_minimap_glyph(0xB1), Some(G::runic(0x74)));
+    assert_eq!(dungeon_minimap_glyph(0xC0), Some(G::runic(0x75)));
+    assert_eq!(dungeon_minimap_glyph(0xD0), Some(G::runic(0x76)));
+    assert_eq!(dungeon_minimap_glyph(0xE0), Some(G::runic(0x77)));
     // Door/room families.
-    assert_eq!(dungeon_minimap_glyph(0xA0), Some(0x73));
-    assert_eq!(dungeon_minimap_glyph(0xF0), Some(0x73));
+    assert_eq!(dungeon_minimap_glyph(0xA0), Some(G::runic(0x73)));
+    assert_eq!(dungeon_minimap_glyph(0xF0), Some(G::runic(0x73)));
+}
+
+/// `dungeon-mode.md §12.3`: "Most classes select the **runic** font. Four
+/// deliberately select the **text** font instead: three of them for
+/// directional arrows the runic font does not have, and one for a solid
+/// block." Those four are the `0x0?` up-arrow, exact `0x60`'s down-arrow,
+/// exact `0x68`'s up-and-down arrow, and `0xB0` bedrock — and nothing
+/// else.
+#[test]
+fn dungeon_minimap_text_font_classes_are_exactly_the_published_four() {
+    let text_font_bytes: Vec<u8> = (0u8..=255)
+        .filter(|byte| {
+            matches!(
+                dungeon_minimap_glyph(*byte),
+                Some(DungeonMinimapGlyph::Font {
+                    font: DungeonMinimapFont::Text,
+                    ..
+                })
+            )
+        })
+        .collect();
+    // Every 0x0? byte with the visit-marker bit is the up-arrow class.
+    let expected: Vec<u8> = (0u8..=255)
+        .filter(|byte| {
+            (*byte < 0x10 && byte & DUNGEON_VISIT_MARKER_BIT != 0)
+                || *byte == 0x60
+                || *byte == 0x68
+                || *byte == 0xB0
+        })
+        .collect();
+    assert_eq!(text_font_bytes, expected);
+}
+
+/// `dungeon-mode.md §12.4`: no two classes may map to the same font
+/// glyph. This is the invariant the fountain class broke — it returned
+/// `0x12`, exact byte `0x68`'s up-and-down arrow.
+#[test]
+fn dungeon_minimap_font_glyphs_do_not_collide_across_classes() {
+    use std::collections::HashMap;
+
+    // One representative byte per published row.
+    let rows: [(&str, u8); 17] = [
+        ("0x0? up-arrow", 0x08),
+        ("0x1? up ladder", 0x10),
+        ("0x2? down ladder", 0x20),
+        ("0x3? two-way ladder", 0x30),
+        ("0x4? closed chest", 0x40),
+        ("0x5? fountain", 0x50),
+        ("0x60 down-arrow", 0x60),
+        ("0x61/0x69 hidden pit", 0x61),
+        ("0x68 up-and-down arrow", 0x68),
+        ("other 0x6? trap", 0x62),
+        ("0x8? energy field", 0x80),
+        ("0xA?/0xF? heavy door", 0xA0),
+        ("0xB0 bedrock", 0xB0),
+        ("other 0xB? lattice", 0xB1),
+        ("0xC? speckled diagonal", 0xC0),
+        ("0xD? arch", 0xD0),
+        ("0xE? filled rounded block", 0xE0),
+    ];
+
+    let mut seen: HashMap<u8, &str> = HashMap::new();
+    for (label, byte) in rows {
+        let Some(index) = dungeon_minimap_glyph(byte).and_then(|glyph| glyph.font_index()) else {
+            continue;
+        };
+        if let Some(previous) = seen.insert(index, label) {
+            panic!("glyph {index:#04x} claimed by both `{previous}` and `{label}`");
+        }
+    }
+    // The party marker's arrowhead is a further distinct glyph.
+    assert_eq!(DUNGEON_MINIMAP_PARTY_GLYPH.font_index(), Some(0x60));
+    assert!(!seen.contains_key(&0x60));
 }
 
 #[test]
@@ -10637,7 +10723,7 @@ fn tlk_byte_runner_class_partitions_byte_space_per_spec() {
         TLK_CODE_PRINT_AVATAR_NAME,
         TLK_CODE_END_STREAM,
         TLK_CODE_PAUSE,
-        TLK_CODE_PANEL_NEWLINE,
+        TLK_CODE_STANDING_DOWN,
         TLK_CODE_CURSE_CHECK,
         TLK_CODE_LITERAL_NEWLINE,
         TLK_CODE_PROTECT_RUN,
@@ -12639,16 +12725,61 @@ fn save_character_field_offsets_match_spec_record() {
     );
 }
 
+/// `catalogs/item-list.md` Spyglass row / `inventory.md §7`: three
+/// conditions — the surface world plane, the outdoor world scene *or a
+/// town-class scene*, and the night window `19..=23` / `0..=5`.
+///
+/// This test previously read `spyglass_usable(scene_byte,
+/// sky_has_stars)` and asserted that every non-overworld scene refused.
+/// Both halves are withdrawn: the row publishes "the outdoor world scene
+/// or a town-class scene ... a broader scene gate than the Sextant's",
+/// and the sky-state parameter was a stand-in for the published hour
+/// window. The predicate also had no production caller, so the assertion
+/// it made was never the assertion the game played.
 #[test]
-fn spyglass_usable_requires_overworld_with_stars() {
-    // inventory.md §7
-    assert!(spyglass_usable(0, true));
-    assert!(!spyglass_usable(0, false));
-    // Non-overworld scenes refuse regardless of sky state.
-    for scene in [1u8, 17, 33, 0xFF] {
-        assert!(!spyglass_usable(scene, true));
-        assert!(!spyglass_usable(scene, false));
+fn spyglass_usable_admits_surface_outdoor_and_town_scenes_at_night() {
+    let surface = WorldPlane::Britannia.plane_byte();
+    let underworld = WorldPlane::Underworld.plane_byte();
+
+    // Outdoor world scene and every town-family scene are admitted.
+    assert!(spyglass_usable(surface, SCENE_OVERWORLD, 20));
+    for scene in [SCENE_TOWN_FAMILY_FIRST, 17, SCENE_TOWN_FAMILY_LAST] {
+        assert!(
+            spyglass_usable(surface, scene, 20),
+            "town-class scene {scene} should admit the Spyglass"
+        );
     }
+    // Dungeon-class and combat-class scenes refuse.
+    for scene in [33u8, 40, 127, 0xFF] {
+        assert!(
+            !spyglass_usable(surface, scene, 20),
+            "scene {scene} should refuse the Spyglass"
+        );
+    }
+    // The Underworld is excluded by the same plane condition that
+    // excludes it from the Sextant, on every otherwise-admitted scene.
+    for scene in [SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST] {
+        assert!(!spyglass_usable(underworld, scene, 20));
+    }
+    // The night window is the Sextant's, not the town-lighting window:
+    // hours 5 and 19 are the two the two windows disagree on.
+    for hour in 0u8..=23 {
+        let expected = hour <= 5 || hour >= 19;
+        assert_eq!(
+            spyglass_usable(surface, SCENE_OVERWORLD, hour),
+            expected,
+            "hour {hour}"
+        );
+        assert_eq!(
+            spyglass_usable(surface, SCENE_TOWN_FAMILY_FIRST, hour),
+            expected,
+            "hour {hour} in a town"
+        );
+    }
+    assert!(spyglass_usable(surface, SCENE_OVERWORLD, 5));
+    assert!(spyglass_usable(surface, SCENE_OVERWORLD, 19));
+    assert!(!is_town_night_hour(5));
+    assert!(!is_town_night_hour(19));
 }
 
 #[test]

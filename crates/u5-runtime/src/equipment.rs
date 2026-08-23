@@ -207,13 +207,51 @@ pub const fn scroll_grant_label_id(grant_subtype: u8) -> u8 {
     grant_subtype & SCROLL_GRANT_LABEL_MASK
 }
 
-/// `inventory.md §7` Spyglass U-Use eligibility predicate. The
-/// Spyglass is a surface-only utility; it refuses outside the
-/// overworld scene byte zero. The caller must additionally check
-/// the sky-state "no stars" gate before the successful path enters
-/// the LOOKOBJ full Britannia chunk-map renderer.
-pub const fn spyglass_usable(scene_byte: u8, sky_has_stars: bool) -> bool {
-    scene_byte == 0 && sky_has_stars
+/// `catalogs/item-list.md` Spyglass row / `inventory.md §7`: the scene
+/// half of the Spyglass gate. The Spyglass admits **the outdoor world
+/// scene or a town-class scene**; dungeon-class and combat-class scenes
+/// are excluded. This is deliberately broader than
+/// [`sextant_outdoor_position`]'s scene test, which admits the outdoor
+/// scene only — the two items share a plane test and a night window but
+/// not a scene gate.
+pub const fn spyglass_scene_admits(scene_byte: u8) -> bool {
+    scene_byte == crate::SCENE_OVERWORLD
+        || (scene_byte >= crate::SCENE_TOWN_FAMILY_FIRST
+            && scene_byte <= crate::SCENE_TOWN_FAMILY_LAST)
+}
+
+/// `catalogs/item-list.md` Spyglass row / `inventory.md §7`: the first
+/// two of the Spyglass's three conditions — the party is on the surface
+/// world plane, and the scene is one [`spyglass_scene_admits`] accepts.
+/// The plane test is the same lower-half magnitude test on the
+/// world-plane value the Sextant uses, not an equality against the
+/// surface value, and **the Underworld is excluded by the same plane
+/// condition that excludes it from the Sextant**. Both failures print
+/// the same "not here" refusal.
+pub const fn spyglass_position_admits(world_plane_byte: u8, scene_byte: u8) -> bool {
+    if world_plane_byte >= WORLD_PLANE_SURFACE_MAGNITUDE_LIMIT {
+        return false;
+    }
+    spyglass_scene_admits(scene_byte)
+}
+
+/// `catalogs/item-list.md` Spyglass row / `inventory.md §7` Spyglass
+/// U-Use eligibility predicate. A look is permitted only when **all
+/// three** published conditions hold: the surface world plane, an
+/// admitted scene, and a night hour. A scene or plane failure is the
+/// "not here" refusal and a daytime hour is the no-stars refusal, so
+/// callers that must tell them apart use [`spyglass_position_admits`]
+/// and [`sextant_night_hour`] directly.
+///
+/// *Corrected:* this predicate previously took `(scene_byte,
+/// sky_has_stars)`, admitted the overworld scene only, and had **no
+/// production caller** — the live `use_spyglass` path did its own
+/// gating against the town-lighting night window, which disagrees with
+/// the published window at hours `5` and `19`. Both the scene gate and
+/// the night window are now published here and the live path calls
+/// through, so there is one gate rather than two.
+pub const fn spyglass_usable(world_plane_byte: u8, scene_byte: u8, hour: u8) -> bool {
+    spyglass_position_admits(world_plane_byte, scene_byte) && sextant_night_hour(hour)
 }
 
 /// `inventory.md §7` HMS Cape plans U-Use eligibility predicate.
@@ -242,12 +280,20 @@ pub const fn hms_cape_plans_usable(transport_marker: u8) -> bool {
 /// the same "outdoors" refusal an indoor scene takes and never reaches
 /// the night test. There is no Underworld-specific message.
 pub const fn sextant_outdoor_position(world_plane_byte: u8, scene_byte: u8) -> bool {
-    if world_plane_byte >= 0x80 {
+    if world_plane_byte >= WORLD_PLANE_SURFACE_MAGNITUDE_LIMIT {
         return false;
     }
     // Outdoor world scene byte is zero; any other scene refuses.
-    scene_byte == 0
+    scene_byte == crate::SCENE_OVERWORLD
 }
+
+/// `catalogs/item-list.md` Sextant and Spyglass rows: the threshold the
+/// published plane test compares the world-plane byte against. The test
+/// is a magnitude comparison — the plane value must lie in the lower
+/// half of its byte range — so the surface value passes and the
+/// all-ones Underworld value does not. Promoted so the two items share
+/// one threshold instead of repeating the bare literal.
+pub const WORLD_PLANE_SURFACE_MAGNITUDE_LIMIT: u8 = 0x80;
 
 /// `catalogs/item-list.md` / `inventory.md §7`: the night window the
 /// Sextant and the Spyglass share — hours `19..=23` and `0..=5`. This is

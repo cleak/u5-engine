@@ -104,6 +104,12 @@ pub struct ConversationSessionOutput {
     /// `true` when this step ended the conversation (Bye fired or the
     /// stream ended unrecoverably).
     pub ended: bool,
+    /// Shared moral-standing selector after any `0x89` / `0x8A` writes in
+    /// this step's streams, or `None` when none ran. `conversation.md
+    /// §7.4` makes those two codes the byte runner's only direct writers
+    /// of the selector; the caller assigns this value rather than
+    /// re-deriving a delta.
+    pub moral_standing: Option<u8>,
 }
 
 /// Holder for a conversation in progress.
@@ -119,6 +125,13 @@ pub struct ConversationSession {
     pub decoded_fields: Vec<String>,
     /// Number of keyword lines processed so far (telemetry / UI).
     pub keyword_turns: u32,
+    /// Live shared moral-standing selector once a stream in this session
+    /// has written it with `0x89` / `0x8A`. A single step can run several
+    /// streams (a `0x87` follow-up scan, a scoped-prompt record), and the
+    /// caller's [`ConversationContext`] snapshot is fixed for the whole
+    /// step, so the second stream would otherwise re-read a stale value
+    /// and lose the first stream's write.
+    moral_standing: Option<u8>,
 }
 
 struct KeywordMatch {
@@ -134,6 +147,7 @@ impl ConversationSession {
             fields,
             decoded_fields,
             keyword_turns: 0,
+            moral_standing: None,
         }
     }
 
@@ -397,6 +411,7 @@ impl ConversationSession {
         while let Some(run) = self.fields.get(field_idx).map(|bytes| {
             let inputs = make_inputs(
                 ctx,
+                self.moral_standing.unwrap_or(ctx.moral_standing),
                 ask_party_name_response,
                 ask_who_response,
                 gold_payment_accepted,
@@ -449,6 +464,7 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
+        self.absorb_moral_standing(run, out);
         match run.stop {
             TlkRunStop::AskingPartyName(cursor) => {
                 self.phase = ConversationSessionPhase::AwaitingAskPartyName { field_idx, cursor };
@@ -545,6 +561,7 @@ impl ConversationSession {
     ) -> ConversationSessionOutput {
         let inputs = make_inputs(
             ctx,
+            self.moral_standing.unwrap_or(ctx.moral_standing),
             ask_party_name_response,
             ask_who_response,
             ctx.gold_payment_accepted,
@@ -569,12 +586,24 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
+        self.absorb_moral_standing(run, out);
         match run.stop {
             TlkRunStop::LabelTransfer(label) if self.has_scoped_label_records(label) => {
                 self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
             }
             TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {}
             _ => {}
+        }
+    }
+
+    /// `conversation.md §7.4`: carry a stream's `0x89` / `0x8A` write of
+    /// the shared moral-standing selector into both the session's live
+    /// value (so a later stream in the same step reads it) and the step
+    /// output (so the caller assigns it to the party record).
+    fn absorb_moral_standing(&mut self, run: &TlkRunOutput, out: &mut ConversationSessionOutput) {
+        if let Some(standing) = run.moral_standing {
+            self.moral_standing = Some(standing);
+            out.moral_standing = Some(standing);
         }
     }
 }
@@ -587,6 +616,7 @@ fn merge_session_output(out: &mut ConversationSessionOutput, nested: Conversatio
     out.signal_flags.extend(nested.signal_flags);
     out.asked_party_name = nested.asked_party_name.or(out.asked_party_name);
     out.asked_who = nested.asked_who.or(out.asked_who);
+    out.moral_standing = nested.moral_standing.or(out.moral_standing);
     out.ended |= nested.ended;
 }
 
@@ -637,6 +667,7 @@ fn find_scoped_response_in_record(record: &[u8], label: u8, input_upper: &[u8]) 
 
 fn make_inputs<'a>(
     ctx: &'a ConversationContext<'a>,
+    moral_standing: u8,
     ask_party_name_response: u8,
     ask_who_response: u8,
     gold_payment_accepted: bool,
@@ -645,7 +676,7 @@ fn make_inputs<'a>(
     TlkRunInputs {
         avatar_name: ctx.avatar_name,
         branch_flags: ctx.branch_flags,
-        moral_standing: ctx.moral_standing,
+        moral_standing,
         dictionary: ctx.dictionary,
         curse_seen: false,
         gold_payment_accepted,
@@ -963,6 +994,70 @@ mod tests {
             }]
         );
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    /// `conversation.md §7.4` / `karma.md §4`: five of the eight shipped
+    /// `0x8A` bytes head the "no" arm of a scoped prompt that asks the
+    /// party for something, two of them gold requests, so "declining a
+    /// conversation gold request can lower standing even though accepting
+    /// it never raises standing by itself". This models that shipped
+    /// shape: the refusal record opens with the standing byte, the
+    /// payment record carries none.
+    #[test]
+    fn declining_a_gold_request_lowers_moral_standing() {
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("PAY"),
+            {
+                let mut bytes = vec![TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5'];
+                bytes.push(TLK_GOLD_PAYMENT_PAID_LABEL);
+                bytes.extend_from_slice(&enc(" Paid."));
+                bytes.push(TLK_CODE_END_OF_RESPONSE);
+                bytes.push(TLK_GOLD_PAYMENT_REFUSED_LABEL);
+                bytes.push(TLK_CODE_STANDING_DOWN);
+                bytes.extend_from_slice(&enc("Scoundrel!"));
+                bytes.push(TLK_CODE_END_OF_RESPONSE);
+                bytes
+            },
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "PAY".to_string(),
+            String::new(),
+        ];
+        let context = ConversationContext {
+            moral_standing: 40,
+            gold_payment_accepted: true,
+            gold_available: Some(30),
+            ..ctx()
+        };
+
+        let mut declined = ConversationSession::new(raw.clone(), decoded.clone());
+        declined.present_greeting(&context);
+        declined.submit_keyword("pay", &context);
+        let out = declined.submit_keyword("n", &context);
+        assert_eq!(out.text, "Scoundrel!");
+        assert_eq!(
+            out.moral_standing,
+            Some(39),
+            "the refusal arm's 0x8A must debit the shared selector"
+        );
+
+        // Paying takes the other arm, which carries no standing byte.
+        let mut paid = ConversationSession::new(raw, decoded);
+        paid.present_greeting(&context);
+        paid.submit_keyword("pay", &context);
+        let out = paid.submit_keyword("y", &context);
+        assert_eq!(out.text, " Paid.");
+        assert_eq!(out.moral_standing, None);
     }
 
     #[test]

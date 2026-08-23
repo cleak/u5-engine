@@ -3170,6 +3170,80 @@
         assert_eq!(state.active_player, None);
     }
 
+    /// `conversation.md §7.4` / `karma.md §4`: the `0x8A` STANDING-DOWN
+    /// byte at the head of a declined gold request's refusal record must
+    /// reach the party's shared moral-standing selector. This engine used
+    /// to dispatch `0x8A` as a panel newline, so the byte printed a line
+    /// break and cost nothing — the live karma bug this test pins shut.
+    #[test]
+    fn town_raw_tlk_declined_gold_request_debits_moral_standing() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+                "PAY".to_string(),
+                "placeholder".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut pay_response = vec![0x85, b'0', b'2', b'5'];
+        pay_response.push(0x9E);
+        pay_response.extend(enc("Paid"));
+        pay_response.push(0xFF);
+        pay_response.push(0x9F);
+        // Three stacked STANDING-DOWN bytes, the shipped run that heads a
+        // fifty-gold refusal ahead of its rebuke.
+        pay_response.extend([0x8A, 0x8A, 0x8A]);
+        pay_response.extend(enc("Scoundrel!"));
+        pay_response.push(0xFF);
+
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+                enc("PAY"),
+                pay_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 30;
+        state.moral_standing = 40;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+        state.submit_active_conversation_keyword("pay");
+        let (text, ended) = state.submit_active_conversation_keyword("n");
+        assert!(!ended);
+        // The standing bytes emit no text and no newline.
+        assert_eq!(text, "Scoundrel!");
+        assert_eq!(state.gold, 30, "a declined request debits no gold");
+        assert_eq!(
+            state.moral_standing, 37,
+            "three stacked 0x8A bytes each lower the selector by one"
+        );
+    }
+
     #[test]
     fn town_raw_tlk_gold_payment_debits_only_affordable_accepted_payment() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();

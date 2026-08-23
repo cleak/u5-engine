@@ -27,6 +27,33 @@ pub const COMPLETED_LONG_CAMP_MIN_HOURS: u8 = 6;
 pub const COMPLETED_LONG_CAMP_HP_GAIN_MIN: u8 = 1;
 pub const COMPLETED_LONG_CAMP_HP_GAIN_MAX: u8 = 63;
 
+/// `rest-and-camp.md §5` camp cooldown counter arming value. The
+/// counter "is set to 14 whenever a camp completes and is reduced by
+/// one, floored at zero, at every hour rollover. A second camp begun
+/// inside fourteen game hours of the previous one therefore prints the
+/// no-effect line and recovers nothing."
+pub const COMPLETED_LONG_CAMP_COOLDOWN_HOURS: u8 = 14;
+
+/// `rest-and-camp.md §5` camp-marker roll: the completed camp "on a
+/// 25-percent roll, remembers the tile under the party and stamps the
+/// camp marker tile". Published as a probability, and held here so the
+/// number has one home — but see [`camp_cooldown_blocks_recovery`]'s
+/// note: the marker itself is **not** implemented, because no spec in
+/// this workspace publishes a camp-marker tile id.
+pub const COMPLETED_LONG_CAMP_MARKER_ROLL_PERCENT: u8 = 25;
+
+/// `rest-and-camp.md §5`: the completed-camp recovery walk runs only
+/// while the camp cooldown counter reads zero.
+pub const fn camp_cooldown_blocks_recovery(cooldown: u8) -> bool {
+    cooldown != 0
+}
+
+/// `rest-and-camp.md §5`: the camp cooldown counter is "reduced by one,
+/// floored at zero, at every hour rollover".
+pub const fn camp_cooldown_after_hour_rollover(cooldown: u8) -> u8 {
+    cooldown.saturating_sub(1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -40,5 +67,33 @@ mod tests {
         // member"
         assert_eq!(COMPLETED_LONG_CAMP_HP_GAIN_MIN, 1);
         assert_eq!(COMPLETED_LONG_CAMP_HP_GAIN_MAX, 63);
+    }
+
+    #[test]
+    fn camp_cooldown_arms_at_fourteen_and_decays_one_per_hour_floored_at_zero() {
+        // `rest-and-camp.md §5`: "set to 14 whenever a camp completes
+        // and ... reduced by one, floored at zero, at every hour
+        // rollover."
+        assert_eq!(COMPLETED_LONG_CAMP_COOLDOWN_HOURS, 14);
+        assert!(camp_cooldown_blocks_recovery(
+            COMPLETED_LONG_CAMP_COOLDOWN_HOURS
+        ));
+        assert!(camp_cooldown_blocks_recovery(1));
+        assert!(!camp_cooldown_blocks_recovery(0));
+
+        // Fourteen rollovers take a freshly armed counter to zero, and
+        // the fourteenth is the first hour a second camp can recover.
+        let mut cooldown = COMPLETED_LONG_CAMP_COOLDOWN_HOURS;
+        for elapsed in 1..=COMPLETED_LONG_CAMP_COOLDOWN_HOURS {
+            cooldown = camp_cooldown_after_hour_rollover(cooldown);
+            assert_eq!(
+                cooldown,
+                COMPLETED_LONG_CAMP_COOLDOWN_HOURS - elapsed,
+                "after {elapsed} hour rollover(s)"
+            );
+        }
+        assert_eq!(cooldown, 0);
+        // Floored, not wrapped.
+        assert_eq!(camp_cooldown_after_hour_rollover(0), 0);
     }
 }

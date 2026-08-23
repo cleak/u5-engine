@@ -1,6 +1,7 @@
 use std::io;
 use std::path::Path;
 
+use crate::rest_camp::camp_cooldown_after_hour_rollover;
 use crate::*;
 
 #[derive(Clone, Copy, Debug)]
@@ -1985,6 +1986,9 @@ impl PlayState {
         if self.clock.hour != previous_hour {
             self.refresh_cached_moon_glyphs();
             self.apply_hourly_status_provision_pass();
+            // `rest-and-camp.md §5`: the camp cooldown counter is
+            // "reduced by one, floored at zero, at every hour rollover".
+            self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
         }
         self.decay_light_counters(effective_minutes);
         if matches!(self.area, Area::Town { .. })

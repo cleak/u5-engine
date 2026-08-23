@@ -27,6 +27,13 @@ pub enum KarmaAction {
     /// Three-digit conversation gold-payment milestone: +1, plus another
     /// +2 if the payment leaves the party with zero gold.
     TollMilestone { left_party_with_zero_gold: bool },
+    /// `conversation.md §7.4` `0x89` STANDING-UP control byte: +1,
+    /// capped at ninety-nine. Scripts stack the byte to grant more
+    /// than one.
+    ConversationStandingUp,
+    /// `conversation.md §7.4` `0x8A` STANDING-DOWN control byte: -1,
+    /// floored at zero. Scripts stack the byte to deduct more than one.
+    ConversationStandingDown,
 }
 
 impl KarmaAction {
@@ -55,9 +62,17 @@ impl KarmaAction {
                     base
                 }
             }
+            KarmaAction::ConversationStandingUp => KARMA_CONVERSATION_STANDING_STEP as i16,
+            KarmaAction::ConversationStandingDown => -(KARMA_CONVERSATION_STANDING_STEP as i16),
         }
     }
 }
+
+/// `karma.md §4` / `conversation.md §7.4` magnitude each of the two
+/// conversation standing control bytes moves the shared selector. Both
+/// codes move it by exactly one; scripts stack the byte to move it
+/// further, so this is deliberately not a per-record total.
+pub const KARMA_CONVERSATION_STANDING_STEP: u8 = 1;
 
 /// `karma.md §4` shared moral-standing debit applied when the party
 /// picks a crop cell or eats reachable table food. The selector is

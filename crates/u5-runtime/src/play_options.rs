@@ -58,6 +58,14 @@ pub struct PlayOptions {
     pub active_effect_tag: Option<u8>,
     pub active_effect_counter: u8,
     pub fortunes_of_war: u8,
+    /// `rest-and-camp.md §5` camp cooldown counter seed. The counter is
+    /// engine-only state (`PlayState::camp_cooldown` explains why it is
+    /// not save-backed), so a route or debug session that needs to start
+    /// inside the fourteen-hour window has to seed it here — the only
+    /// other way to reach that state is to complete a camp, and the
+    /// wilderness rest loop's sleep-ambush roll interrupts long before a
+    /// second six-hour camp can complete.
+    pub camp_cooldown: u8,
     pub active_player: Option<usize>,
     pub combat_round_counter: u8,
     pub transport: TransportState,
@@ -125,6 +133,7 @@ impl Default for PlayOptions {
             active_effect_tag: None,
             active_effect_counter: 0,
             fortunes_of_war: 0,
+            camp_cooldown: 0,
             active_player: None,
             combat_round_counter: 0,
             transport: TransportState::Foot,

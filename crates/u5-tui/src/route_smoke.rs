@@ -15,11 +15,12 @@ use u5_runtime::{
     COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
     COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_VANISH_DEATH_MARKER_TILE,
-    CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
-    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST,
-    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
-    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction,
-    DungeonScene, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
+    COMPLETED_LONG_CAMP_COOLDOWN_HOURS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT,
+    CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor,
+    CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
+    DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
+    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene,
+    ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
     EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
@@ -264,6 +265,20 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ..PlayOptions::default()
     };
     britannia_spyglass.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+
+    // `catalogs/item-list.md` Spyglass row: the scene gate admits a
+    // town-class scene, and the night window is the Sextant's
+    // `19..=23` / `0..=5`. Hour 19 in a town is the case the previous
+    // implementation refused twice over — once on its overworld-only
+    // scene test and once on the town-*lighting* window, which starts an
+    // hour later. The overworld case above runs at hour 20, inside both
+    // windows, so it never covered either bug.
+    let mut town_spyglass_night_edge = PlayOptions {
+        target: PlayTarget::Town(minoc),
+        clock: GameClock::new(19, 0).expect("19:00 is a valid game-clock time"),
+        ..PlayOptions::default()
+    };
+    town_spyglass_night_edge.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
 
     let mut britannia_utility_use = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
@@ -654,6 +669,21 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ..PlayOptions::default()
     };
 
+    // `rest-and-camp.md §5`: a second camp begun inside fourteen game
+    // hours of the previous one recovers nothing. Two six-hour camps
+    // back to back leave the cooldown at eight when the second walk is
+    // reached, so this route drives the gate the engine had no field for.
+    // `rest-and-camp.md §5`: a camp begun inside fourteen game hours of
+    // the previous one recovers nothing. The window cannot be reached by
+    // camping twice in a route — the wilderness rest loop's sleep-ambush
+    // roll interrupts long before a second six-hour camp completes — so
+    // the counter is seeded directly. The options are otherwise identical
+    // to `dungeon-long-camp-recovery`, and the gate draws no randomness,
+    // so the two routes take the same path up to the recovery walk and
+    // diverge only in whether it runs.
+    let mut dungeon_camp_inside_cooldown = dungeon_long_camp_recovery.clone();
+    dungeon_camp_inside_cooldown.camp_cooldown = COMPLETED_LONG_CAMP_COOLDOWN_HOURS;
+
     let doom_options = PlayOptions {
         target: PlayTarget::Dungeon(doom),
         floor: 0,
@@ -698,6 +728,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: britannia_spyglass,
             script: &["USP"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "view overlay",
+        },
+        RouteSmokeCase {
+            name: "town-spyglass-night-window-edge",
+            options: town_spyglass_night_edge,
+            script: &["USP"],
+            expected: RouteSmokeExpectation::Town(minoc),
             min_turn: 0,
             expected_frame_kind: "view overlay",
         },
@@ -1866,6 +1904,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "dungeon-long-camp-recovery",
             options: dungeon_long_camp_recovery,
+            script: &["H6/4"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 18,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-camp-inside-cooldown-window",
+            options: dungeon_camp_inside_cooldown,
             script: &["H6/4"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 18,
@@ -3385,7 +3431,7 @@ fn apply_route_smoke_case_setup(
             state.sync_player_object();
             state.mark_visibility_dirty();
         }
-        "dungeon-long-camp-recovery" => {
+        "dungeon-long-camp-recovery" | "dungeon-camp-inside-cooldown-window" => {
             seed_long_camp_recovery_route(state);
         }
         "dungeon-field-cycle-spells" => {
@@ -6186,6 +6232,33 @@ fn validate_route_smoke_case_state(
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public #47 completed long-camp recovery"
+                )));
+            }
+        }
+        // `rest-and-camp.md §5`: with the cooldown counter armed, the
+        // same camp that recovers above must recover nothing. The
+        // discriminators are the three magic-point rows the recovery walk
+        // assigns (22 / 24 / 10) and the Avatar's hit points, which the
+        // walk caps at a maximum of two.
+        "dungeon-camp-inside-cooldown-window" => {
+            if state.clock.hour != 14
+                || state.active_rest.is_some()
+                || state.party.first().is_none_or(|member| {
+                    member.status != b'G' || member.hp != 1 || member.mana != 0
+                })
+                || state.party.get(1).is_none_or(|member| {
+                    member.status != b'G' || member.hp != 4 || member.mana != 1
+                })
+                || state.party.get(2).is_none_or(|member| {
+                    member.status != b'G' || member.hp != 5 || member.mana != 2
+                })
+                || state.party.get(3).is_none_or(|member| {
+                    member.status != b'G' || member.hp != 5 || member.mana != 3
+                })
+                || !state.message.contains("recovered 0 HP and 0 MP")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` recovered inside the published camp cooldown window"
                 )));
             }
         }
