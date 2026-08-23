@@ -2479,6 +2479,57 @@
     }
 
     #[test]
+    fn outdoor_walker_broadside_survives_the_pass_handlers_own_result_line() {
+        // The test above calls `advance_outdoor_active_objects()` directly and
+        // so never meets the handler that used to erase the line. In
+        // production the epilogue runs inside `advance_turn()`, and every
+        // command handler assigns `message` afterwards -- `Pass` assigns
+        // "Passed." -- so the boom announcement was written and then thrown
+        // away before the player could see it.
+        //
+        // `text-output.md SECTION 11` settles the composition question and
+        // rejects the premise behind it: "**The original has no such slot.**
+        // ... **Both lines are emitted, in the order they occur** ... A turn
+        // that produces an epilogue announcement *and* a command result shows
+        // the announcement first, then the result beneath it."
+        let dir = debug_game_dir();
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        // The command's own result still stands in the slot the renderers and
+        // the rest of the suite read.
+        assert_eq!(state.message, "Passed.");
+
+        let lines: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let boom = lines
+            .iter()
+            .position(|line| line.contains("BOOOM"))
+            .unwrap_or_else(|| panic!("broadside line missing from transcript: {lines:?}"));
+        let passed = lines
+            .iter()
+            .position(|line| line.contains("Passed."))
+            .unwrap_or_else(|| panic!("pass result missing from transcript: {lines:?}"));
+        // "the announcement first, then the result beneath it".
+        assert!(boom < passed, "wrong order: {lines:?}");
+        // Emitted once, not once per transcribe path.
+        assert_eq!(
+            lines.iter().filter(|line| line.contains("BOOOM")).count(),
+            1,
+            "{lines:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn outdoor_walker_broadside_fires_across_the_map_seam() {
         // The window is measured on wrapped deltas, so a pirate three cells
         // away across the 256-cell seam is in range. Raw subtraction would

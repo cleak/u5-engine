@@ -27,17 +27,72 @@ impl PlayState {
         self.message_transcript_revision
     }
 
-    /// Append one already-classified transcript line.
-    pub fn push_message_entry(&mut self, text: impl Into<String>, is_command_echo: bool) {
+    /// Append one entry and honour the transcript's capacity. Shared by
+    /// the revision-bumping public push and the epilogue push below.
+    fn append_transcript_entry(&mut self, text: String, is_command_echo: bool) {
         self.message_transcript.push(MessageEntry {
-            text: text.into(),
+            text,
             is_command_echo,
         });
-        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
             let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
             self.message_transcript.drain(0..excess);
         }
+    }
+
+    /// Append one already-classified transcript line.
+    pub fn push_message_entry(&mut self, text: impl Into<String>, is_command_echo: bool) {
+        self.append_transcript_entry(text.into(), is_command_echo);
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
+    /// `text-output.md SECTION 11`: emit a line produced by the **turn
+    /// epilogue** rather than by a command handler.
+    ///
+    /// "An implementation that keeps a **single message slot** - one
+    /// string field that the turn epilogue writes and a command handler
+    /// then overwrites - has invented a conflict the original does not
+    /// have, and will silently lose whichever line is written first."
+    /// The original emits both, "in the order they occur": "A turn that
+    /// produces an epilogue announcement *and* a command result shows the
+    /// announcement first, then the result beneath it."
+    ///
+    /// So the epilogue's line enters the append-and-scroll transcript the
+    /// moment it occurs, where no later assignment to
+    /// [`PlayState::message`] can reach it. Two deliberate details:
+    ///
+    /// * It does **not** bump `message_transcript_revision`. That counter
+    ///   means "this dispatch recorded its own output"; an epilogue line
+    ///   is not the dispatch's output, and a handler that printed nothing
+    ///   else must still reach the fallback transcribe path.
+    /// * The line is remembered in `pending_epilogue_transcript_lines` so
+    ///   that a handler which leaves the message slot untouched - and
+    ///   therefore still carrying the epilogue's words - does not
+    ///   transcribe the same line a second time.
+    pub(crate) fn push_epilogue_transcript_line(&mut self, line: &str) {
+        self.append_transcript_entry(line.to_string(), false);
+        self.pending_epilogue_transcript_lines
+            .push(line.to_string());
+    }
+
+    /// Forget any epilogue lines left over from an earlier dispatch.
+    pub fn clear_pending_epilogue_transcript_lines(&mut self) {
+        self.pending_epilogue_transcript_lines.clear();
+    }
+
+    /// Consume a pending epilogue line equal to `line`, reporting whether
+    /// one was found. A match means the transcript already carries this
+    /// text from the epilogue, so the handler must not repeat it.
+    fn take_pending_epilogue_transcript_line(&mut self, line: &str) -> bool {
+        let Some(index) = self
+            .pending_epilogue_transcript_lines
+            .iter()
+            .position(|pending| pending == line)
+        else {
+            return false;
+        };
+        self.pending_epilogue_transcript_lines.remove(index);
+        true
     }
 
     /// Append a handler message as continuation lines. Embedded newlines
@@ -45,6 +100,9 @@ impl PlayState {
     /// emitter's treatment of line-feed bytes (`text-output.md §5`).
     pub fn push_message_transcript_lines(&mut self, text: &str) {
         for line in text.split('\n') {
+            if self.take_pending_epilogue_transcript_line(line) {
+                continue;
+            }
             self.push_message_entry(line, false);
         }
     }
@@ -123,10 +181,16 @@ impl PlayState {
             if let Some(last) = self.message_transcript.last_mut() {
                 last.text.push_str(first);
             }
-        } else {
+        } else if !self.take_pending_epilogue_transcript_line(first) {
+            // `text-output.md SECTION 11`: when the handler left the slot
+            // still carrying the epilogue's words, that text is already in
+            // the transcript above this point; do not double it.
             self.push_message_entry(first, false);
         }
         for line in lines {
+            if self.take_pending_epilogue_transcript_line(line) {
+                continue;
+            }
             self.push_message_entry(line, false);
         }
         true

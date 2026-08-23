@@ -2,6 +2,31 @@
 //!
 //! These cases intentionally exercise public harness routes and sidecar-backed
 //! transitions without asserting copyrighted text content.
+//!
+//! # Case names are matched in more than one place
+//!
+//! A case name is a bare string, and it is keyed on by several `match
+//! case_name` blocks in this file - notably the *setup* block
+//! ([`apply_route_smoke_case_setup`]) and the *validation* block
+//! ([`validate_route_smoke_case_state`]). The same name legitimately
+//! appears in both, so searching for `"some-case" =>` finds more than one
+//! anchor and it is easy to add an arm to the wrong block. An arm added to
+//! the block that already has one for that name is dead code: the case
+//! then "passes" while doing nothing, which is the worst possible
+//! outcome for a smoke harness.
+//!
+//! Two guards make that loud instead of silent:
+//!
+//! * `deny(unreachable_patterns)` below turns a duplicate arm into a build
+//!   error rather than a warning nobody reads.
+//! * [`tests::every_case_name_arm_names_a_real_route_smoke_case`] rejects
+//!   an arm keyed on a name no case carries, which is the other way an arm
+//!   can never fire.
+
+// A second arm for a case name that a `match case_name` block already
+// handles can never run. That is exactly how a validation arm added to the
+// setup block disappears, so it must not compile.
+#![deny(unreachable_patterns)]
 
 use std::fs;
 use std::io;
@@ -32,18 +57,18 @@ use u5_runtime::{
     MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE,
     NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX,
-    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
-    PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
-    RESURRECT_SPELL_INDEX, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
-    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    OUTDOOR_BROADSIDE_BOOM_MESSAGE, OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST, PEER_SPELL_INDEX,
+    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST,
+    PROTECTION_SPELL_INDEX, PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState,
+    PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST,
+    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, SAVED_GAM_FILENAME,
+    SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
+    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
+    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
+    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
+    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
     SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind, ShrineVirtue, Stable,
@@ -6338,12 +6363,27 @@ fn validate_route_smoke_case_state(
             validate_combat_party_descriptor_links(state, case_name)?;
         }
         "britannia-pirate-broadside-damages-the-party" => {
+            // `text-output.md §11`: "A turn that produces an epilogue
+            // announcement *and* a command result shows the announcement
+            // first, then the result beneath it." The walker announces the
+            // broadside inside the turn epilogue and the command handler
+            // then assigns its own result line, so this route is the
+            // end-to-end check that the announcement still reaches the
+            // player. It previously could not be asserted at all: the
+            // announcement lived in the single message slot the handler
+            // overwrote, and only the payload's effect on the roster was
+            // durable evidence that the shot had happened.
+            if !state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text.contains(OUTDOOR_BROADSIDE_BOOM_MESSAGE))
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` lost the broadside announcement before the player could see it"
+                )));
+            }
             // `overworld.md §6.2.4`: on foot "[e]very qualifying member is
-            // damaged", so the whole party is below full. The boom line
-            // itself is not asserted here: the walker announces it inside
-            // the turn epilogue and the command handler then overwrites
-            // `message` with its own result line, so the payload's effect
-            // on the roster is the durable evidence.
+            // damaged", so the whole party is below full.
             let untouched = state
                 .party
                 .iter()
@@ -6548,4 +6588,120 @@ fn require_raster_available(case: &RouteSmokeCase, raster: &str) -> io::Result<(
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::{HashMap, HashSet};
+
+    const SOURCE: &str = include_str!("route_smoke.rs");
+
+    /// One `match case_name { .. }` block: the 1-based line it opens on and
+    /// the case-name literals its arms are keyed on, in source order.
+    struct CaseNameMatchBlock {
+        line: usize,
+        literals: Vec<String>,
+    }
+
+    /// Walk this file's own source for every `match case_name` block.
+    ///
+    /// The scan leans on rustfmt's layout rather than on brace counting,
+    /// which string literals containing braces would throw off: the block
+    /// ends at the first line that is exactly the `match`'s own indent
+    /// followed by `}`, and an arm pattern is a line at exactly one
+    /// indent step deeper that starts with a string literal or `| `.
+    fn case_name_match_blocks() -> Vec<CaseNameMatchBlock> {
+        let lines: Vec<&str> = SOURCE.lines().collect();
+        let mut blocks = Vec::new();
+        for (index, line) in lines.iter().enumerate() {
+            if line.trim() != "match case_name {" {
+                continue;
+            }
+            let indent = line.len() - line.trim_start().len();
+            let closing = format!("{}}}", " ".repeat(indent));
+            let arm_indent = indent + 4;
+            let mut literals = Vec::new();
+            for probe in &lines[index + 1..] {
+                if *probe == closing {
+                    break;
+                }
+                if probe.len() - probe.trim_start().len() != arm_indent {
+                    continue;
+                }
+                let trimmed = probe.trim_start();
+                if !(trimmed.starts_with('"') || trimmed.starts_with("| \"")) {
+                    continue;
+                }
+                // Arm patterns only: stop at the fat arrow so a guard or an
+                // arm body on the same line contributes nothing.
+                let pattern = trimmed.split("=>").next().unwrap_or(trimmed);
+                literals.extend(pattern.split('"').skip(1).step_by(2).map(str::to_string));
+            }
+            blocks.push(CaseNameMatchBlock {
+                line: index + 1,
+                literals,
+            });
+        }
+        blocks
+    }
+
+    #[test]
+    fn source_scan_finds_the_setup_and_validation_case_name_blocks() {
+        // Guard the scanner itself: if rustfmt or a refactor moves these
+        // blocks out from under the heuristic above, the two tests below
+        // would quietly stop checking anything.
+        let blocks = case_name_match_blocks();
+        assert!(
+            blocks.len() >= 2,
+            "expected several `match case_name` blocks, found {}",
+            blocks.len()
+        );
+        let biggest = blocks
+            .iter()
+            .map(|block| block.literals.len())
+            .max()
+            .unwrap_or_default();
+        assert!(
+            biggest > 50,
+            "the setup/validation blocks key on many cases; largest block found keys on {biggest}"
+        );
+    }
+
+    #[test]
+    fn no_case_name_is_matched_twice_inside_one_block() {
+        // `deny(unreachable_patterns)` already makes this a build error.
+        // The test states the invariant in the harness's own terms and
+        // still holds if the lint is ever relaxed.
+        for block in case_name_match_blocks() {
+            let mut seen = HashSet::new();
+            for literal in &block.literals {
+                assert!(
+                    seen.insert(literal.clone()),
+                    "`match case_name` at line {} keys on `{literal}` twice;                      the second arm can never run",
+                    block.line
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_case_name_arm_names_a_real_route_smoke_case() {
+        // An arm keyed on a name no case carries never fires, so the case
+        // it was meant to cover passes without being set up or validated.
+        let cases = route_smoke_cases();
+        let names: HashSet<&str> = cases.iter().map(|case| case.name).collect();
+        let mut orphans: HashMap<String, usize> = HashMap::new();
+        for block in case_name_match_blocks() {
+            for literal in &block.literals {
+                if !names.contains(literal.as_str()) {
+                    orphans.insert(literal.clone(), block.line);
+                }
+            }
+        }
+        assert!(
+            orphans.is_empty(),
+            "route-smoke `match case_name` arms key on names no case carries: {orphans:?}"
+        );
+    }
 }

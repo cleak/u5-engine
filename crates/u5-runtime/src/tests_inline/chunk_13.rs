@@ -13122,13 +13122,40 @@ fn active_effect_tag_byte_and_install_counter_match_spec() {
 #[test]
 fn spawn_terrain_branch_classifier_matches_spec_table() {
     // encounters.md §4
-    assert_eq!(SPAWN_WHIRLPOOL_DENOMINATOR, 7);
+    // "**One-in-eight** chance of a special animated active-object
+    // class". The earlier one-in-seven is withdrawn: "the shared range
+    // draw is inclusive on both bounds, so a draw over the closed
+    // interval `[0, 7]` accepted on one value is one in eight".
+    assert_eq!(SPAWN_WHIRLPOOL_DENOMINATOR, 8);
     // "**One-in-four** chance of the **Sand Trap** sprite run
     // `0xE0..0xE3`". The earlier one-in-three is withdrawn: "The draw is
     // over the closed interval `[0, 3]` accepted on one value, which is
     // one in four".
     assert_eq!(SPAWN_SAND_TRAP_DENOMINATOR, 4);
-    assert_eq!(SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR, 4);
+    // The low-tile allowance is not one-in-N at all: "a draw over the
+    // closed interval `[0, 64]`, inclusive, accepted when the result is
+    // below sixteen — **sixteen outcomes in sixty-five**". The earlier
+    // "one-in-four" is withdrawn as an approximation.
+    assert_eq!(SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH, 64);
+    assert_eq!(SPAWN_LOW_TILE_ALLOWANCE_ACCEPT_BELOW, 16);
+    let accepted = (0..=SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH)
+        .filter(|roll| spawn_low_tile_allowance_accepts(*roll))
+        .count();
+    assert_eq!(accepted, 16, "sixteen outcomes accept");
+    assert_eq!(
+        usize::from(SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH) + 1,
+        65,
+        "out of sixty-five"
+    );
+    assert!(spawn_low_tile_allowance_accepts(15));
+    assert!(!spawn_low_tile_allowance_accepts(16));
+    // 16/65 ~= 0.246 is *near* 1/4 but not equal to it, which is why the
+    // withdrawn approximation survived review. Pin the inequality so a
+    // future "simplification" back to a one-in-four denominator fails.
+    assert_ne!(
+        accepted * 4,
+        usize::from(SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH) + 1
+    );
 
     // Surface tile 1 -> whirlpool/aquatic special branch.
     assert_eq!(
