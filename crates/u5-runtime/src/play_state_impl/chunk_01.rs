@@ -1376,11 +1376,18 @@ impl PlayState {
         entry: TownTrapDoorEntry,
         advance_turn: bool,
     ) -> io::Result<MoveOutcome> {
-        self.grid = load_town_runtime_floor(game_dir, scene, entry.to_floor, self.clock.hour)?;
+        let (grid, beacon_sources) = load_town_runtime_floor_with_beacon_sources(
+            game_dir,
+            scene,
+            entry.to_floor,
+            self.clock.hour,
+        )?;
+        self.grid = grid;
         // `visibility.md §12.6`: a new location floor is fresh map setup —
         // clear both beacon positions and re-record up to two bright-light
-        // hits.
-        self.harvest_location_light_beacon();
+        // hits. Harvested from the RAW floor above, because the runtime
+        // normalisation pass scrubs the marker byte the beacon looks for.
+        self.light_beacon.sources = beacon_sources;
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town {
             scene,

@@ -381,6 +381,30 @@ pub fn load_town_runtime_floor(
     Ok(grid)
 }
 
+/// `visibility.md §12.6` indoor beacon sources, harvested from the **raw**
+/// floor before [`normalize_town_runtime_floor`] rewrites any cell.
+///
+/// This exists because the normalisation pass scrubs the location-entry
+/// markers, and the bright-light tile the beacon looks for currently shares
+/// a byte with the asterisk marker `formats/location-dat.md §6` describes.
+/// `load_town_scene` already harvested from the raw grid; every floor
+/// *transition* went through `load_town_runtime_floor` and then harvested
+/// from the scrubbed result, so the two entry paths disagreed and a floor
+/// reached by stairs lost its beacon source. Lighthouses have stairs, and
+/// the four floors carrying that tile are lighthouse lantern rooms, so the
+/// transition path was the one that mattered.
+pub fn load_town_runtime_floor_with_beacon_sources(
+    game_dir: &Path,
+    scene: Scene,
+    floor: i8,
+    hour: u8,
+) -> io::Result<(Vec<u8>, [Option<(u8, u8)>; 2])> {
+    let mut grid = load_floor(game_dir, scene, floor)?;
+    let sources = crate::harvest_location_beacon_sources(&grid);
+    normalize_town_runtime_floor(&mut grid, hour);
+    Ok((grid, sources))
+}
+
 pub fn normalize_town_runtime_floor(grid: &mut [u8], hour: u8) {
     scrub_location_entry_markers(grid);
     if is_town_night_hour(hour) {

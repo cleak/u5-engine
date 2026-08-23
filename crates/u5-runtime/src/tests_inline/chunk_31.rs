@@ -783,3 +783,53 @@ mod light_beacon_shipped_map_sources {
         }
     }
 }
+
+mod light_beacon_floor_transition_harvest {
+    use super::*;
+
+    /// `visibility.md §12.6`: a location floor's beacon sources must be
+    /// harvested from the **raw** floor, before the runtime normalisation
+    /// pass rewrites any cell.
+    ///
+    /// This is a regression test for a divergence between our own two entry
+    /// paths, not for a spec disagreement. `load_town_scene` already
+    /// harvested from the raw grid; every floor *transition* loaded through
+    /// `load_town_runtime_floor` and then harvested from the **scrubbed**
+    /// result. `scrub_location_entry_markers` rewrites the marker byte the
+    /// beacon looks for, so a floor reached by stairs found no source while
+    /// the same floor reached by initial load found one.
+    ///
+    /// It mattered because the four shipped floors carrying that tile are
+    /// lighthouse lantern rooms, and a lighthouse lantern room is reached by
+    /// stairs — so the broken path was the only one that could occur in
+    /// play. Nothing in the 493-case route suite reaches it either way.
+    #[test]
+    fn normalisation_scrubs_the_byte_the_beacon_harvests() {
+        let mut grid = vec![0u8; 32 * 32];
+        grid[5 * 32 + 7] = BEACON_BRIGHT_LIGHT_TILE;
+
+        let raw_sources = harvest_location_beacon_sources(&grid);
+        assert_eq!(
+            raw_sources[0],
+            Some((7, 5)),
+            "the raw floor must yield the bright-light cell"
+        );
+
+        // The normalisation pass rewrites it, so harvesting afterwards finds
+        // nothing. This assertion is the *cause* of the bug, pinned so that
+        // if the scrub ever stops claiming this byte the ordering fix can be
+        // simplified deliberately rather than by accident.
+        normalize_town_runtime_floor(&mut grid, 12);
+        assert_ne!(
+            grid[5 * 32 + 7],
+            BEACON_BRIGHT_LIGHT_TILE,
+            "normalisation is expected to rewrite the marker byte"
+        );
+        assert_eq!(
+            harvest_location_beacon_sources(&grid),
+            [None, None],
+            "harvesting after normalisation finds nothing - which is why every \
+             floor-transition path must harvest before it"
+        );
+    }
+}

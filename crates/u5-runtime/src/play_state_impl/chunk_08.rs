@@ -831,9 +831,13 @@ impl PlayState {
         scene: Scene,
         next_floor: i8,
     ) -> io::Result<MoveOutcome> {
-        let next_grid = match load_town_runtime_floor(game_dir, scene, next_floor, self.clock.hour)
-        {
-            Ok(grid) => grid,
+        let (next_grid, beacon_sources) = match load_town_runtime_floor_with_beacon_sources(
+            game_dir,
+            scene,
+            next_floor,
+            self.clock.hour,
+        ) {
+            Ok(loaded) => loaded,
             Err(err) if err.kind() == io::ErrorKind::InvalidInput => {
                 self.message = "No connected floor in this slice.".to_string();
                 return Ok(MoveOutcome::Blocked);
@@ -843,8 +847,9 @@ impl PlayState {
         self.grid = next_grid;
         // `visibility.md §12.6`: a new location floor is fresh map setup —
         // clear both beacon positions and re-record up to two bright-light
-        // hits.
-        self.harvest_location_light_beacon();
+        // hits. Harvested from the RAW floor, because the runtime
+        // normalisation pass scrubs the marker byte the beacon looks for.
+        self.light_beacon.sources = beacon_sources;
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town {
             scene,

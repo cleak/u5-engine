@@ -2885,11 +2885,14 @@ impl PlayState {
     ) -> io::Result<Option<MoveOutcome>> {
         let scene = Scene::new(TOWN_ARREST_JAIL_SCENE)?;
         let floor = TOWN_ARREST_JAIL_FLOOR as i8;
-        self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        let (grid, beacon_sources) =
+            load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
+        self.grid = grid;
         // `visibility.md §12.6`: a new location floor is fresh map setup —
         // clear both beacon positions and re-record up to two bright-light
-        // hits.
-        self.harvest_location_light_beacon();
+        // hits. Harvested from the RAW floor, because the runtime
+        // normalisation pass scrubs the marker byte the beacon looks for.
+        self.light_beacon.sources = beacon_sources;
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = TOWN_ARREST_JAIL_X as usize;
@@ -3221,11 +3224,14 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE)?;
         let floor = 0i8;
-        self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        let (grid, beacon_sources) =
+            load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
+        self.grid = grid;
         // `visibility.md §12.6`: a new location floor is fresh map setup —
         // clear both beacon positions and re-record up to two bright-light
-        // hits.
-        self.harvest_location_light_beacon();
+        // hits. Harvested from the RAW floor, because the runtime
+        // normalisation pass scrubs the marker byte the beacon looks for.
+        self.light_beacon.sources = beacon_sources;
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = BLACKTHORN_CAPTIVE_CELL_X as usize;
@@ -3269,11 +3275,14 @@ impl PlayState {
         self.blackthorn_story.clear_jailed_party_slots();
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
         let floor = 0i8;
-        self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        let (grid, beacon_sources) =
+            load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
+        self.grid = grid;
         // `visibility.md §12.6`: a new location floor is fresh map setup —
         // clear both beacon positions and re-record up to two bright-light
-        // hits.
-        self.harvest_location_light_beacon();
+        // hits. Harvested from the RAW floor, because the runtime
+        // normalisation pass scrubs the marker byte the beacon looks for.
+        self.light_beacon.sources = beacon_sources;
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = BLACKTHORN_RESCUE_HANDOFF_X as usize;
