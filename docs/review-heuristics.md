@@ -133,6 +133,48 @@ the most common of the four, because a cross-reference does not read as a claim
 at all. It reads as context. "The same generator the shrine effect uses" slips
 past review that would have caught the same assertion stated plainly.
 
+## 4. Which of the things I just changed does this suite actually touch?
+
+A suite reports what it **ran** and is read as reporting what **exists**. Ask of
+any green integration run: *which of the changes I just made does this actually
+reach?* The answer is "none of them" more often than anyone guesses.
+
+Two features landed on 2026-08-23 and route-smoke's 493 cases reached **neither**
+— for two completely unrelated structural reasons:
+
+- **Outdoor creature ranged attacks.** No route ever brings a pirate ship or a
+  dragon into range, so the trigger cannot fire. This is *why the absence
+  survived*: the subsystem had ~80 unit tests on predicates nothing called, and
+  an integration suite that structurally could not notice.
+- **The moongate transit presentation.** The harness captures one frame per
+  script step and the transit is blocking, so it plays entirely *between* two
+  captures. Its one hash-visible side effect is discarded when the warp rebuilds
+  state from `PlayOptions`.
+
+In both cases the suite was **correct**. 493 cases really did pass. Nothing was
+wrong except the sentence about what that meant.
+
+### The general shape
+
+This is the same defect as the three checks above, arriving from a fourth
+direction. A measurement's boundary is invisible in its own output, so the
+reader supplies "everything" by default:
+
+| Artefact | Reported | Read as |
+|---|---|---|
+| A bounded survey without its bound | "found N" | "there are N" |
+| A bounded scan without its scope | "found zero" | "there are none" |
+| A suite | "493 passed" | "493 things work" |
+
+Every one of those artefacts is accurate. The failure is entirely in the
+sentence wrapped around it — which is why none of them can be caught by
+re-running the thing that produced it.
+
+**When you add a feature, add the route that reaches it**, or state plainly that
+the integration suite does not cover it. A feature whose only coverage is unit
+tests over its own helpers is in exactly the position the eviction cascade and
+the ranged attacks were in before they were found.
+
 ## Corollaries
 
 - **Internal consistency is not evidence.** Three mutually-agreeing tests that
