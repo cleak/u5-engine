@@ -54,13 +54,6 @@ pub fn parse_tlk_blob_fields_raw(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<Ve
         }
         out.insert(entry.npc_id, fields);
     }
-    if !out.contains_key(&1) {
-        if let Some(first) = entries.first() {
-            if let Some(fields) = out.get(&first.npc_id).cloned() {
-                out.insert(1, fields);
-            }
-        }
-    }
     Ok(out)
 }
 
@@ -94,51 +87,51 @@ pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
         }
         out.insert(entry.npc_id, fields);
     }
-    if !out.contains_key(&1) {
-        if let Some(first) = entries.first() {
-            if let Some(fields) = out.get(&first.npc_id).cloned() {
-                out.insert(1, fields);
-            }
-        }
-    }
     Ok(out)
 }
 
+/// `.TLK` header: a two-byte entry count followed by exactly that many
+/// four-byte `(npc id, blob offset)` rows.
+///
+/// There is **no sentinel row**. Verified by decoding the shipped files:
+/// `CASTLE.TLK` (40), `TOWNE.TLK` (48), `DWELLING.TLK` (15) and `KEEP.TLK`
+/// (32) each carry ids exactly `1..=count`, in order, with row one's offset
+/// equal to the header length - so every id, id 1 included, addresses its own
+/// blob.
+///
+/// This previously read row zero as a sentinel, required its id to be 1,
+/// skipped it, and then paired each row's *offset* with the *next* row's id.
+/// That shifted every NPC's dialogue by one id and dropped the last NPC
+/// entirely; the missing id 1 was then papered over by aliasing it onto the
+/// first surviving blob.
 fn parse_tlk_header_entries(bytes: &[u8]) -> io::Result<Vec<TlkHeaderEntry>> {
-    if bytes.len() < 4 {
+    if bytes.len() < 2 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "short TLK"));
     }
-    let count = u16_at(&bytes, 0) as usize;
-    if count < 1 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("TLK header count must include at least the sentinel, got {count}"),
-        ));
-    }
-    let header_len = count
-        .checked_mul(4)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "TLK header length overflows"))?;
-    if header_len > bytes.len() || header_len > 512 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("TLK header length {header_len} is outside the available fixed header window"),
-        ));
-    }
-    if count == 1 {
+    let count = u16_at(bytes, 0) as usize;
+    if count == 0 {
         return Ok(Vec::new());
     }
-    let sentinel_id = u16_at(bytes, 2);
-    if sentinel_id != 1 {
+    let header_len = 2usize
+        .checked_add(count.checked_mul(4).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "TLK header length overflows")
+        })?)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "TLK header length overflows"))?;
+    if header_len > bytes.len() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("TLK leading sentinel id must be 1, got {sentinel_id}"),
+            format!(
+                "TLK header length {header_len} exceeds the {} byte file",
+                bytes.len()
+            ),
         ));
     }
-    let mut entries = Vec::new();
-    let mut last_id = 1u16;
-    for k in 1..count {
-        let off = u16_at(bytes, 4 * k) as usize;
-        let id = u16_at(bytes, 4 * k + 2);
+
+    let mut entries = Vec::with_capacity(count);
+    let mut last_id = 0u16;
+    for row in 0..count {
+        let id = u16_at(bytes, 2 + 4 * row);
+        let off = u16_at(bytes, 4 + 4 * row) as usize;
         if id <= last_id {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,

@@ -683,17 +683,23 @@ impl PlayState {
         if self.active_objects.is_empty() {
             return None;
         }
+        // `encounters.md §9` / `active-objects.md §4`: the ordinary acquisition
+        // path searches only slots 1..=23. Slot 0 is the player and slots
+        // 24..=31 are reserved for setup paths outside the allocator, so
+        // handing those out here over-fills the table past the published
+        // density cap.
         if let Some(slot) = self
             .active_objects
             .iter()
             .enumerate()
             .skip(1)
+            .take(ACTIVE_OBJECT_ACQUISITION_LAST_SLOT)
             .find_map(|(slot, object)| object.is_empty().then_some(slot))
         {
             self.active_objects[slot] = object;
             return Some(slot);
         }
-        if self.active_objects.len() < OOL_SLOTS {
+        if self.active_objects.len() <= ACTIVE_OBJECT_ACQUISITION_LAST_SLOT {
             self.active_objects.push(object);
             return Some(self.active_objects.len() - 1);
         }

@@ -165,8 +165,17 @@ impl PlayState {
             TransportState::Carpet { .. } => {
                 nearby_support || self.player_can_land_on_foot(game_dir, current.0, current.1)?
             }
+            // `vehicles.md`: the skiff's extra X-Xit rejection is the bridge
+            // tile pair underfoot, not deep water. No water tile is rejected -
+            // deep water, water and shoals (0x01..=0x03) are exactly what a
+            // skiff sits on, so rejecting deep water blocked ordinary shoreline
+            // landings. The nearby-support half of the rule was correct.
             TransportState::Skiff { .. } => {
-                nearby_support && self.current_surface_tile() != Some(BRIT_DEEP_WATER_TILE)
+                nearby_support
+                    && !matches!(
+                        self.current_surface_tile(),
+                        Some(SKIFF_XIT_REJECTED_BRIDGE_FIRST..=SKIFF_XIT_REJECTED_BRIDGE_LAST)
+                    )
             }
             TransportState::Ship {
                 sails_hoisted: false,

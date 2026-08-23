@@ -680,3 +680,46 @@
         assert_eq!(soft_breaks, 654, "author-placed soft hyphens");
         assert_eq!(braces, 36, "paragraph-indent braces");
     }
+
+    #[test]
+    fn shipped_tlk_headers_have_no_sentinel_row() {
+        // The header is a two-byte count then exactly that many four-byte
+        // (npc id, blob offset) rows. Decoding the shipped files shows ids
+        // running exactly 1..=count with row one's offset equal to the header
+        // length, so there is no sentinel and id 1 addresses its own blob.
+        // The parser previously skipped row zero as a sentinel and paired each
+        // row's offset with the next row's id, shifting every NPC's dialogue.
+        let Some(dir) = local_clean_assets() else {
+            return;
+        };
+        for file in [
+            CASTLE_TLK_FILENAME,
+            TOWNE_TLK_FILENAME,
+            DWELLING_TLK_FILENAME,
+            KEEP_TLK_FILENAME,
+        ] {
+            let path = dir.join(file);
+            if !path.is_file() {
+                continue;
+            }
+            let bytes = std::fs::read(&path).expect("shipped TLK reads");
+            let count = usize::from(u16::from_le_bytes([bytes[0], bytes[1]]));
+            assert!(count > 0, "{file} declares no entries");
+            let dialogue = parse_tlk_bytes(&bytes)
+                .unwrap_or_else(|err| panic!("{file} parses with the shipped header shape: {err}"));
+            assert_eq!(dialogue.len(), count, "{file} yields one blob per header row");
+            let mut ids: Vec<u16> = dialogue.keys().copied().collect();
+            ids.sort_unstable();
+            assert_eq!(
+                ids,
+                (1..=count as u16).collect::<Vec<_>>(),
+                "{file} ids must be exactly 1..=count"
+            );
+            // Row one's offset is the first byte past the header.
+            assert_eq!(
+                u16::from_le_bytes([bytes[4], bytes[5]]) as usize,
+                2 + count * 4,
+                "{file} first blob starts at the header end"
+            );
+        }
+    }

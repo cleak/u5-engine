@@ -109,15 +109,6 @@ pub const fn monster_wound_sets_fleeing(
     }
 }
 
-/// `combat.md §8` Quickness player-dispatch gate. When the shared
-/// `Q` active-effect tag is live, the per-player command handler
-/// rolls a `0..=1` random value before reading input. A zero result
-/// consumes the ready dispatch without reading input; a one result
-/// continues normally.
-pub const fn quickness_skips_player_input(quickness_active: bool, roll_0_or_1: u8) -> bool {
-    quickness_active && roll_0_or_1 == 0
-}
-
 /// `combat.md §6` byte offsets inside the eight-byte combat actor
 /// descriptor. The decoded row order is HP/wound counter, base-step,
 /// flags/faction, owner/target/class, active-object back-reference,

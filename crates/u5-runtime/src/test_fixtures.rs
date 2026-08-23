@@ -596,7 +596,7 @@ pub fn debug_game_dir() -> PathBuf {
     // without this file.
     fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 0\n").unwrap();
     fs::write(dir.join("CASTLE.NPC"), vec![0; 2304]).unwrap();
-    fs::write(dir.join("CASTLE.TLK"), [1, 0, 0, 0]).unwrap();
+    fs::write(dir.join("CASTLE.TLK"), [0, 0]).unwrap();
     fs::write(dir.join("DUNGEON.DAT"), vec![0; DUNGEON_DAT_LEN]).unwrap();
     fs::write(dir.join("UNDER.DAT"), vec![5; UNDER_DAT_LEN]).unwrap();
     // `systems/intro.md §3` step 2: the intro pre-flourish phase

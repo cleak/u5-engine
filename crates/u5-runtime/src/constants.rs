@@ -1324,6 +1324,15 @@ pub const DAWN_DUSK_LIGHT: [u8; 6] = [FULL_DARKNESS, 5, 10, 20, 34, FULL_DAYLIGH
 /// adding a field only happens in one place.
 pub const OOL_RECORD_LEN: usize = crate::ACTIVE_OBJECT_FIELD_DEP3 + 1;
 pub const OOL_SLOTS: usize = 32;
+/// `encounters.md §9` / `active-objects.md §4`: the ordinary acquisition path
+/// searches only slots one through twenty-three. Slot zero is the player and
+/// slots twenty-four through thirty-one are reserved for setup paths outside
+/// the allocator, so spawner-driven density tops out at twenty-three.
+pub const ACTIVE_OBJECT_ACQUISITION_LAST_SLOT: usize = 23;
+/// `vehicles.md`: the two bridge tile ids a skiff's X-Xit rejects when they
+/// sit directly under the party. `LOOK2.DAT` names them "a bridge".
+pub const SKIFF_XIT_REJECTED_BRIDGE_FIRST: u8 = 0x6A;
+pub const SKIFF_XIT_REJECTED_BRIDGE_LAST: u8 = 0x6B;
 pub const OOL_PLANE_LEN: usize = OOL_RECORD_LEN * OOL_SLOTS;
 /// `formats/saved-gam.md §11`: SAVED.OOL packs both per-plane
 /// object-overlay mirrors — surface (first plane) and underworld

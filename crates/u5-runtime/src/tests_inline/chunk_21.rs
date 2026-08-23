@@ -1144,14 +1144,20 @@
     }
 
     #[test]
-    fn parsed_tlk_aliases_sentinel_id_one_to_first_real_blob() {
-        let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
-            2,
-            &["Ada", "a test smith", "Greetings", "I mend gear", "Bye"],
-        )]))
+    fn parsed_tlk_gives_every_id_its_own_blob_including_id_one() {
+        // There is no sentinel row and no id-1 alias: each header row's id
+        // addresses its own blob. Confirmed against the shipped files, whose
+        // ids run exactly 1..=count.
+        let dialogue = parse_tlk_bytes(&tlk_bytes(&[
+            (1, &["Ada", "a test smith", "Greetings", "I mend gear", "Bye"]),
+            (2, &["Bry", "a test baker", "Hello", "I bake bread", "Bye"]),
+        ]))
         .unwrap();
 
-        assert_eq!(dialogue.get(&1), dialogue.get(&2));
+        assert_eq!(dialogue.len(), 2);
+        assert_eq!(dialogue[&1][0], "Ada");
+        assert_eq!(dialogue[&2][0], "Bry");
+        assert_ne!(dialogue.get(&1), dialogue.get(&2));
     }
 
     #[test]
@@ -1567,9 +1573,11 @@
     }
 
     #[test]
-    fn town_talk_dialog_id_one_uses_sentinel_alias() {
+    fn town_talk_dialog_id_one_reads_its_own_blob() {
+        // Dialog id 1 is an ordinary NPC with its own blob, not an alias onto
+        // the first surviving entry.
         let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
-            2,
+            1,
             &["Ada", "a test smith", "Greetings", "I mend gear", "Bye"],
         )]))
         .unwrap();
@@ -1688,16 +1696,13 @@
 
     #[test]
     fn parse_tlk_blob_fields_raw_round_trips_a_minimal_blob() {
-        // Synthetic minimal TLK: header count=2 (so 1 live NPC) at offset 0.
-        // Header entry layout: 2 bytes blob_offset, 2 bytes npc_id.
-        // Slot 0 is the sentinel; slot 1 is the live NPC. The actual file
-        // starts with the count word, then `count - 1` header entries.
-        let blob_offset: u16 = 8;
+        // Synthetic minimal TLK in the shipped shape: a two-byte count then
+        // that many four-byte `(npc id, blob offset)` rows. No sentinel.
+        let blob_offset: u16 = 6;
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(&2u16.to_le_bytes()); // count
-        bytes.extend_from_slice(&1u16.to_le_bytes()); // leading sentinel npc id
-        bytes.extend_from_slice(&blob_offset.to_le_bytes()); // blob offset for npc 1
+        bytes.extend_from_slice(&1u16.to_le_bytes()); // count
         bytes.extend_from_slice(&0x0042u16.to_le_bytes()); // npc id 0x42
+        bytes.extend_from_slice(&blob_offset.to_le_bytes()); // its blob offset
         // Two fields: "Ada\0" then "smith\0" (XOR-encoded).
         let xor = 0x80u8;
         let field_a = b"Ada";
@@ -1728,18 +1733,14 @@
 
     #[test]
     fn parse_tlk_rejects_malformed_headers() {
-        assert!(parse_tlk_bytes(&[0, 0, 0]).is_err());
-
-        let mut empty_sentinel_only = Vec::new();
-        empty_sentinel_only.extend_from_slice(&1u16.to_le_bytes());
-        empty_sentinel_only.extend_from_slice(&1u16.to_le_bytes());
-        assert!(parse_tlk_bytes(&empty_sentinel_only).unwrap().is_empty());
-        assert!(parse_tlk_bytes(&[1, 0, 0, 0]).unwrap().is_empty());
-
-        let mut zero_count = Vec::new();
-        zero_count.extend_from_slice(&0u16.to_le_bytes());
-        zero_count.extend_from_slice(&1u16.to_le_bytes());
-        assert!(parse_tlk_bytes(&zero_count).is_err());
+        // A zero count is a legal empty file; a count that overruns the file
+        // is not.
+        assert!(parse_tlk_bytes(&[0, 0]).unwrap().is_empty());
+        let mut count_overruns = Vec::new();
+        count_overruns.extend_from_slice(&1u16.to_le_bytes());
+        count_overruns.extend_from_slice(&1u16.to_le_bytes());
+        assert!(parse_tlk_bytes(&count_overruns).is_err());
+        assert!(parse_tlk_bytes(&[0]).is_err());
 
         let mut bad_sentinel = Vec::new();
         bad_sentinel.extend_from_slice(&2u16.to_le_bytes());
@@ -1890,11 +1891,12 @@
             bytes.push(0);
         }
 
-        let mut bytes = vec![0; 8];
-        bytes[0..2].copy_from_slice(&2u16.to_le_bytes());
-        bytes[2..4].copy_from_slice(&1u16.to_le_bytes());
-        bytes[4..6].copy_from_slice(&8u16.to_le_bytes());
-        bytes[6..8].copy_from_slice(&2u16.to_le_bytes());
+        // Shipped header shape: count word, then one (npc id, blob offset)
+        // row. No sentinel.
+        let mut bytes = vec![0; 6];
+        bytes[0..2].copy_from_slice(&1u16.to_le_bytes());
+        bytes[2..4].copy_from_slice(&2u16.to_le_bytes());
+        bytes[4..6].copy_from_slice(&6u16.to_le_bytes());
         for field in ["Ada", "a test smith", "Greetings", "I mend gear", "Bye", "GIFT"] {
             push_text(&mut bytes, field);
         }
@@ -3930,11 +3932,12 @@
             bytes.push(0);
         }
 
-        let mut bytes = vec![0; 8];
-        bytes[0..2].copy_from_slice(&2u16.to_le_bytes());
-        bytes[2..4].copy_from_slice(&1u16.to_le_bytes());
-        bytes[4..6].copy_from_slice(&8u16.to_le_bytes());
-        bytes[6..8].copy_from_slice(&2u16.to_le_bytes());
+        // Shipped header shape: count word, then one (npc id, blob offset)
+        // row. No sentinel.
+        let mut bytes = vec![0; 6];
+        bytes[0..2].copy_from_slice(&1u16.to_le_bytes());
+        bytes[2..4].copy_from_slice(&2u16.to_le_bytes());
+        bytes[4..6].copy_from_slice(&6u16.to_le_bytes());
         push_text(&mut bytes, "Ada");
         push_text(&mut bytes, "a test speaker");
         bytes.push(0x01);

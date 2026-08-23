@@ -9256,39 +9256,20 @@
     }
 
     #[test]
-    fn combat_player_command_quickness_can_consume_dispatch_before_input() {
+    fn combat_player_command_ignores_quickness_entirely() {
+        // `combat.md` section 8: the player's command handler reads only the
+        // Negate Magic tag. Quickness must never consume a player dispatch -
+        // it makes hostiles act about half as often, it does not turn the
+        // player's own turn into a coin flip. The single gate lives at the
+        // head of the automatic actor driver.
         let mut state = combat_player_command_state(8, 5);
-        assert_eq!(state.combat_quickness_dispatch_roll(0), 1);
-        assert_eq!(state.prng_state, 0);
-
         state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
         state.active_effect_counter = 3;
-        let mut expected_prng = state.prng_state;
-        let quickness_roll = u5_prng_range_u16(&mut expected_prng, 0, 1) as u8;
-        assert_eq!(state.combat_quickness_dispatch_roll(0), quickness_roll);
-        assert_eq!(state.prng_state, expected_prng);
-
-        let application = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('Q'), 0)
-            .unwrap();
-
-        assert_eq!(
-            application,
-            CombatPlayerCommandApplication {
-                actor_slot: 0,
-                input: CombatPlayerCommandInput::Key('Q'),
-                action: CombatPlayerCommandAction::QuicknessSkipped,
-                weapon_attack: None,
-                ring_pass: None,
-                control_after: CombatRoundLoopControl::ContinueActorWalk,
-            }
-        );
-        assert!(state.combat_active);
-        assert!(state.party[0].living());
 
         let quit = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('Q'), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('Q'))
             .unwrap();
+
         assert_eq!(quit.action, CombatPlayerCommandAction::QuitDefeat);
         assert_eq!(
             quit.control_after,
@@ -9302,7 +9283,7 @@
         move_state.visibility_dirty = false;
 
         let moved = move_state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Direction(2), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Direction(2))
             .unwrap();
 
         assert_eq!(
@@ -9331,7 +9312,6 @@
             .apply_combat_player_command_with_inputs(
                 0,
                 CombatPlayerCommandInput::AttackDirection(2),
-                1,
             )
             .unwrap();
 
@@ -9357,7 +9337,7 @@
         state.active_objects[0].x = 10;
 
         let application = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Direction(2), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Direction(2))
             .unwrap();
 
         assert_eq!(
@@ -9387,7 +9367,6 @@
             .apply_combat_player_command_with_attack_inputs(
                 0,
                 CombatPlayerCommandInput::AttackDirection(2),
-                1,
                 CombatPlayerWeaponAttackInputs {
                     damage_roll: 0,
                     forced_hit: Some(true),
@@ -9433,7 +9412,6 @@
             .apply_combat_player_command_with_attack_inputs(
                 0,
                 CombatPlayerCommandInput::AttackDirection(2),
-                1,
                 CombatPlayerWeaponAttackInputs {
                     damage_roll: 0,
                     forced_hit: Some(true),
@@ -9465,7 +9443,7 @@
         assert_ne!(vanish_roll, 0);
 
         let application = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
             .unwrap();
 
         assert_eq!(
@@ -9489,7 +9467,7 @@
         let mut state = combat_player_command_state(8, 5);
 
         let selected = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('1'), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('1'))
             .unwrap();
         assert_eq!(
             selected.action,
@@ -9500,7 +9478,7 @@
         assert_eq!(state.active_player, Some(0));
 
         let pass = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
             .unwrap();
         assert_eq!(
             pass.action,
@@ -9512,7 +9490,7 @@
         );
 
         let get = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('G'), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('G'))
             .unwrap();
         assert_eq!(
             get.action,
@@ -9523,7 +9501,7 @@
         );
 
         let blocked_xit = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('X'), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('X'))
             .unwrap();
         assert_eq!(
             blocked_xit.action,
@@ -9533,7 +9511,7 @@
 
         state.combat_actors[8].mark_dead();
         let allowed_xit = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('X'), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('X'))
             .unwrap();
         assert_eq!(
             allowed_xit.action,
@@ -9545,7 +9523,7 @@
         );
 
         let invalid_direction = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Direction(5), 1)
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Direction(5))
             .unwrap();
         assert_eq!(
             invalid_direction.action,
@@ -10060,7 +10038,7 @@
     }
 
     #[test]
-    fn combat_input_dispatch_quickness_roll_can_consume_ready_actor() {
+    fn combat_input_dispatch_quickness_never_consumes_the_ready_player() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(8, 5);
         state.turn = 0;
@@ -10072,8 +10050,8 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Quickness!\nGiant Rat moved to (7, 5).");
-        assert!(state.combat_active);
+        assert_eq!(state.message, "Combat abandoned.");
+        assert!(!state.combat_active, "the quit key must end the fight");
     }
 
     #[test]
@@ -10157,7 +10135,7 @@
     }
 
     #[test]
-    fn combat_input_dispatch_quickness_can_consume_cast_before_resources() {
+    fn combat_input_dispatch_quickness_does_not_consume_a_player_cast() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(8, 5);
         state.party[0].mana = INVISIBILITY_COST;
@@ -10172,11 +10150,57 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Quickness!\nGiant Rat moved to (7, 5).");
-        assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, INVISIBILITY_COST);
-        assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
+        assert_eq!(state.message, "Invisibility!");
+        assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert!(state.combat_actors[0].is_hidden_or_unrevealed());
         assert!(state.combat_active);
+    }
+
+    #[test]
+    fn combat_actor_slot_dispatch_quickness_consumes_an_automatic_actor() {
+        // `combat.md` section 8: the engine's single Quickness gate sits at
+        // the head of the automatic actor driver, so a self-acting slot
+        // forfeits a dispatch when the roll comes up zero. The party slots and
+        // any controlled actor never reach it.
+        let mut state = combat_ai_turn_state(8, 5);
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
+        let position_before = (state.combat_actors[8].x, state.combat_actors[8].y);
+
+        let mut skipped = 0usize;
+        let mut acted = 0usize;
+        for _ in 0..16 {
+            let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+                8, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true,
+                &[1, 2, 3, 4], &[],
+            );
+            match application {
+                CombatActorSlotDispatchApplication::Slot { action, .. } => match action {
+                    CombatActorDispatchAction::QuicknessSkipped => skipped += 1,
+                    CombatActorDispatchAction::MonsterAi { .. } => acted += 1,
+                    _ => {}
+                },
+                CombatActorSlotDispatchApplication::EndOfRound { .. } => {}
+            }
+        }
+        assert!(skipped > 0, "a live Quickness effect must consume dispatches");
+        let _ = (acted, position_before);
+
+        // With no Quickness tag the same slot always takes its AI turn.
+        let mut state = combat_ai_turn_state(8, 5);
+        for _ in 0..8 {
+            let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+                8, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true,
+                &[1, 2, 3, 4], &[],
+            );
+            if let CombatActorSlotDispatchApplication::Slot { action, .. } = application {
+                assert!(
+                    !matches!(action, CombatActorDispatchAction::QuicknessSkipped),
+                    "no Quickness tag means no Quickness gate"
+                );
+            }
+        }
     }
 
     #[test]

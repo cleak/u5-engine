@@ -87,12 +87,9 @@ pub fn run_combat_scenario(
         }
 
         let command_input = scenario_command_input(input);
-        let quickness_roll = state.combat_quickness_dispatch_roll(actor_slot);
-        let Some(application) = state.apply_combat_player_command_with_inputs(
-            actor_slot,
-            command_input,
-            quickness_roll,
-        ) else {
+        let Some(application) =
+            state.apply_combat_player_command_with_inputs(actor_slot, command_input)
+        else {
             result.steps.push(CombatScenarioStep::NoActiveCombatant);
             break;
         };

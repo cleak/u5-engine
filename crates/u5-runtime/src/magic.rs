@@ -92,17 +92,28 @@ pub const fn spell_min_caster_level(circle: u8) -> u8 {
 /// `magic.md §9` per-spell scene allow-mask bits. Each spell carries
 /// a four-bit mask; the dispatcher tests the active scene's bit and
 /// rejects with `Not here!` when the bit is clear.
-pub const SPELL_SCENE_BIT_DUNGEON: u8 = 0x01;
-pub const SPELL_SCENE_BIT_COMBAT: u8 = 0x02;
+///
+/// The combat and dungeon bits were transposed here until `magic.md §9`
+/// published the correction. The corrected legend is confirmed by the shipped
+/// mask values themselves: the two dungeon-only level-change spells (Up, Down)
+/// carry `0x02` alone, while combat-only attack spells such as Magic Missile,
+/// Repel Undead and Kill carry `0x01` alone. The per-spell `C`/`D`/`I`/`O`
+/// labels in `catalogs/spell-list.md` were correct throughout; only the bit
+/// legend was wrong.
+///
+/// No production caller reads this mask yet - nothing supplies an `allow_mask`
+/// - so the transposition was latent rather than a live bug.
+pub const SPELL_SCENE_BIT_COMBAT: u8 = 0x01;
+pub const SPELL_SCENE_BIT_DUNGEON: u8 = 0x02;
 pub const SPELL_SCENE_BIT_INDOOR: u8 = 0x04;
 pub const SPELL_SCENE_BIT_OVERWORLD: u8 = 0x08;
 
 /// `magic.md §9` scene-class enum aligned with the allow-mask bits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpellSceneClass {
-    /// `0x01` — dungeon scene.
+    /// `0x02` — dungeon scene.
     Dungeon,
-    /// `0x02` — combat-class scene (the temporary 0xFF marker).
+    /// `0x01` — combat-class scene (the temporary 0xFF marker).
     Combat,
     /// `0x04` — indoor / town-mode scene.
     Indoor,
