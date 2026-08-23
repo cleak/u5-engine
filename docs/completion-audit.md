@@ -426,18 +426,31 @@ a phase leaves a column of the band unpublished — not contract gates.
 
 These are honest gaps: the contract is published and the engine does not do it.
 
-Three entries left this list on 2026-08-23 — `visibility.md §12.6`'s night
-beacon, `overworld.md §9.2`'s blocking transit, and `active-objects.md §8`'s
-outdoor walker phase — all now implemented. What remains:
+**Every published contract is now implemented.** Four entries left this list on
+2026-08-23 — `visibility.md §12.6`'s night beacon, `overworld.md §9.2`'s blocking
+transit, `active-objects.md §8`'s outdoor walker phase, and `overworld.md §6.2`'s
+ranged-attack payload, the last one to close (`cleak/u5-spec#90`).
 
-- **`overworld.md §6.2`'s ranged-attack payload — partially.** The shared traced
-  line, both triggers and the walker ordering are implemented. The **payload**
-  refuses at one named seam citing `cleak/u5-spec#90`, which is now answered and
-  is being built: it is transport-dependent and differs *in kind* — aboard a
-  frigate the hull absorbs the impact and no member loses hit points, otherwise a
-  whole-party pass rolls **independently per living member**. Also fixed there:
-  the serpent/dragon trigger was one-in-**seven** against a published
-  one-in-eight, and nothing called it, so the wrong value passed its own test.
+`§6.2`'s payload is worth recording because it could not have been guessed: it is
+**transport-dependent and differs in kind** — aboard a frigate the hull absorbs
+the impact and no party member loses hit points, otherwise a whole-party pass
+rolls **independently per living member**, one roll each rather than one shared.
+It does not route through the combat damage-and-status resolver and carries no
+attacker sentinel. Two bugs fell out alongside it: the serpent/dragon trigger was
+one-in-**seven** against a published one-in-eight (nothing called it, so the wrong
+value passed its own test), and `0xE0..0xE3` was treated as a sea-serpent family
+when it is the **Sand Trap** — the sea serpent is `0x88`.
+
+What remains is not a contract we have failed to build:
+
+- **`visibility.md §12.6`'s bearing stencil offsets** are unpublished
+  (`cleak/u5-spec#92`, open). The beacon works: the offsets are located
+  **structurally in the shipped `DATA.OVL` at load time**, validated only against
+  published facts, and the shipped image yields exactly one candidate — still
+  unique at a 90° heading tolerance, so the identification is not tuned to its
+  own constraint. This is a stopgap, not a guess: when the offsets publish, the
+  loader becomes an anchor to citable text. One asymmetry to remove then — an
+  image whose table moved would silently light nothing rather than failing loudly.
 
 - **`main-loop.md §4`'s outer scene router.** `OuterLoopFlags` and `scene_route`
   model §4's dispatch and nothing constructs either, because the clean engine has
