@@ -4,19 +4,22 @@ This audit maps each public-spec deliverable (the systems and formats published
 in `C:\Projects\Rust\u5-clean\u5-spec`) to concrete engine evidence
 (`crates/u5-runtime`, `crates/u5-tui`, `crates/u5-bevy`) and to test coverage.
 
-Created on 2026-05-19; last refreshed on 2026-08-22 at `d4fc579`, after the
-six-package presentation-parity pass, the `cleak/u5-spec` sweep that closed
-every issue including our own `#78`-`#83`, and the work implemented from those
-answers.
+Created on 2026-05-19; last refreshed on 2026-08-23 at `9e437d5`, after the
+audit-and-repair pass that implemented `#72` and `#73`, retracted three
+invented or misattributed models, and wired two published mechanisms that had
+been fully modelled and never called.
 
-**Read spec contracts from the GitHub issues, not from the local checkout.**
+**Read spec contracts from GitHub, not from the local checkout** — the issues,
+and document text through
+`gh api -H "Accept: application/vnd.github.raw" repos/cleak/u5-spec/contents/<path>`.
 `C:\Projects\Rust\u5-clean\u5-spec` is read-only from this workspace and is
-stale at `9a898d1`, behind spec head `8192d67` and several of its retractions
+stale at `9a898d1`, many commits and several retractions behind spec head
 (notably `#42` local light, `#53` reveal transitions, `#54` Return-to-View,
 `#65`/`#66`/`#67` title sequence, `#69` doorway text, `#70` font metrics,
-`#80` floor pages, `#82` endgame/chargen). The spec queue is now empty - 83
-closed, 0 open - and head has moved several times past `9a898d1`, so an audit
-checked against the local files would disagree with this document.
+`#80` floor pages, `#82` endgame/chargen, and `#85`-`#88` on moongate transit,
+combat `§7`, animation provenance and the U4 seed pair). The spec queue is
+empty — **88 closed, 0 open** — so an audit checked against the local files
+would disagree with this document.
 
 This document satisfies the completion criterion in `TODO.md`:
 
@@ -73,106 +76,54 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#60` | Look/View overlay pixel renderer tables and dungeon minimap exact glyph/flood presentation | Gameplay-depth View and minimap behavior is implemented from `systems/view.md`; exact per-class 4x4 glyph pixels, source-bank/tint choices, chunk-map pixels, and dungeon minimap renderer details remain clean-spec questions |
 | `cleak/u5-spec#61` | Town free-roaming active-object walker exact rules | Implemented from the latest answer: byte/floor eligibility, 50% gate, four-neighbor `0xA2`/`0x43` blocker gate, query-`0x10` destination classifier, occupancy checks, X-facing writes, Y-facing preservation, and visibility dirties on success |
 | `cleak/u5-spec#62` | Live shop-dialogue record selection and window pacing | Implemented where published: shared `SHOPPE.DAT` selection timing, Talk-to-shop inherited window-2 handoff, prompt window separation, and inn Pickup window-1 register geometry; a fresh follow-up asks for the live per-state transcript/wait/clear table needed to replace modal summaries frame-accurately |
+| `cleak/u5-spec#72` | Acknowledgements screen asset and presentation | Implemented (`6db6135`). `§11.1` settles the asset as three `STARTSC` records with every credit line drawn into the bitmap; `§11.2` settles the presentation as compose / rise / part / keypress / close / sink, and **withdraws in full** the "bottom-up entry wipe, top-down exit wipe with horizontal slabs" model this engine carried. Nothing typesets the credits, so there is no text to author |
+| `cleak/u5-spec#73` | Ultima IV transfer preview screen | Implemented (`f3ecfd1`). `§6.1`-`§6.6` publish the window rectangles, prompt-frame cells, both panel geometries, the eight-row field-label column, the pages, the stage machine and the finish. `§6` has no double buffering and no page swap, so the screen is one persistent surface edited in place. `§6.4`'s insert-disk block is dead code in the shipped build and is not drawn |
+| `cleak/u5-spec#84` | Dungeon billboard slot-to-role mapping | Implemented; the corridor draws from its billboard banks and the banks moved onto the atlas. The self-check is scoped to `DNG1` because the mapping is not bank-invariant |
+| `cleak/u5-spec#85` | Moongate transit animation distinct from the static gate tile | Answered. Gate *presence* is the `§9.1` sixteen-step composed-frame model and is implemented; the `§9.2` blocking transit presentation is **not** (see "Published but not implemented") |
+| `cleak/u5-spec#86` | Retract `combat.md §7`'s post-round maintenance pass | Retracted upstream and removed here (`60ec07c`) |
+| `cleak/u5-spec#87` | Clean-room: `animation.md` provenance cited private paths | Resolved on the spec side. No engine change; recorded because a correction pass introduced the breach, which is the failure mode `docs/review-heuristics.md` warns about |
+| `cleak/u5-spec#88` | `PARTY.SAV` field layout and the U5 seed filenames | Implemented (`ee0dc53`). The seed pair is `INIT.GAM`/`INIT.OOL`; `BRIT.GAM` is withdrawn and **does not ship at all**, so the old constant named a file that is never present |
 
 Where an audit row references a pending issue, the engine carries a clean
 implementation or conservative placeholder that avoids private-derived guesses
-until the public spec publishes the missing rule.
+until the public spec publishes the missing rule. No such row remains: the
+queue is empty.
 
 ## Verification Baseline
 
-Runtime, TUI, route-smoke, and visual-route results refreshed alongside this
-audit on 2026-05-24; Bevy frame-suite evidence remains from the latest display
-audit:
+Re-measured on 2026-08-23 at `9e437d5`. Asset-backed runs used a **scratch copy**
+of the asset directory, never `C:\Games\U5-Clean` itself: the install is a
+read-only clean-room input, the suite paths take a directory they both read and
+write, and it has been corrupted that way before. The engine now refuses a write
+destination that resolves to `DEFAULT_GAME_DIR`, and `copy_asset_writable`
+clears the read-only bit Windows `fs::copy` propagates into scratch copies.
 
-- `cargo test -p u5-runtime` — 2634 tests pass, including stats-panel
-  combat-row inverse-video style coverage.
-- `cargo test -p u5-runtime published_location --tests` - 6 focused tests pass,
-  including exhaustive entry and return coverage for all forty public
-  world-location rows without sidecars.
-- `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
-  smoke for empty-save Journey Onward, deterministic Create Character followed
-  by `--from-save --play-script`, intro-driven U4 transfer commit, and a
-  confirmed `QY` save/reload round trip.
-- `cargo test -p u5-bevy` — 67 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 493 scripted cases pass,
-  The same run can now write a sanitized 2183-frame initial/per-command/final
-  route manifest that compares cleanly against itself with
-  `--compare-frame-manifests`, including TLK-backed reserved-word and no-match
-  conversation routes across
-  all 32 named-location scenes in the town, dwelling, castle, and keep
-  dialogue families,
-  including all 40 published stock world-location entry rows and four
-  extended-session cases that exercise 5–12 commands across
-  Britannia exploration, castle walking, dungeon turning/search, and
-  multi-round Doom combat to prove the engine sustains long playable sessions,
-  save/reload checkpoints across transport, plane transitions, fixed hidden
-  treasure, horse-trader delivery, ship X-it/skiff, dungeon ladders, and
-  dungeon exits,
-  plus active shop/modal flows, Blackthorn audience correct/wrong and
-  rescue-refuge routes, fixed hidden-treasure zero-key/single-use/daily/stacked routes,
-  PRV Gate Travel success/refusal paths, saved-slot natural moongate live-entry
-  paths, public #31 native shard/Eternal Flame destruction routes, public #32 Britannia/Doom Word-of-Power seal opening, public #15
-  accepted inn-rest pricing, public #44 sleeping/praying Talk refusals, public
-  #48 Blink ray landing, all-cardinal directed Sleep/Poison Wind/Death Wind/Flame Wind
-  combat casts, combat field marker casts/removal, combat utility fallback casts, targeted Magic Missile/Tremor/Repel
-  Undead/Charm/Polymorph/Clone casts, Conjure/Swarm/Summon Daemon routes,
-  special death-marker Kill routes, combat-entry party descriptor routes, and combat terminal cleanup routes,
-  #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest,
-  completed long-camp recovery, and hourly ring tick, public #13
-  all-nine-tavern lore selector routes plus sage paid-success/short-funds paths, public #41
-  all nine arms-shop first-stock purchases and terminator-letter refusals, public #28
-  all-stable horse-trader purchases, accepted shipwright frigate/skiff dock
-  deliveries, save/reload durability for queued shipwright deliveries before
-  town exit, native town walk-on stair up/down/crossing routes,
-  town attack/alarm/arrest routes, and
-  ship broadside fire, horse boarding, dungeon torch ignition, Mix/Ready/New
-  Order command workflow, combat-active Board/Enter/Fire/Hole-up/Ignite/Mix/New
-  Order/Talk refusal rows, combat-active digit selection/clear, Escape abort,
-  Ctrl-S music toggle, lowercase direct movement, Horse and non-horse
-  wishing-well branches, public #56 terminal endgame missing-box jitter and full
-  victory cinematic routes, the public Britannia chasm fall route, the forced
-  whirlpool Underworld branch, and fixed narrative gate open/ordained-block
-  routes through real asset-backed play states.
-- `cargo run -- --save-frame-suite target\codex-view-class-gallery-frame-suite C:\Games\U5-Clean`
-  — 16 PNGs, every frame nonblank with stable hashes, including gem/Peer/X-Ray
-  surface View class galleries.
-- `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-view-class-gallery-visual-frame-suite C:\Games\U5-Clean` — 163 Bevy-owned PNGs,
-  every frame nonblank with a sanitized manifest, including all sixteen public
-  `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls,
-  all one hundred twelve public `DUNGEON.CBT` dungeon-room terrain records with
-  source scanning disabled, prompt/modal frames for world, town, dungeon,
-  combat, and Talk, surface View class galleries for gem/Peer/X-Ray modes, plus
-  combat status-highlight and death/field/cursor marker galleries.
-- `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 1780 Bevy-owned per-step route
-  PNGs, every frame nonblank with a sanitized manifest, including all 40
-  published stock world-location entry rows, TLK-backed reserved-word
-  conversation routes across all 32 named-location scenes, exact
-  TUI-label ship/castle/shop/dungeon/Doom/combat-field/terrain-exit aliases,
-  light-decay, all nine public arms-shop first-stock purchases and terminator
-  refusals, horse-trader purchases, accepted healer cure/heal/resurrect, all four public shipwright
-  delivery-row purchases, spell routes for Locate, In Lor/Light/Open, restore, active effects,
-  all-cardinal directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts, targeted
-  Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone, Conjure/Swarm/Summon
-  Daemon, dungeon levels, dungeon fields/dispel, dungeon Open chest, utility
-  item use, Gate Travel success/refusal, natural moongate live-entry, chasm
-  fall, forced whirlpool Underworld branch, fixed narrative gate open/ordained-block
-  routes, H-Hole-up rest, save/refusal, castle dispatcher/workflow overlays,
-  dungeon SJOG/refusal paths, TUI-parity world/town/dungeon movement/pass/look/view/status,
-  Minoc daily fixed-hidden, hourly status/ring, native stair, dungeon
-  rest/ladder/exit/search, active-monster ambush routes, fixed hidden-treasure, Blackthorn
-  audience/rescue routes, debug-enter town/dungeon transitions, ship X-it/skiff
-  and hoisted-sail movement routes, extended Britannia/castle/dungeon routes,
-  Shadowlord town entry/Yell/Stonegate, all three native shard vanquish paths,
-  public Word-of-Power seal opening paths, public #56 endgame class-tableau
-  restoration, broad Doom combat command/pass routes covering digit
-  selection, direct movement, command refusals/prompts, Ready, Yell, and X-it,
-  and real-key Bevy keyboard routes for movement, pass, Ctrl-S music toggle,
-  save refusal, conversation/shrine/shop line buffers, direction prompts, Yell
-  text, Ready/Z-stats modal pickers, U-Use, M-Mix, H-Hole-up/Rest watch, New Order, Backspace, Enter, and prompt-safe Escape.
-- `cargo fmt -- --check` passed, and `git diff --check` reported only
-  CRLF-normalization warnings.
+| Command | Result |
+|---|---|
+| `cargo test -p u5-runtime --lib` | 2902 pass |
+| `cargo test -p u5-bevy` | 170 pass |
+| `cargo test -p u5-tui --features visual` | 96 pass (11 + 51 + 34) |
+| `cargo fmt --all -- --check` | clean |
+| `cargo clippy --workspace --all-targets` | **zero errors**; style warnings remain and are not gated |
+| `--route-smoke <asset-copy>` | all **493** scripted cases pass |
+| `--visual-frame-suite <asset-copy>` | **193** PNGs plus a sanitized manifest |
+| `--visual-route-suite <asset-copy>` | **1814** PNGs plus a sanitized manifest |
+
+The route-smoke corpus spans world, town, dungeon, combat, endgame and shop
+play: all 40 published stock world-location entry rows, TLK-backed reserved-word
+and no-match conversation routes across all 32 named-location scenes,
+save/reload checkpoints for transport and transition continuity, the full
+spell/combat command matrix, all nine public arms-shop stock rows, the nine
+tavern lore selectors, the four shipwright delivery rows, the three native shard
+vanquish routes, the Word-of-Power seals, and the terminal endgame through the
+full victory cinematic. Its validator requires `cinematic_is_finished()`, so an
+ending that stops short fails the case.
+
+The visual route suite's 1814 frames are all nonblank except exactly one, which
+is black by contract: the `endgame.md §7.1` fade between the throne tableau and
+the first `END.DAT` window. The suite also rejects any scripted step that leaves
+the frame unchanged, outside the explicit terminal-endgame and Doom
+sustained-pass hold frames.
 
 ## Systems
 
@@ -218,11 +169,11 @@ Notes:
 | §2 Reagents | `magic.rs::REAGENT_*`, `play_state_struct.rs` counters | reagent stock tests | Implemented |
 | §3 Rune vocabulary | `magic.rs::RUNE_*`, spell-name parser | spell-name parse tests | Implemented |
 | §4 Eight circles, 48 spells | `magic.rs::spell_circle_for`, `spell_mana_cost`, parser table | spell-cost tests | Implemented |
-| §5 C-Cast | `play_state_impl/chunk_04.rs` cast handler, `magic.rs::cast_dispatcher_gate` | cast scene-gate tests in `chunk_17.rs`, `chunk_18.rs` | Implemented |
+| §5 C-Cast | `play_state_impl/chunk_04.rs` cast handler, `magic.rs::cast_dispatcher_gate` | cast scene-gate tests in `chunk_17.rs`, `chunk_18.rs` | Implemented. The live `cast_spell_resource_gate` now routes through `cast_dispatcher_gate` rather than duplicating it |
 | §6 M-Mix | `play_state_impl/chunk_04.rs` mix handler; `magic.rs::SPELL_SELECTOR_IGNORED_LETTERS` (J/O) | mix recipe tests | Implemented |
-| §7 Prerequisites | `magic.rs::cast_dispatcher_gate` (`CastGateOutcome`) | gate tests | Implemented |
+| §7 Prerequisites | `magic.rs::cast_dispatcher_gate` (`CastGateOutcome`), `SPELL_SCENE_BIT_*`, `SpellSceneClass`, `spell_scene_class_for_scene_byte` | gate tests; all 48 mask rows checked against the published `Allowed` column | Implemented, and **newly enforced** (`2e76b82`). The four-bit scene allow mask is applied ahead of charge consumption with `Not here!`. The crate previously modelled the contract twice and disagreed with itself: `constants.rs` carried the transposed legend `catalogs/spell-list.md §4` withdraws, and `cast_dispatcher_gate` had no production caller at all while the live gate tested charges, mana and level but never the scene. Two live defects fell out: Blink was exempt from the central gate (published `C/O`), and X-Ray used an area-only check blind to `combat_active`. The level gate is level-vs-circle by construction now that the circle is re-derived from the spell id |
 | §8 Spell effects | per-spell handlers in `play_state_impl/chunk_*.rs`; field placement in `magic.rs::spell_field_placement_byte` | field-cast and restoration/status spell PRNG tests | Implemented (Heal uses the public shared-PRNG roll path; Create Food uses the latest public tiny PRNG grant; non-combat Blink follows public #48 directional ray-to-farthest-grass behavior) |
-| §9 Casting in combat | `combat_frame.rs` cast dispatch; scene allow-mask | combat-cast tests in `chunk_23.rs` | Implemented |
+| §9 Casting in combat | `combat_frame.rs` cast dispatch; enforced scene allow-mask; runtime tag `T` Negate Time gate in the automatic actor driver | combat-cast tests in `chunk_23.rs` | Implemented. Under Negate Time the automatic actor driver returns immediately, so every self-acting actor's turn is skipped while the party is still prompted normally; we previously had no combat gate at all. The gate sits past the `PlayerReady` arm, so the party's own dispatch is untouched |
 | §10 Virtue/shrine linkage | `shrine_virtue.rs` stat reward, ordained/Codex masks, Codex urn read state, and all-virtues-complete predicate | shrine-meditation, Codex urn, and Codex turn-in tests | Implemented |
 | §11 Z-stats integration | `z_stats.rs`, `stats_panel.rs` | z-stats render tests | Implemented |
 | §12 Persistence | `save_load.rs` spell-charge and reagent stock | save/load tests | Implemented |
@@ -320,7 +271,7 @@ through the asset-backed Talk command path.
 |--------|----------|-------|--------|
 | `intro.md` §1–§14 | `intro.rs`, `intro_menu.rs`, `menu_dispatch.rs`, `pth.rs` (BRITISH.PTH walker), `return_to_view.rs`, `story_io.rs`; Bevy intro shell composes published title bitmap, animates signature path, draws the four title-tick flame bands from `ULTIMA.16` records 1..=4 (the public issue #52 procedural flame stripe was withdrawn and its generator deleted), renders all 21 story slides with the spec-defined transition-strip and secondary-art draws plus step 6's published #69 doorway text, and reveals story step 1 and the STARTSC menu loader through the public issue #53 rectangle dissolve (the 36-tick and 320-tick column sweeps were withdrawn) before sampling menu input; Return-to-View preview rendering uses public title-tick animation families, transparent actor overlay composition, public #54 fixed strip captions from LoadMapStrip, high-opcode no-ops, 4x19 source strip loading, `(x, y + 7)` cell-effect coordinates, and scheduler/playback timing for preview ticks, cell effects, fixed wipes, fixed waits, trailing ticks, and one-shot actor draws; §11 (`A` submenu) is an artwork screen, not a text screen - the credits page is published band by band out of the hidden surface at its published origins, and any key (`Esc` included) starts the close phase that publishes the rebuilt menu back. No credits text is authored; the earlier `ACKNOWLEDGEMENTS_LINES` clean-room-authored constant was removed. The terminal harness has no pixel surface for it and still fails loudly through `intro.rs::require_graphical_acknowledgements_surface`. §11.2's full phase sequence is implemented: `intro_acknowledgements.rs` owns the geometry, step lists and one-BIOS-tick-per-step pacing for the part and close phases, and `u5-bevy` composites the rise, part, close and sink phases across a hidden surface and the visible page | intro/chargen menu tests in `chunk_01.rs`, `chunk_02.rs`; Bevy intro framebuffer/title-tick/story-wipe tests; Bevy acknowledgements phase/coverage/pacing tests; Return-to-View renderer/playback tests; `intro_acknowledgements::tests` (exact column coverage, step counts, pacing, the row-63 floor); `intro::tests::acknowledgements_refuses_placeholder_lines_without_a_pixel_surface` | Complete for §11 (cleak/u5-spec#72 is closed; the withdrawn slab-wipe model is gone); exact historical title-tick silhouette pixels and exact Return-to-View effect rasters remain Presentation work |
 | `chargen.md` §1–§11 | `chargen.rs` questionnaire VM, gender prompt, virtue tournament, stat assignment | chargen tests | Implemented |
-| `u4-transfer.md` §1–§10 | `u4_transfer.rs`, `u4_transfer_session.rs` state machine, public issue #16 `PARTY.SAV` source validation offsets, BRIT.GAM/BRIT.OOL handling, stat translation, OOL ordering | u4-transfer tests | Implemented |
+| `u4-transfer.md` §1–§10 | `u4_transfer.rs`, `u4_transfer_session.rs` state machine, public issue #16 `PARTY.SAV` source validation offsets, `INIT.GAM`/`INIT.OOL` seed handling, stat translation, OOL ordering; `u4_transfer_preview.rs` + `crates/u5-bevy/src/u4_transfer.rs` for the `§6` preview screen | u4-transfer tests; `intro-u4-transfer-found` and `intro-u4-transfer-panels` in the visual frame suite | Implemented. The U5-side seed pair is `INIT.GAM` (save image, 4192 bytes) and `INIT.OOL` (object overlay); `#88` withdrew `BRIT.GAM`, which **does not ship at all** — the old constant named a file that is never present, and the test pinning it could not have failed either way. `§6.1`-`§6.6` are drawn (`f3ecfd1`) |
 
 ### `systems/save-load.md`
 
@@ -333,7 +284,7 @@ through the asset-backed Talk command path.
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
 | `movement.md` §1–§10 | `direction.rs`, `tile_classes.rs`, `predicates.rs`, `transport.rs`, `active_object_io.rs`; native static terrain predicates cover the published foot, horse, carpet, ship, and facing-sensitive skiff tile sets | per-mode movement tests plus exhaustive 0..=255 transport predicate tests | Implemented |
-| `overworld.md` §1–§15 | `play_state_impl/chunk_01.rs` overworld loop, `world_tables.rs`, `moongate.rs`, `lord_british_camp.rs`, native and sidecar encounters, public Word-of-Power seal rows | world tests in chunks 03, 05, 06, 07, 10, 12, 13, 15, 17, 23 | Implemented |
+| `overworld.md` §1–§15 | `play_state_impl/chunk_01.rs` overworld loop, `world_tables.rs`, `moongate.rs`, `moongate_phase.rs`, `lord_british_camp.rs`, native and sidecar encounters, public Word-of-Power seal rows | world tests in chunks 03, 05, 06, 07, 10, 12, 13, 15, 17, 23; moongate phase composition, ground-plate and save round-trip tests | Implemented **except `§9.2`'s blocking transit presentation** (the two-stage dissolve around the party-vanishing sprite), which is absent — transit is instantaneous. `§9.1` gate presence is implemented (`cd58ac9`): the per-render-frame moongate animator is withdrawn in full and deleted rather than adapted, and presence is a sixteen-step **global** counter — phase 0 draws the ground plate, `1..15` a composed frame whose bottom *N* pixel rows are the top *N* rows of the moon-gate tile via scratch tile `0x116`, phase 16 tile `0xDC` on the ordinary tile path. The ground plate is grass in play and `0x44` in the endgame. The counter is **persistent save-backed state at `SAVED.GAM` offset `0x02E1`**; it was previously not persisted at all, so save/load reloaded a gate at the wrong height. The scratch slot is saved and restored around every composition so `§9.2`'s party-vanishing sprite survives, and the renderer special-cases live terrain only so an overlay-painted `0xDC` keeps the plain tile path |
 | `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, `location_audit.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23, 24, including sanitized shipped `LOCATION.DAT` aggregate owner/class/view audits when local clean assets are present | Implemented (public #51 tile `0x04` poison-gas step behavior is native; coordinate and tile-attribute sidecars no longer trigger this branch) |
 | `dungeon-mode.md` §1–§17 | `play_state_impl/chunk_*.rs` dungeon loop, `dungeon_tables.rs`, raster in `crates/u5-bevy/src/lib.rs` first-person draw | dungeon tests in chunks 05, 12, 13, 18, 20, 23 | Implemented |
 
@@ -341,7 +292,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| §1–§14 | `play_state_impl/chunk_*.rs` random spawn probe (native + sidecar), fortunes-of-war counter, sleep-ambush in `rest_camp.rs`, dungeon-room arena selection, public #21 dungeon active-monster ambush setup | encounter and ambush tests | Implemented |
+| §1–§14 | `play_state_impl/chunk_*.rs` random spawn probe (native + sidecar), fortunes-of-war counter, sleep-ambush in `rest_camp.rs`, dungeon-room arena selection, public #21 dungeon active-monster ambush setup | encounter and ambush tests | Implemented. `§4`/`§9`: a full active-object table does not make an acquisition fail — the spawner acquires *or evicts* — and the "table full" early-out the spec explicitly withdraws is gone. The 128-candidate coordinate loop was already correct and is now pinned |
 
 ### `systems/vehicles.md`, `systems/weather.md`, `systems/moons.md`, `systems/time.md`, `systems/rest-and-camp.md`, `systems/lighting.md`, `systems/doors-and-z-transitions.md`
 
@@ -349,11 +300,11 @@ through the asset-backed Talk command path.
 |--------|----------|-------|--------|
 | `vehicles.md` §1–§11 | `transport.rs`, `play_state_impl/chunk_*.rs` Board/X-it/Yell sails, `ship_broadside.rs` Fire | vehicle save/load round-trip tests, broadside tests | Implemented |
 | `weather.md` §1–§11 | `wind.rs`, Rel Hur cast in `magic.rs`, sail cadence | wind cast and sailing tests, including the two-wait into-wind case | Implemented |
-| `moons.md` §1–§4 | `play_state_impl/chunk_*.rs` sky strip; moongate counters in `moongate.rs`; public issue #38 Felucca phase-0 glyph bytes for hours 10/11/19/20 | sky-strip and moon-glyph cache tests | Implemented |
+| `moons.md` §1–§4 | `play_state_impl/chunk_*.rs` sky strip; moongate counters in `moongate.rs`; public issue #38 Felucca phase-0 glyph bytes for hours 10/11/19/20 | sky-strip and moon-glyph cache tests | Implemented. `§3` publishes that below the surface nothing is drawn, erased, *or cached*; the engine used to refresh the cached glyph bytes on every hour change in every mode, including dungeons, the Underworld plane and town basements, and no longer does (`f976af0`) |
 | `time.md` §1–§13 | `clock.rs` cascade, Q/T tag handling, mode-specific increment | clock and cascade tests | Implemented |
 | `rest-and-camp.md` §1–§10 | `rest_camp.rs`, `lord_british_camp.rs`, native town inn bed gate in `play_state_impl/chunk_07.rs`, `play_state_impl/chunk_08.rs::apply_completed_long_camp_recovery`, and hourly Ring of Regeneration tick in `chunk_09.rs` | rest, native inn bed/no-inn refusal, sidecar override, camp, ambush, long-camp recovery, and hourly ring tests | Implemented (ordinary rest has no direct HP/MP recovery; current checked-in spec matches public #47 issue-comment behavior) |
 | `lighting.rs` §1–§11 | `lighting.rs` ambient + torch + light-spell counters | lighting tests | Implemented |
-| `doors-and-z-transitions.md` §1–§15 | `jimmy.rs`, `play_state_impl/chunk_*.rs` open/get/look cascade, `ship_broadside.rs` BOOOM, secret doors, climb command | jimmy, open, secret-door, klimb tests | Implemented |
+| `doors-and-z-transitions.md` §1–§15 | `jimmy.rs`, `play_state_impl/chunk_*.rs` open/get/look cascade, `ship_broadside.rs` BOOOM, secret doors, climb command | jimmy, open, secret-door, klimb tests | Implemented. `dungeon-mode.md §8`/`§13.1`/`§13.2` corrected Klimb (`2254649`): the whole pit family `0x6?` — marked and fired variants included, since the dispatcher masks to the high nibble — is an **ordinary descent** calling the same level-step helper a down ladder uses, not a surface-reset ejection. Klimbing Deceit level zero `(1, 3)` or Destard level zero `(7, 3)`/`(1, 7)` used to eject the party to Britannia from the top level of two dungeons. `§13.1` also withdraws the claim that a climb tests the cell it lands on — the ladder or pit underfoot is proof enough — so that predicate moved to the Up/Down level-change spells, and level-zero up runs the surface-reset contract so dungeons stay leavable |
 
 ### `systems/endgame.md`, `systems/blackthorn.md`
 
@@ -371,9 +322,9 @@ through the asset-backed Talk command path.
 | `runtime.md` | `play_state_struct.rs`, `play_options.rs`, boot in `boot.rs` | start-validation tests | Implemented |
 | `input.md` | `input_codes.rs`, `input_dispatch.rs` | typeahead tests | Implemented |
 | `commands.md` | `commands.rs` + per-command handlers in `play_state_impl/chunk_*.rs`; reference in `docs/commands.md` | per-command route-smoke and unit tests | Implemented |
-| `animation.md` | `animation.rs`; visual cadence in `u5-bevy` | animation tests | Implemented |
+| `animation.md` | `animation.rs`; visual cadence in `u5-bevy` | `chunk_29.rs` family/gate/selector tests | Implemented against the **replaced** `§6` family list (`774dff0`). The water/lava/fire/wind model this engine carried is withdrawn — "no water, lava, brazier or torch tile animates through this pass at all" — and with it `STATIC_TILE_ANIMATION_FRAME_WRAP` and the single shared frame per family. The five real families are waterfall `0xD4..0xD7`, fountain `0xD8..0xDB`, pendulum `0x80..0x83`, standard of Britannia `0xEC..0xEF`, and clock `0xFA..0xFB` / bellows `0xFC..0xFD`, with nested gating (waterfall and fountain ungated, then bit 0, then bit 1 only inside the bit-0 gate) giving net 1x / 2x / 4x rates, **per-id selectors** so a four-frame family's ids stay a quarter-cycle apart, and `STATIC_TILE_ANIMATION_PERIOD_TICKS = 8`. Visible consequence: repaint cadence drops sharply in ocean and coastal areas. The moongate presence counter is not a member of these families and `tick_static_tiles` never advances it |
 | `view.md` | `view_classes.rs`, V-View overlays in `play_state_impl/chunk_*.rs`; explicit View/Peer/X-Ray overlay modes and peer/gem alternate-bank raster branch; Bevy overlay draws | View overlay route-smoke (surface, dungeon, Spyglass chunk-map, Peer, X-Ray) | Implemented (exact remote-view pixels and chunk-map pixel parity — Presentation work) |
-| `visibility.md` | `visibility.rs`, persistent radius-5 visibility grid / companion terrain band, light-mask wrap | persistent visibility-buffer and visibility tests | Implemented |
+| `visibility.md` | `visibility.rs`, persistent radius-5 visibility grid / companion terrain band, light-mask wrap | persistent visibility-buffer and visibility tests | Implemented **except `§12.6`**: the night-time rotating light beacon is not implemented at all — no bearing counter, no rotating beam, nothing. Its gate runs only while ambient is *strictly below* full daylight. `lighting.rs` carries a comment recording that the withdrawn `MOONGATE_ANIMATOR_DAYTIME_THRESHOLD` was this beacon's gate, misattributed to moongates and inverted |
 
 ### `systems/text-output.md`, `systems/stats-panel.md`, `systems/display-driver.md`, `systems/display-driver-abi.md`, `systems/overlay-abi.md`
 
@@ -381,7 +332,7 @@ through the asset-backed Talk command path.
 |--------|----------|-------|--------|
 | `text-output.md` §1–§7 | `text_wrap.rs` fixed-cell text window, control bytes `0xFB`..`0xFF`, padded numeric printer, descriptor cursors | text-wrap tests in `chunk_13.rs`, `chunk_14.rs` | Implemented |
 | `stats-panel.md` §1–§5 | `stats_panel.rs` party rows, active-cursor handling, combat overlays | stats-panel tests | Implemented |
-| `display-driver.md`, `display-driver-abi.md` | `crates/u5-bevy/src/lib.rs` framebuffer composition, atlas-backed top-down and first-person rasters, fixed-font shared surface, intro column-sweep and endgame certificate-rectangle rendering, and per-step visual route replay harness; Tandy CLI raster depth aliases route to the EGA-equivalent path while Hercules is explicitly rejected as outside v1 scope | Bevy framebuffer/story-wipe/STARTSC/endgame-transition tests; visual frame suite; visual route suite; CLI display-depth tests | Implemented with public story/menu-loader timing; exact late endgame rectangle primitive/cadence and Return-to-View effect rasters remain presentation work |
+| `display-driver.md`, `display-driver-abi.md` | `crates/u5-bevy/src/lib.rs` framebuffer composition, atlas-backed top-down and first-person rasters, fixed-font shared surface, rectangle-dissolve and endgame certificate-rectangle rendering, and per-step visual route replay harness; Tandy CLI raster depth aliases route to the EGA-equivalent path while Hercules is explicitly rejected as outside v1 scope | Bevy framebuffer/story-wipe/STARTSC/endgame-transition tests; visual frame suite; visual route suite; CLI display-depth tests | Implemented with public story/menu-loader timing. `§6`/`§8`/`§9.2` back-buffer routing was corrected in `f976af0` and is the largest fix of that batch: the clipped rectangle fill (`0x3F`), the 16-by-16 tile entry (`0x51`) and the fixed-cell glyph entry (`0x5D`) each branch to a real back-buffer body, and the engine treated tile and glyph as front-buffer-only, so **both were silently discarded on the hidden surface** — which would leave the endgame and map-viewport fades dissolving stale pixels. The line entry (`0x33`) is front-buffer-only *regardless* of the selector, which is a draw to the front buffer, not a skipped draw; it was skipping. Exact late endgame rectangle cadence and Return-to-View effect rasters remain presentation work |
 | `overlay-abi.md` | `crates/u5-bevy/src/lib.rs` overlay composition for status/Z-stats/endgame/intro | Bevy overlay tests | Implemented |
 
 ### `systems/prng.md`, `systems/timing.md`, `systems/stat-arithmetic.md`, `systems/active-objects.md`
@@ -391,7 +342,10 @@ through the asset-backed Talk command path.
 | `prng.md` | `prng.rs` LCG; `random_*` helpers in `play_state_*.rs` | rng round-trip tests | Implemented |
 | `timing.md` | `timing.rs` wait counters; integrated in clock and sailing cadence | timing tests | Implemented |
 | `stat-arithmetic.md` | `stat_arithmetic.rs` saturating add/sub | stat-arith tests | Implemented |
-| `active-objects.md` | `active_object_io.rs` 32-slot table, animator, OOL persistence, `ool_audit.rs` aggregate active-object overlay census | active-object tests across chunks plus synthetic and local-clean `.OOL` aggregate audit coverage | Implemented |
+| `active-objects.md` `§1`-`§7` | `active_object_io.rs` 32-slot table, OOL persistence, `ool_audit.rs` aggregate active-object overlay census | active-object tests across chunks plus synthetic and local-clean `.OOL` aggregate audit coverage | Implemented |
+| `active-objects.md` `§4` eviction cascade | `allocate_active_object_slot` → `active_object_eviction_victim`; `active_object_eviction_phase` derived from `active_object_eviction_byte_accepted` + `active_object_eviction_phase_is_off_screen` | allocator cascade tests; the two tests that asserted the old "table full" early-out at horse purchase and Y-Yell Shadowlord install are corrected | Implemented (`a48e2ef`, trigger corroborated by `f976af0`). Previously the allocator ran phase 1 only and returned `None`, so a full ordinary range **silently dropped** horse purchases, dropped items, shipwright deliveries and encounter spawns. Phases run in published order, lowest index up within each; slot 0 and the reserved band `24..=31` are never victims, and type byte `0xB5` is rejected by every phase including last-resort phase 10 |
+| `active-objects.md` `§8.1` distance gates | `ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW` (`§4`), `ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT` (`§8.1`) | prune/eviction window tests | Implemented. Both gates are **square per-axis windows, not radii** — each axis tested separately against the same bound, no distance and no disc, because a disc would prune the window corners the original keeps. Differences are formed in **unsigned eight-bit** arithmetic, wrapping with the 256-cell coordinate space with no map-seam case; `§8.1` measures forward from the scroll base, the loaded window's origin corner, not a centred band. The `_RADIUS` names asserted a quantity the code does not compute and are gone, and the two constants are kept apart because `§8.1` warns that one shared constant serving both pruning and eviction is a sign the two have been conflated |
+| `active-objects.md` `§8` outdoor walker | `active_object_io.rs` predicates only | predicate tests | **Published, not implemented.** `FC_PROXIMITY_AGE_CAP`, `outdoor_serpent_dragon_triggers` and `outdoor_water_creature_attack_aligned` have **zero production call sites**, so the walker's first phase — adjacent hostile engagement, sea-serpent/dragon breath, whirlpool transition, ship broadside — never runs. The step-committer and classifier halves of `§8` are wired; this phase is not |
 
 ## Formats
 
@@ -435,36 +389,64 @@ through the asset-backed Talk command path.
 
 ## Remaining Public-Spec Gaps
 
-There are none. Every issue in `cleak/u5-spec` is closed, including the six
-this engine filed (`#78` intro/menu, `#79` gameplay chrome, `#80` per-scene
-floor pages, `#81` command echoes and dungeon tables, `#82` endgame/chargen/
-`PARTY.SAV`, `#83` light-byte semantics). What is left is engine work against
-published contracts, and a small number of details the spec states honestly
-that it does not publish.
+There are none. Every issue in `cleak/u5-spec` is closed — 88 of them, including
+the six this engine filed (`#78` intro/menu, `#79` gameplay chrome, `#80`
+per-scene floor pages, `#81` command echoes and dungeon tables, `#82`
+endgame/chargen/`PARTY.SAV`, `#83` light-byte semantics) and the five later ones
+(`#84`-`#88`). What is left is engine work against published contracts, and a
+small number of details the spec states honestly that it does not publish.
 
-### The last gate on an unpublished contract is down
+### No refusal stands for an unimplemented contract
 
-The endgame certificate wording was the final one. `endgame.md §9.1`-`§9.5`
-published it, so `endgame_certificate_lines` now builds the screen and **the
-victory ending is reachable and rendering end to end** - rite beats, tableau
-exit, the `§7.1` fade to black, six `END.DAT` windows, the certificate on its
-parchment, the elapsed-time report, and the `§9.5` terminal hold. Evidence:
-`route-endgame-box-full-victory-cinematic-29-empty.png` in the visual route
-suite, and route-smoke's validator requires `cinematic_is_finished()` so the
-case fails if the ending stops short.
+The endgame certificate was the last gate on an *unpublished* contract. The
+Ultima IV transfer preview was the last gate on a *published but unbuilt* one,
+and it was built in `f3ecfd1`.
 
-### Panics that remain, and what each one is
+**Category (a) — refusals that stand for an unimplemented published contract —
+is empty.** That is the headline of this refresh. It was verified by grepping
+`crates/` for `panic!`, `-> !` and the `forbidden fallback` marker, excluding
+`tests_inline/`, `test_fixtures.rs` and `#[cfg(test)]` helpers, and classifying
+every hit.
 
-Six `panic!` sites still cite a spec issue. Only one of them is an
-unimplemented contract; the rest are structural. Derived by grepping
-`crates/` rather than from any summary:
+### Refusals that remain, and what each one is
 
 | Site | Kind |
 |---|---|
-| `u5-bevy` `require_published_u4_transfer_preview_presentation` | **Unimplemented published contract.** `#73` is closed and `u4-transfer.md §6.1`-`§6.6` publish the per-field cursor cells, the label strip, the "Found:" summary page, the stage machine and the finish. The graphical preview has not been built against them yet. This is the one real remaining implementation gap in this area. |
-| `u5-tui` terminal story / Return-to-View / transfer preview | No terminal surface. These are graphical screens; `--intro` refuses rather than printing a diagnostic substitute. Not spec gaps. |
-| `u5-runtime` `require_acknowledgements_contract` | Same: the graphical path draws the credits artwork, the terminal harness cannot. |
-| `u5-runtime` display title-tick operation | An injection guard - the caller must supply the `ULTIMA` bands rather than generated clean-room frames. Not a gap. |
+| `u5-tui` `require_terminal_story_renderer_contract` | **(b) Structural — no surface.** Story slides are a graphical screen; `--intro` refuses rather than printing a diagnostic substitute |
+| `u5-tui` `require_terminal_return_to_view_renderer_contract` | **(b) Structural — no surface.** The preview is a 304x64 tile strip. `#54` is published and the graphical shell implements it; the terminal harness has no pixel surface to blit it onto |
+| `u5-tui` `require_terminal_u4_transfer_renderer_contract` | **(b) Structural — no surface.** Retained deliberately after `#73` shipped: the graphical preview exists, and a text transcript of it would be the invented substitute the no-fallback rule forbids |
+| `u5-runtime` `intro.rs::require_graphical_acknowledgements_surface` | **(b) Structural — no surface.** The credit lines are drawn into the `STARTSC` bitmap and nothing typesets them, so printing clean-room-authored credits would invent the one thing the original never types. Replaces the old `require_acknowledgements_contract`, whose message was scoped to the retracted slab cadence |
+| `u5-runtime` `display_driver.rs` title-tick operation | **(c) Injection guard.** The caller must supply the `ULTIMA` bands; generated clean-room frames are refused |
+
+`u5-runtime` `intro_acknowledgements.rs` also carries two `panic!` sites in the
+part and close phases, but those are internal coverage assertions — they fire if
+a phase leaves a column of the band unpublished — not contract gates.
+
+### Published but not implemented
+
+These are honest gaps: the contract is published and the engine does not do it.
+
+- **`visibility.md §12.6` night-time light beacon.** Not implemented at all —
+  no bearing counter, no rotating beam. Its gate runs only while ambient is
+  strictly below full daylight. The engine's only trace of it is a comment in
+  `lighting.rs` recording that the withdrawn `MOONGATE_ANIMATOR_DAYTIME_THRESHOLD`
+  was this beacon's gate, misattributed to moongates and inverted.
+- **`overworld.md §9.2` blocking moongate transit presentation.** The two-stage
+  dissolve around the party-vanishing sprite is absent; transit is instantaneous.
+  Gate *presence* (`§9.1`) is implemented.
+- **`active-objects.md §8` outdoor walker, first phase.** Adjacent hostile
+  engagement, sea-serpent/dragon breath, whirlpool transition and ship broadside
+  exist as predicates with zero production call sites, so none of it runs.
+- **Dungeon first-person wall/scenery tables.** `#84` published the billboard
+  slot-to-role mapping and the corridor now draws from its banks, but no
+  wall/scenery table exists in `crates/`, so first-person presentation is not
+  parity-checked.
+- **The required-disk contract.** There is no disk-swap handling, which is
+  correct for a single-directory install but means we carry no model of it. What
+  *is* implemented is the part of the swap loop that has a filesystem effect:
+  `save_load_needs_underworld_disk_swap`, the `UNDER.OOL` mirror flush and its
+  `§5.2` defensive re-flush, and the `screen-mode-dispatch.md §5` disk-prompt
+  mode normalizer. No disk labels, prompts or swap timing are modelled.
 
 ### Details the spec publishes as unpublished
 
@@ -477,18 +459,35 @@ unimplemented contract; the rest are structural. Derived by grepping
 - The driver's per-step pixel pattern for the brightness entry the endgame gate
   flare drives (`display-driver-abi.md`).
 - Any wall-clock length for the rectangle dissolve, so the engine completes it
-  as the single blocking call `#53` specifies rather than pacing it.
+  as the single blocking call `#53` specifies rather than pacing it. The same
+  treatment applies to the acknowledgements rise and sink phases, which `§11.2`
+  gives no wait at all.
 - The alternate-depth (`.4`) conversion of the archives named in `#82`.
+- The 14 ms flourish step is a derived target inside a 10.5-15.8 ms bracket, not
+  a measured figure.
 
-### Engine work still outstanding
+### Review heuristics
 
-- **Dungeon first-person wall tables** (`#81` item 5). The corridor renders as
-  an untextured wireframe; no wall/scenery table exists in `crates/`. Whether
-  the tables were published is being checked.
-- `#42`'s local-light mask cadence, and the night-time beacon gate
-  (`visibility.md §12.6`).
-- The decomp side has a cross-document contradiction sweep in flight that may
-  yet touch contracts already implemented here.
+`docs/review-heuristics.md` records the three mechanical checks that between
+them found every real defect in this pass: **does anything read this?** (a
+reference count), **is this byte inside the save window?** (a lifetime test with
+one subtraction), and **decompose the name** (a name is an assertion no review
+checks). None of them requires reading code attentively, and none of the day's
+real finds came from doing so.
+
+They are worth running as routine rather than on suspicion, because they catch
+two opposite defects that present identically as "a well-tested module with a
+confident name" — real code implementing an unreal contract (`combat.md §7`'s
+post-round maintenance pass) and unreal code implementing a real contract (the
+active-object eviction predicates, the spell scene allow-mask, the outdoor
+walker's first phase). All four of those were found by check 1 alone — a
+reference count, not a reading — and the last of them is still open.
+
+The file also records why a **repair pass** deserves the same scrutiny as the
+thing it repairs: corrections in this project have introduced wrong names while
+fixing wrong names, regressed a section via a retracted correction, and leaked
+private paths into a public document (`#87`). A correction can breach a boundary
+the original error did not.
 
 ## Presentation Work (Separate From Gameplay Correctness)
 
@@ -533,6 +532,17 @@ table (which withdrew the `page = sub_map_index * 2 + floor` model - wrong for
 the certificate. The gaps section above is what is genuinely left, and it is
 now engine work rather than missing contracts.
 
+The 2026-08-23 pass then closed the last two published-but-unbuilt intro
+contracts (`#72` acknowledgements, `#73` transfer preview) and spent the rest of
+its effort on the opposite problem: mechanisms the tree already contained that
+were wrong, misattributed, or never called. Three models were retracted -
+`combat.md §7`'s post-round maintenance pass, the water/lava tile-animation
+family list, and the per-render-frame moongate animator - and two published
+mechanisms were connected for the first time: the active-object eviction cascade
+and the spell scene allow-mask. Neither had ever run in production despite being
+fully modelled and heavily tested, which is why `docs/review-heuristics.md`
+leads with the reference count.
+
 Two corrections that arrived with those answers are worth recording because
 they were wrong in the engine, not merely unimplemented: `TORCH_LIGHT_FLOOR`
 and `LIGHT_SPELL_FLOOR` were inverted (magic light is the brighter one), and
@@ -549,7 +559,8 @@ changed hue once it was corrected. Nothing in the game reprograms the palette
 after mode setup; apparent recolouring is a restricted plane write mask or a
 display effect mutating the loaded asset data, never a palette change.
 
-Verified on 2026-08-22 at `d4fc579`: 2815 u5-runtime, 155 u5-bevy, 96 u5-tui
-tests pass, `cargo fmt --all -- --check` is clean, `--route-smoke` passes all
-cases, `--visual-frame-suite` writes 187 PNGs and `--visual-route-suite` writes
-1814. Every asset-backed run used a copy of the asset directory.
+Verified on 2026-08-23 at `9e437d5`: 2902 u5-runtime, 170 u5-bevy, 96 u5-tui
+tests pass, `cargo fmt --all -- --check` is clean, `cargo clippy --workspace
+--all-targets` reports zero errors, `--route-smoke` passes all 493 cases,
+`--visual-frame-suite` writes 193 PNGs and `--visual-route-suite` writes 1814.
+Every asset-backed run used a copy of the asset directory.

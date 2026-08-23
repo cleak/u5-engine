@@ -1,6 +1,6 @@
 # Intro Graphics Gaps
 
-Last refreshed: 2026-08-22 against `cleak/u5-spec` head `8192d67` and the
+Last refreshed: 2026-08-23 at `9e437d5`, against `cleak/u5-spec` head and the
 current `u5-engine` tree.
 
 This file tracks the intro graphics contracts that still block an authentic
@@ -10,27 +10,40 @@ generated animation, cropped buffers, or diagnostic substitutes.
 
 ## Still Open
 
-The `cleak/u5-spec` queue is empty - 83 closed, 0 open - so nothing on the
-intro path is waiting on a contract. What is listed here is engine work and the
-handful of details the spec states honestly that it does not publish.
+The `cleak/u5-spec` queue is empty - **88 closed, 0 open** - so nothing on the
+intro path is waiting on a contract.
+
+**Nothing on the intro path is an unimplemented published contract any more.**
+The Ultima IV transfer preview was the last one, and it is built. What is left
+below is the handful of details the spec states honestly that it does not
+publish.
 
 | Item | Status |
 |---|---|
-| Ultima IV transfer preview | **The one unimplemented published contract on this path.** `#73` is closed and `u4-transfer.md §6.1`-`§6.6` publish the per-field cursor cells, the label strip, the "Found:" summary page, the media-selection behaviour, the stage machine and the finish. The graphical preview has not been built against them, so `require_published_u4_transfer_preview_presentation` still fires when a *valid* `PARTY.SAV` is present. Missing or unreadable media is not gated - it takes the published `§3` retryable branch. `§6.4`'s "Please insert the Ultima IV Player Disk" block is statically orphaned in the shipped build and must not be drawn. |
-| Acknowledgements wipe cadence | Published and implemented: 8-px stride, 18 steps, one BIOS tick per step on the part and close phases, no wait on rise and sink. `#72` is closed. |
+| Ultima IV transfer preview | **Implemented** (`f3ecfd1`). `u4-transfer.md §6.1`-`§6.6` publish the per-field cursor cells, the label strip, the "Found:" summary page, the media-selection behaviour, the stage machine and the finish; `crates/u5-runtime/src/u4_transfer_preview.rs` holds them as data and `crates/u5-bevy/src/u4_transfer.rs` composites them. `§6` has no double buffering, no page swap and no deferred flush, so the screen is one persistent surface drawn once and edited in place — every keystroke is a short list of edits. Retractions honoured: an eight-row label column rather than an eight-column heading strip; exactly eight fields; the panels read ` Ultima IV ` and ` Ultima  V ` after the single-cell blanking write; and once the drive is selected no key aborts, so `Esc` is ignored at every prompt. `§6.4`'s "Please insert the Ultima IV Player Disk" block is statically orphaned in the shipped build and is not drawn. The gate `require_published_u4_transfer_preview_presentation` is gone. Missing or unreadable media is still not gated - it takes the published `§3` retryable branch. Frame-suite evidence: `intro-u4-transfer-found`, `intro-u4-transfer-panels`. |
+| Acknowledgements | **Implemented** (`6db6135`) as the `§11.2` four-phase artwork animation: compose, rise, part, keypress, close, sink. Rise is 137 unpaced steps, part and close are 18 steps each at one BIOS tick per step, sink is 136 + 1 unpaced. Step 6 rebuilds the menu on the hidden surface with the Acknowledgements row inverse-video while the credits are still displayed. Step 8 is not a literal mirror of step 5 — its band offsets walk the pillars back to rows 144..=175, exactly where step 10 picks them up. `Esc` is an ordinary key here. Four new frame-suite cases: `intro-acknowledgements-risen`/`-parting`/`-credits`/`-closing`. |
 | Rune digraph code points | `endgame.md §9.3` publishes that TH and ST each occupy one character and that the at-sign is the word space, but not which code points the digraphs use - and explicitly allows an engine to supply its own mapping. The engine applies the published word-space rule and leaves the digraphs as two runes. |
 
-Four `panic!` sites on this path are structural rather than gaps: the terminal
-shell refuses story slides, Return-to-View, acknowledgements and the transfer
-preview because they are graphical screens and `--intro` has no surface to draw
-them on, and the display driver's title-tick operation requires the caller to
-inject the `ULTIMA` bands rather than generating clean-room frames.
+### Retraction note: the slab-wipe model
+
+The acknowledgements "bottom-up entry wipe / top-down exit wipe with horizontal
+slabs" model this engine carried is **withdrawn in full**. There are no
+horizontal slabs in either direction. Any surviving "slab" language outside this
+paragraph is wrong and should be deleted, not reconciled.
+
+Five refusals on this path are structural rather than gaps: the terminal shell
+refuses story slides, Return-to-View, acknowledgements and the transfer preview
+because they are graphical screens and `--intro` has no surface to draw them on,
+and the display driver's title-tick operation requires the caller to inject the
+`ULTIMA` bands rather than generating clean-room frames. The terminal transfer
+refusal stays by design even though the graphical preview now exists: a text
+transcript of it would be the invented substitute the no-fallback rule forbids.
 
 ## Answered Or Non-Blocking For This Pass
 
 | Issue | Status |
 |---:|---|
-| [#52](https://github.com/cleak/u5-spec/issues/52) / [#65](https://github.com/cleak/u5-spec/issues/65) / [#63](https://github.com/cleak/u5-spec/issues/63) | Resolved by clean runtime observation of the shipped assets, pending the spec correction requested as [#78](https://github.com/cleak/u5-spec/issues/78). See "Resolved By Runtime Observation" below. |
+| [#52](https://github.com/cleak/u5-spec/issues/52) / [#65](https://github.com/cleak/u5-spec/issues/65) / [#63](https://github.com/cleak/u5-spec/issues/63) | Resolved by clean runtime observation of the shipped assets; the spec correction requested as [#78](https://github.com/cleak/u5-spec/issues/78) has since been published and closed. See "Resolved By Runtime Observation" below. |
 | [#64](https://github.com/cleak/u5-spec/issues/64) | CREATE/chargen panel placements published and implemented. The paragraph rectangles `§5.1` never published were measured off a capture instead of invented - `CHARGEN_GYPSY_PARAGRAPH_BOX`, `CHARGEN_QUESTION_PARAGRAPH_BOX`, `CHARGEN_RESULT_PARAGRAPH_BOX` in `crates/u5-runtime/src/story_layout.rs`. The name/gender prompts use `§5.1`'s published cells and share one uncleared screen. |
 | [#66](https://github.com/cleak/u5-spec/issues/66) / [#67](https://github.com/cleak/u5-spec/issues/67) | Title bitmap layering, flourish script, palette and final pre-menu frame are answered and implemented; see the reconciliation table below. |
 | [#68](https://github.com/cleak/u5-spec/issues/68) / [#77](https://github.com/cleak/u5-spec/issues/77) | Intro animation cadence is published (`timing.md §5`) and implemented: the flourish is the calibrated animation-script entry at 14 ms per presentation step, the signature advances one 32-stroke chunk per BIOS user-tick, and a no-key menu poll pass costs two ticks. |
@@ -39,10 +52,11 @@ inject the `ULTIMA` bands rather than generating clean-room frames.
 | [#71](https://github.com/cleak/u5-spec/issues/71) | Withdrawn as a visual contract by spec commit `6f9132f`: the "initial title/rune text" phase is the non-visual pre-flourish preparation pass (`intro.md §3` step 2), implemented in `crates/u5-runtime/src/intro_preflourish.rs`. The former panic gate is gone. |
 | [#54](https://github.com/cleak/u5-spec/issues/54) | Return-to-View preview geometry is published and implemented; the graphical preview renders and `--visual-frame-suite` now runs to completion instead of aborting on it. |
 
-## Reconciled With Spec Head `8192d67`
+## Reconciled With Spec Head
 
 The spec's 2026-08-22 pass answered the whole intro sequence and retracted
-several earlier answers. The engine now follows head `8192d67`:
+several earlier answers, and head has moved on again since (`c00bf63`,
+`38b0231`). The engine follows current head:
 
 | Contract | Correction | Where |
 |---|---|---|
@@ -61,7 +75,7 @@ rectangle, so the engine completes it as the single blocking call it is rather
 than inventing a rate; and the `.4`-depth conversion of the title-tick records
 is published as geometry only.
 
-## Resolved By Runtime Observation (pending `cleak/u5-spec#78`)
+## Resolved By Runtime Observation (`cleak/u5-spec#78`, now answered)
 
 The intro menu screen no longer has an unpublished contract. Decoding the local
 `ULTIMA.16` image directory and comparing it against a black-box capture of the
@@ -96,10 +110,12 @@ needed.
   cropped buffers, or diagnostic substitutes.
 - When one of these issues is answered, remove only the corresponding panic and
   add focused tests that prove the published contract is being followed.
-- Read contracts from the `cleak/u5-spec` GitHub issues. The local checkout at
+- Read contracts from `cleak/u5-spec` on GitHub - the issues, and document
+  text through `gh api -H "Accept: application/vnd.github.raw"
+  repos/cleak/u5-spec/contents/<path>`. The local checkout at
   `C:\Projects\Rust\u5-clean\u5-spec` is read-only from this workspace and is
-  stale at `9a898d1`, now many commits and several retractions behind spec head
-  - the reconciliation table would look wrong if checked against it.
+  stale at `9a898d1`, many commits and several retractions behind spec head -
+  the reconciliation table would look wrong if checked against it.
 - The shipped palette is not stock EGA: index 6 is `(170, 170, 0)` dark yellow,
   not `(170, 85, 0)` brown, and it is the only index that differs. `STORY1`
   slide 0 is 25% index 6 and the `STARTSC` acknowledgements parchment 6%, so
@@ -108,7 +124,9 @@ needed.
 - Intro evidence in `--visual-frame-suite`: `intro-menu`, `intro-finished-menu`,
   `intro-story-00`..`intro-story-20`, `intro-return-to-view`,
   `intro-chargen-name-prompt`, `intro-chargen-gender-prompt`,
-  `intro-chargen-gender-echo`. 187 PNGs total on 2026-08-22 at `d4fc579`.
+  `intro-chargen-gender-echo`, `intro-acknowledgements-risen`/`-parting`/
+  `-credits`/`-closing`, `intro-u4-transfer-found`, `intro-u4-transfer-panels`.
+  193 PNGs total on 2026-08-23 at `9e437d5`.
 - The suite used to render no menu window at all while the live path was
   correct, because it built its intro state through a parallel path. It now
   drives the real render path, so a defect of that shape cannot hide there

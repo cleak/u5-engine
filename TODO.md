@@ -14,17 +14,20 @@ this file alone.
 
 Last known verification state:
 
-2026-08-22, engine `intro-preflourish-phase` at `d4fc579`, after the
-six-package presentation-parity pass and the work implemented from the answers
-to our own `#78`-`#83`:
+2026-08-23, engine `intro-preflourish-phase` at `9e437d5`, after the
+audit-and-repair pass that implemented `#72` and `#73`, retracted three invented
+or misattributed models, and wired two published mechanisms that had been fully
+modelled and never called:
 
 - `cargo fmt --all -- --check` clean.
-- `cargo test -p u5-runtime --lib` 2815 passed.
-- `cargo test -p u5-bevy` 155 passed.
+- `cargo test -p u5-runtime --lib` 2902 passed.
+- `cargo test -p u5-bevy` 170 passed.
 - `cargo test -p u5-tui --features visual` 96 passed (11 + 51 + 34).
-- `--route-smoke` all scripted cases passed.
-- `--visual-frame-suite` wrote 187 PNGs and runs to completion.
-- `--visual-route-suite` wrote 1814 PNGs, now including the whole victory
+- `cargo clippy --workspace --all-targets` **zero errors**. Style warnings
+  remain (19 in the `u5-bevy` lib) and are not gated.
+- `--route-smoke` all 493 scripted cases passed.
+- `--visual-frame-suite` wrote 193 PNGs and runs to completion.
+- `--visual-route-suite` wrote 1814 PNGs, including the whole victory
   ending through to the certificate. Exactly one is black by contract: the
   `endgame.md §7.1` fade-to-black frame between the throne tableau and the first
   `END.DAT` window.
@@ -34,14 +37,23 @@ to our own `#78`-`#83`:
   fade, six `END.DAT` windows, the certificate on its parchment, the
   elapsed-time report, and the `§9.5` terminal hold; route-smoke's validator
   requires `cinematic_is_finished()`, so the case fails if it stops short.
-- The `cleak/u5-spec` queue is empty: 83 closed, 0 open.
+- **No `panic!` in `crates/` stands for an unimplemented published contract.**
+  The Ultima IV transfer preview was the last one and it is built (`f3ecfd1`).
+  Every refusal that remains is structural (a graphical screen with no terminal
+  surface) or an injection guard; see `docs/completion-audit.md`, "Refusals that
+  remain".
+- The `cleak/u5-spec` queue is empty: **88 closed, 0 open**.
 - Asset-backed runs used a **copy** of the asset directory. `C:\Games\U5-Clean`
   is a read-only clean-room input; the engine now refuses a write destination
   that resolves to `DEFAULT_GAME_DIR`, and `copy_asset_writable` clears the
   read-only bit Windows `fs::copy` propagates into scratch copies.
-- Spec contracts come from the `cleak/u5-spec` GitHub issues. The local
-  `u5-spec` checkout is read-only from this workspace and stale at `9a898d1`,
-  behind head `8192d67` and its retractions.
+- Spec contracts come from `cleak/u5-spec` on GitHub - the issues, and document
+  text through `gh api -H "Accept: application/vnd.github.raw"
+  repos/cleak/u5-spec/contents/<path>`. The local `u5-spec` checkout is
+  read-only from this workspace and stale at `9a898d1`, many commits and
+  several retractions behind head.
+- `docs/review-heuristics.md` records the three mechanical checks that found
+  most of this pass's defects. Run them as routine, not on suspicion.
 
 Earlier verification detail, kept for history:
 
@@ -879,14 +891,35 @@ reprograms the palette after mode setup - apparent recolouring is a restricted
 plane write mask or a display effect mutating the loaded asset data.
 
 This is a long step toward presentation parity, not parity itself, and none of
-it is pixel-verified against the original for any screen not named above. What
-is still open is engine work rather than missing contracts, listed in
-`docs/completion-audit.md`: the graphical U4 transfer preview (`#73` is closed
-and `§6.1`-`§6.6` publish it; it has not been built), the dungeon first-person
-wall tables (`#81` item 5 - the corridor is still an untextured wireframe),
-`#42`'s mask cadence, and the night-time beacon gate (`visibility.md §12.6`).
-The decomp side also has a cross-document contradiction sweep in flight that
-may yet touch contracts already implemented here.
+it is pixel-verified against the original for any screen not named above.
+
+### 2026-08-23 status
+
+The graphical U4 transfer preview is built (`f3ecfd1`, `cleak/u5-spec#73`), and
+so is the acknowledgements phase sequence (`6db6135`, `#72`). Nothing published
+on the intro path is unbuilt any more.
+
+What is still open is engine work rather than missing contracts, listed in
+`docs/completion-audit.md` under "Published but not implemented":
+
+- The `visibility.md §12.6` night-time light beacon - no bearing counter, no
+  rotating beam, nothing.
+- `overworld.md §9.2`'s blocking moongate transit presentation (the two-stage
+  dissolve). Gate *presence* is implemented; transit is instantaneous.
+- The `active-objects.md §8` outdoor walker's first phase - adjacent hostile
+  engagement, sea-serpent/dragon breath, whirlpool transition, ship broadside.
+  The predicates exist with **zero production call sites**, so none of it runs.
+- The dungeon first-person wall/scenery tables. `#84` published the billboard
+  slot-to-role mapping and the corridor draws from its banks now, but no
+  wall/scenery table exists in `crates/`.
+- The required-disk contract. There is no disk-swap handling, which is correct
+  for a single-directory install but means we carry no model of it.
+
+Three models were retracted in the same pass and should not reappear:
+`combat.md §7`'s post-round maintenance pass, the water/lava/brazier/torch
+tile-animation families, and the per-render-frame moongate animator. Two
+published mechanisms were connected for the first time: the active-object
+eviction cascade and the spell scene allow-mask.
 
 ### Bevy Integration
 
@@ -969,14 +1002,18 @@ may yet touch contracts already implemented here.
 ### Exact Visual Parity Deferrals
 
 - Public spec still calls out optional exactness gaps:
-  - wider story/endgame rectangle transition helper rates beyond the
-    published step-1 one-column-per-title-tick wipe,
-  - Return-to-View strip geometry and exact effect rasters (the public #54
-    scheduler timing and fixed captions are now modeled in runtime state),
+  - any wall-clock length for the rectangle dissolve. `#53` withdrew the
+    one-column-per-title-tick wipe in full; the dissolve is one blocking call
+    visiting every pixel once in a deterministic pseudo-random order, and the
+    engine completes it as such rather than inventing a rate,
+  - Return-to-View exact effect rasters (the public #54 scheduler timing, fixed
+    captions and 4x19 visible geometry are implemented),
   - broader `EGA.DRV` behavior beyond the canonical EGA/Tandy-equivalent path,
-  - exact historical title-tick silhouette pixels,
   - exact remote-view panel for X-Ray/Peer,
   - exact dungeon minimap glyph/floodability edge cases.
+- No longer deferred: the title-tick silhouette pixels are `ULTIMA` records
+  1..=4, read from the shipped asset at runtime. The clean-room flame generator
+  and palette-cycle table are deleted.
 - These do not block current public-depth gameplay, but should be tracked if
   exact visual parity becomes the target.
 
@@ -1099,9 +1136,13 @@ as public details become available.
     terrain stamps, out-of-range target sentinels, ordinary-combat clearing, and
     post-committed-movement dispatch for player and AI movement paths.
   - Combat round-counter wrap now applies the one-minute combat-safe clock
-    advance, and post-round maintenance sweeps terrain/effect dispatch bytes,
-    the magic-effect timer, and transient cursor/secondary-marker visuals
-    without aging field active objects.
+    advance. **Retracted:** the "post-round maintenance pass" that used to be
+    described here was an invented contract, removed in `60ec07c` after
+    `cleak/u5-spec#86`. The row-major terrain/effect sweep never did anything -
+    both call sites discarded its report and `combat_magic_effect_timer` was
+    write-only - and route-smoke's 493 cases were unchanged by its removal. What
+    is real is the combat-only cursor highlight (blink toggle, active-actor box,
+    optional secondary marker), which has live renderer consumers.
   - Combat Vanish, Magic Lock, Unlock Magic, and Open use the public issue
     #37/#39 utility fallback: no target prompt, no arena mutation, resources
     consumed after gates, turn advanced, and `Failed!` reported.

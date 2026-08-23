@@ -1,10 +1,16 @@
 # Architecture
 
 `u5-engine` is a clean-room Rust implementation that consumes the public
-specification in `../u5-spec` and local user-owned game assets at runtime. The
+`cleak/u5-spec` specification and local user-owned game assets at runtime. The
 repository must not contain original asset dumps, dialogue transcripts,
 decompiled source, private offsets, or generated tables copied from protected
 material.
+
+Read spec text from GitHub, not from the local `../u5-spec` checkout: that
+checkout is read-only from this workspace and is stale by many commits and
+several retractions. Use the issues, and
+`gh api -H "Accept: application/vnd.github.raw" repos/cleak/u5-spec/contents/<path>`
+for document text.
 
 ## Crates
 
@@ -42,16 +48,28 @@ conversation, or save rules.
 
 ## Verification Layers
 
+Asset-backed layers take `<asset-copy>`: a scratch **copy** of the asset
+directory, never `C:\Games\U5-Clean` itself. The install is a read-only
+clean-room input, these harness paths take a directory they both read and write,
+and it has been corrupted that way before. The engine refuses a write
+destination resolving to `DEFAULT_GAME_DIR`, and `copy_asset_writable` clears
+the read-only bit Windows `fs::copy` propagates into scratch copies.
+
 | Layer | Typical command |
 |---|---|
-| Runtime unit tests | `cargo test -p u5-runtime` |
-| CLI/TUI smoke tests | `cargo test -p u5-tui` |
-| Formatting | `cargo fmt -- --check` |
-| Scripted play smoke | `cargo run -- --play-script "d;empty;q" C:\Games\U5-Clean` |
-| Raster hash smoke | `cargo run -- --play-script "idle:1;q" --raster-diagnostics C:\Games\U5-Clean` |
-| Headless frame capture | `cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA C:\Games\U5-Clean` |
-| Bevy frame suite | `cargo run --features visual -- --visual-frame-suite target\visual-frame-suite C:\Games\U5-Clean` |
-| Bevy visual smoke | `cargo run --features visual -- --visual --scene BRITANNIA C:\Games\U5-Clean` |
+| Runtime unit tests | `cargo test -p u5-runtime --lib` |
+| CLI/TUI smoke tests | `cargo test -p u5-tui --features visual` |
+| Bevy tests | `cargo test -p u5-bevy` |
+| Formatting | `cargo fmt --all -- --check` |
+| Lints | `cargo clippy --workspace --all-targets` |
+| Scripted play smoke | `cargo run -- --play-script "d;empty;q" <asset-copy>` |
+| Raster hash smoke | `cargo run -- --play-script "idle:1;q" --raster-diagnostics <asset-copy>` |
+| Headless frame capture | `cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA <asset-copy>` |
+| Scripted route smoke | `cargo run --features visual -- --route-smoke <asset-copy>` |
+| Bevy frame suite | `cargo run --features visual -- --visual-frame-suite target\visual-frame-suite <asset-copy>` |
+| Bevy route suite | `cargo run --features visual -- --visual-route-suite target\visual-route-suite <asset-copy>` |
+| Bevy visual smoke | `cargo run --features visual -- --visual --scene BRITANNIA <asset-copy>` |
 
 When changing shared gameplay behavior, prefer focused runtime tests first and
-then run the full `u5-runtime` suite before committing.
+then run the full `u5-runtime` suite before committing. `docs/status-matrix.md`
+carries the current measured counts for each layer.
