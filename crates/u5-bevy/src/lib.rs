@@ -135,12 +135,12 @@ use u5_runtime::{
 };
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
-    CHROME_RIBBON_INDEX, CHROME_RULE_INDEX, ChromeFonts, ChromePalette, GameplayMessageLog,
-    MESSAGE_WINDOW_RIGHT, MessageWindowRow, RibbonCapDirection, VIEWPORT_ORIGIN_X,
-    VIEWPORT_ORIGIN_Y, command_for_letter, configure_play_text_windows, gameplay_chrome_content,
-    layout_message_window, load_runes_ch_font, message_is_scene_entry_narration,
-    paint_fixed_cell_glyph, paint_fixed_cell_text, paint_gameplay_frame_chrome,
-    paint_message_line_cap, prompt_cursor_glyph, ribbon_cap_sprite,
+    CHROME_RULE_INDEX, ChromeFonts, ChromePalette, GameplayMessageLog, MESSAGE_WINDOW_RIGHT,
+    MessageWindowRow, RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, command_for_letter,
+    configure_play_text_windows, gameplay_chrome_content, layout_message_window,
+    load_runes_ch_font, message_is_scene_entry_narration, paint_fixed_cell_glyph,
+    paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
+    prompt_cursor_glyph, ribbon_cap_sprite,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};

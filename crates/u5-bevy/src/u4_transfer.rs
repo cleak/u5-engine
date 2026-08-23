@@ -1157,7 +1157,9 @@ mod tests {
         )
         .unwrap();
         std::fs::write(
-            screen.game_dir.join(u5_runtime::BRIT_OOL_FILENAME),
+            screen
+                .game_dir
+                .join(u5_runtime::U4_TRANSFER_U5_SEED_OOL_FILENAME),
             vec![0x55; u5_runtime::OOL_PLANE_LEN],
         )
         .unwrap();
