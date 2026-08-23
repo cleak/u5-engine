@@ -617,9 +617,11 @@ impl PlayState {
         depth: TileGraphicsDepth,
         billboards: Option<&DungeonBillboardBanks>,
     ) -> io::Result<TileViewport> {
-        // Clean first-person raster for the current dungeon view. It follows
-        // the public light gate and facing-relative wall/feature checks; exact
-        // DOS sparse point-table parity remains presentation QA.
+        // First-person corridor for the current dungeon view, drawn from
+        // the flavour's billboard bank per `dungeon-mode.md` sections
+        // 6.1-6.5. An earlier comment here promised parity with a "DOS
+        // sparse point-table"; that reading of the renderer is withdrawn
+        // - the corridor is bitmap blits, not a synthesised point cloud.
         let cells = radius
             .checked_mul(2)
             .and_then(|diameter| diameter.checked_add(1))

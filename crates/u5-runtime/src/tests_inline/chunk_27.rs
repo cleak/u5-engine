@@ -590,6 +590,17 @@ fn decorated_dungeon_families_are_their_plain_counterparts_plus_scenery() {
     // decorated family is its plain counterpart with scenery
     // composited on top, so 20-23 differs from 0-3 by only a few per
     // cent of pixels where unrelated families differ by far more.
+    //
+    // **The quoted ratio is DNG1-specific and does not generalise.**
+    // Measured across all three banks: DNG1 pairs at 6.3% side and
+    // 6.1% forward against 17-31% for unrelated pairings, which is the
+    // published 4.6-7.7% band. DNG3 pairs at 13.3%/13.9% against
+    // 30-38% - still discriminating, but well outside the quoted
+    // range. DNG2 pairs at 13.9% side and **40.6% forward**, which sits
+    // inside its own unrelated band of 16.6-41.7% and does not
+    // discriminate at all. So this test deliberately reads DNG1 only;
+    // applied to DNG2 it would conclude the forward flavour family is
+    // unpaired, which is wrong.
     let game_dir = Path::new(DEFAULT_GAME_DIR);
     if !game_dir.join("DNG1.16").exists() {
         return;
