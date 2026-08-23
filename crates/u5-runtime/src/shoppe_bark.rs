@@ -429,7 +429,7 @@ pub fn audit_shoppe_records(records: &ShoppeRecords, ctx: &ShoppeBarkContext) ->
         bands: BANDS
             .into_iter()
             .map(|band| {
-                let (first, last) = band.range();
+                let (first, last) = (band.first(), band.last());
                 ShoppeBandAudit {
                     band,
                     first_record: first,
@@ -688,7 +688,7 @@ mod tests {
         let mut records = vec![Vec::new(); SHOPPE_DAT_RECORD_SLOTS];
         records[0] = vec![0x80, b' ', b'$', b' ', b'&'];
         records[crate::SHOPPE_RECORDS_REAGENT_FIRST] = vec![b'%', b' ', b'^'];
-        records[crate::SHOPPE_RECORDS_SAGE_FIRST] = vec![b'&', b' ', b'*'];
+        records[crate::SAGE_RUMOUR_FEE_QUOTE_RECORD] = vec![b'&', b' ', b'*'];
         let renderer = ShoppeTextRenderer::new(ShoppeRecords { records });
         let audit = renderer.audit_records(&ShoppeBarkContext {
             gold: 27,

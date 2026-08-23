@@ -412,6 +412,15 @@ impl PlayState {
         Some(format!("authored chest grants {}", parts.join(", ")))
     }
 
+    /// `containers.md §6` dungeon-chest reward generator. Iterates the
+    /// seven published reward rows in order, driven by
+    /// [`DUNGEON_CHEST_ROWS`] rather than by re-typed literals, so the
+    /// gate thresholds and the row order have one source of truth.
+    /// Each row rolls uniform in `1..=(4 * dungeon_depth + 4)`
+    /// ([`dungeon_chest_row_gate_max`]) and is awarded when its
+    /// threshold is at or below that roll
+    /// ([`dungeon_chest_row_awarded`]); multiple rows can succeed for
+    /// one chest.
     pub fn generate_dungeon_chest_content(
         &mut self,
         level: u8,
@@ -419,43 +428,76 @@ impl PlayState {
         y: usize,
         tile: u8,
     ) -> String {
-        let gate_upper = 4u16 * u16::from(level) + 4;
+        let gate_upper = u16::from(dungeon_chest_row_gate_max(level));
         let mut parts = Vec::new();
 
-        if self.dungeon_chest_gate_succeeds(level, x, y, tile, 0, 2, gate_upper) {
-            let amount = self.dungeon_chest_roll(level, x, y, tile, 0, 1, 31);
-            self.apply_object_pickup(ObjectPickupKind::Food, amount);
-            parts.push(format!("{amount} food"));
-        }
-        if self.dungeon_chest_gate_succeeds(level, x, y, tile, 1, 4, gate_upper) {
-            let amount = self.dungeon_chest_gold_roll(level, x, y, tile);
-            self.apply_object_pickup(ObjectPickupKind::Gold, amount);
-            parts.push(format!("{amount} gold"));
-        }
-        if self.dungeon_chest_gate_succeeds(level, x, y, tile, 2, 5, gate_upper) {
-            let amount = self.dungeon_chest_roll(level, x, y, tile, 2, 1, 3);
-            self.apply_object_pickup(ObjectPickupKind::Keys, amount);
-            parts.push(format!("{amount} keys"));
-        }
-        if self.dungeon_chest_gate_succeeds(level, x, y, tile, 3, 10, gate_upper) {
-            let amount = self.dungeon_chest_roll(level, x, y, tile, 3, 1, 3);
-            self.apply_object_pickup(ObjectPickupKind::Gems, amount);
-            parts.push(format!("{amount} gems"));
-        }
-        if self.dungeon_chest_gate_succeeds(level, x, y, tile, 4, 20, gate_upper) {
-            let amount = self.dungeon_chest_roll(level, x, y, tile, 4, 1, 3);
-            self.apply_object_pickup(ObjectPickupKind::Torches, amount);
-            parts.push(format!("{amount} torches"));
-        }
-        if self.dungeon_chest_gate_succeeds(level, x, y, tile, 5, 25, gate_upper) {
-            let subtype = self.dungeon_chest_zero_based_roll(level, x, y, tile, 5, 1, POTION_COUNT);
-            self.apply_object_pickup(ObjectPickupKind::Potion(subtype), 1);
-            parts.push(format!("1 {} potion", potion_label(subtype)));
-        }
-        if self.dungeon_chest_gate_succeeds(level, x, y, tile, 6, 25, gate_upper) {
-            let subtype = self.dungeon_chest_zero_based_roll(level, x, y, tile, 6, 1, SCROLL_COUNT);
-            self.apply_object_pickup(ObjectPickupKind::Scroll(subtype), 1);
-            parts.push(format!("1 {} scroll", scroll_label(subtype)));
+        for (index, row) in DUNGEON_CHEST_ROWS.iter().enumerate() {
+            let row_index = index as u8;
+            let gate_roll = self.dungeon_chest_roll(level, x, y, tile, row_index, 0, gate_upper);
+            if !dungeon_chest_row_awarded(*row, gate_roll) {
+                continue;
+            }
+            match row.reward {
+                DungeonChestReward::Food => {
+                    let amount = self.dungeon_chest_roll(
+                        level,
+                        x,
+                        y,
+                        tile,
+                        row_index,
+                        1,
+                        u16::from(DUNGEON_CHEST_FOOD_MAX),
+                    );
+                    self.apply_object_pickup(ObjectPickupKind::Food, amount);
+                    parts.push(format!("{amount} food"));
+                }
+                DungeonChestReward::Gold => {
+                    let amount = self.dungeon_chest_gold_roll(level, x, y, tile);
+                    self.apply_object_pickup(ObjectPickupKind::Gold, amount);
+                    parts.push(format!("{amount} gold"));
+                }
+                DungeonChestReward::Keys => {
+                    let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
+                    self.apply_object_pickup(ObjectPickupKind::Keys, amount);
+                    parts.push(format!("{amount} keys"));
+                }
+                DungeonChestReward::Gems => {
+                    let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
+                    self.apply_object_pickup(ObjectPickupKind::Gems, amount);
+                    parts.push(format!("{amount} gems"));
+                }
+                DungeonChestReward::Torches => {
+                    let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
+                    self.apply_object_pickup(ObjectPickupKind::Torches, amount);
+                    parts.push(format!("{amount} torches"));
+                }
+                DungeonChestReward::Potion => {
+                    let subtype = self.dungeon_chest_zero_based_roll(
+                        level,
+                        x,
+                        y,
+                        tile,
+                        row_index,
+                        1,
+                        POTION_COUNT,
+                    );
+                    self.apply_object_pickup(ObjectPickupKind::Potion(subtype), 1);
+                    parts.push(format!("1 {} potion", potion_label(subtype)));
+                }
+                DungeonChestReward::Scroll => {
+                    let subtype = self.dungeon_chest_zero_based_roll(
+                        level,
+                        x,
+                        y,
+                        tile,
+                        row_index,
+                        1,
+                        SCROLL_COUNT,
+                    );
+                    self.apply_object_pickup(ObjectPickupKind::Scroll(subtype), 1);
+                    parts.push(format!("1 {} scroll", scroll_label(subtype)));
+                }
+            }
         }
 
         if parts.is_empty() {
@@ -463,6 +505,20 @@ impl PlayState {
         } else {
             format!("generated chest grants {}", parts.join(", "))
         }
+    }
+
+    /// `containers.md §6`: the keys, gems, and torches rows all roll
+    /// `1..3` for their quantity.
+    pub fn dungeon_chest_small_roll(&self, level: u8, x: usize, y: usize, tile: u8, row: u8) -> u8 {
+        self.dungeon_chest_roll(
+            level,
+            x,
+            y,
+            tile,
+            row,
+            1,
+            u16::from(DUNGEON_CHEST_SMALL_MAX),
+        )
     }
 
     pub fn dungeon_chest_gate_succeeds(
@@ -478,13 +534,28 @@ impl PlayState {
         threshold <= self.dungeon_chest_roll(level, x, y, tile, row, 0, upper)
     }
 
+    /// `containers.md §6` gold row. The row passes lower endpoint `1`
+    /// and upper endpoint `8 * dungeon_depth`
+    /// ([`dungeon_chest_gold_upper`]) to the shared one-based random
+    /// helper. At `dungeon_depth == 0` that is an invalid `1..0`
+    /// range; the published behaviour is to consume one PRNG advance
+    /// and reach the zero-width edge rather than clamp the bound to
+    /// one, so [`dungeon_chest_gold_is_zero_width`] gates that branch.
     pub fn dungeon_chest_gold_roll(&self, level: u8, x: usize, y: usize, tile: u8) -> u8 {
-        let upper = 8u16 * u16::from(level);
-        if upper == 0 {
-            let _ = self.dungeon_chest_roll_seed(level, x, y, tile, 1, 1);
+        const GOLD_ROW: u8 = 1;
+        if dungeon_chest_gold_is_zero_width(level) {
+            let _ = self.dungeon_chest_roll_seed(level, x, y, tile, GOLD_ROW, 1);
             return 0;
         }
-        self.dungeon_chest_roll(level, x, y, tile, 1, 1, upper)
+        self.dungeon_chest_roll(
+            level,
+            x,
+            y,
+            tile,
+            GOLD_ROW,
+            1,
+            u16::from(dungeon_chest_gold_upper(level)),
+        )
     }
 
     pub fn dungeon_chest_roll(

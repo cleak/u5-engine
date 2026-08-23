@@ -480,6 +480,23 @@ impl PlayState {
         (0, 0)
     }
 
+    /// `rest-and-camp.md §5` completed-long-camp recovery walk. The
+    /// published guards implemented here are: accepted duration
+    /// greater than five hours, the member was not Poisoned in the
+    /// rest-local entry snapshot, the member is not Dead, and the
+    /// member is not the selected watcher. Each survivor gains a
+    /// uniform random 1..63 HP capped at maximum HP, then the class
+    /// rows that publish an MP write have their current MP assigned
+    /// (not added) to the published target.
+    ///
+    /// **Gap.** §5 also publishes a camp cooldown counter — armed at
+    /// 14 whenever a camp completes, reduced by one and floored at
+    /// zero at every hour rollover, and required to be zero before
+    /// the walk runs — and a 25-percent roll that remembers the tile
+    /// under the party and stamps the camp marker tile. Neither is
+    /// implemented: this engine has no camp cooldown field and no
+    /// camp marker stamp, so a second camp begun inside fourteen game
+    /// hours recovers again instead of printing the no-effect line.
     pub fn apply_completed_long_camp_recovery(
         &mut self,
         accepted_hours: u8,

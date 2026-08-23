@@ -605,7 +605,7 @@
     }
 
     #[test]
-    fn dungeon_view_decrements_gem_and_reports_centered_flood_map_without_light() {
+    fn dungeon_view_decrements_gem_and_reports_22x22_flood_map_without_light() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 7, 1)] = 0x20;
         grid[dungeon_cell_index(0, 2, 1)] = 0x40;
@@ -618,13 +618,19 @@
         assert_eq!(state.gems, 1);
         assert_eq!(state.turn, 0);
         assert!(state.message.contains("Dungeon view"));
-        assert!(state.message.contains("centered flood map"));
+        assert!(state.message.contains("22x22 flood map"));
         assert!(!state.message.contains("out of scope"));
+        // `dungeon-mode.md §12.1`: 22 rows of 22 cells, party at
+        // grid cell (11,11) — eleven cells left/above, ten right/below.
         let rows: Vec<_> = state.message.lines().skip(1).collect();
-        assert_eq!(rows.len(), 11);
-        assert!(rows.iter().all(|row| row.chars().count() == 11));
-        assert_eq!(rows[5].chars().nth(3), Some('>'));
-        assert!(rows[5].contains("@$#"));
+        assert_eq!(rows.len(), DUNGEON_GEM_VIEW_GRID_SIDE);
+        assert!(
+            rows.iter()
+                .all(|row| row.chars().count() == DUNGEON_GEM_VIEW_GRID_SIDE)
+        );
+        let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+        assert_eq!(rows[party_y].chars().nth(party_x - 2), Some('>'));
+        assert!(rows[party_y].contains("@$#"));
     }
 
     #[test]
@@ -637,12 +643,13 @@
         assert_eq!(state.view_gem(), MoveOutcome::Observed);
 
         let rows: Vec<_> = state.message.lines().skip(1).collect();
-        assert_eq!(rows.len(), 11);
-        assert_eq!(rows[5].chars().nth(5), Some('@'));
-        assert_eq!(rows[5].chars().nth(6), Some('#'));
-        assert_eq!(rows[5].chars().nth(7), Some(' '));
-        assert_eq!(rows[4].chars().nth(4), Some('#'));
-        assert_eq!(rows[4].chars().nth(7), Some(' '));
+        assert_eq!(rows.len(), DUNGEON_GEM_VIEW_GRID_SIDE);
+        let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+        assert_eq!(rows[party_y].chars().nth(party_x), Some('@'));
+        assert_eq!(rows[party_y].chars().nth(party_x + 1), Some('#'));
+        assert_eq!(rows[party_y].chars().nth(party_x + 2), Some(' '));
+        assert_eq!(rows[party_y - 1].chars().nth(party_x - 1), Some('#'));
+        assert_eq!(rows[party_y - 1].chars().nth(party_x + 2), Some(' '));
     }
 
     #[test]
@@ -658,8 +665,9 @@
             assert_eq!(state.view_gem(), MoveOutcome::Observed);
 
             let rows: Vec<_> = state.message.lines().skip(1).collect();
-            assert_eq!(rows[5].chars().nth(6), Some('+'));
-            assert_eq!(rows[5].chars().nth(7), Some('>'));
+            let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+            assert_eq!(rows[party_y].chars().nth(party_x + 1), Some('+'));
+            assert_eq!(rows[party_y].chars().nth(party_x + 2), Some('>'));
         }
     }
 
@@ -676,8 +684,9 @@
             assert_eq!(state.view_gem(), MoveOutcome::Observed);
 
             let rows: Vec<_> = state.message.lines().skip(1).collect();
-            assert_eq!(rows[5].chars().nth(6), Some('#'));
-            assert_eq!(rows[5].chars().nth(7), Some(' '));
+            let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+            assert_eq!(rows[party_y].chars().nth(party_x + 1), Some('#'));
+            assert_eq!(rows[party_y].chars().nth(party_x + 2), Some(' '));
         }
     }
 
@@ -798,7 +807,7 @@
     }
 
     #[test]
-    fn dungeon_view_overlay_renders_centered_minimap_raster() {
+    fn dungeon_view_overlay_renders_published_22x22_minimap_raster() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x40;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -812,10 +821,28 @@
             ViewOverlayKind::Dungeon { level: 0 }
         ));
         let viewport = state.render_active_view_overlay(TileGraphicsDepth::Ega16).unwrap();
-        assert_eq!(viewport.cells_wide, 11);
-        assert_eq!(viewport.cells_high, 11);
-        assert_eq!(viewport.width, 11 * LOCAL_VIEW_CELL_PIXEL_SCALE);
-        assert_eq!(viewport.pixel(22, 20), Some(15));
+        // `dungeon-mode.md §12.1`: 22x22 cells of 8x8 pixels — 484
+        // cells — exactly filling the cleared viewport interior
+        // `(8,8)`..=`(183,183)`, which is 176 pixels on a side.
+        assert_eq!(viewport.cells_wide, DUNGEON_GEM_VIEW_GRID_SIDE);
+        assert_eq!(viewport.cells_high, DUNGEON_GEM_VIEW_GRID_SIDE);
+        assert_eq!(
+            viewport.width,
+            DUNGEON_GEM_VIEW_GRID_SIDE * DUNGEON_GEM_VIEW_CELL_PIXELS
+        );
+        assert_eq!(viewport.height, viewport.width);
+        assert_eq!(
+            viewport.width,
+            DUNGEON_GEM_VIEW_CLEAR_RECT_END.0 - DUNGEON_GEM_VIEW_CLEAR_RECT_ORIGIN.0 + 1
+        );
+        assert_eq!(viewport.pixels.len(), 484 * 8 * 8);
+        // The party marker sits at grid cell (11,11), not at a centre.
+        let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+        let scale = DUNGEON_GEM_VIEW_CELL_PIXELS;
+        assert_eq!(
+            viewport.pixel(party_x * scale + scale / 2, party_y * scale),
+            Some(15)
+        );
     }
 
     #[test]
@@ -832,11 +859,12 @@
         let state = dungeon_state(grid, 0, 1, 1);
 
         let glyphs = state.dungeon_vision_glyphs(0);
-        let side = (DUNGEON_GEM_VIEW_RADIUS * 2 + 1) as usize;
-        let center = DUNGEON_GEM_VIEW_RADIUS as usize;
+        let side = DUNGEON_GEM_VIEW_GRID_SIDE;
+        let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+        assert_eq!(glyphs.len(), 484);
         let at = |dx: isize, dy: isize| {
-            let x = (center as isize + dx) as usize;
-            let y = (center as isize + dy) as usize;
+            let x = (party_x as isize + dx) as usize;
+            let y = (party_y as isize + dy) as usize;
             glyphs[y * side + x]
         };
 
@@ -852,10 +880,10 @@
 
         let viewport =
             state.render_dungeon_view_overlay_for_mode(0, TileGraphicsDepth::Ega16, ViewOverlayMode::GemView);
-        let cell = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let cell = DUNGEON_GEM_VIEW_CELL_PIXELS;
         let px = |dx: isize, dy: isize, lx: usize, ly: usize| {
-            let x = (center as isize + dx) as usize * cell + lx;
-            let y = (center as isize + dy) as usize * cell + ly;
+            let x = (party_x as isize + dx) as usize * cell + lx;
+            let y = (party_y as isize + dy) as usize * cell + ly;
             viewport.pixel(x, y)
         };
         assert_eq!(px(1, 0, cell / 2, 0), Some(14));
@@ -1145,14 +1173,16 @@
         );
     }
 
-    fn dungeon_view_audit_mask(glyph: Option<u8>, mode: ViewOverlayMode) -> [[u8; 4]; 4] {
-        assert_eq!(LOCAL_VIEW_CELL_PIXEL_SCALE, 4);
+    fn dungeon_view_audit_mask(glyph: Option<u8>, mode: ViewOverlayMode) -> [[u8; 8]; 8] {
+        // `dungeon-mode.md §12.1`: dungeon minimap cells are 8x8
+        // pixels, not the 4x4 of the `view.md §4` surface local view.
+        assert_eq!(DUNGEON_GEM_VIEW_CELL_PIXELS, 8);
         let viewport = PlayState::render_dungeon_view_glyph_cell_for_mode(
             TileGraphicsDepth::Ega16,
             glyph,
             mode,
         );
-        let mut mask = [[0; 4]; 4];
+        let mut mask = [[0; 8]; 8];
         for (y, row) in mask.iter_mut().enumerate() {
             for (x, pixel) in row.iter_mut().enumerate() {
                 *pixel = viewport.pixel(x, y).unwrap();
@@ -1163,70 +1193,231 @@
 
     #[test]
     fn dungeon_view_overlay_audit_masks_cover_public_glyph_families() {
+        // `dungeon-mode.md §12.1`: every dungeon minimap glyph is
+        // drawn into an eight-by-eight-pixel cell.
         let gem = ViewOverlayMode::GemView;
 
-        assert_eq!(dungeon_view_audit_mask(None, gem), [[0; 4]; 4]);
+        assert_eq!(
+            dungeon_view_audit_mask(None, gem),
+            [
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+            ]
+        );
         assert_eq!(
             dungeon_view_audit_mask(Some(0xff), gem),
-            [[0, 0, 15, 0], [0, 0, 15, 0], [15, 15, 15, 15], [0, 0, 15, 0]]
+            [
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [15, 15, 15, 15, 15, 15, 15, 15],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x18), gem),
-            [[0, 0, 0, 0], [0, 0, 0, 0], [7, 7, 7, 7], [0, 0, 0, 0]]
+            [
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [7, 7, 7, 7, 7, 7, 7, 7],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x2E), gem),
-            [[14, 14, 14, 14], [0, 0, 14, 0], [0, 0, 14, 0], [0, 0, 14, 0]]
+            [
+                [14, 14, 14, 14, 14, 14, 14, 14],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x2D), gem),
-            [[0, 0, 14, 0], [0, 0, 14, 0], [0, 0, 14, 0], [14, 14, 14, 14]]
+            [
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [14, 14, 14, 14, 14, 14, 14, 14],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x2F), gem),
-            [[14, 14, 14, 14], [0, 0, 14, 0], [14, 14, 14, 14], [14, 14, 14, 14]]
+            [
+                [14, 14, 14, 14, 14, 14, 14, 14],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [14, 14, 14, 14, 14, 14, 14, 14],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [0, 0, 0, 0, 14, 0, 0, 0],
+                [14, 14, 14, 14, 14, 14, 14, 14],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x70), gem),
-            [[14, 14, 14, 14], [14, 6, 6, 14], [14, 6, 6, 14], [14, 14, 14, 14]]
+            [
+                [14, 14, 14, 14, 14, 14, 14, 14],
+                [14, 6, 6, 6, 6, 6, 6, 14],
+                [14, 6, 6, 6, 6, 6, 6, 14],
+                [14, 6, 6, 6, 6, 6, 6, 14],
+                [14, 6, 6, 6, 6, 6, 6, 14],
+                [14, 6, 6, 6, 6, 6, 6, 14],
+                [14, 6, 6, 6, 6, 6, 6, 14],
+                [14, 14, 14, 14, 14, 14, 14, 14],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x12), gem),
-            [[0, 0, 11, 0], [0, 0, 11, 0], [11, 11, 11, 11], [0, 0, 11, 0]]
+            [
+                [0, 0, 0, 0, 11, 0, 0, 0],
+                [0, 0, 0, 0, 11, 0, 0, 0],
+                [0, 0, 0, 0, 11, 0, 0, 0],
+                [0, 0, 0, 0, 11, 0, 0, 0],
+                [11, 11, 11, 11, 11, 11, 11, 11],
+                [0, 0, 0, 0, 11, 0, 0, 0],
+                [0, 0, 0, 0, 11, 0, 0, 0],
+                [0, 0, 0, 0, 11, 0, 0, 0],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x19), gem),
-            [[14, 14, 14, 14], [14, 0, 0, 14], [14, 0, 14, 14], [14, 14, 14, 14]]
+            [
+                [14, 14, 14, 14, 14, 14, 14, 14],
+                [14, 0, 0, 0, 0, 0, 0, 14],
+                [14, 0, 0, 0, 0, 0, 0, 14],
+                [14, 0, 0, 0, 0, 0, 0, 14],
+                [14, 0, 0, 0, 14, 0, 0, 14],
+                [14, 0, 0, 0, 0, 0, 0, 14],
+                [14, 0, 0, 0, 0, 0, 0, 14],
+                [14, 14, 14, 14, 14, 14, 14, 14],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x71), gem),
-            [[12, 0, 0, 12], [0, 12, 12, 0], [0, 12, 12, 0], [12, 0, 0, 12]]
+            [
+                [12, 0, 0, 0, 0, 0, 0, 12],
+                [0, 12, 0, 0, 0, 0, 12, 0],
+                [0, 0, 12, 0, 0, 12, 0, 0],
+                [0, 0, 0, 12, 12, 0, 0, 0],
+                [0, 0, 0, 12, 12, 0, 0, 0],
+                [0, 0, 12, 0, 0, 12, 0, 0],
+                [0, 12, 0, 0, 0, 0, 12, 0],
+                [12, 0, 0, 0, 0, 0, 0, 12],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x72), gem),
-            [[14, 0, 0, 14], [0, 14, 14, 0], [0, 14, 14, 0], [14, 0, 0, 14]]
+            [
+                [14, 0, 0, 0, 0, 0, 0, 14],
+                [0, 14, 0, 0, 0, 0, 14, 0],
+                [0, 0, 14, 0, 0, 14, 0, 0],
+                [0, 0, 0, 14, 14, 0, 0, 0],
+                [0, 0, 0, 14, 14, 0, 0, 0],
+                [0, 0, 14, 0, 0, 14, 0, 0],
+                [0, 14, 0, 0, 0, 0, 14, 0],
+                [14, 0, 0, 0, 0, 0, 0, 14],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x73), gem),
-            [[0, 0, 14, 14], [0, 0, 14, 14], [14, 14, 14, 14], [0, 0, 14, 14]]
+            [
+                [0, 0, 0, 0, 14, 14, 0, 0],
+                [0, 0, 0, 0, 14, 14, 0, 0],
+                [0, 0, 0, 0, 14, 14, 0, 0],
+                [0, 0, 0, 0, 14, 14, 0, 0],
+                [14, 14, 14, 14, 14, 14, 14, 14],
+                [0, 0, 0, 0, 14, 14, 0, 0],
+                [0, 0, 0, 0, 14, 14, 0, 0],
+                [0, 0, 0, 0, 14, 14, 0, 0],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x74), gem),
-            [[13, 13, 13, 13], [13, 0, 0, 13], [13, 0, 0, 13], [13, 13, 13, 13]]
+            [
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x75), gem),
-            [[13, 13, 14, 13], [13, 0, 14, 13], [13, 0, 14, 13], [13, 13, 14, 13]]
+            [
+                [13, 13, 13, 13, 14, 13, 13, 13],
+                [13, 0, 0, 0, 14, 0, 0, 13],
+                [13, 0, 0, 0, 14, 0, 0, 13],
+                [13, 0, 0, 0, 14, 0, 0, 13],
+                [13, 0, 0, 0, 14, 0, 0, 13],
+                [13, 0, 0, 0, 14, 0, 0, 13],
+                [13, 0, 0, 0, 14, 0, 0, 13],
+                [13, 13, 13, 13, 14, 13, 13, 13],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x76), gem),
-            [[5, 5, 5, 5], [5, 0, 0, 5], [5, 0, 14, 5], [5, 5, 5, 5]]
+            [
+                [5, 5, 5, 5, 5, 5, 5, 5],
+                [5, 0, 0, 0, 0, 0, 0, 5],
+                [5, 0, 0, 0, 0, 0, 0, 5],
+                [5, 0, 0, 0, 0, 0, 0, 5],
+                [5, 0, 0, 0, 14, 0, 0, 5],
+                [5, 0, 0, 0, 0, 0, 0, 5],
+                [5, 0, 0, 0, 0, 0, 0, 5],
+                [5, 5, 5, 5, 5, 5, 5, 5],
+            ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(0x77), gem),
-            [[14, 14, 14, 14], [14, 0, 14, 14], [14, 14, 14, 14], [14, 14, 14, 14]]
+            [
+                [14, 14, 14, 14, 14, 14, 14, 14],
+                [14, 0, 0, 0, 14, 14, 0, 14],
+                [14, 0, 0, 0, 14, 14, 0, 14],
+                [14, 0, 0, 0, 14, 14, 0, 14],
+                [14, 14, 14, 14, 14, 14, 14, 14],
+                [14, 0, 0, 0, 14, 14, 0, 14],
+                [14, 0, 0, 0, 14, 14, 0, 14],
+                [14, 14, 14, 14, 14, 14, 14, 14],
+            ]
         );
-        assert_eq!(dungeon_view_audit_mask(Some(0x7F), gem), [[13, 13, 13, 13]; 4]);
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x7F), gem),
+            [
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+            ]
+        );
     }
 
     #[test]
@@ -1244,9 +1435,11 @@
             dungeon_view_audit_mask(Some(0x73), peer)
         );
 
+        // Row 4 is the mid-cell row of an eight-pixel cell, where the
+        // ladder/fountain/door cross-bars land.
         assert_eq!(dungeon_view_audit_mask(Some(0x2E), x_ray)[0][0], 15);
-        assert_eq!(dungeon_view_audit_mask(Some(0x12), x_ray)[2][0], 9);
-        assert_eq!(dungeon_view_audit_mask(Some(0x73), x_ray)[2][0], 11);
+        assert_eq!(dungeon_view_audit_mask(Some(0x12), x_ray)[4][0], 9);
+        assert_eq!(dungeon_view_audit_mask(Some(0x73), x_ray)[4][0], 11);
         assert_eq!(dungeon_view_audit_mask(Some(0x74), x_ray)[0][0], 8);
         assert_eq!(dungeon_view_audit_mask(Some(0x76), x_ray)[0][0], 13);
     }

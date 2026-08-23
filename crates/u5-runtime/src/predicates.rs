@@ -369,26 +369,14 @@ pub const fn ship_sail_toggle_marker(current_marker: u8) -> Option<u8> {
     }
 }
 
-/// `vehicles.md §4` ship-boarding hull-condition warning threshold.
-/// After a successful ship board, the handler warns the player if
-/// the boarded ship's `+5` hull-condition byte is strictly less than
-/// this threshold. The ship still boards; the warning is presentation
-/// only.
-pub const SHIP_HULL_BOARDING_WARNING_THRESHOLD: u8 = 10;
-
-/// `vehicles.md §4`: returns `true` when ship boarding should print
-/// the low-hull warning after a successful board. The ship is still
-/// boarded either way; the helper only encodes the presentation gate.
-pub const fn ship_boarding_warns_low_hull(hull_condition: u8) -> bool {
-    hull_condition < SHIP_HULL_BOARDING_WARNING_THRESHOLD
-}
-
-/// `vehicles.md §4` shipwright-purchased Frigate starting state. A
-/// newly placed Frigate carries the published hull condition and
-/// skiff count when it appears at the stored sale coordinates on
-/// the next overworld entry.
-pub const FRIGATE_INITIAL_HULL_CONDITION: u8 = 100;
-pub const FRIGATE_INITIAL_SKIFFS: u8 = 2;
+// `vehicles.md §4` ship-boarding warnings and the shipwright-
+// purchased Frigate's starting hull/skiff state live in
+// `transport.rs`, next to the boarding precondition they belong to:
+// [`crate::SHIP_BOARDING_HULL_WARNING_THRESHOLD`] /
+// [`crate::ship_boarding_warnings`] and [`crate::FRIGATE_PURCHASE_HULL`]
+// / [`crate::FRIGATE_PURCHASE_SKIFFS`]. This module previously carried
+// a second copy of both under word-swapped names; the duplicate hull
+// constant also read `100` where `vehicles.md` publishes `99`.
 
 /// `vehicles.md §2`: typed [`Direction`] for the transport marker's
 /// facing. Decodes the low two bits via [`transport_facing_index`]
