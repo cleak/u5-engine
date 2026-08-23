@@ -293,4 +293,13 @@ impl WorldPlane {
             Self::Underworld => -1,
         }
     }
+
+    /// `catalogs/item-list.md`: the world-plane byte as the shipped save
+    /// carries it — the surface value, or the all-ones Underworld value.
+    /// This is [`Self::save_floor`] read as a byte, and it is what the
+    /// Sextant's threshold plane test in
+    /// [`crate::sextant_outdoor_position`] compares against.
+    pub fn plane_byte(self) -> u8 {
+        self.save_floor() as u8
+    }
 }

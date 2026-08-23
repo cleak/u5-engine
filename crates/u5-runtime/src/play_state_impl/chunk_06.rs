@@ -199,7 +199,7 @@ impl PlayState {
                 let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
                 let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
                 if self.surface_object_chest_slot_at(tx, ty).is_some() {
-                    return Ok(self.start_surface_object_chest_prompt(
+                    return Ok(self.begin_surface_object_chest_interaction(
                         tx,
                         ty,
                         SurfaceChestVerb::Open,
@@ -237,7 +237,7 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
         if self.surface_object_chest_slot_at(tx, ty).is_some() {
-            return Ok(self.start_surface_object_chest_prompt(tx, ty, SurfaceChestVerb::Open));
+            return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Open));
         }
         if !(96..=103).contains(&tile) {
             self.message = "Nothing to open!".to_string();
@@ -339,6 +339,39 @@ impl PlayState {
         Ok(None)
     }
 
+    /// `traps.md §2.1` / `containers.md`: the surface/town container site
+    /// chooses its acting member through the shared acting-member
+    /// selection, *before* testing whether the container is trapped. A
+    /// prompt is only **one** of that selection's three outcomes: a
+    /// combat-class scene and a set active character both bypass it
+    /// silently, and a party with exactly one Good-or-Poisoned member
+    /// selects that member silently, with no prompt and no name echo.
+    /// When nobody qualifies the command reports it and aborts, before
+    /// any trap can fire.
+    pub fn begin_surface_object_chest_interaction(
+        &mut self,
+        x: usize,
+        y: usize,
+        verb: SurfaceChestVerb,
+    ) -> MoveOutcome {
+        match self.surface_container_acting_member() {
+            ActingMemberSelection::Selected(member_index) => self
+                .consume_surface_object_chest_at(x, y, member_index, verb.label())
+                .unwrap_or_else(|| {
+                    self.message = "Nothing to open!".to_string();
+                    MoveOutcome::Blocked
+                }),
+            ActingMemberSelection::Prompt => self.start_surface_object_chest_prompt(x, y, verb),
+            ActingMemberSelection::NoneAble => {
+                self.message = "No party members are available.".to_string();
+                MoveOutcome::Blocked
+            }
+        }
+    }
+
+    /// `traps.md §2.1` branch 3, two-or-more case: open the interactive
+    /// picker. Reached only from
+    /// [`Self::begin_surface_object_chest_interaction`] in ordinary play.
     pub fn start_surface_object_chest_prompt(
         &mut self,
         x: usize,
@@ -382,14 +415,21 @@ impl PlayState {
             }
             let member_index = digit - 1;
             if !self.surface_chest_member_available(member_index) {
-                self.message = party_member_unavailable_message(member_index);
-                return Ok(Some(MoveOutcome::PromptDeclined));
+                // `traps.md §2.1`: a confirmed pick that is not
+                // Good-or-Poisoned is rejected with the short "disabled"
+                // notice and **the prompt repeats** - it does not abort.
+                // The original's literal is unpublished, so this reuses
+                // the engine's existing unavailable-member line rather
+                // than inventing one (cleak/u5-spec#81).
+                self.message = format!("Party member {} is unavailable.", member_index + 1);
+                self.active_surface_chest = Some(session);
+                return Ok(None);
             }
             let outcome = self
                 .consume_surface_object_chest_at(
                     session.x,
                     session.y,
-                    Some(member_index),
+                    member_index,
                     session.verb.label(),
                 )
                 .unwrap_or_else(|| {
@@ -403,10 +443,13 @@ impl PlayState {
         Ok(None)
     }
 
+    /// `traps.md §2.1` branch 3: the picker accepts exactly the statuses
+    /// the scan accepts - Good or Poisoned. `conscious()` is a wider gate
+    /// (it admits Charmed, among others) and was the wrong test here.
     pub fn surface_chest_member_available(&self, member_index: usize) -> bool {
         self.party
             .get(member_index)
-            .is_some_and(|member| member.conscious())
+            .is_some_and(|member| acting_member_status_eligible(member.status))
     }
 
     #[cfg(test)]
@@ -745,20 +788,32 @@ impl PlayState {
         self.random_range_u8(JIMMY_OBJECT_DIE_LOW, JIMMY_OBJECT_DIE_HIGH)
     }
 
+    /// `containers.md` / `traps.md §4`: `member_index` is the acting member
+    /// already chosen by [`Self::begin_surface_object_chest_interaction`]
+    /// before this site tests the trap bit — the selection is not made
+    /// here, and there is no slot-0 fallback.
+    ///
+    /// Two orderings below are load-bearing. The flag/class byte is copied
+    /// to `stat` **first**, so the trap still fires on this open; the
+    /// matched object record is then cleared outright — its kind, its
+    /// position, and the byte carrying the trap flag and content class —
+    /// so a later Open of the same square matches no container at all. The
+    /// record lives inside the persisted save image, so the clear is
+    /// durable: **a trapped surface or town container cannot spring a
+    /// second time.** `traps.md` §4 published that as an open gap and has
+    /// since withdrawn it; do not reintroduce the uncertainty.
     pub fn consume_surface_object_chest_at(
         &mut self,
         x: usize,
         y: usize,
-        member_index: Option<usize>,
+        member_index: usize,
         verb: &str,
     ) -> Option<MoveOutcome> {
         let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
         let stat = Self::surface_object_chest_stat(object)?;
         let chest_class = stat & 0x7f;
-        let trap_note = (stat & 0x80 != 0).then(|| {
-            let target = member_index.unwrap_or_else(|| self.shared_trap_default_target_slot());
-            self.apply_shared_trap_effect_to_slot(target)
-        });
+        let trap_note =
+            (stat & 0x80 != 0).then(|| self.apply_shared_trap_effect_to_slot(member_index));
         let content_note = self.generate_surface_object_chest_content(slot, x, y, chest_class);
         self.clear_consumed_active_object_slot(slot);
         self.rewrite_surface_object_chest_cell(x, y);
@@ -1458,7 +1513,7 @@ impl PlayState {
             return Ok(outcome);
         }
         if self.surface_object_chest_slot_at(tx, ty).is_some() {
-            return Ok(self.start_surface_object_chest_prompt(tx, ty, SurfaceChestVerb::Get));
+            return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
         }
         if self.world_object_at(tx, ty).is_some() {
             self.message = "Nothing to get there.".to_string();
@@ -1535,7 +1590,7 @@ impl PlayState {
             return Ok(outcome);
         }
         if self.surface_object_chest_slot_at(tx, ty).is_some() {
-            return Ok(self.start_surface_object_chest_prompt(tx, ty, SurfaceChestVerb::Get));
+            return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
         }
         if self.blocking_object_at(tx, ty).is_some() {
             self.message = "Nothing to get there.".to_string();

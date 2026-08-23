@@ -269,10 +269,29 @@ impl PlayState {
         tile: u8,
         verb: &str,
     ) -> MoveOutcome {
+        // `traps.md §2.1`/§4: the dungeon chest site uses the same shared
+        // acting-member selection, minus the combat override - the Open
+        // dispatcher never routes a combat-class scene here. The selection
+        // runs before the trap test, so a party with nobody able aborts
+        // before the trap can fire.
+        let acting_member = self.dungeon_container_acting_member();
+        let target_slot = match acting_member {
+            ActingMemberSelection::Selected(slot) => slot,
+            // Two or more qualify: the dungeon site has no picker of its
+            // own in this engine, so the scan's last match stands in. The
+            // choice is observable only for effect ids 0 and 1; ids 2 and
+            // 3 ignore the slot entirely.
+            ActingMemberSelection::Prompt => {
+                self.acting_member_scan_last_eligible_slot().unwrap_or(0)
+            }
+            ActingMemberSelection::NoneAble => {
+                self.message = "No party members are available.".to_string();
+                return MoveOutcome::Blocked;
+            }
+        };
         let trap_note = if self.dungeon_chest_trap_detail(level, x, y, tile) == "no trap" {
             None
         } else {
-            let target_slot = self.shared_trap_default_target_slot();
             Some(self.apply_shared_trap_effect_to_slot(target_slot))
         };
         self.grid[idx] = 0x70 | (tile & 0x0f);

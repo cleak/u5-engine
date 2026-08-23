@@ -1326,26 +1326,116 @@ impl PlayState {
     }
 
     pub fn wrong_mix_trap_message(&mut self, base: String) -> String {
-        let target_slot = self.shared_trap_default_target_slot();
+        let target_slot = self.mixer_trap_target_slot();
         let trap = self.apply_shared_trap_effect_to_slot(target_slot);
         format!("{base}\n{trap}")
     }
 
-    /// `traps.md §4` (M-Mix): the mixer refreshes its target scratch slot
-    /// to the first travelling member currently marked Good or Poisoned.
-    /// When no such member exists the original leaves the scratch slot
-    /// holding a stale party index and the spec calls that undefined
-    /// behaviour a port should decide deliberately; the `.or(active)/0`
-    /// tail below is that deliberate choice, not published behaviour.
-    /// `traps.md` also does not publish how the two container call sites
-    /// pick their triggering slot, so they reuse this helper. See
-    /// `cleak/u5-spec` traps.md §2/§4 for the open question.
-    pub fn shared_trap_default_target_slot(&self) -> usize {
+    /// `traps.md §4` (M-Mix): the mixer supplies its own victim slot and
+    /// does **not** use the §2.1 acting-member selection. Before calling
+    /// the trap-effect resolver it refreshes its target to the **first**
+    /// travelling member currently marked Good or Poisoned.
+    ///
+    /// When no such member exists the original leaves the target holding
+    /// whatever it last held and the trap lands on that stale value;
+    /// `traps.md` §4 names that undefined behaviour and tells a port to
+    /// decide deliberately rather than invent a fallback. The
+    /// `.or(active)/0` tail is that deliberate choice, not published
+    /// behaviour. `cleak/u5-spec#89` re-confirmed the case is explicitly
+    /// undefined, so the choice stays as it is.
+    ///
+    /// The two container call sites do **not** share this helper: §2.1
+    /// publishes a real selection rule for them, implemented in
+    /// [`Self::shared_acting_member_selection`].
+    pub fn mixer_trap_target_slot(&self) -> usize {
         self.party
             .iter()
             .position(|member| matches!(member.status, b'G' | b'P'))
             .or(self.active_player)
             .unwrap_or(0)
+    }
+
+    /// `traps.md §2.1`: the shared acting-member selection, in priority
+    /// order.
+    ///
+    /// 1. **During a combat-class scene**, the party slot bound to the
+    ///    combatant whose turn is in progress, chosen silently: no prompt,
+    ///    no status test.
+    /// 2. **Otherwise, when a single active character is set**, that
+    ///    character, returned directly and silently, with **no status
+    ///    re-check** — so a member who has become Asleep or Charmed since
+    ///    the hint was set can still be the trap victim.
+    /// 3. **Otherwise**, the Good-or-Poisoned scan of
+    ///    [`acting_member_scan`].
+    ///
+    /// The scoping matters and was nearly published wrong: "a party with
+    /// no able-bodied member can never spring a container trap" holds
+    /// **only** outside a combat-class scene and **only** with no active
+    /// character set. Both override branches skip the status test
+    /// entirely, so neither is covered by that guarantee.
+    ///
+    /// `allow_combat_override` selects whether branch 1 is reachable. The
+    /// `O` Open dispatcher routes only a narrow band of dungeon scenes to
+    /// the dungeon chest handler and every other scene — combat-class
+    /// scenes included — to the surface/town handler, so per §4 the combat
+    /// override can fire at the surface/town container site and can
+    /// **never** fire at the dungeon chest site.
+    ///
+    /// §2.1 records that the original range-checks neither the combatant
+    /// index nor its "is a party member" flag, and that a port which does
+    /// range-check is safe against every reachable case published. This
+    /// range-checks.
+    pub fn shared_acting_member_selection(
+        &self,
+        allow_combat_override: bool,
+    ) -> ActingMemberSelection {
+        if allow_combat_override && self.combat_active {
+            if let Some(slot) = self
+                .pending_combat_actor_slot
+                .filter(|slot| *slot < self.party.len() && *slot < COMBAT_PARTY_ACTOR_SLOTS)
+            {
+                return ActingMemberSelection::Selected(slot);
+            }
+        }
+        if let Some(slot) = self.active_player.filter(|slot| *slot < self.party.len()) {
+            return ActingMemberSelection::Selected(slot);
+        }
+        let statuses: Vec<u8> = self
+            .party
+            .iter()
+            .take(COMBAT_PARTY_ACTOR_SLOTS)
+            .map(|member| member.status)
+            .collect();
+        acting_member_scan(&statuses)
+    }
+
+    /// `traps.md §2.1` branch 3: the **last** Good-or-Poisoned roster
+    /// position inside the party count, which is the match the scan keeps.
+    ///
+    /// This is not itself a published outcome — §2.1's two-or-more case
+    /// prompts — and it exists only as the dungeon chest site's stand-in
+    /// for a picker this engine does not yet have there. Marked as a
+    /// deliberate choice, not as contract.
+    pub fn acting_member_scan_last_eligible_slot(&self) -> Option<usize> {
+        self.party
+            .iter()
+            .take(COMBAT_PARTY_ACTOR_SLOTS)
+            .rposition(|member| acting_member_status_eligible(member.status))
+    }
+
+    /// `traps.md §2.1`/§4: the surface/town container site's acting-member
+    /// selection. The Open dispatcher sends combat-class scenes here, so
+    /// the combat override is reachable at this site.
+    pub fn surface_container_acting_member(&self) -> ActingMemberSelection {
+        self.shared_acting_member_selection(true)
+    }
+
+    /// `traps.md §2.1`/§4: the dungeon chest site's acting-member
+    /// selection. Only the narrow dungeon-scene band reaches the dungeon
+    /// chest handler, and combat-class scene values sit far above that
+    /// band, so the combat override can never fire here.
+    pub fn dungeon_container_acting_member(&self) -> ActingMemberSelection {
+        self.shared_acting_member_selection(false)
     }
 
     /// `traps.md §2-3`: dispatch the resolved effect family. The family

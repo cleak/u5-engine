@@ -225,20 +225,48 @@ pub const fn hms_cape_plans_usable(transport_marker: u8) -> bool {
     matches!(transport_marker, 0x20..=0x27)
 }
 
-/// `inventory.md §7` Sextant U-Use eligibility predicate. The
-/// Sextant is an outdoor night-only utility — it refuses outside
-/// the overworld or during the daytime interval. The "daytime
-/// interval" matches the surface daylight band where the daylight
-/// model produces full daylight (`hour 6..=18`); outside that band
-/// (hours `0..=5` and `19..=23`) the Sextant is usable on the
-/// overworld plane.
-pub const fn sextant_usable(scene_byte: u8, hour: u8) -> bool {
-    // Overworld scene byte is zero; any other scene refuses.
-    if scene_byte != 0 {
+/// `catalogs/item-list.md` Sextant row / `inventory.md §7`: the first
+/// two of the Sextant's three conditions — the party is on the
+/// **surface** world plane and the scene is the outdoor world scene.
+///
+/// The published plane test is a magnitude comparison: the world-plane
+/// value must lie in the lower half of its byte range, rather than an
+/// equality against the surface value. The two agree on every reachable
+/// state, because on the outdoor scene the plane only ever holds the
+/// surface value or the all-ones Underworld value, and the spec names
+/// the threshold form the safer contract for an engine that represents
+/// the plane numerically.
+///
+/// The plane test runs **first and short-circuits**, so the Underworld
+/// — which *is* the outdoor world scene, only on the other plane — takes
+/// the same "outdoors" refusal an indoor scene takes and never reaches
+/// the night test. There is no Underworld-specific message.
+pub const fn sextant_outdoor_position(world_plane_byte: u8, scene_byte: u8) -> bool {
+    if world_plane_byte >= 0x80 {
         return false;
     }
-    // Daytime interval is hours 6..=18; outside that, accept.
-    hour < 6 || hour > 18
+    // Outdoor world scene byte is zero; any other scene refuses.
+    scene_byte == 0
+}
+
+/// `catalogs/item-list.md` / `inventory.md §7`: the night window the
+/// Sextant and the Spyglass share — hours `19..=23` and `0..=5`. This is
+/// deliberately **not** [`crate::is_town_night_hour`], which is town
+/// lighting's own window (`0..=4` and `20..=23`) and disagrees at hours
+/// `5` and `19`.
+pub const fn sextant_night_hour(hour: u8) -> bool {
+    hour <= 5 || hour >= 19
+}
+
+/// `catalogs/item-list.md` Sextant row / `inventory.md §7` Sextant U-Use
+/// eligibility predicate. A reading is permitted only when **all three**
+/// published conditions hold: the surface world plane, the outdoor world
+/// scene, and a night hour. The two refusals are distinguishable — a
+/// plane or scene failure is the "outdoors" refusal and a daytime hour is
+/// the "no stars" refusal — so callers that must tell them apart use
+/// [`sextant_outdoor_position`] and [`sextant_night_hour`] directly.
+pub const fn sextant_usable(world_plane_byte: u8, scene_byte: u8, hour: u8) -> bool {
+    sextant_outdoor_position(world_plane_byte, scene_byte) && sextant_night_hour(hour)
 }
 
 /// `inventory.md §7` U-Use scroll family. The handler exposes eight

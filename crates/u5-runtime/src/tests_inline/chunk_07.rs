@@ -26,9 +26,23 @@ fn use_command_rejects_inline_torch_and_gem_aliases() {
     assert_eq!(world.message, use_prompt_message());
 }
 
+/// `world_state` builds an **Underworld** state; the Sextant refuses
+/// there, so a reading needs the surface plane.
+fn surface_world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
+    let mut state = world_state(grid, x, y);
+    state.area = Area::World {
+        plane: WorldPlane::Britannia,
+    };
+    state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+    state
+        .rebuild_world_live_chunks_from_grid(WorldPlane::Britannia)
+        .unwrap();
+    state
+}
+
 #[test]
 fn use_command_routes_inline_sextant_request_at_night() {
-    let mut world = world_state(open_world_grid(), 0x23, 0xaf);
+    let mut world = surface_world_state(open_world_grid(), 0x23, 0xaf);
     world.clock = GameClock::new(20, 0).unwrap();
     world.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
 
@@ -42,8 +56,54 @@ fn use_command_routes_inline_sextant_request_at_night() {
 }
 
 #[test]
+fn sextant_refuses_in_the_underworld_with_the_indoor_refusal() {
+    // catalogs/item-list.md Sextant row / inventory.md §7: the plane test
+    // runs first and short-circuits, so the Underworld - which *is* the
+    // outdoor world scene, only on the other plane - takes the same
+    // "outdoors" refusal an indoor scene takes, at a night hour that would
+    // otherwise read. There is no Underworld-specific message and no
+    // coordinate readout. An earlier revision of this suite asserted a
+    // successful Underworld reading through the `world_state` fixture,
+    // which is an Underworld state; that assertion is withdrawn.
+    let mut under = world_state(open_world_grid(), 0x23, 0xaf);
+    assert_eq!(under.area, Area::World { plane: WorldPlane::Underworld });
+    under.clock = GameClock::new(20, 0).unwrap();
+    under.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+
+    assert_eq!(under.use_sextant(), MoveOutcome::Blocked);
+    assert_eq!(under.message, "Not here!");
+    assert_eq!(under.turn, 0);
+
+    // The same square on the surface plane does read.
+    let mut surface = surface_world_state(open_world_grid(), 0x23, 0xaf);
+    surface.clock = GameClock::new(20, 0).unwrap();
+    surface.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+    assert_eq!(surface.use_sextant(), MoveOutcome::Used);
+    assert_eq!(surface.message, "Sextant: K'P,C'D\"");
+}
+
+#[test]
+fn sextant_night_window_includes_hours_five_and_nineteen() {
+    // catalogs/item-list.md: the window is `19..=23` / `0..=5`, not town
+    // lighting's `20..=23` / `0..=4`. Hours 5 and 19 are inside it; hours
+    // 6 and 18 are not.
+    for (hour, usable) in [(5u8, true), (6, false), (18, false), (19, true)] {
+        let mut world = surface_world_state(open_world_grid(), 0x23, 0xaf);
+        world.clock = GameClock::new(hour, 0).unwrap();
+        world.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+        let outcome = world.use_sextant();
+        if usable {
+            assert_eq!(outcome, MoveOutcome::Used, "hour {hour}");
+        } else {
+            assert_eq!(outcome, MoveOutcome::Blocked, "hour {hour}");
+            assert_eq!(world.message, "Cannot see the stars!", "hour {hour}");
+        }
+    }
+}
+
+#[test]
 fn sextant_requires_item_world_scene_and_night() {
-    let mut world = world_state(open_world_grid(), 1, 1);
+    let mut world = surface_world_state(open_world_grid(), 1, 1);
     assert_eq!(world.use_sextant(), MoveOutcome::Blocked);
     assert_eq!(world.message, "No Sextant!");
 

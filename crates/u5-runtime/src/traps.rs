@@ -134,3 +134,53 @@ pub const fn trap_poison_accepts(status: crate::CharacterStatus) -> bool {
 pub const fn trap_poison_accepts_status_byte(status: u8) -> bool {
     status != crate::CharacterStatus::Dead.save_byte()
 }
+
+/// `traps.md §2.1` outcome of the shared acting-member selection — the
+/// selection that decides who performs Search, Jimmy, Get, Open, Look and
+/// Cast, and which both container call sites consult **before** they test
+/// whether the container is trapped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActingMemberSelection {
+    /// A slot was chosen silently: no prompt, and no echo of the chosen
+    /// member's name. §2.1 is explicit that the single-qualifier case does
+    /// *not* echo the name, where a prompted pick does, so an engine that
+    /// echoes here prints a line the original does not.
+    Selected(usize),
+    /// Two or more members qualify, so the interactive picker runs.
+    Prompt,
+    /// Nobody qualifies. The command reports it and aborts — before the
+    /// trap can fire.
+    NoneAble,
+}
+
+/// `traps.md §2.1` branch 3 status gate: the scan considers members whose
+/// status is Good or Poisoned. Every other status — Dead, Ashes, Asleep,
+/// Charmed — is ineligible, and a confirmed pick that is ineligible is
+/// rejected with the short "disabled" notice rather than accepted.
+pub const fn acting_member_status_eligible(status: u8) -> bool {
+    matches!(status, b'G' | b'P')
+}
+
+/// `traps.md §2.1` branch 3: scan the roster positions inside the current
+/// party count for Good-or-Poisoned members, **keeping the last match**.
+///
+/// Three outcomes, and the middle one is the easy one to get wrong: zero
+/// matches aborts the command, **exactly one match is auto-selected
+/// silently with no prompt at all**, and two or more prompt. `statuses`
+/// is the status byte of each roster position already bounded by the
+/// party count.
+pub fn acting_member_scan(statuses: &[u8]) -> ActingMemberSelection {
+    let mut last = None;
+    let mut matches = 0usize;
+    for (slot, status) in statuses.iter().copied().enumerate() {
+        if acting_member_status_eligible(status) {
+            last = Some(slot);
+            matches += 1;
+        }
+    }
+    match (matches, last) {
+        (1, Some(slot)) => ActingMemberSelection::Selected(slot),
+        (0, _) => ActingMemberSelection::NoneAble,
+        _ => ActingMemberSelection::Prompt,
+    }
+}
