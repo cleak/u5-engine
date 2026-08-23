@@ -1331,6 +1331,15 @@ impl PlayState {
         format!("{base}\n{trap}")
     }
 
+    /// `traps.md §4` (M-Mix): the mixer refreshes its target scratch slot
+    /// to the first travelling member currently marked Good or Poisoned.
+    /// When no such member exists the original leaves the scratch slot
+    /// holding a stale party index and the spec calls that undefined
+    /// behaviour a port should decide deliberately; the `.or(active)/0`
+    /// tail below is that deliberate choice, not published behaviour.
+    /// `traps.md` also does not publish how the two container call sites
+    /// pick their triggering slot, so they reuse this helper. See
+    /// `cleak/u5-spec` traps.md §2/§4 for the open question.
     pub fn shared_trap_default_target_slot(&self) -> usize {
         self.party
             .iter()
@@ -1339,18 +1348,30 @@ impl PlayState {
             .unwrap_or(0)
     }
 
+    /// `traps.md §2-3`: dispatch the resolved effect family. The family
+    /// classification lives in [`shared_trap_effect_family_from_index`]
+    /// so the resolver and the published-predicate helpers cannot drift
+    /// apart; this match is exhaustive over [`TrapEffect`] rather than
+    /// falling through a catch-all arm.
     pub fn apply_shared_trap_effect_to_slot(&mut self, triggering_slot: usize) -> String {
-        match self.shared_trap_effect_id(triggering_slot) {
-            0 => self.apply_acid_trap_effect(triggering_slot),
-            1 => self.apply_poison_trap_effect(triggering_slot),
-            2 => self.apply_bomb_trap_effect(triggering_slot),
-            _ => self.apply_gas_trap_effect(),
+        match self.shared_trap_effect_family(triggering_slot) {
+            TrapEffect::Acid => self.apply_acid_trap_effect(triggering_slot),
+            TrapEffect::Poison => self.apply_poison_trap_effect(triggering_slot),
+            TrapEffect::Bomb => self.apply_bomb_trap_effect(triggering_slot),
+            TrapEffect::Gas => self.apply_gas_trap_effect(),
         }
     }
 
     pub fn shared_trap_effect_id(&self, triggering_slot: usize) -> u8 {
         let seed = self.shared_trap_seed(triggering_slot, 0);
         shared_trap_effect_id_from_index(seed, self.combat_active)
+    }
+
+    /// `traps.md §3`: the effect family selected for this trigger, using
+    /// the same combat/non-combat split as [`Self::shared_trap_effect_id`].
+    pub fn shared_trap_effect_family(&self, triggering_slot: usize) -> TrapEffect {
+        let seed = self.shared_trap_seed(triggering_slot, 0);
+        shared_trap_effect_family_from_index(seed, self.combat_active)
     }
 
     pub fn shared_trap_seed(&self, triggering_slot: usize, salt: u8) -> u8 {
@@ -1394,12 +1415,12 @@ impl PlayState {
         )
     }
 
+    /// `traps.md §3` effect id 1: apply Poisoned status to the triggering
+    /// slot through the shared poison helper. A member already marked
+    /// Dead is skipped and left Dead.
     pub fn apply_poison_trap_effect(&mut self, triggering_slot: usize) -> String {
-        if self.revive_dead_party_member_as_poisoned(triggering_slot) {
-            format!(
-                "Poison trap revived party member {} as poisoned.",
-                triggering_slot + 1
-            )
+        if self.apply_trap_poison_status_to_slot(triggering_slot) {
+            format!("Poison trap poisoned party member {}.", triggering_slot + 1)
         } else {
             format!(
                 "Poison trap had no effect on party member {}.",
@@ -1434,26 +1455,34 @@ impl PlayState {
         format!("Bomb trap dealt {total_applied} HP across {affected} party member(s).")
     }
 
+    /// `traps.md §3` effect id 3: apply Poisoned status across the
+    /// six-slot party band through the same helper as effect id 1.
+    /// Empty roster positions and Dead members are skipped by the helper.
     pub fn apply_gas_trap_effect(&mut self) -> String {
-        let mut revived = 0usize;
-        for slot in 0..self.party.len().min(COMBAT_PARTY_ACTOR_SLOTS) {
-            if self.revive_dead_party_member_as_poisoned(slot) {
-                revived += 1;
+        let mut poisoned = 0usize;
+        for slot in 0..COMBAT_PARTY_ACTOR_SLOTS {
+            if self.apply_trap_poison_status_to_slot(slot) {
+                poisoned += 1;
             }
         }
-        format!("Gas trap revived {revived} dead party member(s) as poisoned.")
+        format!("Gas trap poisoned {poisoned} party member(s).")
     }
 
-    pub fn revive_dead_party_member_as_poisoned(&mut self, slot: usize) -> bool {
+    /// `traps.md §3`: the shared trap poison-status primitive used by
+    /// effect ids 1 and 3. A slot outside the current party count is
+    /// ignored and a member already marked Dead is skipped and left
+    /// Dead; any other in-party member is rewritten to Poisoned.
+    /// Nothing else changes — no hit points, maxima, or magic points,
+    /// and no relation to the resurrection spell path.
+    pub fn apply_trap_poison_status_to_slot(&mut self, slot: usize) -> bool {
         let Some(member) = self.party.get_mut(slot) else {
             return false;
         };
-        if member.status == b'D' {
-            member.status = b'P';
-            true
-        } else {
-            false
+        if !trap_poison_accepts_status_byte(member.status) {
+            return false;
         }
+        member.status = TRAP_POISON_STATUS_BYTE;
+        true
     }
 
     pub fn shrine_prompt_at_current_position(&self, game_dir: &Path) -> io::Result<Option<String>> {

@@ -33,13 +33,14 @@ pub enum TrapEffect {
     /// Effect id 0 — acid sting; rolls `1..=30` damage on the triggering
     /// slot only.
     Acid,
-    /// Effect id 1 — poison label; runs the narrow revive helper for the
-    /// triggering slot.
+    /// Effect id 1 — poison label; runs the shared poison-status helper
+    /// for the triggering slot.
     Poison,
     /// Effect id 2 — bomb; rolls `1..=8` damage independently for each
     /// living member in slots `0..=5`.
     Bomb,
-    /// Effect id 3 — gas; runs the narrow revive helper for slots `0..=5`.
+    /// Effect id 3 — gas; runs the shared poison-status helper for slots
+    /// `0..=5`.
     Gas,
 }
 
@@ -55,7 +56,7 @@ pub const fn trap_effect_for_id(effect_id: u8) -> Option<TrapEffect> {
 }
 
 /// `traps.md §3`: per-family damage upper bound for the families that
-/// roll damage. Returns `None` for revive-helper families.
+/// roll damage. Returns `None` for the poison-helper families.
 pub const fn trap_effect_damage_max(effect: TrapEffect) -> Option<u8> {
     match effect {
         TrapEffect::Acid => Some(TRAP_ACID_DAMAGE_MAX),
@@ -71,9 +72,9 @@ pub const fn trap_effect_targets_whole_party(effect: TrapEffect) -> bool {
 }
 
 /// `traps.md §3`: predicate marking effects that route through the
-/// narrow revive helper (Poison and Gas). Acid and Bomb roll damage
-/// instead.
-pub const fn trap_effect_uses_revive_helper(effect: TrapEffect) -> bool {
+/// shared poison-status helper (Poison and Gas). Acid and Bomb roll
+/// damage instead.
+pub const fn trap_effect_uses_poison_helper(effect: TrapEffect) -> bool {
     matches!(effect, TrapEffect::Poison | TrapEffect::Gas)
 }
 
@@ -97,14 +98,28 @@ pub const fn trap_effect_appears_in_combat(effect: TrapEffect) -> bool {
 }
 
 /// `traps.md §3` raw status byte written by the trap-effect
-/// resolver's revive helper. The helper rewrites Dead slots to the
-/// `'P'` status byte and refreshes the stats panel, without
-/// running the broader resurrection spell contract.
-pub const TRAP_REVIVE_STATUS_BYTE: u8 = b'P';
+/// resolver's poison helper. The helper rewrites an accepted slot to
+/// the `'P'` status byte and refreshes the stats panel. It touches no
+/// hit points, magic points, or maxima, and has no relation to the
+/// resurrection spell path.
+pub const TRAP_POISON_STATUS_BYTE: u8 = b'P';
 
 /// `traps.md §3`: returns `true` when the trap-effect resolver's
-/// revive helper accepts the supplied slot status. Only Dead slots
-/// are revived; every other status is left unchanged.
-pub const fn trap_revive_accepts(status: crate::CharacterStatus) -> bool {
-    matches!(status, crate::CharacterStatus::Dead)
+/// poison helper accepts the supplied slot status. A member already
+/// marked Dead is skipped and left Dead; every other status is
+/// rewritten to Poisoned.
+///
+/// `traps.md §3` names exactly two tests for this helper — in-party
+/// and not-already-Dead — so Ashes is accepted here rather than
+/// skipped. See `cleak/u5-spec` for the open question on whether
+/// Ashes shares the Dead exclusion.
+pub const fn trap_poison_accepts(status: crate::CharacterStatus) -> bool {
+    trap_poison_accepts_status_byte(status.save_byte())
+}
+
+/// `traps.md §3`: raw-status-byte form of [`trap_poison_accepts`], for
+/// the resolver's party slots, which hold the published status letter
+/// rather than a decoded [`crate::CharacterStatus`].
+pub const fn trap_poison_accepts_status_byte(status: u8) -> bool {
+    status != crate::CharacterStatus::Dead.save_byte()
 }
