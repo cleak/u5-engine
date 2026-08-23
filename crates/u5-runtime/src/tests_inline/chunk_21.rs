@@ -5028,81 +5028,38 @@
         );
     }
 
-    #[test]
-    fn animation_clock_cycles_public_static_four_frame_families() {
-        // Only water actually animates (3 frames). Mountains, bookshelves,
-        // doors, tables in the 0x0a, 0x5c, 0x98, 0x9c bands are static
-        // terrain/furniture per LOOK2.DAT, not animation cycles.
-        let (base, cycle) = (1u8, 3u8);
-        let mut clock = AnimationClock::default();
-        let frames: Vec<_> = (0..cycle)
-            .map(|_| {
-                let tile = clock.resolve_static_tile(base);
-                clock.tick_static_tiles();
-                tile
-            })
-            .collect();
-        let expected: Vec<u8> = (0..cycle).map(|i| base + i).collect();
-        assert_eq!(frames, expected);
-
-        // Static-only tiles remain unchanged across the same cycle.
-        let static_ids: [u8; 6] = [10, 11, 12, 13, 92, 152];
-        for tid in static_ids {
-            for frame in 0..4u8 {
-                let clk = AnimationClock {
-                    frame,
-                    moongate_frame: 0,
-                };
-                assert_eq!(
-                    clk.resolve_static_tile(tid),
-                    tid,
-                    "tile 0x{tid:02x} should not animate at frame {frame}"
-                );
-            }
-        }
-
-        let clock = AnimationClock {
-            frame: 3,
-            moongate_frame: 7,
-        };
-        assert_eq!(clock.resolve_static_tile(16), 16);
-    }
-
-    #[test]
-    fn static_tile_animation_uses_family_wide_frame_selector() {
-        // Per animation.md Section 6: shared frame selector. Every cell
-        // in the water family displays the same frame at each tick,
-        // regardless of stored id.
-        for frame in 0..4u8 {
-            let clock = AnimationClock {
-                frame,
-                moongate_frame: 0,
-            };
-            let resolved: Vec<_> = (1u8..=3).map(|t| clock.resolve_static_tile(t)).collect();
-            let expected_frame = 1 + (frame % 3);
-            assert_eq!(
-                resolved,
-                vec![expected_frame; 3],
-                "all water cells must share frame {expected_frame} at tick {frame}"
-            );
-        }
-    }
-
+    /// `animation.md §6` (spec HEAD `c00bf63`): "These are render
+    /// selectors, not map edits; the authored map byte remains the
+    /// phase-zero tile id." The grid must never be rewritten for an
+    /// animated cell.
+    ///
+    /// This test used to drive tile `1` (water) and read the change out
+    /// of the text view's `~`/`=` glyphs. Both halves are withdrawn:
+    /// water does not animate, and every id in every surviving family
+    /// shares a text-view glyph with its own frames, so the assertion
+    /// reads the resolved selector directly.
     #[test]
     fn render_resolves_static_animation_without_mutating_grid() {
         let mut grid = open_world_grid();
-        grid[world_cell_index(6, 5)] = 1;
+        // 0xD4: first id of the waterfall family.
+        grid[world_cell_index(6, 5)] = 0xD4;
         let mut state = britannia_state(grid, 5, 5);
         state.ambient_light = FULL_DAYLIGHT;
 
-        let frame_zero = state.render_text_view(1);
-        assert!(frame_zero.lines().nth(2).unwrap().contains("@~"));
-        assert_eq!(state.grid[world_cell_index(6, 5)], 1);
+        let _ = state.render_text_view(1);
+        assert_eq!(state.grid[world_cell_index(6, 5)], 0xD4);
+        assert_eq!(state.animation.resolve_static_tile(0xD4), 0xD4);
 
-        state.animation.tick_static_tiles();
-        let frame_one = state.render_text_view(1);
-        assert!(frame_one.lines().nth(2).unwrap().contains("@="));
-        assert_eq!(state.grid[world_cell_index(6, 5)], 1);
+        for expected in [0xD5u8, 0xD6, 0xD7, 0xD4] {
+            state.animation.tick_static_tiles();
+            let _ = state.render_text_view(1);
+            assert_eq!(
+                state.grid[world_cell_index(6, 5)],
+                0xD4,
+                "the authored map byte must stay the phase-zero tile id"
+            );
+            assert_eq!(state.animation.resolve_static_tile(0xD4), expected);
+        }
     }
 
     #[test]

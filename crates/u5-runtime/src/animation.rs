@@ -2,48 +2,251 @@
 
 use crate::*;
 
-/// `animation.md §6`: the shared static-tile frame counter wraps at the
-/// least common multiple of the supported cycle lengths (12 covers the
-/// three-frame water cycle and the four-frame lava / fire / wind
-/// cycles), so the counter stays small while every family's modulo
-/// still lands on the same frame.
-pub const STATIC_TILE_ANIMATION_FRAME_WRAP: u8 = 12;
+/// `animation.md §6` (spec HEAD `c00bf63`): the world-tick tile animator
+/// owns **exactly five** tile families, and that is the complete list.
+///
+/// Earlier revisions of `animation.md §6` and `catalogs/tile-catalog.md
+/// §4` headed the list with water, lava and torch/fire families plus
+/// unnamed "special effect" and "alternate decorative" families. Both
+/// documents now retract that: "**no water, lava, brazier or torch tile
+/// animates through this pass at all.**" Nothing in this module may grow
+/// a water or fire terrain family back.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum StaticTileAnimationFamily {
+    /// `0xD4..0xD7`, four-frame cycle, ungated (advances every tick).
+    Waterfall,
+    /// `0xD8..0xDB`, four-frame cycle, ungated (advances every tick).
+    Fountain,
+    /// `0x80..0x83`, two-frame toggle in adjacent pairs, inside the
+    /// bit-0 gate (half rate).
+    Pendulum,
+    /// `0xEC..0xEF`, four-frame cycle, inside the same bit-0 gate as the
+    /// pendulum (half rate, **not** every tick).
+    StandardOfBritannia,
+    /// `0xFA..0xFD` — grandfather clock `0xFA..0xFB` and bellows
+    /// `0xFC..0xFD` — two-frame toggles in adjacent pairs, inside the
+    /// bit-1 gate nested within the bit-0 gate (quarter rate).
+    ClockAndBellows,
+}
+
+/// One row of the `animation.md §6` family table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StaticTileAnimationFamilySpec {
+    pub family: StaticTileAnimationFamily,
+    /// First tile id owned by the family.
+    pub first_id: u8,
+    /// How many adjacent ids the family owns.
+    pub id_count: u8,
+    /// Frames per cycle group. The four-frame families own one group of
+    /// four ids; the paired toggles own two adjacent groups of two.
+    pub cycle: u8,
+}
+
+/// `animation.md §6` family table, spec HEAD `c00bf63`. The id ranges
+/// are published by that section's table and corroborated by
+/// `catalogs/tile-catalog.md §3.1` ("waterfall family `0xD4..0xD7`",
+/// "the fountain band `0xD8..0xDB`", "grandfather clock `0xFA..0xFB`")
+/// and by `catalogs/tile-catalog.md §4`'s animation table.
+///
+/// No-fallback policy: every range and cycle length below is published
+/// spec text. Nothing here is inferred, and
+/// [`crate::static_tile_animation_family`] deliberately has no catch-all
+/// guess for ids the spec does not list.
+pub const STATIC_TILE_ANIMATION_FAMILIES: [StaticTileAnimationFamilySpec; 5] = [
+    StaticTileAnimationFamilySpec {
+        family: StaticTileAnimationFamily::Waterfall,
+        first_id: 0xD4,
+        id_count: 4,
+        cycle: 4,
+    },
+    StaticTileAnimationFamilySpec {
+        family: StaticTileAnimationFamily::Fountain,
+        first_id: 0xD8,
+        id_count: 4,
+        cycle: 4,
+    },
+    StaticTileAnimationFamilySpec {
+        family: StaticTileAnimationFamily::Pendulum,
+        first_id: 0x80,
+        id_count: 4,
+        cycle: 2,
+    },
+    StaticTileAnimationFamilySpec {
+        family: StaticTileAnimationFamily::StandardOfBritannia,
+        first_id: 0xEC,
+        id_count: 4,
+        cycle: 4,
+    },
+    StaticTileAnimationFamilySpec {
+        family: StaticTileAnimationFamily::ClockAndBellows,
+        first_id: 0xFA,
+        id_count: 4,
+        cycle: 2,
+    },
+];
+
+impl StaticTileAnimationFamily {
+    pub const fn spec(self) -> StaticTileAnimationFamilySpec {
+        STATIC_TILE_ANIMATION_FAMILIES[self as usize]
+    }
+
+    pub const fn contains(self, tile: u8) -> bool {
+        let spec = self.spec();
+        tile >= spec.first_id && (tile - spec.first_id) < spec.id_count
+    }
+
+    /// First id of the cycle group `tile` belongs to. A four-frame
+    /// family has a single group covering all four ids; a paired toggle
+    /// has two groups of two, so `0x82` toggles inside `0x82..0x83` and
+    /// never displays `0x80`.
+    pub const fn cycle_group_base(self, tile: u8) -> u8 {
+        let spec = self.spec();
+        spec.first_id + ((tile - spec.first_id) / spec.cycle) * spec.cycle
+    }
+}
+
+/// `animation.md §6` (spec HEAD `c00bf63`): the shared phase counter is
+/// incremented once at the end of every pass. Eight ticks is the exact
+/// period of the whole layer, so the counter may wrap there:
+///
+/// * waterfall / fountain advance 8 times in 8 ticks; `8 % 4 == 0`.
+/// * pendulum / flag advance on the four odd phases; `4 % 2 == 0` and
+///   `4 % 4 == 0`.
+/// * clock / bellows advance on phases `3` and `7`; `2 % 2 == 0`.
+///
+/// This replaces the retracted `STATIC_TILE_ANIMATION_FRAME_WRAP = 12`,
+/// which was justified as "the LCM of the three-frame water cycle and
+/// the four-frame lava / fire / wind cycles". Both of those cycles are
+/// withdrawn, so the justification and the value went with them.
+pub const STATIC_TILE_ANIMATION_PERIOD_TICKS: u8 = 8;
+
+/// Which families one run of the `animation.md §6` pass advances.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StaticTileAnimationPass {
+    pub waterfall: bool,
+    pub fountain: bool,
+    pub pendulum: bool,
+    pub standard_of_britannia: bool,
+    pub clock_and_bellows: bool,
+}
+
+impl StaticTileAnimationPass {
+    pub const fn advances(self, family: StaticTileAnimationFamily) -> bool {
+        match family {
+            StaticTileAnimationFamily::Waterfall => self.waterfall,
+            StaticTileAnimationFamily::Fountain => self.fountain,
+            StaticTileAnimationFamily::Pendulum => self.pendulum,
+            StaticTileAnimationFamily::StandardOfBritannia => self.standard_of_britannia,
+            StaticTileAnimationFamily::ClockAndBellows => self.clock_and_bellows,
+        }
+    }
+}
+
+/// One run of the `animation.md §6` pass for the tick whose shared
+/// phase-counter value is `phase`, written in the spec's own order:
+///
+/// > "advance the waterfall family, advance the fountain family, then
+/// > test bit 0 of the shared phase counter. If bit 0 is clear, the pass
+/// > skips **everything** that follows — pendulum, flag and
+/// > clock/bellows alike — and goes straight to incrementing the
+/// > counter. If bit 0 is set, the pendulum and the flag advance, and
+/// > only then is bit 1 tested; the clock/bellows family advances only
+/// > when both bits are set."
+///
+/// The gates are **nested**, not independent: the quarter rate of
+/// `0xFA..0xFD` falls out of `bit 0 AND bit 1`, not out of a lone bit-1
+/// test. An earlier revision calling this pass "short and
+/// unconditional" with independently gated families is withdrawn.
+pub const fn static_tile_animation_pass(phase: u8) -> StaticTileAnimationPass {
+    // Two families are ungated.
+    let waterfall = true;
+    let fountain = true;
+
+    if phase & 0x01 == 0 {
+        // Bit 0 clear: skip pendulum, flag AND clock/bellows, and go
+        // straight to incrementing the counter.
+        return StaticTileAnimationPass {
+            waterfall,
+            fountain,
+            pendulum: false,
+            standard_of_britannia: false,
+            clock_and_bellows: false,
+        };
+    }
+
+    // Bit 0 set: pendulum and flag advance, and only now is bit 1 read.
+    StaticTileAnimationPass {
+        waterfall,
+        fountain,
+        pendulum: true,
+        standard_of_britannia: true,
+        clock_and_bellows: phase & 0x02 != 0,
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AnimationClock {
+    /// `animation.md §6` shared phase counter, wrapped at
+    /// [`STATIC_TILE_ANIMATION_PERIOD_TICKS`].
     pub frame: u8,
+    /// Moongate presence counter. **Not** a member of the §6 families:
+    /// the tile-animation tick never advances it and it has no frame
+    /// selector. See `catalogs/tile-catalog.md §4`, "Moongate graphics
+    /// are **not** animated at all".
     pub moongate_frame: u8,
 }
 
 impl AnimationClock {
+    /// A clock whose §6 pass has run `phase` times since phase zero.
+    pub const fn at_static_tile_phase(phase: u8) -> Self {
+        Self {
+            frame: phase % STATIC_TILE_ANIMATION_PERIOD_TICKS,
+            moongate_frame: 0,
+        }
+    }
+
+    /// `animation.md §6`: run the pass once, then increment the shared
+    /// phase counter — "whichever path was taken".
+    ///
+    /// This never touches [`Self::moongate_frame`].
     pub fn tick_static_tiles(&mut self) {
-        // Per animation.md Section 6 the global tile-animation step
-        // increments a shared frame counter. Different families apply
-        // their own cycle length on top, so the counter itself just
-        // counts up; the cycle modulo happens in `resolve_static_tile`.
-        // Wrap at the LCM of supported cycle lengths (12 covers both
-        // the 3-frame water cycle and the 4-frame lava / fire / wind
-        // cycles) so the counter stays small.
-        self.frame = self.frame.wrapping_add(1) % STATIC_TILE_ANIMATION_FRAME_WRAP;
+        self.frame = self.frame.wrapping_add(1) % STATIC_TILE_ANIMATION_PERIOD_TICKS;
     }
 
     pub fn tick_moongate(&mut self) {
         self.moongate_frame = self.moongate_frame.wrapping_add(1) % MOONGATE_ANIMATION_FRAMES;
     }
 
+    /// How many times `family`'s selectors have advanced since phase
+    /// zero, obtained by replaying the nested-gate pass across every
+    /// phase the shared counter has already passed through.
+    pub fn static_tile_advances(self, family: StaticTileAnimationFamily) -> u8 {
+        (0..self.frame)
+            .filter(|phase| static_tile_animation_pass(*phase).advances(family))
+            .count() as u8
+    }
+
+    /// `animation.md §6`: "Each id inside a family owns its own selector
+    /// byte, so the four ids of a four-frame family are permanently a
+    /// quarter-cycle apart and a wall of waterfall cells does not
+    /// flicker in lockstep."
+    ///
+    /// So an id keeps its own offset inside its cycle group and only the
+    /// family's advance count is added on top. A previous revision of
+    /// this method used one shared frame for the whole family — "every
+    /// cell in the family displays the same frame at any given tick" —
+    /// which is withdrawn.
+    ///
+    /// "These are render selectors, not map edits; the authored map byte
+    /// remains the phase-zero tile id." Nothing here mutates a grid.
     pub fn resolve_static_tile(self, tile: u8) -> u8 {
-        // Per u5-spec/systems/animation.md Section 6: animated terrain
-        // uses a SHARED FRAME SELECTOR per family. "A map cell continues
-        // to mean 'water'; the renderer resolves that semantic tile
-        // through the current water-frame selector at draw time. This
-        // keeps the map stable and makes one frame-counter update
-        // affect every visible cell in the same family." Every cell in
-        // the family displays the same frame at any given tick.
-        if let Some((base, cycle)) = static_tile_animation_family(tile) {
-            base + (self.frame % cycle)
-        } else {
-            tile
-        }
+        let Some(family) = static_tile_animation_family(tile) else {
+            return tile;
+        };
+        let cycle = family.spec().cycle;
+        let group_base = family.cycle_group_base(tile);
+        let own_selector_offset = tile - group_base;
+        group_base + (own_selector_offset + self.static_tile_advances(family)) % cycle
     }
 
     pub fn resolve_moongate_tile(self) -> u8 {

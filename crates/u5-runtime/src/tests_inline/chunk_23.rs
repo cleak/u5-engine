@@ -5587,7 +5587,15 @@
         state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         assert!(!state.viewport_has_animated_tiles(5));
 
+        // `animation.md §6` (spec HEAD `c00bf63`): water `0x01` is not an
+        // animated family. `0xD4` is the waterfall family's first id.
         state.combat_terrain[3][4] = 0x01;
+        assert!(
+            !state.viewport_has_animated_tiles(5),
+            "water must not count as animated terrain"
+        );
+
+        state.combat_terrain[3][4] = 0xD4;
         assert!(state.viewport_has_animated_tiles(5));
     }
 
@@ -15247,89 +15255,28 @@
         );
     }
 
-    /// Per u5-spec/systems/animation.md Section 6 the water animator
-    /// uses a shared frame selector: every water cell shows the same
-    /// frame at the same tick, cycling through the family.
-    #[test]
-    fn water_animation_cycles_three_frames_shared_selector() {
-        let mut clock = AnimationClock::default();
-        for tick in 0..9 {
-            let resolved = clock.resolve_static_tile(0x01);
-            let expected = 0x01 + (tick % 3);
-            assert_eq!(
-                resolved, expected,
-                "tick {tick}: water-family base 0x01 must show frame 0x{expected:02x}"
-            );
-            clock.tick_static_tiles();
-        }
-    }
-
-    /// Per u5-spec the water animator runs as part of the per-turn
-    /// epilogue. After enough ticks the displayed tile of any single
-    /// water cell must cycle through every frame in its family.
-    #[test]
-    fn water_cells_visit_every_frame_across_ticks() {
-        let mut clock = AnimationClock::default();
-        let mut seen = std::collections::BTreeSet::new();
-        for _ in 0..12 {
-            seen.insert(clock.resolve_static_tile(0x02));
-            clock.tick_static_tiles();
-        }
-        assert!(
-            seen.contains(&0x01) && seen.contains(&0x02) && seen.contains(&0x03),
-            "water cell stored as 0x02 must visit 0x01, 0x02, and 0x03 across the cycle, got {seen:?}"
-        );
-    }
-
-    /// Per u5-spec/systems/animation.md Section 6: "A map cell continues
-    /// to mean 'water'; the renderer resolves that semantic tile through
-    /// the current water-frame selector at draw time. This keeps the map
-    /// stable and makes one frame-counter update affect every visible
-    /// cell in the same family."
-    /// I.e. the animation is a SHARED FRAME SELECTOR -- at any given
-    /// tick, every water-family cell displays the same frame, regardless
-    /// of what its stored id is.
-    #[test]
-    fn water_animation_is_shared_frame_selector() {
-        for frame in 0..6u8 {
-            let clock = AnimationClock {
-                frame,
-                moongate_frame: 0,
-            };
-            let a = clock.resolve_static_tile(0x01);
-            let b = clock.resolve_static_tile(0x02);
-            let c = clock.resolve_static_tile(0x03);
-            assert_eq!(
-                a, b,
-                "water cells 0x01 and 0x02 must show the same frame at tick {frame}"
-            );
-            assert_eq!(
-                b, c,
-                "water cells 0x02 and 0x03 must show the same frame at tick {frame}"
-            );
-        }
-    }
-
-    /// Per actual Ultima V gameplay: swamp tiles are walkable on foot
-    /// (you take poison damage stepping through). 0x04 is "swamp" per
-    /// LOOK2.DAT. The visual sprite at 0x04 (green dots over blue) is a
-    /// distinct terrain type from water; it must NOT participate in the
-    /// water animation cycle and must NOT block on-foot movement.
+    /// Swamp tiles are walkable on foot (you take poison damage stepping
+    /// through). `0x04` is "swamp" per the shipped description table.
+    ///
+    /// The three `water_animation_*` tests that stood here — asserting a
+    /// three-frame water cycle behind one shared family-wide selector —
+    /// are deleted. `animation.md §6` (spec HEAD `c00bf63`) withdraws
+    /// both claims: "**no water, lava, brazier or torch tile animates
+    /// through this pass at all**", and each id owns its own selector
+    /// rather than sharing one. `static_tile_animation_*` in chunk 29
+    /// covers the replacement contract.
     #[test]
     fn swamp_is_walkable_and_static() {
         assert!(
             is_probe_walkable(0x04),
             "0x04 'swamp' must be walkable on foot"
         );
-        for frame in 0..6u8 {
-            let clock = AnimationClock {
-                frame,
-                moongate_frame: 0,
-            };
+        for phase in 0..STATIC_TILE_ANIMATION_PERIOD_TICKS {
+            let clock = AnimationClock::at_static_tile_phase(phase);
             assert_eq!(
                 clock.resolve_static_tile(0x04),
                 0x04,
-                "swamp must stay 0x04 across all animation frames"
+                "swamp must stay 0x04 across all animation phases"
             );
         }
     }

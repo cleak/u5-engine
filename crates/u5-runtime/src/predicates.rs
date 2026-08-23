@@ -1032,31 +1032,30 @@ pub fn is_water_tile(tile: u8) -> bool {
     (1..=3).contains(&tile)
 }
 
-/// Returns `(family_base, cycle_length)` for an animated-static tile. The
-/// renderer cycles the displayed sprite within `[base, base + cycle)` while
-/// preserving each cell's per-tile identity offset. Returns `None` for
-/// static tiles.
+/// Which `animation.md §6` family owns `tile`, or `None` when the tile is
+/// not animated by the world-tick tile animator.
 ///
-/// Only water actually animates in U5's 0..=255 map-tile range. Per a
-/// LOOK2.DAT canonical cross-check:
-///   * 0x01..=0x03 -- "deep water" / "water" / "shoals". 3-frame cycle.
-///   * 0x04        -- "swamp". Static terrain, NOT a water frame.
-///   * 0x0a..=0x0f -- "tropical forest" / "foothills" / "mountains" /
-///                    "high peaks" / "foothills" / "foothills". The spec
-///                    listed this band as a 4-frame lava cycle but the
-///                    game data has six distinct static terrain types
-///                    here. Mountains do not animate.
-///   * 0x5c..=0x5f -- bookshelves and similar furniture (static).
-///   * 0x98..=0x9b -- odd door / portcullis / tables with food (static).
-///   * 0x9c..=0x9f -- tables with food / mirror (static).
-/// Other animation families (fire field, poison field, sleep / energy
-/// field) may exist in dungeon-mode and combat-mode tile spaces but those
-/// run through separate animators.
-pub fn static_tile_animation_family(tile: u8) -> Option<(u8, u8)> {
-    match tile {
-        1..=3 => Some((1, 3)),
-        _ => None,
-    }
+/// The family list is [`STATIC_TILE_ANIMATION_FAMILIES`] and is complete:
+/// waterfall `0xD4..0xD7`, fountain `0xD8..0xDB`, pendulum `0x80..0x83`,
+/// the standard of Britannia `0xEC..0xEF`, and the grandfather clock /
+/// bellows pair `0xFA..0xFD`.
+///
+/// `animation.md §6` (spec HEAD `c00bf63`) retracts the family list this
+/// function used to carry: "**no water, lava, brazier or torch tile
+/// animates through this pass at all.**" `catalogs/tile-catalog.md §4`
+/// carries the same correction and additionally withdraws a "wind / gust
+/// visuals" row. Water `0x01..0x03`, swamp `0x04`, lava `0x8F`, the
+/// brazier/fireplace band and every torch id therefore resolve to
+/// themselves, unchanged, at every phase.
+///
+/// Dungeon-mode and combat-mode effect tiles (fire field, poison field,
+/// sleep / energy field) are owned by per-effect handlers, not by this
+/// pass — see `catalogs/tile-catalog.md §4`.
+pub fn static_tile_animation_family(tile: u8) -> Option<StaticTileAnimationFamily> {
+    STATIC_TILE_ANIMATION_FAMILIES
+        .iter()
+        .find(|spec| spec.family.contains(tile))
+        .map(|spec| spec.family)
 }
 
 pub fn is_lava_tile(tile: u8) -> bool {
