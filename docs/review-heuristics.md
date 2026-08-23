@@ -181,6 +181,29 @@ the ranged attacks were in before they were found.
   all descend from one wrong premise agree about nothing that matters. Verify
   against shipped data (decode the file, hash it) or published spec text — never
   against the neighbouring test.
+
+  The sharper form: two statements corroborate only to the extent that their
+  errors are **independent**. So the question to ask of a second source is not
+  *"does it agree?"* but **"could it have inherited the first's error?"** If yes,
+  the agreement is close to worthless. The same word carries opposite weight
+  either side of that line:
+
+  | Agreement | Worth |
+  |---|---|
+  | Three tests written from one spec section | nothing — they share every premise it carries |
+  | Our tests agreeing with our own constants | nothing — same ancestor |
+  | Two independently-written scans of the same shipped bytes | strong |
+  | Two spec statements about one routine, different triggers, different subsystems, months apart, neither written to check the other | strongest available |
+
+  This is exactly how a green suite certified a chain of three wrong `.TLK`
+  constants: every test in the chain descended from the same wrong boundary.
+  Conversely it is why a helper could be pinned by matching it against an
+  already-published behaviour on an unrelated trigger — the two had no
+  opportunity to influence each other.
+
+  Worth hunting deliberately: **cross-trigger, cross-subsystem restatements of
+  the same mechanism.** They are the cheapest strong evidence available, and
+  they mostly get noticed by accident rather than sought.
 - **A green test can pin something that never touches the world.** We had a
   passing assertion that a seed constant equalled `"BRIT.GAM"` — a correct
   string naming a file that does not ship. It could not have failed either way.
