@@ -208,9 +208,15 @@ impl PlayState {
                     self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, 0, 0x62)
                 }
             }
-            SpawnTerrainBranch::SeaSerpentAdjacency => {
-                (self.native_world_encounter_mod(0, 0x63, SPAWN_SEA_SERPENT_DENOMINATOR) == 0)
-                    .then_some(0xE0)
+            // `encounters.md §4`: "Terrain tile 7 (parched desert) |
+            // **One-in-four** chance of the **Sand Trap** sprite run
+            // `0xE0..0xE3`; a failed special roll rejects the candidate."
+            // The sprite this writes was always right; the branch name and
+            // the denominator were not. Sea Serpents reach the overworld
+            // only through the water buckets, whose first frame is `0x88`.
+            SpawnTerrainBranch::SandTrapParchedDesert => {
+                (self.native_world_encounter_mod(0, 0x63, SPAWN_SAND_TRAP_DENOMINATOR) == 0)
+                    .then_some(OUTDOOR_SAND_TRAP_SPRITE_RUN_FIRST)
             }
             SpawnTerrainBranch::UnderworldTile4RotWorm => Some(0xF8),
             SpawnTerrainBranch::HardReject | SpawnTerrainBranch::HighTileReject => None,
@@ -344,10 +350,14 @@ impl PlayState {
                 continue;
             }
             let slot = self.party[index].slot;
-            let applied = self.party[index].apply_damage(1);
+            // `overworld.md §6.2.4` names this row's one-point fall damage
+            // as going through "the same party-damage helper" the impact
+            // payload uses, so it takes the same active-player clear on a
+            // death rather than leaving a stale selection behind.
+            let damage = self.apply_shared_party_damage(index, 1);
             reports.push(format!(
-                "party slot {slot} failed Dex roll {roll} and took {applied} HP ({} HP left)",
-                self.party[index].hp
+                "party slot {slot} failed Dex roll {roll} and took {} HP ({} HP left)",
+                damage.applied, damage.hp_after
             ));
         }
 
@@ -2513,19 +2523,14 @@ impl PlayState {
     /// **ranged half**. Returns `true` when the slot's immediate hostile
     /// reaction fired, which suppresses this turn's cleanup movement.
     ///
-    /// §8 lists four immediate reactions. In walker order they are adjacent
-    /// hostile engagement, the Sea Serpent / Dragon breath attack, adjacent
-    /// whirlpool plane transition, and the ship-like water-creature /
-    /// pirate broadside. `overworld.md §6` repeats the relative order of
-    /// the ones it names: "adjacent engagement, Sea Serpent/Dragon
-    /// first-frame near-range effects, aligned water-creature attack, and
-    /// cleanup movement".
-    ///
-    /// Engagement and whirlpool are already implemented, on the world
-    /// post-turn epilogue path; this method deliberately does not
-    /// re-implement them. It covers the two ranged reactions, which share
-    /// one routine per `overworld.md §6.2` — see
-    /// [`crate::outdoor_ranged_attack`] for that contract.
+    /// §8 lists the immediate reactions in walker order: adjacent hostile
+    /// engagement, adjacent whirlpool, adjacent sand trap, then the two
+    /// ranged reactions. "Orthogonal adjacency is tested **before** any
+    /// class test, so an adjacent creature engages rather than firing."
+    /// The adjacency arms are already implemented on the world post-turn
+    /// epilogue path; this method deliberately does not re-implement them.
+    /// It covers the two ranged reactions, which share one routine per
+    /// `overworld.md §6.2` — see [`crate::outdoor_ranged_attack`].
     ///
     /// Every window here is measured on **wrapped** deltas. §8's own
     /// proximity helper "first computes wrapped absolute distance to the
@@ -2533,12 +2538,22 @@ impl PlayState {
     /// would read a creature one cell across the map seam as ~255 cells
     /// away and silently disable both attacks near the seam.
     pub fn outdoor_first_phase_ranged_attack(&mut self, slot: usize) -> bool {
+        self.outdoor_first_phase_ranged_attack_detail(slot)
+            .is_some()
+    }
+
+    /// [`Self::outdoor_first_phase_ranged_attack`], reporting what the
+    /// shot did rather than only that it fired.
+    pub fn outdoor_first_phase_ranged_attack_detail(
+        &mut self,
+        slot: usize,
+    ) -> Option<OutdoorRangedAttackReport> {
         let Area::World { plane } = self.area else {
-            return false;
+            return None;
         };
         let object = self.active_objects[slot];
         if object.z != plane.save_floor() || !is_outdoor_active_object_walker(object) {
-            return false;
+            return None;
         }
         let (dx, dy) = wrapped_deltas_to_player(
             object.x as u8,
@@ -2547,105 +2562,341 @@ impl PlayState {
             self.player.y as u8,
         );
 
-        // §8 bullet 2, and `overworld.md §6.2`'s first table row: "Sea
-        // Serpent and Dragon first-frame hostile classes within three cells
-        // of the player on **both** axes roll a one-in-eight trigger, and
-        // on success loose a breath attack".
-        //
-        // Only the Dragon first frame is wired. `encounters.md`'s payload
-        // table names `0xDC..0xDF` the "Dragon sprite run" and says of it
-        // that "the first frame also participates in a special outdoor
-        // near-range pull/effect path", which identifies `0xDC`
-        // unambiguously. The Sea Serpent half is withheld: the same table
-        // carries two candidate families, `0x88..0x8B` "Sea Serpent sprite
-        // run" and `0xE0..0xE3` "Outdoor sea-serpent adjacency family", and
-        // no spec text picks between them for this trigger. Guessing would
-        // decide which creature breathes on the party.
-        if object.type_byte == OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME
-            && outdoor_breath_attack_in_range(dx, dy)
-        {
-            if outdoor_serpent_dragon_triggers(self.outdoor_serpent_dragon_breath_roll(slot)) {
-                self.resolve_outdoor_ranged_attack(
-                    object,
-                    OutdoorRangedAttackFigure::SparkCloud,
-                    None,
-                );
-                return true;
+        // `overworld.md §6.2.1` is the closed recognition table for both
+        // outdoor attackers. The breath row is exact equality against the
+        // Sea Serpent and Dragon *first* frames — "Sibling animation
+        // frames `0x89..0x8B` and `0xDD..0xDF` never enter the breath
+        // branch" — while the broadside row is a masked family test on
+        // `0x2C..0x2F`. "Do not generalise either rule to the other."
+        let figure = outdoor_ranged_attacker_figure(object.type_byte, dx, dy)?;
+
+        let announcement = match figure {
+            // §6.2.1's announcement column: "None" for the breath, "A boom
+            // message before the shot" for the broadside.
+            OutdoorRangedAttackFigure::SparkCloud => {
+                // "One-in-eight each turn ... the breath asks for the
+                // closed interval `[0, 7]` and fires on one of those eight
+                // outcomes." The broadside has no such gate: it "fires
+                // whenever the geometry holds".
+                if !outdoor_serpent_dragon_triggers(self.outdoor_serpent_dragon_breath_roll(slot)) {
+                    return None;
+                }
+                None
             }
-        }
+            OutdoorRangedAttackFigure::SolidBurst => Some(OUTDOOR_BROADSIDE_BOOM_MESSAGE),
+        };
 
-        // §8 bullet 4: "Ship-like water-creature and pirate frames aligned
-        // with the player on the same row or column within three cells fire
-        // a broadside: they print the boom message and then resolve the
-        // same traced-line ranged attack as the breath attack above. The
-        // generic 'attacked' message belongs to the adjacent-engagement
-        // path, not to this one."
-        if outdoor_broadside_attacker_class(object.type_byte)
-            && outdoor_water_creature_attack_aligned(dx, dy)
-        {
-            self.resolve_outdoor_ranged_attack(
-                object,
-                OutdoorRangedAttackFigure::SolidBurst,
-                Some(OUTDOOR_BROADSIDE_BOOM_MESSAGE),
-            );
-            return true;
-        }
-
-        false
+        Some(self.resolve_outdoor_ranged_attack(dx, dy, figure, announcement))
     }
 
-    /// `active-objects.md §8` one-in-eight breath-attack gate roll, reduced
-    /// into `0..=7` by [`OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR`].
-    /// Named so the gate can be exercised directly rather than inferred
-    /// from whether a breath attack happened to fire.
+    /// `overworld.md §6.2.1` one-in-eight breath-attack gate roll, reduced
+    /// into the closed interval `[0, 7]` by
+    /// [`OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR`]. Named so the gate
+    /// can be exercised directly rather than inferred from whether a
+    /// breath attack happened to fire.
     pub fn outdoor_serpent_dragon_breath_roll(&self, slot: usize) -> u8 {
         self.outdoor_active_object_step_seed(slot, OUTDOOR_SERPENT_DRAGON_BREATH_SALT)
             % OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR
     }
 
     /// `overworld.md §6.2` shared ranged-attack resolution, creature-to-
-    /// party direction. Announces (the broadside's boom message precedes
-    /// the shot; the breath attack has no announcement), traces the line,
-    /// and applies the outcome.
+    /// party direction: announce, trace, and on a clear line run the
+    /// §6.2.4 payload.
     ///
-    /// §6.2 on the announcement asymmetry: the breath row's announcement
-    /// column is "None", the broadside row's is "A boom message before the
-    /// shot", and "[t]he firing sound is played by the caller before the
-    /// flight begins, not per cell during it".
+    /// The trace runs in **viewport** space, as §6.2.2 specifies: the
+    /// obstruction test "consults the on-screen eleven-by-eleven viewport
+    /// tile grid rather than the world map". The predicate below maps each
+    /// sampled viewport cell back to its wrapped world coordinate and
+    /// reads terrain there. §6.2.5 leaves the two ways that can differ
+    /// open — whether a stamped active-object sprite blocks a shot was not
+    /// established, and an unresolved (dark) viewport cell is positively
+    /// established *not* to block — so terrain is the conservative read.
     fn resolve_outdoor_ranged_attack(
         &mut self,
-        attacker: ActiveObject,
+        wrapped_dx: i32,
+        wrapped_dy: i32,
         figure: OutdoorRangedAttackFigure,
         announcement: Option<&str>,
-    ) {
+    ) -> OutdoorRangedAttackReport {
         if let Some(announcement) = announcement {
-            if self.message.is_empty() {
-                self.message = announcement.to_string();
-            } else {
-                self.message.push(' ');
-                self.message.push_str(announcement);
+            self.push_impact_line(announcement);
+        }
+
+        let attacker_cell = outdoor_ranged_attacker_viewport_cell(wrapped_dx, wrapped_dy);
+        let player_x = self.player.x as i32;
+        let player_y = self.player.y as i32;
+        let world_side = WORLD_SIDE as i32;
+        let grid = &self.grid;
+        let outcome = trace_outdoor_ranged_attack(
+            attacker_cell,
+            OUTDOOR_RANGED_ATTACK_PARTY_CELL,
+            |column, row| {
+                let x = (player_x + column - OUTDOOR_RANGED_ATTACK_PARTY_CELL.0)
+                    .rem_euclid(world_side) as usize;
+                let y = (player_y + row - OUTDOOR_RANGED_ATTACK_PARTY_CELL.1).rem_euclid(world_side)
+                    as usize;
+                surface_tile_blocks_projectile(grid[world_cell_index(x, y)])
+            },
+        );
+
+        let absorption = match outcome {
+            // §6.2.2: "*Blocked* means the shot stops where it stopped and
+            // nothing further happens — no payload, no message, no state
+            // change."
+            OutdoorRangedAttackOutcome::Obstructed { .. } => None,
+            // §6.2.4: "On a clear line the attack connects, and the
+            // payload below runs."
+            OutdoorRangedAttackOutcome::Connects => Some(self.apply_outdoor_impact()),
+        };
+
+        OutdoorRangedAttackReport {
+            figure,
+            attacker_cell,
+            outcome,
+            absorption,
+        }
+    }
+
+    /// `overworld.md §6.2.4` shared impact payload, both stages.
+    ///
+    /// This is the whole payload, and it is shared: besides the two ranged
+    /// attacks it is reached "from the sand-trap adjacency reaction and
+    /// from the whirlpool engagement", and the drowning rung of
+    /// `vehicles.md §6` runs its second stage directly.
+    ///
+    /// It does **not** route through the combat damage-and-status
+    /// resolver: §6.2.4 states positively that "[n]o attacker identity,
+    /// sprite byte, class or sentinel participates anywhere on this path,
+    /// and the path never reaches the combat damage-and-status resolver."
+    /// That is why nothing here takes an attacker argument.
+    pub fn apply_outdoor_impact(&mut self) -> OutdoorImpactAbsorption {
+        self.outdoor_impact_presentation();
+        self.apply_outdoor_impact_absorption()
+    }
+
+    /// `overworld.md §6.2.4` stage one — impact presentation. "An impact
+    /// figure is drawn at the party's own map coordinates ..., a short
+    /// tone plays, and the viewport is rebuilt. This stage writes no
+    /// character state and no vehicle state, and prints no narration
+    /// line."
+    fn outdoor_impact_presentation(&mut self) {
+        self.mark_visibility_dirty();
+    }
+
+    /// `overworld.md §6.2.4` stage two — impact absorption. The stage
+    /// "takes no arguments and branches on exactly one thing: the party's
+    /// transport marker", and the two branches differ in kind.
+    pub fn apply_outdoor_impact_absorption(&mut self) -> OutdoorImpactAbsorption {
+        // "**Aboard a frigate** — any marker in the hoisted or furled ship
+        // families ..., meaning all four headings and both sail states,
+        // eight values in total."
+        if let TransportState::Ship { hull, .. } = self.player.transport {
+            let roll =
+                self.random_range_u8(OUTDOOR_IMPACT_HULL_ROLL_LOW, OUTDOOR_IMPACT_HULL_ROLL_HIGH);
+            return match outdoor_impact_hull_outcome(roll, hull) {
+                // "Roll **strictly less than** the hull: subtract the roll
+                // from the hull, repaint the stats panel, and return. **No
+                // party member loses hit points.**"
+                OutdoorImpactHullOutcome::Absorbed { hull_after } => {
+                    if let TransportState::Ship { hull, .. } = &mut self.player.transport {
+                        *hull = hull_after;
+                    }
+                    self.sync_player_object();
+                    self.mark_visibility_dirty();
+                    OutdoorImpactAbsorption::HullAbsorbed { roll, hull_after }
+                }
+                // "Roll **greater than or equal to** the hull: the ship is
+                // destroyed. The ship-sunk line prints and the
+                // loss-of-ship ladder in `systems/vehicles.md` Section 6
+                // runs exactly as published there."
+                OutdoorImpactHullOutcome::ShipDestroyed => {
+                    self.push_impact_line(SHIP_SUNK_MESSAGE);
+                    let (fallback, drowning) = self.apply_ship_loss_ladder();
+                    OutdoorImpactAbsorption::ShipDestroyed {
+                        roll,
+                        fallback,
+                        drowning,
+                    }
+                }
+            };
+        }
+
+        // "**Under every other transport marker** — foot, horse, carpet,
+        // skiff, and the sprite-suppressed value — the **whole-party
+        // damage pass** below runs, and the stage returns."
+        OutdoorImpactAbsorption::PartyDamaged(self.apply_outdoor_impact_party_damage())
+    }
+
+    /// `overworld.md §6.2.4` whole-party damage pass. It "walks roster
+    /// slots from index zero upward. For each slot index that is **below
+    /// the party-size byte** and whose **status byte is not the dead
+    /// marker**, it draws its own **fresh, independent** uniform integer in
+    /// the **closed interval `[1, 8]`, inclusive on both ends**, and
+    /// applies it. The pass's own hard bound is six slots, indices
+    /// `0..5`."
+    ///
+    /// What §6.2.4 rules out, "scoped to the whole of that pass and the
+    /// whole of the absorption stage, both of which were read from entry
+    /// to exit": no active-player selection, no first-living selection, no
+    /// single randomly chosen target, no fixed slot, and one roll per
+    /// damaged member rather than one roll shared between them.
+    pub fn apply_outdoor_impact_party_damage(&mut self) -> Vec<OutdoorImpactMemberDamage> {
+        let slots = self.party.len().min(OUTDOOR_IMPACT_PARTY_PASS_SLOT_BOUND);
+        let mut applied_to = Vec::new();
+        for slot in 0..slots {
+            if !outdoor_impact_damages_member(self.party[slot].status) {
+                continue;
+            }
+            let roll = self.random_range_u8(
+                OUTDOOR_IMPACT_MEMBER_DAMAGE_LOW,
+                OUTDOOR_IMPACT_MEMBER_DAMAGE_HIGH,
+            );
+            applied_to.push(self.apply_shared_party_damage(slot, roll));
+        }
+        applied_to
+    }
+
+    /// `overworld.md §6.2.4` per-member application — "the same
+    /// party-damage helper that the surface chasm/falls row of Section 8
+    /// uses for its one-point fall damage".
+    ///
+    /// The helper flashes the member's row, subtracts from the **current**
+    /// hit points word (character record `+0x10`), clamps at zero and
+    /// writes the dead status letter into `+0x0B` when the result is zero
+    /// or below, and "if the member that just died is the currently
+    /// selected character, writes the published 'none selected' value into
+    /// the active-player index byte". `formats/saved-gam.md §4` publishes
+    /// that value as `0xFF`, modelled here as `None`. §6.2.4 is explicit
+    /// that it "is **not** an attacker id, and nothing on this path reads
+    /// it back as one".
+    ///
+    /// "Maximum hit points, experience, level, magic points and equipment
+    /// are untouched by this helper." §6.2.5 keeps the closing stats-panel
+    /// repaint an open gap, so that list is "these fields are written",
+    /// not "only these fields are written".
+    pub fn apply_shared_party_damage(
+        &mut self,
+        slot: usize,
+        amount: u8,
+    ) -> OutdoorImpactMemberDamage {
+        let applied = self.party[slot].apply_damage(amount);
+        let hp_after = self.party[slot].hp;
+        let died = hp_after == 0;
+        if died && self.active_player == Some(slot) {
+            self.active_player = None;
+        }
+        OutdoorImpactMemberDamage {
+            slot,
+            roll: amount,
+            applied,
+            hp_after,
+            died,
+        }
+    }
+
+    /// `vehicles.md §6` loss-of-ship ladder: "The engine walks a fixed
+    /// fallback ladder and takes the first option that is available."
+    ///
+    /// Returns the rung taken, and — on the drowning rung — one entry per
+    /// iteration of the drowning loop.
+    pub fn apply_ship_loss_ladder(
+        &mut self,
+    ) -> (ShipLossFallback, Vec<Vec<OutdoorImpactMemberDamage>>) {
+        let TransportState::Ship {
+            type_byte, skiffs, ..
+        } = self.player.transport
+        else {
+            // Only a frigate can be lost. Reaching here with any other
+            // marker would mean the absorption stage's ship branch and
+            // this ladder disagree about what the party is aboard.
+            return (ShipLossFallback::Drown, Vec::new());
+        };
+        let facing = type_byte & TRANSPORT_FACING_MASK;
+        let fallback =
+            ship_loss_fallback(skiffs, self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX]);
+        let mut drowning = Vec::new();
+
+        match fallback {
+            // "The party abandons into a skiff, keeping the ship's current
+            // facing, and the marker becomes the matching skiff value."
+            ShipLossFallback::Skiff => {
+                let marker = TRANSPORT_MARKER_SKIFF_FIRST + facing;
+                self.player.transport = TransportState::Skiff {
+                    type_byte: marker,
+                    tile: transport_visual_tile_for_marker(marker)
+                        .unwrap_or(FIRST_PLAYABLE_SKIFF_TILE),
+                };
+            }
+            // "The party deploys a carried carpet, the carried-carpet
+            // count is decremented, and the marker becomes one of the two
+            // carpet frames (chosen at random, since the frame is
+            // cosmetic)."
+            ShipLossFallback::Carpet => {
+                self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
+                    self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);
+                let pick = self.random_mod_u8(CARPET_MARKER_FRAMES.len() as u8) as usize;
+                let marker = CARPET_MARKER_FRAMES[pick % CARPET_MARKER_FRAMES.len()];
+                self.player.transport = TransportState::Carpet {
+                    type_byte: marker,
+                    tile: transport_visual_tile_for_marker(marker)
+                        .unwrap_or(FIRST_PLAYABLE_MAGIC_CARPET_TILE),
+                };
+            }
+            // "The marker is set to the sprite-suppressed value and the
+            // drowning outcome runs. This is the only way the suppressed
+            // value becomes persistent state."
+            ShipLossFallback::Drown => {
+                self.player.transport = TransportState::SpriteSuppressed;
+                drowning = self.apply_ship_loss_drowning();
             }
         }
 
-        let grid = &self.grid;
-        let outcome = trace_outdoor_ranged_attack(
-            (attacker.x as u8, attacker.y as u8),
-            (self.player.x as u8, self.player.y as u8),
-            |x, y| surface_tile_blocks_projectile(grid[world_cell_index(x as usize, y as usize)]),
-        );
+        self.timing_status = TimingStatusTag::for_transport(self.player.transport);
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        (fallback, drowning)
+    }
 
-        match outcome {
-            // §6.2: "If an obstruction is met first, the shot stops there
-            // and nothing further happens."
-            OutdoorRangedAttackOutcome::Obstructed { .. } => {}
-            // §6.2: "If the line reaches the party with no intervening
-            // blocker, the attack connects: the world tick runs and damage
-            // is applied to the party at its map coordinates." The amount
-            // is unspecified everywhere; the seam refuses rather than
-            // inventing one.
-            OutdoorRangedAttackOutcome::Connects => {
-                require_outdoor_ranged_attack_damage(figure);
+    /// `vehicles.md §6` drowning outcome: "a loop, and it tests before it
+    /// damages. While the shared living-member scan does not report 'none
+    /// remaining', each iteration plays the impact presentation at the
+    /// party's cell and runs the whole-party damage pass ... **once**".
+    ///
+    /// "A party that is already entirely dead when the ladder reaches this
+    /// rung takes no damage at all, because the test comes first."
+    ///
+    /// The exit scan and the damage filter are deliberately different
+    /// tests; see [`party_member_counts_as_living`] and
+    /// [`outdoor_impact_damages_member`].
+    pub fn apply_ship_loss_drowning(&mut self) -> Vec<Vec<OutdoorImpactMemberDamage>> {
+        let mut iterations = Vec::new();
+        while self.party_has_drowning_loop_survivor() {
+            if iterations.len() >= SHIP_LOSS_DROWNING_ITERATION_GUARD {
+                break;
             }
+            self.outdoor_impact_presentation();
+            iterations.push(self.apply_outdoor_impact_party_damage());
+        }
+        iterations
+    }
+
+    /// `vehicles.md §6` shared living-member scan, as the drowning loop's
+    /// exit test uses it.
+    pub fn party_has_drowning_loop_survivor(&self) -> bool {
+        self.party
+            .iter()
+            .take(OUTDOOR_IMPACT_PARTY_PASS_SLOT_BOUND)
+            .any(|member| party_member_counts_as_living(member.status))
+    }
+
+    /// Append one impact-path line to the message window, matching the
+    /// broadside announcement's join.
+    fn push_impact_line(&mut self, line: &str) {
+        if self.message.is_empty() {
+            self.message = line.to_string();
+        } else {
+            self.message.push(' ');
+            self.message.push_str(line);
         }
     }
 

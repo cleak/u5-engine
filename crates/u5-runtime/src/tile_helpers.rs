@@ -573,6 +573,13 @@ pub fn transport_from_vehicle_object(
 }
 
 pub fn transport_from_save_marker(marker: u8) -> TransportState {
+    // vehicles.md §2 lists marker `0x00` as "Party sprite suppressed", but
+    // decoding it here would be wrong: the shipped chargen template also
+    // leaves this byte zero before the first overworld entry, and §2 is
+    // explicit that `0x1C` is "[t]he clean seed and default state". The
+    // suppressed marker is therefore produced only by the loss-of-ship
+    // ladder at runtime, and a save that carries it decodes as foot. See
+    // the note on the asymmetry in `TransportState::SpriteSuppressed`.
     let Some(family) = transport_family(marker) else {
         return transport_from_vehicle_object(marker, marker, 0, 0).unwrap_or_default();
     };

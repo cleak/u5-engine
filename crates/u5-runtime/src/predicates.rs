@@ -613,9 +613,19 @@ pub enum SpawnTerrainBranch {
     /// Surface tile `0x01` after the low-tile allowance — 1/7 special
     /// whirlpool roll, otherwise surface default/aquatic bucket.
     SurfaceTile1WhirlpoolOrAquatic,
-    /// Terrain tile `0x07` — 1/3 sea-serpent adjacency special roll;
-    /// failure rejects the candidate.
-    SeaSerpentAdjacency,
+    /// Terrain tile `0x07` (parched desert) — 1-in-4 Sand Trap special
+    /// roll; failure rejects the candidate.
+    ///
+    /// *Was* `SeaSerpentAdjacency`, on the strength of an earlier
+    /// `encounters.md §4` revision that read "one-in-three chance of the
+    /// outdoor sea-serpent adjacency class". **Both halves of that are
+    /// withdrawn**: the current text gives "**One-in-four** chance of the
+    /// **Sand Trap** sprite run `0xE0..0xE3`", and
+    /// `active-objects.md §8` adds that calling `0xE0..0xE3` a
+    /// sea-serpent family "is withdrawn and was backwards" — the Sea
+    /// Serpent run is `0x88..0x8B`, which reaches the overworld only
+    /// through the water buckets.
+    SandTrapParchedDesert,
     /// Terrain tile `0x04` on the full underworld plane — direct Rot
     /// Worm sprite-run selection.
     UnderworldTile4RotWorm,
@@ -645,7 +655,7 @@ pub const fn spawn_terrain_branch(tile: u8, underworld: bool) -> SpawnTerrainBra
         return SpawnTerrainBranch::HardReject;
     }
     if tile == 0x07 {
-        return SpawnTerrainBranch::SeaSerpentAdjacency;
+        return SpawnTerrainBranch::SandTrapParchedDesert;
     }
     if tile == 0x01 {
         return SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic;
@@ -667,9 +677,12 @@ pub const fn spawn_terrain_branch(tile: u8, underworld: bool) -> SpawnTerrainBra
 /// surface tile 1).
 pub const SPAWN_WHIRLPOOL_DENOMINATOR: u8 = 7;
 
-/// `encounters.md §4` sea-serpent adjacency chance gate (1-in-3
-/// on terrain tile 7); failure rejects the candidate.
-pub const SPAWN_SEA_SERPENT_DENOMINATOR: u8 = 3;
+/// `encounters.md §4` Sand Trap chance gate on terrain tile 7
+/// (parched desert); failure rejects the candidate. "The draw is over
+/// the closed interval `[0, 3]` accepted on one value, which is one in
+/// four" — an earlier revision's one-in-three is withdrawn along with
+/// the sea-serpent naming.
+pub const SPAWN_SAND_TRAP_DENOMINATOR: u8 = 4;
 
 /// `encounters.md §4` low-tile allowance die (1-in-4 on the low /
 /// shore / road / bridge bands); failure rejects the candidate.
@@ -1010,6 +1023,14 @@ pub fn is_tile_walkable_for_transport(
         }
         TransportState::Carpet { .. } => carpet_terrain_accepts(tile),
         TransportState::Balloon { .. } => true,
+        // `vehicles.md §2` gives every other marker family an explicit
+        // "[o]rdinary terrain queries use the ... predicate family" line
+        // and gives marker `0x00` none: the sprite-suppressed party is
+        // reached only by drowning, and `vehicles.md §6` records that
+        // "[w]hat runs after the loop exits was not traced". Accepting no
+        // terrain withholds a movement capability rather than inventing
+        // one.
+        TransportState::SpriteSuppressed => false,
     }
 }
 

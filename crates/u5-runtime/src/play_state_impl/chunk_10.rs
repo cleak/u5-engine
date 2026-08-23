@@ -185,6 +185,7 @@ impl PlayState {
                 nearby_support || self.player_can_land_on_foot(game_dir, current.0, current.1)?
             }
             TransportState::Foot
+            | TransportState::SpriteSuppressed
             | TransportState::Ship {
                 sails_hoisted: true,
                 ..
