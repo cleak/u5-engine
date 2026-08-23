@@ -170,9 +170,31 @@ no test asserted rendered text against shipped blobs.
 
 If the thing being dispatched is exhaustive — and that arm's own comment said
 the original's dispatcher *is* — then an unrecognised input is a defect in the
-implementation, not defensive input, and skipping it is the wrong response.
-Enumerate the cases mechanically against the published set rather than trusting
-the arm to be empty.
+implementation, not defensive input, and skipping it is the wrong response. A
+defensive default is only defensible when the input is genuinely untrusted;
+against a fixed shipped corpus it converts every implementation gap into
+silence.
+
+**It does not only hide a missing case — it hides an already-answered one.**
+`0x81`'s behaviour was correctly published, word-boundary handling and all, in a
+document we were actively building from. The information was *there*. The skip
+arm meant nothing ever asked for it. So the cost of a silent default is not
+measured in unanswered questions; it is measured in answers nobody fetched.
+
+**Enumerate mechanically, and mind which set you enumerate against.** Checking
+handled arms against the *published constant list* can only find cases someone
+already thought to name. The complete set is *every value the dispatcher can
+receive*, and the gap between those two sets is exactly where an unnamed case
+hides.
+
+### Absence of failure is not evidence
+
+Both forms of this failure strengthen with age, in different currencies. A
+disclaimer strengthens because its persistence reads as corroboration — if it
+were wrong, surely someone would have noticed. A silent-discard arm strengthens
+because every day it does not crash reads as evidence it has nothing in it.
+
+Neither is evidence. **A quiet arm is only ever evidence that nothing asked.**
 
 ## 4. Which of the things I just changed does this suite actually touch?
 
