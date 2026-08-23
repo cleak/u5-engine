@@ -86,14 +86,14 @@ use u5_runtime::{
     TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_FLOURISH_FRAME_COUNT,
     TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem,
-    TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TitleTickFrameSet, TransportState, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH,
-    ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX,
-    VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, ViewOverlayMode,
-    WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX,
+    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor,
+    TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages,
+    TitleBitPlacement, TitleTickFrameSet, TransportState, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT,
+    ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
+    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     blit_tile_id_to_viewport, combat_actor_is_active_not_dead, combat_class_stats,
     commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
@@ -324,6 +324,70 @@ impl IntroDisplayBuffer {
         }
     }
 
+    /// `systems/intro.md §11.2` opaque record draw, clipped against the
+    /// bottom edge of the page.
+    ///
+    /// The rise and sink phases deliberately place the 137-row
+    /// `STARTSC` pillar records so that most of the record hangs below
+    /// row 199; only the on-screen rows are written. Nothing is keyed
+    /// or masked - the original's draw is opaque, which is what lets
+    /// the pillars climb straight over the still-visible menu window.
+    fn blit_intro_buffer_clipped(&mut self, src: &IntroDisplayBuffer, dst_x: usize, dst_y: usize) {
+        assert!(
+            src.width > 0 && src.height > 0,
+            "intro buffer blit requires a non-empty source"
+        );
+        assert!(
+            dst_x + src.width <= self.width,
+            "intro buffer blit at ({dst_x}, {dst_y}) is {} wide, past the {}-column page",
+            src.width,
+            self.width
+        );
+        let rows = self.height.saturating_sub(dst_y).min(src.height);
+        for row in 0..rows {
+            let src_start = row * src.width;
+            let dst_start = (dst_y + row) * self.width + dst_x;
+            self.pixels[dst_start..dst_start + src.width]
+                .copy_from_slice(&src.pixels[src_start..src_start + src.width]);
+        }
+    }
+
+    /// `systems/intro.md §11.2`: copy an inclusive rectangle from the
+    /// hidden surface to this (visible) page. The part, close and sink
+    /// phases publish the credits page and then the rebuilt menu screen
+    /// through this one primitive, and every rectangle they name has
+    /// top edge 63 and bottom edge 199 - which is why the `ULTIMA` logo
+    /// on visible rows `0..=60` survives the path (§11.3).
+    fn copy_rect_inclusive_from(
+        &mut self,
+        src: &IntroDisplayBuffer,
+        left: usize,
+        top: usize,
+        right: usize,
+        bottom: usize,
+    ) {
+        assert_eq!(
+            (self.width, self.height),
+            (src.width, src.height),
+            "intro surface copy requires both surfaces to have the same geometry"
+        );
+        assert!(
+            left <= right && top <= bottom,
+            "intro surface copy rectangle is inverted: ({left}, {top})..({right}, {bottom})"
+        );
+        assert!(
+            right < self.width && bottom < self.height,
+            "intro surface copy ({left}, {top})..({right}, {bottom}) exceeds framebuffer {}x{}",
+            self.width,
+            self.height
+        );
+        for y in top..=bottom {
+            let start = y * self.width + left;
+            let end = y * self.width + right + 1;
+            self.pixels[start..end].copy_from_slice(&src.pixels[start..end]);
+        }
+    }
+
     /// `systems/display-driver.md §5` + `cleak/u5-spec#65`: copy one
     /// staged band into this framebuffer, overwriting the whole
     /// published `(0, 65)` `320 x 49` destination rectangle opaquely.
@@ -492,6 +556,19 @@ impl IntroDisplayBuffer {
     }
 }
 
+/// `systems/intro.md §11` acknowledgements geometry and sequencing.
+/// `cleak/u5-spec#72` is closed and fully answered; the phase list,
+/// step counts, band arithmetic and pacing all live in `u5-runtime` so
+/// this crate only has to composite pixels.
+use u5_runtime::intro::TITLE_TICK_STAGING_BACKGROUND;
+use u5_runtime::intro_acknowledgements::{
+    ACK_BAND_BOTTOM_Y, ACK_BAND_TOP_Y, ACK_CLOSE_STEP_COUNT, ACK_CREDITS_ORIGIN_X,
+    ACK_CREDITS_RECORD, ACK_CREDITS_WIDTH, ACK_LEFT_PILLAR_RECORD,
+    ACK_MENU_REBUILD_TITLE_TICK_FRAME, ACK_PART_STEP_COUNT, ACK_PILLAR_WIDTH, ACK_RECORD_HEIGHT,
+    ACK_RIGHT_PILLAR_RECORD, ACKNOWLEDGEMENTS_ARCHIVE_STEM, AcknowledgementsDraw,
+    AcknowledgementsPresentation, AcknowledgementsStep,
+};
+
 fn new_intro_display_buffer() -> IntroDisplayBuffer {
     IntroDisplayBuffer::new(
         INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -510,40 +587,42 @@ fn intro_buffer_from_rgba_frame(rgba: &[u8]) -> IntroDisplayBuffer {
 /// `cleak/u5-spec#78`: `STARTSC.16` decodes to the credits artwork
 /// the Acknowledgements screen shows, not the start/menu backing
 /// `systems/intro.md §3` assigns it. The 16 + 288 + 16 by 137
-/// composition is drawn bottom-aligned at `y = 63`, so it fills
+/// composition is bottom-aligned at `y = 63`, so it fills
 /// `(0, 63)..=(319, 199)` under the retained `ULTIMA` logo.
+///
+/// This is **not** how the screen is drawn. `systems/intro.md §11.2`
+/// publishes the band column by column out of the hidden surface
+/// (`cleak/u5-spec#72`), and blitting the assembled composition in one
+/// step was the placeholder that stood in while the phase sequence was
+/// unpublished. The table survives as the tests' independent statement
+/// of where the three records must end up.
+#[cfg(test)]
 const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
     ImagePanelSpec {
         stem: "STARTSC",
         subimage: 0,
         top_left_x: 0,
-        top_left_y: ACKNOWLEDGEMENTS_PANEL_TOP_Y,
+        top_left_y: ACK_BAND_TOP_Y,
         width: 16,
-        height: STARTSC_PANEL_HEIGHT,
+        height: ACK_RECORD_HEIGHT,
     },
     ImagePanelSpec {
         stem: "STARTSC",
         subimage: 1,
         top_left_x: 16,
-        top_left_y: ACKNOWLEDGEMENTS_PANEL_TOP_Y,
+        top_left_y: ACK_BAND_TOP_Y,
         width: 288,
-        height: STARTSC_PANEL_HEIGHT,
+        height: ACK_RECORD_HEIGHT,
     },
     ImagePanelSpec {
         stem: "STARTSC",
         subimage: 2,
         top_left_x: 304,
-        top_left_y: ACKNOWLEDGEMENTS_PANEL_TOP_Y,
+        top_left_y: ACK_BAND_TOP_Y,
         width: 16,
-        height: STARTSC_PANEL_HEIGHT,
+        height: ACK_RECORD_HEIGHT,
     },
 ];
-
-/// `cleak/u5-spec#72` + `#78`: the acknowledgements parchment is
-/// bottom-aligned on the 200-row surface, so its 137 rows occupy
-/// `63..=199` and the `ULTIMA` logo above it stays on screen.
-const ACKNOWLEDGEMENTS_PANEL_TOP_Y: usize =
-    INTRO_FRAMEBUFFER_HEIGHT as usize - STARTSC_PANEL_HEIGHT;
 
 /// `cleak/u5-spec#78` menu backing art: `ULTIMA` slot 0, the
 /// 319-by-61 "Ultima V" logo, blitted at the surface origin over a
@@ -553,8 +632,8 @@ const ACKNOWLEDGEMENTS_PANEL_TOP_Y: usize =
 /// but `STARTSC.16` decodes to the credits artwork the
 /// Acknowledgements screen shows, and a black-box capture of the
 /// original menu matches this `ULTIMA` panel exactly at `(0, 0)`.
-/// `STARTSC_PANEL_SPECS` stays available for the Acknowledgements
-/// subflow.
+/// `STARTSC` is used by nothing except the Acknowledgements
+/// subflow (`systems/intro.md §11.1`).
 const ULTIMA_LOGO_PANEL_SPEC: ImagePanelSpec = ImagePanelSpec {
     stem: ULTIMA_PANEL_STEM,
     subimage: ULTIMA_LOGO_SLOT,
@@ -597,7 +676,6 @@ const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
 /// presented, before any key is pressed (`cleak/u5-spec#78`).
 const INTRO_MENU_DEFAULT_HIGHLIGHT: IntroSubflow = IntroSubflow::JourneyOnward;
 
-const STARTSC_PANEL_HEIGHT: usize = 137;
 /// `systems/intro.md §6.2`: after two hundred consecutive no-key
 /// menu poll passes the intro enters the Return-to-View preview as if
 /// `R` had been pressed. This counts *poll passes*, not BIOS ticks.
@@ -1017,6 +1095,39 @@ pub fn visual_frame_suite(
             VisualIntroPanel::U4Transfer {
                 screen: Box::new(screen),
             },
+            game_dir,
+            raster_depth,
+        )?);
+    }
+
+    // `systems/intro.md §11.2` (`cleak/u5-spec#72`): one PNG per moving
+    // phase of the acknowledgement path, so the pillar rise, the
+    // outward part sweep, the finished credits page and the inward close
+    // sweep are all covered by the visual regression set. The credits
+    // themselves are artwork - nothing here is authored text.
+    for (label, part_ticks, close_ticks) in [
+        ("intro-acknowledgements-risen", 0usize, None),
+        (
+            "intro-acknowledgements-parting",
+            ACK_PART_STEP_COUNT / 2,
+            None,
+        ),
+        ("intro-acknowledgements-credits", ACK_PART_STEP_COUNT, None),
+        (
+            "intro-acknowledgements-closing",
+            ACK_PART_STEP_COUNT,
+            // Late enough that the rebuilt menu has reached the label
+            // columns; a half-way close frame is still pixel-identical to
+            // the half-way part frame, because the outer columns the two
+            // phases have published so far carry the same chrome.
+            Some(ACK_CLOSE_STEP_COUNT - 3),
+        ),
+    ] {
+        reports.push(write_visual_acknowledgements_report(
+            out_dir,
+            label,
+            part_ticks,
+            close_ticks,
             game_dir,
             raster_depth,
         )?);
@@ -8161,12 +8272,283 @@ enum VisualIntroPanel {
         /// rectangle dissolve, not the withdrawn column sweep.
         transition: Option<RectangleDissolve>,
     },
-    Acknowledgements,
+    Acknowledgements(Box<AcknowledgementsPanelState>),
     ReturnToView {
         preview_frames: Vec<IntroDisplayBuffer>,
         frame_metadata: Vec<VisualReturnToViewFrameMeta>,
         preview_frame_index: usize,
     },
+}
+
+/// `systems/intro.md §11` acknowledgements screen state
+/// (`cleak/u5-spec#72`, closed and fully answered).
+///
+/// The credits are **artwork, not text**: `STARTSC` records 0, 1 and 2
+/// are the left ornamental pillar, the 288-wide credits page with every
+/// credit line drawn into the bitmap, and the right pillar. Nothing in
+/// this path typesets a credit string.
+///
+/// The panel owns both display surfaces because §11.2 is an incremental
+/// path: the pillars are drawn straight over the still-visible menu
+/// window, and the credits page - then the rebuilt menu screen - are
+/// published out of the hidden surface band by band. Nothing is saved
+/// or restored, and nothing clears the visible page first.
+#[derive(Debug)]
+struct AcknowledgementsPanelState {
+    presentation: AcknowledgementsPresentation,
+    /// The visible page. Enters holding the live menu screen, complete
+    /// with the `ULTIMA` logo on rows `0..=60` that §11.3 never touches.
+    visible: IntroDisplayBuffer,
+    /// The hidden surface: the credits page first (step 2), then the
+    /// rebuilt menu screen (step 6), then the subtitle animation atlas
+    /// the §5 title tick expects to find (step 11).
+    hidden: IntroDisplayBuffer,
+    /// `STARTSC` records 0, 1 and 2, decoded once when the panel opens.
+    records: [IntroDisplayBuffer; 3],
+    /// §11.2 step 6's hidden-surface menu rebuild goes through the
+    /// ordinary text pipeline - the §6.1 window frame and the §6.2
+    /// labels - so the panel keeps the glyph slot and the title-tick
+    /// atlas it needs to run without reaching back into the intro state.
+    menu_font: FixedCellFont,
+    title_tick_frames: TitleTickFrameSet,
+}
+
+impl AcknowledgementsPanelState {
+    /// `systems/intro.md §11.2` steps 1..4. Loading the archive,
+    /// composing the credits page on the hidden surface and running the
+    /// whole rise phase all carry **no wait**, so they complete before
+    /// the first frame is presented and the player's first sight of the
+    /// screen is the two pillars at rest over the menu window.
+    fn open(
+        game_dir: &Path,
+        depth: TileGraphicsDepth,
+        visible: IntroDisplayBuffer,
+        menu_font: FixedCellFont,
+        title_tick_frames: TitleTickFrameSet,
+    ) -> Self {
+        let mut state = Self {
+            presentation: AcknowledgementsPresentation::new(),
+            visible,
+            hidden: new_intro_display_buffer(),
+            records: decode_startsc_records(game_dir, depth),
+            menu_font,
+            title_tick_frames,
+        };
+        state.advance();
+        state
+    }
+
+    /// Run the draws that fall before the next wait. Returns false when
+    /// there is nothing to do - the §11.2 step 7 keypress wait is open,
+    /// or the path has finished.
+    fn advance(&mut self) -> bool {
+        let steps = self.presentation.advance();
+        if steps.is_empty() {
+            return false;
+        }
+        for step in &steps {
+            self.execute(&step.clone());
+        }
+        true
+    }
+
+    fn execute(&mut self, step: &AcknowledgementsStep) {
+        for draw in &step.draws {
+            match *draw {
+                AcknowledgementsDraw::ComposeCreditsOnHidden => {
+                    let credits = self.records[usize::from(ACK_CREDITS_RECORD)].clone();
+                    self.hidden.blit_intro_buffer_clipped(
+                        &credits,
+                        ACK_CREDITS_ORIGIN_X,
+                        ACK_BAND_TOP_Y,
+                    );
+                }
+                AcknowledgementsDraw::Pillar { record, x, y } => {
+                    let pillar = self.records[usize::from(record)].clone();
+                    self.visible.blit_intro_buffer_clipped(&pillar, x, y);
+                }
+                AcknowledgementsDraw::CopyFromHidden {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                } => {
+                    self.visible
+                        .copy_rect_inclusive_from(&self.hidden, left, top, right, bottom);
+                }
+                AcknowledgementsDraw::RebuildMenuOnHidden => self.rebuild_menu_on_hidden(),
+                AcknowledgementsDraw::StageTitleTickAtlasOnHidden => {
+                    self.stage_title_tick_atlas_on_hidden()
+                }
+            }
+        }
+    }
+
+    /// `systems/intro.md §11.2` step 6: rebuild the menu screen on the
+    /// hidden surface *while the credits are still displayed*, between
+    /// the part phase and the keypress wait.
+    ///
+    /// This is the one place in the path that touches the text pipeline.
+    /// The text system's clear control blanks the **entire** hidden page
+    /// (the intro's active text window is the full-screen one), then
+    /// `ULTIMA` record 1 - the first subtitle animation phase, i.e.
+    /// title-tick frame 0 - lands at `(16, 65)`, then the §6.1 lower
+    /// window frame and the §6.2 labels with the Acknowledgements row
+    /// bracketed by the inverse-video attribute toggle. None of it is
+    /// visible until the close phase publishes it.
+    ///
+    /// Note what is *not* here: the `ULTIMA` logo. Step 6 never redraws
+    /// it, and it does not need to - the logo survives on the visible
+    /// page because every copy the close and sink phases perform has top
+    /// edge 63 and bottom edge 199 (§11.3).
+    fn rebuild_menu_on_hidden(&mut self) {
+        self.hidden.clear(0);
+        self.hidden
+            .draw_title_tick(ACK_MENU_REBUILD_TITLE_TICK_FRAME, &self.title_tick_frames);
+        draw_visual_intro_menu_text_window_frame(&mut self.hidden, &self.menu_font);
+        draw_visual_intro_menu_labels(
+            &mut self.hidden,
+            &self.menu_font,
+            Some(IntroSubflow::Acknowledgements),
+        );
+    }
+
+    /// `systems/intro.md §11.2` step 11: clear the hidden page a second
+    /// time and stage `ULTIMA` records 1..=4 at vertical origins 0, 50,
+    /// 100 and 150 - the subtitle animation atlas the §5 title tick
+    /// expects to find. This is the last of the path's writes above row
+    /// 63, and it lands on the hidden surface only.
+    ///
+    /// `cleak/u5-spec#65`: the engine keeps each staged record already
+    /// composited onto a background-filled 320-wide band, so blitting
+    /// the four bands at `(0, 0)`, `(0, 50)`, `(0, 100)` and `(0, 150)`
+    /// reproduces the same hidden surface the original leaves behind.
+    fn stage_title_tick_atlas_on_hidden(&mut self) {
+        self.hidden.clear(TITLE_TICK_STAGING_BACKGROUND);
+        let band_height = TITLE_TICK_FRAME_HEIGHT as usize;
+        let width = TITLE_TICK_FRAME_WIDTH as usize;
+        for frame in 0..TITLE_TICK_FRAME_COUNT {
+            let origin_y = usize::from(frame) * ACK_TITLE_TICK_STAGING_PITCH;
+            let pixels = self.title_tick_frames.frame_pixels(frame).to_vec();
+            let band = IntroDisplayBuffer {
+                width,
+                height: band_height,
+                pixels,
+            };
+            self.hidden.blit_intro_buffer_clipped(&band, 0, origin_y);
+        }
+    }
+}
+
+/// `systems/intro.md §11.2` step 11 / `cleak/u5-spec#65`: the four
+/// staged subtitle animation bands sit 50 rows apart on the hidden
+/// surface.
+const ACK_TITLE_TICK_STAGING_PITCH: usize = 50;
+
+/// `systems/intro.md §11.1`: decode the three `STARTSC` records.
+///
+/// Record 2 is decoded from the archive exactly like records 0 and 1 -
+/// it is **never** synthesised by mirroring record 0. `cleak/u5-spec#72`
+/// re-checked the shipped archive and found that under a horizontal
+/// flip only seven of the 137 row pairs match, because the two pillars
+/// are dithered separately.
+fn decode_startsc_records(game_dir: &Path, depth: TileGraphicsDepth) -> [IntroDisplayBuffer; 3] {
+    let directory = load_graphic_image_directory(game_dir, ACKNOWLEDGEMENTS_ARCHIVE_STEM, depth)
+        .unwrap_or_else(|err| {
+            panic!(
+                "intro acknowledgements require the {ACKNOWLEDGEMENTS_ARCHIVE_STEM} image directory: {err}"
+            )
+        });
+    let published = [
+        (ACK_LEFT_PILLAR_RECORD, ACK_PILLAR_WIDTH),
+        (ACK_CREDITS_RECORD, ACK_CREDITS_WIDTH),
+        (ACK_RIGHT_PILLAR_RECORD, ACK_PILLAR_WIDTH),
+    ];
+    std::array::from_fn(|index| {
+        let (record, width) = published[index];
+        let image = directory
+            .images
+            .get(usize::from(record))
+            .and_then(Option::as_ref)
+            .unwrap_or_else(|| {
+                panic!("{ACKNOWLEDGEMENTS_ARCHIVE_STEM} image directory is missing record {record}")
+            });
+        assert_eq!(
+            (image.width, image.height),
+            (width, ACK_RECORD_HEIGHT),
+            "{ACKNOWLEDGEMENTS_ARCHIVE_STEM} record {record} is {}x{}, expected exactly {}x{}",
+            image.width,
+            image.height,
+            width,
+            ACK_RECORD_HEIGHT
+        );
+        let rgba = graphic_image_to_rgba(image, depth);
+        IntroDisplayBuffer::from_rgba(image.width, image.height, &rgba)
+    })
+}
+
+/// `systems/intro.md §11.2` steps 1..4, entered from the menu.
+///
+/// §11.2 never clears the visible page, so the path starts from the
+/// live menu screen and draws over it.
+fn open_visual_acknowledgements_panel(intro: &mut VisualIntroState) -> VisualIntroPanel {
+    let visible = intro_buffer_from_rgba_frame(&render_intro_frame(intro));
+    let menu_font = intro
+        .font_slots
+        .as_ref()
+        .map(|slots| slots.active_font().clone())
+        .expect(
+            "intro acknowledgements require the pre-flourish font-slot table for the §11.2 step 6 menu rebuild",
+        );
+    let title_tick_frames = ensure_title_tick_frames(&mut *intro).clone();
+    let game_dir = intro.game_dir.clone();
+    let depth = intro.raster_depth;
+    VisualIntroPanel::Acknowledgements(Box::new(AcknowledgementsPanelState::open(
+        &game_dir,
+        depth,
+        visible,
+        menu_font,
+        title_tick_frames,
+    )))
+}
+
+/// `systems/intro.md §11.2` steps 5, 7, 8, 10 and 12 on the DOS BIOS
+/// user-tick pump.
+///
+/// The part and close phases ask for exactly one hardware timer tick per
+/// step, which is the pump's own cadence, so they consume one call per
+/// step. The rise and sink phases carry no wait at all and therefore run
+/// as one unpaced burst — the same treatment `cleak/u5-spec#53` gave the
+/// story reveal, where no wall-clock duration is published and there is
+/// no rate to spread the steps over frames with.
+fn advance_visual_intro_acknowledgements(intro: &mut VisualIntroState) -> bool {
+    let VisualIntroPanel::Acknowledgements(panel) = &mut intro.panel else {
+        return false;
+    };
+    if !panel.advance() {
+        return false;
+    }
+    if !panel.presentation.is_finished() {
+        return true;
+    }
+    // Step 12: select the visible page and return to the menu poll loop.
+    let finished = std::mem::replace(&mut intro.panel, VisualIntroPanel::Menu);
+    if let VisualIntroPanel::Acknowledgements(panel) = finished {
+        intro.surface = panel.visible;
+    }
+    // Step 6 published title-tick frame 0 (`ULTIMA` record 1) and step
+    // 11 restaged the atlas, so the menu resumes its flame cycle there.
+    intro.title_tick_visible_frame = ACK_MENU_REBUILD_TITLE_TICK_FRAME;
+    intro.title_tick_frame = title_tick_next_frame(ACK_MENU_REBUILD_TITLE_TICK_FRAME);
+    intro.dispatch.complete_subflow(
+        IntroSubflow::Acknowledgements,
+        IntroSubflowResult::ReturnedToMenu,
+    );
+    intro.modal_backing = None;
+    intro.menu_idle_ticks = 0;
+    intro.message_waiting_for_key = false;
+    intro.message.clear();
+    true
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -8695,6 +9077,13 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         }
         return advanced;
     } else {
+        // `systems/intro.md §11.2`: the acknowledgement path drives both
+        // display surfaces and needs the intro state to publish its
+        // rebuilt menu, so it is stepped here rather than through the
+        // panel-only animation helper.
+        if matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)) {
+            return advance_visual_intro_acknowledgements(intro);
+        }
         let mut title_tick_frame = intro.title_tick_frame;
         let title_tick_visible_frame = intro.title_tick_frame;
         if !advance_visual_intro_panel_animation(&mut intro.panel, &mut title_tick_frame) {
@@ -9196,14 +9585,16 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             let _ = records;
             step_visual_intro_story_panel(step, transition)
         }
-        // `systems/intro.md §11`: any key wipes the parchment away and
-        // restores the menu (`cleak/u5-spec#72` - the wipe cadence is
-        // unpublished, so the restore is immediate).
-        VisualIntroPanel::Acknowledgements => VisualIntroPanelOutcome::ReturnToMenu {
-            subflow: IntroSubflow::Acknowledgements,
-            result: IntroSubflowResult::ReturnedToMenu,
-            message: String::new(),
-        },
+        // `systems/intro.md §11.2` step 7: one page only, any key
+        // advances, and `Esc` has no special meaning here. There is no
+        // timeout, no timed auto-advance and no second page. The key
+        // does not restore the menu on the spot — the close and sink
+        // phases still have to publish the rebuilt menu screen, which
+        // the animation pump drives.
+        VisualIntroPanel::Acknowledgements(panel) => {
+            panel.presentation.queue_key();
+            VisualIntroPanelOutcome::Stay
+        }
         // `#54` retraction 3: "every preview tick polls the keyboard
         // once, and any pending key aborts the preview immediately", at
         // which point the saved title/menu image is restored. There is
@@ -9262,6 +9653,13 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
         return step_visual_intro_panel(intro, '\x1b');
     }
+    // `systems/intro.md §11.2` step 7: `Esc` has no special meaning on
+    // the acknowledgement screen — it is an ordinary key, and the close
+    // and sink phases still play before the menu comes back.
+    if let VisualIntroPanel::Acknowledgements(panel) = &mut intro.panel {
+        panel.presentation.queue_key();
+        return true;
+    }
     let Some((subflow, result, message)) = (match intro.panel {
         VisualIntroPanel::Menu => None,
         VisualIntroPanel::CharacterCreation { .. } => Some((
@@ -9275,11 +9673,9 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
             IntroSubflowResult::ReturnedToMenu,
             "Ultima V Introduction cancelled; returning to the intro menu.",
         )),
-        VisualIntroPanel::Acknowledgements => Some((
-            IntroSubflow::Acknowledgements,
-            IntroSubflowResult::ReturnedToMenu,
-            "",
-        )),
+        VisualIntroPanel::Acknowledgements(_) => {
+            unreachable!("acknowledgements treat Esc as an ordinary key above")
+        }
         // `cleak/u5-spec#54` retraction 3: any pending key aborts the
         // preview immediately and restores the saved title/menu image.
         // Escape is an ordinary key here, not a special case.
@@ -9458,7 +9854,8 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
             Err(err) => panic!("intro story requires readable STORY.DAT: {err}"),
         },
         IntroSubflow::Acknowledgements => {
-            intro.panel = VisualIntroPanel::Acknowledgements;
+            let panel = open_visual_acknowledgements_panel(intro);
+            intro.panel = panel;
             intro.message_waiting_for_key = false;
             intro.message.clear();
         }
@@ -9635,8 +10032,14 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         VisualIntroPanel::Story { records, step, .. } => {
             return summarize_intro_story(records, *step);
         }
-        VisualIntroPanel::Acknowledgements => {
-            return "Acknowledgements: STARTSC credits parchment at (0, 63).".to_string();
+        VisualIntroPanel::Acknowledgements(panel) => {
+            return format!(
+                "Acknowledgements: STARTSC credits artwork on rows {}..={}, {:?} phase, step {}.",
+                ACK_BAND_TOP_Y,
+                ACK_BAND_BOTTOM_Y,
+                panel.presentation.phase(),
+                panel.presentation.step_index(),
+            );
         }
         VisualIntroPanel::ReturnToView {
             preview_frames,
@@ -9810,7 +10213,7 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     if matches!(intro.panel, VisualIntroPanel::CharacterCreation { .. }) {
         return render_chargen_intro_frame(intro);
     }
-    if matches!(intro.panel, VisualIntroPanel::Acknowledgements) {
+    if matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)) {
         return render_acknowledgements_intro_frame(intro);
     }
 
@@ -10412,45 +10815,19 @@ fn render_u4_transfer_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     screen.render()
 }
 
-/// `systems/intro.md §11` acknowledgements screen, as the original
-/// draws it (`cleak/u5-spec#72`, `cleak/u5-spec#78`).
+/// `systems/intro.md §11` acknowledgements screen (`cleak/u5-spec#72`,
+/// closed and fully answered; `cleak/u5-spec#78`).
 ///
-/// §11 says the acknowledgements load "their own graphics resource
-/// from the end-screen asset family"; `ENDSC.16` is a single blank
-/// 260x168 parchment, while `STARTSC.16` decodes to the credits
-/// artwork ("Produced and Designed by Lord British" ... "Artwork by
-/// Denis Loubet and Doug Wike"). A black-box capture of the original
-/// confirms it: pressing `A` keeps the `ULTIMA` logo on rows 0..=60
-/// and replaces everything from row 63 down with the STARTSC
-/// 16 + 288 + 16 by 137 composition. No text is drawn over it - the
-/// credits are part of the artwork - so nothing here is authored.
-///
-/// The entry/exit wipe cadence is still unpublished, so this blits
-/// the composition immediately rather than inventing a sweep.
+/// The panel maintains the visible page incrementally through the §11.2
+/// phase sequence, so rendering a frame is just publishing it. Nothing
+/// is composed here: composing per frame would erase the whole point of
+/// the path, which is that visible rows `63..=199` are overwritten and
+/// then rebuilt band by band with nothing cleared in between.
 fn render_acknowledgements_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    let mut buffer = new_intro_display_buffer();
-    buffer.clear(0);
-    blit_image_panel_specs_intro_buffer(
-        &mut buffer,
-        &intro.game_dir,
-        intro.raster_depth,
-        std::slice::from_ref(&ULTIMA_LOGO_PANEL_SPEC),
-    );
-    buffer.clear_rect_inclusive(
-        0,
-        ULTIMA_LOGO_HEIGHT,
-        INTRO_FRAMEBUFFER_WIDTH as usize - 1,
-        INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
-        0,
-    );
-    blit_image_panel_specs_intro_buffer(
-        &mut buffer,
-        &intro.game_dir,
-        intro.raster_depth,
-        &STARTSC_PANEL_SPECS,
-    );
-    intro.surface = buffer;
-    intro.surface.to_rgba()
+    let VisualIntroPanel::Acknowledgements(panel) = &intro.panel else {
+        panic!("render_acknowledgements_intro_frame called for a non-acknowledgements panel")
+    };
+    panel.visible.to_rgba()
 }
 
 fn render_chargen_intro_graphics(
@@ -12362,23 +12739,22 @@ fn write_visual_intro_report_with_title_dismissed(
     )
 }
 
-fn write_visual_intro_report_inner(
-    out_dir: &Path,
-    label: &str,
-    frame_kind: &'static str,
+/// The intro state every headless suite frame is rendered from.
+///
+/// `systems/intro.md §3` step 2. Run the **same** pre-flourish phase
+/// the live harness runs rather than reproducing its effects by hand:
+/// it loads the resident font slots and resets the primary text window
+/// to 40x25, and later intro screens draw through both. Hand-rolling
+/// that state is exactly what let this suite disagree with the live
+/// renderer — it seeded `font_slots: None`, the menu compositor
+/// silently dropped the §6.1 frame and the §6.2 labels, and every suite
+/// menu frame came out black below row 119.
+fn visual_intro_suite_state(
     panel: VisualIntroPanel,
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
     title_dismissed: bool,
-) -> io::Result<VisualFrameReport> {
-    // `systems/intro.md §3` step 2. Run the **same** pre-flourish phase
-    // the live harness runs rather than reproducing its effects by
-    // hand: it loads the resident font slots and resets the primary
-    // text window to 40x25, and later intro screens draw through both.
-    // Hand-rolling that state is exactly what let this suite disagree
-    // with the live renderer — it seeded `font_slots: None`, the menu
-    // compositor silently dropped the §6.1 frame and the §6.2 labels,
-    // and every suite menu frame came out black below row 119.
+) -> io::Result<VisualIntroState> {
     let mut text_windows = TextWindowSystem::new();
     let (font_slots, _pre_flourish_outcome) =
         run_intro_pre_flourish_phase(game_dir, DisplayDriverFamily::Ega, &mut text_windows, None)?;
@@ -12412,6 +12788,19 @@ fn write_visual_intro_report_inner(
     if title_dismissed {
         intro.dispatch.dismiss_title();
     }
+    Ok(intro)
+}
+
+fn write_visual_intro_report_inner(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    panel: VisualIntroPanel,
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    title_dismissed: bool,
+) -> io::Result<VisualFrameReport> {
+    let mut intro = visual_intro_suite_state(panel, game_dir, raster_depth, title_dismissed)?;
     if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
         // `cleak/u5-spec#54`: the preview is entered from the menu and
         // composites over the preserved title/menu image, which it
@@ -12435,6 +12824,45 @@ fn write_visual_intro_report_inner(
         INTRO_FRAMEBUFFER_WIDTH,
         INTRO_FRAMEBUFFER_HEIGHT,
         frame_kind,
+        rgba,
+    )
+}
+
+/// `systems/intro.md §11.2` acknowledgement frames for the visual
+/// regression suite.
+///
+/// Opening the panel runs the unpaced compose and rise burst, so
+/// `part_ticks = 0` is the two pillars standing over the still-visible
+/// menu window and `part_ticks = 18` is the finished credits page.
+/// Passing `close_ticks` sends step 7's keypress and then runs that many
+/// of the eighteen close steps.
+fn write_visual_acknowledgements_report(
+    out_dir: &Path,
+    label: &str,
+    part_ticks: usize,
+    close_ticks: Option<usize>,
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+) -> io::Result<VisualFrameReport> {
+    let mut intro = visual_intro_suite_state(VisualIntroPanel::Menu, game_dir, raster_depth, true)?;
+    let panel = open_visual_acknowledgements_panel(&mut intro);
+    intro.panel = panel;
+    for _ in 0..part_ticks {
+        advance_visual_intro_acknowledgements(&mut intro);
+    }
+    if let Some(close_ticks) = close_ticks {
+        step_visual_intro_panel(&mut intro, ' ');
+        for _ in 0..close_ticks {
+            advance_visual_intro_acknowledgements(&mut intro);
+        }
+    }
+    let rgba = render_intro_frame(&mut intro);
+    write_visual_report(
+        out_dir,
+        label,
+        INTRO_FRAMEBUFFER_WIDTH,
+        INTRO_FRAMEBUFFER_HEIGHT,
+        "intro acknowledgements",
         rgba,
     )
 }
@@ -14573,7 +15001,11 @@ mod tests {
         img.save(&out_path).expect("PNG save");
         eprintln!("intro menu PNG written: {}", out_path.display());
 
-        intro.panel = VisualIntroPanel::Acknowledgements;
+        let panel = open_visual_acknowledgements_panel(&mut intro);
+        intro.panel = panel;
+        for _ in 0..ACK_PART_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+        }
         let ack_rgba = render_intro_frame(&mut intro);
         let ack_path = out_dir.join("intro-acknowledgements.png");
         let ack_img = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, ack_rgba)
@@ -14964,10 +15396,11 @@ mod tests {
 
     #[test]
     fn startsc_panels_remain_the_acknowledgements_credits_composition() {
-        // `cleak/u5-spec#78`: `STARTSC.16` stays loadable for the
-        // Acknowledgements subflow (still gated behind
-        // `require_acknowledgements_contract`), as the published
-        // 16 + 288 + 16 by 137 composition.
+        // `cleak/u5-spec#78`: `STARTSC.16` is the Acknowledgements
+        // subflow's credits artwork, the published 16 + 288 + 16 by 137
+        // composition. `cleak/u5-spec#72` is closed and the path is
+        // implemented, so this only pins the assembled geometry the
+        // §11.2 phases publish column by column.
         let dir = debug_game_dir();
         install_intro_assets(&dir);
         let mut panels = new_intro_display_buffer();
@@ -14979,9 +15412,9 @@ mod tests {
             &STARTSC_PANEL_SPECS,
         );
 
-        assert_eq!(STARTSC_PANEL_HEIGHT, 137);
+        assert_eq!(ACK_RECORD_HEIGHT, 137);
         assert!(
-            panels.pixels[..STARTSC_PANEL_HEIGHT * panels.width]
+            panels.pixels[..ACK_RECORD_HEIGHT * panels.width]
                 .iter()
                 .any(|index| *index != 0),
             "the STARTSC composition must decode to visible credits art"
@@ -16202,9 +16635,8 @@ mod tests {
     fn intro_menu_space_activates_the_highlighted_row() {
         // Space and Enter both activate whatever row is highlighted.
         // Walking the highlight down to "Acknowledgements" and
-        // pressing Space must enter that subflow (whose rendering is
-        // still gated behind the unpublished acknowledgements
-        // contract) rather than being ignored.
+        // pressing Space must enter that subflow rather than being
+        // ignored.
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
         let down = char::from(u5_runtime::INPUT_CODE_SOUTH);
@@ -16219,7 +16651,7 @@ mod tests {
         assert!(step_visual_intro(&mut intro, ' '));
 
         assert!(
-            matches!(intro.panel, VisualIntroPanel::Acknowledgements),
+            matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)),
             "space must enter the highlighted row's subflow"
         );
         assert_eq!(
@@ -19836,17 +20268,35 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Open the panel exactly as pressing `A` on the menu does: the
+    /// §11.2 compose and rise burst runs before the first frame, so the
+    /// state comes back with both pillars standing at columns
+    /// `144..=175` over the still-visible menu window.
+    fn visual_intro_state_with_acknowledgements(
+        dir: std::path::PathBuf,
+    ) -> (VisualIntroState, IntroDisplayBuffer) {
+        let mut intro = visual_intro_state_with_panel(dir, VisualIntroPanel::Menu);
+        let menu = intro_buffer_from_rgba_frame(&render_intro_frame(&mut intro));
+        let panel = open_visual_acknowledgements_panel(&mut intro);
+        intro.panel = panel;
+        (intro, menu)
+    }
+
+    fn acknowledgements_panel(intro: &VisualIntroState) -> &AcknowledgementsPanelState {
+        let VisualIntroPanel::Acknowledgements(panel) = &intro.panel else {
+            panic!("expected an acknowledgements panel");
+        };
+        panel
+    }
+
+    /// `systems/intro.md §11.2` step 5 / `cleak/u5-spec#72`: the part
+    /// phase publishes the assembled `STARTSC` band - record 0 at
+    /// `(0, 63)`, record 1 at `(16, 63)`, record 2 at `(304, 63)` -
+    /// across visible rows `63..=199`, and nothing is authored over it.
     #[test]
-    fn visual_intro_acknowledgements_draws_the_startsc_credits_parchment() {
-        // `cleak/u5-spec#72` + `#78`: pressing `A` keeps the `ULTIMA`
-        // logo and replaces everything from row 63 down with the
-        // STARTSC 16 + 288 + 16 by 137 credits composition. No text is
-        // authored over it.
+    fn visual_intro_acknowledgements_part_phase_publishes_the_startsc_band() {
         let dir = debug_game_dir();
-        let mut intro =
-            visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
-        let logo = u5_runtime::load_ultima_logo_panel(&dir, TileGraphicsDepth::Ega16)
-            .expect("ULTIMA logo panel decodes");
+        let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
         let mut expected_panels = new_intro_display_buffer();
         blit_image_panel_specs_intro_buffer(
             &mut expected_panels,
@@ -19855,63 +20305,263 @@ mod tests {
             &STARTSC_PANEL_SPECS,
         );
 
-        let rgba = render_intro_frame(&mut intro);
-        let actual = intro_buffer_from_rgba_frame(&rgba);
+        for _ in 0..ACK_PART_STEP_COUNT {
+            assert!(advance_visual_intro_acknowledgements(&mut intro));
+        }
 
-        assert_eq!(ACKNOWLEDGEMENTS_PANEL_TOP_Y, 63);
-        // Logo rows survive.
-        for y in 0..ULTIMA_LOGO_HEIGHT {
-            for x in 0..ULTIMA_LOGO_WIDTH {
-                assert_eq!(
-                    actual.pixels[y * actual.width + x],
-                    logo.pixels[y * ULTIMA_LOGO_WIDTH + x],
-                    "logo pixel at ({x}, {y})"
-                );
-            }
-        }
-        // The gap between the logo and the parchment stays black.
-        for y in ULTIMA_LOGO_HEIGHT..ACKNOWLEDGEMENTS_PANEL_TOP_Y {
-            for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
-                assert_eq!(actual.pixels[y * actual.width + x], 0, "gap at ({x}, {y})");
-            }
-        }
-        // The parchment fills the rest of the surface.
-        for y in ACKNOWLEDGEMENTS_PANEL_TOP_Y..INTRO_FRAMEBUFFER_HEIGHT as usize {
+        let actual = intro_buffer_from_rgba_frame(&render_intro_frame(&mut intro));
+        assert_eq!(ACK_BAND_TOP_Y, 63);
+        for y in ACK_BAND_TOP_Y..=ACK_BAND_BOTTOM_Y {
             for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
                 assert_eq!(
                     actual.pixels[y * actual.width + x],
                     expected_panels.pixels[y * expected_panels.width + x],
-                    "parchment pixel at ({x}, {y})"
+                    "credits pixel at ({x}, {y})"
                 );
             }
         }
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `systems/intro.md §11.3`: no pixel above row 63 **of the visible
+    /// page** is written at any point, so the `ULTIMA` logo on rows
+    /// `0..=60` is still there when the path ends. The hidden surface is
+    /// a different story - the menu rebuild and the subtitle atlas
+    /// restage both write it above row 63 - so this checks the visible
+    /// page across the whole path, not the hidden one.
     #[test]
-    fn visual_intro_acknowledgements_any_key_restores_the_menu() {
+    fn visual_intro_acknowledgements_never_writes_a_visible_pixel_above_row_63() {
         let dir = debug_game_dir();
-        let mut intro =
-            visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
+        let (mut intro, menu) = visual_intro_state_with_acknowledgements(dir.clone());
+
+        let check = |intro: &mut VisualIntroState, stage: &str| {
+            let frame = intro_buffer_from_rgba_frame(&render_intro_frame(intro));
+            for y in 0..ACK_BAND_TOP_Y {
+                for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
+                    assert_eq!(
+                        frame.pixels[y * frame.width + x],
+                        menu.pixels[y * menu.width + x],
+                        "{stage}: visible pixel at ({x}, {y}) above row 63 changed"
+                    );
+                }
+            }
+        };
+
+        check(&mut intro, "after the rise phase");
+        for tick in 0..ACK_PART_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+            check(&mut intro, &format!("part tick {tick}"));
+        }
+        step_visual_intro_panel(&mut intro, ' ');
+        for tick in 0..ACK_CLOSE_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+            check(&mut intro, &format!("close tick {tick}"));
+        }
+        advance_visual_intro_acknowledgements(&mut intro);
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §11.1` / `cleak/u5-spec#72`: record 2 is a
+    /// mirrored *variant* of record 0, not a horizontal flip of it -
+    /// their dithering is authored separately, and under a flip only a
+    /// handful of the 137 rows match. It must be decoded from the
+    /// archive and drawn as decoded.
+    #[test]
+    fn visual_intro_acknowledgements_decodes_record_2_instead_of_mirroring_record_0() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let records = decode_startsc_records(&dir, TileGraphicsDepth::Ega16);
+        let left = &records[usize::from(ACK_LEFT_PILLAR_RECORD)];
+        let right = &records[usize::from(ACK_RIGHT_PILLAR_RECORD)];
+        assert_eq!(
+            (left.width, left.height),
+            (ACK_PILLAR_WIDTH, ACK_RECORD_HEIGHT)
+        );
+        assert_eq!(
+            (right.width, right.height),
+            (ACK_PILLAR_WIDTH, ACK_RECORD_HEIGHT)
+        );
+
+        let mirrored_rows = (0..ACK_RECORD_HEIGHT)
+            .filter(|row| {
+                (0..ACK_PILLAR_WIDTH).all(|column| {
+                    left.pixels[row * ACK_PILLAR_WIDTH + column]
+                        == right.pixels[row * ACK_PILLAR_WIDTH + (ACK_PILLAR_WIDTH - 1 - column)]
+                })
+            })
+            .count();
+        assert!(
+            mirrored_rows < ACK_RECORD_HEIGHT,
+            "record 2 must not be reproducible as a horizontal flip of record 0, but all {ACK_RECORD_HEIGHT} rows mirror"
+        );
+
+        // And the drawn right pillar is the decoded record, not a
+        // synthesised mirror of the left one.
+        let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
+        let frame = intro_buffer_from_rgba_frame(&render_intro_frame(&mut intro));
+        for row in 0..ACK_RECORD_HEIGHT {
+            for column in 0..ACK_PILLAR_WIDTH {
+                assert_eq!(
+                    frame.pixels[(ACK_BAND_TOP_Y + row) * frame.width + 160 + column],
+                    right.pixels[row * ACK_PILLAR_WIDTH + column],
+                    "risen right pillar pixel at ({column}, {row})"
+                );
+            }
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §11.2` step 4: the pillars climb straight over
+    /// the still-visible menu window, and nothing clears the lower band
+    /// first - so every column outside `144..=175` still holds the menu
+    /// when the rise phase ends.
+    #[test]
+    fn visual_intro_acknowledgements_rise_draws_over_the_live_menu_window() {
+        let dir = debug_game_dir();
+        let (mut intro, menu) = visual_intro_state_with_acknowledgements(dir.clone());
+
+        let frame = intro_buffer_from_rgba_frame(&render_intro_frame(&mut intro));
+        for y in ACK_BAND_TOP_Y..=ACK_BAND_BOTTOM_Y {
+            for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
+                if (144..=175).contains(&x) {
+                    continue;
+                }
+                assert_eq!(
+                    frame.pixels[y * frame.width + x],
+                    menu.pixels[y * menu.width + x],
+                    "the rise phase must not touch column {x} (row {y})"
+                );
+            }
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §11.2` step 6: the menu rebuild lands entirely
+    /// on the hidden surface while the credits are still displayed, and
+    /// the Acknowledgements row carries the inverse-video toggle.
+    #[test]
+    fn visual_intro_acknowledgements_menu_rebuild_lands_on_the_hidden_surface() {
+        let dir = debug_game_dir();
+        let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
+        for _ in 0..ACK_PART_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+        }
+
+        let font = load_ibm_ch_font(&dir).expect("intro fixtures require IBM.CH");
+        let frames = load_ultima_title_tick_frames(&dir, TileGraphicsDepth::Ega16)
+            .expect("ULTIMA title-tick panels decode");
+        let mut expected = new_intro_display_buffer();
+        expected.clear(0);
+        expected.draw_title_tick(ACK_MENU_REBUILD_TITLE_TICK_FRAME, &frames);
+        draw_visual_intro_menu_text_window_frame(&mut expected, &font);
+        draw_visual_intro_menu_labels(&mut expected, &font, Some(IntroSubflow::Acknowledgements));
+
+        assert_eq!(acknowledgements_panel(&intro).hidden, expected);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §11.2` steps 7..12: any key advances, the close
+    /// and sink phases publish the rebuilt menu from the outside inward,
+    /// and only then does the path return to the menu poll loop.
+    #[test]
+    fn visual_intro_acknowledgements_any_key_plays_the_close_and_sink_phases() {
+        let dir = debug_game_dir();
+        let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
+        for _ in 0..ACK_PART_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+        }
 
         assert!(step_visual_intro_panel(&mut intro, ' '));
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)),
+            "the keypress starts the close phase; it does not restore the menu on the spot"
+        );
+
+        let rebuilt = acknowledgements_panel(&intro).hidden.clone();
+        for tick in 0..ACK_CLOSE_STEP_COUNT {
+            assert!(
+                advance_visual_intro_acknowledgements(&mut intro),
+                "close tick {tick}"
+            );
+            assert!(matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)));
+        }
+        assert!(advance_visual_intro_acknowledgements(&mut intro));
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.is_empty(), "no message text is authored");
         assert!(!intro.message_waiting_for_key);
+        // Visible rows 63..=199 are the rebuilt menu screen, published
+        // out of the hidden surface. Nothing of the pre-credits screen
+        // is preserved (§11.3).
+        for y in ACK_BAND_TOP_Y..=ACK_BAND_BOTTOM_Y {
+            for x in 0..INTRO_FRAMEBUFFER_WIDTH as usize {
+                assert_eq!(
+                    intro.surface.pixels[y * intro.surface.width + x],
+                    rebuilt.pixels[y * rebuilt.width + x],
+                    "published menu pixel at ({x}, {y})"
+                );
+            }
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `systems/intro.md §11.2` step 7: `Esc` has no special meaning
+    /// here. It is an ordinary key - it satisfies the poll and the close
+    /// phase still plays.
     #[test]
-    fn visual_intro_acknowledgements_cancel_restores_the_menu() {
+    fn visual_intro_acknowledgements_esc_is_an_ordinary_key() {
         let dir = debug_game_dir();
-        let mut intro =
-            visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
+        let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
+        for _ in 0..ACK_PART_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+        }
 
         assert!(cancel_visual_intro_panel(&mut intro));
 
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)),
+            "Esc must not shortcut the close and sink phases"
+        );
+        for _ in 0..=ACK_CLOSE_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+        }
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.is_empty(), "no message text is authored");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §11.2` "Wipe cadence": the part and close
+    /// phases are the only paced ones, one BIOS user-tick per step, so
+    /// eighteen pump ticks each. The rise and sink phases carry no wait
+    /// and are complete the moment their phase opens.
+    #[test]
+    fn visual_intro_acknowledgements_paces_only_the_part_and_close_phases() {
+        let dir = debug_game_dir();
+        let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
+
+        // The rise phase already ran inside `open`, unpaced.
+        assert_eq!(
+            acknowledgements_panel(&intro).presentation.phase(),
+            u5_runtime::intro_acknowledgements::AcknowledgementsPhase::Part
+        );
+        for tick in 0..ACK_PART_STEP_COUNT {
+            assert!(advance_visual_intro_acknowledgements(&mut intro), "{tick}");
+        }
+        assert!(
+            acknowledgements_panel(&intro).presentation.awaiting_key(),
+            "eighteen ticks finish the part phase exactly"
+        );
+        // No timeout and no auto-advance: further ticks do nothing.
+        assert!(!advance_visual_intro_acknowledgements(&mut intro));
+
+        step_visual_intro_panel(&mut intro, 'x');
+        for tick in 0..ACK_CLOSE_STEP_COUNT {
+            assert!(advance_visual_intro_acknowledgements(&mut intro), "{tick}");
+            assert!(matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)));
+        }
+        // One more tick runs the whole unpaced sink burst and finishes.
+        assert!(advance_visual_intro_acknowledgements(&mut intro));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         let _ = fs::remove_dir_all(dir);
     }
 
