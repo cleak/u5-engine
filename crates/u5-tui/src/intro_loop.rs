@@ -162,7 +162,7 @@ fn drive_intro_subflow(
             prompt_continue()?;
         }
         IntroSubflow::Acknowledgements => {
-            u5_runtime::require_acknowledgements_contract();
+            u5_runtime::require_graphical_acknowledgements_surface();
         }
         IntroSubflow::ReturnToView => {
             run_return_to_view_preview(game_dir)?;

@@ -47,6 +47,7 @@ pub mod inline_parsers;
 pub mod input_codes;
 pub mod input_dispatch;
 pub mod intro;
+pub mod intro_acknowledgements;
 pub mod intro_menu;
 pub mod intro_preflourish;
 pub mod jimmy;
@@ -344,10 +345,23 @@ pub use intro::{
     intro_menu_frame_border_start_column, load_miscmaps_cutscene_map, load_ultima_logo_panel,
     load_ultima_title_tick_frames, parse_miscmaps_cutscene_map_file,
     parse_ultima_title_tick_frames, placeholder_title_tick_frames,
-    require_acknowledgements_contract, require_miscmaps_cutscene_map, title_flourish_band,
+    require_graphical_acknowledgements_surface, require_miscmaps_cutscene_map, title_flourish_band,
     title_flourish_band_shift, title_flourish_content_row, title_flourish_fills_top_down,
     title_flourish_step_state, title_flourish_total_steps, title_flourish_visible_rows,
     title_tick_next_frame,
+};
+pub use intro_acknowledgements::{
+    ACK_BAND_BOTTOM_Y, ACK_BAND_STRIDE, ACK_BAND_TOP_Y, ACK_CLOSE_STEP_COUNT, ACK_CREDITS_ORIGIN_X,
+    ACK_CREDITS_RECORD, ACK_CREDITS_WIDTH, ACK_LEFT_PILLAR_CENTRE_X, ACK_LEFT_PILLAR_RECORD,
+    ACK_MENU_REBUILD_TITLE_TICK_FRAME, ACK_PACED_STEP_BIOS_TICKS, ACK_PART_STEP_COUNT,
+    ACK_PILLAR_WIDTH, ACK_RECORD_HEIGHT, ACK_RIGHT_PILLAR_CENTRE_X, ACK_RIGHT_PILLAR_RECORD,
+    ACK_RISE_STEP_COUNT, ACK_SCREEN_HEIGHT, ACK_SCREEN_WIDTH, ACK_SINK_PILLAR_STEP_COUNT,
+    ACK_SINK_STEP_COUNT, ACK_UNPACED_STEP_BIOS_TICKS, ACKNOWLEDGEMENTS_ARCHIVE_STEM,
+    AcknowledgementsColumnOwner, AcknowledgementsDraw, AcknowledgementsPhase,
+    AcknowledgementsPresentation, AcknowledgementsStep, acknowledgements_close_steps,
+    acknowledgements_compose_step, acknowledgements_final_column_owners,
+    acknowledgements_menu_rebuild_step, acknowledgements_part_steps,
+    acknowledgements_pillar_visible_rows, acknowledgements_rise_steps, acknowledgements_sink_steps,
 };
 pub use intro_preflourish::{
     IntroFontSlot, IntroFontSlots, JOURNEY_ONWARD_SHORTCUT_BANNER, PRE_FLOURISH_TEXT_WINDOW_INDEX,
