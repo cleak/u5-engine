@@ -1149,6 +1149,139 @@
         assert_eq!(state.party[4].mana, 4);
         assert_eq!(state.party[5].hp, 0);
         assert_eq!(state.party[5].mana, 5);
+        // `rest-and-camp.md §5`: the walk arms the cooldown at 14.
+        assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
+    }
+
+    /// `rest-and-camp.md §5`: "A second camp begun inside fourteen game
+    /// hours of the previous one therefore prints the no-effect line and
+    /// recovers nothing." The engine had no cooldown field and no gate at
+    /// all, so a second camp recovered again immediately.
+    #[test]
+    fn second_camp_inside_the_cooldown_window_recovers_nothing() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 1,
+            max_hp: 90,
+            level: 8,
+        }];
+        let entry_statuses = [b'G'];
+
+        assert_eq!(state.camp_cooldown, 0, "a fresh party is not on cooldown");
+        let (first_hp, _) = state.apply_completed_long_camp_recovery(6, None, &entry_statuses);
+        assert!(first_hp > 0, "the first camp recovers");
+        assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
+
+        // A second camp, immediately, recovers nothing and does not
+        // extend its own lockout.
+        let hp_before = state.party[0].hp;
+        assert_eq!(
+            state.apply_completed_long_camp_recovery(6, None, &entry_statuses),
+            (0, 0)
+        );
+        assert_eq!(state.party[0].hp, hp_before);
+        assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
+
+        // Thirteen hours in, still blocked; the fourteenth clears it.
+        for _ in 0..COMPLETED_LONG_CAMP_COOLDOWN_HOURS - 1 {
+            state.camp_cooldown = camp_cooldown_after_hour_rollover(state.camp_cooldown);
+        }
+        assert_eq!(state.camp_cooldown, 1);
+        assert_eq!(
+            state.apply_completed_long_camp_recovery(6, None, &entry_statuses),
+            (0, 0)
+        );
+        state.camp_cooldown = camp_cooldown_after_hour_rollover(state.camp_cooldown);
+        assert_eq!(state.camp_cooldown, 0);
+        let (hp, _) = state.apply_completed_long_camp_recovery(6, None, &entry_statuses);
+        assert!(hp > 0, "the window has expired, so the camp recovers again");
+    }
+
+    /// `rest-and-camp.md §5`: the counter is "reduced by one, floored at
+    /// zero, at every hour rollover". The rollover is the clock's, not
+    /// the rest loop's, so ordinary play drains it too.
+    #[test]
+    fn camp_cooldown_decays_on_the_clock_hour_rollover() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.camp_cooldown = COMPLETED_LONG_CAMP_COOLDOWN_HOURS;
+        state.clock = GameClock::new(9, 30).unwrap();
+
+        // Half an hour is not a rollover.
+        state.advance_turn_with_minutes(20);
+        assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
+
+        // Crossing into the next hour is.
+        state.advance_turn_with_minutes(20);
+        assert_eq!(state.clock.hour, 10);
+        assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS - 1);
+
+        // Floored at zero rather than wrapping.
+        state.camp_cooldown = 0;
+        state.advance_turn_with_minutes(60);
+        assert_eq!(state.camp_cooldown, 0);
+    }
+
+    /// `rest-and-camp.md §5`: "The cooldown is armed whether or not the
+    /// marker is stamped, and whether or not any member actually
+    /// recovered." A camp whose every member is skipped by a per-member
+    /// guard still arms it — the arming sits outside the walk, not inside
+    /// a success branch.
+    #[test]
+    fn camp_arms_the_cooldown_even_when_no_member_recovers() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'D',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 0,
+            max_hp: 90,
+            level: 8,
+        }];
+        let entry_statuses = [b'D'];
+
+        assert_eq!(
+            state.apply_completed_long_camp_recovery(6, None, &entry_statuses),
+            (0, 0),
+            "a dead member is skipped by a per-member guard"
+        );
+        assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
+    }
+
+    /// A duration of five hours or fewer never reaches the recovery walk,
+    /// so it does not arm the cooldown either — §5 puts the arming
+    /// "after the recovery walk", and the duration is one of the guards
+    /// that gates the walk.
+    #[test]
+    fn short_camp_neither_recovers_nor_arms_the_cooldown() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 1,
+            max_hp: 90,
+            level: 8,
+        }];
+        let entry_statuses = [b'G'];
+
+        assert_eq!(
+            state.apply_completed_long_camp_recovery(
+                COMPLETED_LONG_CAMP_MIN_HOURS - 1,
+                None,
+                &entry_statuses
+            ),
+            (0, 0)
+        );
+        assert_eq!(state.camp_cooldown, 0);
     }
 
     #[test]

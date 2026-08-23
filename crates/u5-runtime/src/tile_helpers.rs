@@ -1074,48 +1074,132 @@ pub const fn dungeon_minimap_flood_expands(tile: u8) -> bool {
     !matches!(tile >> 4, 0xB | 0xC | 0xD)
 }
 
-/// `dungeon-mode.md §12` V-View minimap glyph for one dungeon cell
-/// byte. Returns the printable glyph code (per the published table)
-/// or `None` for classes the painter intentionally leaves blank
-/// (`0x0?` without bit `0x08`, `0x7?`, and `0x9?`). The fountain
-/// class paints a six-cell icon rooted at the cell; this helper
-/// returns the glyph anchor (`0x12` for that one cell).
-pub const fn dungeon_minimap_glyph(tile: u8) -> Option<u8> {
+/// `dungeon-mode.md §12.3`: which of the engine's two fixed
+/// eight-by-eight one-bit fonts a minimap class selects. Each font holds
+/// one hundred twenty-eight glyphs of eight bytes, one byte per row, most
+/// significant bit leftmost. Most classes select the runic font; exactly
+/// four select the text font — three directional arrows the runic font
+/// does not have, and the solid block whose runic slot at that index is
+/// blank, "which is precisely why the bedrock class does not switch
+/// fonts".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonMinimapFont {
+    /// The text font (`IBM.CH` family).
+    Text,
+    /// The runic font (`RUNES.CH` family).
+    Runic,
+}
+
+/// `dungeon-mode.md §12.4`: what the V-View minimap painter draws for one
+/// dungeon cell. §12.3 says two classes "are not font characters at all
+/// but small vector drawings", so this is a sum type rather than a bare
+/// glyph index — the fountain and the energy field have no font index to
+/// return, and giving them one is what made class `0x5?` collide with
+/// exact byte `0x68`'s published up-and-down arrow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonMinimapGlyph {
+    /// A character from one of the two fixed fonts.
+    Font {
+        /// Index into the selected font, `0..=127`.
+        index: u8,
+        /// Which font the class selects.
+        font: DungeonMinimapFont,
+    },
+    /// `dungeon-mode.md §12.5` fountain vector drawing — a basin in the
+    /// bright foreground pen plus a jet and spray in a brighter blue,
+    /// inside one eight-by-eight cell.
+    Fountain,
+    /// `dungeon-mode.md §12.5` energy-field vector drawing — eight
+    /// full-width horizontal runs covering all eight rows in four
+    /// two-row colour bands. It reads no sub-type, so all four field
+    /// flavours look identical on the map.
+    EnergyField,
+}
+
+impl DungeonMinimapGlyph {
+    /// A glyph taken from the text font.
+    pub const fn text(index: u8) -> Self {
+        Self::Font {
+            index,
+            font: DungeonMinimapFont::Text,
+        }
+    }
+
+    /// A glyph taken from the runic font.
+    pub const fn runic(index: u8) -> Self {
+        Self::Font {
+            index,
+            font: DungeonMinimapFont::Runic,
+        }
+    }
+
+    /// The font index, or `None` for the two vector drawings.
+    pub const fn font_index(self) -> Option<u8> {
+        match self {
+            Self::Font { index, .. } => Some(index),
+            Self::Fountain | Self::EnergyField => None,
+        }
+    }
+}
+
+/// `dungeon-mode.md §12.4` party marker: "Arrowhead glyph `0x60`, drawn
+/// unconditionally at the centre cell `(11,11)`", from the runic font.
+pub const DUNGEON_MINIMAP_PARTY_GLYPH: DungeonMinimapGlyph = DungeonMinimapGlyph::runic(0x60);
+
+/// `dungeon-mode.md §12.4` V-View minimap output for one dungeon cell
+/// byte, or `None` for the classes the painter intentionally leaves black
+/// (`0x0?` without bit `0x08`, `0x7?`, and `0x9?`).
+///
+/// *Corrected:* this returned a bare `Option<u8>` glyph code and mapped
+/// two classes to the wrong output. Class `0x5?` returned `0x12`, the
+/// published glyph of *exact byte* `0x68`'s up-and-down arrow, so two
+/// distinct classes painted one glyph; §12.4 gives `0x5?` a vector
+/// fountain drawing instead. Class `0x8?` returned `0x18`, the `0x0?`
+/// up-arrow, where §12.4 gives it the vector energy-field drawing. Both
+/// vector drawings are published in §12.5.
+pub const fn dungeon_minimap_glyph(tile: u8) -> Option<DungeonMinimapGlyph> {
     // Exact-byte cases inside 0x6? must be tested before the band.
     match tile {
-        0x60 => return Some(0x19),
-        0x61 | 0x69 => return Some(0x71),
-        0x68 => return Some(0x12),
+        // Exact 0x60 — down-arrow, text font.
+        0x60 => return Some(DungeonMinimapGlyph::text(0x19)),
+        // Exact 0x61 / 0x69 — hidden/fall-pit, runic.
+        0x61 | 0x69 => return Some(DungeonMinimapGlyph::runic(0x71)),
+        // Exact 0x68 — up-and-down arrow, text font. This is the only
+        // published owner of glyph 0x12.
+        0x68 => return Some(DungeonMinimapGlyph::text(0x12)),
         _ => {}
     }
     Some(match tile >> 4 {
         0x0 => {
             if tile & DUNGEON_VISIT_MARKER_BIT != 0 {
-                0x18
+                // Up-arrow, text font.
+                DungeonMinimapGlyph::text(0x18)
             } else {
                 return None;
             }
         }
-        0x1 => 0x2E,
-        0x2 => 0x2D,
-        0x3 => 0x2F,
-        0x4 => 0x70,
-        0x5 => 0x12, // fountain anchor; full six-cell icon painted by caller
-        0x6 => 0x72,
+        0x1 => DungeonMinimapGlyph::runic(0x2E),
+        0x2 => DungeonMinimapGlyph::runic(0x2D),
+        0x3 => DungeonMinimapGlyph::runic(0x2F),
+        0x4 => DungeonMinimapGlyph::runic(0x70),
+        0x5 => DungeonMinimapGlyph::Fountain,
+        0x6 => DungeonMinimapGlyph::runic(0x72),
         0x7 => return None,
-        0x8 => 0x18, // stair/field helper family
+        0x8 => DungeonMinimapGlyph::EnergyField,
         0x9 => return None,
-        0xA | 0xF => 0x73,
+        0xA | 0xF => DungeonMinimapGlyph::runic(0x73),
         0xB => {
             if tile == 0xB0 {
-                0x7F
+                // Bedrock keeps the text font: the runic slot at 0x7F is
+                // blank, which is exactly why this class does not switch.
+                DungeonMinimapGlyph::text(0x7F)
             } else {
-                0x74
+                DungeonMinimapGlyph::runic(0x74)
             }
         }
-        0xC => 0x75,
-        0xD => 0x76,
-        0xE => 0x77,
+        0xC => DungeonMinimapGlyph::runic(0x75),
+        0xD => DungeonMinimapGlyph::runic(0x76),
+        0xE => DungeonMinimapGlyph::runic(0x77),
         _ => return None,
     })
 }

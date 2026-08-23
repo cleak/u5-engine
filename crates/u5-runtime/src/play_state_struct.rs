@@ -90,6 +90,24 @@ pub struct PlayState {
     pub active_effect_tag: Option<u8>,
     pub active_effect_counter: u8,
     pub fortunes_of_war: u8,
+    /// `rest-and-camp.md §5` camp cooldown counter. Armed at
+    /// [`crate::COMPLETED_LONG_CAMP_COOLDOWN_HOURS`] whenever a camp
+    /// completes and reduced by one, floored at zero, at every hour
+    /// rollover; the completed-camp recovery walk runs only while it
+    /// reads zero.
+    ///
+    /// **Not save-backed, deliberately.** The counter's fourteen-hour
+    /// lifetime sits well inside the save window, so it *should*
+    /// persist — but `formats/saved-gam.md` publishes no offset for it,
+    /// and every byte in the band it would live in is either claimed by
+    /// another system or covered by that document's instruction to
+    /// "preserve adjacent unnamed bytes". Choosing a byte ourselves
+    /// would overwrite one the original owns, which is a worse failure
+    /// than the one this leaves: saving and reloading inside the
+    /// fourteen-hour window clears the cooldown, so a save/load lets a
+    /// second camp recover. Persist it here the moment the spec
+    /// publishes an offset.
+    pub camp_cooldown: u8,
     pub active_player: Option<usize>,
     pub combat_round_counter: u8,
     pub combat_active: bool,

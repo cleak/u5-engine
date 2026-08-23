@@ -2,7 +2,8 @@ use std::io;
 use std::path::Path;
 
 use crate::rest_camp::{
-    COMPLETED_LONG_CAMP_HP_GAIN_MAX, COMPLETED_LONG_CAMP_HP_GAIN_MIN, COMPLETED_LONG_CAMP_MIN_HOURS,
+    COMPLETED_LONG_CAMP_COOLDOWN_HOURS, COMPLETED_LONG_CAMP_HP_GAIN_MAX,
+    COMPLETED_LONG_CAMP_HP_GAIN_MIN, COMPLETED_LONG_CAMP_MIN_HOURS, camp_cooldown_blocks_recovery,
 };
 use crate::*;
 
@@ -489,20 +490,44 @@ impl PlayState {
     /// rows that publish an MP write have their current MP assigned
     /// (not added) to the published target.
     ///
-    /// **Gap.** §5 also publishes a camp cooldown counter — armed at
-    /// 14 whenever a camp completes, reduced by one and floored at
-    /// zero at every hour rollover, and required to be zero before
-    /// the walk runs — and a 25-percent roll that remembers the tile
-    /// under the party and stamps the camp marker tile. Neither is
-    /// implemented: this engine has no camp cooldown field and no
-    /// camp marker stamp, so a second camp begun inside fourteen game
-    /// hours recovers again instead of printing the no-effect line.
+    /// The block-level guards — the cooldown counter and the duration —
+    /// short-circuit before the walk; the remaining three are per-member
+    /// and only skip that member. §5 states the ordering as "the handler
+    /// can walk active party records and apply recovery if all of these
+    /// guards pass", then "for each member that passes those guards".
+    ///
+    /// After the walk the cooldown is armed at
+    /// [`COMPLETED_LONG_CAMP_COOLDOWN_HOURS`] "whether or not the marker
+    /// is stamped, and whether or not any member actually recovered", so
+    /// the arming sits outside every per-member branch. It is *not*
+    /// re-armed when the cooldown gate itself refused: §5 says a camp
+    /// begun inside the window "prints the no-effect line and recovers
+    /// nothing" and says nothing about extending the window, and an
+    /// implementation that re-armed there would let a player lock
+    /// themselves out indefinitely by camping repeatedly.
+    ///
+    /// **Gap — the camp marker is not implemented.** §5 also publishes a
+    /// 25-percent roll that "remembers the tile under the party and
+    /// stamps the camp marker tile". No spec in this workspace publishes
+    /// a camp-marker tile id: `catalogs/tile-catalog.md` names the camp
+    /// and brazier tiles only as H-Hole-up *triggers* and gives no id for
+    /// the stamped marker. Stamping a guessed id would mutate the world
+    /// map, so the roll is not drawn and nothing is stamped. The clause
+    /// that mattered for correctness here — that the cooldown is armed
+    /// independently of the roll — is honoured by construction, because
+    /// the arming below is not inside any roll branch.
     pub fn apply_completed_long_camp_recovery(
         &mut self,
         accepted_hours: u8,
         watcher: Option<usize>,
         entry_statuses: &[u8],
     ) -> (u16, u16) {
+        // `rest-and-camp.md §5`: "A second camp begun inside fourteen
+        // game hours of the previous one therefore prints the no-effect
+        // line and recovers nothing."
+        if camp_cooldown_blocks_recovery(self.camp_cooldown) {
+            return (0, 0);
+        }
         if accepted_hours < COMPLETED_LONG_CAMP_MIN_HOURS {
             return (0, 0);
         }
@@ -542,6 +567,11 @@ impl PlayState {
                 self.party[index].mana = mana_target;
             }
         }
+        // `rest-and-camp.md §5`: "After the recovery walk, the handler
+        // arms the cooldown counter at 14 ... The cooldown is armed
+        // whether or not the marker is stamped, and whether or not any
+        // member actually recovered."
+        self.camp_cooldown = COMPLETED_LONG_CAMP_COOLDOWN_HOURS;
         (recovered_hp, recovered_mana)
     }
 
@@ -1365,6 +1395,7 @@ impl PlayState {
             active_effect_tag: self.active_effect_tag,
             active_effect_counter: self.active_effect_counter,
             fortunes_of_war: self.fortunes_of_war,
+            camp_cooldown: self.camp_cooldown,
             active_player: self.active_player,
             combat_round_counter: self.combat_round_counter,
             transport: TransportState::Foot,

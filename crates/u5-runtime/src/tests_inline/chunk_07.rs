@@ -190,8 +190,16 @@ fn use_command_routes_inline_spyglass_request_to_britannia_overview() {
     assert_eq!(world.message, "View closed.");
 }
 
+/// `catalogs/item-list.md` Spyglass row: the plane/scene pair prints the
+/// "not here" refusal and a daytime hour prints the no-stars refusal.
+///
+/// The town case previously asserted `Blocked` / "Not here!". That is
+/// withdrawn: the row says the Spyglass admits "the outdoor world scene
+/// *or a town-class scene* ... a broader scene gate than the Sextant's",
+/// so a town at night is a *successful* look. See
+/// `spyglass_admits_a_town_scene_at_night` below.
 #[test]
-fn spyglass_requires_item_britannia_and_night() {
+fn spyglass_requires_item_surface_plane_and_night() {
     let mut missing = britannia_state(open_world_grid(), 1, 1);
     missing.clock = GameClock::new(20, 0).unwrap();
     assert_eq!(missing.use_spyglass(), MoveOutcome::Blocked);
@@ -205,17 +213,48 @@ fn spyglass_requires_item_britannia_and_night() {
     assert_eq!(day.turn, 0);
     assert_eq!(day.message, "Cannot see the stars!");
 
-    let mut town = test_state(open_grid(), 1, 1);
-    town.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
-    town.clock = GameClock::new(20, 0).unwrap();
-    assert_eq!(town.use_spyglass(), MoveOutcome::Blocked);
-    assert_eq!(town.message, "Not here!");
-
+    // The Underworld is excluded by the plane condition, exactly as it is
+    // for the Sextant, and takes the same "not here" refusal.
     let mut underworld = world_state(open_world_grid(), 1, 1);
     underworld.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     underworld.clock = GameClock::new(20, 0).unwrap();
     assert_eq!(underworld.use_spyglass(), MoveOutcome::Blocked);
     assert_eq!(underworld.message, "Not here!");
+}
+
+/// `catalogs/item-list.md` Spyglass row: the scene gate admits a
+/// town-class scene, and the night window is the Sextant's `19..=23` /
+/// `0..=5`. The live handler used to gate on `is_town_night_hour`, the
+/// town **lighting** window (`0..=4`, `20..=23`), which wrongly refused
+/// at hours 5 and 19 — the only two hours the two windows disagree on.
+#[test]
+fn spyglass_admits_a_town_scene_and_the_published_night_window() {
+    for hour in [19u8, 20, 23, 0, 5] {
+        let mut town = test_state(open_grid(), 1, 1);
+        town.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+        town.clock = GameClock::new(hour, 0).unwrap();
+        assert_eq!(
+            town.use_spyglass(),
+            MoveOutcome::Observed,
+            "a town at hour {hour} is inside the published night window"
+        );
+        assert!(town.message.starts_with("Spyglass: Looking at the stars"));
+    }
+
+    // Hours 5 and 19 on the outdoor scene too — the same two hours.
+    for hour in [5u8, 19] {
+        let mut world = britannia_state(open_world_grid(), 1, 1);
+        world.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+        world.clock = GameClock::new(hour, 0).unwrap();
+        assert_eq!(world.use_spyglass(), MoveOutcome::Observed, "hour {hour}");
+    }
+
+    // Daytime in a town is still the no-stars refusal, not "not here".
+    let mut noon = test_state(open_grid(), 1, 1);
+    noon.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    noon.clock = GameClock::new(12, 0).unwrap();
+    assert_eq!(noon.use_spyglass(), MoveOutcome::Blocked);
+    assert_eq!(noon.message, "Cannot see the stars!");
 }
 
 #[test]

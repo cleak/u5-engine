@@ -687,7 +687,11 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
 fn route_smoke_cases_cover_representative_modes() {
     let cases = route_smoke_cases();
 
-    assert_eq!(cases.len(), 495);
+    // 495 at `intro-preflourish-phase`, plus two added with this change:
+    // `town-spyglass-night-window-edge` (`catalogs/item-list.md` Spyglass
+    // row) and `dungeon-camp-inside-cooldown-window`
+    // (`rest-and-camp.md` §5).
+    assert_eq!(cases.len(), 497);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)

@@ -10,6 +10,46 @@ pub const DISPLAY_SURFACE_HEIGHT: usize = TITLE_SURFACE_HEIGHT as usize;
 pub const DISPLAY_SURFACE_PIXELS: usize = DISPLAY_SURFACE_WIDTH * DISPLAY_SURFACE_HEIGHT;
 pub const DISPLAY_TEXT_COLUMNS: usize = TEXT_SCREEN_COLUMNS as usize;
 pub const DISPLAY_TEXT_ROWS: usize = TEXT_SCREEN_ROWS as usize;
+/// `display-driver.md §2` boot-time user-interface colour table. The
+/// startup pass that selects the graphics-resource family also publishes
+/// this small table of colour indices, and the table is read all over the
+/// program — the gameplay frame's accent and chrome pens, the sky strip's
+/// markers, the Return-to-View caption panel, the Ultima IV transfer
+/// preview, and the dungeon minimap's energy-field bands
+/// (`dungeon-mode.md §12.5`) all name *slots* rather than raw indices.
+pub const UI_COLOUR_TABLE_SLOTS: usize = 7;
+/// `display-driver.md §2` high-colour set (EGA and Tandy).
+pub const UI_COLOUR_TABLE_HIGH: [u8; UI_COLOUR_TABLE_SLOTS] = [4, 15, 1, 2, 5, 14, 7];
+/// `display-driver.md §2` low-colour set (CGA and Hercules). The values
+/// all sit inside `0..3` because those drivers mask the drawing colour
+/// to two bits; on Hercules read them as pen selectors, not hues.
+pub const UI_COLOUR_TABLE_LOW: [u8; UI_COLOUR_TABLE_SLOTS] = [2, 3, 1, 1, 2, 3, 3];
+/// `dungeon-mode.md §12.5`: the amount a caller adds to a slot value to
+/// bias it "into the bright half of the palette".
+pub const UI_COLOUR_BRIGHT_BIAS: u8 = 8;
+
+/// `display-driver.md §2`: resolve one user-interface colour-table slot.
+/// `high_colour` selects the EGA/Tandy set over the CGA/Hercules one.
+/// Out-of-range slots return zero rather than panicking, because the
+/// table is fixed-size and every published consumer names a slot inside
+/// it.
+pub const fn ui_colour_slot(slot: usize, high_colour: bool) -> u8 {
+    if slot >= UI_COLOUR_TABLE_SLOTS {
+        return 0;
+    }
+    if high_colour {
+        UI_COLOUR_TABLE_HIGH[slot]
+    } else {
+        UI_COLOUR_TABLE_LOW[slot]
+    }
+}
+
+/// `display-driver.md §2` + `dungeon-mode.md §12.5`: a slot resolved and
+/// then biased into the bright half of the palette.
+pub const fn ui_colour_slot_bright(slot: usize, high_colour: bool) -> u8 {
+    ui_colour_slot(slot, high_colour) + UI_COLOUR_BRIGHT_BIAS
+}
+
 pub const EGA_DRIVER_SLOT_COUNT: u8 = 38;
 pub const EGA_DRIVER_LAST_DISPATCH_OFFSET: u8 = (EGA_DRIVER_SLOT_COUNT - 1) * 3;
 

@@ -2203,6 +2203,7 @@
             active_effect_tag: None,
             active_effect_counter: 0,
             fortunes_of_war: 0,
+            camp_cooldown: 0,
             active_player: None,
             combat_round_counter: 0,
             transport: TransportState::Foot,

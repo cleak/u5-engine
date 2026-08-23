@@ -868,15 +868,18 @@
             glyphs[y * side + x]
         };
 
-        assert_eq!(at(0, 0), Some(0xff));
-        assert_eq!(at(1, 0), Some(0x2E));
-        assert_eq!(at(-1, 0), Some(0x2D));
-        assert_eq!(at(0, -1), Some(0x2F));
-        assert_eq!(at(0, 1), Some(0x70));
-        assert_eq!(at(1, -1), Some(0x12));
-        assert_eq!(at(-1, -1), Some(0x19));
-        assert_eq!(at(1, 1), Some(0x71));
-        assert_eq!(at(-1, 1), Some(0x77));
+        // `dungeon-mode.md §12.4`: the party marker is the runic
+        // arrowhead glyph 0x60, not a private sentinel value.
+        assert_eq!(at(0, 0), Some(DUNGEON_MINIMAP_PARTY_GLYPH));
+        assert_eq!(at(1, 0), Some(DungeonMinimapGlyph::runic(0x2E)));
+        assert_eq!(at(-1, 0), Some(DungeonMinimapGlyph::runic(0x2D)));
+        assert_eq!(at(0, -1), Some(DungeonMinimapGlyph::runic(0x2F)));
+        assert_eq!(at(0, 1), Some(DungeonMinimapGlyph::runic(0x70)));
+        // The 0x50 fountain cell: a vector drawing, not glyph 0x12.
+        assert_eq!(at(1, -1), Some(DungeonMinimapGlyph::Fountain));
+        assert_eq!(at(-1, -1), Some(DungeonMinimapGlyph::text(0x19)));
+        assert_eq!(at(1, 1), Some(DungeonMinimapGlyph::runic(0x71)));
+        assert_eq!(at(-1, 1), Some(DungeonMinimapGlyph::runic(0x77)));
 
         let viewport =
             state.render_dungeon_view_overlay_for_mode(0, TileGraphicsDepth::Ega16, ViewOverlayMode::GemView);
@@ -888,7 +891,10 @@
         };
         assert_eq!(px(1, 0, cell / 2, 0), Some(14));
         assert_eq!(px(0, 1, 0, 0), Some(14));
-        assert_eq!(px(1, -1, cell / 2, cell / 2), Some(11));
+        // §12.5: the fountain's lower lip covers `x + 1..x + 6` at
+        // `y + 4`, so the mid-cell pixel is the basin's bright
+        // foreground pen, not the old full-width cross-bar's blue.
+        assert_eq!(px(1, -1, cell / 2, cell / 2), Some(14));
         assert_eq!(px(-1, 1, cell / 2, cell / 2), Some(14));
     }
 
@@ -1173,7 +1179,10 @@
         );
     }
 
-    fn dungeon_view_audit_mask(glyph: Option<u8>, mode: ViewOverlayMode) -> [[u8; 8]; 8] {
+    fn dungeon_view_audit_mask(
+        glyph: Option<DungeonMinimapGlyph>,
+        mode: ViewOverlayMode,
+    ) -> [[u8; 8]; 8] {
         // `dungeon-mode.md §12.1`: dungeon minimap cells are 8x8
         // pixels, not the 4x4 of the `view.md §4` surface local view.
         assert_eq!(DUNGEON_GEM_VIEW_CELL_PIXELS, 8);
@@ -1211,7 +1220,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0xff), gem),
+            dungeon_view_audit_mask(Some(DUNGEON_MINIMAP_PARTY_GLYPH), gem),
             [
                 [0, 0, 0, 0, 15, 0, 0, 0],
                 [0, 0, 0, 0, 15, 0, 0, 0],
@@ -1224,7 +1233,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x18), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::text(0x18)), gem),
             [
                 [0, 0, 0, 0, 0, 0, 0, 0],
                 [0, 0, 0, 0, 0, 0, 0, 0],
@@ -1237,7 +1246,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x2E), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), gem),
             [
                 [14, 14, 14, 14, 14, 14, 14, 14],
                 [0, 0, 0, 0, 14, 0, 0, 0],
@@ -1250,7 +1259,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x2D), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2D)), gem),
             [
                 [0, 0, 0, 0, 14, 0, 0, 0],
                 [0, 0, 0, 0, 14, 0, 0, 0],
@@ -1263,7 +1272,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x2F), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2F)), gem),
             [
                 [14, 14, 14, 14, 14, 14, 14, 14],
                 [0, 0, 0, 0, 14, 0, 0, 0],
@@ -1276,7 +1285,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x70), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x70)), gem),
             [
                 [14, 14, 14, 14, 14, 14, 14, 14],
                 [14, 6, 6, 6, 6, 6, 6, 14],
@@ -1288,21 +1297,58 @@
                 [14, 14, 14, 14, 14, 14, 14, 14],
             ]
         );
+        // `dungeon-mode.md §12.4` exact byte `0x68`: the up-and-down
+        // arrow, text glyph `0x12`. This mask used to be the fountain's,
+        // because class `0x5?` returned the same glyph code.
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x12), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::text(0x12)), gem),
             [
-                [0, 0, 0, 0, 11, 0, 0, 0],
-                [0, 0, 0, 0, 11, 0, 0, 0],
-                [0, 0, 0, 0, 11, 0, 0, 0],
-                [0, 0, 0, 0, 11, 0, 0, 0],
-                [11, 11, 11, 11, 11, 11, 11, 11],
-                [0, 0, 0, 0, 11, 0, 0, 0],
-                [0, 0, 0, 0, 11, 0, 0, 0],
-                [0, 0, 0, 0, 11, 0, 0, 0],
+                [0, 0, 0, 0, 7, 0, 0, 0],
+                [0, 0, 0, 7, 7, 7, 0, 0],
+                [0, 0, 0, 0, 7, 0, 0, 0],
+                [0, 0, 0, 0, 7, 0, 0, 0],
+                [0, 0, 0, 0, 7, 0, 0, 0],
+                [0, 0, 0, 0, 7, 0, 0, 0],
+                [0, 0, 0, 7, 7, 7, 0, 0],
+                [0, 0, 0, 0, 7, 0, 0, 0],
+            ]
+        );
+        // `dungeon-mode.md §12.5` fountain: basin lips and feet in the
+        // bright foreground pen, jet and spray in a brighter blue. Every
+        // stroke is exactly the published inclusive range.
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), gem),
+            [
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 11, 0, 0, 11, 0, 0],
+                [0, 11, 0, 11, 11, 0, 11, 0],
+                [0, 0, 0, 11, 11, 0, 0, 0],
+                [0, 14, 14, 14, 14, 14, 14, 0],
+                [0, 0, 14, 14, 14, 14, 0, 0],
+                [0, 14, 14, 0, 0, 14, 14, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+            ]
+        );
+        // `dungeon-mode.md §12.5` energy field: eight full-width runs
+        // covering **all eight** rows, in four two-row bands, each band's
+        // pen a `display-driver.md §2` colour-table slot biased bright —
+        // slots 4, 0, 2, 3, which on the high-colour set resolve to
+        // 5, 4, 1, 2 and bias to 13, 12, 9, 10.
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::EnergyField), gem),
+            [
+                [0, 13, 13, 13, 13, 13, 13, 0],
+                [0, 13, 13, 13, 13, 13, 13, 0],
+                [0, 12, 12, 12, 12, 12, 12, 0],
+                [0, 12, 12, 12, 12, 12, 12, 0],
+                [0, 9, 9, 9, 9, 9, 9, 0],
+                [0, 9, 9, 9, 9, 9, 9, 0],
+                [0, 10, 10, 10, 10, 10, 10, 0],
+                [0, 10, 10, 10, 10, 10, 10, 0],
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x19), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::text(0x19)), gem),
             [
                 [14, 14, 14, 14, 14, 14, 14, 14],
                 [14, 0, 0, 0, 0, 0, 0, 14],
@@ -1315,7 +1361,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x71), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x71)), gem),
             [
                 [12, 0, 0, 0, 0, 0, 0, 12],
                 [0, 12, 0, 0, 0, 0, 12, 0],
@@ -1328,7 +1374,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x72), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x72)), gem),
             [
                 [14, 0, 0, 0, 0, 0, 0, 14],
                 [0, 14, 0, 0, 0, 0, 14, 0],
@@ -1341,7 +1387,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x73), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), gem),
             [
                 [0, 0, 0, 0, 14, 14, 0, 0],
                 [0, 0, 0, 0, 14, 14, 0, 0],
@@ -1354,7 +1400,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x74), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x74)), gem),
             [
                 [13, 13, 13, 13, 13, 13, 13, 13],
                 [13, 0, 0, 0, 0, 0, 0, 13],
@@ -1367,7 +1413,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x75), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x75)), gem),
             [
                 [13, 13, 13, 13, 14, 13, 13, 13],
                 [13, 0, 0, 0, 14, 0, 0, 13],
@@ -1380,7 +1426,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x76), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x76)), gem),
             [
                 [5, 5, 5, 5, 5, 5, 5, 5],
                 [5, 0, 0, 0, 0, 0, 0, 5],
@@ -1393,7 +1439,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x77), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x77)), gem),
             [
                 [14, 14, 14, 14, 14, 14, 14, 14],
                 [14, 0, 0, 0, 14, 14, 0, 14],
@@ -1406,7 +1452,7 @@
             ]
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x7F), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::text(0x7F)), gem),
             [
                 [13, 13, 13, 13, 13, 13, 13, 13],
                 [13, 13, 13, 13, 13, 13, 13, 13],
@@ -1427,21 +1473,45 @@
         let x_ray = ViewOverlayMode::XRaySpell;
 
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x2E), gem),
-            dungeon_view_audit_mask(Some(0x2E), peer)
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), peer)
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(0x73), gem),
-            dungeon_view_audit_mask(Some(0x73), peer)
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), gem),
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), peer)
         );
 
         // Row 4 is the mid-cell row of an eight-pixel cell, where the
-        // ladder/fountain/door cross-bars land.
-        assert_eq!(dungeon_view_audit_mask(Some(0x2E), x_ray)[0][0], 15);
-        assert_eq!(dungeon_view_audit_mask(Some(0x12), x_ray)[4][0], 9);
-        assert_eq!(dungeon_view_audit_mask(Some(0x73), x_ray)[4][0], 11);
-        assert_eq!(dungeon_view_audit_mask(Some(0x74), x_ray)[0][0], 8);
-        assert_eq!(dungeon_view_audit_mask(Some(0x76), x_ray)[0][0], 13);
+        // ladder and door cross-bars land.
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), x_ray)[0][0],
+            15
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), x_ray)[4][0],
+            11
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x74)), x_ray)[0][0],
+            8
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x76)), x_ray)[0][0],
+            13
+        );
+        // `dungeon-mode.md §12.5`: the fountain's lower lip runs
+        // `x + 1..x + 6` at `y + 4`, so column 0 of row 4 is background
+        // and column 1 carries the basin pen. This assertion used to read
+        // column 0 of row 4 as the fountain colour, because the fountain
+        // was drawn as a full-width cross-bar.
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), x_ray)[4][0],
+            0
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), x_ray)[4][1],
+            15
+        );
     }
 
     #[test]

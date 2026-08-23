@@ -268,6 +268,11 @@ pub fn play_options_from_save_bytes_named(
         active_effect_tag: None,
         active_effect_counter: 0,
         fortunes_of_war: bytes[SAVE_FORTUNES_OF_WAR_OFFSET],
+        // `rest-and-camp.md §5` camp cooldown: engine-only state with no
+        // published `SAVED.GAM` offset, so a loaded save starts it at
+        // zero. See `PlayState::camp_cooldown` for why it is not
+        // persisted and what that costs.
+        camp_cooldown: 0,
         active_player: decode_active_player_slot(bytes[SAVE_ACTIVE_PLAYER_OFFSET], party_size),
         combat_round_counter: bytes[SAVE_COMBAT_ROUND_COUNTER_OFFSET],
         transport,

@@ -924,21 +924,41 @@ impl PlayState {
         MoveOutcome::Used
     }
 
+    /// `catalogs/item-list.md` Spyglass row / `inventory.md §7`: the
+    /// world-plane byte the Sextant/Spyglass plane test reads. On the
+    /// outdoor scenes it is the active plane. Inside a town or dungeon
+    /// the party is still standing on one of the two planes, and the
+    /// return snapshot is what remembers which; with no snapshot the
+    /// surface plane is the only reachable answer, because a game that
+    /// has never crossed to the Underworld has never left it.
+    pub fn current_world_plane_byte(&self) -> u8 {
+        match self.area {
+            Area::World { plane } => plane.plane_byte(),
+            Area::Town { .. } | Area::Dungeon { .. } => self
+                .return_world
+                .as_ref()
+                .map_or(WorldPlane::Britannia, |snapshot| snapshot.plane)
+                .plane_byte(),
+        }
+    }
+
     pub fn use_spyglass(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] == 0 {
             self.message = "No Spyglass!".to_string();
             return MoveOutcome::Blocked;
         }
-        if !matches!(
-            self.area,
-            Area::World {
-                plane: WorldPlane::Britannia
-            }
-        ) {
+        // `catalogs/item-list.md` Spyglass row: three conditions, of
+        // which the plane and scene pair is the "not here" refusal and
+        // the hour is the no-stars refusal. The scene gate admits the
+        // outdoor world scene *or a town-class scene* — broader than the
+        // Sextant's — and the night window is the Sextant's `19..=23` /
+        // `0..=5`, not the town-lighting window this handler used to
+        // read, which disagrees at hours 5 and 19.
+        if !spyglass_position_admits(self.current_world_plane_byte(), self.current_scene_byte()) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
-        if !is_town_night_hour(self.clock.hour) {
+        if !sextant_night_hour(self.clock.hour) {
             self.message = "Cannot see the stars!".to_string();
             return MoveOutcome::Blocked;
         }
@@ -977,10 +997,26 @@ impl PlayState {
     /// read-only spec checkout is refreshed past `9a898d1`. Left in
     /// place rather than replaced with a guess or a loud failure that
     /// would red-build the visual route suite; see the report.
+    ///
+    /// The renderer is reachable from a town-class scene, because
+    /// `catalogs/item-list.md`'s Spyglass row admits one. `self.grid`
+    /// there is the town interior, not a world map, so the world sample
+    /// is taken from the return snapshot the party carries and every
+    /// read is bounds-guarded. (The published sky renderer reads no
+    /// party position at all, which is exactly what the retraction
+    /// above says; this only keeps the stand-in from indexing off the
+    /// end of an interior grid.)
     pub fn britannia_chunk_overview_map(&self) -> String {
+        let (grid, origin_x, origin_y) = match self.area {
+            Area::World { .. } => (&self.grid, self.player.x, self.player.y),
+            Area::Town { .. } | Area::Dungeon { .. } => match self.return_world.as_ref() {
+                Some(snapshot) => (&snapshot.grid, snapshot.x, snapshot.y),
+                None => (&self.grid, 0, 0),
+            },
+        };
         let mut out = String::new();
-        let current_chunk_x = self.player.x / CHUNK_SIDE;
-        let current_chunk_y = self.player.y / CHUNK_SIDE;
+        let current_chunk_x = origin_x / CHUNK_SIDE;
+        let current_chunk_y = origin_y / CHUNK_SIDE;
         for row in 0..8 {
             for col in 0..22 {
                 let chunk_x =
@@ -993,7 +1029,10 @@ impl PlayState {
                 }
                 let sample_x = chunk_x * CHUNK_SIDE + CHUNK_SIDE / 2;
                 let sample_y = chunk_y * CHUNK_SIDE + CHUNK_SIDE / 2;
-                let tile = self.grid[world_cell_index(sample_x, sample_y)];
+                let Some(&tile) = grid.get(world_cell_index(sample_x, sample_y)) else {
+                    out.push(' ');
+                    continue;
+                };
                 let tile = self.animation.resolve_static_tile(tile);
                 out.push(render_surface_view_class(surface_view_class(tile)));
             }
@@ -1644,6 +1683,7 @@ impl PlayState {
             active_effect_tag: self.active_effect_tag,
             active_effect_counter: self.active_effect_counter,
             fortunes_of_war: self.fortunes_of_war,
+            camp_cooldown: self.camp_cooldown,
             active_player: self.active_player,
             combat_round_counter: self.combat_round_counter,
             transport: TransportState::Foot,
@@ -2033,7 +2073,7 @@ impl PlayState {
 
     pub fn render_dungeon_view_glyph_cell_for_mode(
         depth: TileGraphicsDepth,
-        glyph: Option<u8>,
+        glyph: Option<DungeonMinimapGlyph>,
         mode: ViewOverlayMode,
     ) -> TileViewport {
         let scale = DUNGEON_GEM_VIEW_CELL_PIXELS;
@@ -2079,7 +2119,7 @@ impl PlayState {
         viewport
     }
 
-    pub fn dungeon_vision_glyphs(&self, level: u8) -> Vec<Option<u8>> {
+    pub fn dungeon_vision_glyphs(&self, level: u8) -> Vec<Option<DungeonMinimapGlyph>> {
         let side = DUNGEON_GEM_VIEW_GRID_SIDE;
         let (party_cell_x, party_cell_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
         // The grid side is even, so the party cell is not a centre:
@@ -2132,7 +2172,7 @@ impl PlayState {
         }
 
         let mut glyphs = vec![None; side * side];
-        glyphs[party_index] = Some(DUNGEON_VIEW_PARTY_GLYPH);
+        glyphs[party_index] = Some(DUNGEON_MINIMAP_PARTY_GLYPH);
         for scratch_y in 0..side {
             for scratch_x in 0..side {
                 let index = scratch_y * side + scratch_x;
@@ -3202,6 +3242,7 @@ impl PlayState {
             Vec::new();
         let mut applied_signal_flags: Vec<u8> = Vec::new();
         let mut applied_flags: u32 = 0;
+        let mut applied_standing: Option<u8> = None;
 
         if let Some(keyword) = keyword {
             if fields.len() < 5 {
@@ -3223,6 +3264,7 @@ impl PlayState {
                         _ => None,
                     }));
                     applied_flags |= output.branch_flags_set;
+                    applied_standing = output.moral_standing.or(applied_standing);
                     if output.text.is_empty() {
                         TLK_NO_KEYWORD_MATCH_MESSAGE.to_string()
                     } else {
@@ -3240,6 +3282,7 @@ impl PlayState {
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&response_text);
             self.apply_tlk_action_grants(&applied_grants);
             self.apply_tlk_gold_payments(&applied_payments);
+            self.apply_tlk_moral_standing(applied_standing);
             self.record_tlk_signal_flags(&applied_signal_flags);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
@@ -3260,6 +3303,7 @@ impl PlayState {
                     _ => None,
                 }));
                 applied_flags |= output.branch_flags_set;
+                applied_standing = output.moral_standing.or(applied_standing);
                 if output.text.is_empty() {
                     "...".to_string()
                 } else {
@@ -3275,6 +3319,7 @@ impl PlayState {
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&greeting_text);
             self.apply_tlk_action_grants(&applied_grants);
             self.apply_tlk_gold_payments(&applied_payments);
+            self.apply_tlk_moral_standing(applied_standing);
             self.record_tlk_signal_flags(&applied_signal_flags);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
@@ -3324,6 +3369,18 @@ impl PlayState {
 
     /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants
     /// to the live runtime counters per `conversation.md §7.6`.
+    /// `conversation.md §7.4` / `karma.md §4`: assign the shared
+    /// moral-standing selector after a TLK stream ran `0x89`
+    /// STANDING-UP or `0x8A` STANDING-DOWN. The runner already applied
+    /// the published capped-add / capped-subtract writers, so this is an
+    /// assignment; `None` means the stream ran neither code and the
+    /// selector is untouched.
+    pub fn apply_tlk_moral_standing(&mut self, standing: Option<u8>) {
+        if let Some(standing) = standing {
+            self.moral_standing = standing;
+        }
+    }
+
     pub fn apply_tlk_action_grants(
         &mut self,
         grants: &[crate::tlk_control_codes::TlkActionDispatchVerb],
@@ -3476,6 +3533,7 @@ impl PlayState {
             })
             .collect();
         self.apply_tlk_gold_payments(&gold_payments);
+        self.apply_tlk_moral_standing(output.moral_standing);
         self.record_tlk_signal_flags(&output.signal_flags);
         if let Area::Town { scene, .. } = self.area {
             self.merge_talk_branch_flags(scene, output.branch_flags_set);
@@ -3557,6 +3615,7 @@ impl PlayState {
             text = output.text.clone();
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
+            self.apply_tlk_moral_standing(output.moral_standing);
             self.record_tlk_signal_flags(&output.signal_flags);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
@@ -3617,6 +3676,7 @@ impl PlayState {
             ask_party_name_prompted = session.awaiting_ask_party_name();
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
+            self.apply_tlk_moral_standing(output.moral_standing);
             self.record_tlk_signal_flags(&output.signal_flags);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
@@ -4107,8 +4167,6 @@ fn pending_use_cardinal_direction(key: char, suffix: &str) -> Option<Direction> 
         .filter(|direction| direction.opposite_cardinal().is_some())
 }
 
-const DUNGEON_VIEW_PARTY_GLYPH: u8 = 0xff;
-
 fn draw_surface_view_cell(
     viewport: &mut TileViewport,
     cell_x: usize,
@@ -4200,7 +4258,7 @@ fn draw_dungeon_view_glyph(
     cell_x: usize,
     cell_y: usize,
     scale: usize,
-    glyph: Option<u8>,
+    glyph: Option<DungeonMinimapGlyph>,
     mode: ViewOverlayMode,
 ) {
     let Some(glyph) = glyph else {
@@ -4213,10 +4271,23 @@ fn draw_dungeon_view_glyph(
     } else {
         15
     };
-    match glyph {
-        DUNGEON_VIEW_PARTY_GLYPH => {
-            draw_surface_view_cell(viewport, cell_x, cell_y, scale, 0, 0, true, mode)
+    // `dungeon-mode.md §12.3`: two classes "are not font characters at
+    // all but small vector drawings". Their geometry is §12.5's and is
+    // drawn directly rather than through a glyph index.
+    let glyph = match glyph {
+        DungeonMinimapGlyph::Fountain => {
+            draw_dungeon_fountain_glyph(viewport, cell_x, cell_y, scale, mode);
+            return;
         }
+        DungeonMinimapGlyph::EnergyField => {
+            draw_dungeon_energy_field_glyph(viewport, cell_x, cell_y, scale);
+            return;
+        }
+        DungeonMinimapGlyph::Font { index, .. } => index,
+    };
+    match glyph {
+        // §12.4 party marker: arrowhead glyph 0x60 at the centre cell.
+        0x60 => draw_surface_view_cell(viewport, cell_x, cell_y, scale, 0, 0, true, mode),
         0x18 => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, 7),
         0x2e => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, true, false, highlight),
         0x2d => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, false, true, highlight),
@@ -4225,7 +4296,10 @@ fn draw_dungeon_view_glyph(
             fill_view_overlay_cell(viewport, cell_x, cell_y, scale, 6);
             draw_view_overlay_box(viewport, cell_x, cell_y, scale, highlight);
         }
-        0x12 => draw_dungeon_fountain_glyph(viewport, cell_x, cell_y, scale, mode),
+        // §12.4 exact byte 0x68: the up-and-down arrow, and the only
+        // published owner of glyph 0x12. The fountain class used to
+        // collide with it here.
+        0x12 => draw_dungeon_up_and_down_arrow_glyph(viewport, cell_x, cell_y, scale, 7),
         0x19 => draw_dungeon_pit_glyph(viewport, cell_x, cell_y, scale, highlight),
         0x71 => draw_dungeon_trap_glyph(viewport, cell_x, cell_y, scale, 12),
         0x72 => draw_dungeon_trap_glyph(viewport, cell_x, cell_y, scale, 14),
@@ -4262,23 +4336,34 @@ fn draw_dungeon_view_glyph(
     }
 }
 
-fn render_dungeon_minimap_glyph_code(glyph: Option<u8>) -> char {
+/// Diagnostic ASCII stand-in for one minimap cell. The letters are this
+/// engine's own text rendering of the map, not published art; what the
+/// published table fixes is that each class gets its **own** output, so
+/// the fountain and the energy field need codes of their own rather than
+/// borrowing the arrow glyphs they used to collide with.
+fn render_dungeon_minimap_glyph_code(glyph: Option<DungeonMinimapGlyph>) -> char {
+    let Some(glyph) = glyph else {
+        return ' ';
+    };
     match glyph {
-        Some(DUNGEON_VIEW_PARTY_GLYPH) => '@',
-        Some(0x18) => '.',
-        Some(0x2e) => '<',
-        Some(0x2d) => '>',
-        Some(0x2f) => 'H',
-        Some(0x70) => '$',
-        Some(0x12) => 'f',
-        Some(0x19) => 'o',
-        Some(0x71) => 'v',
-        Some(0x72) => '!',
-        Some(0x73) => '+',
-        Some(0x74 | 0x75 | 0x76 | 0x7f) => '#',
-        Some(0x77) => '+',
-        Some(_) => '?',
-        None => ' ',
+        DungeonMinimapGlyph::Fountain => 'f',
+        DungeonMinimapGlyph::EnergyField => '=',
+        DungeonMinimapGlyph::Font { index, .. } => match index {
+            0x60 => '@',
+            0x18 => '.',
+            0x2e => '<',
+            0x2d => '>',
+            0x2f => 'H',
+            0x70 => '$',
+            0x12 => 'I',
+            0x19 => 'o',
+            0x71 => 'v',
+            0x72 => '!',
+            0x73 => '+',
+            0x74 | 0x75 | 0x76 | 0x7f => '#',
+            0x77 => '+',
+            _ => '?',
+        },
     }
 }
 
@@ -4290,23 +4375,26 @@ fn draw_dungeon_view_cell(
     glyph: char,
     mode: ViewOverlayMode,
 ) {
+    // Inverse of `render_dungeon_minimap_glyph_code`, for the text-map
+    // path that re-renders a stored ASCII map into pixels.
     let glyph = match glyph {
-        '@' => Some(DUNGEON_VIEW_PARTY_GLYPH),
-        '.' => Some(0x18),
-        '<' => Some(0x2e),
-        '>' => Some(0x2d),
-        'H' => Some(0x2f),
-        '$' => Some(0x70),
-        'f' => Some(0x12),
-        'o' => Some(0x19),
-        'v' => Some(0x71),
-        '!' => Some(0x72),
-        '+' => Some(0x73),
-        '#' => Some(0x74),
-        '*' => Some(0x77),
-        '~' => Some(0x18),
+        '@' => Some(DUNGEON_MINIMAP_PARTY_GLYPH),
+        '.' | '~' => Some(DungeonMinimapGlyph::text(0x18)),
+        '<' => Some(DungeonMinimapGlyph::runic(0x2e)),
+        '>' => Some(DungeonMinimapGlyph::runic(0x2d)),
+        'H' => Some(DungeonMinimapGlyph::runic(0x2f)),
+        '$' => Some(DungeonMinimapGlyph::runic(0x70)),
+        'f' => Some(DungeonMinimapGlyph::Fountain),
+        '=' => Some(DungeonMinimapGlyph::EnergyField),
+        'I' => Some(DungeonMinimapGlyph::text(0x12)),
+        'o' => Some(DungeonMinimapGlyph::text(0x19)),
+        'v' => Some(DungeonMinimapGlyph::runic(0x71)),
+        '!' => Some(DungeonMinimapGlyph::runic(0x72)),
+        '+' => Some(DungeonMinimapGlyph::runic(0x73)),
+        '#' => Some(DungeonMinimapGlyph::runic(0x74)),
+        '*' => Some(DungeonMinimapGlyph::runic(0x77)),
         ' ' => None,
-        _ => Some(0x18),
+        _ => Some(DungeonMinimapGlyph::text(0x18)),
     };
     draw_dungeon_view_glyph(viewport, cell_x, cell_y, scale, glyph, mode);
 }
@@ -4356,6 +4444,10 @@ fn draw_dungeon_ladder_glyph(
     }
 }
 
+/// `dungeon-mode.md §12.5` fountain vector drawing. The basin strokes go
+/// down first in the bright foreground pen, then the pen switches to a
+/// brighter blue for the jet and the four spray dots. All ranges are
+/// inclusive and relative to the cell's pixel origin.
 fn draw_dungeon_fountain_glyph(
     viewport: &mut TileViewport,
     cell_x: usize,
@@ -4363,15 +4455,108 @@ fn draw_dungeon_fountain_glyph(
     scale: usize,
     mode: ViewOverlayMode,
 ) {
-    let color = if mode.uses_alternate_view_bank() {
+    let basin = if mode.uses_alternate_view_bank() {
+        14
+    } else {
+        15
+    };
+    let jet = if mode.uses_alternate_view_bank() {
         11
     } else {
         9
     };
-    draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, color);
+    let mut plot = |x: usize, y: usize, color: u8| {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+    };
+    // Basin: lower lip, middle lip, then the two feet.
+    for x in 1..=6 {
+        plot(x, 4, basin);
+    }
+    for x in 2..=5 {
+        plot(x, 5, basin);
+    }
+    for x in 1..=2 {
+        plot(x, 6, basin);
+    }
+    for x in 5..=6 {
+        plot(x, 6, basin);
+    }
+    // Jet and spray.
+    plot(2, 1, jet);
+    plot(5, 1, jet);
+    plot(1, 2, jet);
+    plot(6, 2, jet);
+    for x in 3..=4 {
+        plot(x, 2, jet);
+        plot(x, 3, jet);
+    }
+}
+
+/// `dungeon-mode.md §12.5` energy-field vector drawing: eight full-width
+/// horizontal runs covering **all eight** rows of the cell, in four
+/// two-row colour bands. Each band's pen is a
+/// `display-driver.md §2` user-interface colour-table slot biased into
+/// the bright half of the palette — band A slot 4, band B slot 0, band C
+/// slot 2, band D slot 3 — resolved through the same table the rest of
+/// the interface uses so the low-colour drivers inherit their own values.
+/// The drawing reads no sub-type, so all four field flavours look
+/// identical on the map.
+fn draw_dungeon_energy_field_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+) {
+    let high_colour = viewport.depth.pixel_limit() > 4;
+    for (band, slot) in DUNGEON_ENERGY_FIELD_BAND_SLOTS.iter().enumerate() {
+        let color = crate::display_driver::ui_colour_slot_bright(*slot, high_colour);
+        for row in 0..2 {
+            let y = band * 2 + row;
+            for x in 1..=6 {
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+            }
+        }
+    }
+}
+
+/// `dungeon-mode.md §12.5`: the user-interface colour-table slot each of
+/// the energy field's four two-row bands takes its pen from, in band
+/// order A, B, C, D.
+const DUNGEON_ENERGY_FIELD_BAND_SLOTS: [usize; 4] = [4, 0, 2, 3];
+
+/// `dungeon-mode.md §12.4` exact byte `0x68`: the up-and-down-arrow text
+/// glyph `0x12`. Drawn as a vertical shaft with a head at each end.
+fn draw_dungeon_up_and_down_arrow_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
     draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale / 2, color);
-    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, 0, color);
-    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale - 1, color);
+    let mid = scale / 2;
+    for offset in 1..=1 {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, mid - offset, offset, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, mid + offset, offset, color);
+        set_view_overlay_pixel(
+            viewport,
+            cell_x,
+            cell_y,
+            scale,
+            mid - offset,
+            scale - 1 - offset,
+            color,
+        );
+        set_view_overlay_pixel(
+            viewport,
+            cell_x,
+            cell_y,
+            scale,
+            mid + offset,
+            scale - 1 - offset,
+            color,
+        );
+    }
 }
 
 fn draw_dungeon_pit_glyph(

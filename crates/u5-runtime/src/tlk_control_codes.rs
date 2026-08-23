@@ -427,8 +427,34 @@ pub const TLK_CODE_END_STREAM: u8 = 0x82;
 pub const TLK_CODE_PAUSE: u8 = 0x83;
 pub const TLK_CODE_WAIT_KEY: u8 = 0x8F;
 
-// §7.4 newline and panel-flush codes
-pub const TLK_CODE_PANEL_NEWLINE: u8 = 0x8A;
+// §7.4 moral-standing and newline codes
+/// `conversation.md §7.4` STANDING-UP. Raises the shared moral-standing
+/// selector by one through the ordinary capped-add writer, clamped at
+/// [`crate::MORAL_STANDING_MAX`]. Emits no text and does not touch the
+/// word buffer. With [`TLK_CODE_STANDING_DOWN`] it is one of the byte
+/// runner's only two direct writers of the selector (`karma.md §4`).
+pub const TLK_CODE_STANDING_UP: u8 = 0x89;
+/// `conversation.md §7.4` STANDING-DOWN. Lowers the shared
+/// moral-standing selector by one through the ordinary capped-subtract
+/// writer, floored at zero. Emits no text and does not touch the word
+/// buffer.
+///
+/// *Corrected:* this engine previously named the byte
+/// `TLK_CODE_PANEL_NEWLINE` and dispatched it as a newline, following an
+/// earlier revision of the spec. §7.4 withdraws that reading: "the
+/// literal-newline code is `0x8D` and only `0x8D`; the value `0x8A`
+/// acquires its newline meaning only *inside* the word buffer, because
+/// the printable-text path rewrites a `0x8D` to `0x8A` after
+/// control-code dispatch has already been passed." The two meanings
+/// coexist at different stages, so the dispatcher must read `0x8A` as a
+/// standing writer and never as a newline. §7.4 also notes the live
+/// cost of getting this wrong: five of the eight shipped `0x8A` bytes
+/// head the "no" arm of a scoped prompt, two of them gold requests, so
+/// declining a gold request must cost the party standing.
+pub const TLK_CODE_STANDING_DOWN: u8 = 0x8A;
+/// `conversation.md §7.4` LITERAL-NEWLINE — the only newline control
+/// code. See [`TLK_CODE_STANDING_DOWN`] for the withdrawn `0x8A`
+/// reading.
 pub const TLK_CODE_LITERAL_NEWLINE: u8 = 0x8D;
 
 // §7.5 print-mask and curse codes
