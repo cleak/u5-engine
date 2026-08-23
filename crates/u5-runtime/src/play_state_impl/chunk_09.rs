@@ -451,6 +451,7 @@ impl PlayState {
         } else {
             self.prepare_top_down_render_grid(area, radius)
         };
+        let r = radius as isize;
         for cell_y in 0..cells {
             for cell_x in 0..cells {
                 let Some(cell) = prepared[cell_y * cells + cell_x] else {
@@ -458,6 +459,25 @@ impl PlayState {
                 };
                 let tile = cell.tile();
                 if tile == VISIBILITY_HIDDEN {
+                    continue;
+                }
+                // `overworld.md §9.1` (spec HEAD c00bf63): a live moon-gate
+                // cell is not a plain tile. Resolve it through the shared
+                // sixteen-step gate-presence counter before the ordinary
+                // tile path gets it.
+                if tile == NATURAL_MOONGATE_LIVE_TILE
+                    && self.live_natural_moongate_terrain_at(
+                        area,
+                        self.player.x as isize + cell_x as isize - r,
+                        self.player.y as isize + cell_y as isize - r,
+                    )
+                    && self.blit_natural_moongate_phase_cell(
+                        &mut viewport,
+                        atlas,
+                        cell_x,
+                        cell_y,
+                    )?
+                {
                     continue;
                 }
                 let tile_id = if tile == PLAYER_TILE {
@@ -473,6 +493,94 @@ impl PlayState {
         }
         self.draw_white_potion_sweep_overlay(area, radius, &prepared, &mut viewport);
         Ok(Some(viewport))
+    }
+
+    /// `overworld.md §9.1` (spec HEAD c00bf63): is this cell's **live
+    /// terrain** the moon-gate byte `0xDC`?
+    ///
+    /// The phase model special-cases live terrain, so a `0xDC` a renderer
+    /// overlay merely painted over some other terrain is not a gate cell
+    /// and keeps the ordinary tile path.
+    fn live_natural_moongate_terrain_at(
+        &self,
+        area: TopDownRenderArea,
+        world_x: isize,
+        world_y: isize,
+    ) -> bool {
+        let idx = match area {
+            TopDownRenderArea::World(_) => {
+                let wx = world_x.rem_euclid(WORLD_SIDE as isize) as usize;
+                let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
+                world_cell_index(wx, wy)
+            }
+            TopDownRenderArea::Town { .. } => {
+                if !(0..32).contains(&world_x) || !(0..32).contains(&world_y) {
+                    return false;
+                }
+                world_y as usize * 32 + world_x as usize
+            }
+        };
+        self.grid.get(idx).copied() == Some(NATURAL_MOONGATE_LIVE_TILE)
+    }
+
+    /// `overworld.md §9.1` (spec HEAD c00bf63): the ground half of a
+    /// composed gate frame. Ordinary play uses grass, terrain `5`, the
+    /// same tile the daytime pass restores; the endgame scene substitutes
+    /// its throne-room floor `0x44`, which is why the endgame gate rises
+    /// out of flagstones rather than turf.
+    pub fn natural_moongate_phase_ground_tile(&self) -> u8 {
+        moongate_phase_ground_tile(self.endgame.is_some())
+    }
+
+    /// `overworld.md §9.1` (spec HEAD c00bf63): draw one live moon-gate
+    /// cell at the **global** gate-presence phase.
+    ///
+    /// Returns `false` when the phase is sixteen, i.e. when the whole
+    /// moon-gate tile goes through the ordinary tile path and this cell
+    /// needs no composition. Every visible gate reads the same counter,
+    /// so gates in one view rise and sink in lockstep.
+    fn blit_natural_moongate_phase_cell(
+        &self,
+        viewport: &mut TileViewport,
+        atlas: &TileAtlas,
+        cell_x: usize,
+        cell_y: usize,
+    ) -> io::Result<bool> {
+        let rows = match moongate_phase_draw(self.natural_moongate_counter) {
+            MoongatePhaseDraw::WholeGate => return Ok(false),
+            // Phase zero shows zero gate rows, which is the ground plate:
+            // the same frame the composition produces at `rows == 0`.
+            MoongatePhaseDraw::Ground => 0,
+            MoongatePhaseDraw::Composed { rows } => rows,
+        };
+        let ground_tile = self.natural_moongate_phase_ground_tile() as usize;
+        let gate_tile = moongate_phase_gate_tile() as usize;
+        let missing = |tile: usize| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("tile atlas is missing tile {tile}"),
+            )
+        };
+        let ground = atlas
+            .tile_pixels(ground_tile)
+            .ok_or_else(|| missing(ground_tile))?
+            .to_vec();
+        let gate = atlas
+            .tile_pixels(gate_tile)
+            .ok_or_else(|| missing(gate_tile))?
+            .to_vec();
+        // The composed frame lives in the dedicated scratch tile `0x116`,
+        // saved and restored around every composition so its shipped
+        // artwork - which `overworld.md §9.2` reuses as the
+        // party-vanishing sprite - survives.
+        let mut scratch = atlas
+            .tile_pixels(MOONGATE_PHASE_SCRATCH_TILE)
+            .ok_or_else(|| missing(MOONGATE_PHASE_SCRATCH_TILE))?
+            .to_vec();
+        with_moongate_phase_scratch_tile(&mut scratch, &ground, &gate, rows, |composed| {
+            blit_tile_pixels_to_viewport(viewport, composed, cell_x, cell_y)
+        })??;
+        Ok(true)
     }
 
     pub fn render_combat_viewport(
@@ -865,7 +973,7 @@ impl PlayState {
             let wx = world_x.rem_euclid(WORLD_SIDE as isize) as usize;
             let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
             if self.visible_moongate_at(plane, wx, wy) {
-                return self.animation.resolve_moongate_tile();
+                return MOONGATE_TILE_BASE;
             }
         }
         terrain
@@ -1022,7 +1130,7 @@ impl PlayState {
                     let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
                     if let Some(cell) = prepared[cell_y * cells + cell_x].as_mut() {
                         if self.visible_moongate_at(plane, wx, wy) {
-                            cell.grid = self.animation.resolve_moongate_tile();
+                            cell.grid = MOONGATE_TILE_BASE;
                         }
                     }
                 }
@@ -2320,11 +2428,17 @@ impl PlayState {
         self.prune_far_overworld_objects();
     }
 
+    /// `animation.md §6` global tile-animation step.
+    ///
+    /// It deliberately does **not** touch the natural-moongate
+    /// gate-presence counter. Per `overworld.md §9.1` (spec HEAD
+    /// c00bf63) that counter "is not a member of the global
+    /// tile-animation families in `systems/animation.md` Section 6. It
+    /// is not advanced by the animation tick, it has no frame selector,
+    /// and skipping a rendered frame does not advance it." Only the
+    /// once-per-turn refresh in `refresh_natural_moongates` moves it.
     pub fn advance_animation_clock(&mut self) {
         self.animation.tick_static_tiles();
-        if !self.visible_moongate_cells().is_empty() {
-            self.animation.tick_moongate();
-        }
     }
 
     pub fn animate_active_objects(&mut self) {

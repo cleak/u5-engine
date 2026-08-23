@@ -15294,7 +15294,6 @@
         for frame in 0..6u8 {
             let clock = AnimationClock {
                 frame,
-                moongate_frame: 0,
             };
             let a = clock.resolve_static_tile(0x01);
             let b = clock.resolve_static_tile(0x02);
@@ -15324,7 +15323,6 @@
         for frame in 0..6u8 {
             let clock = AnimationClock {
                 frame,
-                moongate_frame: 0,
             };
             assert_eq!(
                 clock.resolve_static_tile(0x04),

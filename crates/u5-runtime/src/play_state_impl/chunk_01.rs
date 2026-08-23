@@ -137,6 +137,10 @@ impl PlayState {
         save[SAVE_SHRINE_CODEX_MASK_OFFSET] = self.shrine_codex_mask;
         save[SAVE_MORAL_STANDING_OFFSET] = self.moral_standing;
         save[SAVE_TOLL_PROGRESS_OFFSET] = self.toll_progress;
+        // `overworld.md §9.1` (spec HEAD c00bf63): persist the shared
+        // gate-presence counter so a save taken at 20:07 reloads with
+        // its gates at the height they had.
+        save[SAVE_NATURAL_MOONGATE_COUNTER_OFFSET] = self.natural_moongate_counter;
         save[SAVE_TIMING_STATUS_TAG_OFFSET] = self.timing_status.save_byte();
         save[SAVE_FORTUNES_OF_WAR_OFFSET] = self.fortunes_of_war;
         save[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET
@@ -409,7 +413,7 @@ impl PlayState {
             clock: options.clock,
             prng_state: DEFAULT_PRNG_STATE,
             animation: AnimationClock::default(),
-            natural_moongate_counter: 0,
+            natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,
@@ -647,7 +651,7 @@ impl PlayState {
             clock: options.clock,
             prng_state: DEFAULT_PRNG_STATE,
             animation: AnimationClock::default(),
-            natural_moongate_counter: 0,
+            natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,
@@ -900,7 +904,7 @@ impl PlayState {
             clock: options.clock,
             prng_state: DEFAULT_PRNG_STATE,
             animation: AnimationClock::default(),
-            natural_moongate_counter: 0,
+            natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,

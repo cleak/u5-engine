@@ -9,10 +9,18 @@ use crate::*;
 /// still lands on the same frame.
 pub const STATIC_TILE_ANIMATION_FRAME_WRAP: u8 = 12;
 
+/// `animation.md §6` global tile-animation clock.
+///
+/// It carries no moongate member. `overworld.md §9.1` (spec HEAD
+/// c00bf63) states the gate-presence counter "is **not** a member of the
+/// global tile-animation families in `systems/animation.md` Section 6.
+/// It is not advanced by the animation tick, it has no frame selector,
+/// and skipping a rendered frame does not advance it." The counter lives
+/// on `PlayState` as save-backed world state instead; see
+/// `crate::moongate_phase`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AnimationClock {
     pub frame: u8,
-    pub moongate_frame: u8,
 }
 
 impl AnimationClock {
@@ -25,10 +33,6 @@ impl AnimationClock {
         // the 3-frame water cycle and the 4-frame lava / fire / wind
         // cycles) so the counter stays small.
         self.frame = self.frame.wrapping_add(1) % STATIC_TILE_ANIMATION_FRAME_WRAP;
-    }
-
-    pub fn tick_moongate(&mut self) {
-        self.moongate_frame = self.moongate_frame.wrapping_add(1) % MOONGATE_ANIMATION_FRAMES;
     }
 
     pub fn resolve_static_tile(self, tile: u8) -> u8 {
@@ -44,10 +48,6 @@ impl AnimationClock {
         } else {
             tile
         }
-    }
-
-    pub fn resolve_moongate_tile(self) -> u8 {
-        MOONGATE_TILE_BASE + self.moongate_frame
     }
 }
 

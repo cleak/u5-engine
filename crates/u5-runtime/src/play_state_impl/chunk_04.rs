@@ -1570,6 +1570,9 @@ impl PlayState {
             shrine_codex_mask: self.shrine_codex_mask,
             moral_standing: self.moral_standing,
             toll_progress: self.toll_progress,
+            // `overworld.md §9.1` (spec HEAD c00bf63): the
+            // gate-presence counter survives scene changes.
+            natural_moongate_counter: self.natural_moongate_counter,
             avatar_stats: self.avatar_stats,
             torches: self.torches,
             torch_counter: self.torch_counter,
@@ -1930,7 +1933,9 @@ impl PlayState {
                 if let Some(object) = self.world_object_at(wx, wy) {
                     object.tile
                 } else if self.visible_moongate_at(plane, wx, wy) {
-                    self.animation.resolve_moongate_tile()
+                    // `overworld.md §9` (spec HEAD c00bf63): no animator,
+                    // no frame ring - the moon-gate artwork is one tile.
+                    MOONGATE_TILE_BASE
                 } else {
                     let tile = self.grid[world_cell_index(wx, wy)];
                     self.animation.resolve_static_tile(tile)
@@ -2200,7 +2205,7 @@ impl PlayState {
                             out.push(render_surface_view_class(surface_view_class(object.tile)));
                         } else if self.visible_moongate_at(plane, wx, wy) {
                             out.push(render_surface_view_class(surface_view_class(
-                                self.animation.resolve_moongate_tile(),
+                                MOONGATE_TILE_BASE,
                             )));
                         } else {
                             let tile = self.grid[world_cell_index(wx, wy)];

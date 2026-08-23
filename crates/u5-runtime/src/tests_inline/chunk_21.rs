@@ -5049,10 +5049,7 @@
         let static_ids: [u8; 6] = [10, 11, 12, 13, 92, 152];
         for tid in static_ids {
             for frame in 0..4u8 {
-                let clk = AnimationClock {
-                    frame,
-                    moongate_frame: 0,
-                };
+                let clk = AnimationClock { frame };
                 assert_eq!(
                     clk.resolve_static_tile(tid),
                     tid,
@@ -5061,10 +5058,7 @@
             }
         }
 
-        let clock = AnimationClock {
-            frame: 3,
-            moongate_frame: 7,
-        };
+        let clock = AnimationClock { frame: 3 };
         assert_eq!(clock.resolve_static_tile(16), 16);
     }
 
@@ -5074,10 +5068,7 @@
         // in the water family displays the same frame at each tick,
         // regardless of stored id.
         for frame in 0..4u8 {
-            let clock = AnimationClock {
-                frame,
-                moongate_frame: 0,
-            };
+            let clock = AnimationClock { frame };
             let resolved: Vec<_> = (1u8..=3).map(|t| clock.resolve_static_tile(t)).collect();
             let expected_frame = 1 + (frame % 3);
             assert_eq!(
@@ -5105,28 +5096,11 @@
         assert_eq!(state.grid[world_cell_index(6, 5)], 1);
     }
 
-    #[test]
-    fn animation_clock_cycles_moongate_through_animation_frames() {
-        // Moongate cycles through MOONGATE_ANIMATION_FRAMES sprite frames
-        // starting at MOONGATE_TILE_BASE. The full ring is verified per
-        // u5-spec/catalogs/tile-catalog.md and the LOOK2.DAT moongate
-        // labelling of tile 0xDC.
-        let mut clock = AnimationClock::default();
-        let frames: Vec<_> = (0..MOONGATE_ANIMATION_FRAMES)
-            .map(|_| {
-                let tile = clock.resolve_moongate_tile();
-                clock.tick_moongate();
-                tile
-            })
-            .collect();
-
-        assert_eq!(
-            frames,
-            (MOONGATE_TILE_BASE..MOONGATE_TILE_BASE + MOONGATE_ANIMATION_FRAMES)
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(clock.resolve_moongate_tile(), MOONGATE_TILE_BASE);
-    }
+    // `animation_clock_cycles_moongate_through_animation_frames` is gone.
+    // `overworld.md §9` (spec HEAD c00bf63) retracts the per-render-frame
+    // moongate animator in full: there is no moongate frame ring on the
+    // animation clock to cycle. A gate cell resolves through the
+    // sixteen-step gate-presence phase of §9.1 instead.
 
     #[test]
     fn active_object_phase_respects_steady_countdown_and_decision() {

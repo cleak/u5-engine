@@ -151,75 +151,27 @@
     }
 
     #[test]
-    fn moongate_animation_frame_advances_only_for_visible_active_gates() {
-        let mut dark = britannia_state(open_world_grid(), 0, 0);
-        dark.clock = GameClock::new(12, 0).unwrap();
-        dark.ambient_light = FULL_DARKNESS;
-        dark.animation = AnimationClock {
-            frame: 0,
-            moongate_frame: 7,
-        };
-        dark.moongates.push(MoongateEntry {
-            x: 1,
-            y: 0,
-            destination_plane: WorldPlane::Britannia,
-            destination_x: 30,
-            destination_y: 40,
-            active_hours: None,
-            expected_tile: None,
-        });
+    fn animation_tick_never_advances_the_gate_presence_counter() {
+        // `overworld.md §9.1` (spec HEAD c00bf63): the gate-presence
+        // counter "is **not** a member of the global tile-animation
+        // families in `systems/animation.md` Section 6. It is not
+        // advanced by the animation tick, it has no frame selector, and
+        // skipping a rendered frame does not advance it."
+        //
+        // This replaces `moongate_animation_frame_advances_only_for_visible_active_gates`,
+        // which was written against the per-render-frame moongate
+        // animator `overworld.md §9` retracts in full.
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.clock = GameClock::new(21, 0).unwrap();
+        state.natural_moongate_counter = 7;
 
-        assert_eq!(dark.idle_tick(), MoveOutcome::IdleTick);
+        for _ in 0..32 {
+            state.advance_animation_clock();
+        }
 
-        assert_eq!(dark.animation.frame, 1);
-        assert_eq!(dark.animation.moongate_frame, 7);
-
-        let mut inactive = britannia_state(open_world_grid(), 0, 0);
-        inactive.clock = GameClock::new(12, 0).unwrap();
-        inactive.ambient_light = FULL_DAYLIGHT;
-        inactive.animation = AnimationClock {
-            frame: 0,
-            moongate_frame: 7,
-        };
-        inactive.moongates.push(MoongateEntry {
-            x: 1,
-            y: 0,
-            destination_plane: WorldPlane::Britannia,
-            destination_x: 30,
-            destination_y: 40,
-            active_hours: Some((13, 13)),
-            expected_tile: None,
-        });
-
-        assert_eq!(inactive.idle_tick(), MoveOutcome::IdleTick);
-
-        assert_eq!(inactive.animation.frame, 1);
-        assert_eq!(inactive.animation.moongate_frame, 7);
-
-        let mut visible = britannia_state(open_world_grid(), 0, 0);
-        visible.clock = GameClock::new(12, 0).unwrap();
-        visible.ambient_light = FULL_DAYLIGHT;
-        visible.animation = AnimationClock {
-            frame: 0,
-            moongate_frame: 0,
-        };
-        visible.moongates.push(MoongateEntry {
-            x: 1,
-            y: 0,
-            destination_plane: WorldPlane::Britannia,
-            destination_x: 30,
-            destination_y: 40,
-            active_hours: None,
-            expected_tile: None,
-        });
-
-        assert_eq!(visible.idle_tick(), MoveOutcome::IdleTick);
-
-        assert_eq!(visible.animation.frame, 1);
-        // The moongate sprite at 0xDC is a single static tile per
-        // LOOK2.DAT ("a moon gate!"); the frame ring is one wide so
-        // ticking is a no-op.
-        assert_eq!(visible.animation.moongate_frame, 0);
+        assert_eq!(state.natural_moongate_counter, 7);
+        // The families' own selector did advance, so the tick really ran.
+        assert_ne!(state.animation.frame, 0);
     }
 
     #[test]
@@ -988,6 +940,7 @@
             shrine_codex_mask: 0,
             moral_standing: 0,
             toll_progress: 0,
+            natural_moongate_counter: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,
@@ -1092,6 +1045,7 @@
             shrine_codex_mask: 0,
             moral_standing: 0,
             toll_progress: 0,
+            natural_moongate_counter: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,

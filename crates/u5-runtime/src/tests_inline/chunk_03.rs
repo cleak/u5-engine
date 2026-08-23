@@ -2191,6 +2191,7 @@
             shrine_codex_mask: 0,
             moral_standing: 0,
             toll_progress: 0,
+            natural_moongate_counter: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,

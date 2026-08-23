@@ -1195,6 +1195,15 @@ impl PlayState {
             return Ok(None);
         }
 
+        // `overworld.md §9.2` (spec HEAD c00bf63) stage B: the transit
+        // drives the *shared* gate-presence counter from 15 down to 1 and
+        // "the countdown ends with the counter at zero". Because the
+        // counter is shared, a gate that was mid-rise elsewhere in view is
+        // driven to zero by this unrelated transit and rises again from
+        // zero on subsequent turns. §9.1 calls that out explicitly as "the
+        // original's behaviour, not a defect to design around", so it is
+        // reproduced here rather than worked around.
+        self.natural_moongate_counter = 0;
         self.grid[idx] = NATURAL_MOONGATE_RESTORED_TERRAIN_TILE;
         self.refresh_world_live_chunks_for_current_area()?;
         self.natural_moongate_live_cells
@@ -1325,6 +1334,9 @@ impl PlayState {
             shrine_codex_mask: self.shrine_codex_mask,
             moral_standing: self.moral_standing,
             toll_progress: self.toll_progress,
+            // `overworld.md §9.1` (spec HEAD c00bf63): the
+            // gate-presence counter survives scene changes.
+            natural_moongate_counter: self.natural_moongate_counter,
             avatar_stats: self.avatar_stats,
             torches: self.torches,
             torch_counter: self.torch_counter,

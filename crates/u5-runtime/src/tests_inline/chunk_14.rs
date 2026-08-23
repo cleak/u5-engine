@@ -2633,8 +2633,6 @@
         grid[world_cell_index(0, 0)] = 17;
         let mut state = britannia_state(grid, 255, 0);
         state.ambient_light = FULL_DAYLIGHT;
-        // Moongate is a single-frame sprite at 0xDC; keep frame at 0.
-        state.animation.moongate_frame = 0;
         state.moongates.push(MoongateEntry {
             x: 254,
             y: 0,

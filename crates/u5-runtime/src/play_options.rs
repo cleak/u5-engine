@@ -42,6 +42,11 @@ pub struct PlayOptions {
     pub shrine_codex_mask: u8,
     pub moral_standing: u8,
     pub toll_progress: u8,
+    /// `overworld.md §9.1` (spec HEAD c00bf63): the shared
+    /// natural-moongate gate-presence counter, restored from
+    /// `SAVED.GAM` offset `0x02E1`. Persistent world state - it
+    /// survives turns, mode changes, scene changes and save/load.
+    pub natural_moongate_counter: u8,
     pub avatar_stats: AvatarStats,
     pub torches: u8,
     pub torch_counter: u8,
@@ -108,6 +113,7 @@ impl Default for PlayOptions {
             shrine_codex_mask: 0,
             moral_standing: 0,
             toll_progress: 0,
+            natural_moongate_counter: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,
