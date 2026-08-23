@@ -2089,6 +2089,10 @@ impl PlayState {
         self.combat_secondary_marker = None;
         self.combat_ambush_reveals = reveals;
         self.combat_active = true;
+        // `visibility.md §12.6`: "combat entry switches the beacon off
+        // outright". There is no matching exit trigger; the beacon stays off
+        // until a map loader next harvests a source.
+        self.light_beacon.switch_off();
         self.combat_frame_snapshot = Some(snapshot.clone());
         self.pending_combat_actor_slot = None;
         self.pending_combat_terrain_trigger_slot = None;

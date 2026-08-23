@@ -352,6 +352,11 @@ impl PlayState {
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
         let markers = harvest_location_markers(&grid);
+        // `visibility.md §12.6`: inside a location the map setup clears both
+        // beacon positions and records up to two bright-light hits. Harvested
+        // from the raw floor, before the runtime normalisation pass rewrites
+        // any cell.
+        let beacon_sources = harvest_location_beacon_sources(&grid);
         normalize_town_runtime_floor(&mut grid, options.clock.hour);
         let table_start = if options.floor == 0 {
             load_location_entry_y(game_dir, scene)?
@@ -465,6 +470,11 @@ impl PlayState {
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
             ambient_light: 0,
+            light_beacon: LightBeaconState {
+                sources: beacon_sources,
+                bearing: BEACON_INITIAL_BEARING,
+            },
+            beacon_bearing_stencils: load_beacon_bearing_stencils(game_dir)?,
             visibility_dirty: false,
             visibility_grid: [0; VISIBILITY_GRID_LEN],
             terrain_band: [0; TERRAIN_BAND_LEN],
@@ -701,6 +711,11 @@ impl PlayState {
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
             ambient_light: 0,
+            light_beacon: LightBeaconState {
+                sources: [None; BEACON_SOURCE_SLOTS],
+                bearing: BEACON_INITIAL_BEARING,
+            },
+            beacon_bearing_stencils: load_beacon_bearing_stencils(game_dir)?,
             visibility_dirty: false,
             visibility_grid: [0; VISIBILITY_GRID_LEN],
             terrain_band: [0; TERRAIN_BAND_LEN],
@@ -891,6 +906,15 @@ impl PlayState {
             y,
             |_| false,
         )?);
+        // `visibility.md §12.6`: the chunk loader scans each freshly loaded
+        // 32x32 window for the lighthouse tile and records the first hit, or
+        // the "no beacon" sentinel when the window holds none.
+        let beacon_sources = match &world_live_chunks {
+            Some(buffer) => {
+                harvest_outdoor_beacon_sources(buffer.scroll_base, |wx, wy| buffer.tile_at(wx, wy))
+            }
+            None => [None; BEACON_SOURCE_SLOTS],
+        };
 
         let mut state = Self {
             area: Area::World { plane },
@@ -952,6 +976,11 @@ impl PlayState {
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
             ambient_light: 0,
+            light_beacon: LightBeaconState {
+                sources: beacon_sources,
+                bearing: BEACON_INITIAL_BEARING,
+            },
+            beacon_bearing_stencils: load_beacon_bearing_stencils(game_dir)?,
             visibility_dirty: false,
             visibility_grid: [0; VISIBILITY_GRID_LEN],
             terrain_band: [0; TERRAIN_BAND_LEN],
@@ -1348,6 +1377,10 @@ impl PlayState {
         advance_turn: bool,
     ) -> io::Result<MoveOutcome> {
         self.grid = load_town_runtime_floor(game_dir, scene, entry.to_floor, self.clock.hour)?;
+        // `visibility.md §12.6`: a new location floor is fresh map setup —
+        // clear both beacon positions and re-record up to two bright-light
+        // hits.
+        self.harvest_location_light_beacon();
         self.natural_moongate_live_cells.clear();
         self.area = Area::Town {
             scene,

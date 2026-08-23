@@ -65,6 +65,15 @@ pub struct PlayState {
     pub torch_counter: u8,
     pub light_spell_counter: u8,
     pub ambient_light: u8,
+    /// `visibility.md §12.6`: the night-time rotating beacon's resident
+    /// scratch block — up to two harvested source positions plus the
+    /// beam's current bearing. Map loaders own the positions; the
+    /// per-turn pass owns the bearing.
+    pub light_beacon: LightBeaconState,
+    /// `visibility.md §12.6` beam stencils, located in the shipped
+    /// `DATA.OVL` at map-load time. `None` only for synthetic fixtures
+    /// built without a game directory.
+    pub beacon_bearing_stencils: Option<BeaconBearingStencils>,
     pub visibility_dirty: bool,
     pub visibility_grid: [u8; VISIBILITY_GRID_LEN],
     pub terrain_band: [u8; TERRAIN_BAND_LEN],
