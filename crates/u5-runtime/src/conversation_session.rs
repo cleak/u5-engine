@@ -869,10 +869,10 @@ mod tests {
             {
                 let mut bytes = enc("A toll.");
                 bytes.extend_from_slice(&[TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5']);
-                bytes.push(TLK_CODE_GOTO_LABEL_FIRST);
+                bytes.push(TLK_GOLD_PAYMENT_PAID_LABEL);
                 bytes.extend_from_slice(&enc(" Paid."));
                 bytes.push(TLK_CODE_END_OF_RESPONSE);
-                bytes.push(TLK_CODE_GOTO_LABEL_LAST);
+                bytes.push(TLK_GOLD_PAYMENT_REFUSED_LABEL);
                 bytes.extend_from_slice(&enc(" Refused."));
                 bytes.push(TLK_CODE_END_OF_RESPONSE);
                 bytes
@@ -926,10 +926,10 @@ mod tests {
             enc("PAY"),
             {
                 let mut bytes = vec![TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5'];
-                bytes.push(TLK_CODE_GOTO_LABEL_FIRST);
+                bytes.push(TLK_GOLD_PAYMENT_PAID_LABEL);
                 bytes.extend_from_slice(&enc(" Paid."));
                 bytes.push(TLK_CODE_END_OF_RESPONSE);
-                bytes.push(TLK_CODE_GOTO_LABEL_LAST);
+                bytes.push(TLK_GOLD_PAYMENT_REFUSED_LABEL);
                 bytes.extend_from_slice(&enc(" Refused."));
                 bytes.push(TLK_CODE_END_OF_RESPONSE);
                 bytes

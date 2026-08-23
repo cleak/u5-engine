@@ -37,7 +37,10 @@ pub struct TlkRunInputs<'a> {
     /// `0x85` GOLD-PAYMENT prompt result. `true` means the player accepted
     /// the gold deduction; `false` means they declined or had insufficient
     /// gold. The runner records the amount regardless and uses this flag
-    /// to choose between the `0x9E` "paid" and `0x9F` "refused" follow-ups.
+    /// to choose between the [`TLK_GOLD_PAYMENT_PAID_LABEL`] and
+    /// [`TLK_GOLD_PAYMENT_REFUSED_LABEL`] follow-ups. Those two label
+    /// values are an engine convention, not published by the spec — see
+    /// their doc comments.
     pub gold_payment_accepted: bool,
     /// Optional party gold available to the payment prompt. When supplied,
     /// the runner treats an otherwise accepted payment as refused if the
@@ -138,7 +141,7 @@ pub enum TlkRunEvent {
         target_label: u8,
         branched: bool,
     },
-    /// A `0x9E`/`0x9F` GOTO-LABEL was followed.
+    /// A GOTO-LABEL (`0x91..=0x9F`) was followed.
     GotoLabel { from: u8, to: u8 },
 }
 
@@ -309,9 +312,9 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     out.events
                         .push(TlkRunEvent::GoldPayment { amount, accepted });
                     let target_label = if accepted {
-                        TLK_CODE_GOTO_LABEL_FIRST
+                        TLK_GOLD_PAYMENT_PAID_LABEL
                     } else {
-                        TLK_CODE_GOTO_LABEL_LAST
+                        TLK_GOLD_PAYMENT_REFUSED_LABEL
                     };
                     if let Some(target_pos) =
                         find_label_position_excluding(bytes, target_label, arg_start, arg_end)
@@ -727,10 +730,10 @@ mod tests {
     #[test]
     fn gold_payment_branches_to_paid_or_refused_label_by_affordability() {
         let mut bytes = vec![TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5'];
-        bytes.push(TLK_CODE_GOTO_LABEL_FIRST);
+        bytes.push(TLK_GOLD_PAYMENT_PAID_LABEL);
         bytes.extend_from_slice(&enc("paid"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
-        bytes.push(TLK_CODE_GOTO_LABEL_LAST);
+        bytes.push(TLK_GOLD_PAYMENT_REFUSED_LABEL);
         bytes.extend_from_slice(&enc("refused"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
 

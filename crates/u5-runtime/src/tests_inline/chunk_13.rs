@@ -97,19 +97,29 @@ fn encounter_spawner_separation_bounds_alias_to_axis_bounds() {
 }
 
 #[test]
-fn tlk_label_byte_count_anchors_to_label_band_width() {
-    // conversation.md §7.7: per-blob label bytes occupy
-    // `0x91..=0x9F`, so the count is TLK_LABEL_LAST -
-    // TLK_LABEL_FIRST + 1 = 15. Anchor TLK_LABEL_BYTE_COUNT
-    // to that band width so the count derives from the
-    // published label-byte band.
+fn tlk_label_byte_count_matches_published_band_width() {
+    // conversation.md §7.7 publishes the count and the band as two
+    // separate statements ("up to fifteen label bytes per blob";
+    // "identified by the values `0x91..=0x9F`") and then observes that
+    // they agree: "Fifteen label values are addressable (`0x9F` minus
+    // `0x91`, inclusive), matching the fifteen-label limit stated
+    // above."
+    //
+    // This test asserts that agreement as a CONSEQUENCE of three
+    // independently-read literals. It withdraws the assertion the
+    // earlier `tlk_label_byte_count_anchors_to_label_band_width` made,
+    // which required TLK_LABEL_BYTE_COUNT to be *defined* as the band
+    // width. A count defined that way cannot disagree with the band,
+    // so the assertion was structurally incapable of failing and the
+    // "= 15" line beneath it was the only real check present.
+    assert_eq!(TLK_LABEL_FIRST, 0x91);
+    assert_eq!(TLK_LABEL_LAST, 0x9F);
+    assert_eq!(TLK_LABEL_BYTE_COUNT, 15);
     assert_eq!(
         TLK_LABEL_BYTE_COUNT,
         (TLK_LABEL_LAST - TLK_LABEL_FIRST + 1) as usize,
+        "§7.7's count and band must agree; neither derives the other",
     );
-    assert_eq!(TLK_LABEL_BYTE_COUNT, 15);
-    assert_eq!(TLK_LABEL_FIRST, 0x91);
-    assert_eq!(TLK_LABEL_LAST, 0x9F);
 }
 
 #[test]
@@ -1415,32 +1425,90 @@ fn signs_dat_scene_directory_bytes_anchors_to_slots() {
 }
 
 #[test]
-fn tlk_label_and_printable_text_bands_chain() {
-    // conversation.md §7, §7.7: the label band ends at the
-    // last GOTO-label byte (0x9F), and the printable-text
-    // band begins immediately past the label band. Anchor
-    // TLK_LABEL_LAST to TLK_CODE_GOTO_LABEL_LAST and
-    // TLK_PRINTABLE_TEXT_FIRST to TLK_LABEL_LAST + 1 so the
-    // label/printable-text adjacencies have one source of
-    // truth.
-    assert_eq!(TLK_LABEL_LAST, TLK_CODE_GOTO_LABEL_LAST);
-    assert_eq!(TLK_PRINTABLE_TEXT_FIRST, TLK_LABEL_LAST + 1);
+fn tlk_label_and_printable_text_bands_are_adjacent_but_independent() {
+    // conversation.md §7.7 publishes the label band as `0x91..=0x9F`;
+    // §7 publishes the printable-text band as `0xA0..=0xFD`. They abut.
+    //
+    // This test withdraws what `tlk_label_and_printable_text_bands_chain`
+    // asserted. That test required TLK_LABEL_LAST to *be*
+    // TLK_CODE_GOTO_LABEL_LAST and TLK_PRINTABLE_TEXT_FIRST to *be*
+    // TLK_LABEL_LAST + 1, and passed green while all three named 0x9E/0x9F
+    // instead of the published fifteen-value band -- a chain is consistent
+    // with itself no matter what value it starts from. Both constants are
+    // now literals read off the spec, and the adjacency below is checked as
+    // an observation about two independent numbers.
     assert_eq!(TLK_LABEL_LAST, 0x9F);
     assert_eq!(TLK_PRINTABLE_TEXT_FIRST, 0xA0);
+    assert_eq!(
+        TLK_PRINTABLE_TEXT_FIRST,
+        TLK_LABEL_LAST + 1,
+        "published bands happen to abut; neither derives the other",
+    );
 }
 
 #[test]
-fn tlk_goto_label_pair_anchors_to_control_code_band_end() {
-    // conversation.md §7.7: the GOTO-label pair (0x9E, 0x9F)
-    // sits immediately past the engine-control byte band
-    // (0x80..=0x9D). Anchor TLK_CODE_GOTO_LABEL_FIRST to
-    // TLK_CONTROL_CODE_LAST + 1 and TLK_CODE_GOTO_LABEL_LAST
-    // to FIRST + 1 so the GOTO-label adjacency has one source
-    // of truth.
-    assert_eq!(TLK_CODE_GOTO_LABEL_FIRST, TLK_CONTROL_CODE_LAST + 1);
-    assert_eq!(TLK_CODE_GOTO_LABEL_LAST, TLK_CODE_GOTO_LABEL_FIRST + 1);
-    assert_eq!(TLK_CODE_GOTO_LABEL_FIRST, 0x9E);
-    assert_eq!(TLK_CODE_GOTO_LABEL_LAST, 0x9F);
+fn tlk_goto_label_band_spans_the_published_fifteen_values() {
+    // conversation.md §7.7: "The byte runner supports up to fifteen
+    // label bytes per blob, identified by the values `0x91..=0x9F`",
+    // and §7's dispatcher list gives the same range: "Bytes
+    // `0x91..0x9F`. These are GOTO-LABEL codes."
+    //
+    // §7.7 confirms it empirically: scanning the four shipped `.TLK`
+    // files for `0x90 <label>` declarations finds ELEVEN distinct
+    // labels spanning the range end to end. Reproduced here against
+    // the shipped corpus before this test was written -- 0x91 x110,
+    // 0x92 x74, 0x93 x54, 0x94 x44, 0x95 x17, 0x96 x5, 0x97 x3,
+    // 0x98 x2, 0x99 x3, 0x9A x1, 0x9F x135 (448 declarations total).
+    // The decaying frequency curve is what label numbering looks like.
+    //
+    // This test replaces `tlk_goto_label_pair_anchors_to_control_code_band_end`,
+    // and withdraws everything it asserted. That test pinned a
+    // TWO-value band, 0x9E..=0x9F, and derived both ends from
+    // TLK_CONTROL_CODE_LAST, so a single wrong constant produced a
+    // wrong band, a wrong TLK_LABEL_LAST, and a green test asserting
+    // the three agreed. Under it, 0x91..=0x9D -- the bytes carrying
+    // the overwhelming majority of shipped label traffic -- classified
+    // as engine control codes.
+    assert_eq!(TLK_LABEL_FIRST, 0x91);
+    assert_eq!(TLK_LABEL_LAST, 0x9F);
+    assert_eq!((TLK_LABEL_LAST - TLK_LABEL_FIRST + 1) as usize, 15);
+    // Every one of the fifteen is a label byte, including the eleven
+    // exercised in shipped content and the four that are not.
+    for byte in 0x91u8..=0x9F {
+        assert!(
+            is_tlk_label_byte(byte),
+            "0x{byte:02X} is inside the published label band",
+        );
+        assert_eq!(tlk_byte_runner_class(byte), TlkByteRunnerClass::GotoLabel);
+        assert_eq!(classify_tlk_byte(byte), TlkByteKind::GotoLabel);
+    }
+    // The control band ends immediately below, on the 0x90
+    // LABEL-RECORD row that closes the §7.2-§7.6 dispatch table.
+    // Adjacency, asserted as a consequence of two literals.
+    assert_eq!(TLK_CONTROL_CODE_LAST, 0x90);
+    assert_eq!(TLK_CODE_LABEL_RECORD, TLK_CONTROL_CODE_LAST);
+    assert_eq!(TLK_CONTROL_CODE_LAST + 1, TLK_LABEL_FIRST);
+}
+
+#[test]
+fn tlk_gold_payment_arm_labels_are_particular_labels_not_band_bounds() {
+    // The runner's paid/refused gold-payment arms used to borrow the
+    // GOTO band's boundary constants, which is how one two-value fact
+    // masqueraded as two. They are two PARTICULAR label values inside
+    // the band, and they carry no band meaning.
+    //
+    // conversation.md §7.6 does not publish this pairing: it says only
+    // that an unaffordable demand "prints the refusal line, clears its
+    // multi-byte state, and re-enters the keyword prompt rather than
+    // continuing the response". These values preserve existing engine
+    // behaviour unchanged and are flagged as unpublished at their
+    // definition; this test pins them so widening the label band can
+    // never silently re-route the paid arm to 0x91, the most common
+    // label byte in shipped content.
+    assert_eq!(TLK_GOLD_PAYMENT_PAID_LABEL, 0x9E);
+    assert_eq!(TLK_GOLD_PAYMENT_REFUSED_LABEL, 0x9F);
+    assert!(is_tlk_label_byte(TLK_GOLD_PAYMENT_PAID_LABEL));
+    assert!(is_tlk_label_byte(TLK_GOLD_PAYMENT_REFUSED_LABEL));
 }
 
 #[test]
@@ -3397,19 +3465,22 @@ fn tlk_dictionary_token_range_matches_spec() {
 
 #[test]
 fn tlk_printable_and_control_byte_ranges_match_spec() {
-    // conversation.md §7: byte runner classifies high-bit-set
-    // bytes in 0xA0..=0xFD as printable text and bytes in
-    // 0x81..=0x9D as engine control codes (with 0x9E..=0x9F
-    // carved out for the GOTO label range).
+    // conversation.md §7: high-bit-set bytes in 0xA0..=0xFD are
+    // printable text; the control band is published as "0x81..0x9F
+    // with the exception of the GOTO range", and §7.7 fixes the GOTO
+    // range at 0x91..=0x9F, so the control codes proper are
+    // 0x81..=0x90.
+    //
+    // The 0x9D this test used to assert was the wrong end of that
+    // subtraction -- it left 0x91..=0x9D classified as control codes.
     assert_eq!(TLK_PRINTABLE_TEXT_FIRST, 0xA0);
     assert_eq!(TLK_PRINTABLE_TEXT_LAST, 0xFD);
     assert_eq!(TLK_CONTROL_CODE_FIRST, 0x81);
-    assert_eq!(TLK_CONTROL_CODE_LAST, 0x9D);
-    // The control-code range ends one byte before the GOTO range
-    // begins; the GOTO range ends one byte before the printable
-    // range begins.
-    assert_eq!(TLK_CONTROL_CODE_LAST + 1, TLK_CODE_GOTO_LABEL_FIRST);
-    assert_eq!(TLK_CODE_GOTO_LABEL_LAST + 1, TLK_PRINTABLE_TEXT_FIRST);
+    assert_eq!(TLK_CONTROL_CODE_LAST, 0x90);
+    // Adjacencies, asserted as consequences of independent literals
+    // rather than as the definitions they used to be.
+    assert_eq!(TLK_CONTROL_CODE_LAST + 1, TLK_LABEL_FIRST);
+    assert_eq!(TLK_LABEL_LAST + 1, TLK_PRINTABLE_TEXT_FIRST);
 }
 
 #[test]
@@ -10485,18 +10556,25 @@ fn tlk_byte_runner_class_partitions_byte_space_per_spec() {
             "{byte:#04x} should be DictionaryToken"
         );
     }
-    // 0x81..=0x9D control codes — the 0x9E..=0x9F GOTO pair is
-    // carved out below.
-    for byte in [0x81u8, 0x83, 0x8C, 0x8E, 0x91, 0x9D] {
+    // 0x81..=0x90 control codes, ending on the 0x90 LABEL-RECORD row.
+    // This list used to include 0x91 and 0x9D and assert they were
+    // ControlCode; §7.7 puts both inside the GOTO-LABEL band, and
+    // 0x91 is the single most common label byte in shipped content.
+    for byte in [0x81u8, 0x83, 0x8C, 0x8E, 0x8F, 0x90] {
         assert_eq!(
             tlk_byte_runner_class(byte),
             TlkByteRunnerClass::ControlCode,
             "{byte:#04x} should be ControlCode"
         );
     }
-    // 0x9E..=0x9F GOTO-LABEL.
-    assert_eq!(tlk_byte_runner_class(0x9E), TlkByteRunnerClass::GotoLabel);
-    assert_eq!(tlk_byte_runner_class(0x9F), TlkByteRunnerClass::GotoLabel);
+    // 0x91..=0x9F GOTO-LABEL — the whole band, not just its top.
+    for byte in 0x91u8..=0x9F {
+        assert_eq!(
+            tlk_byte_runner_class(byte),
+            TlkByteRunnerClass::GotoLabel,
+            "{byte:#04x} should be GotoLabel"
+        );
+    }
     // 0xA0..=0xFD printable text path.
     for byte in [0xA0u8, 0xC1, 0xE5, 0xFD] {
         assert_eq!(
@@ -10530,13 +10608,13 @@ fn tlk_byte_runner_class_partitions_byte_space_per_spec() {
             "{code:#04x} should classify as ControlCode"
         );
     }
-    // The GOTO-LABEL constants share the GotoLabel branch.
+    // The label-band constants share the GotoLabel branch.
     assert_eq!(
-        tlk_byte_runner_class(TLK_CODE_GOTO_LABEL_FIRST),
+        tlk_byte_runner_class(TLK_LABEL_FIRST),
         TlkByteRunnerClass::GotoLabel
     );
     assert_eq!(
-        tlk_byte_runner_class(TLK_CODE_GOTO_LABEL_LAST),
+        tlk_byte_runner_class(TLK_LABEL_LAST),
         TlkByteRunnerClass::GotoLabel
     );
 }
@@ -20536,18 +20614,29 @@ fn tile_class_partitions_byte_range_per_catalog_section_three() {
 
 #[test]
 fn classify_tlk_byte_partitions_dispatcher_table_per_section_seven() {
-    // conversation.md §7 dispatcher classification order: 0x00 NUL,
-    // 0x01..=0x80 dictionary, 0x9E..=0x9F GOTO label (precedes the
-    // 0x81..=0x9F control band), 0x81..=0x9F control, 0xA0..=0xFD
-    // printable, 0xFE IF-ELSE alias, 0xFF end-of-response.
+    // conversation.md §7 dispatcher classification: 0x00 NUL,
+    // 0x01..=0x80 dictionary, 0x91..=0x9F GOTO label, 0x81..=0x90
+    // control (the published "0x81..0x9F with the exception of the
+    // GOTO range"), 0xA0..=0xFD printable, 0xFE IF-ELSE alias,
+    // 0xFF end-of-response.
+    //
+    // The 0x9D-is-ControlByte and two-value-GOTO assertions this test
+    // used to make are withdrawn: §7.7 puts 0x91..=0x9F in the label
+    // band, and the classifier's GOTO arm is now a range rather than
+    // an or-pattern over two boundary constants.
     assert_eq!(classify_tlk_byte(0x00), TlkByteKind::Nul);
     assert_eq!(classify_tlk_byte(0x01), TlkByteKind::DictionaryToken);
     assert_eq!(classify_tlk_byte(0x7F), TlkByteKind::DictionaryToken);
     assert_eq!(classify_tlk_byte(0x80), TlkByteKind::DictionaryToken);
     assert_eq!(classify_tlk_byte(0x81), TlkByteKind::ControlByte);
-    assert_eq!(classify_tlk_byte(0x9D), TlkByteKind::ControlByte);
-    assert_eq!(classify_tlk_byte(0x9E), TlkByteKind::GotoLabel);
-    assert_eq!(classify_tlk_byte(0x9F), TlkByteKind::GotoLabel);
+    assert_eq!(classify_tlk_byte(0x90), TlkByteKind::ControlByte);
+    for byte in 0x91u8..=0x9F {
+        assert_eq!(
+            classify_tlk_byte(byte),
+            TlkByteKind::GotoLabel,
+            "0x{byte:02X} is inside the published label band",
+        );
+    }
     assert_eq!(classify_tlk_byte(0xA0), TlkByteKind::PrintableText);
     assert_eq!(classify_tlk_byte(0xFD), TlkByteKind::PrintableText);
     assert_eq!(classify_tlk_byte(0xFE), TlkByteKind::IfElseAlias);
@@ -20571,8 +20660,10 @@ fn tlk_label_byte_classifier_covers_section_seven_seven_range() {
     }
     assert!(!is_tlk_label_byte(0x90));
     assert!(!is_tlk_label_byte(0xA0));
-    assert!(is_tlk_label_byte(TLK_CODE_GOTO_LABEL_FIRST));
-    assert!(is_tlk_label_byte(TLK_CODE_GOTO_LABEL_LAST));
+    // 0x91 and 0x9D were classified as control codes until the band
+    // was corrected; both are labels.
+    assert!(is_tlk_label_byte(0x91));
+    assert!(is_tlk_label_byte(0x9D));
 }
 
 #[test]
