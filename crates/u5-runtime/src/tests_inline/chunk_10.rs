@@ -458,7 +458,7 @@
         ] {
             fs::write(dir.join(dat), &open_pages).unwrap();
             fs::write(dir.join(npc), vec![0; NPC_FILE_LEN]).unwrap();
-            fs::write(dir.join(tlk), [1, 0, 0, 0]).unwrap();
+            fs::write(dir.join(tlk), [0, 0]).unwrap();
         }
     }
 
@@ -728,7 +728,7 @@
         let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
         fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
         fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
-        fs::write(dir.join("KEEP.TLK"), [1, 0, 0, 0]).unwrap();
+        fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
             "BRITANNIA 10 20 KEEP:4 7\n",
@@ -1051,7 +1051,7 @@ CASTLE:0 8
         let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
         fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
         fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
-        fs::write(dir.join("KEEP.TLK"), [1, 0, 0, 0]).unwrap();
+        fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
         let mut options = PlayOptions::default();
         options.target = PlayTarget::Town(scene);
         options.start = Some((1, 1));
@@ -1078,7 +1078,7 @@ CASTLE:0 8
         let scene = Scene::new(1).unwrap();
         fs::write(dir.join("TOWNE.DAT"), open_grid()).unwrap();
         fs::write(dir.join("TOWNE.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
-        fs::write(dir.join("TOWNE.TLK"), [1, 0, 0, 0]).unwrap();
+        fs::write(dir.join("TOWNE.TLK"), [0, 0]).unwrap();
         let mut options = PlayOptions::default();
         options.target = PlayTarget::Town(scene);
         options.start = Some((5, 5));
@@ -1123,7 +1123,7 @@ CASTLE:0 8
         let scene = Scene::new(1).unwrap();
         fs::write(dir.join("TOWNE.DAT"), open_grid()).unwrap();
         fs::write(dir.join("TOWNE.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
-        fs::write(dir.join("TOWNE.TLK"), [1, 0, 0, 0]).unwrap();
+        fs::write(dir.join("TOWNE.TLK"), [0, 0]).unwrap();
         let existing = ActiveObject {
             type_byte: SHADOWLORD_OBJECT_TILE_BASE,
             tile: SHADOWLORD_OBJECT_TILE_BASE,

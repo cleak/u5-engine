@@ -371,9 +371,13 @@
     }
 
     #[test]
-    fn exit_vehicle_skiff_rejects_deep_water_underfoot_even_with_support() {
+    fn exit_vehicle_skiff_rejects_a_bridge_tile_underfoot_even_with_support() {
+        // `vehicles.md`: the skiff's extra X-Xit rejection is the bridge tile
+        // pair (0x6A/0x6B) directly underfoot. No water tile is rejected -
+        // this test previously pinned deep water, which a skiff normally sits
+        // on, and so blocked ordinary shoreline landings.
         let mut grid = open_world_grid();
-        grid[world_cell_index(5, 5)] = BRIT_DEEP_WATER_TILE;
+        grid[world_cell_index(5, 5)] = SKIFF_XIT_REJECTED_BRIDGE_FIRST;
         let mut state = world_state(grid, 5, 5);
         state.player.transport = TransportState::Skiff {
             type_byte: FIRST_PLAYABLE_SKIFF_TILE,

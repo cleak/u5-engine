@@ -1911,19 +1911,9 @@ fn handle_combat_cast_key_input(
         return Ok(PlayInputDisposition::Continue);
     }
 
-    let quickness_roll = state.combat_quickness_dispatch_roll(actor_slot);
-    if resolve_quickness_dispatch_consumed(
-        state.active_effect_tag,
-        state.active_effect_counter,
-        quickness_roll,
-    ) {
-        let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-        state.message =
-            combat_magic_ring_pass_message(ring_pass).unwrap_or_else(|| "Quickness!".to_string());
-        advance_combat_round_after_actor_and_append_message(state, actor_slot);
-        return Ok(PlayInputDisposition::Continue);
-    }
-
+    // `combat.md §8`: the player's cast path reads only the Negate Magic tag.
+    // The single Quickness gate lives at the head of the automatic actor
+    // driver, not here.
     let had_foe = combat_has_active_non_party_actor(state);
     let turn_before = state.turn;
     let cast_suffix = combat_cast_suffix_for_actor(suffix, actor_slot);
@@ -1958,10 +1948,7 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         return PlayInputDisposition::Continue;
     }
     let input = combat_player_command_input_from_key_suffix(key, suffix);
-    let quickness_roll = state.combat_quickness_dispatch_roll(actor_slot);
-    let Some(application) =
-        state.apply_combat_player_command_with_inputs(actor_slot, input, quickness_roll)
-    else {
+    let Some(application) = state.apply_combat_player_command_with_inputs(actor_slot, input) else {
         state.message = "No active combatant.".to_string();
         return PlayInputDisposition::Continue;
     };

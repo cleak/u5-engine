@@ -88,18 +88,20 @@
         lzw_envelope_with_9_bit_codes(body.len(), &codes)
     }
 
+    /// Builds a `.TLK` in the shipped shape: a two-byte entry count followed
+    /// by exactly that many four-byte `(npc id, blob offset)` rows. No
+    /// sentinel row - see `parse_tlk_header_entries`.
     fn tlk_bytes(entries: &[(u16, &[&str])]) -> Vec<u8> {
-        let count = entries.len() + 1;
-        let mut bytes = vec![0; count * 4];
+        let count = entries.len();
+        let mut bytes = vec![0; 2 + count * 4];
         bytes[0..2].copy_from_slice(&(count as u16).to_le_bytes());
-        bytes[2..4].copy_from_slice(&1u16.to_le_bytes());
         let mut pool = Vec::new();
 
         for (index, (id, fields)) in entries.iter().enumerate() {
             let offset = bytes.len() + pool.len();
-            let header = (index + 1) * 4;
-            bytes[header..header + 2].copy_from_slice(&(offset as u16).to_le_bytes());
-            bytes[header + 2..header + 4].copy_from_slice(&id.to_le_bytes());
+            let header = 2 + index * 4;
+            bytes[header..header + 2].copy_from_slice(&id.to_le_bytes());
+            bytes[header + 2..header + 4].copy_from_slice(&(offset as u16).to_le_bytes());
             for field in *fields {
                 for byte in field.bytes() {
                     pool.push(byte | 0x80);

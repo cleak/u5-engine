@@ -12509,19 +12509,26 @@ fn reserved_keyword_table_size_matches_spec_inventory() {
 
 #[test]
 fn spell_scene_allow_mask_bits_match_spec() {
-    // magic.md §9
-    assert_eq!(SPELL_SCENE_BIT_DUNGEON, 0x01);
-    assert_eq!(SPELL_SCENE_BIT_COMBAT, 0x02);
+    // magic.md §9, after the correction that transposed the combat and
+    // dungeon bits back: 0x01 is combat, 0x02 is dungeon. Cross-checked
+    // against the shipped mask values - Up/Down carry 0x02 alone and Magic
+    // Missile/Repel Undead/Kill carry 0x01 alone.
+    assert_eq!(SPELL_SCENE_BIT_COMBAT, 0x01);
+    assert_eq!(SPELL_SCENE_BIT_DUNGEON, 0x02);
     assert_eq!(SPELL_SCENE_BIT_INDOOR, 0x04);
     assert_eq!(SPELL_SCENE_BIT_OVERWORLD, 0x08);
 
-    assert_eq!(SpellSceneClass::Dungeon.allow_mask_bit(), 0x01);
-    assert_eq!(SpellSceneClass::Combat.allow_mask_bit(), 0x02);
+    assert_eq!(SpellSceneClass::Combat.allow_mask_bit(), 0x01);
+    assert_eq!(SpellSceneClass::Dungeon.allow_mask_bit(), 0x02);
     assert_eq!(SpellSceneClass::Indoor.allow_mask_bit(), 0x04);
     assert_eq!(SpellSceneClass::Overworld.allow_mask_bit(), 0x08);
 
-    // Combat-only spell (mask 0x02) accepts combat, refuses elsewhere.
-    let combat_only = 0x02;
+    // Combat-only spell (mask 0x01, as Magic Missile ships) accepts combat
+    // and refuses elsewhere; the dungeon-only pair ships as 0x02.
+    let combat_only = 0x01;
+    let dungeon_only = 0x02;
+    assert!(spell_allowed_in_scene(dungeon_only, SpellSceneClass::Dungeon));
+    assert!(!spell_allowed_in_scene(dungeon_only, SpellSceneClass::Combat));
     assert!(spell_allowed_in_scene(combat_only, SpellSceneClass::Combat));
     assert!(!spell_allowed_in_scene(
         combat_only,
@@ -14471,18 +14478,6 @@ fn monster_wound_classifier_matches_spec_thresholds() {
     assert!(!monster_wound_sets_fleeing(80, 100, 251));
 }
 
-#[test]
-fn quickness_skips_player_input_only_with_zero_roll_and_active_tag() {
-    // combat.md §8
-    // Active tag + zero roll -> skip.
-    assert!(quickness_skips_player_input(true, 0));
-    // Active tag + nonzero roll -> proceed.
-    assert!(!quickness_skips_player_input(true, 1));
-    // Inactive tag -> always proceed regardless of roll.
-    assert!(!quickness_skips_player_input(false, 0));
-    assert!(!quickness_skips_player_input(false, 1));
-    assert!(!quickness_skips_player_input(false, 255));
-}
 
 #[test]
 fn combat_actor_record_offsets_match_spec_row_order() {

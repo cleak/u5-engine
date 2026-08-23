@@ -562,6 +562,9 @@ pub enum CombatActorDispatchAction {
         wake: CombatSleepWakeApplication,
     },
     PlayerReady,
+    /// `combat.md §8`: a self-acting slot whose dispatch the live Quickness
+    /// effect consumed. This is the only Quickness gate in the engine.
+    QuicknessSkipped,
     MonsterAi {
         ai_turn: Option<CombatAiTurnApplication>,
     },
@@ -3300,33 +3303,24 @@ impl PlayState {
         ))
     }
 
+    /// `combat.md §8`: the player's command handler reads only the Negate
+    /// Magic tag. There is exactly one Quickness gate and it sits at the head
+    /// of the automatic actor driver, so Quickness makes hostiles act about
+    /// half as often - it never turns the player's own turn into a coin flip.
     pub fn apply_combat_player_command_with_inputs(
         &mut self,
         actor_slot: usize,
         input: CombatPlayerCommandInput,
-        quickness_roll: u8,
     ) -> Option<CombatPlayerCommandApplication> {
-        let quickness_consumed = resolve_quickness_dispatch_consumed(
-            self.active_effect_tag,
-            self.active_effect_counter,
-            quickness_roll,
-        );
-        let weapon_attack_inputs = if quickness_consumed
-            || !matches!(
-                input,
-                CombatPlayerCommandInput::Direction(_)
-                    | CombatPlayerCommandInput::AttackDirection(_)
-            ) {
-            CombatPlayerWeaponAttackInputs::default()
-        } else {
-            self.combat_player_weapon_attack_inputs(actor_slot)
-        };
-        self.apply_combat_player_command_with_attack_inputs(
-            actor_slot,
+        let weapon_attack_inputs = if matches!(
             input,
-            quickness_roll,
-            weapon_attack_inputs,
-        )
+            CombatPlayerCommandInput::Direction(_) | CombatPlayerCommandInput::AttackDirection(_)
+        ) {
+            self.combat_player_weapon_attack_inputs(actor_slot)
+        } else {
+            CombatPlayerWeaponAttackInputs::default()
+        };
+        self.apply_combat_player_command_with_attack_inputs(actor_slot, input, weapon_attack_inputs)
     }
 
     pub fn combat_player_weapon_attack_inputs(
@@ -3389,7 +3383,6 @@ impl PlayState {
         &mut self,
         actor_slot: usize,
         input: CombatPlayerCommandInput,
-        quickness_roll: u8,
         weapon_attack_inputs: CombatPlayerWeaponAttackInputs,
     ) -> Option<CombatPlayerCommandApplication> {
         if !self.combat_active {
@@ -3401,22 +3394,6 @@ impl PlayState {
         }
         if actor_slot >= COMBAT_PARTY_ACTOR_SLOTS && !active_actor.is_controlled() {
             return None;
-        }
-
-        if resolve_quickness_dispatch_consumed(
-            self.active_effect_tag,
-            self.active_effect_counter,
-            quickness_roll,
-        ) {
-            let ring_pass = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-            return Some(CombatPlayerCommandApplication {
-                actor_slot,
-                input,
-                action: CombatPlayerCommandAction::QuicknessSkipped,
-                weapon_attack: None,
-                ring_pass,
-                control_after: self.combat_round_loop_control(false, false),
-            });
         }
 
         let action = match input {
@@ -3675,6 +3652,15 @@ impl PlayState {
 
         let action = if slot < COMBAT_PARTY_ACTOR_SLOTS || actor.is_controlled() {
             CombatActorDispatchAction::PlayerReady
+        } else if resolve_quickness_dispatch_consumed(
+            self.active_effect_tag,
+            self.active_effect_counter,
+            self.combat_quickness_dispatch_roll(slot),
+        ) {
+            // `combat.md §8`: the single Quickness gate sits at the head of the
+            // automatic actor driver, so a self-acting slot forfeits about half
+            // its dispatches while the effect is live.
+            CombatActorDispatchAction::QuicknessSkipped
         } else {
             let monster_attack_inputs = monster_attack_inputs_by_slot
                 .iter()
