@@ -145,10 +145,10 @@ cargo run -- --save-frame screenshots\dungeon.png --scene DUNGEON:0 --play-scrip
 
 `--save-frame-suite <DIR>` writes representative local-asset PNGs for
 Britannia, a moved Britannia frame, Castle:0, a lit Dungeon:0 frame, composed
-combat, View/Peer/X-Ray/chunk-map overlays, intro/status/modal surfaces, and an
+combat, View/Peer/X-Ray/night-sky overlays, intro/status/modal surfaces, and an
 endgame status panel, plus a sanitized manifest with dimensions, frame kinds,
 positions, and hashes. The Bevy feature also provides `--visual-frame-suite`
-for 163 composed Bevy-owned frames and `--visual-route-suite` for 1780
+for 193 composed Bevy-owned frames and `--visual-route-suite` for 1856
 per-step route frames; both Bevy manifests include review coverage rows and
 per-frame clean metadata for auditing generated screenshots. Use
 `--compare-frame-manifests <BASE> <CURRENT>` to gate sanitized manifests by
@@ -170,9 +170,10 @@ for N no-turn visual ticks:
 cargo run -- --play-script "d;empty;idle:4;q" --raster-diagnostics C:\Games\U5-Clean
 ```
 
-`--route-smoke` runs a bundled 493-case local-asset route suite covering world,
+`--route-smoke` runs a bundled 507-case local-asset route suite covering world,
 town, dungeon, combat, shop, endgame, transition, save/reload, and modal
-routes. It prints sanitized state lines and raster hashes; add
+routes, including native Jimmy magic-lock, empty-restraint, prisoner-release,
+and prisoner-removal save/reload paths. It prints sanitized state lines and raster hashes; add
 `--route-smoke-manifest <PATH>` to write a clean manifest with initial,
 per-command, and final route labels, command counts, frame dimensions, hashes,
 nonblack counts, and state hashes:
@@ -249,10 +250,14 @@ modal shop sessions, including horse-trader purchases that place a nearby
 boardable horse object. Raw `.TLK` and `SHOPPE.DAT` dictionary tokens expand
 through the published public issue #33/#40 128-row shared dictionary, with
 `common_words.tsv` still supported as an optional clean override for custom data.
-TLK `0x85` gold-payment
-prompts decode the three public digit bytes, yield for yes/no input, refuse
-unaffordable payments, debit accepted affordable payments, increment the
-toll-progress counter, and apply the public toll milestone karma behavior.
+TLK `0x85` gold-payment controls decode the three public digit bytes with no
+extra confirmation read: the surrounding authored yes-answer record is the
+consent. Affordable demands debit immediately and continue with the next stream
+byte. Unaffordable demands discard the pending word, print the exact quoted
+refusal, and enter the ordinary nested keyword loop whose eventual stop closes
+the whole conversation. Ordinary exploration turns age the saved cooldown;
+only a live linked class-108 speaker can test/reset it and award the published
+milestone standing gain.
 Overworld and dungeon Talk return the stock no-response path without spending a
 turn.
 Dungeon movement and the normal lit render are facing-relative: `W`/`S` step
@@ -308,17 +313,36 @@ scene gates as inline `C1...` casts. Spells that need a follow-up direction,
 party member, combat slot, or Gate Travel moon phase now prompt for that choice
 before any spell charge or mana is spent. Bare `U` opens the Use picker, bare
 `R` opens the Ready picker with carried-stock, ammunition, strength, occupied
-slot, hand-occupancy, ring-vanish, and combat body-armour gates, bare `M` opens
-the reagent mixer, bare `N` opens the New Order party-slot prompt, and bare `Y`
-opens the free-text yell prompt.
-Bare `J` opens the Jimmy party-member picker, and inline forms such as `J1`
+slot, hand-occupancy, ring-vanish, and combat body-armour gates. The shared item
+picker accepts Enter or Space, consumes native vertical/corner navigation codes,
+uses its mode-specific Escape literal, and closes immediately after a magic-ring
+vanish. U-Use commits one ordinary exploration turn for success, refusal, an
+empty picker, or cancellation; moving within the picker remains free. Bare `M`
+opens the reagent mixer, bare `N` opens the New Order party-slot
+prompt, and bare `Y` opens the free-text yell prompt.
+Combat `U` uses that same picker after the live-actor gate; finishing or
+cancelling it ends the acting combatant's action, as closing combat Ready or
+Z-stats does. Once combat accepts `C`, cancelling or submitting a blank
+spell-name prompt likewise ends that combatant's action and runs the committed
+action maintenance tail; cancelling a field target cursor also keeps the
+already-spent charge and mana before the round resumes. Combat Push and the
+Get/Jimmy/Open/Search direction prompts follow the same accepted-verb rule:
+choosing a direction or cancelling the prompt commits the action and ages the
+active effect, while an actually blocked Klimb remains a free re-prompt.
+Bare `J` opens the Jimmy party-member picker when the target requires a picker, and inline forms such as `J1`
 still route in one command. The command follows the public lockpick rules:
-non-dungeon doors, chests, and NPC pockets use the selected member's class byte
-against the `1..29` strict-greater roll, object and dungeon chests use their
-published threshold formulas, failures break keys where specified, and magic
-locks refuse without consuming a key. Clean town-lock rows still provide
-authored coordinate bindings where native exact cells are not public; dungeon
-door sidecars are ignored because public dungeon cells carry the room-trigger,
+non-dungeon doors compare the selected member's Dexterity strictly against a
+uniform `0..=29` roll, while object and dungeon chests use their published
+unsigned-word threshold formulas and a strict `1..=30` comparison. Failed
+attempts, already-unlocked object containers, and magic locks break one key as
+specified; ordinary NPCs are not Jimmy targets. Native stocks (`0x84`) and
+manacles (`0x85`) release a linked prisoner through the same flat Dexterity roll,
+clear its dialogue field, set all three schedule modes to 5, award the fixed
+thanks/+2 moral result once, and set the scene's save-backed removal bit when the
+NPC class is eligible. The two 32-scene NPC mask banks at `0x05B4` and `0x0634`
+persist removals and name-known dialogue flags. Clean town-lock rows remain
+available as coordinate-bound overrides. Dungeon door sidecars are ignored
+because public dungeon cells carry the room-trigger,
 room-helper, chest, passage, and visual-wall semantics directly. Numeric
 diagonals still refuse as unsupported dungeon movement, and
 dungeon `Q` routes to the public mode-loop `Exit to DOS?` prompt instead of
@@ -330,9 +354,12 @@ Unhandled dungeon keys run the public sleep/idle polling path as a no-turn
 `Zzzzzz...` visual tick instead of using the top-down generic unhandled-command
 message.
 `V`iew consumes a gem and opens a modal top-down map: a 32-by-32 town/world
-class overlay, or a centered dungeon flood map that wraps the 8-by-8 level and
-stops expansion at wall-like cells while exact dungeon glyph/floodability edge
-cases remain out of scope.
+class overlay whose 128-by-128 raster starts at absolute screen pixel `(32,32)`,
+or a centered dungeon flood map that wraps the 8-by-8 level and stops expansion
+at wall-like cells while exact dungeon glyph/floodability edge cases remain out
+of scope. The terminal renderer reads the overlay's diagnostic class map
+directly; the graphical renderer never copies that debug text into the message
+panel.
 In town and overworld mode, `B` boards a current or facing parked vehicle
 active object, including magic carpets, and town horse boarding refuses occupied
 horse cells with the public `Nay!` line. `X`/`x` exits the current vehicle,
@@ -366,9 +393,17 @@ public level, max-HP, mana, and moral-standing experience adjustment rules.
 `C1IS`, `C1RT`, and `C1AI` cast the
 shared active-effect wrappers for Protection, Quickness, and Negate Magic,
 recording the public `P`/20, `Q`/30, or `N`/10 runtime tag and aging it on
-consumed turns. Combat consumes those shared tags for Protection's equipped-stat
-bonus, Quickness's player-dispatch skip gate, Mass Charm's AI target remap, and
-Negate Magic's cast absorption. `C1IW` casts the
+consumed turns. Protection deliberately has no mechanical consumer, matching
+the published original-game defect. Combat consumes Quickness in the automatic
+actor driver, Mass Charm in AI target remapping, and a live Negate Magic
+code/duration pair in the pre-resource cast-absorption gate. Combat C-Cast also
+implements the published interference lifecycle: ordinary automatic adjacent
+attacks, including misses, save their attacker slot for the victim; a later Cast
+revalidates that source as live, hostile, visible, awake, adjacent, and not
+suppressed by Negate Time before printing `<actor> interferes!` and re-prompting
+without spending the action. A completed victim action clears only that slot;
+the 32-byte map persists across rounds, encounters, combat exits, and save/load.
+`C1IW` casts the
 narrow overworld Locate hook, reporting the current plane, coordinate, facing,
 wind, and time
 after the saved charge/MP/level gates succeed. `C1IMX` casts the narrow Create
@@ -394,7 +429,20 @@ visit-marked `0x08`, preserving the marker bit in the placed field byte.
 In combat, the same four field spells use a target-cell cursor/coordinate
 instead of the dungeon direction prompt; inline smoke can use coordinates such
 as `C1FGI4,3`, and prompt Escape cancels after charge and mana are spent but
-before placing a marker.
+before placing a marker. Completed player and automatic actor dispatches then
+run one common contact hook against the acting descriptor. Exact arena terrain
+byte `0x04` acts as Poison, while `0x8F` and `0xBC` act as Fire; no other terrain
+byte has a contact arm. A recognized terrain byte takes priority and suppresses
+the marker scan even when Poison is rejected by its linked-tile gate. Otherwise,
+the actor's linked renderer record is skipped and the first separate colocated
+Poison/Sleep/Fire marker wins; the marker remains. Poison and Fire use direct
+conditional `0..20` and `0..10` raw-damage draws; Energy instead blocks both
+player and AI movement and has no contact payload. Doom absorption is a separate
+earlier committed non-digit player-action check: a live actor on arena row 2
+accepts renderer companion-band byte `0x3C..0x3F` one cell north, consumes no
+PRNG, and arms the endgame handoff. Digit selection, parser refusals, and
+automatic actor dispatch bypass Doom absorption. Blocked-direction re-prompts do
+not reach either player-action hook.
 `C1AG6` casts Dispel Field from party slot 1, spending the saved charge,
 MP, and level gates before clearing a public dungeon field target back to
 passage while preserving the visit marker bit.
@@ -482,8 +530,8 @@ acknowledgement even after the one-door auto-close timer moves to a later door,
 visit-local town secret-door reveals whose Open path stays open without arming
 the normal auto-close tracker, survives town floor reloads during the visit,
 and clears on full location exit,
-clean-return-checked location exits, clean-room sidecar-backed town and
-overworld Get plus town Push, trap doors, town exit tiles, Hole-up rest, and a
+clean-return-checked grid-boundary location exits, clean-room sidecar-backed town and
+overworld Get plus town Push, trap doors, Hole-up rest, and a
 public #43 Look-special path for top-down fountains, scene-gated wishing wells,
 death-vision active objects, and sign/poster active-object classes, plus a clean-room
 clean dungeon text view with public-spec movement and ladder
@@ -495,10 +543,15 @@ NPC schedules link active-object slots and advance only in town-family scenes;
 off-floor schedule changes detach or attach visible slots by zeroing and
 first-empty allocation while exact stair subtype routing can be supplied through
 clean sidecar metadata. Overworld and dungeon turns leave any stale or synthetic
-schedule state inert. Town entry also attaches the high-indexed player phantom
-NPC to a sentinel active-object row; collision, rendering, and
-line-of-sight helpers keep that sentinel logical-only so the canonical player
-remains slot zero.
+schedule state inert. The player remains active-object slot zero and has no NPC
+descriptor. A town that hosts a living Shadowlord instead installs an ordinary
+stationary `0xFC` actor at the highest free NPC index (overwriting index 31 when
+the roster is full) and links it through the normal active-object allocator.
+The row-4 entry guard and shared one-at-a-time Shadowlord gate are enforced,
+and the resident's day-seeded farmland/orchard blight runs before the shared
+PRNG stream is replaced with the published host-clock seed. The player may
+separately Yell any Shadowlord name in any keep; that transient summon uses its
+own active-object identity handshake and does not create an NPC descriptor.
 Town floor entry and reloads harvest asterisk spawn markers and `0x48`/`0x49`
 NPC start markers before replacing those metadata bytes with the open-floor
 placeholder in the live grid; chair/seat markers remain untouched for schedule
@@ -513,6 +566,23 @@ player commands, monster AI, spells, fields, rewards, escape, and victory
 cleanup. Non-party combat sleep uses the public own-turn 1-in-17 wake check and
 keeps disabled actors present and occupying their cells while wake-check turns
 are spent.
+Monster possess/blink/summon hooks use the published lazy cascade: exact
+`0..=31` acceptance on independent `0..=255` blink and summon gates, fresh
+summon X then Y draws in `0..=15`, one placement attempt, immediate turn
+consumption on success, and ordinary-AI continuation after summon failure.
+Shared combat resistance uses party-owner Intelligence or monster-class
+endurance, the signed unclamped score, and one skewed roll; Tremor and Poison
+Wind instead compare that roll directly with the target's combat weight.
+Kill excludes Blackthorn, Lord British, and Shadow Lord targets. Cause Fear
+and Repel Undead share the exact one-HP fleeing transition, with Repel narrowed
+to the two published undead classes and producing neither death nor XP credit.
+Conjure uses the published sixteen-outcome weighting; Conjure, Swarm, and
+Summon share whole-candidate `0..=15` arena probes; Swarm places four actors at
+one accepted cell; and Summon's controlled bit is stamped only after a
+successful party-caster self-check, never on Oops or monster-AI summons.
+Public issue `#132` further pins protected Kill rejection after the shared
+charge/7-MP and pre-effect envelope: it consumes no resistance PRNG, leaves the
+target untouched, reports `Failed!`, and commits the combat action.
 Combat-frame exits restore the pre-combat active-object table and
 reconcile the caller's original terrain trigger slot, including water-creature
 victory rewrites into persistent body/retrieval objects while defeat and
@@ -710,15 +780,15 @@ surface door lock-state byte pairs remain open:
 
 ```text
 # SCENE FLOOR X Y LOCKED_TILE UNLOCKED_TILE [LOCKED|MAGIC]
-CASTLE:0 0 12 4 97 96
-CASTLE:0 0 14 4 96 97 MAGIC
+CASTLE:0 0 12 4 185 184
+CASTLE:0 0 14 4 151 184 MAGIC
 ```
 
 Matching `town_locks.tsv` rows make `O` refuse the locked cell without spending
 a turn. `J` with keys rewrites ordinary locked cells to `UNLOCKED_TILE`, marks
-the visit-local map dirty, and consumes one indoor turn; `MAGIC` rows report
-the magic-lock refusal without spending a turn or key. Missing rows keep the
-existing clean fallback door behavior.
+the visit-local map dirty, and commits one indoor turn; `MAGIC` rows skip the
+member prompt and roll, break one key, and commit the turn. Missing rows use the
+native dispersed door identifiers (`0x97`, `0x98`, `0xB8..=0xBB`).
 
 Non-combat Blink (`In Por`) follows the public `cleak/u5-spec#48` rule. After
 the normal spell gates spend charge and mana, the spell prompts for a cardinal
@@ -912,7 +982,7 @@ rows next to the game data as `secret_doors.tsv`:
 
 ```text
 # TOWN SCENE FLOOR X Y REVEAL_TILE [TILE]
-TOWN CASTLE:0 0 12 4 96 24
+TOWN CASTLE:0 0 12 4 184 24
 # DUNGEON SCENE LEVEL X Y REVEAL_CELL [CELL]
 DUNGEON DUNGEON:0 0 2 1 0xF0 0x30
 ```
@@ -944,7 +1014,7 @@ CASTLE:0 0 1 1 EAST 80
 party is adjacent to a matching sidecar source or native cannon, the command
 consumes a turn, traces from the source in the supplied or tile-derived
 cardinal direction for up to three cells, zeroes the first active-object slot
-hit, or rewrites a door tile in `96..103` to the current open-door placeholder
+hit, or rewrites one of the native dispersed door tiles to cobble `0x44`
 and clears the active auto-close tracker. Missing sources or rows whose
 optional source-tile guard does not match refuse without spending a turn.
 
@@ -1080,22 +1150,16 @@ Older coordinate and tile-attribute poison-gas sidecars are kept only for
 compatibility with older clean saves/tests and no longer trigger the native
 branch.
 
-Town boundary exits use the native public threshold tile `0x59`. Additional
-authored exit cells can be supplied as clean-room sidecar metadata:
-
-```text
-# SCENE FLOOR X Y [TILE]
-CASTLE:0 0 15 31 55
-```
-
-Stepping onto native `0x59` or a matching `town_exit_tiles.tsv` row consumes one
-indoor turn and returns to the saved debug world snapshot, or to the matching
-`world_locations.tsv` row when no snapshot is available. If the exit trigger
-matches but no clean return coordinate exists, the party stays in location mode
-with a diagnostic. Consumed top-down commands and pass/empty waits while already
-standing on a matching exit trigger apply the same underfoot exit transition
-after turn cleanup without spending a second turn. Missing or mismatched
-sidecar rows behave like ordinary movement.
+Town exits are prompted only when a cardinal step would leave the 32-by-32
+interior grid. The attempted step is not committed. Accepting returns to the
+saved world snapshot, or to the matching `world_locations.tsv` row when no
+snapshot is available; refusing or cancelling leaves town mode active. Tile
+`0x59` is the telescope Look trigger and never participates in exit handling.
+The former `town_exit_tiles.tsv` compatibility sidecar is retired and ignored.
+Per clean specification issue `cleak/u5-spec#110`, every edge samples loaded
+floor cell `(31,31)` through the active transport terrain predicate and checks
+occupancy at the true out-of-grid candidate coordinate. A terrain rejection,
+`N`, or Escape consumes one normal town turn; `Y` exits without a town turn.
 
 The town entry-Y table can also be supplied separately as
 `location_entry_y.tsv`, which is useful for direct `--scene` starts and for
@@ -1168,12 +1232,14 @@ runtime movement state. For dungeon saves, it restores the 512-byte dungeon
 working buffer from `SAVED.GAM`, preserving visit-local edits such as opened
 doors, trap rewrites, and dispelled fields instead of replaying only the durable
 room-clear bitmap from static `DUNGEON.DAT`. It restores the full saved
-year/month/day/hour/minute clock. It reads the separate timing/status tag as `Q`
-half-time or `T` no-minute/no-light-counter cleanup; other values are treated as
-normal timing. Fixed hidden-treasure state and the three Shadowlord hideout slots
+year/month/day/hour/minute clock. It restores the shared active-effect code and
+duration; `Q` applies half-time and `T` suppresses minute/light cleanup, while
+unknown nonzero codes are preserved without inventing behavior. Fixed hidden-
+treasure state and the three Shadowlord hideout slots
 now round-trip through their public `SAVED.GAM` bytes, with `SAVED.WPS` retained
-only as a compatibility mirror for older clean saves. Exact ship facing/sail
-marker variants remain an open public-spec table. `--from-init` keeps the
+only as a compatibility mirror for older clean saves. Ship state uses the exact
+public marker table: `0x20..0x23` are hoisted frigates, `0x24..0x27` are furled
+frigates, and each run's low two bits encode north/east/south/west. `--from-init` keeps the
 factory bootstrap path by reading `INIT.GAM` plus
 the surface `INIT.OOL` overlay seed, so fresh bootstrap does not depend on stale
 `SAVED.OOL` surface objects.
@@ -1184,14 +1250,15 @@ the public load-time mirror contract before gameplay starts.
 
 During top-down play, uppercase `Q` opens the public save-and-continue prompt,
 with inline confirmation shortcuts still accepted: enter `QY` to write
-`SAVED.GAM`, canonical `SAVED.OOL`, and refreshed `BRIT.OOL` / `UNDER.OOL`
-per-plane mirrors, or `QN` to cancel. Inactive world-plane object staging comes
-from those per-plane mirrors, with the active plane supplied by live state; the
-underworld mirror is defensively re-flushed in the normal save entry mode. The
-save writer intentionally leaves `INIT.GAM`, `INIT.OOL`, and static map assets
-alone; dungeon-mode saves write the current 512-byte dungeon working buffer
-into the save image. After `--from-init`, unresolved `SAVED.GAM` bytes are
-templated from `INIT.GAM` instead of any stale saved game.
+`SAVED.GAM` and canonical `SAVED.OOL`, or `QN` to cancel. Save staging reads
+`UNDER.OOL` first and `BRIT.OOL` second, assembles the Britannia/Underworld
+`SAVED.OOL` halves, never writes `BRIT.OOL`, and writes the unchanged
+`UNDER.OOL` bytes only when the entry required-disk role was not Britannia.
+Queued shipwright delivery lives in its published `SAVED.GAM` X/Y/class bytes,
+not either overlay. The save writer intentionally leaves `INIT.GAM`, `INIT.OOL`,
+and static map assets alone; dungeon-mode saves write the current 512-byte
+dungeon working buffer into the save image. After `--from-init`, unresolved
+`SAVED.GAM` bytes are templated from `INIT.GAM` instead of any stale saved game.
 
 Use `--from-init` to seed the same harness from `INIT.GAM` without running
 character creation:

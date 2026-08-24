@@ -2,11 +2,11 @@
 
 use crate::*;
 
-/// `catalogs/tile-catalog.md` §6: any tile id in the door family
-/// (`96..=103`) is a town/world door tile that blocks movement when closed
-/// and dispatches the door-interaction handler.
+/// `doors-and-z-transitions.md §2`: exact dispersed top-down door
+/// ids accepted by the live command handlers. The broad `96..=103`
+/// catalog row is not a command predicate.
 pub const fn is_town_door_tile(tile: u8) -> bool {
-    tile >= TOWN_DOOR_TILE_FIRST && tile <= TOWN_DOOR_TILE_LAST
+    town_command_door_tile(tile)
 }
 
 /// `catalogs/tile-catalog.md` §6: town stair tile-id family
@@ -41,24 +41,30 @@ pub const fn is_ship_transport_furled(byte: u8) -> bool {
     byte >= SHIP_TRANSPORT_FURLED_FIRST && byte <= SHIP_TRANSPORT_FURLED_LAST
 }
 
-/// `overworld.md §3` per-chunk live-substitution rewrite. After a
-/// chunk is loaded into the live 16x16 chunk buffer, the loader walks
-/// the cells and applies a fixed substitution pass:
-///
-/// - Tile ids `0x16..=0x18` rewrite to `0xDF` unconditionally.
-/// - Tile id `0x19` rewrites to `0x1A` only when the chunk
-///   high-byte classifier accepts the current chunk descriptor.
-///
-/// The substitution affects only the live chunk buffer; the on-disk
-/// chunk is unchanged. The classifier acceptance state is supplied
-/// by the caller (the `chunk_classifier_accepts` flag).
+/// `formats/brit-dat.md §9.1` decisions for one loaded 16x16 chunk.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LiveChunkSubstitutionPolicy {
+    pub seal_entrances: bool,
+    pub ruin_shrine: bool,
+}
+
+impl LiveChunkSubstitutionPolicy {
+    pub const NONE: Self = Self {
+        seal_entrances: false,
+        ruin_shrine: false,
+    };
+}
+
+/// Apply the two independent quest-gated tile substitutions to a copied cell.
+/// The caller derives the policy from the chunk owner and save-backed flags;
+/// the on-disk chunk is never changed.
 pub const LIVE_CHUNK_SUBSTITUTION_TARGET_DF: u8 = 0xDF;
 pub const LIVE_CHUNK_SUBSTITUTION_TARGET_1A: u8 = 0x1A;
 
-pub const fn live_chunk_substituted_tile(tile: u8, chunk_classifier_accepts: bool) -> u8 {
+pub const fn live_chunk_substituted_tile(tile: u8, policy: LiveChunkSubstitutionPolicy) -> u8 {
     match tile {
-        0x16..=0x18 => LIVE_CHUNK_SUBSTITUTION_TARGET_DF,
-        0x19 if chunk_classifier_accepts => LIVE_CHUNK_SUBSTITUTION_TARGET_1A,
+        0x16..=0x18 if policy.seal_entrances => LIVE_CHUNK_SUBSTITUTION_TARGET_DF,
+        0x19 if policy.ruin_shrine => LIVE_CHUNK_SUBSTITUTION_TARGET_1A,
         other => other,
     }
 }
@@ -987,7 +993,7 @@ pub const fn random_encounter_threshold(underworld: bool, tile: u8, hour: u8) ->
 }
 
 pub fn is_probe_walkable(tile: u8) -> bool {
-    if is_location_entry_marker(tile) {
+    if is_npc_start_marker(tile) {
         return true;
     }
     // This broad probe is used by diagnostics, smoke pathfinding, and
@@ -1018,7 +1024,7 @@ pub fn is_tile_walkable(tile: u8, passability: Option<&TilePassability>) -> bool
 }
 
 pub fn is_base_tile_passable(tile: u8, passability: Option<&TilePassability>) -> bool {
-    if is_location_entry_marker(tile) {
+    if is_npc_start_marker(tile) {
         return true;
     }
     passability
@@ -1127,7 +1133,7 @@ pub fn is_mountain_or_lava(tile: u8) -> bool {
 }
 
 pub fn is_wall_or_closed_door_tile(tile: u8) -> bool {
-    matches!(tile, 24..=79 | 96..=103)
+    matches!(tile, 24..=79) || town_command_door_tile(tile)
 }
 
 /// `conversation.md §2`: first tile id of the talk-through band.
@@ -1186,7 +1192,7 @@ pub fn rounded_div(numerator: isize, denominator: isize) -> isize {
 /// derived from movement passability", so the centre-out sight carve must
 /// use [`tile_blocks_sight_propagation`] and
 /// [`tile_propagates_sight_only_when_adjacent`] instead. The band this
-/// covers (`24..=79`, `96..=103`, `160..=255`) swallows ordinary interior
+/// covers broad wall and high tile bands and therefore swallows ordinary interior
 /// floor tiles such as the brick floor `0x44`, so wiring it into the carve
 /// collapses every indoor scene to the player's own 3x3 neighbourhood.
 /// Kept under a projectile name so it cannot drift back into the
@@ -1459,23 +1465,6 @@ pub fn town_trap_door_matches(
 
 pub const fn town_poison_gas_live_tile_matches(tile: u8, transport_marker: u8) -> bool {
     tile == TOWN_POISON_GAS_LIVE_TILE && transport_marker == TOWN_POISON_GAS_VEHICLE_BYTE
-}
-
-pub fn town_exit_tile_matches(
-    entry: TownExitTileEntry,
-    scene: Scene,
-    floor: i8,
-    x: usize,
-    y: usize,
-    tile: u8,
-) -> bool {
-    entry.scene == scene
-        && entry.floor == floor
-        && entry.x == x
-        && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
 }
 
 pub fn town_lock_matches(

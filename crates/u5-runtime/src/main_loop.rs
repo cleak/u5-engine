@@ -1,6 +1,45 @@
 //! Outer-dispatch routing per `main-loop.md` §3-§4.
 
-use crate::{InputDirection, WorldPlane};
+use crate::{
+    CHUNK_SIDE, InputDirection, PartyMember, SAVE_QUEST_TILE_FLAG_HIGH_BIT,
+    SAVE_SHRINE_RUIN_FLAG_COUNT, SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT, WORLD_CELLS, WORLD_SIDE,
+    WorldPlane,
+};
+
+/// `main-loop.md §6` shared exploration-loop roster result.
+///
+/// The scan is status-byte-only: Good and Poisoned can act, Sleeping selects
+/// the automatic sleep pass only when no earlier member can act, and every
+/// other status contributes to total-party defeat.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PartyCapability {
+    CanAct { member_index: usize },
+    Sleeping,
+    Defeated,
+}
+
+/// Exact line printed by the no-input sleeping-party loop branch.
+pub const PARTY_SLEEP_LINE: &str = "Zzzzzz...";
+
+/// `town-mode.md §7`: inclusive PRNG range for each sleeping member's
+/// independent 1-in-16 wake roll. Roll zero wakes the member to Good.
+pub const TOWN_SLEEP_WAKE_ROLL_MAX: u8 = 15;
+
+pub fn party_capability(party: &[PartyMember]) -> PartyCapability {
+    let mut sleeping = false;
+    for (member_index, member) in party.iter().enumerate() {
+        match member.status {
+            b'G' | b'P' => return PartyCapability::CanAct { member_index },
+            b'S' => sleeping = true,
+            _ => {}
+        }
+    }
+    if sleeping {
+        PartyCapability::Sleeping
+    } else {
+        PartyCapability::Defeated
+    }
+}
 
 /// `main-loop.md §11` Q-save scene-byte normalisation. Combat is not
 /// saved; if the active scene byte is the temporary combat marker
@@ -49,42 +88,6 @@ pub const fn world_tick_path(scene_byte: u8, visibility_dirty: bool) -> WorldTic
                 WorldTickPath::LazyRefill
             }
         }
-    }
-}
-
-/// `main-loop.md §4` outer-loop bookkeeping flags. The published
-/// outer dispatch is a read-and-route over the scene byte that
-/// carries exactly one piece of mid-iteration state — "a one-bit
-/// 'exit pending' flag that the overworld branch sets when it
-/// returns" — plus "a second flag [that] tracks whether the previous
-/// iteration ran the dungeon branch". Both are modelled here.
-///
-/// **Unwired.** The clean engine has no outer scene router: scene
-/// transitions are driven directly from `PlayState` and the frontend
-/// drivers, so nothing constructs this type in production, exactly as
-/// nothing calls [`scene_route`]. The pair models §4's dispatch, and
-/// the gap is the router itself, not these flags — wiring them means
-/// building the outer read-and-route loop of §4 steps 1-6.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct OuterLoopFlags {
-    /// Set when the overworld branch returns. Prevents a tight
-    /// overworld -> overworld spin when the scene byte is still
-    /// zero (e.g. a no-op cancellation produced no scene change).
-    pub exit_pending: bool,
-    /// Tracks whether the previous iteration ran the dungeon
-    /// branch. The dungeon dispatch consults this to know whether
-    /// the player is entering fresh or returning from combat.
-    pub previous_was_dungeon: bool,
-}
-
-impl OuterLoopFlags {
-    /// `main-loop.md §4`: returns `true` when the outer loop should
-    /// skip the overworld branch this iteration because the
-    /// previous iteration already returned with the scene byte
-    /// still at zero. Caller clears the flag after honoring the
-    /// skip.
-    pub const fn should_skip_overworld(self, scene_byte: u8) -> bool {
-        self.exit_pending && scene_byte == SCENE_OVERWORLD
     }
 }
 
@@ -228,9 +231,9 @@ pub fn dungeon_scene_for_word_of_power(word: &str) -> Option<u8> {
     }
 }
 
-/// Public issue #32: one Word-of-Power seal predicate row. Coordinates are
-/// absolute plane coordinates; the live tile must match `closed_tile` before
-/// the seal opens via `tile ^ 0xDF`.
+/// `commands.md §11.1`: one Word-of-Power seal predicate row. The horizontal
+/// coordinate pair is shared by both world surfaces; `plane` documents the
+/// dungeon's canonical entrance surface, but does not gate Yell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WordOfPowerSeal {
     pub word: &'static str,
@@ -238,10 +241,20 @@ pub struct WordOfPowerSeal {
     pub plane: WorldPlane,
     pub x: usize,
     pub y: usize,
-    pub closed_tile: u8,
+    pub unsealed_tile: u8,
 }
 
-pub const WORD_OF_POWER_SEAL_XOR: u8 = 0xDF;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WordOfPowerTargetOutcome {
+    NoQualifyingNeighbor,
+    RuinedShrine { x: usize, y: usize },
+    WrongCoordinate { x: usize, y: usize },
+    EntranceToggled { x: usize, y: usize, open: bool },
+}
+
+pub const WORD_OF_POWER_SEALED_TILE: u8 = 0xDF;
+pub const WORLD_SHRINE_TILE: u8 = 0x19;
+pub const WORLD_RUINED_SHRINE_TILE: u8 = 0x1A;
 
 /// Public issue #32 byte-level Word-of-Power coordinate and category tables.
 pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
@@ -251,7 +264,7 @@ pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
         plane: WorldPlane::Britannia,
         x: 240,
         y: 73,
-        closed_tile: 0x16,
+        unsealed_tile: 0x18,
     },
     WordOfPowerSeal {
         word: "VILIS",
@@ -259,7 +272,7 @@ pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
         plane: WorldPlane::Britannia,
         x: 91,
         y: 67,
-        closed_tile: 0x16,
+        unsealed_tile: 0x16,
     },
     WordOfPowerSeal {
         word: "INOPIA",
@@ -267,7 +280,7 @@ pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
         plane: WorldPlane::Britannia,
         x: 72,
         y: 168,
-        closed_tile: 0x16,
+        unsealed_tile: 0x16,
     },
     WordOfPowerSeal {
         word: "MALUM",
@@ -275,7 +288,7 @@ pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
         plane: WorldPlane::Britannia,
         x: 126,
         y: 20,
-        closed_tile: 0x18,
+        unsealed_tile: 0x18,
     },
     WordOfPowerSeal {
         word: "AVIDUS",
@@ -283,7 +296,7 @@ pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
         plane: WorldPlane::Britannia,
         x: 156,
         y: 27,
-        closed_tile: 0x18,
+        unsealed_tile: 0x18,
     },
     WordOfPowerSeal {
         word: "INFAMA",
@@ -291,7 +304,7 @@ pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
         plane: WorldPlane::Britannia,
         x: 58,
         y: 102,
-        closed_tile: 0x17,
+        unsealed_tile: 0x17,
     },
     WordOfPowerSeal {
         word: "IGNAVUS",
@@ -299,7 +312,7 @@ pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
         plane: WorldPlane::Britannia,
         x: 239,
         y: 240,
-        closed_tile: 0x17,
+        unsealed_tile: 0x17,
     },
     WordOfPowerSeal {
         word: "VERAMOCOR",
@@ -307,7 +320,7 @@ pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
         plane: WorldPlane::Underworld,
         x: 128,
         y: 128,
-        closed_tile: 0x16,
+        unsealed_tile: 0x16,
     },
 ];
 
@@ -316,6 +329,72 @@ pub fn word_of_power_seal_for_word(word: &str) -> Option<WordOfPowerSeal> {
         .iter()
         .copied()
         .find(|seal| seal.word.eq_ignore_ascii_case(word))
+}
+
+/// `commands.md §11.1`: the scanner walks the fixed word table and accepts
+/// the first row whose complete word is a prefix of the normalized input.
+pub fn word_of_power_seal_prefix_match(word: &str) -> Option<(usize, WordOfPowerSeal)> {
+    WORD_OF_POWER_SEALS
+        .iter()
+        .copied()
+        .enumerate()
+        .find(|(_, seal)| word.starts_with(seal.word))
+}
+
+/// `catalogs/gazetteer.md §7`: shrine coordinates in the same fixed order as
+/// the eight save-backed ruin flags. Spirituality's `(0, 0)` is the published
+/// surface-map sentinel.
+pub const WORLD_SHRINE_COORDINATES: [(usize, usize); SAVE_SHRINE_RUIN_FLAG_COUNT] = [
+    (233, 66),
+    (128, 92),
+    (36, 229),
+    (73, 11),
+    (205, 45),
+    (81, 207),
+    (0, 0),
+    (231, 216),
+];
+
+const fn same_world_chunk(a: (usize, usize), b: (usize, usize)) -> bool {
+    a.0 / CHUNK_SIDE == b.0 / CHUNK_SIDE && a.1 / CHUNK_SIDE == b.1 / CHUNK_SIDE
+}
+
+pub fn word_of_power_chunk_owner(x: usize, y: usize) -> Option<usize> {
+    WORD_OF_POWER_SEALS
+        .iter()
+        .position(|seal| same_world_chunk((x, y), (seal.x, seal.y)))
+}
+
+pub fn shrine_chunk_owner(x: usize, y: usize) -> Option<usize> {
+    WORLD_SHRINE_COORDINATES
+        .iter()
+        .position(|coordinate| same_world_chunk((x, y), *coordinate))
+}
+
+/// `formats/brit-dat.md §9.1`: derive quest-gated live tiles from the shipped
+/// unsealed/intact world map. This mutates only the in-memory decoded grid.
+pub fn apply_world_quest_tile_substitutions(
+    grid: &mut [u8],
+    word_flags: &[u8; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+    shrine_flags: &[u8; SAVE_SHRINE_RUIN_FLAG_COUNT],
+) {
+    debug_assert_eq!(grid.len(), WORLD_CELLS);
+    for (index, tile) in grid.iter_mut().take(WORLD_CELLS).enumerate() {
+        let x = index % WORLD_SIDE;
+        let y = index / WORLD_SIDE;
+        if matches!(*tile, 0x16..=0x18) {
+            let open = word_of_power_chunk_owner(x, y)
+                .is_some_and(|owner| word_flags[owner] & SAVE_QUEST_TILE_FLAG_HIGH_BIT != 0);
+            if !open {
+                *tile = WORD_OF_POWER_SEALED_TILE;
+            }
+        } else if *tile == WORLD_SHRINE_TILE
+            && shrine_chunk_owner(x, y)
+                .is_some_and(|owner| shrine_flags[owner] & SAVE_QUEST_TILE_FLAG_HIGH_BIT != 0)
+        {
+            *tile = WORLD_RUINED_SHRINE_TILE;
+        }
+    }
 }
 
 /// `catalogs/gazetteer.md §6` resident name for one of the eight

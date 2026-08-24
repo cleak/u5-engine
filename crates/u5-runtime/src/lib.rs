@@ -27,6 +27,7 @@ pub mod conversation_session;
 pub mod directed_step;
 pub mod direction;
 pub mod disk_io;
+pub mod disk_prompt;
 pub mod display_driver;
 pub mod dissolve;
 pub mod dungeon_tables;
@@ -61,6 +62,7 @@ pub mod magic;
 pub mod main_loop;
 pub mod map_decoders;
 pub mod map_io;
+pub mod map_viewport_dissolve;
 pub mod menu_dispatch;
 pub mod message_transcript;
 pub use message_transcript::{dungeon_command_echo, top_down_command_echo};
@@ -78,6 +80,7 @@ pub mod party;
 pub mod play_options;
 pub mod play_state_impl;
 pub mod play_state_struct;
+pub use play_state_impl::ExplorationTurnGateOutcome;
 pub mod predicates;
 pub mod prng;
 pub mod pth;
@@ -96,11 +99,14 @@ pub mod shoppe_records;
 pub mod shops;
 pub mod shrine_virtue;
 pub mod signs_io;
+pub mod sky_view;
 pub mod start_validation;
 pub mod stat_arithmetic;
 pub mod stats_panel;
+pub mod stonegate_trapdoor;
 pub mod story_io;
 pub mod story_layout;
+pub mod subtitle_ignition;
 pub mod test_fixtures;
 pub mod text_wrap;
 pub mod tile_classes;
@@ -109,6 +115,7 @@ pub mod timing;
 pub mod tlk_control_codes;
 pub mod tlk_runner;
 pub mod town_mode;
+pub mod town_npc_mutations;
 pub mod town_tables;
 pub mod town_tables_io;
 pub mod town_tables_io_movement;
@@ -136,26 +143,31 @@ pub use animation::{
     StaticTileAnimationPass, static_tile_animation_pass,
 };
 pub use blackthorn::{
-    BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
-    BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y,
-    BLACKTHORN_CAPTURE_CONTEXT_NONE, BLACKTHORN_CHALLENGE_INPUT_LIMIT,
-    BLACKTHORN_CHALLENGE_PROMPT_COUNT, BLACKTHORN_CHALLENGE_PROMPT_TABLE,
-    BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT, BLACKTHORN_CUTSCENE_ATTENDANT_TYPE,
-    BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER, BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE,
-    BLACKTHORN_CUTSCENE_FORMAT_OUTPUT, BLACKTHORN_CUTSCENE_SECOND_PARTY_TYPE,
-    BLACKTHORN_CUTSCENE_TEMP_TILE_A, BLACKTHORN_CUTSCENE_TEMP_TILE_B,
-    BLACKTHORN_CUTSCENE_THRONE_TYPE, BLACKTHORN_FAILURE_VICTIM_SLOT,
-    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y,
-    BLACKTHORN_RESCUE_STANDING_FLOOR, BLACKTHORN_STORY_STATE_FILE,
-    BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN, BLACKTHORN_STORY_STATE_LEN,
-    BLACKTHORN_STORY_STATE_MAGIC, BlackthornCutsceneActor, BlackthornCutsceneActorPlacement,
-    BlackthornCutsceneActorState, BlackthornCutsceneBeat, BlackthornCutsceneCommand,
-    BlackthornCutsceneVm, BlackthornEntryFamily, BlackthornStoryState, KARMA_DAT_BAND_WIDTH,
-    KarmaDatTier, blackthorn_challenge_answer_matches, blackthorn_challenge_limited_input,
+    ActiveBlackthornGuardDemand, BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS,
+    BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD, BLACKTHORN_CAPTIVE_CELL_SCENE,
+    BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y, BLACKTHORN_CAPTURE_CONTEXT_NONE,
+    BLACKTHORN_CHALLENGE_INPUT_LIMIT, BLACKTHORN_CHALLENGE_PROMPT_COUNT,
+    BLACKTHORN_CHALLENGE_PROMPT_TABLE, BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT,
+    BLACKTHORN_CUTSCENE_ATTENDANT_TYPE, BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
+    BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE, BLACKTHORN_CUTSCENE_FORMAT_OUTPUT,
+    BLACKTHORN_CUTSCENE_SECOND_PARTY_TYPE, BLACKTHORN_CUTSCENE_TEMP_TILE_A,
+    BLACKTHORN_CUTSCENE_TEMP_TILE_B, BLACKTHORN_CUTSCENE_THRONE_TYPE,
+    BLACKTHORN_FAILURE_VICTIM_SLOT, BLACKTHORN_GUARD_DEMAND_DIALOG_ID, BLACKTHORN_GUARD_PASSWORD,
+    BLACKTHORN_GUARD_PASSWORD_COMPARE_LEN, BLACKTHORN_GUARD_PASSWORD_INPUT_MAX,
+    BLACKTHORN_GUARD_TRIBUTE_PER_LIVING_MEMBER, BLACKTHORN_RESCUE_HANDOFF_SCENE,
+    BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y, BLACKTHORN_RESCUE_STANDING_FLOOR,
+    BLACKTHORN_STORY_STATE_FILE, BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN,
+    BLACKTHORN_STORY_STATE_LEN, BLACKTHORN_STORY_STATE_MAGIC, BlackthornCutsceneActor,
+    BlackthornCutsceneActorPlacement, BlackthornCutsceneActorState, BlackthornCutsceneBeat,
+    BlackthornCutsceneCommand, BlackthornCutsceneVm, BlackthornEntryFamily,
+    BlackthornGuardDemandPrompt, BlackthornGuardDemandResolution, BlackthornGuardDemandStart,
+    BlackthornStoryState, KARMA_DAT_BAND_WIDTH, KarmaDatTier, begin_blackthorn_guard_demand,
+    blackthorn_challenge_answer_matches, blackthorn_challenge_limited_input,
     blackthorn_challenge_prompt, blackthorn_cutscene_actor, blackthorn_cutscene_beat_commands,
     blackthorn_cutscene_tile_index, blackthorn_rescue_post_print_standing,
     blackthorn_rescue_verdict_record, karma_dat_tier, load_blackthorn_story_state,
-    lord_british_camp_verdict_record, write_blackthorn_story_state,
+    lord_british_camp_verdict_record, resolve_blackthorn_guard_demand,
+    write_blackthorn_story_state,
 };
 pub use boot::{
     DATA_OVL_FILENAME, DRIVER_SELECTOR_CGA, DRIVER_SELECTOR_EGA, DRIVER_SELECTOR_HERCULES,
@@ -204,25 +216,25 @@ pub use combat_frame::*;
 pub use combat_setup::*;
 pub use combat_stats::*;
 pub use commands::{
-    BRITANNIA_CHUNK_MAP_COLUMNS, BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE, BRITANNIA_CHUNK_MAP_ROWS,
     Command, CommandEcho, CommandEchoJoin, CommandEchoMode, DEATH_VISION_OBJECT_CLASS,
     DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW, DIRECTION_PROMPT_CANCEL_LITERAL,
     DUNGEON_EXIT_TO_BRITANNIA_NARRATION, DUNGEON_EXIT_TO_UNDERWORLD_NARRATION,
     DUNGEON_MOVEMENT_BLOCKED_REFUSAL, DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL,
     DUNGEON_ROOM_ENTRY_NARRATION, DungeonMovementEcho, ITEM_SELECTION_PROMPT,
-    LOCAL_VIEW_CELL_PIXEL_SCALE, LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome,
-    PARTY_SELECTION_PROMPT, PUSH_NOT_HERE_REFUSAL, PUSHABLE_CANNON_FLOOR_STAMP,
-    PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily, SELECTION_CANCELLED_LITERAL,
-    TOWN_CANNON_TILE_FIRST, TOWN_CANNON_TILE_LAST, VIEW_NO_GEM_REFUSAL, ViewCommandOutcome,
-    WISHING_WELL_WISH_KEYWORDS, WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, YELL_INPUT_MAX_LEN,
-    YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE,
-    YellInputContext, command_echo, command_for_letter, death_vision_object_class,
-    dungeon_display_level, local_view_class_for_tile, movement_echo, new_order_outcome,
-    new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile, pushable_tile_family,
+    LOCAL_VIEW_CELL_PIXEL_SCALE, LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y,
+    LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome, PARTY_SELECTION_PROMPT,
+    PUSH_NOT_HERE_REFUSAL, PUSHABLE_CANNON_FLOOR_STAMP, PUSHABLE_GENERIC_FLOOR_STAMP,
+    PushableTileFamily, SELECTION_CANCELLED_LITERAL, TOWN_CANNON_TILE_FIRST, TOWN_CANNON_TILE_LAST,
+    VIEW_NO_GEM_REFUSAL, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
+    WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE,
+    YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_echo,
+    command_for_letter, death_vision_object_class, dungeon_display_level,
+    local_view_class_for_tile, movement_echo, new_order_outcome, new_order_swap_accepted,
+    pushable_facing_index, pushable_oriented_tile, pushable_tile_family,
     sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
     surface_wishing_well_look_tile, town_cannon_tile_fire_direction, town_fountain_drink_accepts,
     unassigned_refusal_echo, view_command_outcome, wishing_well_grant_scene, wishing_well_wish,
-    wishing_well_wish_accepted,
+    wishing_well_wish_accepted, yell_input_context, yell_routes_to_ship_sails,
 };
 pub use common_words_io::{
     COMMON_WORD_DICTIONARY_FILE, CommonWordDictionary, CommonWordDictionaryError,
@@ -263,6 +275,7 @@ pub use direction::{
     dungeon_facing_from_encoding, dungeon_facing_label_field, dungeon_level_label_digit,
 };
 pub use disk_io::*;
+pub use disk_prompt::*;
 pub use display_driver::*;
 pub use dissolve::{
     DissolveAbortGate, DissolveVisitOrder, RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL,
@@ -372,16 +385,22 @@ pub use intro_preflourish::{
     PreFlourishOutcome, load_intro_font_slots, run_intro_pre_flourish_phase,
 };
 pub use jimmy::{
-    DOOR_AUTO_CLOSE_TURNS, DoorAutoCloseTick, JIMMY_CHEST_THRESHOLD_BIAS,
-    JIMMY_CHEST_THRESHOLD_DIVISOR, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW,
-    JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER, JIMMY_NPC_PICKPOCKET_KARMA_REWARD, JIMMY_OBJECT_DIE_HIGH,
-    JIMMY_OBJECT_DIE_LOW, MAGIC_UNLOCK_CLOSED_WOODEN_A, MAGIC_UNLOCK_CLOSED_WOODEN_B,
-    MAGIC_UNLOCK_OPEN_WOODEN_A, MAGIC_UNLOCK_OPEN_WOODEN_B, OUTDOOR_KLIMB_FALL_DAMAGE_MAX,
-    OUTDOOR_KLIMB_FALL_DAMAGE_MIN, OUTDOOR_KLIMB_FALL_DIE_HIGH, OUTDOOR_KLIMB_FALL_DIE_LOW,
-    OverworldKlimbEntryGate, door_auto_close_tick, dungeon_chest_jimmy_succeeds,
-    dungeon_chest_jimmy_threshold, jimmy_door_succeeds, magic_unlock_door_rewrite,
-    object_chest_jimmy_succeeds, object_chest_jimmy_threshold, outdoor_klimb_member_falls,
-    overworld_klimb_entry_gate,
+    DOOR_AUTO_CLOSE_TURNS, DUNGEON_OPEN_CHEST_CLASS, DUNGEON_VISIT_MARKER_BIT, DoorAutoCloseTick,
+    JIMMY_CHEST_THRESHOLD_BIAS, JIMMY_CHEST_THRESHOLD_DIVISOR, JIMMY_DOOR_DIE_HIGH,
+    JIMMY_DOOR_DIE_LOW, JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER, JIMMY_MANACLES_TILE,
+    JIMMY_OBJECT_DIE_HIGH, JIMMY_OBJECT_DIE_LOW, JIMMY_PRISONER_RELEASE_KARMA_REWARD,
+    JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE, MAGIC_UNLOCK_CLOSED_WOODEN_A,
+    MAGIC_UNLOCK_CLOSED_WOODEN_B, MAGIC_UNLOCK_OPEN_WOODEN_A, MAGIC_UNLOCK_OPEN_WOODEN_B,
+    OUTDOOR_KLIMB_FALL_DAMAGE_MAX, OUTDOOR_KLIMB_FALL_DAMAGE_MIN, OUTDOOR_KLIMB_FALL_DIE_HIGH,
+    OUTDOOR_KLIMB_FALL_DIE_LOW, OverworldKlimbEntryGate, TOWN_DOOR_CLEARED_TILE,
+    TOWN_DOOR_MAGIC_PLAIN_TILE, TOWN_DOOR_MAGIC_WINDOWED_TILE, TOWN_DOOR_PLAIN_LOCKED_TILE,
+    TOWN_DOOR_PLAIN_UNLOCKED_TILE, TOWN_DOOR_WINDOWED_LOCKED_TILE,
+    TOWN_DOOR_WINDOWED_UNLOCKED_TILE, TOWN_OPEN_ALREADY_OPEN_TILE, door_auto_close_tick,
+    dungeon_chest_jimmy_succeeds, dungeon_chest_jimmy_threshold, dungeon_open_chest_rewrite,
+    jimmy_door_succeeds, jimmy_locked_door_rewrite, jimmy_magic_locked_door, jimmy_restraint_tile,
+    magic_unlock_door_rewrite, object_chest_jimmy_succeeds, object_chest_jimmy_threshold,
+    openable_town_door, outdoor_klimb_member_falls, overworld_klimb_entry_gate,
+    town_command_door_tile,
 };
 pub use karma::{
     CODEX_TURNIN_STAT_CAP, CODEX_TURNIN_STAT_INCREMENT, KARMA_CROP_OR_TABLE_FOOD_DEBIT,
@@ -427,8 +446,9 @@ pub use magic::{
     MMIX_QUANTITY_PROMPT_MESSAGE, MMIX_SPELL_PROMPT_MESSAGE, RUNE_SYLLABLE_VOCABULARY,
     SPELL_SCENE_BIT_COMBAT, SPELL_SCENE_BIT_DUNGEON, SPELL_SCENE_BIT_INDOOR,
     SPELL_SCENE_BIT_OVERWORLD, SPELL_SELECTOR_IGNORED_LETTERS, SPELL_SELECTOR_MAX_LEN,
-    SpellRouteFamily, SpellSceneClass, active_effect_tag_for_byte, cast_dispatcher_gate,
-    combat_interference_blocks, conjure_summon_for_roll, field_spell_kind_for_dungeon_byte,
+    SpellRouteFamily, SpellSceneClass, VANISH_CLEARED_TILE, VANISH_REMOVABLE_TILES,
+    active_effect_tag_for_byte, cast_dispatcher_gate, combat_interference_blocks,
+    conjure_summon_for_roll, directed_utility_tile_rewrite, field_spell_kind_for_dungeon_byte,
     heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable, sextant_coordinate_letters,
     spell_allowed_in_scene, spell_charge_add_capped, spell_circle_for, spell_combat_field_kind,
     spell_common_name, spell_field_placement_byte, spell_indoor_absorbs, spell_mana_cost,
@@ -440,19 +460,24 @@ pub use main_loop::{
     DUNGEON_ENTRY_SURFACE_Y, DUNGEON_ENTRY_SURFACE_Z, DUNGEON_ENTRY_UNDERWORLD_X,
     DUNGEON_ENTRY_UNDERWORLD_Y, DUNGEON_ENTRY_UNDERWORLD_Z, DUNGEON_FACING_EAST,
     DUNGEON_FACING_NORTH, DUNGEON_FACING_SOUTH, DUNGEON_FACING_WEST, DungeonEntrySeed,
-    DungeonMovementAction, OuterLoopFlags, SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST,
-    SCENE_DUNGEON_FAMILY_LAST, SCENE_DUNGEON_NAMED_FIRST, SCENE_DUNGEON_NAMED_LAST,
-    SCENE_INTRO_FIRST, SCENE_INTRO_LAST, SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST,
-    SCENE_TOWN_FAMILY_LAST, SceneRoute, WORD_OF_POWER_SEAL_XOR, WORD_OF_POWER_SEALS,
-    WordOfPowerSeal, WorldTickPath, dungeon_entry_seed, dungeon_facing_back_delta,
-    dungeon_facing_forward_delta, dungeon_facing_left_delta, dungeon_facing_right_delta,
-    dungeon_facing_turn_around, dungeon_facing_turn_left, dungeon_facing_turn_right,
-    dungeon_movement_action, dungeon_record_index, dungeon_resident_name,
-    dungeon_scene_for_word_of_power, dungeon_word_of_power, mode_minute_increment,
-    save_scene_byte_normalised, scene_route, word_of_power_seal_for_word, world_tick_path,
+    DungeonMovementAction, PARTY_SLEEP_LINE, PartyCapability, SCENE_COMBAT_TEMPORARY,
+    SCENE_DUNGEON_FAMILY_FIRST, SCENE_DUNGEON_FAMILY_LAST, SCENE_DUNGEON_NAMED_FIRST,
+    SCENE_DUNGEON_NAMED_LAST, SCENE_INTRO_FIRST, SCENE_INTRO_LAST, SCENE_OVERWORLD,
+    SCENE_TOWN_FAMILY_FIRST, SCENE_TOWN_FAMILY_LAST, SceneRoute, TOWN_SLEEP_WAKE_ROLL_MAX,
+    WORD_OF_POWER_SEALED_TILE, WORD_OF_POWER_SEALS, WORLD_RUINED_SHRINE_TILE,
+    WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WordOfPowerSeal, WordOfPowerTargetOutcome,
+    WorldTickPath, apply_world_quest_tile_substitutions, dungeon_entry_seed,
+    dungeon_facing_back_delta, dungeon_facing_forward_delta, dungeon_facing_left_delta,
+    dungeon_facing_right_delta, dungeon_facing_turn_around, dungeon_facing_turn_left,
+    dungeon_facing_turn_right, dungeon_movement_action, dungeon_record_index,
+    dungeon_resident_name, dungeon_scene_for_word_of_power, dungeon_word_of_power,
+    mode_minute_increment, party_capability, save_scene_byte_normalised, scene_route,
+    shrine_chunk_owner, word_of_power_chunk_owner, word_of_power_seal_for_word,
+    word_of_power_seal_prefix_match, world_tick_path,
 };
 pub use map_decoders::*;
 pub use map_io::*;
+pub use map_viewport_dissolve::*;
 pub use message_window::*;
 pub use misc_tables::*;
 pub use misc_tables_io::*;
@@ -492,7 +517,7 @@ pub use moongate_transit::{
     run_moongate_transit_presentation,
 };
 pub use npc_runtime::{
-    DoorTracker, LocationMarkers, NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST,
+    DoorTracker, LocationNpcStartMarkers, NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST,
     NPC_DIALOG_ID_HIGH_LAST, NPC_DIALOG_ID_NONE, NPC_DIALOG_ID_TLK_SENTINEL,
     NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS, NPC_FLOOR_LINK_TILE_C8, NPC_FLOOR_LINK_TILE_C9,
     NPC_HIDDEN_SPRITE_TILE, NPC_PATH_DIR_EAST, NPC_PATH_DIR_NORTH, NPC_PATH_DIR_SOUTH,
@@ -502,9 +527,9 @@ pub use npc_runtime::{
     NPC_STATE_CLIMB_UP_OFF_FLOOR, NPC_STATE_DESCEND_TOWARD_TARGET, NPC_STATE_EMPTY, NPC_STATE_IDLE,
     NPC_STATE_INPLANE_MOVE, NPC_STATE_PARKED_OFF_FLOOR, NPC_STATE_REPLAY_QUEUE,
     NPC_STUCK_REPLAN_THRESHOLD, NPC_TYPE_DEFAULT_HUMAN_SPRITE, NPC_TYPE_EMPTY,
-    NPC_TYPE_RUNTIME_PLAYER_MIRROR, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction,
-    NpcScheduleState, NpcShopTrigger, NpcTypeByteClass, RuntimeNpc, npc_ai_behavior,
-    npc_dialog_id_kind, npc_dynamic_obstacle_blocks, npc_hidden_sprite_slot, npc_link_action,
+    NPC_TYPE_SHADOWLORD_ACTOR, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction, NpcScheduleState,
+    NpcShopTrigger, NpcTypeByteClass, RuntimeNpc, npc_ai_behavior, npc_dialog_id_kind,
+    npc_dynamic_obstacle_blocks, npc_hidden_sprite_slot, npc_link_action,
     npc_path_direction_offset, npc_path_direction_opposite, npc_path_tile_open,
     npc_pathfind_visit_stamp, npc_schedule_state_classify, npc_schedule_state_for_floor_transition,
     npc_shop_trigger, npc_state_off_floor_or_empty, npc_stuck_counter_forces_replan,
@@ -547,13 +572,13 @@ pub use party::{
 };
 pub use play_options::*;
 pub use play_state_impl::{
-    town_free_roaming_direction, town_free_roaming_facing_byte, town_free_roaming_object_eligible,
+    outdoor_active_object_step_accepts_tile, town_free_roaming_direction,
+    town_free_roaming_facing_byte, town_free_roaming_object_eligible,
     town_free_roaming_pen_tile_blocks,
 };
 pub use play_state_struct::{
-    CombatPotionPresentation, CombatPotionPresentationKind, MESSAGE_TRANSCRIPT_CAPACITY,
-    MessageEntry, PlayState, ViewOverlay, ViewOverlayKind, ViewOverlayMode, WhitePotionSweep,
-    WorldOverlayCache, WorldReturn,
+    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, PlayState, ViewOverlay, ViewOverlayKind,
+    ViewOverlayMode, WhitePotionSweep, WorldOverlayCache, WorldReturn,
 };
 pub use predicates::*;
 pub use prng::*;
@@ -564,9 +589,8 @@ pub use pth::{
 };
 pub use quest_flags::{
     CONVERSATION_CLEANUP_GOLD_DEBIT_MAX, CONVERSATION_CLEANUP_GOLD_DEBIT_MIN,
-    CONVERSATION_CLEANUP_SENTINEL_ALLOW, ConversationCleanupReconciliation,
-    ConversationLetterAction, ConversationPassword, QUEST_GRAPH_NODE_CLASSES, QuestGraphNodeClass,
-    conversation_cleanup_gold_debit_amount, conversation_cleanup_reconciliation,
+    CONVERSATION_CLEANUP_SENTINEL_ALLOW, ConversationLetterAction, ConversationPassword,
+    QUEST_GRAPH_NODE_CLASSES, QuestGraphNodeClass, conversation_cleanup_gold_debit_amount,
     conversation_cleanup_runs_warning, conversation_letter_action, conversation_password,
     tlk_scene_branch_is_set, tlk_scene_branch_mask, tlk_scene_branch_set,
 };
@@ -578,10 +602,10 @@ pub use question_io::{
 };
 pub use report::run_report;
 pub use rest_camp::{
-    COMPLETED_LONG_CAMP_COOLDOWN_HOURS, COMPLETED_LONG_CAMP_HP_GAIN_MAX,
-    COMPLETED_LONG_CAMP_HP_GAIN_MIN, COMPLETED_LONG_CAMP_MARKER_ROLL_PERCENT,
-    COMPLETED_LONG_CAMP_MIN_HOURS, camp_cooldown_after_hour_rollover,
-    camp_cooldown_blocks_recovery,
+    CAMP_NO_EFFECT_MESSAGE_OFFSET, CAMP_SUCCESS_MESSAGE_OFFSET, COMPLETED_LONG_CAMP_COOLDOWN_HOURS,
+    COMPLETED_LONG_CAMP_HP_GAIN_MAX, COMPLETED_LONG_CAMP_HP_GAIN_MIN,
+    COMPLETED_LONG_CAMP_MIN_HOURS, CampResultMessages, camp_cooldown_after_hour_rollover,
+    camp_cooldown_blocks_recovery, load_camp_result_messages, parse_camp_result_messages,
 };
 pub use return_to_view::{
     RTV_ACTOR_SLOTS, RTV_ACTOR_TRANSPARENT_PIXEL, RTV_CAPTION_CENTRE_COLUMN, RTV_CAPTION_TEXT_ROW,
@@ -633,21 +657,35 @@ pub use signs_io::{
     SIGNS_DAT_SCENE_DIRECTORY_BYTES, SIGNS_DAT_SCENE_DIRECTORY_SLOTS, SignBodyByteKind, SignRecord,
     decode_sign_payload, find_sign, load_sign_records, parse_sign_records, sign_body_byte_kind,
 };
+pub use sky_view::*;
 pub use start_validation::*;
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use stats_panel::{
-    INN_PICKUP_REGISTER_BOTTOM, INN_PICKUP_REGISTER_FRAME_RIGHT, INN_PICKUP_REGISTER_INITIAL_RIGHT,
-    INN_PICKUP_REGISTER_LEFT, INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX, INN_PICKUP_REGISTER_TOP,
-    MAIN_TEXT_WINDOW_INDEX, MESSAGE_TEXT_WINDOW_RIGHT, PROMPT_TEXT_WINDOW_INDEX,
-    STATS_PANEL_HP_CELLS, STATS_PANEL_NAME_CELLS, STATS_PANEL_PARTY_ROWS, STATS_PANEL_TEXT_BOTTOM,
-    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_TOP,
-    STATS_PANEL_TEXT_WINDOW_INDEX, STATS_PANEL_WIDTH, StatsPanelCombatRowOverlay,
-    TALK_SHOP_TEXT_WINDOW_INDEX, configure_play_text_windows, configure_talk_shop_text_window,
+    ARMS_SELL_BROWSER_BORDER_FIRST_ROW, ARMS_SELL_BROWSER_BORDER_LAST_ROW,
+    ARMS_SELL_BROWSER_FRAME_BOTTOM, ARMS_SELL_BROWSER_FRAME_RIGHT,
+    ARMS_SELL_BROWSER_INITIAL_BOTTOM, ARMS_SELL_BROWSER_INITIAL_RIGHT, ARMS_SELL_BROWSER_LEFT,
+    ARMS_SELL_BROWSER_PAGE_BADGE_CLOSE, ARMS_SELL_BROWSER_PAGE_BADGE_LOCAL_COLUMN,
+    ARMS_SELL_BROWSER_PAGE_BADGE_LOCAL_ROW, ARMS_SELL_BROWSER_PAGE_BADGE_OPEN,
+    ARMS_SELL_BROWSER_PAGE_GLYPH_BOTH, ARMS_SELL_BROWSER_PAGE_GLYPH_DOWN,
+    ARMS_SELL_BROWSER_PAGE_GLYPH_UP, ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX, ARMS_SELL_BROWSER_TOP,
+    FULL_SCREEN_TEXT_WINDOW_INDEX, INN_PICKUP_REGISTER_BORDER_FIRST_ROW,
+    INN_PICKUP_REGISTER_BORDER_LAST_ROW, INN_PICKUP_REGISTER_BOTTOM,
+    INN_PICKUP_REGISTER_FRAME_RIGHT, INN_PICKUP_REGISTER_INITIAL_RIGHT, INN_PICKUP_REGISTER_LEFT,
+    INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX, INN_PICKUP_REGISTER_TOP, MAIN_TEXT_WINDOW_INDEX,
+    MESSAGE_TEXT_WINDOW_INDEX, MESSAGE_TEXT_WINDOW_RIGHT, PROMPT_TEXT_WINDOW_INDEX,
+    SHOP_SIDE_PANEL_LEFT_BORDER_COLUMN, SHOP_SIDE_PANEL_RIGHT_BORDER_COLUMN, STATS_PANEL_HP_CELLS,
+    STATS_PANEL_NAME_CELLS, STATS_PANEL_PARTY_ROWS, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_TOP, STATS_PANEL_TEXT_WINDOW_INDEX, STATS_PANEL_WIDTH,
+    StatsPanelCombatRowOverlay, TALK_SHOP_TEXT_WINDOW_INDEX, UNUSED_TEXT_WINDOW_INDEX,
+    active_arms_sell_browser, active_arms_sell_page_indicator, active_shop_side_panel_border_rows,
+    arms_sell_browser_row, arms_sell_page_indicator_bytes, configure_play_text_windows,
+    configure_talk_shop_text_window, paint_arms_sell_browser_text_window,
     paint_inn_pickup_register_text_window, paint_message_text_window, paint_prompt_text_window,
     paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     paint_talk_shop_text_window, render_play_text_window_ascii, render_play_text_window_system,
     render_stats_panel, stats_panel_active_cursor_visible, stats_panel_combat_row_overlay,
 };
+pub use stonegate_trapdoor::*;
 pub use story_io::{
     INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP, INTRO_START_MENU_REVEAL_RECT,
     INTRO_STEP_0_TRANSITION_STRIPS, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
@@ -670,6 +708,7 @@ pub use story_layout::{
     PROPORTIONAL_LINE_STRIDE, PlacedProportionalGlyph, ProportionalLayoutDescriptor,
     intro_doorway_paragraph_boxes, intro_story_paragraph_box, layout_proportional_paragraph_glyphs,
 };
+pub use subtitle_ignition::*;
 pub use text_wrap::{
     EmitterByteKind, ParagraphByteKind, ProportionalRendererByteKind, TEXT_COLOR_BACKGROUND_SHIFT,
     TEXT_COLOR_FOREGROUND_MASK, TEXT_CTRL_CENTRE_OFF, TEXT_CTRL_CENTRE_ON, TEXT_CTRL_CLEAR_WINDOW,
@@ -696,8 +735,7 @@ pub use tile_classes::{
 pub use tile_helpers::*;
 pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
 pub use tlk_control_codes::{
-    CASTLE_TLK_NPCS, COMMON_WORD_DICTIONARY_ENTRIES, COMMON_WORD_DICTIONARY_NUL_SENTINELS,
-    CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT, CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT,
+    CASTLE_TLK_NPCS, COMMON_WORD_DICTIONARY_ENTRIES, COMMON_WORD_DICTIONARY_NULL_REFERENCES,
     CONVERSATION_SHARED_NO_SLOT_SENTINEL, DWELLING_TLK_NPCS, KEEP_TLK_NPCS,
     QUEST_PASSWORD_OPPRESSION, QUEST_PASSWORD_RESISTANCE, RESERVED_KEYWORD_FUNCTIONAL_COUNT,
     RESERVED_KEYWORD_FUNCTIONAL_WORDS, RESERVED_KEYWORD_REBUKE_COUNT,
@@ -712,15 +750,14 @@ pub use tlk_control_codes::{
     TLK_CODE_WAIT_KEY, TLK_CONTROL_CODE_FIRST, TLK_CONTROL_CODE_LAST, TLK_DICTIONARY_TOKEN_FIRST,
     TLK_DICTIONARY_TOKEN_LAST, TLK_DOUBLE_QUOTE_ENCODED, TLK_EMPTY_INPUT_BYE_MESSAGE,
     TLK_GENERIC_SIGNAL_CAP, TLK_GENERIC_SIGNAL_COUNT, TLK_GOLD_PAYMENT_ARGUMENT_BYTES,
-    TLK_GOLD_PAYMENT_PAID_LABEL, TLK_GOLD_PAYMENT_REFUSED_LABEL, TLK_HEADER_ENTRY_LEN,
-    TLK_HEADER_FIXED_READ, TLK_IF_ELSE_ALT_ARGUMENT_BYTES, TLK_INPUT_MAX_LEN, TLK_KEYWORD_PROMPT,
-    TLK_LABEL_BYTE_COUNT, TLK_LABEL_FIRST, TLK_LABEL_LAST, TLK_LEADING_ENTRY_COUNT,
-    TLK_NO_KEYWORD_MATCH_MESSAGE, TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES,
-    TLK_OPENING_DESCRIPTION_PREFIX, TLK_PRINTABLE_TEXT_FIRST, TLK_PRINTABLE_TEXT_LAST,
-    TLK_RESERVED_REBUKE_MESSAGE, TLK_RESERVED_REBUKE_PAUSE_LIMIT, TLK_SENTINEL_NPC_ID,
-    TLK_TEXT_XOR_MASK, TOWNE_TLK_NPCS, TalkRefusal, TlkActionDispatchVerb, TlkByteKind,
-    TlkByteRunnerClass, TlkFileClass, TlkLeadingEntry, TlkPlayerInputKind, TlkPrintMaskState,
-    classify_tlk_byte, conversation_cleanup_gold_debit_from_seed, is_tlk_label_byte,
+    TLK_GOLD_PAYMENT_REFUSAL_MESSAGE, TLK_HEADER_ENTRY_LEN, TLK_HEADER_FIXED_READ,
+    TLK_IF_ELSE_ALT_ARGUMENT_BYTES, TLK_INPUT_MAX_LEN, TLK_KEYWORD_PROMPT, TLK_LABEL_BYTE_COUNT,
+    TLK_LABEL_FIRST, TLK_LABEL_LAST, TLK_LEADING_ENTRY_COUNT, TLK_NO_KEYWORD_MATCH_MESSAGE,
+    TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES, TLK_OPENING_DESCRIPTION_PREFIX,
+    TLK_PRINTABLE_TEXT_FIRST, TLK_PRINTABLE_TEXT_LAST, TLK_RESERVED_REBUKE_MESSAGE,
+    TLK_RESERVED_REBUKE_PAUSE_LIMIT, TLK_SENTINEL_NPC_ID, TLK_TEXT_XOR_MASK, TOWNE_TLK_NPCS,
+    TalkRefusal, TlkActionDispatchVerb, TlkByteKind, TlkByteRunnerClass, TlkFileClass,
+    TlkLeadingEntry, TlkPlayerInputKind, TlkPrintMaskState, classify_tlk_byte, is_tlk_label_byte,
     reserved_functional_keyword_index, reserved_keyword_effect, reserved_rebuke_keyword_index,
     shoppe_dictionary_index, talk_liveness_refusal, talk_status_tile_refusal,
     tlk_action_dispatch_is_signal_flag, tlk_action_dispatch_verb, tlk_ask_party_name_match,
@@ -728,6 +765,7 @@ pub use tlk_control_codes::{
     tlk_if_else_alt_branches, tlk_introducer_argument_count, tlk_keyword_matches, tlk_label_index,
     tlk_leading_entry_index, tlk_player_input_kind,
 };
+pub use tlk_runner::{TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText};
 pub use town_mode::{
     CASTLE_NPC_FILENAME, CASTLE_TLK_FILENAME, DWELLING_NPC_FILENAME, DWELLING_TLK_FILENAME,
     KEEP_NPC_FILENAME, KEEP_TLK_FILENAME, LOCATION_DAT_BLOCK_LEN, LOCATION_DAT_BLOCKS_PER_FILE,
@@ -744,24 +782,36 @@ pub use town_mode::{
     SCENE_MINOC, SCENE_MOONGLOW, SCENE_NEW_MAGINCIA, SCENE_NORTH_BRITANNY, SCENE_PAWS,
     SCENE_SERPENTS_HOLD, SCENE_SKARA_BRAE, SCENE_STONEGATE, SCENE_STORMCROW, SCENE_THE_LYCAEUM,
     SCENE_TRINSIC, SCENE_WAVEGUIDE, SCENE_WEST_BRITANNY, SCENE_WINDEMERE, SCENE_YEW,
-    TOWN_ARREST_JAIL_FLOOR, TOWN_ARREST_JAIL_SCENE, TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y,
+    SHADOWLORD_BLIGHT_FRUIT_TREE_TILE, SHADOWLORD_BLIGHT_HOLLOW_STUMP_TILE,
+    SHADOWLORD_BLIGHT_PLOWED_PATCH_TILE, SHADOWLORD_BLIGHT_ROLL_HIGH,
+    SHADOWLORD_BLIGHT_STANDING_CROP_TILE, SHADOWLORD_TOWN_ENTRY_SKIP_Y,
+    SHADOWLORD_TOWN_INSTALL_ROWS, SHADOWLORD_TOWN_INSTALL_X, TOWN_ARREST_JAIL_FLOOR,
+    TOWN_ARREST_JAIL_SCENE, TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y,
     TOWN_DAWN_DUSK_GATE_CLOSED_TILE, TOWN_DAWN_DUSK_GATE_MARKER_TILE,
-    TOWN_DAWN_DUSK_GATE_OPEN_TILE, TOWN_DAWN_DUSK_GATE_TOGGLE_XOR, TOWN_EXIT_THRESHOLD_TILE,
-    TOWN_EXIT_UNDERWORLD_SCENE, TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NIGHT_BAND_DAWN_HOUR,
-    TOWN_NIGHT_BAND_DUSK_HOUR, TOWN_NPC_BLOCK_BYTES, TOWN_NPC_ROSTER_SLOTS, TOWN_STAIR_TILE_FIRST,
-    TOWN_STAIR_TILE_LAST, TOWN_TILE_DASH_MARKER, TOWN_TILE_NPC_START_A, TOWN_TILE_NPC_START_B,
-    TOWN_TILE_PERIOD_MARKER, TOWN_TILE_SPAWN_ASTERISK, TOWNE_NPC_FILENAME, TOWNE_TLK_FILENAME,
-    TownArrestPrompt, TownLocationClass, TownNpcAlarmMarker, TownNpcAlarmState,
+    TOWN_DAWN_DUSK_GATE_OPEN_TILE, TOWN_DAWN_DUSK_GATE_TOGGLE_XOR, TOWN_EXIT_UNDERWORLD_SCENE,
+    TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NIGHT_BAND_DAWN_HOUR, TOWN_NIGHT_BAND_DUSK_HOUR,
+    TOWN_NPC_ALARM_GUARD_TYPE, TOWN_NPC_ALARM_LICH_TYPE, TOWN_NPC_BLOCK_BYTES,
+    TOWN_NPC_BRUSHOFF_DIALOG_ID, TOWN_NPC_BRUSHOFF_RESPONSE, TOWN_NPC_COWERING_DIALOG_ID,
+    TOWN_NPC_COWERING_RESPONSE, TOWN_NPC_FORCED_FLIGHT_AI, TOWN_NPC_FORCED_PURSUIT_NEAR_AI,
+    TOWN_NPC_FORCED_PURSUIT_NEAR_TYPE_CUTOFF, TOWN_NPC_FORCED_PURSUIT_RANDOM_AI,
+    TOWN_NPC_ORDINARY_TYPE_FIRST, TOWN_NPC_ORDINARY_TYPE_LAST, TOWN_NPC_ROSTER_SLOTS,
+    TOWN_STAIR_TILE_FIRST, TOWN_STAIR_TILE_LAST, TOWN_TILE_BEACON_LIGHT_SOURCE,
+    TOWN_TILE_FRUIT_TREE, TOWN_TILE_NPC_START_A, TOWN_TILE_NPC_START_B, TOWN_TILE_STANDING_CROP,
+    TOWNE_NPC_FILENAME, TOWNE_TLK_FILENAME, TownArrestPrompt, TownLocationClass,
     TownNpcAttackResolution, TownStairIntent, TownTileMarker, WORLD_LOCATION_TABLE_DUNGEON_ROWS,
-    WORLD_LOCATION_TABLE_TOTAL_ROWS, WORLD_LOCATION_TABLE_TOWN_ROWS, location_dat_filename,
-    npc_dialog_index_offset, npc_roster_filename, npc_schedule_hour_at_boundary,
-    npc_schedule_record_offset, npc_schedule_waypoint_for_hour, npc_sub_map_offset,
-    npc_tlk_filename, npc_type_byte_offset, town_dawn_dusk_gate_pass_fires_at_hour,
-    town_dawn_dusk_gate_toggle, town_dawn_dusk_substitution_active, town_entry_is_jail_wakeup,
-    town_exit_lands_underworld, town_floor_offset, town_location_class,
-    town_npc_activation_mask_eligible, town_npc_attack_resolution, town_npc_type_guard_like,
-    town_per_class_index, town_resident_name, town_stair_intent, town_tile_marker,
-    world_location_table_scene_for_row,
+    WORLD_LOCATION_TABLE_TOTAL_ROWS, WORLD_LOCATION_TABLE_TOWN_ROWS, apply_shadowlord_blight,
+    location_dat_filename, npc_dialog_index_offset, npc_roster_filename,
+    npc_schedule_hour_at_boundary, npc_schedule_record_offset, npc_schedule_waypoint_for_hour,
+    npc_sub_map_offset, npc_tlk_filename, npc_type_byte_offset, shadowlord_town_install_row,
+    town_dawn_dusk_gate_pass_fires_at_hour, town_dawn_dusk_gate_toggle,
+    town_dawn_dusk_substitution_active, town_entry_is_jail_wakeup, town_exit_lands_underworld,
+    town_floor_offset, town_location_class, town_npc_activation_mask_eligible,
+    town_npc_attack_resolution, town_npc_type_guard_like, town_per_class_index, town_resident_name,
+    town_stair_intent, town_tile_marker, world_location_table_scene_for_row,
+};
+pub use town_npc_mutations::{
+    TOWN_NPC_MUTATIONS_FILENAME, TownNpcMutation, load_town_npc_mutations,
+    upsert_town_npc_mutation, write_town_npc_mutations,
 };
 pub use town_tables::*;
 pub use town_tables_io::*;
@@ -770,7 +820,7 @@ pub use transport::{
     BoardVehicleCandidate, BoardableFamily, CARPET_BOARDING_EAST_MARKER,
     CARPET_BOARDING_NORTH_MARKER, CARPET_MARKER_FRAMES, CARPET_MOUNTED, CARPET_PARKED,
     FRIGATE_PURCHASE_HULL, FRIGATE_PURCHASE_SKIFFS, HORSE_MOUNTED_FIRST, HORSE_MOUNTED_LAST,
-    HORSE_PARKED_FIRST, HORSE_PARKED_LAST, PendingVehicleAcquisition,
+    HORSE_PARKED_FIRST, HORSE_PARKED_LAST, PendingVehicleAcquisition, PendingVehicleSaveState,
     SHIP_BOARDING_HULL_WARNING_THRESHOLD, SHIP_LOSS_DROWNING_ITERATION_GUARD, SHIP_PARKED_FIRST,
     SHIP_PARKED_LAST, SHIP_SUNK_MESSAGE, SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST,
     ShipBoardingWarnings, ShipLossFallback, TRANSPORT_MARKER_SPRITE_SUPPRESSED, TransportState,
@@ -856,4 +906,5 @@ mod tests {
     include!("tests_inline/chunk_29.rs");
     include!("tests_inline/chunk_30.rs");
     include!("tests_inline/chunk_31.rs");
+    include!("tests_inline/chunk_32.rs");
 }

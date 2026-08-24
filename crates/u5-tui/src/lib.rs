@@ -18,11 +18,12 @@ pub use cli::{
 };
 pub use intro_loop::run_intro_menu_loop;
 pub use play_loop::{
-    ansi_function_key, ansi_navigation_key, handle_empty_play_input, handle_play_script_command,
-    is_music_toggle_token, is_simple_typeahead_key, is_typeahead_toggle_token,
-    play_input_key_and_suffix, play_input_typeahead_chars, play_script_command_label,
-    play_script_idle_tick_count, play_script_state_line, play_state_accepts_typeahead,
-    print_play_frame, print_play_script_snapshot, raster_diagnostic_line, raster_frame_kind,
+    ansi_function_key, ansi_navigation_key, complete_headless_blocking_presentations,
+    handle_empty_play_input, handle_play_script_command, is_music_toggle_token,
+    is_simple_typeahead_key, is_typeahead_toggle_token, play_input_key_and_suffix,
+    play_input_typeahead_chars, play_script_command_label, play_script_idle_tick_count,
+    play_script_state_line, play_state_accepts_typeahead, print_play_frame,
+    print_play_script_snapshot, raster_diagnostic_line, raster_frame_kind,
     replay_play_script_commands, run_play_loop, run_play_script_commands,
     unclassified_escape_sequence,
 };

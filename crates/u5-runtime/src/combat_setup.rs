@@ -10,33 +10,111 @@ use crate::*;
 /// the format-side `.CBT` record count stay one value.
 pub const OUTDOOR_ARENA_COUNT: usize = BRIT_CBT_RECORDS;
 
-/// `encounters.md §4` outdoor-arena trigger-class window: the linear
-/// formula `arena_id = (class - 0x40) / 4` covers class bytes
-/// `0x40..=0x7F`. Class bytes outside this window fall through to
-/// scripted handling.
-pub const OUTDOOR_ARENA_CLASS_FIRST: u8 = 0x40;
-pub const OUTDOOR_ARENA_CLASS_LAST: u8 = 0x7F;
+pub const OUTDOOR_COMBAT_TYPE_FIRST: u8 = 0x40;
+pub const OUTDOOR_PIRATE_TYPE_FIRST: u8 = 0x2c;
+pub const OUTDOOR_PIRATE_TYPE_LAST: u8 = 0x2f;
+pub const OUTDOOR_PIRATE_COMBAT_CLASS: u8 = 1;
 
-/// `encounters.md §4` skiff/pirate-ship special class family. Terrain
-/// combat masks active-object byte zero with `0xFC`; any byte in
-/// `0x2C..=0x2F` selects arena 1.
-pub const OUTDOOR_ARENA_PIRATE_CLASS_FAMILY: u8 = 0x2c;
-pub const OUTDOOR_ARENA_PIRATE_CLASS_MASK: u8 = 0xfc;
-pub const OUTDOOR_ARENA_SKIFF_INDEX: u8 = 1;
+/// `combat.md §6.1`: placement marks ordinary self-acting monsters with
+/// `0x40`. The two passive/neutral class rows are non-acting `0x20` records.
+pub const fn combat_monster_placement_flags(class: u8) -> u8 {
+    if class == 8 || class == 9 {
+        COMBAT_ACTOR_FLAG_MARKED_DEAD
+    } else {
+        COMBAT_ACTOR_FLAG_SELECTABLE_40
+    }
+}
 
-/// `encounters.md §4`: returns the outdoor arena id (`0..=15`) for an
-/// active-object trigger class byte. Pirate/water-creature body bytes
-/// in `0x2C..=0x2F` select arena 1 after masking. Class bytes inside
-/// `0x40..=0x7F` use the linear formula `(class - 0x40) / 4`; other
-/// class bytes fall through (`None`) to scripted handling.
-pub const fn outdoor_arena_id_for_class(class_byte: u8) -> Option<u8> {
-    if class_byte & OUTDOOR_ARENA_PIRATE_CLASS_MASK == OUTDOOR_ARENA_PIRATE_CLASS_FAMILY {
-        return Some(OUTDOOR_ARENA_SKIFF_INDEX);
+pub const fn outdoor_type_is_pirate(type_byte: u8) -> bool {
+    type_byte & 0xfc == OUTDOOR_PIRATE_TYPE_FIRST
+}
+
+/// `encounters.md §4`: resolve the combat class independently of the arena.
+/// The low two animation-frame bits of ordinary active-object types are
+/// discarded; the pirate ship family has the fixed class-one override.
+pub const fn outdoor_combat_class_id(type_byte: u8) -> Option<u8> {
+    if type_byte >= OUTDOOR_COMBAT_TYPE_FIRST {
+        return Some((type_byte - OUTDOOR_COMBAT_TYPE_FIRST) / 4);
     }
-    if class_byte < OUTDOOR_ARENA_CLASS_FIRST || class_byte > OUTDOOR_ARENA_CLASS_LAST {
-        return None;
+    if outdoor_type_is_pirate(type_byte) {
+        return Some(OUTDOOR_PIRATE_COMBAT_CLASS);
     }
-    Some((class_byte - OUTDOOR_ARENA_CLASS_FIRST) / 4)
+    None
+}
+
+pub fn outdoor_combat_banner_name(type_byte: u8) -> Option<&'static str> {
+    if outdoor_type_is_pirate(type_byte) {
+        return Some("Pirates");
+    }
+    outdoor_combat_class_id(type_byte)
+        .and_then(combat_class_stats)
+        .map(|stats| stats.name)
+}
+
+/// `encounters.md §4` water predicate before aquatic-class forcing.
+pub const fn outdoor_combat_terrain_is_water(terrain: u8) -> bool {
+    terrain < 4 || ((terrain >= 0x60 && terrain <= 0x6f) && terrain != 0x6a && terrain != 0x6b)
+}
+
+/// `encounters.md §4`: select one of the sixteen outdoor arenas from the
+/// combat class, hostile object's underlying terrain, party transport, and
+/// scene-byte fallback. Combat class and arena selection deliberately remain
+/// separate operations.
+pub const fn outdoor_combat_arena_index(
+    type_byte: u8,
+    hostile_terrain: u8,
+    aboard_ship: bool,
+    scene_byte: u8,
+) -> Option<usize> {
+    let class = match outdoor_combat_class_id(type_byte) {
+        Some(class) => class,
+        None => return None,
+    };
+    if class == 47 {
+        return Some(10);
+    }
+
+    let ship_target = outdoor_type_is_pirate(type_byte);
+    let water = outdoor_combat_terrain_is_water(hostile_terrain) || (class >= 16 && class <= 19);
+    if aboard_ship && ship_target {
+        return Some(14);
+    }
+    if aboard_ship && water {
+        return Some(11);
+    }
+    if aboard_ship {
+        return Some(13);
+    }
+    if ship_target {
+        return Some(12);
+    }
+    if water {
+        return Some(15);
+    }
+
+    Some(match hostile_terrain {
+        4 => 1,
+        5 => 2,
+        6 | 8 => 3,
+        7 | 30 | 31 => 4,
+        9 | 10 => 5,
+        11..=15 => 6,
+        29 | 72 | 73 | 106 | 107 => 7,
+        68 => 8,
+        _ if scene_byte == 0 => 2,
+        _ => 8,
+    })
+}
+
+/// `active-objects.md §8`: the generic adjacent-hostile arm reaches the
+/// shared impact payload only for the exact terrain/transport combination.
+pub const fn generic_adjacent_hostile_uses_impact(
+    party_terrain: u8,
+    party_transport_marker: u8,
+) -> bool {
+    party_terrain <= 0x03
+        && ((party_transport_marker >= 0x14 && party_transport_marker <= 0x15)
+            || (party_transport_marker >= 0x28 && party_transport_marker <= 0x2b))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,20 +186,27 @@ pub const fn terrain_combat_raw_replacement_tile_for_arena(arena_index: usize) -
     }
 }
 
-pub fn terrain_combat_setup_from_record(
+pub fn terrain_combat_setup_from_record_at_arena(
     plane: WorldPlane,
     trigger: ActiveObject,
+    arena_index: usize,
     record: &CombatArenaRecord,
 ) -> io::Result<TerrainCombatSetup> {
-    let arena_index = outdoor_combat_arena_index_for_object(trigger).ok_or_else(|| {
-        io::Error::new(
+    if arena_index >= OUTDOOR_ARENA_COUNT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("outdoor combat arena index {arena_index} is out of range"),
+        ));
+    }
+    if outdoor_combat_class_id(trigger.type_byte).is_none() {
+        return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!(
-                "active-object type 0x{:02X} tile 0x{:02X} has no outdoor combat arena",
-                trigger.type_byte, trigger.tile
+                "active-object type 0x{:02X} has no outdoor combat class",
+                trigger.type_byte
             ),
-        )
-    })?;
+        ));
+    }
     let placement_slots = combat_placement_slots_from_record(record);
 
     Ok(TerrainCombatSetup {
@@ -224,7 +309,7 @@ pub fn dungeon_room_combat_instance_from_setup_with_prng(
                     active_object_slot as u8,
                     source.x,
                     source.y,
-                    COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                    combat_monster_placement_flags(stats.class),
                     0,
                 );
                 placed_count = placed_count.saturating_add(1);
@@ -328,11 +413,7 @@ fn dungeon_room_special_marker_active_object(
 }
 
 pub fn terrain_combat_base_class(trigger: ActiveObject) -> Option<CombatClassStats> {
-    if (0xe0..=0xe3).contains(&trigger.tile) {
-        return None;
-    }
-    combat_class_stats_for_sprite_byte(trigger.tile)
-        .or_else(|| combat_class_stats_for_sprite_byte(trigger.type_byte))
+    outdoor_combat_class_id(trigger.type_byte).and_then(combat_class_stats)
 }
 
 pub fn resolve_terrain_combat_setup_count(
@@ -472,7 +553,7 @@ pub fn terrain_combat_instance_from_setup(
             active_object_slot as u8,
             placement.x,
             placement.y,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(stats.class),
             0,
         );
     }
@@ -564,17 +645,15 @@ impl PlayState {
         self.populate_terrain_combat_party(&mut active_objects, &mut actors, level as i8);
 
         let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
-        let stats = combat_class_stats_for_sprite_byte(object.tile)
-            .or_else(|| combat_class_stats_for_sprite_byte(object.type_byte))
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!(
-                        "dungeon active-object type 0x{:02X} tile 0x{:02X} has no combat class",
-                        object.type_byte, object.tile
-                    ),
-                )
-            })?;
+        let stats = combat_class_stats(object.aux1).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "dungeon active-object DEP1 0x{:02X} has no combat class",
+                    object.aux1
+                ),
+            )
+        })?;
         active_objects[monster_slot] = ActiveObject {
             type_byte: object.type_byte,
             tile: object.tile,
@@ -590,7 +669,7 @@ impl PlayState {
             monster_slot as u8,
             6,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(stats.class),
             0,
         );
         self.enter_combat_frame_with_terrain(active_objects, actors, DUNGEON_AMBUSH_ARENA_TERRAIN)?;
@@ -640,7 +719,7 @@ impl PlayState {
                 slot as u8,
                 x,
                 y,
-                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                combat_monster_placement_flags(stats.class),
                 0,
             );
         }
@@ -659,12 +738,20 @@ impl PlayState {
         object_slot: usize,
         object: ActiveObject,
     ) -> io::Result<String> {
-        let arena_index = outdoor_combat_arena_index_for_object(object).ok_or_else(|| {
+        let hostile_terrain = self.grid[world_cell_index(object.x, object.y)];
+        let aboard_ship = matches!(self.player.transport, TransportState::Ship { .. });
+        let arena_index = outdoor_combat_arena_index(
+            object.type_byte,
+            hostile_terrain,
+            aboard_ship,
+            SCENE_OVERWORLD,
+        )
+        .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
-                    "active-object type 0x{:02X} tile 0x{:02X} has no outdoor combat arena",
-                    object.type_byte, object.tile
+                    "active-object type 0x{:02X} has no outdoor combat class",
+                    object.type_byte
                 ),
             )
         })?;
@@ -675,7 +762,7 @@ impl PlayState {
                 format!("BRIT.CBT has no arena record {arena_index}"),
             )
         })?;
-        let setup = terrain_combat_setup_from_record(plane, object, record)?;
+        let setup = terrain_combat_setup_from_record_at_arena(plane, object, arena_index, record)?;
         let base_class = setup.base_class.ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -685,8 +772,14 @@ impl PlayState {
                 ),
             )
         })?;
-        let requested_count =
-            self.roll_terrain_combat_setup_count(base_class.default_spawn_count, false);
+        // The identity-gap classes carry all-zero stat rows. Terrain setup
+        // still creates the lead actor once and adds no followers; in
+        // particular, it must not feed zero to a modulo-based count roll.
+        let requested_count = if base_class.default_spawn_count == 0 {
+            1
+        } else {
+            self.roll_terrain_combat_setup_count(base_class.default_spawn_count, false)
+        };
         let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(arena_index);
         let replacement_roll_seeds =
             self.terrain_combat_replacement_roll_seeds(requested_count, replacement_tile);
@@ -713,7 +806,9 @@ impl PlayState {
         self.pending_combat_terrain_trigger_slot = Some(object_slot);
         Ok(format!(
             "entered terrain combat using BRIT.CBT arena {arena_index}; spawned {} of {} requested {} combatant(s)",
-            placed_count, requested_count, base_class.name
+            placed_count,
+            requested_count,
+            outdoor_combat_banner_name(object.type_byte).unwrap_or(base_class.name)
         ))
     }
 

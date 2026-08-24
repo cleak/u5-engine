@@ -236,6 +236,8 @@ and in agent briefs, because the figure had been copied forward from an earlier
 run rather than re-measured. Two agents caught it independently, from the
 assertion in `crates/u5-tui/tests/play_loop.rs`.
 
+The same guard now measures **511** cases; the lesson is unchanged.
+
 Nothing was wrong with the suite. The number was simply **stale**, and staleness
 is invisible in a figure the way a boundary is invisible in a measurement. So
 the check has a companion: *when did I last actually run the thing I am quoting?*

@@ -123,12 +123,14 @@ impl PlayState {
             Some(UseItemRequest::HmsCapePlans) => self.use_hms_cape_plans(),
             Some(UseItemRequest::CrownOfLordBritish) => self.use_worn_regalia(
                 SPECIAL_ITEM_CROWN_LB_INDEX,
+                CROWN_LB_ACTIVE_EFFECT_TAG,
                 "Crown",
                 "Wearing Crown.",
                 "Removed Crown.",
             ),
             Some(UseItemRequest::AmuletOfLordBritish) => self.use_worn_regalia(
                 SPECIAL_ITEM_AMULET_LB_INDEX,
+                AMULET_LB_ACTIVE_EFFECT_TAG,
                 "Amulet",
                 "Wearing Amulet.",
                 "Removed Amulet.",
@@ -136,6 +138,7 @@ impl PlayState {
             Some(UseItemRequest::Sceptre) => self.use_sceptre_of_lord_british(),
             Some(UseItemRequest::BlackBadge) => self.use_worn_regalia(
                 SPECIAL_ITEM_BLACK_BADGE_INDEX,
+                BLACK_BADGE_ACTIVE_EFFECT_TAG,
                 "Black Badge",
                 "Wearing Black Badge.",
                 "Removed Black Badge.",
@@ -168,6 +171,9 @@ impl PlayState {
         let rows = self.use_item_picker_rows();
         if rows.is_empty() {
             self.message = "No usable items.".to_string();
+            // inventory.md §7: U-Use returns the normal action result even
+            // when item-specific dispatch is never reached.
+            self.advance_turn();
             return MoveOutcome::Blocked;
         }
         self.active_use = Some(UseSession::new());
@@ -230,7 +236,14 @@ impl PlayState {
         }
         match use_input_action(key) {
             UseInputAction::Exit => {
-                self.message = "Use closed.".to_string();
+                let turn_before = self.turn;
+                self.message = ITEM_PICKER_ESCAPE_MESSAGE.to_string();
+                self.ensure_use_action_turn(turn_before);
+                self.apply_post_turn_effects_after_outcome(
+                    turn_before,
+                    game_dir,
+                    MoveOutcome::Used,
+                )?;
             }
             UseInputAction::NextItem => {
                 self.move_use_cursor(&mut session, 1);
@@ -253,8 +266,15 @@ impl PlayState {
                 self.active_use = Some(session);
             }
             UseInputAction::Confirm => {
+                let turn_before = self.turn;
                 let Some(row) = self.use_selected_item(&session) else {
                     self.message = "No usable items.".to_string();
+                    self.ensure_use_action_turn(turn_before);
+                    self.apply_post_turn_effects_after_outcome(
+                        turn_before,
+                        game_dir,
+                        MoveOutcome::Blocked,
+                    )?;
                     return Ok(true);
                 };
                 if let Some(pending) = pending_action_for_use_request(row.request) {
@@ -264,8 +284,8 @@ impl PlayState {
                     self.active_use = Some(session);
                     return Ok(true);
                 }
-                let turn_before = self.turn;
                 let outcome = self.use_item_command(Some(row.request), Some(game_dir))?;
+                self.ensure_use_action_turn(turn_before);
                 self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
             }
             UseInputAction::Redraw | UseInputAction::Discard => {
@@ -285,8 +305,11 @@ impl PlayState {
         suffix: &str,
         game_dir: &Path,
     ) -> io::Result<bool> {
-        if matches!(use_input_action(key), UseInputAction::Exit) {
+        if matches!(key, ' ' | '\u{1b}') {
+            let turn_before = self.turn;
             self.message = "Use closed.".to_string();
+            self.ensure_use_action_turn(turn_before);
+            self.apply_post_turn_effects_after_outcome(turn_before, game_dir, MoveOutcome::Used)?;
             return Ok(true);
         }
 
@@ -328,8 +351,19 @@ impl PlayState {
                 }
             }
         };
+        self.ensure_use_action_turn(turn_before);
         self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         Ok(true)
+    }
+
+    /// `inventory.md §7`: the U-Use caller returns the normal action result
+    /// regardless of the selected handler's success/refusal result. Existing
+    /// handlers that already commit their effect's turn remain authoritative;
+    /// otherwise the command layer supplies the one ordinary turn here.
+    pub(crate) fn ensure_use_action_turn(&mut self, turn_before: u64) {
+        if self.turn == turn_before {
+            self.advance_turn();
+        }
     }
 
     fn render_pending_use_action(&self, pending: UsePendingAction) -> String {
@@ -693,22 +727,27 @@ impl PlayState {
     }
 
     pub fn clear_shadowlord_name_encounters(&mut self, index: usize) -> usize {
+        if self.summoned_shadowlord != Some(index) {
+            return 0;
+        }
         let Some(floor) = self.current_floor() else {
             return 0;
         };
         let mut cleared = 0;
         for object in self.active_objects.iter_mut().skip(1) {
-            if object.z == floor && Self::shadowlord_name_encounter_index(*object) == Some(index) {
+            if object.z == floor && Self::is_shadowlord_actor(*object) {
                 object.free();
                 cleared += 1;
             }
         }
+        self.summoned_shadowlord = None;
         cleared
     }
 
     pub fn use_worn_regalia(
         &mut self,
         special_item_index: usize,
+        effect_tag: u8,
         missing_label: &str,
         wear_message: &str,
         remove_message: &str,
@@ -718,21 +757,12 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let was_worn = self.special_items[special_item_index] == SPECIAL_ITEM_WORN_VALUE;
-        for index in [
-            SPECIAL_ITEM_AMULET_LB_INDEX,
-            SPECIAL_ITEM_CROWN_LB_INDEX,
-            SPECIAL_ITEM_BLACK_BADGE_INDEX,
-        ] {
-            if self.special_items[index] == SPECIAL_ITEM_WORN_VALUE {
-                self.special_items[index] = SPECIAL_ITEM_OWNED_VALUE;
-            }
-        }
-
-        self.message = if was_worn {
+        self.message = if self.active_effect_tag == Some(effect_tag) {
+            self.clear_active_effect_slot();
             remove_message.to_string()
         } else {
-            self.special_items[special_item_index] = SPECIAL_ITEM_WORN_VALUE;
+            self.active_effect_tag = Some(effect_tag);
+            self.active_effect_counter = PERMANENT_ACTIVE_EFFECT_DURATION;
             wear_message.to_string()
         };
         self.mark_visibility_dirty();
@@ -865,7 +895,6 @@ impl PlayState {
         self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
             self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);
         self.player.transport = transport;
-        self.timing_status = TimingStatusTag::for_transport(transport);
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
@@ -891,22 +920,23 @@ impl PlayState {
             Area::Town { .. } | Area::Dungeon { .. } => false,
         };
         if !outdoors {
-            self.message = "Not here!".to_string();
+            self.message = "Sextant:\nNot here!".to_string();
             return MoveOutcome::Blocked;
         }
         // The Sextant's night window is `19..=23` / `0..=5`, which is not
         // the town-lighting window `is_town_night_hour` carries.
         if !sextant_night_hour(self.clock.hour) {
-            self.message = "Cannot see the stars!".to_string();
+            self.message = "Sextant:\nCannot see the stars!".to_string();
             return MoveOutcome::Blocked;
         }
 
         let y = sextant_coordinate(self.player.y);
         let x = sextant_coordinate(self.player.x);
         self.advance_turn();
-        // magic.md §8 / inventory.md §7: shared sextant printer is Y first,
-        // then a comma and the X-coordinate, with a trailing double quote.
-        self.message = format!("Sextant: {y},{x}\"");
+        // magic.md §8 / inventory.md §7: the label is followed by the
+        // formatter's leading newline, then Y and X each carry their own
+        // closing quote and are separated by comma-space.
+        self.message = format!("Sextant:\n{y}\", {x}\"");
         MoveOutcome::Used
     }
 
@@ -915,12 +945,11 @@ impl PlayState {
             self.message = "No Pocket Watch!".to_string();
             return MoveOutcome::Blocked;
         }
+        let display_hour = self.clock.display_hour();
+        let minute = self.clock.minute;
+        let suffix = self.clock.am_pm_suffix();
         self.advance_turn();
-        self.message = format!(
-            "Pocket Watch: {} {}",
-            self.clock.display_hour(),
-            self.clock.am_pm_suffix()
-        );
+        self.message = format!("Pocket Watch: {display_hour}:{minute:02} {suffix}");
         MoveOutcome::Used
     }
 
@@ -963,82 +992,62 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        self.activate_britannia_chunk_map_overlay("Spyglass: Looking at the stars over Britannia");
+        self.activate_night_sky_overlay(Some("Spyglass: Looking at the stars"));
         MoveOutcome::Observed
     }
 
-    pub fn activate_britannia_chunk_map_overlay(&mut self, title: impl Into<String>) {
-        let title = title.into();
-        let text_map = self.britannia_chunk_overview_map();
-        self.active_view_overlay = Some(ViewOverlay {
-            title: title.clone(),
-            text_map: text_map.clone(),
-            kind: ViewOverlayKind::BritanniaChunkMap,
-            mode: ViewOverlayMode::BritanniaOverview,
-        });
-        self.message = format!("{title}:\n{text_map}");
+    /// `systems/view.md §4.2.1`: a telescope shows the sun during
+    /// hours 6 through 17, selects the first healthy/poisoned member
+    /// when necessary, and applies one point through the shared damage
+    /// path. All other hours enter the night-sky overlay.
+    pub fn look_through_telescope(&mut self) {
+        if !sky_view_is_daylight(self.clock.hour) {
+            self.activate_night_sky_overlay(None);
+            return;
+        }
+
+        self.active_view_overlay = None;
+        if self.active_player.is_none() {
+            self.active_player = self
+                .party
+                .iter()
+                .position(|member| matches!(member.status, b'G' | b'P'));
+        }
+        if let Some(slot) = self.active_player.filter(|slot| *slot < self.party.len()) {
+            self.apply_shared_party_damage(slot, 1);
+        }
+        self.message = "the sun!".to_string();
     }
 
-    /// **Contradicted by `cleak/u5-spec#60`; do not trust this output.**
-    ///
-    /// The closing comment retracts the "full Britannia chunk-map
-    /// renderer" this was built from, specifically: it is not an 8x22
-    /// chunk map but eight cells in total, one per row; the party's
-    /// position is never read (the inputs are the saved year, month and
-    /// day); the overlay marker tracks the Shadowlords, not the party;
-    /// and there is no map-edge wrapping, only a 22-slot column ring.
-    /// The retraction says in terms that a party-chunk crosshair
-    /// "paints the wrong cells for the wrong reason".
-    ///
-    /// The corrected contract needs `systems/view.md` section 4.2.3's
-    /// eight-row table (per-row y origin, start column and permitted
-    /// column ring), which the issue says is published but does not
-    /// reproduce, so it is not available to this workspace until the
-    /// read-only spec checkout is refreshed past `9a898d1`. Left in
-    /// place rather than replaced with a guess or a loud failure that
-    /// would red-build the visual route suite; see the report.
-    ///
-    /// The renderer is reachable from a town-class scene, because
-    /// `catalogs/item-list.md`'s Spyglass row admits one. `self.grid`
-    /// there is the town interior, not a world map, so the world sample
-    /// is taken from the return snapshot the party carries and every
-    /// read is bounds-guarded. (The published sky renderer reads no
-    /// party position at all, which is exactly what the retraction
-    /// above says; this only keeps the stand-in from indexing off the
-    /// end of an interior grid.)
-    pub fn britannia_chunk_overview_map(&self) -> String {
-        let (grid, origin_x, origin_y) = match self.area {
-            Area::World { .. } => (&self.grid, self.player.x, self.player.y),
-            Area::Town { .. } | Area::Dungeon { .. } => match self.return_world.as_ref() {
-                Some(snapshot) => (&snapshot.grid, snapshot.x, snapshot.y),
-                None => (&self.grid, 0, 0),
-            },
+    /// `systems/view.md §4.2.2`: capture the eighty PRNG-selected stars
+    /// once when the modal view opens, hide the ordinary visibility
+    /// window, and leave it dirty so closing the overlay restores the
+    /// world view.
+    pub fn activate_night_sky_overlay(&mut self, message_prefix: Option<&str>) {
+        let stars =
+            std::array::from_fn(|_| (self.random_range_u8(9, 182), self.random_range_u8(9, 172)));
+        let sky = SkyOverlayState {
+            stars,
+            body_columns: sky_body_columns(self.clock),
         };
-        let mut out = String::new();
-        let current_chunk_x = origin_x / CHUNK_SIDE;
-        let current_chunk_y = origin_y / CHUNK_SIDE;
-        for row in 0..8 {
-            for col in 0..22 {
-                let chunk_x =
-                    (current_chunk_x + WORLD_CHUNKS_PER_SIDE + col - 11) % WORLD_CHUNKS_PER_SIDE;
-                let chunk_y =
-                    (current_chunk_y + WORLD_CHUNKS_PER_SIDE + row - 4) % WORLD_CHUNKS_PER_SIDE;
-                if chunk_x == current_chunk_x && chunk_y == current_chunk_y {
-                    out.push('+');
-                    continue;
-                }
-                let sample_x = chunk_x * CHUNK_SIDE + CHUNK_SIDE / 2;
-                let sample_y = chunk_y * CHUNK_SIDE + CHUNK_SIDE / 2;
-                let Some(&tile) = grid.get(world_cell_index(sample_x, sample_y)) else {
-                    out.push(' ');
-                    continue;
-                };
-                let tile = self.animation.resolve_static_tile(tile);
-                out.push(render_surface_view_class(surface_view_class(tile)));
+        self.mark_visibility_dirty();
+        for row in 0..VIEWPORT_SIDE {
+            for col in 0..VIEWPORT_SIDE {
+                self.visibility_grid[visibility_grid_active_index(row, col).unwrap()] =
+                    VISIBILITY_HIDDEN;
             }
-            out.push('\n');
         }
-        out
+        let text_map = sky_text_map(&sky, self.shadowlord_hideouts);
+        self.active_view_overlay = Some(ViewOverlay {
+            title: "the night sky!".to_string(),
+            text_map,
+            kind: ViewOverlayKind::Sky(sky),
+            mode: ViewOverlayMode::SkyView,
+        });
+        self.message = match message_prefix {
+            Some(prefix) => format!("{prefix}\nthe night sky! "),
+            None => "the night sky! ".to_string(),
+        };
     }
 
     pub fn use_scroll(
@@ -1083,8 +1092,8 @@ impl PlayState {
                     return MoveOutcome::Blocked;
                 }
                 self.advance_turn();
-                let view_message = self.activate_peer_view_overlay();
-                self.message = format!("View!\n{view_message}");
+                let _ = self.activate_peer_view_overlay();
+                self.message = "View!".to_string();
                 MoveOutcome::Observed
             }
             SCROLL_SUMMON_DAEMON_INDEX => {
@@ -1106,14 +1115,15 @@ impl PlayState {
                     &legal_cells,
                 );
                 self.advance_turn();
-                if applied.is_none() {
+                let Some(applied) = applied else {
                     self.message = "Failed!".to_string();
                     return MoveOutcome::Blocked;
-                }
+                };
                 if self.combat_summon_daemon_self_check_oops(0) {
                     self.message = "Oops...".to_string();
                     MoveOutcome::Blocked
                 } else {
+                    self.combat_actors[applied.actor_slot].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
                     self.message = "Summon Daemon!".to_string();
                     MoveOutcome::Used
                 }
@@ -1232,6 +1242,11 @@ impl PlayState {
         target_index: usize,
         effect_index: usize,
     ) -> MoveOutcome {
+        // `catalogs/item-list.md §7.2`: the accepted selected bottle owns a
+        // blocking full-playfield flash before the later variation-selected
+        // gameplay effect. The frontend consumes this pending event before it
+        // displays the resulting gameplay state.
+        self.pending_potion_flash = potion_flash_playback(selected_index);
         let selected_label = potion_label(selected_index);
         let effect_label = potion_label(effect_index);
         let prefix = if selected_index == effect_index {
@@ -1411,71 +1426,88 @@ impl PlayState {
         if !self.combat_active || target_index >= COMBAT_PARTY_ACTOR_SLOTS {
             return false;
         }
-        let Some(presentation) = self.combat_potion_presentation else {
+        let Some(actor) = self.combat_actors.get_mut(target_index) else {
             return false;
         };
-        if presentation.kind == CombatPotionPresentationKind::Sleep
-            && presentation.actor_slot == target_index
-        {
-            self.combat_potion_presentation = None;
-            true
-        } else {
-            false
+        if !actor.is_status_disabled() {
+            return false;
         }
+        actor.clear_status_disabled();
+        let hidden = actor.is_hidden_or_unrevealed();
+        let active_object_slot = usize::from(actor.active_object_slot);
+        if let Some(object) = self.active_objects.get_mut(active_object_slot) {
+            object.tile = if hidden {
+                COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE
+            } else {
+                object.type_byte
+            };
+        }
+        true
     }
 
     pub fn apply_combat_party_sleep_presentation(&mut self, target_index: usize) -> bool {
-        self.set_combat_potion_presentation(
-            target_index,
-            CombatPotionPresentationKind::Sleep,
-            COMBAT_POTION_SLEEP_PRESENTATION_FRAMES,
-        )
+        if !self.combat_active || target_index >= COMBAT_PARTY_ACTOR_SLOTS {
+            return false;
+        }
+        let Some(actor) = self.combat_actors.get_mut(target_index) else {
+            return false;
+        };
+        if actor.is_empty() || actor.is_marked_dead() {
+            return false;
+        }
+        let active_object_slot = usize::from(actor.active_object_slot);
+        let Some(object) = self.active_objects.get_mut(active_object_slot) else {
+            return false;
+        };
+        actor.set_status_disabled();
+        object.tile = COMBAT_POTION_SLEEP_DISPLAY_TILE;
+        true
     }
 
     pub fn apply_combat_potion_poof_presentation(&mut self, target_index: usize) -> bool {
-        self.set_combat_potion_presentation(
-            target_index,
-            CombatPotionPresentationKind::Poof,
-            COMBAT_POTION_POOF_PRESENTATION_FRAMES,
-        )
-    }
-
-    fn set_combat_potion_presentation(
-        &mut self,
-        target_index: usize,
-        kind: CombatPotionPresentationKind,
-        frames_remaining: u8,
-    ) -> bool {
         if !self.combat_active || target_index >= COMBAT_PARTY_ACTOR_SLOTS {
             return false;
         }
         let Some(actor) = self.combat_actors.get(target_index).copied() else {
             return false;
         };
-        if !combat_actor_is_active_not_dead(actor) {
+        if actor.is_empty() || actor.is_marked_dead() {
             return false;
         }
         let active_object_slot = usize::from(actor.active_object_slot);
         if active_object_slot >= self.active_objects.len() {
             return false;
         }
-        self.combat_potion_presentation = Some(CombatPotionPresentation {
-            kind,
-            actor_slot: target_index,
-            active_object_slot,
-            frames_remaining,
-        });
+        let object = &mut self.active_objects[active_object_slot];
+        object.type_byte = COMBAT_POTION_POOF_TILE;
+        object.tile = COMBAT_POTION_POOF_TILE;
         true
     }
 
     pub fn start_white_potion_sweep(&mut self) {
+        let wrap_world = matches!(self.area, Area::World { .. });
+        let visible = self.surface_visibility_carve_with_light_threshold(
+            self.player.x as isize,
+            self.player.y as isize,
+            VIEWPORT_PLAYER_ROW,
+            u32::from(POTION_WHITE_VISIBILITY_THRESHOLD),
+            wrap_world,
+        );
+        let mut visible_cells = [false; VIEWPORT_SIDE * VIEWPORT_SIDE];
+        visible_cells.copy_from_slice(&visible);
         self.white_potion_sweep = Some(WhitePotionSweep {
             frames_remaining: POTION_WHITE_SWEEP_FRAMES,
-            radius: POTION_WHITE_SWEEP_RADIUS,
+            pause_bios_ticks_per_frame: POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME,
             center_x: self.player.x,
             center_y: self.player.y,
+            visible_cells,
         });
-        self.mark_visibility_dirty();
+    }
+
+    /// Take the selected-bottle flash that must be shown before the resulting
+    /// potion effect is repainted.
+    pub fn take_pending_potion_flash(&mut self) -> Option<PotionFlashPlayback> {
+        self.pending_potion_flash.take()
     }
 
     pub fn apply_combat_party_invisibility_potion(&mut self, target_index: usize) -> bool {
@@ -1664,9 +1696,12 @@ impl PlayState {
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
             shadowlord_hideouts: self.shadowlord_hideouts,
-            quest_progress_word: self.quest_progress_word,
+            removed_town_npc_flags: self.removed_town_npc_flags.clone(),
+            talk_branch_flags: self.talk_branch_flags.clone(),
             shrine_ordained_mask: self.shrine_ordained_mask,
             shrine_codex_mask: self.shrine_codex_mask,
+            word_of_power_seal_flags: self.word_of_power_seal_flags,
+            shrine_ruin_flags: self.shrine_ruin_flags,
             moral_standing: self.moral_standing,
             toll_progress: self.toll_progress,
             // `overworld.md §9.1` (spec HEAD c00bf63): the
@@ -1678,22 +1713,25 @@ impl PlayState {
             light_spell_counter: self.light_spell_counter,
             wind: self.wind,
             wind_save_byte: self.wind_save_byte,
-            timing_status: TimingStatusTag::Normal,
             time_stop_counter: self.time_stop_counter,
             active_effect_tag: self.active_effect_tag,
             active_effect_counter: self.active_effect_counter,
             fortunes_of_war: self.fortunes_of_war,
             camp_cooldown: self.camp_cooldown,
+            camp_month_cookie: self.camp_month_cookie,
             active_player: self.active_player,
             combat_round_counter: self.combat_round_counter,
+            combat_interference_sources: self.combat_interference_sources,
             transport: TransportState::Foot,
             facing: Some(self.player.facing),
             pending_vehicle: None,
+            pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),
             blackthorn_story: self.blackthorn_story,
             initial_britannia_overlay: self.world_overlays.get(WorldPlane::Britannia),
             debug_enter: self.debug_enter,
             saved_active_objects: None,
+            town_npc_mutations: self.town_npc_mutations.clone(),
             save_template_source: self.save_template_source,
         };
         if let PlayTarget::World(plane) = target {
@@ -1885,7 +1923,7 @@ impl PlayState {
                     kind: ViewOverlayKind::Dungeon { level },
                     mode: ViewOverlayMode::GemView,
                 });
-                self.message = format!("{title}:\n{text_map}");
+                self.message.clear();
                 MoveOutcome::Observed
             }
             Area::Town { scene, floor } => {
@@ -1903,7 +1941,7 @@ impl PlayState {
                     kind: ViewOverlayKind::Surface,
                     mode: ViewOverlayMode::GemView,
                 });
-                self.message = format!("{title}:\n{text_map}");
+                self.message.clear();
                 MoveOutcome::Observed
             }
             Area::World { plane } => {
@@ -1922,7 +1960,7 @@ impl PlayState {
                     kind: ViewOverlayKind::Surface,
                     mode: ViewOverlayMode::GemView,
                 });
-                self.message = format!("{title}:\n{text_map}");
+                self.message.clear();
                 MoveOutcome::Observed
             }
         }
@@ -1930,7 +1968,7 @@ impl PlayState {
 
     pub fn clear_active_view_overlay(&mut self) {
         self.active_view_overlay = None;
-        self.message = "View closed.".to_string();
+        self.message.clear();
     }
 
     pub fn render_active_view_overlay(&self, depth: TileGraphicsDepth) -> Option<TileViewport> {
@@ -1939,8 +1977,8 @@ impl PlayState {
             ViewOverlayKind::Surface => {
                 Some(self.render_surface_view_overlay_for_mode(depth, overlay.mode))
             }
-            ViewOverlayKind::BritanniaChunkMap => {
-                Some(self.render_britannia_chunk_map_overlay(depth))
+            ViewOverlayKind::Sky(sky) => {
+                Some(render_sky_overlay(depth, &sky, self.shadowlord_hideouts))
             }
             ViewOverlayKind::Dungeon { level } => {
                 Some(self.render_dungeon_view_overlay_for_mode(level, depth, overlay.mode))
@@ -2086,36 +2124,6 @@ impl PlayState {
             pixels: vec![0; scale * scale],
         };
         draw_dungeon_view_glyph(&mut viewport, 0, 0, scale, glyph, mode);
-        viewport
-    }
-
-    pub fn render_britannia_chunk_map_overlay(&self, depth: TileGraphicsDepth) -> TileViewport {
-        let text_map = self.britannia_chunk_overview_map();
-        let cells_high = text_map.lines().count();
-        let cells_wide = text_map.lines().map(str::len).max().unwrap_or(0);
-        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
-        let width = cells_wide * scale;
-        let height = cells_high * scale;
-        let mut viewport = TileViewport {
-            depth,
-            cells_wide,
-            cells_high,
-            width,
-            height,
-            pixels: vec![0; width * height],
-        };
-        for (cell_y, row) in text_map.lines().enumerate() {
-            for (cell_x, glyph) in row.chars().enumerate() {
-                draw_dungeon_view_cell(
-                    &mut viewport,
-                    cell_x,
-                    cell_y,
-                    scale,
-                    glyph,
-                    ViewOverlayMode::BritanniaOverview,
-                );
-            }
-        }
         viewport
     }
 
@@ -2457,11 +2465,8 @@ impl PlayState {
                     return Ok(MoveOutcome::Observed);
                 }
                 let tile = self.grid[world_cell_index(x, y)];
-                if tile == BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE {
-                    self.activate_britannia_chunk_map_overlay(format!(
-                        "Britannia overview from Look at ({x}, {y}) on {}",
-                        plane.key()
-                    ));
+                if tile == TELESCOPE_LOOK_TRIGGER_TILE {
+                    self.look_through_telescope();
                     return Ok(MoveOutcome::Observed);
                 }
                 if let Some(sign) = self.sign_message_at(
@@ -2614,7 +2619,7 @@ impl PlayState {
                 mode: ViewOverlayMode::SurfaceLook,
             });
             self.message = format!(
-                "Strange vision: party member {} beholds a distant fate at ({x}, {y}).\n{text_map}",
+                "Strange vision: party member {} beholds a distant fate at ({x}, {y}).",
                 member_index + 1
             );
         } else {
@@ -2885,7 +2890,23 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         if self.talk_liveness_blocked() {
-            return Ok(MoveOutcome::Blocked);
+            return Ok(self.consume_ordinary_town_talk());
+        }
+        if let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction)
+            && matches!(
+                dialog_id,
+                TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
+            )
+        {
+            if let Some(tile) = self.npc_live_tile_at(target_x, target_y)
+                && let Some(refusal) = talk_status_tile_refusal(tile)
+            {
+                self.message = refusal.to_string();
+                return Ok(self.consume_ordinary_town_talk());
+            }
+            return Ok(self
+                .talk_alarm_sentinel_at(dialog_id, target_x, target_y)
+                .expect("published alarm sentinel was preclassified"));
         }
         let dialogue = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
@@ -2970,14 +2991,13 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if self.talk_liveness_blocked() {
-            return MoveOutcome::Blocked;
+            return self.consume_ordinary_town_talk();
         }
 
         let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
-            return MoveOutcome::Blocked;
+            return self.consume_ordinary_town_talk();
         };
-
         // `conversation.md §2` status-tile filter (`cleak/u5-spec#44`):
         // a candidate NPC whose live tile byte is the published sleeping
         // (`0xAB`) or praying (`0x9D`) form aborts before shop or dialog
@@ -2985,15 +3005,18 @@ impl PlayState {
         if let Some(tile) = self.npc_live_tile_at(target_x, target_y) {
             if let Some(refusal) = talk_status_tile_refusal(tile) {
                 self.message = refusal.to_string();
-                return MoveOutcome::Blocked;
+                return self.consume_ordinary_town_talk();
             }
+        }
+        if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
+            return outcome;
         }
 
         if let Some((role, _family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
                 self.message =
                     format!("{role} refuses thee on horseback; dismount before commerce.");
-                return MoveOutcome::Blocked;
+                return self.consume_ordinary_town_talk();
             }
             let scene_byte = match self.area {
                 Area::Town { scene, .. } => Some(scene.byte),
@@ -3002,6 +3025,12 @@ impl PlayState {
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
+                if matches!(
+                    &session,
+                    crate::shop_session::ActiveShopSession::Innkeeper(_)
+                ) {
+                    self.clear_active_effect_slot();
+                }
                 self.advance_turn();
                 let label = session.shop_label().to_string();
                 let prompt = session.opening_prompt().to_string();
@@ -3010,12 +3039,15 @@ impl PlayState {
                 return MoveOutcome::Talked;
             }
         }
+        if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
+            return self.begin_blackthorn_guard_demand(target_x, target_y, true);
+        }
         if matches!(
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
         ) {
             self.message = "They give thee a funny look.".to_string();
-            return MoveOutcome::Blocked;
+            return self.consume_ordinary_town_talk();
         }
 
         let Some(fields) = dialogue.get(&(dialog_id as u16)) else {
@@ -3108,26 +3140,32 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if self.talk_liveness_blocked() {
-            return MoveOutcome::Blocked;
+            return self.consume_ordinary_town_talk();
         }
 
         let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
-            return MoveOutcome::Blocked;
+            return self.consume_ordinary_town_talk();
         };
+        let conversation_npc_slot = self
+            .npc_at_current_floor(target_x, target_y)
+            .map(|npc| npc.slot);
 
         if let Some(tile) = self.npc_live_tile_at(target_x, target_y) {
             if let Some(refusal) = talk_status_tile_refusal(tile) {
                 self.message = refusal.to_string();
-                return MoveOutcome::Blocked;
+                return self.consume_ordinary_town_talk();
             }
+        }
+        if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
+            return outcome;
         }
 
         if let Some((role, family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
                 self.message =
                     format!("{role} refuses thee on horseback; dismount before commerce.");
-                return MoveOutcome::Blocked;
+                return self.consume_ordinary_town_talk();
             }
             let scene_byte = match self.area {
                 Area::Town { scene, .. } => Some(scene.byte),
@@ -3136,6 +3174,12 @@ impl PlayState {
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
+                if matches!(
+                    &session,
+                    crate::shop_session::ActiveShopSession::Innkeeper(_)
+                ) {
+                    self.clear_active_effect_slot();
+                }
                 self.advance_turn();
                 let message = self.format_talk_shop_opening_message(
                     dialog_id,
@@ -3148,12 +3192,15 @@ impl PlayState {
                 return MoveOutcome::Talked;
             }
         }
+        if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
+            return self.begin_blackthorn_guard_demand(target_x, target_y, true);
+        }
         if matches!(
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
         ) {
             self.message = "They give thee a funny look.".to_string();
-            return MoveOutcome::Blocked;
+            return self.consume_ordinary_town_talk();
         }
 
         let Some(fields) = dialogue.get(&(dialog_id as u16)) else {
@@ -3193,8 +3240,10 @@ impl PlayState {
                     fields.clone(),
                 );
                 self.active_conversation = Some(Box::new(session));
-                let greeting_text = self.advance_active_conversation_greeting();
-                self.message = conversation_opening_text(&description_text, &greeting_text);
+                self.active_conversation_npc_slot = conversation_npc_slot;
+                let greeting = self.active_conversation_greeting_rendered();
+                let opening = conversation_opening_rendered(&description_text, &greeting);
+                self.emit_tlk_message(opening);
                 return MoveOutcome::Talked;
             }
         }
@@ -3221,13 +3270,11 @@ impl PlayState {
             moral_standing: self.moral_standing,
             dictionary: Some(&dictionary_refs),
             curse_seen: false,
-            gold_payment_accepted: true,
             gold_available: Some(self.gold),
             ask_party_name_response: 0,
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
-            yield_on_gold_payment: false,
         };
 
         // Resolve which field(s) to run through the byte runner.
@@ -3432,24 +3479,31 @@ impl PlayState {
 
     /// Apply accepted conversation gold payments emitted by TLK `0x85`.
     ///
-    /// Per `karma.md §4` and `formats/saved-gam.md §10`: every successful
-    /// three-digit payment debits the party gold, then increments the
-    /// toll-progress counter by one. When the counter reaches
-    /// [`TOLL_PROGRESS_MILESTONE`], the helper resets it to zero and
-    /// applies the [`KarmaAction::TollMilestone`] bump to
-    /// [`Self::moral_standing`]; if the post-debit gold word is also
-    /// zero, the milestone karma includes the zero-gold bonus.
+    /// Per `conversation.md §7.6` and `karma.md §4.1`, affordability
+    /// alone accepts a payment and debits the gold. The turn-aged saved
+    /// cooldown is only tested/reset when the speaking live NPC belongs
+    /// to the one qualifying actor class. A qualifying threshold payment
+    /// raises moral standing by one, plus two when the post-debit purse
+    /// is empty. Payments never increment the cooldown.
     pub fn apply_tlk_gold_payments(
         &mut self,
         payments: &[crate::conversation_session::ConversationGoldPayment],
     ) {
+        let qualifying_speaker = self
+            .active_conversation_npc_slot
+            .and_then(|npc_slot| self.npcs.iter().find(|npc| npc.slot == npc_slot))
+            .filter(|npc| {
+                npc.active_object
+                    .and_then(|slot| self.active_objects.get(slot))
+                    .is_some_and(|object| !object.is_empty())
+            })
+            .is_some_and(|npc| npc.type_byte == TLK_GOLD_PAYMENT_KARMA_SPEAKER_CLASS);
         for payment in payments {
             if !payment.accepted || self.gold < payment.amount {
                 continue;
             }
             self.gold -= payment.amount;
-            self.toll_progress = self.toll_progress.saturating_add(1);
-            if self.toll_progress >= TOLL_PROGRESS_MILESTONE {
+            if qualifying_speaker && self.toll_progress >= TOLL_PROGRESS_MILESTONE {
                 self.toll_progress = 0;
                 self.moral_standing = apply_karma_action(
                     self.moral_standing,
@@ -3509,13 +3563,11 @@ impl PlayState {
             moral_standing: self.moral_standing,
             dictionary: Some(&dictionary_refs),
             curse_seen: false,
-            gold_payment_accepted: true,
             gold_available: Some(self.gold),
             ask_party_name_response: 0,
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
-            yield_on_gold_payment: false,
         };
         let output = crate::tlk_runner::run_tlk_stream(bytes, &inputs);
         self.apply_tlk_action_grants(&output.action_grants);
@@ -3560,7 +3612,32 @@ impl PlayState {
         if self.talk_liveness_blocked() {
             return None;
         }
-        let (dialog_id, _, _) = self.facing_talk_target()?;
+        let (dialog_id, target_x, target_y) = self.facing_talk_target()?;
+        if matches!(
+            dialog_id,
+            TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
+        ) {
+            let text = if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
+                let target_slot = self
+                    .npc_at_current_floor(target_x, target_y)
+                    .map(|npc| npc.slot);
+                if let Some(index) = self
+                    .npcs
+                    .iter()
+                    .position(|npc| Some(npc.slot) == target_slot)
+                {
+                    let _ = self.npcs[index].force_town_flight();
+                    self.record_town_npc_mutation(index);
+                }
+                TOWN_NPC_BRUSHOFF_RESPONSE
+            } else {
+                TOWN_NPC_COWERING_RESPONSE
+            };
+            self.active_conversation = None;
+            self.active_conversation_npc_slot = None;
+            self.message = text.to_string();
+            return Some(text.to_string());
+        }
         if dialog_id == 0 || talk_shop_trigger(dialog_id).is_some() {
             return None;
         }
@@ -3570,15 +3647,42 @@ impl PlayState {
         let session =
             crate::conversation_session::ConversationSession::new(raw.clone(), fields.clone());
         self.active_conversation = Some(Box::new(session));
-        let greeting_text = self.advance_active_conversation_greeting();
-        let opening = conversation_opening_text(&description_text, &greeting_text);
-        self.message = opening.clone();
-        Some(opening)
+        self.active_conversation_npc_slot = self
+            .npc_at_current_floor(target_x, target_y)
+            .map(|npc| npc.slot);
+        let greeting = self.active_conversation_greeting_rendered();
+        let opening = conversation_opening_rendered(&description_text, &greeting);
+        let text = opening.text.clone();
+        self.emit_tlk_message(opening);
+        Some(text)
     }
 
     /// Render the active conversation's greeting and put it in
     /// `state.message`. Returns the rendered text.
     pub fn advance_active_conversation_greeting(&mut self) -> String {
+        let rendered = self.active_conversation_greeting_rendered();
+        let text = rendered.text.clone();
+        self.emit_tlk_message(rendered);
+        text
+    }
+
+    fn active_conversation_greeting_rendered(&mut self) -> crate::tlk_runner::TlkRenderedText {
+        self.active_conversation_greeting_rendered_with_seed(None)
+    }
+
+    /// Testable form of the conversation opener. A supplied seed is installed
+    /// only for a stranger; acquainted NPCs do not sample or mutate the PRNG.
+    pub fn active_conversation_greeting_rendered_with_host_seed(
+        &mut self,
+        host_seed: u16,
+    ) -> crate::tlk_runner::TlkRenderedText {
+        self.active_conversation_greeting_rendered_with_seed(Some(host_seed))
+    }
+
+    fn active_conversation_greeting_rendered_with_seed(
+        &mut self,
+        stranger_host_seed: Option<u16>,
+    ) -> crate::tlk_runner::TlkRenderedText {
         let avatar_name = self
             .party_names
             .first()
@@ -3605,14 +3709,27 @@ impl PlayState {
             branch_flags,
             moral_standing: self.moral_standing,
             dictionary: Some(&dictionary_refs),
-            gold_payment_accepted: true,
             gold_available: Some(self.gold),
             party_member_names: &party_member_names,
         };
-        let mut text = String::new();
+        let mut rendered = crate::tlk_runner::TlkRenderedText::default();
+        let knows_party = self
+            .active_conversation_npc_slot
+            .and_then(|slot| u8::try_from(slot).ok())
+            .is_none_or(|slot| talk_branch_flag_is_set(branch_flags, slot));
+        let stranger_introduces = if knows_party {
+            false
+        } else {
+            self.prng_state = stranger_host_seed.unwrap_or_else(host_clock_prng_seed_now);
+            self.random_range_u8(0, 1) != 0
+        };
         if let Some(session) = self.active_conversation.as_mut() {
-            let output = session.present_greeting(&ctx);
-            text = output.text.clone();
+            let output = if knows_party {
+                session.present_greeting(&ctx)
+            } else {
+                session.present_stranger_opening(&ctx, stranger_introduces)
+            };
+            rendered = output.rendered_text();
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
             self.apply_tlk_moral_standing(output.moral_standing);
@@ -3621,8 +3738,7 @@ impl PlayState {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
         }
-        self.message = text.clone();
-        text
+        rendered
     }
 
     /// Submit one typed keyword line to the active conversation.
@@ -3660,17 +3776,18 @@ impl PlayState {
             branch_flags,
             moral_standing: self.moral_standing,
             dictionary: Some(&dictionary_refs),
-            gold_payment_accepted: true,
             gold_available: Some(self.gold),
             party_member_names: &party_member_names,
         };
         let mut text = String::new();
+        let mut rendered = crate::tlk_runner::TlkRenderedText::default();
         let mut ended = false;
         let mut asked_party_name = None;
         let mut ask_party_name_prompted = false;
         if let Some(session) = self.active_conversation.as_mut() {
             let output = session.submit_keyword(line, &ctx);
             text = output.text.clone();
+            rendered = output.rendered_text();
             ended = output.ended;
             asked_party_name = output.asked_party_name;
             ask_party_name_prompted = session.awaiting_ask_party_name();
@@ -3696,8 +3813,10 @@ impl PlayState {
                 {
                     if !text.is_empty() {
                         text.push(' ');
+                        rendered.push_plain(" ");
                     }
                     text.push_str(&join_text);
+                    rendered.push_plain(&join_text);
                 }
             }
         } else if !join_keyword && !join_prompted_for_roster_companion {
@@ -3708,14 +3827,18 @@ impl PlayState {
                 session.acknowledge_close();
             }
             self.active_conversation = None;
+            self.active_conversation_npc_slot = None;
             if let Some(cleanup) = self.run_final_conversation_cleanup() {
                 if !text.is_empty() {
                     text.push(' ');
+                    rendered.push_plain(" ");
                 }
                 text.push_str(&cleanup);
+                rendered.push_plain(&cleanup);
             }
         }
-        self.message = text.clone();
+        debug_assert_eq!(rendered.text, text);
+        self.emit_tlk_message(rendered);
         (text, ended)
     }
 
@@ -3905,14 +4028,11 @@ impl PlayState {
 
     /// Return the active scene's shared conversation cleanup sentinel.
     pub fn shared_town_conversation_sentinel(&self) -> u8 {
-        let Area::Town { scene, .. } = self.area else {
+        if !matches!(self.area, Area::Town { .. }) {
             return CONVERSATION_SHARED_NO_SLOT_SENTINEL;
-        };
-        self.shadowlord_hideouts
-            .iter()
-            .copied()
-            .enumerate()
-            .find_map(|(slot, hideout)| (hideout == scene.byte).then_some(slot as u8))
+        }
+        self.resident_shadowlord
+            .map(|slot| slot as u8)
             .unwrap_or(CONVERSATION_SHARED_NO_SLOT_SENTINEL)
     }
 
@@ -3928,58 +4048,46 @@ impl PlayState {
         }
     }
 
-    /// Run final conversation cleanup after Bye/empty-input close.
-    /// Returns presentation text for the status line when the zero
-    /// sentinel allowed cleanup; returns `None` when the sentinel
-    /// suppresses the pass.
+    /// Run the Shadowlord of Falsehood's post-conversation theft.
     pub fn run_final_conversation_cleanup(&mut self) -> Option<String> {
-        if self.shared_town_conversation_sentinel() != 0 {
+        self.run_final_conversation_cleanup_with_seed(host_clock_prng_seed_now())
+    }
+
+    /// Deterministic-seed form of [`Self::run_final_conversation_cleanup`].
+    /// The production caller samples the host clock after the warning line and
+    /// sound; tests can inject the same resulting 12-bit seed directly.
+    pub fn run_final_conversation_cleanup_with_seed(&mut self, host_seed: u16) -> Option<String> {
+        if self.resident_shadowlord != Some(SHADOWLORD_FALSEHOOD_INDEX) {
             return None;
         }
 
-        let reseed = self.conversation_cleanup_reseed();
-        if let Some(index) =
-            decrement_random_resource_signal(&mut self.conversation_resource_signals, reseed)
-        {
-            return Some(format!(
-                "Stolen-action warning. Conversation resource signal {} reconciled.",
-                index + 1
+        // `prng.md §3`: this sample precedes inventory inspection even when
+        // the selected branch below is a deterministic high-to-low scan.
+        self.prng_state = host_seed;
+        if self.keys != 0 || self.gems != 0 || self.torches != 0 {
+            loop {
+                let stock = match self.random_range_u8(0, 2) {
+                    0 => &mut self.keys,
+                    1 => &mut self.gems,
+                    _ => &mut self.torches,
+                };
+                if *stock != 0 {
+                    *stock -= 1;
+                    break;
+                }
+            }
+        } else if decrement_stock_high_to_low(&mut self.equipment_stock).is_some() {
+        } else if decrement_stock_high_to_low(&mut self.scroll_stock).is_some() {
+        } else if decrement_stock_high_to_low(&mut self.potion_stock).is_some() {
+        } else {
+            let debit = u16::from(self.random_range_u8(
+                CONVERSATION_CLEANUP_GOLD_DEBIT_MIN,
+                CONVERSATION_CLEANUP_GOLD_DEBIT_MAX,
             ));
+            self.gold = self.gold.saturating_sub(debit);
         }
-        if let Some(index) = decrement_signal_high_to_low(&mut self.conversation_signal_flags) {
-            return Some(format!(
-                "Stolen-action warning. Conversation signal {index} reconciled."
-            ));
-        }
-        if let Some(index) = decrement_signal_high_to_low(&mut self.conversation_signal_bank_a) {
-            return Some(format!(
-                "Stolen-action warning. Conversation side signal A{} reconciled.",
-                index + 1
-            ));
-        }
-        if let Some(index) = decrement_signal_high_to_low(&mut self.conversation_signal_bank_b) {
-            return Some(format!(
-                "Stolen-action warning. Conversation side signal B{} reconciled.",
-                index + 1
-            ));
-        }
-
-        let debit = conversation_cleanup_gold_debit_from_seed(reseed);
-        let before = self.gold;
-        self.gold = self.gold.saturating_sub(debit);
-        let paid = before - self.gold;
-        Some(format!("Stolen-action warning. Gold -{paid}."))
-    }
-
-    pub fn conversation_cleanup_reseed(&self) -> u8 {
-        (self.turn as u8).wrapping_mul(29)
-            ^ self.clock.month.wrapping_mul(31)
-            ^ self.clock.day.wrapping_mul(7)
-            ^ self.clock.hour.wrapping_mul(11)
-            ^ self.clock.minute.wrapping_mul(13)
-            ^ (self.player.x as u8).wrapping_mul(17)
-            ^ (self.player.y as u8).wrapping_mul(19)
-            ^ (self.gold as u8).wrapping_mul(23)
+        self.mark_visibility_dirty();
+        Some("Stolen goods.".to_string())
     }
 
     pub fn apply_talk_action_grants(&mut self, actions: &[char]) {
@@ -3999,6 +4107,127 @@ impl PlayState {
                         SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
                 }
                 _ => {}
+            }
+        }
+    }
+
+    /// `commands.md §3` / `conversation.md §2`: every town `T` result
+    /// except the guard-demand arrest discriminator is an ordinary
+    /// acted command. A missing target, status-tile refusal, funny-look
+    /// stub, or liveness refusal therefore still consumes the town's
+    /// one-minute turn and schedule pass.
+    fn consume_ordinary_town_talk(&mut self) -> MoveOutcome {
+        self.advance_turn();
+        MoveOutcome::Blocked
+    }
+
+    fn talk_alarm_sentinel_at(
+        &mut self,
+        dialog_id: u8,
+        target_x: usize,
+        target_y: usize,
+    ) -> Option<MoveOutcome> {
+        let response = match dialog_id {
+            TOWN_NPC_COWERING_DIALOG_ID => TOWN_NPC_COWERING_RESPONSE,
+            TOWN_NPC_BRUSHOFF_DIALOG_ID => {
+                let target_slot = self
+                    .npc_at_current_floor(target_x, target_y)
+                    .map(|npc| npc.slot);
+                if let Some(index) = self
+                    .npcs
+                    .iter()
+                    .position(|npc| Some(npc.slot) == target_slot)
+                {
+                    let _ = self.npcs[index].force_town_flight();
+                    self.record_town_npc_mutation(index);
+                }
+                TOWN_NPC_BRUSHOFF_RESPONSE
+            }
+            _ => return None,
+        };
+        self.advance_turn();
+        self.message = response.to_string();
+        Some(MoveOutcome::Talked)
+    }
+
+    pub(crate) fn begin_blackthorn_guard_demand(
+        &mut self,
+        target_x: usize,
+        target_y: usize,
+        consume_turn: bool,
+    ) -> MoveOutcome {
+        let Area::Town { scene, floor } = self.area else {
+            return self.consume_ordinary_town_talk();
+        };
+        let npc_slot = self
+            .npc_at_current_floor(target_x, target_y)
+            .map_or(0, |npc| npc.slot);
+        let arrest = TownArrestPrompt {
+            scene_byte: scene.byte,
+            floor,
+            npc_slot,
+        };
+        let living = self
+            .party
+            .iter()
+            .filter(|member| party_member_counts_as_living(member.status))
+            .count()
+            .min(u16::MAX as usize) as u16;
+        let badge_active = self.active_effect_tag == Some(BLACK_BADGE_ACTIVE_EFFECT_TAG)
+            && self.active_effect_counter != 0;
+
+        if consume_turn {
+            self.advance_turn();
+        }
+        match begin_blackthorn_guard_demand(scene.byte, badge_active, living) {
+            BlackthornGuardDemandStart::Prompt(prompt) => {
+                self.active_blackthorn_guard_demand =
+                    Some(ActiveBlackthornGuardDemand { prompt, arrest });
+                self.message = prompt.message();
+                MoveOutcome::Talked
+            }
+            BlackthornGuardDemandStart::Refused => {
+                self.pending_town_arrest = Some(arrest);
+                self.message = "The guard refuses thee. Surrender? (Y/N).".to_string();
+                MoveOutcome::Used
+            }
+        }
+    }
+
+    pub fn resolve_blackthorn_guard_demand_input(
+        &mut self,
+        key: char,
+        suffix: &str,
+    ) -> Option<MoveOutcome> {
+        let active = self.active_blackthorn_guard_demand?;
+        let mut input = String::new();
+        input.push(key);
+        input.push_str(suffix);
+        match resolve_blackthorn_guard_demand(active.prompt, &input, self.gold) {
+            BlackthornGuardDemandResolution::AwaitingInput => {
+                self.message = active.prompt.message();
+                Some(MoveOutcome::PromptDeclined)
+            }
+            BlackthornGuardDemandResolution::PaidOrPassed { gold } => {
+                self.gold = gold;
+                self.active_blackthorn_guard_demand = None;
+                self.message = match active.prompt {
+                    BlackthornGuardDemandPrompt::PalacePassword => "Pass, friend.".to_string(),
+                    BlackthornGuardDemandPrompt::MinocCharity => {
+                        "Thy charitable gift is accepted.".to_string()
+                    }
+                    BlackthornGuardDemandPrompt::Tribute { .. } => {
+                        "Thy tribute is accepted.".to_string()
+                    }
+                };
+                Some(MoveOutcome::Talked)
+            }
+            BlackthornGuardDemandResolution::Refused { gold } => {
+                self.gold = gold;
+                self.active_blackthorn_guard_demand = None;
+                self.pending_town_arrest = Some(active.arrest);
+                self.message = "The guard's demand is refused. Surrender? (Y/N).".to_string();
+                Some(MoveOutcome::Used)
             }
         }
     }
@@ -4085,24 +4314,10 @@ fn party_roster_name_matches(record: &PartyRosterRecord, needle: &str) -> bool {
     name.eq_ignore_ascii_case(needle.trim())
 }
 
-pub fn decrement_signal_high_to_low(signals: &mut [u8]) -> Option<usize> {
-    for index in (0..signals.len()).rev() {
-        if signals[index] != 0 {
-            signals[index] = signals[index].saturating_sub(1);
-            return Some(index);
-        }
-    }
-    None
-}
-
-pub fn decrement_random_resource_signal(signals: &mut [u8; 3], seed: u8) -> Option<usize> {
-    if signals.iter().all(|value| *value == 0) {
-        return None;
-    }
-    for attempt in 0..signals.len() {
-        let index = usize::from(seed.wrapping_add(attempt as u8) % signals.len() as u8);
-        if signals[index] != 0 {
-            signals[index] = signals[index].saturating_sub(1);
+pub fn decrement_stock_high_to_low(stock: &mut [u8]) -> Option<usize> {
+    for index in (0..stock.len()).rev() {
+        if stock[index] != 0 {
+            stock[index] -= 1;
             return Some(index);
         }
     }
@@ -4187,13 +4402,8 @@ fn draw_surface_view_cell(
 
     let color = surface_view_class_color(class, mode);
     match class {
-        0x00 | 0x0C => {}
-        0x01 => {
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 2, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 1, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 3, color);
-        }
+        0x00 => {}
+        0x01 => draw_surface_view_sparse_checker(viewport, cell_x, cell_y, scale, color),
         0x02 | 0x0F => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
         0x03 => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
         0x04 => {
@@ -4225,13 +4435,15 @@ fn draw_surface_view_cell(
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 3, color);
         }
         0x0A => {
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 1, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 2, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 3, color);
+            draw_surface_view_water_corners(viewport, cell_x, cell_y, scale, tile, mode);
         }
         0x0B => {
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 0, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 2, color);
+        }
+        0x0C => {
+            // `view.md §4`: deep water is not the old table-mapped no-op.
+            // It draws exactly one modal-terrain micro-blit at `(2,2)`.
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 2, color);
         }
         0x0D => {
@@ -4247,7 +4459,7 @@ fn draw_surface_view_cell(
                 set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, y, color);
             }
         }
-        0x10 => draw_view_overlay_fence(viewport, cell_x, cell_y, scale, color, tile, mode),
+        0x10 => draw_surface_view_road(viewport, cell_x, cell_y, scale, color, tile, mode),
         0x5A => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
         _ => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
     }
@@ -4365,38 +4577,6 @@ fn render_dungeon_minimap_glyph_code(glyph: Option<DungeonMinimapGlyph>) -> char
             _ => '?',
         },
     }
-}
-
-fn draw_dungeon_view_cell(
-    viewport: &mut TileViewport,
-    cell_x: usize,
-    cell_y: usize,
-    scale: usize,
-    glyph: char,
-    mode: ViewOverlayMode,
-) {
-    // Inverse of `render_dungeon_minimap_glyph_code`, for the text-map
-    // path that re-renders a stored ASCII map into pixels.
-    let glyph = match glyph {
-        '@' => Some(DUNGEON_MINIMAP_PARTY_GLYPH),
-        '.' | '~' => Some(DungeonMinimapGlyph::text(0x18)),
-        '<' => Some(DungeonMinimapGlyph::runic(0x2e)),
-        '>' => Some(DungeonMinimapGlyph::runic(0x2d)),
-        'H' => Some(DungeonMinimapGlyph::runic(0x2f)),
-        '$' => Some(DungeonMinimapGlyph::runic(0x70)),
-        'f' => Some(DungeonMinimapGlyph::Fountain),
-        '=' => Some(DungeonMinimapGlyph::EnergyField),
-        'I' => Some(DungeonMinimapGlyph::text(0x12)),
-        'o' => Some(DungeonMinimapGlyph::text(0x19)),
-        'v' => Some(DungeonMinimapGlyph::runic(0x71)),
-        '!' => Some(DungeonMinimapGlyph::runic(0x72)),
-        '+' => Some(DungeonMinimapGlyph::runic(0x73)),
-        '#' => Some(DungeonMinimapGlyph::runic(0x74)),
-        '*' => Some(DungeonMinimapGlyph::runic(0x77)),
-        ' ' => None,
-        _ => Some(DungeonMinimapGlyph::text(0x18)),
-    };
-    draw_dungeon_view_glyph(viewport, cell_x, cell_y, scale, glyph, mode);
 }
 
 fn dungeon_view_door_color(mode: ViewOverlayMode) -> u8 {
@@ -4598,7 +4778,8 @@ fn surface_view_class_color(class: u8, mode: ViewOverlayMode) -> u8 {
         match class {
             0x0A => return 3,
             0x0B => return 11,
-            0x0F => return 14,
+            0x0C => return 11,
+            0x0D => return 3,
             _ => {}
         }
     }
@@ -4614,6 +4795,7 @@ fn surface_view_class_color(class: u8, mode: ViewOverlayMode) -> u8 {
         0x09 => 10,
         0x0A => 11,
         0x0B => 13,
+        0x0C => 13,
         0x0D => 12,
         0x0E => 9,
         0x0F => 4,
@@ -4671,7 +4853,57 @@ fn draw_view_overlay_diagonals(
     }
 }
 
-fn draw_view_overlay_fence(
+fn draw_surface_view_sparse_checker(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
+    for (x, y) in [(1, 0), (1, 2), (3, 1), (3, 3)] {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+    }
+}
+
+fn surface_view_river_tile(tile: u8) -> bool {
+    matches!(tile, 0x60..=0x69 | 0x6C..=0x6F)
+}
+
+fn draw_surface_view_water_corners(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    tile: u8,
+    mode: ViewOverlayMode,
+) {
+    let modal = surface_view_class_color(0x0A, mode);
+    let secondary = surface_view_class_color(0x02, mode);
+    let shoreline_mask = tile & 0x0F;
+    for (bit, x, y) in [(0x01, 1, 0), (0x02, 3, 1), (0x04, 1, 2), (0x08, 3, 3)] {
+        let color = if surface_view_river_tile(tile) && shoreline_mask & bit == 0 {
+            secondary
+        } else {
+            modal
+        };
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+    }
+}
+
+const fn surface_view_road_connection_mask(tile: u8) -> u8 {
+    match tile {
+        0x20 => 0x01 | 0x04, // north-south
+        0x21 => 0x02 | 0x08, // east-west
+        0x22 => 0x01 | 0x02, // north-east
+        0x23 => 0x02 | 0x04, // east-south
+        0x24 => 0x04 | 0x08, // south-west
+        0x25 => 0x08 | 0x01, // west-north
+        0x26 => 0x0F,
+        _ => 0,
+    }
+}
+
+fn draw_surface_view_road(
     viewport: &mut TileViewport,
     cell_x: usize,
     cell_y: usize,
@@ -4680,6 +4912,15 @@ fn draw_view_overlay_fence(
     tile: u8,
     mode: ViewOverlayMode,
 ) {
+    // `view.md §4`: the road opens with the class-1 secondary checker,
+    // then lays down the frame-fill centre body and connection stubs.
+    draw_surface_view_sparse_checker(
+        viewport,
+        cell_x,
+        cell_y,
+        scale,
+        surface_view_class_color(0x01, mode),
+    );
     let fill = surface_view_class_color(0x03, mode);
     for y in 1..=2 {
         for x in 1..=2 {
@@ -4687,7 +4928,7 @@ fn draw_view_overlay_fence(
         }
     }
 
-    let mask = tile & 0x0f;
+    let mask = surface_view_road_connection_mask(tile);
     if mask & 0x1 != 0 {
         set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, color);
         set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 0, color);
@@ -4705,15 +4946,17 @@ fn draw_view_overlay_fence(
         set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 2, color);
     }
 
-    let marker = match tile {
+    let blank_notch = match tile {
         0x22 => Some((1, 2)),
         0x23 => Some((1, 1)),
         0x24 => Some((2, 1)),
         0x25 => Some((2, 2)),
         _ => None,
     };
-    if let Some((x, y)) = marker {
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+    if let Some((x, y)) = blank_notch {
+        // The final stamp is the blank source over the centre quarter
+        // diagonally opposite the elbow, not a coloured orientation mark.
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, 0);
     }
 }
 
@@ -4760,16 +5003,19 @@ fn set_view_overlay_pixel(
     }
 }
 
-fn conversation_opening_text(description: &str, greeting: &str) -> String {
-    let mut text = String::from(TLK_OPENING_DESCRIPTION_PREFIX);
-    text.push_str(description.trim());
-    text.push_str("\n\n");
-    text.push_str(greeting.trim());
-    if !text.ends_with('\n') {
-        text.push('\n');
+fn conversation_opening_rendered(
+    description: &str,
+    greeting: &crate::tlk_runner::TlkRenderedText,
+) -> crate::tlk_runner::TlkRenderedText {
+    let mut rendered = crate::tlk_runner::TlkRenderedText::plain(TLK_OPENING_DESCRIPTION_PREFIX);
+    rendered.push_plain(description.trim());
+    rendered.push_plain("\n\n");
+    rendered.push_rendered(&greeting.trimmed());
+    if !rendered.text.ends_with('\n') {
+        rendered.push_plain("\n");
     }
-    text.push_str(TLK_KEYWORD_PROMPT);
-    text
+    rendered.push_plain(TLK_KEYWORD_PROMPT);
+    rendered
 }
 
 fn append_shop_opening_prompt(mut rendered: String, prompt: &str) -> String {

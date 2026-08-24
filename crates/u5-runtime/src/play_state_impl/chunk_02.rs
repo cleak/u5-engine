@@ -242,7 +242,9 @@ impl PlayState {
             }
             'u' => {
                 let outcome = if inline_use_request.is_some() {
-                    self.use_item_command(inline_use_request, Some(game_dir))?
+                    let outcome = self.use_item_command(inline_use_request, Some(game_dir))?;
+                    self.ensure_use_action_turn(turn_before);
+                    outcome
                 } else {
                     self.start_use_item()
                 };
@@ -462,7 +464,9 @@ impl PlayState {
                 }
                 'U' => {
                     let outcome = if inline_use_request.is_some() {
-                        self.use_item_command(inline_use_request, Some(game_dir))?
+                        let outcome = self.use_item_command(inline_use_request, Some(game_dir))?;
+                        self.ensure_use_action_turn(turn_before);
+                        outcome
                     } else {
                         self.start_use_item()
                     };
@@ -485,7 +489,14 @@ impl PlayState {
         }
 
         if let Some(direction) = Direction::from_play_key(key) {
-            self.step_with_game_dir(direction, Some(game_dir))?;
+            let town_mode = matches!(self.area, Area::Town { .. });
+            let outcome = self.step_with_game_dir(direction, Some(game_dir))?;
+            // World movement already owns its landing effects inside
+            // `step_world`; town movement reaches the shared town epilogue
+            // here so native underfoot reactions run after the consumed step.
+            if town_mode {
+                self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+            }
             return Ok(true);
         }
 
@@ -567,7 +578,9 @@ impl PlayState {
             'r' => self.start_ready_equipment(),
             'u' => {
                 if inline_use_request.is_some() {
-                    self.use_item_command(inline_use_request, Some(game_dir))?
+                    let outcome = self.use_item_command(inline_use_request, Some(game_dir))?;
+                    self.ensure_use_action_turn(turn_before);
+                    outcome
                 } else {
                     self.start_use_item()
                 }
@@ -604,7 +617,10 @@ impl PlayState {
         if spell_index.is_some()
             && parse_inline_party_index(suffix).is_some()
             && self.combat_active
-            && self.active_effect_tag == Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG)
+            && resolve_negate_magic_absorbs_combat_cast(
+                self.active_effect_tag,
+                self.active_effect_counter,
+            )
         {
             self.message = "Magic absorbed!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -639,6 +655,7 @@ impl PlayState {
                 self.cast_magic_lock(
                     caster_index,
                     parse_inline_cardinal_direction(suffix),
+                    inline_explicit_pass(suffix),
                     game_dir,
                 )
             }
@@ -661,6 +678,7 @@ impl PlayState {
                 self.cast_open_spell(
                     caster_index,
                     parse_inline_cardinal_direction(suffix),
+                    inline_explicit_pass(suffix),
                     game_dir,
                 )
             }
@@ -683,7 +701,11 @@ impl PlayState {
                     self.message = "Who casts? Use C1AY6 for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                Ok(self.cast_vanish(caster_index, parse_inline_cardinal_direction(suffix)))
+                Ok(self.cast_vanish(
+                    caster_index,
+                    parse_inline_cardinal_direction(suffix),
+                    inline_explicit_pass(suffix),
+                ))
             }
             "AWY" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -1099,6 +1121,7 @@ impl PlayState {
                 self.cast_unlock_magic(
                     caster_index,
                     parse_inline_cardinal_direction(suffix),
+                    inline_explicit_pass(suffix),
                     game_dir,
                 )
             }
@@ -1407,20 +1430,6 @@ impl PlayState {
             .map(|member| member.status)
             .collect();
         acting_member_scan(&statuses)
-    }
-
-    /// `traps.md §2.1` branch 3: the **last** Good-or-Poisoned roster
-    /// position inside the party count, which is the match the scan keeps.
-    ///
-    /// This is not itself a published outcome — §2.1's two-or-more case
-    /// prompts — and it exists only as the dungeon chest site's stand-in
-    /// for a picker this engine does not yet have there. Marked as a
-    /// deliberate choice, not as contract.
-    pub fn acting_member_scan_last_eligible_slot(&self) -> Option<usize> {
-        self.party
-            .iter()
-            .take(COMBAT_PARTY_ACTOR_SLOTS)
-            .rposition(|member| acting_member_status_eligible(member.status))
     }
 
     /// `traps.md §2.1`/§4: the surface/town container site's acting-member

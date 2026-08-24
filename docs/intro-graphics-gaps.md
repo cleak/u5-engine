@@ -1,7 +1,7 @@
 # Intro Graphics Gaps
 
-Last refreshed: 2026-08-23 at `9e437d5`, against `cleak/u5-spec` head and the
-current `u5-engine` tree.
+Last refreshed: 2026-08-24 against public `cleak/u5-spec` head `5b9445f` and
+the current `u5-engine` tree.
 
 This file tracks the intro graphics contracts that still block an authentic
 minimum intro implementation under the strict no-fallback rule. If a behavior is
@@ -10,13 +10,16 @@ generated animation, cropped buffers, or diagnostic substitutes.
 
 ## Still Open
 
-The `cleak/u5-spec` queue is empty - **88 closed, 0 open** - so nothing on the
-intro path is waiting on a contract.
+There is no open blocking intro question. Public issues `#118` and `#120` are
+resolved by clean commits `12485b3` and `36780cb`; the subtitle ignition now
+implements the exact two-pass countdown/tails, per-state polling order,
+`0x3500` Galois vector, first-publication anchors, gate recurrence, 45/50 pacing
+ratio, and published `48/53` plus `35/33` burst totals.
 
-**Nothing on the intro path is an unimplemented published contract any more.**
-The Ultima IV transfer preview was the last one, and it is built. What is left
-below is the handful of details the spec states honestly that it does not
-publish.
+**Nothing on the intro path that is fully published remains unimplemented.**
+The Ultima IV transfer preview was the last complete missing contract. What is
+left below is the handful of optional details the spec explicitly permits an
+implementation to choose.
 
 | Item | Status |
 |---|---|

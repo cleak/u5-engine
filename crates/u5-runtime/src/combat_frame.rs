@@ -15,6 +15,11 @@ pub struct CombatFrameSnapshot {
     pub enter_endgame_after_successful_combat: bool,
     pub endgame_messages: Option<EndgameMessages>,
     pub endgame_tableau_map: Option<MiscmapsCutsceneMap>,
+    /// `combat.md §14`: the Escape refusal chooses `Not here` when the
+    /// encounter entry mode has its high bit set.
+    pub encounter_mode_high_bit: bool,
+    /// One-shot out-of-arena exit announcement state sampled by Escape.
+    pub exit_announced: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,8 +92,7 @@ pub struct CombatAmbushRevealApplication {
 pub enum CombatExitOutcome {
     /// Every hostile actor has been killed.
     Victory,
-    /// The entire party is dead, asleep, or otherwise inactive
-    /// (also reached intentionally by combat `Q`).
+    /// The entire party is dead, asleep, or otherwise inactive.
     Defeat,
     /// The party left the arena via the out-of-bounds combat-leave
     /// helper.
@@ -273,7 +277,7 @@ pub fn combat_exit_requests_body_retrieval_reconcile(
     exit: CombatRoundLoopExit,
     actors: &[CombatActorDescriptor],
 ) -> bool {
-    matches!(exit, CombatRoundLoopExit::LeaveCombat)
+    matches!(exit, CombatRoundLoopExit::Victory)
         && !combat_has_active_not_dead_non_party_actor(actors)
 }
 
@@ -394,9 +398,22 @@ pub struct CombatArenaFieldContactApplication {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatPostDispatchContactSource {
+    ArenaTerrain { tile: u8 },
+    PlacedMarker { active_object_slot: usize },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CombatPostDispatchContactApplication {
+    pub source: CombatPostDispatchContactSource,
+    pub field_contact: CombatArenaFieldContactApplication,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CombatAbsorbableFieldApplication {
     pub actor_slot: usize,
-    pub active_object_slot: usize,
+    pub companion_band_index: usize,
+    pub marker_byte: u8,
     pub x: u8,
     pub y: u8,
     pub armed_endgame_result: bool,
@@ -520,14 +537,47 @@ pub enum CombatPlayerCommandAction {
     InvalidDirection {
         direction_code: u8,
     },
-    QuitDefeat,
-    XitCleanup {
-        allowed: bool,
+    EscapeCleanup {
+        application: CombatEscapeCleanupApplication,
     },
     Branch {
         branch: CombatCommandBranch,
         live_actor_gate: CombatCommandLiveActorGate,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatEscapeCleanupApplication {
+    pub decision: CombatEscapeCleanupDecision,
+    pub cleared_descriptor_slots: u8,
+    pub cleared_active_object_slots: u8,
+    pub world_ticks: u8,
+    pub rising_glissando: bool,
+    pub stats_panel_dirty: bool,
+}
+
+impl CombatEscapeCleanupApplication {
+    pub const fn refused(decision: CombatEscapeCleanupDecision) -> Self {
+        Self {
+            decision,
+            cleared_descriptor_slots: 0,
+            cleared_active_object_slots: 0,
+            world_ticks: 0,
+            rising_glissando: false,
+            stats_panel_dirty: false,
+        }
+    }
+
+    pub const fn accepted(cleared_descriptor_slots: u8, cleared_active_object_slots: u8) -> Self {
+        Self {
+            decision: CombatEscapeCleanupDecision::Accepted,
+            cleared_descriptor_slots,
+            cleared_active_object_slots,
+            world_ticks: cleared_descriptor_slots.saturating_add(cleared_active_object_slots),
+            rising_glissando: true,
+            stats_panel_dirty: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -537,7 +587,83 @@ pub struct CombatPlayerCommandApplication {
     pub action: CombatPlayerCommandAction,
     pub weapon_attack: Option<CombatWeaponAttackApplication>,
     pub ring_pass: Option<CombatMagicRingPassOutcome>,
+    pub active_effect_age: Option<ActiveEffectAgeOutcome>,
+    pub absorbable_contact: Option<CombatAbsorbableFieldApplication>,
+    pub post_dispatch_contact: Option<CombatPostDispatchContactApplication>,
+    /// `combat.md §8`'s single re-prompt flag. When set, the same actor
+    /// remains pending and has spent no combat action.
+    pub reprompt: bool,
     pub control_after: CombatRoundLoopControl,
+}
+
+pub const fn combat_player_command_action_defers_maintenance(
+    action: &CombatPlayerCommandAction,
+) -> bool {
+    match action {
+        CombatPlayerCommandAction::PromptForAttackDirection => true,
+        CombatPlayerCommandAction::Branch { branch, .. } => {
+            combat_command_branch_is_named_multistage(*branch)
+                || matches!(
+                    branch,
+                    // Push calls the shared direction-prompt handler directly
+                    // rather than belonging to the named Shape-A prompt group,
+                    // but the event-driven continuation still has to defer the
+                    // parser epilogue until that handler returns. Z-stats
+                    // likewise closes through its modal continuation.
+                    CombatCommandBranch::Push | CombatCommandBranch::ZStats
+                )
+        }
+        _ => false,
+    }
+}
+
+pub const fn combat_player_command_action_reprompts(action: &CombatPlayerCommandAction) -> bool {
+    match action {
+        CombatPlayerCommandAction::QuicknessSkipped => true,
+        CombatPlayerCommandAction::ActivePlayerSelection(
+            CombatActivePlayerSelectionOutcome::Invalid,
+        ) => true,
+        CombatPlayerCommandAction::InvalidDirection { .. }
+        | CombatPlayerCommandAction::EscapeCleanup {
+            application:
+                CombatEscapeCleanupApplication {
+                    decision:
+                        CombatEscapeCleanupDecision::RefusedNotHere
+                        | CombatEscapeCleanupDecision::RefusedNotYet,
+                    ..
+                },
+        } => true,
+        CombatPlayerCommandAction::StepOrAttack {
+            outcome:
+                CombatStepOrAttackPrimitiveOutcome::InactiveActor
+                | CombatStepOrAttackPrimitiveOutcome::BlockedActor { .. }
+                | CombatStepOrAttackPrimitiveOutcome::BlockedWall,
+            ..
+        } => true,
+        CombatPlayerCommandAction::Branch {
+            live_actor_gate: CombatCommandLiveActorGate::RejectedDeadOrMissing,
+            ..
+        } => true,
+        CombatPlayerCommandAction::Branch { branch, .. } => matches!(
+            branch,
+            CombatCommandBranch::SceneMessageAbort(_)
+                | CombatCommandBranch::DWhatRefusal
+                | CombatCommandBranch::WWhatRefusal
+                | CombatCommandBranch::ToggleMusic
+                | CombatCommandBranch::Invalid
+        ),
+        CombatPlayerCommandAction::ActivePlayerSelection(_)
+        | CombatPlayerCommandAction::Pass(_)
+        | CombatPlayerCommandAction::PromptForAttackDirection
+        | CombatPlayerCommandAction::StepOrAttack { .. }
+        | CombatPlayerCommandAction::EscapeCleanup {
+            application:
+                CombatEscapeCleanupApplication {
+                    decision: CombatEscapeCleanupDecision::Accepted,
+                    ..
+                },
+        } => false,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -624,6 +750,20 @@ impl PlayState {
         let woke = roll == COMBAT_SLEEP_WAKE_SUCCESS_ROLL;
         if woke {
             actor.clear_status_disabled();
+            let hidden = actor.is_hidden_or_unrevealed();
+            let active_object_slot = usize::from(actor.active_object_slot);
+            if let Some(member) = self.party.get_mut(slot) {
+                if member.status == b'S' {
+                    member.status = b'G';
+                }
+            }
+            if let Some(object) = self.active_objects.get_mut(active_object_slot) {
+                object.tile = if hidden {
+                    COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE
+                } else {
+                    object.type_byte
+                };
+            }
             self.mark_visibility_dirty();
         }
         Some(CombatSleepWakeApplication { slot, roll, woke })
@@ -647,6 +787,45 @@ impl PlayState {
                 )
             })
             .unwrap_or(COMBAT_TARGET_GROUP_NEUTRAL)
+    }
+
+    /// `magic.md §7`: revalidate a victim's save-backed source at the instant
+    /// C-Cast is dispatched. Stale, friendly, hidden, sleeping, dead, distant,
+    /// and Negate-Time-suppressed references all fall through to the spell UI.
+    pub(crate) fn combat_cast_interference_source_for_slot(
+        &self,
+        caster_slot: usize,
+    ) -> Option<usize> {
+        let source_slot = usize::from(*self.combat_interference_sources.get(caster_slot)?);
+        let caster = self.combat_actors.get(caster_slot).copied()?;
+        let source = self.combat_actors.get(source_slot).copied();
+        let source_is_hostile = source.is_some()
+            && combat_target_groups_are_hostile(
+                self.combat_target_group_for_slot(source_slot),
+                self.combat_target_group_for_slot(caster_slot),
+            );
+        let negate_time_active = active_effect_is_active(
+            self.active_effect_tag,
+            self.active_effect_counter,
+            NEGATE_TIME_ACTIVE_EFFECT_TAG,
+        );
+
+        matches!(
+            resolve_combat_cast_interference(
+                caster,
+                source,
+                source_is_hostile,
+                negate_time_active,
+            ),
+            CombatCastInterferenceOutcome::Interfered
+        )
+        .then_some(source_slot)
+    }
+
+    pub(crate) fn clear_combat_interference_for_completed_action(&mut self, victim_slot: usize) {
+        if let Some(source) = self.combat_interference_sources.get_mut(victim_slot) {
+            *source = COMBAT_INTERFERENCE_NO_SOURCE;
+        }
     }
 
     pub(crate) fn combat_target_candidate_view(
@@ -773,13 +952,56 @@ impl PlayState {
         self.random_mod_u8(max)
     }
 
+    /// `combat.md §9.1`: party actors use their owner character's persisted
+    /// Intelligence; monster actors use their class endurance byte.
+    pub fn combat_actor_resistance_rating(&self, slot: usize) -> Option<u8> {
+        let actor = self.combat_actors.get(slot).copied()?;
+        if slot < COMBAT_PARTY_ACTOR_SLOTS {
+            self.party_intelligence
+                .get(actor.owner_target_class as usize)
+                .copied()
+        } else {
+            combat_class_stats(actor.owner_target_class).map(|stats| stats.endurance)
+        }
+    }
+
+    pub fn combat_resistance_raw_roll(&mut self) -> u8 {
+        self.random_range_u8(0, 60)
+    }
+
+    pub fn combat_resistance_blocks(&mut self, caster_slot: usize, target_slot: usize) -> bool {
+        let ratings = self
+            .combat_actor_resistance_rating(caster_slot)
+            .zip(self.combat_actor_resistance_rating(target_slot));
+        let raw_roll = self.combat_resistance_raw_roll();
+        ratings.is_none_or(|(caster, target)| {
+            combat_resistance_blocks_from_raw_roll(caster, target, raw_roll)
+        })
+    }
+
+    pub fn combat_target_weight(&self, target_slot: usize) -> Option<u8> {
+        let actor = self.combat_actors.get(target_slot).copied()?;
+        let negate_time_active = active_effect_is_active(
+            self.active_effect_tag,
+            self.active_effect_counter,
+            NEGATE_TIME_ACTIVE_EFFECT_TAG,
+        );
+        Some(combat_actor_weight(target_slot, actor, negate_time_active))
+    }
+
+    pub fn combat_target_weight_gate_accepts(&mut self, target_slot: usize) -> bool {
+        let weight = self.combat_target_weight(target_slot);
+        let raw_roll = self.combat_resistance_raw_roll();
+        weight
+            .is_some_and(|weight| combat_target_weight_gate_accepts_from_raw_roll(weight, raw_roll))
+    }
+
     pub fn combat_spell_target_defense_value(&self, target_slot: usize) -> u8 {
         if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            resolve_protection_defense_bonus(
-                CHARACTER_DEFENSE_FACTORY_SEED,
-                self.active_effect_tag,
-                self.active_effect_counter,
-            )
+            // `magic.md §8`: Protection occupies and displays the shared
+            // timed-effect slot, but its intended defense computation is
+            // unreachable and has no mechanical consequence.
+            CHARACTER_DEFENSE_FACTORY_SEED
         } else {
             self.combat_actors
                 .get(target_slot)
@@ -978,28 +1200,27 @@ impl PlayState {
         target_x: u8,
         target_y: u8,
     ) -> Option<(usize, CombatArenaFieldKind)> {
+        self.find_combat_arena_field_marker_excluding(target_x, target_y, None)
+    }
+
+    pub fn find_combat_arena_field_marker_excluding(
+        &self,
+        target_x: u8,
+        target_y: u8,
+        excluded_active_object_slot: Option<usize>,
+    ) -> Option<(usize, CombatArenaFieldKind)> {
         self.active_objects
             .iter()
+            .take(OOL_SLOTS)
             .enumerate()
             .find_map(|(slot, object)| {
+                if excluded_active_object_slot == Some(slot) {
+                    return None;
+                }
                 if object.x != usize::from(target_x) || object.y != usize::from(target_y) {
                     return None;
                 }
                 CombatArenaFieldKind::from_kind_byte(object.type_byte).map(|field| (slot, field))
-            })
-    }
-
-    pub fn find_combat_absorbable_field_marker(&self, target_x: u8, target_y: u8) -> Option<usize> {
-        self.active_objects
-            .iter()
-            .enumerate()
-            .find_map(|(slot, object)| {
-                if object.x != usize::from(target_x) || object.y != usize::from(target_y) {
-                    return None;
-                }
-                (dungeon_room_absorbable_field_family(object.type_byte)
-                    || dungeon_room_absorbable_field_family(object.tile))
-                .then_some(slot)
             })
     }
 
@@ -1008,10 +1229,18 @@ impl PlayState {
         actor_slot: usize,
     ) -> Option<CombatAbsorbableFieldApplication> {
         let actor = self.combat_actors.get(actor_slot).copied()?;
-        if !combat_actor_is_active_not_dead(actor) {
+        if !combat_actor_is_present_not_dead(actor) || actor.y != 2 {
             return None;
         }
-        let active_object_slot = self.find_combat_absorbable_field_marker(actor.x, actor.y)?;
+        let companion_band_index = terrain_band_active_index(1, usize::from(actor.x))?;
+        let marker_byte = self
+            .combat_render_sprite_at(usize::from(actor.x), 1)
+            .and_then(|tile| u8::try_from(tile).ok())
+            .unwrap_or(self.combat_terrain[1][usize::from(actor.x)]);
+        self.terrain_band[companion_band_index] = marker_byte;
+        if !dungeon_room_absorbable_field_family(marker_byte) {
+            return None;
+        }
         self.active_player = None;
         let armed_endgame_result = self.combat_frame_snapshot.as_mut().is_some_and(|snapshot| {
             let armed = snapshot.endgame_messages.is_some();
@@ -1024,7 +1253,8 @@ impl PlayState {
         self.mark_visibility_dirty();
         Some(CombatAbsorbableFieldApplication {
             actor_slot,
-            active_object_slot,
+            companion_band_index,
+            marker_byte,
             x: actor.x,
             y: actor.y,
             armed_endgame_result,
@@ -1214,7 +1444,11 @@ impl PlayState {
             return outcome;
         }
 
-        let applied = self.apply_combat_charm_allegiance(target_slot);
+        let applied = if self.combat_resistance_blocks(caster_index, target_slot) {
+            None
+        } else {
+            self.apply_combat_charm_allegiance(target_slot)
+        };
         self.advance_turn();
         self.message = if applied.is_some() {
             "Charm!".to_string()
@@ -1300,6 +1534,7 @@ impl PlayState {
         &mut self,
         class: u8,
         z: i8,
+        actor_flags: u8,
         legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
         candidate_coordinates: &[(u8, u8)],
     ) -> Option<CombatSummonApplication> {
@@ -1310,7 +1545,7 @@ impl PlayState {
             allocation.active_object_slot as u8,
             x,
             y,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            actor_flags,
             0,
         )?;
         let active_object =
@@ -1338,11 +1573,18 @@ impl PlayState {
         legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     ) -> Option<CombatSummonApplication> {
         for _ in 0..8 {
-            let x = self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8);
-            let y = self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8);
-            if let Some(application) =
-                self.apply_combat_summon_class_with_legal_mask(class, z, legal_cells, &[(x, y)])
-            {
+            let x = self.random_range_u8(0, 15);
+            let y = self.random_range_u8(0, 15);
+            if usize::from(x) >= COMBAT_ARENA_SIDE || usize::from(y) >= COMBAT_ARENA_SIDE {
+                continue;
+            }
+            if let Some(application) = self.apply_combat_summon_class_with_legal_mask(
+                class,
+                z,
+                COMBAT_SUMMONED_ACTOR_FLAGS,
+                legal_cells,
+                &[(x, y)],
+            ) {
                 return Some(application);
             }
         }
@@ -1363,6 +1605,7 @@ impl PlayState {
             if let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 COMBAT_CLASS_DAEMON,
                 z,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
                 legal_cells,
                 &[(x, y)],
             ) {
@@ -1387,6 +1630,7 @@ impl PlayState {
         self.apply_combat_summon_class_with_legal_mask(
             class,
             self.combat_actor_z(center_slot),
+            COMBAT_SUMMONED_ACTOR_FLAGS,
             &legal_cells,
             &candidates,
         )
@@ -1406,6 +1650,7 @@ impl PlayState {
         self.apply_combat_summon_class_with_legal_mask(
             class,
             self.combat_actor_z(center_slot),
+            COMBAT_SUMMONED_ACTOR_FLAGS,
             &legal_cells,
             &candidates,
         )
@@ -1420,7 +1665,13 @@ impl PlayState {
     ) -> Option<CombatSummonApplication> {
         let legal_cells = self.combat_legal_cell_mask();
         let candidates = combat_ring_candidate_coordinates_around(target_x, target_y);
-        self.apply_combat_summon_class_with_legal_mask(class, z, &legal_cells, &candidates)
+        self.apply_combat_summon_class_with_legal_mask(
+            class,
+            z,
+            COMBAT_SUMMONED_ACTOR_FLAGS,
+            &legal_cells,
+            &candidates,
+        )
     }
 
     pub fn apply_combat_ai_blink_special(
@@ -1463,24 +1714,12 @@ impl PlayState {
         let summon = self.apply_combat_summon_class_with_legal_mask(
             COMBAT_CLASS_DAEMON,
             self.combat_actor_z(actor_slot),
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
             &legal_cells,
             candidate_coordinates,
         )?;
         self.message = "Monster summons daemon.".to_string();
         Some(CombatAiSpecialApplication::SummonDaemon { actor_slot, summon })
-    }
-
-    pub fn apply_combat_ai_summon_daemon_special(
-        &mut self,
-        actor_slot: usize,
-        seed: u8,
-    ) -> Option<CombatAiSpecialApplication> {
-        let actor = self.combat_actors.get(actor_slot).copied()?;
-        if !combat_actor_is_active_not_dead(actor) {
-            return None;
-        }
-        let candidates = combat_neighbor_candidate_coordinates(actor.x, actor.y, seed);
-        self.apply_combat_ai_summon_daemon_special_with_candidates(actor_slot, &candidates)
     }
 
     pub fn apply_combat_ai_possess_special_with_inputs(
@@ -1551,6 +1790,132 @@ impl PlayState {
         })
     }
 
+    fn combat_ai_handled_special_turn(
+        actor_slot: usize,
+        acting_group: u8,
+        special: CombatAiSpecialApplication,
+        possess_hook_handled: bool,
+    ) -> CombatAiTurnApplication {
+        CombatAiTurnApplication {
+            actor_slot,
+            special: Some(special),
+            possess_hook_handled,
+            acting_group,
+            target: CombatAiTargetResolution::NoUsableTarget,
+            step_vector: None,
+            attack_route: None,
+            monster_attack: None,
+            movement: None,
+            command_key: None,
+            movement_commit: None,
+        }
+    }
+
+    /// Run one production monster-AI turn using the shared gameplay PRNG.
+    ///
+    /// `combat.md §9` requires a lazy special-hook cascade. No later branch
+    /// or ordinary-AI input is drawn after a handled possess, blink, or summon,
+    /// and a summon probe always draws fresh X then Y coordinates.
+    pub fn apply_combat_ai_turn(&mut self, actor_slot: usize) -> Option<CombatAiTurnApplication> {
+        if !self.combat_active || actor_slot < COMBAT_PARTY_ACTOR_SLOTS {
+            return None;
+        }
+        let actor = *self.combat_actors.get(actor_slot)?;
+        if !combat_actor_is_active_not_dead(actor) {
+            return None;
+        }
+
+        let class = actor.owner_target_class;
+        let traits = combat_class_traits(class)?;
+        let acting_group = self.combat_target_group_for_slot(actor_slot);
+
+        if traits.possess {
+            let target_slot = self.combat_ai_possess_target_slot_roll(actor_slot);
+            if self.combat_ai_possess_candidate_reaches_resistance_from_roll(target_slot) {
+                let resistance_blocks =
+                    self.combat_ai_possess_resistance_blocks(actor_slot, target_slot);
+                if let Some(special) = self.apply_combat_ai_possess_special_with_inputs(
+                    actor_slot,
+                    target_slot,
+                    resistance_blocks,
+                ) {
+                    return Some(Self::combat_ai_handled_special_turn(
+                        actor_slot,
+                        acting_group,
+                        special,
+                        true,
+                    ));
+                }
+            }
+        }
+
+        if traits.blink {
+            let blink_roll = self.combat_ai_blink_roll(actor_slot);
+            if combat_ai_special_one_in_eight_gate(blink_roll) {
+                if let Some(special) = self.apply_combat_ai_blink_special(actor_slot) {
+                    return Some(Self::combat_ai_handled_special_turn(
+                        actor_slot,
+                        acting_group,
+                        special,
+                        false,
+                    ));
+                }
+            }
+        }
+
+        if traits.summon_daemon {
+            let summon_roll = self.combat_ai_summon_roll(actor_slot);
+            if combat_ai_special_one_in_eight_gate(summon_roll) {
+                let candidate = self.combat_ai_summon_probe_coordinate(actor_slot);
+                if let Some(special) = self
+                    .apply_combat_ai_summon_daemon_special_with_candidates(actor_slot, &[candidate])
+                {
+                    return Some(Self::combat_ai_handled_special_turn(
+                        actor_slot,
+                        acting_group,
+                        special,
+                        false,
+                    ));
+                }
+            }
+        }
+
+        let mass_charm_roll = if active_effect_is_active(
+            self.active_effect_tag,
+            self.active_effect_counter,
+            MASS_CHARM_ACTIVE_EFFECT_TAG,
+        ) {
+            self.combat_ai_mass_charm_roll(actor_slot)
+        } else {
+            0
+        };
+        let teleport_candidate = traits
+            .teleport_capable
+            .then(|| self.combat_ai_teleport_candidate(actor_slot))
+            .flatten();
+        let horizontal_axis_first = self.combat_ai_horizontal_axis_first(actor_slot);
+        let random_cardinal_direction_codes =
+            self.combat_ai_random_cardinal_direction_codes(actor_slot);
+        let monster_attack_inputs = self.combat_monster_attack_inputs(actor_slot);
+
+        self.apply_combat_ai_turn_with_inputs(
+            actor_slot,
+            false,
+            0,
+            false,
+            32,
+            32,
+            &[],
+            None,
+            mass_charm_roll,
+            false,
+            teleport_candidate,
+            horizontal_axis_first,
+            &random_cardinal_direction_codes,
+            Some(monster_attack_inputs),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn apply_combat_ai_turn_with_inputs(
         &mut self,
@@ -1578,20 +1943,18 @@ impl PlayState {
         }
 
         let class = actor.owner_target_class;
-        let mut special = None;
-        let mut possess_hook_handled = false;
-        let mut summon_hook_pending = false;
-        let summon_can_place_daemon = if combat_class_traits(class)
-            .is_some_and(|traits| traits.summon_daemon)
-        {
-            let legal_cells = self.combat_legal_cell_mask();
-            resolve_combat_clone_placement_coordinate(&legal_cells, summon_candidate_coordinates)
-                .is_some()
-                && resolve_clone_spell_allocation(&self.combat_actors, &self.active_objects)
+        let normal_group = self.combat_target_group_for_slot(actor_slot);
+        let summon_candidate = summon_candidate_coordinates.first().copied();
+        let summon_can_place_daemon =
+            if combat_class_traits(class).is_some_and(|traits| traits.summon_daemon) {
+                let legal_cells = self.combat_legal_cell_mask();
+                summon_candidate.is_some_and(|candidate| {
+                    resolve_combat_clone_placement_coordinate(&legal_cells, &[candidate]).is_some()
+                }) && resolve_clone_spell_allocation(&self.combat_actors, &self.active_objects)
                     .is_some()
-        } else {
-            false
-        };
+            } else {
+                false
+            };
 
         match resolve_combat_ai_special_hook(
             class,
@@ -1601,23 +1964,49 @@ impl PlayState {
             summon_can_place_daemon,
         ) {
             Some(CombatAiSpecialHook::Possess) => {
-                special = self.apply_combat_ai_possess_special_with_inputs(
+                if let Some(special) = self.apply_combat_ai_possess_special_with_inputs(
                     actor_slot,
                     possess_target_slot,
                     possess_resistance_blocks,
-                );
-                possess_hook_handled = special.is_some();
+                ) {
+                    return Some(Self::combat_ai_handled_special_turn(
+                        actor_slot,
+                        normal_group,
+                        special,
+                        true,
+                    ));
+                }
             }
             Some(CombatAiSpecialHook::Blink) => {
-                special = self.apply_combat_ai_blink_special(actor_slot);
+                if let Some(special) = self.apply_combat_ai_blink_special(actor_slot) {
+                    return Some(Self::combat_ai_handled_special_turn(
+                        actor_slot,
+                        normal_group,
+                        special,
+                        false,
+                    ));
+                }
             }
             Some(CombatAiSpecialHook::SummonDaemon) => {
-                summon_hook_pending = true;
+                if let Some(candidate) = summon_candidate {
+                    if let Some(special) = self
+                        .apply_combat_ai_summon_daemon_special_with_candidates(
+                            actor_slot,
+                            &[candidate],
+                        )
+                    {
+                        return Some(Self::combat_ai_handled_special_turn(
+                            actor_slot,
+                            normal_group,
+                            special,
+                            false,
+                        ));
+                    }
+                }
             }
             None => {}
         }
 
-        let normal_group = self.combat_target_group_for_slot(actor_slot);
         let acting_group = if active_effect_is_active(
             self.active_effect_tag,
             self.active_effect_counter,
@@ -1670,8 +2059,8 @@ impl PlayState {
             CombatAiTargetResolution::NoUsableTarget => {
                 return Some(CombatAiTurnApplication {
                     actor_slot,
-                    special,
-                    possess_hook_handled,
+                    special: None,
+                    possess_hook_handled: false,
                     acting_group,
                     target,
                     step_vector: None,
@@ -1687,23 +2076,6 @@ impl PlayState {
         let fleeing = fleeing || self.combat_ai_actor_fleeing(actor_slot);
         let actor = self.combat_actors[actor_slot];
         let step_vector = combat_ai_step_vector(actor.x, actor.y, target_x, target_y, fleeing);
-        if summon_hook_pending {
-            let mut directional_candidates = combat_step_direction_candidate_coordinates(
-                actor.x,
-                actor.y,
-                step_vector,
-                summon_roll,
-            );
-            for candidate in summon_candidate_coordinates.iter().copied() {
-                if !directional_candidates.contains(&candidate) {
-                    directional_candidates.push(candidate);
-                }
-            }
-            special = self.apply_combat_ai_summon_daemon_special_with_candidates(
-                actor_slot,
-                &directional_candidates,
-            );
-        }
         let target_range = target_slot.map(|slot| actor.range_to(self.combat_actors[slot]));
         let attack_route =
             target_range.and_then(|range| resolve_combat_ai_attack_route(class, range));
@@ -1741,8 +2113,8 @@ impl PlayState {
             });
             return Some(CombatAiTurnApplication {
                 actor_slot,
-                special,
-                possess_hook_handled,
+                special: None,
+                possess_hook_handled: false,
                 acting_group,
                 target,
                 step_vector: Some(step_vector),
@@ -1774,8 +2146,6 @@ impl PlayState {
         if movement_commit.is_some() {
             self.mark_visibility_dirty();
             let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
-            let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
-            let _ = self.apply_combat_arena_field_contact_for_actor_position(actor_slot);
         }
         let movement_direction_code = match movement {
             CombatAiMovementOutcome::Step { direction_code, .. } => Some(direction_code),
@@ -1787,8 +2157,8 @@ impl PlayState {
 
         Some(CombatAiTurnApplication {
             actor_slot,
-            special,
-            possess_hook_handled,
+            special: None,
+            possess_hook_handled: false,
             acting_group,
             target,
             step_vector: Some(step_vector),
@@ -1800,51 +2170,38 @@ impl PlayState {
         })
     }
 
-    pub fn apply_combat_swarm_with_legal_mask(
+    pub fn apply_combat_swarm_with_random_attempts(
         &mut self,
         z: i8,
         legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
-        candidate_coordinates: &[(u8, u8)],
     ) -> Vec<CombatSummonApplication> {
-        let mut accepted = Vec::new();
-        let mut remaining_legal = *legal_cells;
-        for &(x, y) in candidate_coordinates {
-            if accepted.len() >= 8 {
+        let mut accepted_coordinate = None;
+        for _ in 0..8 {
+            let x = self.random_range_u8(0, 15);
+            let y = self.random_range_u8(0, 15);
+            if usize::from(x) >= COMBAT_ARENA_SIDE || usize::from(y) >= COMBAT_ARENA_SIDE {
+                continue;
+            }
+            if combat_ai_legal_cell(legal_cells, i16::from(x), i16::from(y)) {
+                accepted_coordinate = Some((x, y));
                 break;
             }
-            let mut accepted_coordinate =
-                combat_ai_legal_cell(&remaining_legal, i16::from(x), i16::from(y))
-                    .then_some((x, y));
-            for _ in 0..3 {
-                if accepted_coordinate.is_some() {
-                    break;
-                }
-                let jitter_x = self.random_range_u8(0, COMBAT_SWARM_JITTER_ROLL_MAX);
-                let jitter_y = self.random_range_u8(0, COMBAT_SWARM_JITTER_ROLL_MAX);
-                if let Some((candidate_x, candidate_y)) =
-                    combat_swarm_jitter_candidate_coordinate(x, y, jitter_x, jitter_y)
-                {
-                    if combat_ai_legal_cell(
-                        &remaining_legal,
-                        i16::from(candidate_x),
-                        i16::from(candidate_y),
-                    ) {
-                        accepted_coordinate = Some((candidate_x, candidate_y));
-                    }
-                }
-            }
-            let Some((accepted_x, accepted_y)) = accepted_coordinate else {
-                continue;
-            };
+        }
+
+        let Some((accepted_x, accepted_y)) = accepted_coordinate else {
+            return Vec::new();
+        };
+        let mut accepted = Vec::new();
+        for _ in 0..4 {
             let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 COMBAT_CLASS_INSECT_SWARM,
                 z,
-                &remaining_legal,
+                COMBAT_SUMMONED_ACTOR_FLAGS,
+                legal_cells,
                 &[(accepted_x, accepted_y)],
             ) else {
                 break;
             };
-            remaining_legal[usize::from(application.y)][usize::from(application.x)] = false;
             accepted.push(application);
         }
         accepted
@@ -1901,14 +2258,9 @@ impl PlayState {
         }
 
         let legal_cells = self.combat_legal_cell_mask();
-        let caster = self.combat_actors.get(caster_index).copied();
-        let candidates = caster
-            .map(|actor| combat_ring_candidate_coordinates(actor.x, actor.y))
-            .unwrap_or_default();
-        let applied = self.apply_combat_swarm_with_legal_mask(
+        let applied = self.apply_combat_swarm_with_random_attempts(
             self.combat_actor_z(caster_index),
             &legal_cells,
-            &candidates,
         );
         self.advance_turn();
         self.message = if applied.is_empty() {
@@ -1952,14 +2304,15 @@ impl PlayState {
             &legal_cells,
         );
         self.advance_turn();
-        if applied.is_none() {
+        let Some(applied) = applied else {
             self.message = "Failed!".to_string();
             return MoveOutcome::Blocked;
-        }
+        };
         if self.combat_summon_daemon_self_check_oops(caster_index) {
             self.message = "Oops...".to_string();
             MoveOutcome::Blocked
         } else {
+            self.combat_actors[applied.actor_slot].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
             self.message = "Summon Daemon!".to_string();
             MoveOutcome::Cast
         }
@@ -1969,12 +2322,19 @@ impl PlayState {
         self.party_intelligence
             .get(caster_index)
             .copied()
+            .or_else(|| {
+                self.combat_actors
+                    .get(caster_index)
+                    .and_then(|actor| combat_class_stats(actor.owner_target_class))
+                    .map(|stats| stats.endurance)
+            })
             .unwrap_or(self.avatar_stats.intelligence)
     }
 
     pub fn combat_summon_daemon_self_check_oops(&mut self, caster_index: usize) -> bool {
         let threshold = self.combat_summon_daemon_self_check_threshold(caster_index);
-        let roll = self.random_range_u8(1, 30);
+        let raw_roll = self.random_range_u8(0, 60);
+        let roll = combat_skewed_roll_1_to_30(raw_roll);
         roll >= threshold
     }
 
@@ -2024,11 +2384,20 @@ impl PlayState {
     }
 
     pub fn combat_legal_cell_mask(&self) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
-        build_combat_ai_legal_cell_mask(
+        let mut legal_cells = build_combat_ai_legal_cell_mask(
             &self.combat_terrain,
             &self.combat_actors,
             is_probe_walkable,
-        )
+        );
+        for object in self.active_objects.iter().take(OOL_SLOTS) {
+            if object.type_byte != COMBAT_FIELD_KIND_ENERGY {
+                continue;
+            }
+            if object.x < COMBAT_ARENA_SIDE && object.y < COMBAT_ARENA_SIDE {
+                legal_cells[object.y][object.x] = false;
+            }
+        }
+        legal_cells
     }
 
     pub fn enter_combat_frame(
@@ -2080,6 +2449,8 @@ impl PlayState {
             enter_endgame_after_successful_combat: false,
             endgame_messages: None,
             endgame_tableau_map: None,
+            encounter_mode_high_bit: false,
+            exit_announced: false,
         };
         self.active_objects = active_objects;
         self.combat_actors = actors;
@@ -2089,15 +2460,18 @@ impl PlayState {
         self.combat_secondary_marker = None;
         self.combat_ambush_reveals = reveals;
         self.combat_active = true;
+        self.apply_combat_entry_magic_ring_passes();
         // `visibility.md §12.6`: "combat entry switches the beacon off
         // outright". There is no matching exit trigger; the beacon stays off
         // until a map loader next harvests a source.
         self.light_beacon.switch_off();
+        // `visibility.md §12.4`: combat entry rebuilds the shared scratch
+        // mask after setup, before combat reuses that storage.
+        self.rebuild_surface_local_light_mask();
         self.combat_frame_snapshot = Some(snapshot.clone());
         self.pending_combat_actor_slot = None;
         self.pending_combat_terrain_trigger_slot = None;
         self.next_combat_actor_slot = 0;
-        self.combat_potion_presentation = None;
         Ok(snapshot)
     }
 
@@ -2126,7 +2500,6 @@ impl PlayState {
         self.combat_frame_snapshot = None;
         self.pending_combat_actor_slot = None;
         self.next_combat_actor_slot = 0;
-        self.combat_potion_presentation = None;
         if let Some(slot) = pending_terrain_trigger {
             reconcile_post_combat_terrain_trigger_slot(
                 &mut self.active_objects,
@@ -2134,6 +2507,12 @@ impl PlayState {
                 body_retrieval_exit,
             );
         }
+        if matches!(self.area, Area::Dungeon { .. }) {
+            self.setup_dungeon_active_monster_fresh();
+        }
+        // `visibility.md §12.4`: restore the non-combat influence mask after
+        // the combat terrain scratch has been released.
+        self.rebuild_surface_local_light_mask();
         self.mark_visibility_dirty();
     }
 
@@ -2141,6 +2520,11 @@ impl PlayState {
         &mut self,
         exit: CombatRoundLoopExit,
     ) -> CombatRoundLoopExitApplication {
+        match exit {
+            CombatRoundLoopExit::Defeat => self.message = "\nBATTLE IS LOST!".to_string(),
+            CombatRoundLoopExit::Victory => self.message = "\nVICTORY!\n".to_string(),
+            CombatRoundLoopExit::LeaveCombat => {}
+        }
         let result_code = exit.result_code();
         let body_retrieval_exit =
             combat_exit_requests_body_retrieval_reconcile(exit, &self.combat_actors);
@@ -2168,7 +2552,6 @@ impl PlayState {
         } else {
             self.combat_active = false;
             self.pending_combat_actor_slot = None;
-            self.combat_potion_presentation = None;
             if let Some(slot) = self.pending_combat_terrain_trigger_slot.take() {
                 reconcile_post_combat_terrain_trigger_slot(
                     &mut self.active_objects,
@@ -2419,12 +2802,9 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
+        let target_actor = self.combat_actors.get(target_slot).copied();
         if target_slot >= COMBAT_ACTOR_SLOTS
-            || !self
-                .combat_actors
-                .get(target_slot)
-                .copied()
-                .is_some_and(combat_actor_is_active_not_dead)
+            || !target_actor.is_some_and(combat_actor_is_active_not_dead)
         {
             self.message = "Target? Use C1GP7 to target a live combat slot.".to_string();
             return MoveOutcome::Blocked;
@@ -2435,6 +2815,21 @@ impl PlayState {
             return outcome;
         }
 
+        // Public clean-spec issue #132: protected Kill targets are rejected
+        // only after the shared cast/resource and normal pre-effect envelope.
+        // They bypass resistance and all target-death/effect work, but the
+        // combat action is committed through the ordinary failure return.
+        if matches!(kind, CombatSpellDamageKind::Kill)
+            && target_actor
+                .is_some_and(|actor| combat_class_is_protected_special(actor.owner_target_class))
+        {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let resistance_blocked = matches!(kind, CombatSpellDamageKind::Kill)
+            && self.combat_resistance_blocks(caster_index, target_slot);
         let raw_roll = self.combat_spell_damage_roll_for_kind(kind);
         let defense_roll = match kind {
             CombatSpellDamageKind::MagicMissile | CombatSpellDamageKind::Fireball => {
@@ -2445,13 +2840,17 @@ impl PlayState {
             | CombatSpellDamageKind::DeathWind
             | CombatSpellDamageKind::FlameWind => 0,
         };
-        let applied = self.apply_active_target_combat_spell_damage(
-            Some(caster_index),
-            target_slot,
-            kind,
-            raw_roll,
-            defense_roll,
-        );
+        let applied = if resistance_blocked {
+            None
+        } else {
+            self.apply_active_target_combat_spell_damage(
+                Some(caster_index),
+                target_slot,
+                kind,
+                raw_roll,
+                defense_roll,
+            )
+        };
 
         self.advance_turn();
         let succeeded = applied.is_some();
@@ -2513,15 +2912,29 @@ impl PlayState {
             return outcome;
         }
 
-        let gate_accepts = [true; COMBAT_ACTOR_SLOTS];
-        let target_slots = collect_tremor_spell_actor_slots(&self.combat_actors, &gate_accepts);
-        let damage_rolls = target_slots
-            .iter()
-            .copied()
-            .map(|_| self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::Tremor))
-            .collect::<Vec<_>>();
-        let applied =
-            self.apply_tremor_combat_spell_damage(Some(caster_index), &gate_accepts, &damage_rolls);
+        let mut applications = Vec::new();
+        for slot in 0..self.combat_actors.len() {
+            if !tremor_spell_actor_is_damageable(self.combat_actors[slot])
+                || !self.combat_target_weight_gate_accepts(slot)
+            {
+                continue;
+            }
+            let roll = self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::Tremor);
+            let raw_damage = resolve_tremor_spell_raw_damage(roll);
+            if let Some(damage_application) = self.apply_combat_weapon_damage_to_target(
+                Some(caster_index),
+                slot,
+                raw_damage,
+                true,
+            ) {
+                applications.push(CombatTremorSpellSlotDamageApplication {
+                    target_slot: slot,
+                    raw_damage,
+                    damage_application,
+                });
+            }
+        }
+        let applied = Some(CombatTremorSpellDamageApplication { applications });
 
         self.advance_turn();
         self.message = if applied
@@ -2772,41 +3185,88 @@ impl PlayState {
 
         let target_slots = collect_directed_spell_actor_slots(&self.combat_actors, &target_cells);
         let applied = match effect {
-            CombatDirectedSpellEffect::Sleep => self
-                .apply_directed_combat_spell_status(effect, &target_cells, &[], &[])
-                .map(|application| !application.applications.is_empty()),
-            CombatDirectedSpellEffect::PoisonWind => {
-                let poison_rolls = target_slots
-                    .iter()
-                    .copied()
-                    .map(|_| self.combat_arena_field_poison_damage_roll())
-                    .collect::<Vec<_>>();
-                let gate_accepts = poison_rolls
-                    .iter()
-                    .copied()
-                    .map(|roll| roll & 1 == 0)
-                    .collect::<Vec<_>>();
-                self.apply_directed_combat_spell_status(
-                    effect,
-                    &target_cells,
-                    &gate_accepts,
-                    &poison_rolls,
-                )
-                .map(|application| !application.applications.is_empty())
-            }
-            CombatDirectedSpellEffect::DeathWind | CombatDirectedSpellEffect::FlameWind => {
-                let damage_rolls = match effect {
-                    CombatDirectedSpellEffect::FlameWind => target_slots
-                        .iter()
-                        .map(|_| {
-                            self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind)
-                        })
-                        .collect::<Vec<_>>(),
-                    CombatDirectedSpellEffect::DeathWind => Vec::new(),
-                    CombatDirectedSpellEffect::Sleep | CombatDirectedSpellEffect::PoisonWind => {
-                        Vec::new()
+            CombatDirectedSpellEffect::Sleep => {
+                let mut affected = false;
+                for slot in target_slots.iter().copied() {
+                    if self.combat_resistance_blocks(caster_index, slot) {
+                        continue;
                     }
-                };
+                    if slot < COMBAT_PARTY_ACTOR_SLOTS {
+                        if let Some(member) = self.party.get_mut(slot) {
+                            let _ = apply_combat_sleep_to_party_target(member);
+                            affected = true;
+                        }
+                    } else {
+                        self.set_combat_actor_status_disabled(slot);
+                        affected = true;
+                    }
+                }
+                Some(affected)
+            }
+            CombatDirectedSpellEffect::PoisonWind => {
+                let mut affected = false;
+                for slot in target_slots.iter().copied() {
+                    if !self.combat_target_weight_gate_accepts(slot) {
+                        continue;
+                    }
+                    if slot < COMBAT_PARTY_ACTOR_SLOTS {
+                        let needs_damage_roll = self
+                            .party
+                            .get(slot)
+                            .is_some_and(|member| member.status != b'G' || member.hp == 0);
+                        let damage_roll = if needs_damage_roll {
+                            self.combat_arena_field_poison_damage_roll()
+                        } else {
+                            0
+                        };
+                        if let Some(member) = self.party.get_mut(slot) {
+                            let outcome = apply_combat_poison_to_party_target(member, damage_roll);
+                            if let CombatPartyPoisonOutcome::FallbackDamage { raw_damage } = outcome
+                            {
+                                let _ = self.apply_combat_weapon_damage_to_target(
+                                    None,
+                                    slot,
+                                    raw_damage as i16,
+                                    true,
+                                );
+                            }
+                            affected = true;
+                        }
+                    } else {
+                        let raw_damage = combat_field_poison_fallback_damage(
+                            self.combat_arena_field_poison_damage_roll(),
+                        ) as i16;
+                        let _ =
+                            self.apply_combat_weapon_damage_to_target(None, slot, raw_damage, true);
+                        affected = true;
+                    }
+                }
+                Some(affected)
+            }
+            CombatDirectedSpellEffect::DeathWind => {
+                let mut affected = false;
+                for slot in target_slots.iter().copied() {
+                    if self.combat_resistance_blocks(caster_index, slot) {
+                        continue;
+                    }
+                    affected |= self
+                        .apply_combat_weapon_damage_to_target(
+                            Some(caster_index),
+                            slot,
+                            COMBAT_INSTANT_KILL_DAMAGE,
+                            true,
+                        )
+                        .is_some();
+                }
+                Some(affected)
+            }
+            CombatDirectedSpellEffect::FlameWind => {
+                let damage_rolls = target_slots
+                    .iter()
+                    .map(|_| {
+                        self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind)
+                    })
+                    .collect::<Vec<_>>();
                 self.apply_directed_combat_spell_damage(
                     Some(caster_index),
                     effect,
@@ -2845,21 +3305,11 @@ impl PlayState {
             return outcome;
         }
 
-        let target_slots = collect_repel_undead_actor_slots(&self.combat_actors);
-        let mut affected = 0usize;
-        for slot in target_slots {
-            if self
-                .apply_combat_weapon_damage_to_target(
-                    Some(caster_index),
-                    slot,
-                    COMBAT_INSTANT_KILL_DAMAGE,
-                    true,
-                )
-                .is_some()
-            {
-                affected += 1;
-            }
-        }
+        let accepted = collect_repel_undead_actor_slots(&self.combat_actors)
+            .into_iter()
+            .filter(|slot| !self.combat_resistance_blocks(caster_index, *slot))
+            .collect::<Vec<_>>();
+        let affected = apply_cause_fear_critical_hp_setup(&mut self.combat_actors, &accepted);
 
         self.advance_turn();
         self.message = if affected == 0 {
@@ -2873,41 +3323,31 @@ impl PlayState {
     pub fn apply_combat_arena_field_contact(
         &mut self,
         field: CombatArenaFieldKind,
-        current_active_slot: usize,
         target_slot: usize,
         poison_damage_roll: u8,
         fire_damage_roll: u8,
-        defense_roll: u8,
     ) -> Option<CombatArenaFieldContactApplication> {
-        let contact_outcome = if current_active_slot == target_slot {
-            CombatArenaFieldContactOutcome::SkippedCurrentActor
-        } else {
-            let actor = self.combat_actors.get(target_slot)?;
-            let linked_active_object_tile = self
-                .active_objects
-                .get(actor.active_object_slot as usize)?
-                .tile;
+        let actor = self.combat_actors.get(target_slot)?;
+        let linked_active_object_tile = self
+            .active_objects
+            .get(actor.active_object_slot as usize)?
+            .tile;
 
-            if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-                resolve_combat_arena_field_contact_for_party_target(
-                    field,
-                    current_active_slot,
-                    target_slot,
-                    linked_active_object_tile,
-                    self.party.get_mut(target_slot)?,
-                    poison_damage_roll,
-                    fire_damage_roll,
-                )
-            } else {
-                resolve_combat_arena_field_contact_for_non_party_target(
-                    field,
-                    current_active_slot,
-                    target_slot,
-                    linked_active_object_tile,
-                    poison_damage_roll,
-                    fire_damage_roll,
-                )
-            }
+        let contact_outcome = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
+            resolve_combat_arena_field_contact_for_party_target(
+                field,
+                linked_active_object_tile,
+                self.party.get_mut(target_slot)?,
+                poison_damage_roll,
+                fire_damage_roll,
+            )?
+        } else {
+            resolve_combat_arena_field_contact_for_non_party_target(
+                field,
+                linked_active_object_tile,
+                poison_damage_roll,
+                fire_damage_roll,
+            )?
         };
 
         if matches!(
@@ -2927,16 +3367,6 @@ impl PlayState {
                 )?)
             }
             CombatArenaFieldContactOutcome::FireDamage { raw_damage } => {
-                let defended_damage =
-                    resolve_spell_damage_after_defense(raw_damage as i16, defense_roll);
-                Some(self.apply_combat_weapon_damage_to_target(
-                    None,
-                    target_slot,
-                    defended_damage,
-                    true,
-                )?)
-            }
-            CombatArenaFieldContactOutcome::EnergyDamage { raw_damage } => {
                 Some(self.apply_combat_weapon_damage_to_target(
                     None,
                     target_slot,
@@ -2944,8 +3374,7 @@ impl PlayState {
                     true,
                 )?)
             }
-            CombatArenaFieldContactOutcome::SkippedCurrentActor
-            | CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass
+            CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass
             | CombatArenaFieldContactOutcome::PoisonedPartyMember { .. }
             | CombatArenaFieldContactOutcome::SleepSkippedDeadParty
             | CombatArenaFieldContactOutcome::SleptPartyMember { .. }
@@ -2960,19 +3389,93 @@ impl PlayState {
         })
     }
 
+    fn apply_combat_selected_field_contact_for_actor_position(
+        &mut self,
+        actor_slot: usize,
+        field: CombatArenaFieldKind,
+    ) -> Option<CombatArenaFieldContactApplication> {
+        let actor = self.combat_actors.get(actor_slot).copied()?;
+        if !combat_actor_is_present_not_dead(actor) {
+            return None;
+        }
+        if field == CombatArenaFieldKind::Energy {
+            return None;
+        }
+        let linked_tile = self
+            .active_objects
+            .get(actor.active_object_slot as usize)?
+            .tile;
+        let poison_damage_roll = if field == CombatArenaFieldKind::Poison
+            && linked_tile < 0x80
+            && (actor_slot >= COMBAT_PARTY_ACTOR_SLOTS
+                || self.party.get(actor_slot)?.status != b'G')
+        {
+            self.random_range_u8(0, 20)
+        } else {
+            0
+        };
+        let fire_damage_roll = if field == CombatArenaFieldKind::Fire {
+            self.random_range_u8(0, 10)
+        } else {
+            0
+        };
+        let application = self.apply_combat_arena_field_contact(
+            field,
+            actor_slot,
+            poison_damage_roll,
+            fire_damage_roll,
+        )?;
+        self.mark_visibility_dirty();
+        Some(application)
+    }
+
     pub fn apply_combat_arena_field_contact_for_actor_position(
         &mut self,
         actor_slot: usize,
     ) -> Option<CombatArenaFieldContactApplication> {
         let actor = self.combat_actors.get(actor_slot).copied()?;
-        if !combat_actor_is_active_not_dead(actor) {
+        let (_, field) = self.find_combat_arena_field_marker_excluding(
+            actor.x,
+            actor.y,
+            Some(actor.active_object_slot as usize),
+        )?;
+        self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)
+    }
+
+    pub fn apply_combat_post_dispatch_contact_for_actor_position(
+        &mut self,
+        actor_slot: usize,
+    ) -> Option<CombatPostDispatchContactApplication> {
+        let actor = self.combat_actors.get(actor_slot).copied()?;
+        if !combat_actor_is_present_not_dead(actor) {
             return None;
         }
-        let (_, field) = self.find_combat_arena_field_marker(actor.x, actor.y)?;
-        let application =
-            self.apply_combat_arena_field_contact(field, actor_slot, actor_slot, 0, 0, 0)?;
-        self.mark_visibility_dirty();
-        Some(application)
+        let terrain = *self
+            .combat_terrain
+            .get(usize::from(actor.y))?
+            .get(usize::from(actor.x))?;
+        if let Some(field) = combat_arena_terrain_contact_kind(terrain) {
+            let field_contact =
+                self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)?;
+            return Some(CombatPostDispatchContactApplication {
+                source: CombatPostDispatchContactSource::ArenaTerrain { tile: terrain },
+                field_contact,
+            });
+        }
+        let (active_object_slot, field) = self.find_combat_arena_field_marker_excluding(
+            actor.x,
+            actor.y,
+            Some(actor.active_object_slot as usize),
+        )?;
+        if field == CombatArenaFieldKind::Energy {
+            return None;
+        }
+        let field_contact =
+            self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)?;
+        Some(CombatPostDispatchContactApplication {
+            source: CombatPostDispatchContactSource::PlacedMarker { active_object_slot },
+            field_contact,
+        })
     }
 
     pub fn apply_combat_ambush_reveal_for_actor_position(
@@ -3061,6 +3564,13 @@ impl PlayState {
         let attacker_stats = combat_class_stats(attacker.owner_target_class)?;
         let ranged = combat_ranged_effect_stats(attacker.owner_target_class)?;
         let target_range = attacker.range_to(target);
+        // `magic.md §7`: ordinary automatic adjacent attacks install their
+        // source before the hit test, so misses and poison-special returns
+        // record exactly like ordinary hits. Controlled actors use the player
+        // command path and never write this map.
+        if target_range == 1 && !attacker.is_controlled() {
+            self.combat_interference_sources[target_slot] = attacker_slot as u8;
+        }
         let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
             party_defender_rating
         } else {
@@ -3321,6 +3831,13 @@ impl PlayState {
         if !destination.in_bounds {
             return Some(false);
         }
+        if self.active_objects.iter().take(OOL_SLOTS).any(|object| {
+            object.type_byte == COMBAT_FIELD_KIND_ENERGY
+                && object.x == destination.x as usize
+                && object.y == destination.y as usize
+        }) {
+            return Some(false);
+        }
         Some(is_probe_walkable(
             self.combat_terrain[destination.y as usize][destination.x as usize],
         ))
@@ -3385,20 +3902,63 @@ impl PlayState {
         &mut self,
         slot: usize,
     ) -> Option<CombatMagicRingPassOutcome> {
-        let ring = *self.party_equipment.get(slot)?.get(EQUIP_SLOT_RING)?;
+        let acting_actor = self.combat_actors.get(slot).copied()?;
+        if acting_actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 == 0
+            || acting_actor.is_marked_dead()
+        {
+            return None;
+        }
+        let wearer_slot = acting_actor.owner_target_class as usize;
+        let ring = *self
+            .party_equipment
+            .get(wearer_slot)?
+            .get(EQUIP_SLOT_RING)?;
         if ring != EQUIPMENT_ID_RING_INVISIBILITY as u8
             && ring != EQUIPMENT_ID_RING_REGENERATION as u8
         {
             return None;
         }
-        let regeneration_roll = if ring == EQUIPMENT_ID_RING_REGENERATION as u8 {
-            self.combat_magic_ring_regeneration_roll(slot)
+
+        let mut outcome = CombatMagicRingPassOutcome::default();
+        if ring == EQUIPMENT_ID_RING_INVISIBILITY as u8 {
+            outcome.invisibility_applied = apply_combat_linked_invisibility(
+                &mut self.combat_actors[slot],
+                &mut self.active_objects,
+            )
+            .is_some_and(CombatLinkedVisibilityOutcome::changed);
+            if outcome.invisibility_applied {
+                self.mark_visibility_dirty();
+            }
         } else {
-            7
-        };
-        let vanish_roll = self.combat_magic_ring_vanish_roll(slot);
-        let outcome =
-            self.apply_combat_magic_ring_pass_to_slot(slot, regeneration_roll, vanish_roll)?;
+            let eligible_wearers: Vec<usize> = self
+                .combat_actors
+                .iter()
+                .copied()
+                .filter(|actor| {
+                    actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0 && !actor.is_marked_dead()
+                })
+                .map(|actor| actor.owner_target_class as usize)
+                .filter(|&party_slot| {
+                    self.party
+                        .get(party_slot)
+                        .is_some_and(|member| member.living())
+                        && self
+                            .party_equipment
+                            .get(party_slot)
+                            .is_some_and(|equipment| {
+                                equipment[EQUIP_SLOT_RING] == EQUIPMENT_ID_RING_REGENERATION as u8
+                            })
+                })
+                .collect();
+            for party_slot in eligible_wearers {
+                let regeneration_roll = self.combat_magic_ring_regeneration_roll(party_slot);
+                if regeneration_roll == 0 {
+                    outcome.regeneration_applied = outcome
+                        .regeneration_applied
+                        .saturating_add(self.party[party_slot].heal_by(1));
+                }
+            }
+        }
         (outcome != CombatMagicRingPassOutcome::default()).then_some(outcome)
     }
 
@@ -3459,10 +4019,11 @@ impl PlayState {
                         CombatCommandBranch::Attack => {
                             CombatPlayerCommandAction::PromptForAttackDirection
                         }
-                        CombatCommandBranch::QuitDefeat => CombatPlayerCommandAction::QuitDefeat,
-                        CombatCommandBranch::XitCleanup => CombatPlayerCommandAction::XitCleanup {
-                            allowed: self.combat_xit_cleanup_allowed(),
-                        },
+                        CombatCommandBranch::EscapeCleanup => {
+                            CombatPlayerCommandAction::EscapeCleanup {
+                                application: self.apply_combat_escape_cleanup(),
+                            }
+                        }
                         branch => CombatPlayerCommandAction::Branch {
                             branch,
                             live_actor_gate: resolve_combat_command_live_actor_gate(
@@ -3476,10 +4037,13 @@ impl PlayState {
         };
 
         let mut control_after = match action {
-            CombatPlayerCommandAction::QuitDefeat => resolve_combat_quit_command(),
-            CombatPlayerCommandAction::XitCleanup { allowed: true } => {
-                CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
-            }
+            CombatPlayerCommandAction::EscapeCleanup {
+                application:
+                    CombatEscapeCleanupApplication {
+                        decision: CombatEscapeCleanupDecision::Accepted,
+                        ..
+                    },
+            } => CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat),
             CombatPlayerCommandAction::StepOrAttack {
                 direction_code,
                 outcome: CombatStepOrAttackPrimitiveOutcome::OutOfArena { .. },
@@ -3505,11 +4069,39 @@ impl PlayState {
             &action,
             weapon_attack_inputs,
         );
-        let ring_pass = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
+        let reprompt = combat_player_command_action_reprompts(&action);
+        // `combat.md §8` places both hooks in the committed non-digit action
+        // tail. Multi-stage commands defer that tail until their continuation
+        // closes; free refusals and actor-selection digits bypass it entirely.
+        let digit_selection = matches!(action, CombatPlayerCommandAction::ActivePlayerSelection(_));
+        let maintenance_deferred = combat_player_command_action_defers_maintenance(&action);
+        let (absorbable_contact, post_dispatch_contact, ring_pass, active_effect_age) =
+            if reprompt || digit_selection || maintenance_deferred {
+                (None, None, None, None)
+            } else {
+                let absorbable_contact =
+                    self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
+                let post_dispatch_contact =
+                    self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
+                self.clear_combat_interference_for_completed_action(actor_slot);
+                (
+                    absorbable_contact,
+                    post_dispatch_contact,
+                    self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot),
+                    Some(self.age_active_effect()),
+                )
+            };
+        if post_dispatch_contact.is_some() {
+            let leave_combat = matches!(
+                control_after,
+                CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+            );
+            control_after = self.combat_round_loop_control(leave_combat, false);
+        }
         if matches!(control_after, CombatRoundLoopControl::ContinueActorWalk)
             && resolve_combat_victory(&self.combat_actors)
         {
-            control_after = CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat);
+            control_after = CombatRoundLoopControl::Exit(CombatRoundLoopExit::Victory);
         }
 
         Some(CombatPlayerCommandApplication {
@@ -3518,6 +4110,10 @@ impl PlayState {
             action,
             weapon_attack,
             ring_pass,
+            active_effect_age,
+            absorbable_contact,
+            post_dispatch_contact,
+            reprompt,
             control_after,
         })
     }
@@ -3566,8 +4162,45 @@ impl PlayState {
         )
     }
 
-    pub fn combat_xit_cleanup_allowed(&self) -> bool {
-        resolve_combat_xit_cleanup_allowed(&self.combat_actors)
+    pub fn combat_escape_cleanup_decision(&self) -> CombatEscapeCleanupDecision {
+        let encounter_mode_high_bit = self
+            .combat_frame_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.encounter_mode_high_bit);
+        let exit_announced = self
+            .combat_frame_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.exit_announced);
+        resolve_combat_escape_cleanup(&self.combat_actors, encounter_mode_high_bit, exit_announced)
+    }
+
+    pub fn apply_combat_escape_cleanup(&mut self) -> CombatEscapeCleanupApplication {
+        let decision = self.combat_escape_cleanup_decision();
+        if decision != CombatEscapeCleanupDecision::Accepted {
+            return CombatEscapeCleanupApplication::refused(decision);
+        }
+
+        let mut cleared_descriptor_slots = 0u8;
+        for slot in 0..COMBAT_ACTOR_SLOTS {
+            if !self.combat_actors[slot].is_empty() {
+                self.combat_actors[slot].clear();
+                cleared_descriptor_slots = cleared_descriptor_slots.saturating_add(1);
+                self.advance_visual_tick();
+            }
+        }
+        let mut cleared_active_object_slots = 0u8;
+        for slot in 0..COMBAT_ACTOR_SLOTS.min(self.active_objects.len()) {
+            if !self.active_objects[slot].is_empty() {
+                self.active_objects[slot] = ActiveObject::empty();
+                cleared_active_object_slots = cleared_active_object_slots.saturating_add(1);
+                self.advance_visual_tick();
+            }
+        }
+        self.mark_visibility_dirty();
+        CombatEscapeCleanupApplication::accepted(
+            cleared_descriptor_slots,
+            cleared_active_object_slots,
+        )
     }
 
     pub fn combat_round_loop_control(
@@ -3575,11 +4208,17 @@ impl PlayState {
         leave_combat_flag: bool,
         exhausted_slots: bool,
     ) -> CombatRoundLoopControl {
-        resolve_combat_round_loop_control(
-            resolve_combat_defeat(&self.party, &self.combat_actors),
-            leave_combat_flag || resolve_combat_victory(&self.combat_actors),
-            exhausted_slots,
-        )
+        if resolve_combat_defeat(&self.party, &self.combat_actors) {
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+        } else if leave_combat_flag {
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+        } else if resolve_combat_victory(&self.combat_actors) {
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Victory)
+        } else if exhausted_slots {
+            CombatRoundLoopControl::StartNextRound
+        } else {
+            CombatRoundLoopControl::ContinueActorWalk
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3601,6 +4240,48 @@ impl PlayState {
         horizontal_axis_first: bool,
         random_cardinal_direction_codes: &[u8],
         monster_attack_inputs_by_slot: &[(usize, CombatMonsterAttackInputs)],
+    ) -> CombatActorSlotDispatchApplication {
+        self.apply_combat_actor_slot_dispatch_internal(
+            slot,
+            refresh_constant,
+            leave_combat_flag,
+            possess_candidate_reaches_resistance,
+            possess_target_slot,
+            possess_resistance_blocks,
+            blink_roll,
+            summon_roll,
+            summon_candidate_coordinates,
+            cleanup_fallback_target,
+            mass_charm_roll,
+            fleeing,
+            teleport_candidate,
+            horizontal_axis_first,
+            random_cardinal_direction_codes,
+            monster_attack_inputs_by_slot,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_combat_actor_slot_dispatch_internal(
+        &mut self,
+        slot: usize,
+        refresh_constant: u8,
+        leave_combat_flag: bool,
+        possess_candidate_reaches_resistance: bool,
+        possess_target_slot: usize,
+        possess_resistance_blocks: bool,
+        blink_roll: u8,
+        summon_roll: u8,
+        summon_candidate_coordinates: &[(u8, u8)],
+        cleanup_fallback_target: Option<(u8, u8)>,
+        mass_charm_roll: u8,
+        fleeing: bool,
+        teleport_candidate: Option<(u8, u8)>,
+        horizontal_axis_first: bool,
+        random_cardinal_direction_codes: &[u8],
+        monster_attack_inputs_by_slot: &[(usize, CombatMonsterAttackInputs)],
+        draw_ai_inputs_from_shared_prng: bool,
     ) -> CombatActorSlotDispatchApplication {
         if slot >= COMBAT_ACTOR_SLOTS {
             return CombatActorSlotDispatchApplication::EndOfRound {
@@ -3665,6 +4346,8 @@ impl PlayState {
             let wake = self
                 .apply_combat_sleep_wake_dispatch(slot, wake_roll)
                 .expect("status-disabled actor should produce a wake dispatch");
+            let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
+            self.clear_combat_interference_for_completed_action(slot);
             return CombatActorSlotDispatchApplication::Slot {
                 slot,
                 phase_tick: Some(phase_tick),
@@ -3696,8 +4379,10 @@ impl PlayState {
             let monster_attack_inputs = monster_attack_inputs_by_slot
                 .iter()
                 .find_map(|&(input_slot, inputs)| (input_slot == slot).then_some(inputs));
-            CombatActorDispatchAction::MonsterAi {
-                ai_turn: self.apply_combat_ai_turn_with_inputs(
+            let ai_turn = if draw_ai_inputs_from_shared_prng {
+                self.apply_combat_ai_turn(slot)
+            } else {
+                self.apply_combat_ai_turn_with_inputs(
                     slot,
                     possess_candidate_reaches_resistance,
                     possess_target_slot,
@@ -3712,9 +4397,15 @@ impl PlayState {
                     horizontal_axis_first,
                     random_cardinal_direction_codes,
                     monster_attack_inputs,
-                ),
-            }
+                )
+            };
+            CombatActorDispatchAction::MonsterAi { ai_turn }
         };
+
+        if !matches!(action, CombatActorDispatchAction::PlayerReady) {
+            let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
+            self.clear_combat_interference_for_completed_action(slot);
+        }
 
         CombatActorSlotDispatchApplication::Slot {
             slot,
@@ -3730,103 +4421,35 @@ impl PlayState {
         refresh_constant: u8,
         leave_combat_flag: bool,
     ) -> CombatActorSlotDispatchApplication {
-        if slot >= COMBAT_ACTOR_SLOTS {
-            return CombatActorSlotDispatchApplication::EndOfRound {
-                control: self.combat_round_loop_control(leave_combat_flag, true),
-            };
-        }
-
-        let actor = self.combat_actors[slot];
-        let generate_ai_inputs = slot >= COMBAT_PARTY_ACTOR_SLOTS
-            && combat_actor_is_active_not_dead(actor)
-            && !actor.is_controlled()
-            && self.combat_actor_stands_on_walkable_arena_cell(actor)
-            && actor.phase_counter <= 1;
-        let traits = generate_ai_inputs
-            .then(|| combat_class_traits(actor.owner_target_class))
-            .flatten();
-
-        let possess_target_slot = if traits.is_some_and(|traits| traits.possess) {
-            self.combat_ai_possess_target_slot_roll(slot)
-        } else {
-            0
-        };
-        let possess_candidate_reaches_resistance = traits.is_some_and(|traits| traits.possess)
-            && self.combat_ai_possess_candidate_reaches_resistance_from_roll(possess_target_slot);
-        let possess_resistance_blocks = if possess_candidate_reaches_resistance {
-            self.combat_ai_possess_resistance_blocks(slot, possess_target_slot)
-        } else {
-            false
-        };
-        let blink_roll = if traits.is_some_and(|traits| traits.blink) {
-            self.combat_ai_blink_roll(slot)
-        } else {
-            1
-        };
-        let summon_roll = if traits.is_some_and(|traits| traits.summon_daemon) {
-            self.combat_ai_summon_roll(slot)
-        } else {
-            1
-        };
-        let summon_candidate_coordinates = if traits.is_some_and(|traits| traits.summon_daemon) {
-            self.combat_ai_summon_candidate_coordinates_from_seed(slot, summon_roll)
-        } else {
-            Vec::new()
-        };
-        let mass_charm_roll = if generate_ai_inputs
-            && active_effect_is_active(
-                self.active_effect_tag,
-                self.active_effect_counter,
-                MASS_CHARM_ACTIVE_EFFECT_TAG,
-            ) {
-            self.combat_ai_mass_charm_roll(slot)
-        } else {
-            0
-        };
-        let teleport_candidate = traits.and_then(|traits| {
-            traits
-                .teleport_capable
-                .then(|| self.combat_ai_teleport_candidate(slot))
-                .flatten()
-        });
-        let horizontal_axis_first = if generate_ai_inputs {
-            self.combat_ai_horizontal_axis_first(slot)
-        } else {
-            true
-        };
-        let random_cardinal_direction_codes = if generate_ai_inputs {
-            self.combat_ai_random_cardinal_direction_codes(slot)
-        } else {
-            [1, 2, 3, 4]
-        };
-        let monster_attack_inputs_by_slot = if generate_ai_inputs {
-            [(slot, self.combat_monster_attack_inputs(slot))]
-        } else {
-            [(slot, CombatMonsterAttackInputs::default())]
-        };
-
-        self.apply_combat_actor_slot_dispatch_with_inputs(
+        // The shared-PRNG mode enters the exact same phase/status/effect gates
+        // as deterministic tests, then draws monster-AI inputs only after the
+        // slot actually reaches Pass 2.
+        self.apply_combat_actor_slot_dispatch_internal(
             slot,
             refresh_constant,
             leave_combat_flag,
-            possess_candidate_reaches_resistance,
-            possess_target_slot,
-            possess_resistance_blocks,
-            blink_roll,
-            summon_roll,
-            &summon_candidate_coordinates,
-            None,
-            mass_charm_roll,
             false,
-            teleport_candidate,
-            horizontal_axis_first,
-            &random_cardinal_direction_codes,
-            &monster_attack_inputs_by_slot,
+            0,
+            false,
+            32,
+            32,
+            &[],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[],
+            &[],
+            true,
         )
     }
 
-    /// Toggles the combat cursor blink at a round boundary and reports
-    /// where the cursor and secondary marker should be drawn.
+    /// `combat.md §7`: toggle the combat-overlay blink and report the two
+    /// presentation coordinates for the next idle repaint. A dark pass, an
+    /// invalid active cell, or a non-player active group suppresses both
+    /// overlays. The secondary coordinate is deliberately not range-checked;
+    /// the display surface owns clipping.
     pub fn apply_combat_cursor_blink_tick(&mut self) -> CombatCursorBlinkReport {
         let mut report = CombatCursorBlinkReport::default();
 
@@ -3835,24 +4458,23 @@ impl PlayState {
             report.cursor_blink_visible = self.combat_cursor_blink;
             if self.combat_cursor_blink {
                 report.cursor_draw_cell = self.combat_cursor_actor_cell();
+                if report.cursor_draw_cell.is_some() {
+                    report.secondary_marker_cell = self.combat_secondary_marker;
+                }
             }
-            report.secondary_marker_cell = self.combat_secondary_marker.and_then(|(x, y)| {
-                (usize::from(x) < COMBAT_ARENA_SIDE && usize::from(y) < COMBAT_ARENA_SIDE)
-                    .then_some((x, y))
-            });
         }
 
         report
     }
 
     pub(crate) fn combat_cursor_actor_cell(&self) -> Option<(u8, u8)> {
-        let slot = self.active_player.or_else(|| {
-            self.combat_actors
-                .iter()
-                .take(COMBAT_PARTY_ACTOR_SLOTS)
-                .position(|actor| combat_actor_is_active_not_dead(*actor))
-        })?;
+        let slot = self.active_player?;
         let actor = *self.combat_actors.get(slot)?;
+        if !combat_actor_is_active_not_dead(actor)
+            || self.combat_target_group_for_slot(slot) != COMBAT_TARGET_GROUP_PARTY
+        {
+            return None;
+        }
         let x = usize::from(actor.x);
         let y = usize::from(actor.y);
         (x < COMBAT_ARENA_SIDE && y < COMBAT_ARENA_SIDE).then_some((actor.x, actor.y))
@@ -3999,8 +4621,7 @@ impl PlayState {
         actor_slot: usize,
         target_slot: usize,
     ) -> bool {
-        let _ = (actor_slot, target_slot);
-        self.random_mod_u8(2) != 0
+        self.combat_resistance_blocks(actor_slot, target_slot)
     }
 
     pub fn combat_ai_possess_candidate_reaches_resistance_from_roll(
@@ -4027,28 +4648,19 @@ impl PlayState {
 
     pub fn combat_ai_blink_roll(&mut self, actor_slot: usize) -> u8 {
         let _ = actor_slot;
-        self.random_mod_u8(8)
+        self.random_range_u8(0, u8::MAX)
     }
 
     pub fn combat_ai_summon_roll(&mut self, actor_slot: usize) -> u8 {
         let _ = actor_slot;
-        self.random_mod_u8(8)
+        self.random_range_u8(0, u8::MAX)
     }
 
-    pub fn combat_ai_summon_candidate_coordinates_from_seed(
-        &self,
-        actor_slot: usize,
-        seed: u8,
-    ) -> Vec<(u8, u8)> {
-        let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
-            return Vec::new();
-        };
-        combat_neighbor_candidate_coordinates(actor.x, actor.y, seed)
-    }
-
-    pub fn combat_ai_summon_candidate_coordinates(&mut self, actor_slot: usize) -> Vec<(u8, u8)> {
-        let seed = self.combat_ai_summon_roll(actor_slot);
-        self.combat_ai_summon_candidate_coordinates_from_seed(actor_slot, seed)
+    /// `combat.md §9`: a passed monster-summon gate makes exactly two
+    /// fresh shared-PRNG draws, X first and then Y, both in inclusive 0..15.
+    pub fn combat_ai_summon_probe_coordinate(&mut self, actor_slot: usize) -> (u8, u8) {
+        let _ = actor_slot;
+        (self.random_range_u8(0, 15), self.random_range_u8(0, 15))
     }
 
     pub fn combat_ai_mass_charm_roll(&mut self, actor_slot: usize) -> u8 {
@@ -4172,8 +4784,6 @@ impl PlayState {
         if outcome.committed_movement() {
             self.mark_visibility_dirty();
             let _ = self.apply_combat_ambush_reveal_for_actor_position(moving_slot);
-            let _ = self.apply_combat_absorbable_field_contact_for_actor_position(moving_slot);
-            let _ = self.apply_combat_arena_field_contact_for_actor_position(moving_slot);
         }
         outcome
     }
@@ -4199,18 +4809,38 @@ impl PlayState {
         regeneration_roll: u8,
         vanish_roll: u8,
     ) -> Option<CombatMagicRingPassOutcome> {
-        if slot >= COMBAT_PARTY_ACTOR_SLOTS {
+        let actor = *self.combat_actors.get(slot)?;
+        if actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 == 0 || actor.is_marked_dead() {
             return None;
         }
-        let wearer = *self.party.get(slot)?;
-        self.combat_actors.get(slot)?;
+        let wearer_slot = actor.owner_target_class as usize;
+        let wearer = *self.party.get(wearer_slot)?;
         if self.party_equipment.len() < self.party.len() {
             self.party_equipment
                 .resize(self.party.len(), [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]);
         }
 
-        let ring = self.party_equipment[slot][EQUIP_SLOT_RING];
+        let ring = self.party_equipment[wearer_slot][EQUIP_SLOT_RING];
         let mut outcome = CombatMagicRingPassOutcome::default();
+        // `combat.md §12`: the encounter-entry destruction roll happens
+        // immediately before seating-time ring effects. A vanished ring never
+        // reaches invisibility or regeneration.
+        if combat_magic_ring_vanishes(ring, vanish_roll) {
+            self.party_equipment[wearer_slot][EQUIP_SLOT_RING] = EQUIPMENT_EMPTY;
+            outcome.vanished_ring = Some(ring);
+            self.message = "A ring has vanished!".to_string();
+            if ring as usize == EQUIPMENT_ID_RING_INVISIBILITY
+                && clear_combat_linked_invisibility(
+                    &mut self.combat_actors[slot],
+                    &mut self.active_objects,
+                )
+                .is_some_and(CombatLinkedVisibilityOutcome::changed)
+            {
+                self.mark_visibility_dirty();
+            }
+            return Some(outcome);
+        }
+
         if ring as usize == EQUIPMENT_ID_RING_INVISIBILITY {
             outcome.invisibility_applied = apply_combat_linked_invisibility(
                 &mut self.combat_actors[slot],
@@ -4224,25 +4854,47 @@ impl PlayState {
 
         let regeneration = combat_ring_regeneration_amount(wearer, ring, regeneration_roll);
         if regeneration != 0 {
-            outcome.regeneration_applied = self.party[slot].heal_by(regeneration);
-        }
-
-        if combat_magic_ring_vanishes(ring, vanish_roll) {
-            self.party_equipment[slot][EQUIP_SLOT_RING] = EQUIPMENT_EMPTY;
-            outcome.vanished_ring = Some(ring);
-            self.message = format!("{} vanished.", equipment_name(ring as usize));
-            if ring as usize == EQUIPMENT_ID_RING_INVISIBILITY
-                && clear_combat_linked_invisibility(
-                    &mut self.combat_actors[slot],
-                    &mut self.active_objects,
-                )
-                .is_some_and(CombatLinkedVisibilityOutcome::changed)
-            {
-                self.mark_visibility_dirty();
-            }
+            outcome.regeneration_applied = self.party[wearer_slot].heal_by(regeneration);
         }
 
         Some(outcome)
+    }
+
+    /// Run the encounter-entry-only ring destruction and seating hooks in
+    /// descriptor order. Action-time maintenance deliberately uses the
+    /// separate non-vanishing helper above the command parser.
+    fn apply_combat_entry_magic_ring_passes(&mut self) {
+        for actor_slot in 0..COMBAT_ACTOR_SLOTS {
+            let actor = self.combat_actors[actor_slot];
+            if actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 == 0 || actor.is_marked_dead() {
+                continue;
+            }
+            let wearer_slot = actor.owner_target_class as usize;
+            let Some(ring) = self
+                .party_equipment
+                .get(wearer_slot)
+                .map(|equipment| equipment[EQUIP_SLOT_RING])
+            else {
+                continue;
+            };
+            if ring as usize != EQUIPMENT_ID_RING_INVISIBILITY
+                && ring as usize != EQUIPMENT_ID_RING_REGENERATION
+            {
+                continue;
+            }
+            let vanish_roll = self.combat_magic_ring_vanish_roll(actor_slot);
+            let regeneration_roll =
+                if vanish_roll != 0 && ring as usize == EQUIPMENT_ID_RING_REGENERATION {
+                    self.combat_magic_ring_regeneration_roll(actor_slot)
+                } else {
+                    1
+                };
+            let _ = self.apply_combat_magic_ring_pass_to_slot(
+                actor_slot,
+                regeneration_roll,
+                vanish_roll,
+            );
+        }
     }
 
     pub fn advance_combat_round_counter(&mut self) -> CombatRoundCounterTick {

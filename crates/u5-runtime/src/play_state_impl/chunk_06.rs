@@ -221,17 +221,22 @@ impl PlayState {
         let ty = ty as usize;
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
-        if tile == 16 && self.is_recorded_open_town_door(scene, floor, tx, ty) {
+        if tile == TOWN_OPEN_ALREADY_OPEN_TILE
+            || (tile == TOWN_DOOR_CLEARED_TILE
+                && self.is_recorded_open_town_door(scene, floor, tx, ty))
+        {
             self.advance_turn_without_door_tick();
             self.message = "It's open!".to_string();
             return Ok(MoveOutcome::DoorOpened);
         }
         let revealed_secret_door =
-            (96..=103).contains(&tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty);
+            openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty);
         if !revealed_secret_door
-            && self
-                .town_lock_at(game_dir, scene, floor, tx, ty, tile)?
-                .is_some()
+            && (jimmy_locked_door_rewrite(tile).is_some()
+                || jimmy_magic_locked_door(tile)
+                || self
+                    .town_lock_at(game_dir, scene, floor, tx, ty, tile)?
+                    .is_some())
         {
             self.message = "Locked!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -239,12 +244,12 @@ impl PlayState {
         if self.surface_object_chest_slot_at(tx, ty).is_some() {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Open));
         }
-        if !(96..=103).contains(&tile) {
+        if !openable_town_door(tile) {
             self.message = "Nothing to open!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
-        self.grid[idx] = 16;
+        self.grid[idx] = TOWN_DOOR_CLEARED_TILE;
         self.record_open_town_door(scene, floor, tx, ty);
         self.mark_visibility_dirty();
         self.advance_turn_without_door_tick();
@@ -253,7 +258,7 @@ impl PlayState {
                 previous_tile: tile,
                 x: tx,
                 y: ty,
-                turns_remaining: 4,
+                turns_remaining: DOOR_AUTO_CLOSE_TURNS,
             });
         }
         self.message = "Opened!".to_string();
@@ -269,15 +274,9 @@ impl PlayState {
         let idx = dungeon_cell_index(level, self.player.x, self.player.y);
         let tile = self.grid[idx];
         match tile >> 4 {
-            0x4 => Ok(self.open_dungeon_chest(
-                scene,
-                level,
-                self.player.x,
-                self.player.y,
-                idx,
-                tile,
-                "Opened",
-            )),
+            0x4 => {
+                Ok(self.open_dungeon_chest(scene, level, self.player.x, self.player.y, idx, tile))
+            }
             0x7 => {
                 self.advance_turn();
                 self.message = "Chest opened".to_string();
@@ -315,6 +314,7 @@ impl PlayState {
         };
         for ch in std::iter::once(key).chain(suffix.chars()) {
             if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                self.advance_turn();
                 self.message = "None!".to_string();
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }
@@ -425,8 +425,22 @@ impl PlayState {
                 self.active_surface_chest = Some(session);
                 return Ok(None);
             }
-            let outcome = self
-                .consume_surface_object_chest_at(
+            // `traps.md §2.1`: only a prompted choice echoes the selected
+            // member's name. The silent single-match and active-member
+            // branches deliberately bypass this helper.
+            self.record_container_picker_name_echo(member_index);
+            let outcome = if let Some(dungeon) = session.dungeon {
+                self.finish_open_dungeon_chest(
+                    dungeon.scene,
+                    dungeon.level,
+                    session.x,
+                    session.y,
+                    dungeon.index,
+                    dungeon.tile,
+                    member_index,
+                )
+            } else {
+                self.consume_surface_object_chest_at(
                     session.x,
                     session.y,
                     member_index,
@@ -435,7 +449,8 @@ impl PlayState {
                 .unwrap_or_else(|| {
                     self.message = "Nothing to open!".to_string();
                     MoveOutcome::Blocked
-                });
+                })
+            };
             return Ok(Some(outcome));
         }
         self.active_surface_chest = Some(session);
@@ -450,6 +465,21 @@ impl PlayState {
         self.party
             .get(member_index)
             .is_some_and(|member| acting_member_status_eligible(member.status))
+    }
+
+    fn record_container_picker_name_echo(&mut self, member_index: usize) {
+        let Some(name) = self
+            .party_names
+            .get(member_index)
+            .and_then(|name| party_name_to_string(name))
+        else {
+            // Saved parties validate every in-party name before play. A
+            // synthetic fixture may omit one; do not invent a replacement
+            // line for a name the runtime was never given.
+            return;
+        };
+        self.message = name;
+        self.flush_message_slot();
     }
 
     #[cfg(test)]
@@ -509,7 +539,7 @@ impl PlayState {
 
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
-        if (96..=103).contains(&tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty) {
+        if openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty) {
             self.advance_turn();
             self.message = "No lock!".to_string();
             return Ok(MoveOutcome::LockTried);
@@ -566,30 +596,103 @@ impl PlayState {
                 return Ok(self.start_jimmy_party_prompt(direction));
             };
             let Some(member_index) = self.resolve_jimmy_member_index(Some(member_index)) else {
+                self.advance_turn();
                 return Ok(MoveOutcome::PromptDeclined);
             };
             return self.jimmy_dungeon_underfoot(game_dir, scene, level, member_index);
         }
         if self.keys == 0 {
+            self.advance_turn();
             self.message = "No keys!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        match self.area {
+            Area::Town { scene, floor } => {
+                self.jimmy_town_preflight(game_dir, scene, floor, member_index, direction)
+            }
+            Area::World { .. } => {
+                let (dx, dy) = direction.delta();
+                let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
+                let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+                if self.surface_object_chest_slot_at(tx, ty).is_none() {
+                    self.advance_turn();
+                    self.message = "No lock!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(member_index) = member_index else {
+                    return Ok(self.start_jimmy_party_prompt(direction));
+                };
+                let Some(member_index) = self.resolve_jimmy_member_index(Some(member_index)) else {
+                    self.advance_turn();
+                    return Ok(MoveOutcome::PromptDeclined);
+                };
+                Ok(self
+                    .jimmy_surface_object_chest_at(tx, ty, member_index)
+                    .expect("world Jimmy preflight found the target container"))
+            }
+            Area::Dungeon { .. } => unreachable!("dungeon Jimmy returns before key preflight"),
+        }
+    }
+
+    fn jimmy_town_preflight(
+        &mut self,
+        game_dir: Option<&Path>,
+        scene: Scene,
+        floor: i8,
+        member_index: Option<usize>,
+        direction: Direction,
+    ) -> io::Result<MoveOutcome> {
+        let (dx, dy) = direction.delta();
+        let tx = self.player.x as isize + dx;
+        let ty = self.player.y as isize + dy;
+        if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
+            self.advance_turn();
+            self.message = "No lock!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
+        let tx = tx as usize;
+        let ty = ty as usize;
+        let tile = self.grid[ty * 32 + tx];
+        let revealed_secret_door =
+            openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty);
+        let sidecar_lock = if revealed_secret_door {
+            None
+        } else {
+            self.town_lock_at(game_dir, scene, floor, tx, ty, tile)?
+        };
+
+        if jimmy_magic_locked_door(tile)
+            || sidecar_lock.is_some_and(|entry| entry.kind == TownLockKind::Magic)
+        {
+            self.keys = self.keys.saturating_sub(1);
+            self.advance_turn();
+            self.message = "Key broke!".to_string();
+            return Ok(MoveOutcome::LockTried);
+        }
+
+        if jimmy_restraint_tile(tile) {
+            if self.object_slot_at_current_floor(tx, ty).is_none() {
+                self.advance_turn();
+                self.message = "No one is there!".to_string();
+                return Ok(MoveOutcome::LockTried);
+            }
+        } else if sidecar_lock.is_none()
+            && jimmy_locked_door_rewrite(tile).is_none()
+            && self.surface_object_chest_slot_at(tx, ty).is_none()
+        {
+            self.advance_turn();
+            self.message = "No lock!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
+
         let Some(member_index) = member_index else {
             return Ok(self.start_jimmy_party_prompt(direction));
         };
         let Some(member_index) = self.resolve_jimmy_member_index(Some(member_index)) else {
+            self.advance_turn();
             return Ok(MoveOutcome::PromptDeclined);
         };
-        match self.area {
-            Area::Town { scene, floor } => {
-                self.jimmy_town_direction(game_dir, scene, floor, member_index, direction)
-            }
-            Area::World { .. } => {
-                self.message = "No lock!".to_string();
-                Ok(MoveOutcome::Blocked)
-            }
-            Area::Dungeon { .. } => unreachable!("dungeon Jimmy returns before key preflight"),
-        }
+        self.jimmy_town_direction(game_dir, scene, floor, member_index, direction)
     }
 
     pub fn resolve_jimmy_member_index(&mut self, member_index: Option<usize>) -> Option<usize> {
@@ -635,23 +738,25 @@ impl PlayState {
         }
         let tx = tx as usize;
         let ty = ty as usize;
-        if let Some(outcome) = self.jimmy_surface_object_chest_at(tx, ty, member_index) {
-            return Ok(outcome);
-        }
-        if self.blocking_object_at(tx, ty).is_some() {
-            return self.jimmy_town_pickpocket(game_dir, scene, floor, tx, ty, member_index);
-        }
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
-        if (96..=103).contains(&tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty) {
+        if openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty) {
             self.advance_turn();
             self.message = "No lock!".to_string();
             return Ok(MoveOutcome::LockTried);
         }
+        if jimmy_magic_locked_door(tile) {
+            self.keys = self.keys.saturating_sub(1);
+            self.advance_turn();
+            self.message = "Key broke!".to_string();
+            return Ok(MoveOutcome::LockTried);
+        }
         if let Some(entry) = self.town_lock_at(game_dir, scene, floor, tx, ty, tile)? {
             if entry.kind == TownLockKind::Magic {
-                self.message = "Magic lock!".to_string();
-                return Ok(MoveOutcome::Blocked);
+                self.keys = self.keys.saturating_sub(1);
+                self.advance_turn();
+                self.message = "Key broke!".to_string();
+                return Ok(MoveOutcome::LockTried);
             }
             if !self.jimmy_lock_pick_succeeds(member_index) {
                 self.keys = self.keys.saturating_sub(1);
@@ -678,56 +783,72 @@ impl PlayState {
             self.message = "Unlocked!".to_string();
             return Ok(MoveOutcome::LockTried);
         }
+        if jimmy_restraint_tile(tile) {
+            return Ok(self.jimmy_town_restraint_at(scene, tx, ty, member_index));
+        }
+        if let Some(outcome) = self.jimmy_surface_object_chest_at(tx, ty, member_index) {
+            return Ok(outcome);
+        }
+        self.advance_turn();
         self.message = "No lock!".to_string();
         Ok(MoveOutcome::Blocked)
     }
 
-    fn jimmy_town_pickpocket(
+    fn jimmy_town_restraint_at(
         &mut self,
-        game_dir: Option<&Path>,
         scene: Scene,
-        floor: i8,
-        tx: usize,
-        ty: usize,
+        x: usize,
+        y: usize,
         member_index: usize,
-    ) -> io::Result<MoveOutcome> {
-        let Some((slot, dialog_id)) = self.npc_pickpocket_target(floor, tx, ty) else {
+    ) -> MoveOutcome {
+        let Some(object_slot) = self
+            .object_slot_at_current_floor(x, y)
+            .map(|(slot, _)| slot)
+        else {
+            self.advance_turn();
             self.message = "No one is there!".to_string();
-            return Ok(MoveOutcome::Blocked);
+            return MoveOutcome::LockTried;
         };
         if !self.jimmy_lock_pick_succeeds(member_index) {
             self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
             self.message = "Key broke!".to_string();
-            return Ok(MoveOutcome::LockTried);
+            return MoveOutcome::LockTried;
         }
+        let Some(npc_index) = self
+            .npcs
+            .iter()
+            .position(|npc| npc.active_object == Some(object_slot))
+        else {
+            self.advance_turn();
+            self.message = "Unable to find NPC!".to_string();
+            return MoveOutcome::LockTried;
+        };
 
-        if self.mark_npc_pickpocketed_once(scene, floor, slot) {
-            self.add_moral_standing(2);
+        let npc_slot = self.npcs[npc_index].slot;
+        let type_byte = self.npcs[npc_index].type_byte;
+        self.npcs[npc_index].dialog_id = NPC_DIALOG_ID_NONE;
+        let already_removed = self
+            .removed_town_npc_flags
+            .get(&scene.byte)
+            .is_some_and(|mask| {
+                1u32.checked_shl(npc_slot as u32)
+                    .is_some_and(|bit| *mask & bit != 0)
+            });
+        if already_removed {
+            self.message.clear();
+        } else {
+            self.npcs[npc_index].schedule
+                [NPC_SCHEDULE_AI_OFFSET..NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT]
+                .fill(JIMMY_RELEASE_AI_MODE);
+            self.add_moral_standing(JIMMY_PRISONER_RELEASE_KARMA_REWARD);
+            if town_npc_activation_mask_eligible(type_byte) {
+                self.mark_removed_town_npc_once(scene, npc_slot);
+            }
+            self.message = "I thank thee!".to_string();
         }
         self.advance_turn();
-        self.message = self.npc_pickpocket_thanks_line(game_dir, scene, dialog_id)?;
-        Ok(MoveOutcome::LockTried)
-    }
-
-    fn npc_pickpocket_target(&self, floor: i8, tx: usize, ty: usize) -> Option<(usize, u8)> {
-        if floor < 0 {
-            return None;
-        }
-        let floor = floor as u8;
-        self.npcs
-            .iter()
-            .find(|npc| !npc.is_player_phantom() && npc.x == tx && npc.y == ty && npc.z == floor)
-            .map(|npc| (npc.slot, npc.dialog_id))
-    }
-
-    fn mark_npc_pickpocketed_once(&mut self, scene: Scene, floor: i8, slot: usize) -> bool {
-        let marker = (scene.byte, floor, slot);
-        if self.pickpocketed_npcs.contains(&marker) {
-            return false;
-        }
-        self.pickpocketed_npcs.push(marker);
-        true
+        MoveOutcome::LockTried
     }
 
     pub fn surface_object_chest_slot_at(
@@ -763,21 +884,22 @@ impl PlayState {
         let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
         let stat = Self::surface_object_chest_stat(object)?;
         let Some(threshold) =
-            object_chest_jimmy_threshold(stat, self.party[member_index].class_byte)
+            object_chest_jimmy_threshold(stat, self.party[member_index].climb_stat)
         else {
+            self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
             self.message = "Key broke!".to_string();
             return Some(MoveOutcome::LockTried);
         };
         let roll = self.surface_object_chest_jimmy_roll();
         if object_chest_jimmy_succeeds(threshold, roll) {
-            self.keys = self.keys.saturating_sub(1);
-            self.advance_turn();
-            self.message = "Unlocked!".to_string();
-        } else {
             if let Some(object) = self.active_objects.get_mut(slot) {
                 object.aux1 &= 0x7f;
             }
+            self.advance_turn();
+            self.message = "Unlocked!".to_string();
+        } else {
+            self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
             self.message = "Key broke!".to_string();
         }
@@ -1033,31 +1155,6 @@ impl PlayState {
         self.moral_standing - before
     }
 
-    fn npc_pickpocket_thanks_line(
-        &self,
-        game_dir: Option<&Path>,
-        scene: Scene,
-        dialog_id: u8,
-    ) -> io::Result<String> {
-        if dialog_id <= 1 {
-            return Ok("Thanks!".to_string());
-        }
-        let Some(game_dir) = game_dir else {
-            return Ok("Thanks!".to_string());
-        };
-        let dialogue_path = game_dir.join(format!("{}.TLK", scene.family.stem()));
-        if !dialogue_path.exists() {
-            return Ok("Thanks!".to_string());
-        }
-        let dialogue = parse_tlk(&dialogue_path)?;
-        Ok(dialogue
-            .get(&(dialog_id as u16))
-            .and_then(|fields| fields.get(4))
-            .filter(|line| !line.is_empty())
-            .cloned()
-            .unwrap_or_else(|| "Thanks!".to_string()))
-    }
-
     pub fn jimmy_dungeon_underfoot(
         &mut self,
         _game_dir: Option<&Path>,
@@ -1070,6 +1167,7 @@ impl PlayState {
         Ok(match tile >> 4 {
             0x4 => {
                 if self.keys == 0 {
+                    self.advance_turn();
                     self.message = "No keys!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
@@ -1080,21 +1178,21 @@ impl PlayState {
                     return Ok(MoveOutcome::LockTried);
                 }
 
-                let class_byte = self
+                let dexterity = self
                     .party
                     .get(member_index)
-                    .map(|member| member.class_byte)
+                    .map(|member| member.climb_stat)
                     .unwrap_or_default();
-                let threshold = Self::dungeon_chest_pick_threshold(level, class_byte);
+                let threshold = Self::dungeon_chest_pick_threshold(level, dexterity);
                 let roll = self.random_range_u8(JIMMY_OBJECT_DIE_LOW, JIMMY_OBJECT_DIE_HIGH);
-                if roll > threshold {
+                if !dungeon_chest_jimmy_succeeds(threshold, roll) {
                     self.keys = self.keys.saturating_sub(1);
                     self.advance_turn();
                     self.message = "Key broke!".to_string();
                     return Ok(MoveOutcome::LockTried);
                 }
 
-                self.grid[idx] = 0x70 | (tile & 0x0f);
+                self.grid[idx] = dungeon_open_chest_rewrite(tile);
                 self.mark_visibility_dirty();
                 self.advance_turn();
                 self.message = "Unlocked!".to_string();
@@ -1106,6 +1204,7 @@ impl PlayState {
                 MoveOutcome::LockTried
             }
             _ => {
+                self.advance_turn();
                 self.message = "No lock!".to_string();
                 MoveOutcome::Blocked
             }
@@ -1113,13 +1212,13 @@ impl PlayState {
     }
 
     pub fn jimmy_lock_pick_succeeds(&mut self, member_index: usize) -> bool {
-        let class_byte = self
+        let dexterity = self
             .party
             .get(member_index)
-            .map(|member| member.class_byte)
+            .map(|member| member.climb_stat)
             .unwrap_or_default();
         let roll = self.jimmy_lock_pick_roll();
-        jimmy_door_succeeds(class_byte, roll)
+        jimmy_door_succeeds(dexterity, roll)
     }
 
     pub fn jimmy_lock_pick_roll(&mut self) -> u8 {
@@ -1139,11 +1238,7 @@ impl PlayState {
     }
 
     pub fn visible_jimmy_unlock_tile(tile: u8) -> Option<u8> {
-        if (97..=103).contains(&tile) && tile % 2 == 1 {
-            Some(tile - 1)
-        } else {
-            None
-        }
+        jimmy_locked_door_rewrite(tile)
     }
 
     #[cfg(test)]
@@ -1300,7 +1395,7 @@ impl PlayState {
         let threshold =
             search_trap_detection_threshold(trappable, difficulty, member_trap_detection);
         let roll = self.surface_object_search_trap_roll(slot, x, y, stat, member_index);
-        let detection_bit = roll >= threshold;
+        let detection_bit = u16::from(roll) >= threshold;
         let visibility = search_trap_visibility(trappable, difficulty, detection_bit);
 
         self.advance_turn();
@@ -2185,7 +2280,7 @@ impl PlayState {
         };
         self.npcs
             .iter()
-            .any(|npc| !npc.is_player_phantom() && npc.x == x && npc.y == y && npc.z == floor as u8)
+            .any(|npc| npc.x == x && npc.y == y && npc.z == floor as u8)
     }
 
     pub fn fixed_hidden_treasure_pickup_exists(&self, record: usize) -> bool {
@@ -2462,6 +2557,10 @@ impl PlayState {
         let Some(reveal) = dungeon_search_secret_pit_reveal(tile, level) else {
             return self.search_dungeon_feature(scene, level, x, y, tile);
         };
+        self.message = format!(
+            "Searched dungeon pit at ({x}, {y}) on {} level {level}; found a secret door.",
+            scene.key()
+        );
         self.grid[idx] = 0x60;
         if matches!(
             reveal,
@@ -2471,11 +2570,15 @@ impl PlayState {
             self.grid[below_idx] |= DUNGEON_RUNTIME_VARIANT_BIT;
         }
         self.mark_visibility_dirty();
+        self.run_map_viewport_dissolve(MapViewportDissolveSource::DungeonSearchReveal {
+            scene,
+            level,
+            x: x as u8,
+            y: y as u8,
+            original_cell: tile,
+            revealed_cell: 0x60,
+        });
         self.advance_turn();
-        self.message = format!(
-            "Searched dungeon pit at ({x}, {y}) on {} level {level}; found a secret door.",
-            scene.key()
-        );
         MoveOutcome::Searched
     }
 
@@ -2488,13 +2591,13 @@ impl PlayState {
         idx: usize,
         tile: u8,
     ) -> MoveOutcome {
-        let class_byte = self
+        let trap_detection_stat = self
             .party
             .iter()
             .find(|member| member.living())
             .map(|member| member.class_byte)
             .unwrap_or_default();
-        let threshold = Self::dungeon_chest_pick_threshold(level, class_byte);
+        let threshold = Self::dungeon_chest_pick_threshold(level, trap_detection_stat);
         let roll = self.dungeon_chest_trap_roll(level, x, y, tile, 0, 30);
         match dungeon_bomb_search_outcome(threshold, roll) {
             DungeonBombSearchOutcome::NothingOnPit => {
@@ -2531,23 +2634,39 @@ impl PlayState {
                 self.search_dungeon_feature(scene, level, x, y, tile)
             }
             Some(DungeonSearchWallRewrite::ToFlavourFind(reveal_cell)) => {
-                self.grid[idx] = reveal_cell;
-                self.mark_visibility_dirty();
-                self.advance_turn();
                 self.message = format!(
                     "Searched dungeon wall at ({x}, {y}) on {} level {level}; found a hidden passage.",
                     scene.key()
                 );
+                self.grid[idx] = reveal_cell;
+                self.mark_visibility_dirty();
+                self.run_map_viewport_dissolve(MapViewportDissolveSource::DungeonSearchReveal {
+                    scene,
+                    level,
+                    x: x as u8,
+                    y: y as u8,
+                    original_cell: tile,
+                    revealed_cell: reveal_cell,
+                });
+                self.advance_turn();
                 MoveOutcome::Searched
             }
             Some(DungeonSearchWallRewrite::ToHiddenWallReveal(reveal_cell)) => {
-                self.grid[idx] = reveal_cell;
-                self.mark_visibility_dirty();
-                self.advance_turn();
                 self.message = format!(
                     "Searched dungeon wall at ({x}, {y}) on {} level {level}; revealed a hidden wall.",
                     scene.key()
                 );
+                self.grid[idx] = reveal_cell;
+                self.mark_visibility_dirty();
+                self.run_map_viewport_dissolve(MapViewportDissolveSource::DungeonSearchReveal {
+                    scene,
+                    level,
+                    x: x as u8,
+                    y: y as u8,
+                    original_cell: tile,
+                    revealed_cell: reveal_cell,
+                });
+                self.advance_turn();
                 MoveOutcome::Searched
             }
             None => self.search_dungeon_feature(scene, level, x, y, tile),

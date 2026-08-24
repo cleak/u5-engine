@@ -1,5 +1,5 @@
     #[test]
-    fn save_game_command_writes_supported_saved_gam_and_saved_ool_fields() {
+    fn save_game_command_writes_supported_saved_gam_and_stages_saved_ool_mirrors() {
         let dir = debug_game_dir();
         let mut template = saved_game_seed_bytes(17, 0, 15, 15);
         template[SAVE_AVATAR_NAME_OFFSET] = b'A';
@@ -18,12 +18,10 @@
         let mut existing_ool = vec![0; SAVED_OOL_LEN];
         write_ool_object(&mut existing_ool[..OOL_PLANE_LEN], 1, britannia_object);
         fs::write(dir.join("SAVED.OOL"), existing_ool).unwrap();
-        fs::write(
-            dir.join("BRIT.OOL"),
-            ool_plane_with_object(1, britannia_object),
-        )
-        .unwrap();
-        fs::write(dir.join("UNDER.OOL"), vec![0x22; OOL_PLANE_LEN]).unwrap();
+        let britannia_mirror = ool_plane_with_object(1, britannia_object);
+        let underworld_mirror = vec![0x22; OOL_PLANE_LEN];
+        fs::write(dir.join("BRIT.OOL"), &britannia_mirror).unwrap();
+        fs::write(dir.join("UNDER.OOL"), &underworld_mirror).unwrap();
         let underworld_object = ActiveObject {
             type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
             tile: FIRST_PLAYABLE_FRIGATE_TILE,
@@ -54,7 +52,8 @@
             type_byte: FIRST_PLAYABLE_SKIFF_TILE,
             tile: FIRST_PLAYABLE_SKIFF_TILE,
         };
-        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.spell_charges[REL_HUR_SPELL_INDEX] = 4;
         state.scroll_stock[6] = 8;
         state.potion_stock[7] = 9;
@@ -71,14 +70,22 @@
         state.fixed_hidden_treasure_daily_day = 6;
         state.fixed_hidden_treasure_single_use_cookie = 0x77;
         state.shadowlord_hideouts = [8, SHADOWLORD_VANQUISHED, 4];
-        state.quest_progress_word = 0x120e;
+        state.removed_town_npc_flags.insert(STONEGATE_SCENE_BYTE, 0x120e);
+        state.talk_branch_flags.insert(17, 0x89ab_cdef);
         state.shrine_ordained_mask = 0b0000_1010;
         state.shrine_codex_mask = 0b0100_0001;
+        state.word_of_power_seal_flags = [0x80, 1, 2, 3, 4, 5, 6, 0xff];
+        state.shrine_ruin_flags = [7, 6, 5, 4, 3, 2, 1, 0x80];
         state.moral_standing = 42;
         state.fortunes_of_war = 0x7e;
+        state.camp_cooldown = 11;
+        state.camp_month_cookie = 5;
         state.dungeon_room_clear_bitmap[3] = 0xa5;
         state.active_player = Some(1);
         state.combat_round_counter = 7;
+        state.combat_interference_sources = [COMBAT_INTERFERENCE_NO_SOURCE; COMBAT_ACTOR_SLOTS];
+        state.combat_interference_sources[0] = 8;
+        state.combat_interference_sources[31] = 3;
         state.avatar_stats = AvatarStats {
             strength: 23,
             dexterity: 24,
@@ -171,8 +178,22 @@
         assert_eq!(saved[SAVE_TORCH_COUNTER_OFFSET], 44);
         assert_eq!(saved[SAVE_SHRINE_ORDAINED_MASK_OFFSET], 0b0000_1010);
         assert_eq!(saved[SAVE_SHRINE_CODEX_MASK_OFFSET], 0b0100_0001);
+        assert_eq!(
+            &saved[SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET
+                ..SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET + SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+            &state.word_of_power_seal_flags
+        );
+        assert_eq!(
+            &saved[SAVE_SHRINE_RUIN_FLAGS_OFFSET
+                ..SAVE_SHRINE_RUIN_FLAGS_OFFSET + SAVE_SHRINE_RUIN_FLAG_COUNT],
+            &state.shrine_ruin_flags
+        );
         assert_eq!(saved[SAVE_MORAL_STANDING_OFFSET], 42);
         assert_eq!(saved[SAVE_FORTUNES_OF_WAR_OFFSET], 0x7e);
+        assert_eq!(SAVE_CAMP_COOLDOWN_OFFSET, 0x02e6);
+        assert_eq!(SAVE_CAMP_MONTH_COOKIE_OFFSET, 0x02e7);
+        assert_eq!(saved[SAVE_CAMP_COOLDOWN_OFFSET], 11);
+        assert_eq!(saved[SAVE_CAMP_MONTH_COOKIE_OFFSET], 5);
         assert_eq!(
             &saved[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET
                 ..SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES],
@@ -188,15 +209,36 @@
                 ..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT],
             &state.shadowlord_hideouts
         );
-        assert_eq!(u16_at(&saved, SAVE_QUEST_PROGRESS_WORD_OFFSET), 0x120e);
+        let stonegate_offset = SAVE_NPC_REMOVED_MASKS_OFFSET
+            + (STONEGATE_SCENE_BYTE as usize - 1) * SAVE_NPC_MASK_BYTES_PER_SCENE;
+        assert_eq!(
+            u32::from_le_bytes(saved[stonegate_offset..stonegate_offset + 4].try_into().unwrap()),
+            0x120e
+        );
+        let castle_offset = SAVE_NPC_NAME_KNOWN_MASKS_OFFSET
+            + (17usize - 1) * SAVE_NPC_MASK_BYTES_PER_SCENE;
+        assert_eq!(
+            u32::from_le_bytes(saved[castle_offset..castle_offset + 4].try_into().unwrap()),
+            0x89ab_cdef
+        );
         assert_eq!(
             &saved[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
                 ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
             &state.dungeon_room_clear_bitmap
         );
-        assert_eq!(saved[SAVE_TIMING_STATUS_TAG_OFFSET], b'Q');
+        assert_eq!(saved[SAVE_ACTIVE_EFFECT_CODE_OFFSET], b'Q');
+        assert_eq!(
+            saved[SAVE_ACTIVE_EFFECT_DURATION_OFFSET],
+            QUICKNESS_ACTIVE_EFFECT_DURATION
+        );
         assert_eq!(saved[SAVE_ACTIVE_PLAYER_OFFSET], 1);
         assert_eq!(saved[SAVE_COMBAT_ROUND_COUNTER_OFFSET], 7);
+        assert_eq!(
+            &saved[SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET
+                ..SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET
+                    + SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN],
+            &state.combat_interference_sources
+        );
         assert_eq!(
             saved[SAVE_TRANSPORT_MARKER_OFFSET],
             TRANSPORT_MARKER_SKIFF_FIRST
@@ -264,18 +306,10 @@
 
         let saved_ool = fs::read(dir.join("SAVED.OOL")).unwrap();
         assert_eq!(saved_ool.len(), SAVED_OOL_LEN);
-        let britannia_overlay = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
-        let underworld_overlay = decode_ool_plane_objects(&saved_ool[OOL_PLANE_LEN..]).unwrap();
-        assert_eq!(britannia_overlay[0], britannia_object);
-        assert_eq!(underworld_overlay[0], underworld_object);
-        assert_eq!(
-            fs::read(dir.join("BRIT.OOL")).unwrap(),
-            saved_ool[..OOL_PLANE_LEN].to_vec()
-        );
-        assert_eq!(
-            fs::read(dir.join("UNDER.OOL")).unwrap(),
-            saved_ool[OOL_PLANE_LEN..].to_vec()
-        );
+        assert_eq!(&saved_ool[..OOL_PLANE_LEN], britannia_mirror.as_slice());
+        assert_eq!(&saved_ool[OOL_PLANE_LEN..], underworld_mirror.as_slice());
+        assert_eq!(fs::read(dir.join("BRIT.OOL")).unwrap(), britannia_mirror);
+        assert_eq!(fs::read(dir.join("UNDER.OOL")).unwrap(), underworld_mirror);
         let world_progress = load_world_progress_state(&dir).unwrap();
         assert_eq!(world_progress, WorldProgressState::from_play_state(&state));
         let reloaded_options = load_play_options_from_save(&dir).unwrap();
@@ -332,6 +366,28 @@
     }
 
     #[test]
+    fn save_disk_session_restores_the_entry_role_after_canonical_writes() {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        write_empty_ool_mirrors(&dir);
+        let mut state = britannia_state(open_world_grid(), 10, 20);
+        let mut disk_session = DiskPromptSession::single_directory();
+        disk_session.request_operation(DiskOperationFamily::ProgramResources);
+
+        state
+            .write_save_files_with_disk_session(&dir, &mut disk_session)
+            .unwrap();
+
+        assert_eq!(disk_session.required_disk(), RequiredDisk::Program);
+        assert!(dir.join(SAVED_GAM_FILENAME).exists());
+        assert!(dir.join(SAVED_OOL_FILENAME).exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn save_game_command_persists_pending_shipwright_delivery_from_town_return_world() {
         let dir = debug_game_dir();
         let mut template = saved_game_seed_bytes(17, 0, 3, 4);
@@ -341,29 +397,17 @@
         fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
         fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
 
-        let stale_cached_object = ActiveObject {
-            type_byte: FIRST_PLAYABLE_SKIFF_TILE,
-            tile: FIRST_PLAYABLE_SKIFF_TILE,
-            x: 1,
-            y: 2,
-            z: WorldPlane::Britannia.save_floor(),
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        };
         let pending = PendingVehicleAcquisition::Frigate {
             x: 136,
             y: 158,
             skiffs: 3,
         };
-        let expected = pending.active_object(WorldPlane::Britannia.save_floor());
         let mut state = test_state(open_grid(), 3, 4);
         state.return_world = Some(WorldReturn {
             plane: WorldPlane::Britannia,
             x: 12,
             y: 21,
             transport: TransportState::Foot,
-            timing_status: TimingStatusTag::Normal,
             sail_cadence: 0,
             sail_stall_pending: false,
             grid: open_world_grid(),
@@ -379,26 +423,27 @@
             }],
             pending_vehicle: Some(pending),
         });
-        state
-            .world_overlays
-            .set(WorldPlane::Britannia, vec![stale_cached_object; OOL_SLOTS - 1]);
-
         assert_eq!(
             state.save_game_command(&dir, Some(true)).unwrap(),
             MoveOutcome::Saved
         );
 
+        let saved_gam = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(saved_gam[SAVE_PENDING_VEHICLE_X_OFFSET], 136);
+        assert_eq!(saved_gam[SAVE_PENDING_VEHICLE_Y_OFFSET], 158);
+        assert_eq!(saved_gam[SAVE_PENDING_VEHICLE_CLASS_OFFSET], 0x83);
         let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
-        let britannia_overlay = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
-        assert_eq!(britannia_overlay[0], expected);
-        assert!(!britannia_overlay.iter().any(|object| *object == stale_cached_object));
+        assert_eq!(saved_ool, vec![0; SAVED_OOL_LEN]);
+        assert_eq!(fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(), vec![0; OOL_PLANE_LEN]);
+        let reloaded = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(reloaded.pending_vehicle, Some(pending));
         assert_eq!(
-            fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
-            saved_ool[..OOL_PLANE_LEN].to_vec()
-        );
-        assert_eq!(
-            load_world_overlay_objects(&dir, WorldPlane::Britannia).unwrap()[0],
-            expected
+            reloaded.pending_vehicle_save,
+            PendingVehicleSaveState {
+                x: 136,
+                y: 158,
+                class_byte: 0x83,
+            }
         );
         assert_eq!(
             state.return_world.as_ref().and_then(|world| world.pending_vehicle),
@@ -417,8 +462,11 @@
         fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
         fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
 
-        let pending = PendingVehicleAcquisition::Skiff { x: 85, y: 107 };
-        let expected = pending.active_object(WorldPlane::Britannia.save_floor());
+        let pending = PendingVehicleAcquisition::Skiff {
+            x: 85,
+            y: 107,
+            aux3: 0,
+        };
         let mut world_objects = vec![ActiveObject {
             type_byte: PLAYER_TILE,
             tile: PLAYER_TILE,
@@ -445,7 +493,6 @@
             x: 81,
             y: 106,
             transport: TransportState::Foot,
-            timing_status: TimingStatusTag::Normal,
             sail_cadence: 0,
             sail_stall_pending: false,
             grid: open_world_grid(),
@@ -458,20 +505,47 @@
             MoveOutcome::Saved
         );
 
+        let saved_gam = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(saved_gam[SAVE_PENDING_VEHICLE_X_OFFSET], 85);
+        assert_eq!(saved_gam[SAVE_PENDING_VEHICLE_Y_OFFSET], 107);
+        assert_eq!(saved_gam[SAVE_PENDING_VEHICLE_CLASS_OFFSET], 0x40);
         let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
-        let britannia_overlay = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
+        assert_eq!(saved_ool, vec![0; SAVED_OOL_LEN]);
+        assert_eq!(fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(), vec![0; OOL_PLANE_LEN]);
+        assert_eq!(load_play_options_from_save(&dir).unwrap().pending_vehicle, Some(pending));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn save_load_preserves_inactive_pending_vehicle_bytes_verbatim() {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(17, 0, 3, 4);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        template[SAVE_PENDING_VEHICLE_X_OFFSET] = 0xa5;
+        template[SAVE_PENDING_VEHICLE_Y_OFFSET] = 0x5a;
+        template[SAVE_PENDING_VEHICLE_CLASS_OFFSET] = 0x3f;
+        fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        write_empty_ool_mirrors(&dir);
+
+        let reloaded = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(reloaded.pending_vehicle, None);
         assert_eq!(
-            britannia_overlay
-                .iter()
-                .filter(|object| object.type_byte == FIRST_PLAYABLE_FRIGATE_TILE)
-                .count(),
-            1
+            reloaded.pending_vehicle_save,
+            PendingVehicleSaveState {
+                x: 0xa5,
+                y: 0x5a,
+                class_byte: 0x3f,
+            }
         );
-        assert!(britannia_overlay.iter().any(|object| *object == expected));
-        assert_eq!(
-            fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
-            saved_ool[..OOL_PLANE_LEN].to_vec()
-        );
+
+        let mut state = test_state(open_grid(), 3, 4);
+        state.pending_vehicle_save = reloaded.pending_vehicle_save;
+        state.write_save_files(&dir).unwrap();
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(saved[SAVE_PENDING_VEHICLE_X_OFFSET], 0xa5);
+        assert_eq!(saved[SAVE_PENDING_VEHICLE_Y_OFFSET], 0x5a);
+        assert_eq!(saved[SAVE_PENDING_VEHICLE_CLASS_OFFSET], 0x3f);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -508,6 +582,8 @@
             template[SAVE_AVATAR_NAME_OFFSET] = b'A';
             fs::write(dir.join("SAVED.GAM"), template).unwrap();
             fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+            fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+            fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
         }
 
         let mut base = world_state(open_world_grid(), 10, 20);
@@ -521,16 +597,12 @@
         let mut transient = world_state(open_world_grid(), 10, 20);
         transient.white_potion_sweep = Some(WhitePotionSweep {
             frames_remaining: 7,
-            radius: 3,
+            pause_bios_ticks_per_frame: POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME,
             center_x: 10,
             center_y: 20,
+            visible_cells: [true; VIEWPORT_SIDE * VIEWPORT_SIDE],
         });
-        transient.combat_potion_presentation = Some(CombatPotionPresentation {
-            kind: CombatPotionPresentationKind::Poof,
-            actor_slot: 0,
-            active_object_slot: 0,
-            frames_remaining: 1,
-        });
+        transient.pending_potion_flash = potion_flash_playback(POTION_PURPLE_INDEX);
         assert_eq!(
             transient
                 .save_game_command(&transient_dir, Some(true))
@@ -556,7 +628,7 @@
         let state = PlayState::load_scene(&dir, options).unwrap();
 
         assert_eq!(state.white_potion_sweep, None);
-        assert_eq!(state.combat_potion_presentation, None);
+        assert_eq!(state.pending_potion_flash, None);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -648,7 +720,9 @@
         save[SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET] = 0x34;
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&[8, SHADOWLORD_VANQUISHED, 4]);
-        write_u16_at(&mut save, SAVE_QUEST_PROGRESS_WORD_OFFSET, 0x120e);
+        let stonegate_offset = SAVE_NPC_REMOVED_MASKS_OFFSET
+            + (STONEGATE_SCENE_BYTE as usize - 1) * SAVE_NPC_MASK_BYTES_PER_SCENE;
+        save[stonegate_offset..stonegate_offset + 4].copy_from_slice(&0x120eu32.to_le_bytes());
         fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
         fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
 
@@ -669,7 +743,10 @@
         assert_eq!(options.fixed_hidden_treasure_daily_day, 0x12);
         assert_eq!(options.fixed_hidden_treasure_single_use_cookie, 0x34);
         assert_eq!(options.shadowlord_hideouts, [8, SHADOWLORD_VANQUISHED, 4]);
-        assert_eq!(options.quest_progress_word, 0x120e);
+        assert_eq!(
+            options.removed_town_npc_flags.get(&STONEGATE_SCENE_BYTE),
+            Some(&0x120e)
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -679,12 +756,60 @@
         bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
         bytes[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&[8, SHADOWLORD_VANQUISHED, 4]);
-        write_u16_at(&mut bytes, SAVE_QUEST_PROGRESS_WORD_OFFSET, 0x120e);
+        let stonegate_offset = SAVE_NPC_REMOVED_MASKS_OFFSET
+            + (STONEGATE_SCENE_BYTE as usize - 1) * SAVE_NPC_MASK_BYTES_PER_SCENE;
+        bytes[stonegate_offset..stonegate_offset + 4]
+            .copy_from_slice(&0x120eu32.to_le_bytes());
 
         let options = play_options_from_save_bytes(&bytes).unwrap();
 
         assert_eq!(options.shadowlord_hideouts, [8, SHADOWLORD_VANQUISHED, 4]);
-        assert_eq!(options.quest_progress_word, 0x120e);
+        assert_eq!(
+            options.removed_town_npc_flags.get(&STONEGATE_SCENE_BYTE),
+            Some(&0x120e)
+        );
+    }
+
+    #[test]
+    fn native_npc_mask_banks_decode_little_endian_scene_slots() {
+        let mut bytes = saved_game_seed_bytes(0, 0xff, 10, 20);
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        bytes[SAVE_NPC_REMOVED_MASKS_OFFSET..SAVE_NPC_REMOVED_MASKS_OFFSET + 4]
+            .copy_from_slice(&0x8000_0001u32.to_le_bytes());
+        let scene_32_name_offset =
+            SAVE_NPC_NAME_KNOWN_MASKS_OFFSET + 31 * SAVE_NPC_MASK_BYTES_PER_SCENE;
+        bytes[scene_32_name_offset..scene_32_name_offset + 4]
+            .copy_from_slice(&0x0102_0408u32.to_le_bytes());
+
+        let options = play_options_from_save_bytes(&bytes).unwrap();
+
+        assert_eq!(options.removed_town_npc_flags.get(&1), Some(&0x8000_0001));
+        assert_eq!(options.talk_branch_flags.get(&32), Some(&0x0102_0408));
+        assert!(!options.removed_town_npc_flags.contains_key(&2));
+        assert!(!options.talk_branch_flags.contains_key(&31));
+    }
+
+    #[test]
+    fn native_npc_mask_banks_encode_all_32_scene_words() {
+        let mut bytes = vec![0xA5; SAVED_GAM_LEN];
+        let removed = HashMap::from([(1, 0x8000_0001), (29, 0x0000_000E)]);
+        let known = HashMap::from([(17, 0xDEAD_BEEF), (32, 0x0102_0408)]);
+
+        encode_npc_mask_bank(&mut bytes, SAVE_NPC_REMOVED_MASKS_OFFSET, &removed);
+        encode_npc_mask_bank(&mut bytes, SAVE_NPC_NAME_KNOWN_MASKS_OFFSET, &known);
+
+        assert_eq!(
+            decode_npc_mask_bank(&bytes, SAVE_NPC_REMOVED_MASKS_OFFSET),
+            removed
+        );
+        assert_eq!(
+            decode_npc_mask_bank(&bytes, SAVE_NPC_NAME_KNOWN_MASKS_OFFSET),
+            known
+        );
+        assert_eq!(
+            &bytes[SAVE_NPC_REMOVED_MASKS_OFFSET + 4..SAVE_NPC_REMOVED_MASKS_OFFSET + 8],
+            &[0, 0, 0, 0]
+        );
     }
 
     #[test]
@@ -734,6 +859,7 @@
             .fill(0x7f);
         fs::write(dir.join("SAVED.GAM"), template).unwrap();
         fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+        write_empty_ool_mirrors(&dir);
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x68;
         grid[dungeon_cell_index(0, 3, 1)] = 0x8a;
@@ -834,6 +960,17 @@
                 .unwrap(),
             MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 3 })
         );
+        let dungeon_monster = ActiveObject {
+            type_byte: 0,
+            tile: 0,
+            x: 6,
+            y: 7,
+            z: 3,
+            aux1: DUNGEON_MONSTER_COMBAT_CLASSES[0],
+            phase: 0xA5,
+            aux3: DUNGEON_MONSTER_UPPER_DEP3,
+        };
+        state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT] = dungeon_monster;
         let patched_cell = dungeon_cell_index(3, 5, 5);
         state.grid[patched_cell] = 0x68;
 
@@ -864,6 +1001,11 @@
         assert_eq!(reloaded.area, Area::Dungeon { scene, level: 3 });
         assert_eq!((reloaded.player.x, reloaded.player.y), (4, 5));
         assert_eq!(reloaded.active_objects[0].z, 3);
+        assert_eq!(
+            reloaded.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT],
+            dungeon_monster
+        );
+        assert!(dungeon_monster_record_active(dungeon_monster));
         assert_eq!(reloaded.grid[patched_cell], 0x68);
         let _ = fs::remove_dir_all(dir);
     }
@@ -931,6 +1073,7 @@
         template[SAVE_AVATAR_NAME_OFFSET] = b'A';
         fs::write(dir.join("SAVED.GAM"), template).unwrap();
         fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+        write_empty_ool_mirrors(&dir);
         let mut state = world_state(open_world_grid(), 10, 20);
         state.inn_registry.push(InnGuestRecord {
             scene_marker: 0x12,
@@ -1105,6 +1248,7 @@
         let mut template = saved_game_seed_bytes(17, 0, 5, 5);
         template[SAVE_AVATAR_NAME_OFFSET] = b'A';
         fs::write(dir.join("SAVED.GAM"), template).unwrap();
+        write_empty_ool_mirrors(&dir);
         let mut state = test_state(open_grid(), 5, 5);
 
         assert!(
@@ -1144,6 +1288,8 @@
         bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
         bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_BLACK_BADGE_INDEX] = 1;
         bytes[SAVE_FORTUNES_OF_WAR_OFFSET] = 0x99;
+        bytes[SAVE_CAMP_COOLDOWN_OFFSET] = 9;
+        bytes[SAVE_CAMP_MONTH_COOKIE_OFFSET] = 7;
         bytes[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = 8;
         let clock = GameClock::with_date(141, 6, 7, 8, 35).unwrap();
         write_saved_clock(&mut bytes, clock);
@@ -1164,6 +1310,8 @@
         assert_eq!(options.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX], 1);
         assert_eq!(options.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX], 1);
         assert_eq!(options.fortunes_of_war, 0x99);
+        assert_eq!(options.camp_cooldown, 9);
+        assert_eq!(options.camp_month_cookie, 7);
         assert_eq!(options.combat_round_counter, 8);
         assert_eq!(options.party, default_party());
     }
@@ -1187,6 +1335,12 @@
         bytes[SAVE_MOONSTONE_Z_OFFSET + 1] = 0xff;
         bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET] = 0b0010_0010;
         bytes[SAVE_SHRINE_CODEX_MASK_OFFSET] = 0b1000_0001;
+        bytes[SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET
+            ..SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET + SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT]
+            .copy_from_slice(&[0x80, 1, 2, 3, 4, 5, 6, 0xff]);
+        bytes[SAVE_SHRINE_RUIN_FLAGS_OFFSET
+            ..SAVE_SHRINE_RUIN_FLAGS_OFFSET + SAVE_SHRINE_RUIN_FLAG_COUNT]
+            .copy_from_slice(&[7, 6, 5, 4, 3, 2, 1, 0x80]);
         let first = SAVE_ROSTER_OFFSET;
         bytes[first..first + SAVE_CHARACTER_NAME_LEN].copy_from_slice(b"MARIA\0\0\0\0");
         bytes[first + SAVE_CHARACTER_CLASS_OFFSET] = b'A';
@@ -1237,6 +1391,11 @@
         assert_eq!(options.potion_stock[7], 5);
         assert_eq!(options.shrine_ordained_mask, 0b0010_0010);
         assert_eq!(options.shrine_codex_mask, 0b1000_0001);
+        assert_eq!(
+            options.word_of_power_seal_flags,
+            [0x80, 1, 2, 3, 4, 5, 6, 0xff]
+        );
+        assert_eq!(options.shrine_ruin_flags, [7, 6, 5, 4, 3, 2, 1, 0x80]);
         assert_eq!(
             options.avatar_stats,
             AvatarStats {
@@ -1487,7 +1646,7 @@
     }
 
     #[test]
-    fn save_play_options_reads_timing_status_tag() {
+    fn save_play_options_reads_shared_active_effect_code_and_duration() {
         let mut bytes = vec![0; SAVED_GAM_LEN];
         bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
         bytes[SAVE_SCENE_OFFSET] = 0;
@@ -1496,31 +1655,77 @@
         bytes[SAVE_Y_OFFSET] = 201;
         write_saved_clock(&mut bytes, GameClock::new(8, 35).unwrap());
 
-        bytes[SAVE_TIMING_STATUS_TAG_OFFSET] = b'Q';
+        bytes[SAVE_ACTIVE_EFFECT_CODE_OFFSET] = b'Q';
+        bytes[SAVE_ACTIVE_EFFECT_DURATION_OFFSET] = 30;
         let half_time = play_options_from_save_bytes(&bytes).unwrap();
-        assert_eq!(half_time.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(half_time.active_effect_timing_status(), TimingStatusTag::HalfTime);
+        assert_eq!(half_time.active_effect_tag, Some(b'Q'));
+        assert_eq!(half_time.active_effect_counter, 30);
 
-        bytes[SAVE_TIMING_STATUS_TAG_OFFSET] = b'T';
+        bytes[SAVE_ACTIVE_EFFECT_CODE_OFFSET] = b'T';
+        bytes[SAVE_ACTIVE_EFFECT_DURATION_OFFSET] = 10;
         let no_minute_light = play_options_from_save_bytes(&bytes).unwrap();
         assert_eq!(
-            no_minute_light.timing_status,
+            no_minute_light.active_effect_timing_status(),
             TimingStatusTag::NoMinuteLight
         );
+        assert_eq!(no_minute_light.active_effect_tag, Some(b'T'));
+        assert_eq!(no_minute_light.active_effect_counter, 10);
 
-        bytes[SAVE_TIMING_STATUS_TAG_OFFSET] = b'X';
+        bytes[SAVE_ACTIVE_EFFECT_CODE_OFFSET] = b'X';
         let unknown = play_options_from_save_bytes(&bytes).unwrap();
-        assert_eq!(unknown.timing_status, TimingStatusTag::Opaque(b'X'));
-        assert_eq!(unknown.timing_status.save_byte(), b'X');
+        assert_eq!(unknown.active_effect_timing_status(), TimingStatusTag::Opaque(b'X'));
+        assert_eq!(unknown.active_effect_timing_status().save_byte(), b'X');
 
-        bytes[SAVE_TIMING_STATUS_TAG_OFFSET] = OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG;
+        bytes[SAVE_ACTIVE_EFFECT_CODE_OFFSET] = AMULET_LB_ACTIVE_EFFECT_TAG;
+        bytes[SAVE_ACTIVE_EFFECT_DURATION_OFFSET] = PERMANENT_ACTIVE_EFFECT_DURATION;
         let underfoot_exempt = play_options_from_save_bytes(&bytes).unwrap();
         assert_eq!(
-            underfoot_exempt.timing_status,
+            underfoot_exempt.active_effect_timing_status(),
             TimingStatusTag::Opaque(OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG)
         );
         assert_eq!(
-            underfoot_exempt.timing_status.save_byte(),
+            underfoot_exempt.active_effect_timing_status().save_byte(),
             OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG
+        );
+        assert_eq!(underfoot_exempt.active_effect_tag, Some(AMULET_LB_ACTIVE_EFFECT_TAG));
+        assert_eq!(
+            underfoot_exempt.active_effect_counter,
+            PERMANENT_ACTIVE_EFFECT_DURATION
+        );
+    }
+
+    #[test]
+    fn save_play_options_preserves_combat_interference_source_bytes_exactly() {
+        let mut bytes = vec![0; SAVED_GAM_LEN];
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        bytes[SAVE_SCENE_OFFSET] = 0;
+        bytes[SAVE_Z_OFFSET] = 0xff;
+        bytes[SAVE_X_OFFSET] = 200;
+        bytes[SAVE_Y_OFFSET] = 201;
+        write_saved_clock(&mut bytes, GameClock::new(8, 35).unwrap());
+
+        let factory_zeroes = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(
+            factory_zeroes.combat_interference_sources,
+            [0; COMBAT_ACTOR_SLOTS]
+        );
+
+        let mut expected = [COMBAT_INTERFERENCE_NO_SOURCE; COMBAT_ACTOR_SLOTS];
+        expected[0] = 0;
+        expected[7] = 31;
+        expected[31] = 8;
+        bytes[SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET
+            ..SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET
+                + SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN]
+            .copy_from_slice(&expected);
+
+        let options = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(options.combat_interference_sources, expected);
+        assert_eq!(
+            PlayOptions::default().combat_interference_sources,
+            [0; COMBAT_ACTOR_SLOTS],
+            "factory/new-game zero seed is valid source-slot data"
         );
     }
 
@@ -2186,9 +2391,12 @@
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-            quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+            removed_town_npc_flags: HashMap::new(),
+            talk_branch_flags: HashMap::new(),
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
+            word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+            shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
             moral_standing: 0,
             toll_progress: 0,
             natural_moongate_counter: 0,
@@ -2198,22 +2406,25 @@
             light_spell_counter: 0,
             wind: WindState::default(),
             wind_save_byte: 0,
-            timing_status: TimingStatusTag::default(),
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
             fortunes_of_war: 0,
             camp_cooldown: 0,
+            camp_month_cookie: 0,
             active_player: None,
             combat_round_counter: 0,
+            combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
             transport: TransportState::Foot,
             facing: None,
             pending_vehicle: None,
+            pending_vehicle_save: PendingVehicleSaveState::default(),
             inn_registry: Vec::new(),
             blackthorn_story: BlackthornStoryState::default(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: None,
+            town_npc_mutations: Vec::new(),
             save_template_source: SaveTemplateSource::PreferSavedGame,
         };
 
@@ -2306,7 +2517,7 @@
         grid[2 * 32 + 4] = 0x48;
         grid[1] = 0x49;
 
-        let markers = harvest_location_markers(&grid);
+        let markers = harvest_location_npc_start_markers(&grid);
 
         assert_eq!(markers.npc_markers, vec![(1, 0), (4, 2)]);
     }
@@ -2317,14 +2528,14 @@
     /// the beacon harvests survives the runtime tile buffer — which is what
     /// makes `§6`'s "ordering cannot disarm it" hold on our side too.
     #[test]
-    fn scrub_location_entry_markers_removes_npc_bytes_and_spares_the_bright_light() {
+    fn scrub_location_npc_start_markers_spares_the_bright_light() {
         let mut grid = open_grid();
         grid[5 * 32] = BEACON_BRIGHT_LIGHT_TILE;
         grid[2 * 32 + 4] = 0x48;
         grid[3 * 32 + 5] = 0x49;
         grid[4 * 32 + 6] = 0xc8;
 
-        scrub_location_entry_markers(&mut grid);
+        scrub_location_npc_start_markers(&mut grid);
 
         assert_eq!(
             grid[5 * 32], BEACON_BRIGHT_LIGHT_TILE,
@@ -2338,7 +2549,11 @@
             [Some((0, 5)), None],
             "and it is still harvestable after the scrub"
         );
-        assert!(harvest_location_markers(&grid).npc_markers.is_empty());
+        assert!(
+            harvest_location_npc_start_markers(&grid)
+                .npc_markers
+                .is_empty()
+        );
     }
 
     #[test]
@@ -2353,16 +2568,18 @@
 
         let state = PlayState::load_town_scene(&dir, scene, PlayOptions::default()).unwrap();
 
-        // The entry cell is no longer taken from a `0x2A` cell. With no
-        // caller start and no per-scene entry row, what is left is the
-        // first walkable cell — see the KNOWN GAP at the `load_town_scene`
-        // fallback.
-        assert_eq!((state.player.x, state.player.y), (0, 0));
+        // Public #94: the beacon is unrelated to player placement; every
+        // floor-zero town-family entry uses the fixed (15, 30) cell.
+        assert_eq!((state.player.x, state.player.y), (15, 30));
         assert_eq!(state.grid[1 * 32 + 2], BEACON_BRIGHT_LIGHT_TILE);
         assert_eq!(state.grid[2 * 32 + 4], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(state.grid[3 * 32 + 5], LOCATION_MARKER_CLEANUP_TILE);
         assert_eq!(state.light_beacon.sources, [Some((2, 1)), None]);
-        assert!(harvest_location_markers(&state.grid).npc_markers.is_empty());
+        assert!(
+            harvest_location_npc_start_markers(&state.grid)
+                .npc_markers
+                .is_empty()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

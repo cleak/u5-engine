@@ -19,6 +19,9 @@ pub struct PlayState {
     pub clock: GameClock,
     pub prng_state: u16,
     pub animation: AnimationClock,
+    /// `dungeon-mode.md §6.7`: shared three-frame fountain-water phase,
+    /// advanced once per point-blank corridor paint.
+    pub dungeon_fountain_frame: u8,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
     /// `overworld.md §9.2` (spec HEAD `c00bf63`): what the last blocking
@@ -28,6 +31,22 @@ pub struct PlayState {
     /// and unskippable, so this is only ever a record of a sequence that
     /// already finished, never a resumable position in one.
     pub last_natural_moongate_transit: Option<MoongateTransitPlayback>,
+    /// Completed blocking map-viewport dissolves waiting for a frontend to
+    /// present them. This is transient presentation state, never save data.
+    pub pending_map_viewport_dissolves: Vec<MapViewportDissolvePlayback>,
+    /// `catalogs/item-list.md §7.2`: a selected-bottle flash waiting for the
+    /// frontend to present it. This is transient presentation state, never
+    /// resumable or saved gameplay state.
+    pub pending_potion_flash: Option<PotionFlashPlayback>,
+    /// Completed Stonegate trapdoor tableau waiting for a frontend. This is a
+    /// blocking, non-resumable presentation record and is never save data.
+    pub pending_stonegate_trapdoor_playback: Option<StonegateTrapdoorPlayback>,
+    /// Stonegate underfoot detection defers an hour-boundary party pass until
+    /// after the scripted deaths. Transient within one town action.
+    pub pending_stonegate_status_provision_pass: bool,
+    /// Stonegate underfoot detection defers the ordinary animal/NPC tail until
+    /// after the script-owned object-table clear. Transient within one action.
+    pub pending_stonegate_object_epilogue: bool,
     pub cached_moon_glyph_bytes: [u8; 2],
     pub food: u16,
     pub gold: u16,
@@ -55,9 +74,19 @@ pub struct PlayState {
     pub dungeon_room_clear_bitmap: [u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
     pub moonstone_slots: [MoonstoneGateSlot; MOONSTONE_SLOT_COUNT],
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
-    pub quest_progress_word: u16,
+    /// `town-mode.md §13` entry-local selector naming which Shadowlord is
+    /// resident in the current town. Reset before every entry comparison;
+    /// transient runtime state, not part of the save image.
+    pub resident_shadowlord: Option<usize>,
+    /// `commands.md §11` transient identity handshake for a Shadowlord
+    /// summoned by name. The actor record itself carries only the shared
+    /// `0xFC` identity bytes.
+    pub summoned_shadowlord: Option<usize>,
+    pub removed_town_npc_flags: HashMap<u8, u32>,
     pub shrine_ordained_mask: u8,
     pub shrine_codex_mask: u8,
+    pub word_of_power_seal_flags: [u8; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+    pub shrine_ruin_flags: [u8; SAVE_SHRINE_RUIN_FLAG_COUNT],
     pub moral_standing: u8,
     pub toll_progress: u8,
     pub avatar_stats: AvatarStats,
@@ -78,6 +107,11 @@ pub struct PlayState {
     /// handing back an absent one — `§5.1.1` asks for exactly that, since
     /// a silently dark beacon and a missing table look identical in play.
     pub beacon_bearing_stencils: BeaconBearingStencils,
+    /// `visibility.md §12.4`: persistent 32x32 influence mask produced by
+    /// the local-light refresh pass. It is rebuilt only by the published
+    /// Moonstone-refresh and combat-boundary triggers; ordinary visibility
+    /// carves consume this cached state without rescanning sources.
+    pub local_light_mask: [bool; TOWN_GRID_BYTES],
     pub visibility_dirty: bool,
     pub visibility_grid: [u8; VISIBILITY_GRID_LEN],
     pub terrain_band: [u8; TERRAIN_BAND_LEN],
@@ -85,7 +119,6 @@ pub struct PlayState {
     pub world_underfoot_blackout_latched: bool,
     pub wind: WindState,
     pub wind_save_byte: u8,
-    pub timing_status: TimingStatusTag,
     pub time_stop_counter: u8,
     pub active_effect_tag: Option<u8>,
     pub active_effect_counter: u8,
@@ -95,25 +128,27 @@ pub struct PlayState {
     /// completes and reduced by one, floored at zero, at every hour
     /// rollover; the completed-camp recovery walk runs only while it
     /// reads zero.
-    ///
-    /// **Not save-backed, deliberately.** The counter's fourteen-hour
-    /// lifetime sits well inside the save window, so it *should*
-    /// persist — but `formats/saved-gam.md` publishes no offset for it,
-    /// and every byte in the band it would live in is either claimed by
-    /// another system or covered by that document's instruction to
-    /// "preserve adjacent unnamed bytes". Choosing a byte ourselves
-    /// would overwrite one the original owns, which is a worse failure
-    /// than the one this leaves: saving and reloading inside the
-    /// fourteen-hour window clears the cooldown, so a save/load lets a
-    /// second camp recover. Persist it here the moment the spec
-    /// publishes an offset.
+    /// Persisted at `SAVED.GAM` offset `0x02E6`; save/reload therefore
+    /// cannot clear the recovery window.
     pub camp_cooldown: u8,
+    /// `rest-and-camp.md §5`: the successful apparition draw copies
+    /// the current calendar month into `SAVED.GAM` offset `0x02E7`.
+    /// There is no shipped reader, so preserve this cookie without
+    /// deriving any additional behaviour from it.
+    pub camp_month_cookie: u8,
     pub active_player: Option<usize>,
     pub combat_round_counter: u8,
+    /// `magic.md §7`: save-backed per-victim source slots used by the C-Cast
+    /// interference gate. This state intentionally survives combat boundaries.
+    pub combat_interference_sources: [u8; COMBAT_ACTOR_SLOTS],
     pub combat_active: bool,
     pub combat_frame_snapshot: Option<CombatFrameSnapshot>,
     pub pending_combat_actor_slot: Option<usize>,
     pub pending_combat_terrain_trigger_slot: Option<usize>,
+    /// High-to-low outdoor reaction slots staged by the I/O-free active-object
+    /// walker. Lower entries survive a terrain-combat frame and resume when
+    /// that frame returns to the world.
+    pub pending_outdoor_reaction_slots: Vec<usize>,
     pub next_combat_actor_slot: usize,
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     pub combat_magic_effects: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
@@ -123,6 +158,9 @@ pub struct PlayState {
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
     pub sail_cadence: u8,
     pub sail_stall_pending: bool,
+    /// Exact queued shipwright-delivery bytes from `SAVED.GAM`. The packed
+    /// class is cleared only when world setup successfully delivers it.
+    pub pending_vehicle_save: PendingVehicleSaveState,
     pub turn: u64,
     pub message: String,
     /// `text-output.md §2` + `commands.md §5`: the scrolling message
@@ -155,6 +193,7 @@ pub struct PlayState {
     pub save_template_source: SaveTemplateSource,
     pub typeahead_buffer_enabled: bool,
     pub music_enabled: bool,
+    pub active_blackthorn_guard_demand: Option<ActiveBlackthornGuardDemand>,
     pub pending_town_arrest: Option<TownArrestPrompt>,
     pub endgame: Option<EndgameState>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
@@ -163,6 +202,9 @@ pub struct PlayState {
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     pub common_word_dictionary: Option<crate::common_words_io::CommonWordDictionary>,
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
+    /// NPC roster slot captured when the active conversation opens. The
+    /// opening acquaintance test addresses this slot in the scene's TALK bitset.
+    pub active_conversation_npc_slot: Option<usize>,
     pub active_conversation_join_candidate: Option<String>,
     pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
     /// `inventory.md §4`: the outside-combat party-member selector that
@@ -183,20 +225,15 @@ pub struct PlayState {
     pub active_mix: Option<crate::z_stats::MixSession>,
     pub active_new_order: Option<crate::z_stats::NewOrderSession>,
     pub active_yell: Option<crate::z_stats::YellSession>,
+    pub active_shrine_restoration: Option<crate::z_stats::ShrineRestorationSession>,
     pub active_wishing_well: Option<crate::z_stats::WishingWellSession>,
     pub active_view_overlay: Option<ViewOverlay>,
     pub white_potion_sweep: Option<WhitePotionSweep>,
-    pub combat_potion_presentation: Option<CombatPotionPresentation>,
     pub active_direction_prompt: Option<crate::z_stats::DirectionPromptSession>,
     pub active_yes_no_prompt: Option<crate::z_stats::YesNoPromptSession>,
-    pub pickpocketed_npcs: Vec<(u8, i8, usize)>,
-    pub removed_town_npcs: Vec<(u8, i8, usize)>,
-    pub town_npc_alarm_states: Vec<TownNpcAlarmMarker>,
+    pub town_npc_mutations: Vec<TownNpcMutation>,
     pub talk_branch_flags: HashMap<u8, u32>,
-    pub conversation_resource_signals: [u8; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
     pub conversation_signal_flags: [u8; TLK_GENERIC_SIGNAL_COUNT],
-    pub conversation_signal_bank_a: [u8; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
-    pub conversation_signal_bank_b: [u8; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
     pub inn_registry: Vec<InnGuestRecord>,
 }
 
@@ -211,7 +248,7 @@ pub struct ViewOverlay {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewOverlayKind {
     Surface,
-    BritanniaChunkMap,
+    Sky(SkyOverlayState),
     Dungeon { level: u8 },
 }
 
@@ -221,7 +258,7 @@ pub enum ViewOverlayMode {
     PeerSpell,
     XRaySpell,
     SurfaceLook,
-    BritanniaOverview,
+    SkyView,
 }
 
 impl ViewOverlayMode {
@@ -233,23 +270,12 @@ impl ViewOverlayMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WhitePotionSweep {
     pub frames_remaining: u8,
-    pub radius: u8,
+    pub pause_bios_ticks_per_frame: u8,
     pub center_x: usize,
     pub center_y: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CombatPotionPresentation {
-    pub kind: CombatPotionPresentationKind,
-    pub actor_slot: usize,
-    pub active_object_slot: usize,
-    pub frames_remaining: u8,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CombatPotionPresentationKind {
-    Sleep,
-    Poof,
+    /// The producer runs exactly once. Terrain, objects, and animated tiles
+    /// are recomposited for each frame through this frozen visibility field.
+    pub visible_cells: [bool; VIEWPORT_SIDE * VIEWPORT_SIDE],
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -280,7 +306,6 @@ pub struct WorldReturn {
     pub x: usize,
     pub y: usize,
     pub transport: TransportState,
-    pub timing_status: TimingStatusTag,
     pub sail_cadence: u8,
     pub sail_stall_pending: bool,
     pub grid: Vec<u8>,
@@ -297,6 +322,9 @@ pub struct WorldReturn {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MessageEntry {
     pub text: String,
+    /// Fixed-font choice for each byte in `text`. Plain engine messages use
+    /// the ordinary font; TLK `0x8E` spans retain their runic selection here.
+    pub glyphs: Vec<TlkRenderedGlyph>,
     pub is_command_echo: bool,
 }
 

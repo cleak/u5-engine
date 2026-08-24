@@ -124,7 +124,64 @@ pub const SHIP_LOSS_DROWNING_ITERATION_GUARD: usize = 4096;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PendingVehicleAcquisition {
     Frigate { x: usize, y: usize, skiffs: u8 },
-    Skiff { x: usize, y: usize },
+    Skiff { x: usize, y: usize, aux3: u8 },
+}
+
+/// The three-byte queued shipwright-delivery state persisted exclusively in
+/// `SAVED.GAM` (`formats/saved-gam.md §10`). The class byte is retained
+/// verbatim so inactive and noncanonical packed values survive load/save.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PendingVehicleSaveState {
+    pub x: u8,
+    pub y: u8,
+    pub class_byte: u8,
+}
+
+impl PendingVehicleSaveState {
+    pub const fn acquisition(self) -> Option<PendingVehicleAcquisition> {
+        if self.class_byte < 0x40 {
+            None
+        } else if self.class_byte < 0x80 {
+            Some(PendingVehicleAcquisition::Skiff {
+                x: self.x as usize,
+                y: self.y as usize,
+                aux3: self.class_byte & 0x3f,
+            })
+        } else {
+            Some(PendingVehicleAcquisition::Frigate {
+                x: self.x as usize,
+                y: self.y as usize,
+                // Retain bit 6 as well as the delivered low-six-bit count.
+                // This lets a subsequent shipwright increment reproduce the
+                // specified whole-class-byte increment for 0xBF..=0xFF.
+                skiffs: self.class_byte & 0x7f,
+            })
+        }
+    }
+
+    pub const fn from_acquisition(pending: PendingVehicleAcquisition) -> Self {
+        match pending {
+            PendingVehicleAcquisition::Skiff { x, y, aux3 } => Self {
+                x: x as u8,
+                y: y as u8,
+                class_byte: 0x40 | (aux3 & 0x3f),
+            },
+            PendingVehicleAcquisition::Frigate { x, y, skiffs } => Self {
+                x: x as u8,
+                y: y as u8,
+                class_byte: 0x80 | (skiffs & 0x7f),
+            },
+        }
+    }
+
+    /// Delivery clears only the packed class byte; coordinates remain as
+    /// opaque saved state.
+    pub const fn clear_class(self) -> Self {
+        Self {
+            class_byte: 0,
+            ..self
+        }
+    }
 }
 
 /// `vehicles.md §4` boardable-object byte ranges and their boarded
@@ -299,9 +356,9 @@ impl PendingVehicleAcquisition {
                 z,
                 phase: STEADY_PHASE,
                 aux1: FIRST_PLAYABLE_FULL_SHIP_HULL,
-                aux3: skiffs,
+                aux3: skiffs & 0x3f,
             },
-            Self::Skiff { x, y } => ActiveObject {
+            Self::Skiff { x, y, aux3 } => ActiveObject {
                 type_byte: SKIFF_PARKED_FIRST,
                 tile: FIRST_PLAYABLE_SKIFF_TILE,
                 x,
@@ -309,7 +366,7 @@ impl PendingVehicleAcquisition {
                 z,
                 phase: STEADY_PHASE,
                 aux1: 0,
-                aux3: 0,
+                aux3,
             },
         }
     }

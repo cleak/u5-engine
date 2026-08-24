@@ -21,7 +21,10 @@
 use std::collections::HashMap;
 
 use crate::tlk_control_codes::*;
-use crate::tlk_runner::{TlkRunEvent, TlkRunInputs, TlkRunOutput, TlkRunStop, run_tlk_stream_from};
+use crate::tlk_runner::{
+    TlkRenderedGlyph, TlkRenderedText, TlkRunEvent, TlkRunInputs, TlkRunOutput, TlkRunStop,
+    run_tlk_stream_from,
+};
 
 /// Phase the conversation is currently in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -41,13 +44,11 @@ pub enum ConversationSessionPhase {
     /// A TLK `0x88` ASK-WHO prompt is waiting for a free-text party-member
     /// name, then resumes the response at `cursor`.
     AwaitingAskWho { field_idx: usize, cursor: usize },
-    /// A TLK `0x85` GOLD-PAYMENT prompt is waiting for a yes/no answer,
-    /// then resumes the response from the payment opcode at `cursor`.
-    AwaitingGoldPayment {
-        field_idx: usize,
-        cursor: usize,
-        amount: u16,
-    },
+    /// `conversation.md §7.6`: an unaffordable `0x85` demand has stopped
+    /// its response and entered the routine's nested ordinary keyword loop.
+    /// Nonterminating turns reprompt inside the loop; every path that returns
+    /// from it ends the enclosing conversation.
+    AwaitingGoldRefusalKeyword,
     /// NPC's Bye response is being presented; the session is about
     /// to close. The harness flushes the response and then calls
     /// `acknowledge_close`.
@@ -66,10 +67,10 @@ pub struct ConversationContext<'a> {
     pub moral_standing: u8,
     /// Common-word dictionary (128 slots); `None` is acceptable.
     pub dictionary: Option<&'a [&'a str; COMMON_WORD_DICTIONARY_ENTRIES]>,
-    /// Whether the player accepts conversation gold-payment prompts.
-    pub gold_payment_accepted: bool,
-    /// Party gold available for the current prompt, used to refuse
-    /// unaffordable payments.
+    /// Party gold available to the current response. `0x85` itself does
+    /// not ask for confirmation: the surrounding authored answer record
+    /// already represents consent, and affordability alone decides the
+    /// control's accepted/refused result.
     pub gold_available: Option<u16>,
     /// Live party-member names, already trimmed of trailing NUL padding.
     /// ASK-PARTY-NAME and ASK-WHO compare the next typed line against
@@ -89,6 +90,8 @@ pub struct ConversationGoldPayment {
 pub struct ConversationSessionOutput {
     /// Rendered text from the most-recent response stream.
     pub text: String,
+    /// Per-cell ordinary/runic font selection aligned with `text`.
+    pub rendered_glyphs: Vec<TlkRenderedGlyph>,
     /// New branch-flag bits the response set.
     pub branch_flags_set: u32,
     /// Action grants encountered in the response.
@@ -104,12 +107,38 @@ pub struct ConversationSessionOutput {
     /// `true` when this step ended the conversation (Bye fired or the
     /// stream ended unrecoverably).
     pub ended: bool,
+    /// The selected response returned the byte-runner's explicit stop
+    /// result (`0xFF`). Ordinary top-level responses still reprompt, but
+    /// the nested gold-refusal loop propagates this stop through the whole
+    /// conversation without synthesising a Bye line.
+    pub response_signalled_stop: bool,
     /// Shared moral-standing selector after any `0x89` / `0x8A` writes in
     /// this step's streams, or `None` when none ran. `conversation.md
     /// §7.4` makes those two codes the byte runner's only direct writers
     /// of the selector; the caller assigns this value rather than
     /// re-deriving a delta.
     pub moral_standing: Option<u8>,
+}
+
+impl ConversationSessionOutput {
+    pub fn rendered_text(&self) -> TlkRenderedText {
+        TlkRenderedText {
+            text: self.text.clone(),
+            glyphs: self.rendered_glyphs.clone(),
+        }
+    }
+
+    fn set_plain_text(&mut self, text: &str) {
+        self.text.clear();
+        self.rendered_glyphs.clear();
+        self.push_plain_text(text);
+    }
+
+    fn push_plain_text(&mut self, text: &str) {
+        self.text.push_str(text);
+        self.rendered_glyphs
+            .extend(text.bytes().map(TlkRenderedGlyph::ordinary));
+    }
 }
 
 /// Holder for a conversation in progress.
@@ -158,6 +187,26 @@ impl ConversationSession {
         self.run_field_from(2, 0, ctx, 0, 0)
     }
 
+    /// `conversation.md §9`: a stranger either says nothing after the
+    /// description or introduces itself from the Name entry. The caller owns
+    /// the host-clock reseed and fair coin because those mutate PlayState PRNG.
+    pub fn present_stranger_opening(
+        &mut self,
+        ctx: &ConversationContext<'_>,
+        introduces_itself: bool,
+    ) -> ConversationSessionOutput {
+        self.phase = ConversationSessionPhase::AwaitingKeyword;
+        if !introduces_itself {
+            return ConversationSessionOutput::default();
+        }
+        let mut output = self.run_field_from(0, 0, ctx, 0, 0);
+        let mut rendered = TlkRenderedText::plain("I am called ");
+        rendered.push_rendered(&output.rendered_text());
+        output.text = rendered.text;
+        output.rendered_glyphs = rendered.glyphs;
+        output
+    }
+
     /// Feed one typed keyword line. Returns the rendered response.
     pub fn submit_keyword(
         &mut self,
@@ -185,25 +234,19 @@ impl ConversationSession {
                 out.asked_who = Some(slot);
                 return out;
             }
-            ConversationSessionPhase::AwaitingGoldPayment {
-                field_idx,
-                cursor,
-                amount: _,
-            } => {
-                let Some(accepted) = conversation_payment_answer(line) else {
-                    return ConversationSessionOutput::default();
-                };
+            ConversationSessionPhase::AwaitingGoldRefusalKeyword => {
+                // §7.6: refusal calls the ordinary keyword loop as a nested
+                // prompt. Nonterminating turns remain nested; an explicit
+                // response stop or the mandatory Bye path unwinds both loops.
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
-                return self.run_field_from_with_options(
-                    field_idx,
-                    cursor,
-                    ctx,
-                    0,
-                    0,
-                    accepted,
-                    false,
-                    &[],
-                );
+                let mut out = self.submit_keyword(line, ctx);
+                if out.ended || out.response_signalled_stop {
+                    self.phase = ConversationSessionPhase::PresentingBye;
+                    out.ended = true;
+                } else {
+                    self.phase = ConversationSessionPhase::AwaitingGoldRefusalKeyword;
+                }
+                return out;
             }
             _ => return ConversationSessionOutput::default(),
         }
@@ -216,7 +259,7 @@ impl ConversationSession {
         let kind = tlk_player_input_kind(&input_upper);
         let mut out = ConversationSessionOutput::default();
         if matches!(kind, TlkPlayerInputKind::ReservedRebuke { .. }) {
-            out.text = TLK_RESERVED_REBUKE_MESSAGE.to_string();
+            out.set_plain_text(TLK_RESERVED_REBUKE_MESSAGE);
             return out;
         }
         let field_idx = match kind {
@@ -231,7 +274,7 @@ impl ConversationSession {
                 .unwrap_or(usize::MAX),
         };
         if field_idx == usize::MAX {
-            out.text = TLK_NO_KEYWORD_MATCH_MESSAGE.to_string();
+            out.set_plain_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
             return out;
         }
         if matches!(
@@ -239,7 +282,7 @@ impl ConversationSession {
             TlkPlayerInputKind::EmptyByeShortcut
                 | TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath),
         ) {
-            out.text.push_str(TLK_EMPTY_INPUT_BYE_MESSAGE);
+            out.push_plain_text(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
         let followup_input = match kind {
             TlkPlayerInputKind::OrdinaryKeywordScan => self
@@ -250,12 +293,15 @@ impl ConversationSession {
         };
         let response = self.run_field_from_for_input(field_idx, 0, ctx, 0, 0, &followup_input);
         out.text.push_str(&response.text);
+        out.rendered_glyphs.extend(response.rendered_glyphs);
         out.branch_flags_set |= response.branch_flags_set;
         out.action_grants.extend(response.action_grants);
         out.gold_payments.extend(response.gold_payments);
         out.signal_flags.extend(response.signal_flags);
         out.asked_party_name = response.asked_party_name;
         out.asked_who = response.asked_who;
+        out.moral_standing = response.moral_standing.or(out.moral_standing);
+        out.response_signalled_stop |= response.response_signalled_stop;
         out.ended |= response.ended;
         // Empty input or BYE/THANK closes the conversation.
         if matches!(
@@ -278,9 +324,7 @@ impl ConversationSession {
             }
             ConversationSessionPhase::AwaitingAskPartyName { .. } => "Name?".to_string(),
             ConversationSessionPhase::AwaitingAskWho { .. } => "Who?".to_string(),
-            ConversationSessionPhase::AwaitingGoldPayment { amount, .. } => {
-                format!("Pay {amount} gold? (Y/N)")
-            }
+            ConversationSessionPhase::AwaitingGoldRefusalKeyword => TLK_KEYWORD_PROMPT.to_string(),
             ConversationSessionPhase::Opened => TLK_KEYWORD_PROMPT.to_string(),
             ConversationSessionPhase::PresentingBye | ConversationSessionPhase::Closed => {
                 String::new()
@@ -389,8 +433,6 @@ impl ConversationSession {
             ctx,
             ask_party_name_response,
             ask_who_response,
-            ctx.gold_payment_accepted,
-            true,
             followup_input_upper,
         )
     }
@@ -402,8 +444,6 @@ impl ConversationSession {
         ctx: &ConversationContext<'_>,
         ask_party_name_response: u8,
         ask_who_response: u8,
-        gold_payment_accepted: bool,
-        yield_on_gold_payment: bool,
         followup_input_upper: &[u8],
     ) -> ConversationSessionOutput {
         let mut out = ConversationSessionOutput::default();
@@ -414,8 +454,6 @@ impl ConversationSession {
                 self.moral_standing.unwrap_or(ctx.moral_standing),
                 ask_party_name_response,
                 ask_who_response,
-                gold_payment_accepted,
-                yield_on_gold_payment,
             );
             run_tlk_stream_from(bytes, cursor, &inputs)
         }) {
@@ -453,6 +491,7 @@ impl ConversationSession {
         out: &mut ConversationSessionOutput,
     ) {
         out.text.push_str(&run.text);
+        out.rendered_glyphs.extend_from_slice(&run.rendered_glyphs);
         out.branch_flags_set |= run.branch_flags_set;
         out.action_grants.extend(run.action_grants.iter().copied());
         out.gold_payments
@@ -464,6 +503,7 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
+        out.response_signalled_stop |= matches!(run.stop, TlkRunStop::EndOfResponse);
         self.absorb_moral_standing(run, out);
         match run.stop {
             TlkRunStop::AskingPartyName(cursor) => {
@@ -472,12 +512,8 @@ impl ConversationSession {
             TlkRunStop::AskingWho(cursor) => {
                 self.phase = ConversationSessionPhase::AwaitingAskWho { field_idx, cursor };
             }
-            TlkRunStop::AskingGoldPayment { cursor, amount } => {
-                self.phase = ConversationSessionPhase::AwaitingGoldPayment {
-                    field_idx,
-                    cursor,
-                    amount,
-                };
+            TlkRunStop::GoldPaymentRefused { .. } => {
+                self.phase = ConversationSessionPhase::AwaitingGoldRefusalKeyword;
             }
             TlkRunStop::LabelTransfer(label) => {
                 if self.has_scoped_label_records(label) {
@@ -503,10 +539,8 @@ impl ConversationSession {
             .collect();
 
         if input_upper.is_empty() {
-            let out = ConversationSessionOutput {
-                text: TLK_EMPTY_INPUT_BYE_MESSAGE.to_string(),
-                ..Default::default()
-            };
+            let mut out = ConversationSessionOutput::default();
+            out.set_plain_text(TLK_EMPTY_INPUT_BYE_MESSAGE);
             self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
             return out;
         }
@@ -521,10 +555,9 @@ impl ConversationSession {
             return self.run_field_from(field_idx, 0, ctx, 0, 0);
         }
 
-        ConversationSessionOutput {
-            text: TLK_NO_KEYWORD_MATCH_MESSAGE.to_string(),
-            ..Default::default()
-        }
+        let mut out = ConversationSessionOutput::default();
+        out.set_plain_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
+        out
     }
 
     fn has_scoped_label_records(&self, label: u8) -> bool {
@@ -564,8 +597,6 @@ impl ConversationSession {
             self.moral_standing.unwrap_or(ctx.moral_standing),
             ask_party_name_response,
             ask_who_response,
-            ctx.gold_payment_accepted,
-            false,
         );
         let run = run_tlk_stream_from(bytes, 0, &inputs);
         let mut out = ConversationSessionOutput::default();
@@ -575,6 +606,7 @@ impl ConversationSession {
 
     fn absorb_ephemeral_run(&mut self, run: &TlkRunOutput, out: &mut ConversationSessionOutput) {
         out.text.push_str(&run.text);
+        out.rendered_glyphs.extend_from_slice(&run.rendered_glyphs);
         out.branch_flags_set |= run.branch_flags_set;
         out.action_grants.extend(run.action_grants.iter().copied());
         out.gold_payments
@@ -586,10 +618,14 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
+        out.response_signalled_stop |= matches!(run.stop, TlkRunStop::EndOfResponse);
         self.absorb_moral_standing(run, out);
         match run.stop {
             TlkRunStop::LabelTransfer(label) if self.has_scoped_label_records(label) => {
                 self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
+            }
+            TlkRunStop::GoldPaymentRefused { .. } => {
+                self.phase = ConversationSessionPhase::AwaitingGoldRefusalKeyword;
             }
             TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {}
             _ => {}
@@ -610,6 +646,7 @@ impl ConversationSession {
 
 fn merge_session_output(out: &mut ConversationSessionOutput, nested: ConversationSessionOutput) {
     out.text.push_str(&nested.text);
+    out.rendered_glyphs.extend(nested.rendered_glyphs);
     out.branch_flags_set |= nested.branch_flags_set;
     out.action_grants.extend(nested.action_grants);
     out.gold_payments.extend(nested.gold_payments);
@@ -617,6 +654,7 @@ fn merge_session_output(out: &mut ConversationSessionOutput, nested: Conversatio
     out.asked_party_name = nested.asked_party_name.or(out.asked_party_name);
     out.asked_who = nested.asked_who.or(out.asked_who);
     out.moral_standing = nested.moral_standing.or(out.moral_standing);
+    out.response_signalled_stop |= nested.response_signalled_stop;
     out.ended |= nested.ended;
 }
 
@@ -670,8 +708,6 @@ fn make_inputs<'a>(
     moral_standing: u8,
     ask_party_name_response: u8,
     ask_who_response: u8,
-    gold_payment_accepted: bool,
-    yield_on_gold_payment: bool,
 ) -> TlkRunInputs<'a> {
     TlkRunInputs {
         avatar_name: ctx.avatar_name,
@@ -679,25 +715,11 @@ fn make_inputs<'a>(
         moral_standing,
         dictionary: ctx.dictionary,
         curse_seen: false,
-        gold_payment_accepted,
         gold_available: ctx.gold_available,
         ask_party_name_response,
         ask_who_response,
         yield_on_pause: false,
         yield_on_ask: true,
-        yield_on_gold_payment,
-    }
-}
-
-fn conversation_payment_answer(line: &str) -> Option<bool> {
-    let trimmed = line.trim_start();
-    if trimmed.is_empty() {
-        return Some(false);
-    }
-    match trimmed.bytes().next()?.to_ascii_uppercase() {
-        b'Y' => Some(true),
-        b'N' | b' ' => Some(false),
-        _ => None,
     }
 }
 
@@ -743,7 +765,6 @@ mod tests {
             branch_flags: 0,
             moral_standing: 0,
             dictionary: None,
-            gold_payment_accepted: false,
             gold_available: None,
             party_member_names: &[],
         }
@@ -831,7 +852,7 @@ mod tests {
             party_member_names: &party_names,
             ..ctx()
         };
-        let mut s = ConversationSession::new(raw, decoded);
+        let mut s = ConversationSession::new(raw.clone(), decoded.clone());
         s.present_greeting(&context);
 
         let first = s.submit_keyword("join", &context);
@@ -889,7 +910,7 @@ mod tests {
     }
 
     #[test]
-    fn gold_payment_prompt_waits_for_answer_then_resumes_branch() {
+    fn affordable_gold_payment_debits_without_an_extra_confirmation_prompt() {
         let raw = vec![
             enc("Ada"),
             enc("a quiet smith"),
@@ -900,11 +921,7 @@ mod tests {
             {
                 let mut bytes = enc("A toll.");
                 bytes.extend_from_slice(&[TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5']);
-                bytes.push(TLK_GOLD_PAYMENT_PAID_LABEL);
                 bytes.extend_from_slice(&enc(" Paid."));
-                bytes.push(TLK_CODE_END_OF_RESPONSE);
-                bytes.push(TLK_GOLD_PAYMENT_REFUSED_LABEL);
-                bytes.extend_from_slice(&enc(" Refused."));
                 bytes.push(TLK_CODE_END_OF_RESPONSE);
                 bytes
             },
@@ -919,23 +936,14 @@ mod tests {
             "A toll.".to_string(),
         ];
         let context = ConversationContext {
-            gold_payment_accepted: true,
             gold_available: Some(30),
             ..ctx()
         };
         let mut s = ConversationSession::new(raw, decoded);
         s.present_greeting(&context);
 
-        let prompt = s.submit_keyword("pay", &context);
-        assert_eq!(prompt.text, "A toll.");
-        assert_eq!(s.prompt_message(), "Pay 25 gold? (Y/N)");
-        assert!(matches!(
-            s.phase,
-            ConversationSessionPhase::AwaitingGoldPayment { amount: 25, .. }
-        ));
-
-        let paid = s.submit_keyword("y", &context);
-        assert_eq!(paid.text, " Paid.");
+        let paid = s.submit_keyword("pay", &context);
+        assert_eq!(paid.text, "A toll. Paid.");
         assert_eq!(
             paid.gold_payments,
             vec![ConversationGoldPayment {
@@ -944,10 +952,11 @@ mod tests {
             }]
         );
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+        assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
     }
 
     #[test]
-    fn gold_payment_empty_answer_declines_and_takes_refusal_branch() {
+    fn unaffordable_gold_payment_enters_one_nested_prompt_then_closes() {
         let raw = vec![
             enc("Ada"),
             enc("a quiet smith"),
@@ -957,14 +966,12 @@ mod tests {
             enc("PAY"),
             {
                 let mut bytes = vec![TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5'];
-                bytes.push(TLK_GOLD_PAYMENT_PAID_LABEL);
                 bytes.extend_from_slice(&enc(" Paid."));
-                bytes.push(TLK_CODE_END_OF_RESPONSE);
-                bytes.push(TLK_GOLD_PAYMENT_REFUSED_LABEL);
-                bytes.extend_from_slice(&enc(" Refused."));
                 bytes.push(TLK_CODE_END_OF_RESPONSE);
                 bytes
             },
+            enc("HELP"),
+            enc_with_stop("Nested response.", TLK_CODE_END_OF_RESPONSE),
         ];
         let decoded = vec![
             "Ada".to_string(),
@@ -974,37 +981,59 @@ mod tests {
             "Farewell.".to_string(),
             "PAY".to_string(),
             String::new(),
+            "HELP".to_string(),
+            "Nested response.".to_string(),
         ];
         let context = ConversationContext {
-            gold_payment_accepted: true,
-            gold_available: Some(30),
+            gold_available: Some(10),
             ..ctx()
         };
-        let mut s = ConversationSession::new(raw, decoded);
+        let mut s = ConversationSession::new(raw.clone(), decoded.clone());
         s.present_greeting(&context);
-        s.submit_keyword("pay", &context);
-
-        let declined = s.submit_keyword("", &context);
-        assert_eq!(declined.text, " Refused.");
+        let refused = s.submit_keyword("pay", &context);
+        assert_eq!(refused.text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
         assert_eq!(
-            declined.gold_payments,
+            refused.gold_payments,
             vec![ConversationGoldPayment {
                 amount: 25,
                 accepted: false
             }]
         );
-        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingGoldRefusalKeyword
+        );
+        assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
+
+        let name = s.submit_keyword("name", &context);
+        assert_eq!(name.text, "Ada");
+        assert!(!name.ended);
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingGoldRefusalKeyword
+        );
+
+        let nested = s.submit_keyword("", &context);
+        assert_eq!(nested.text, "BYE\n\nFarewell.");
+        assert!(nested.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
+
+        // A response carrying an explicit stop also unwinds immediately and
+        // receives no synthetic mandatory-Bye output.
+        let mut stopped = ConversationSession::new(raw, decoded);
+        stopped.present_greeting(&context);
+        stopped.submit_keyword("pay", &context);
+        let response = stopped.submit_keyword("help", &context);
+        assert_eq!(response.text, "Nested response.");
+        assert!(response.ended);
+        assert!(!response.text.contains("Farewell"));
     }
 
-    /// `conversation.md §7.4` / `karma.md §4`: five of the eight shipped
-    /// `0x8A` bytes head the "no" arm of a scoped prompt that asks the
-    /// party for something, two of them gold requests, so "declining a
-    /// conversation gold request can lower standing even though accepting
-    /// it never raises standing by itself". This models that shipped
-    /// shape: the refusal record opens with the standing byte, the
-    /// payment record carries none.
+    /// `conversation.md §7.6`: refusal stops before the byte after the
+    /// third digit, while acceptance continues in place. A side effect in
+    /// that tail therefore runs only on the affordable path.
     #[test]
-    fn declining_a_gold_request_lowers_moral_standing() {
+    fn unaffordable_gold_payment_does_not_execute_the_success_tail() {
         let raw = vec![
             enc("Ada"),
             enc("a quiet smith"),
@@ -1014,12 +1043,8 @@ mod tests {
             enc("PAY"),
             {
                 let mut bytes = vec![TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5'];
-                bytes.push(TLK_GOLD_PAYMENT_PAID_LABEL);
-                bytes.extend_from_slice(&enc(" Paid."));
-                bytes.push(TLK_CODE_END_OF_RESPONSE);
-                bytes.push(TLK_GOLD_PAYMENT_REFUSED_LABEL);
                 bytes.push(TLK_CODE_STANDING_DOWN);
-                bytes.extend_from_slice(&enc("Scoundrel!"));
+                bytes.extend_from_slice(&enc("Paid."));
                 bytes.push(TLK_CODE_END_OF_RESPONSE);
                 bytes
             },
@@ -1033,31 +1058,28 @@ mod tests {
             "PAY".to_string(),
             String::new(),
         ];
-        let context = ConversationContext {
+        let affordable = ConversationContext {
             moral_standing: 40,
-            gold_payment_accepted: true,
             gold_available: Some(30),
+            ..ctx()
+        };
+        let unaffordable = ConversationContext {
+            moral_standing: 40,
+            gold_available: Some(10),
             ..ctx()
         };
 
         let mut declined = ConversationSession::new(raw.clone(), decoded.clone());
-        declined.present_greeting(&context);
-        declined.submit_keyword("pay", &context);
-        let out = declined.submit_keyword("n", &context);
-        assert_eq!(out.text, "Scoundrel!");
-        assert_eq!(
-            out.moral_standing,
-            Some(39),
-            "the refusal arm's 0x8A must debit the shared selector"
-        );
-
-        // Paying takes the other arm, which carries no standing byte.
-        let mut paid = ConversationSession::new(raw, decoded);
-        paid.present_greeting(&context);
-        paid.submit_keyword("pay", &context);
-        let out = paid.submit_keyword("y", &context);
-        assert_eq!(out.text, " Paid.");
+        declined.present_greeting(&unaffordable);
+        let out = declined.submit_keyword("pay", &unaffordable);
+        assert_eq!(out.text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
         assert_eq!(out.moral_standing, None);
+
+        let mut paid = ConversationSession::new(raw, decoded);
+        paid.present_greeting(&affordable);
+        let out = paid.submit_keyword("pay", &affordable);
+        assert_eq!(out.text, "Paid.");
+        assert_eq!(out.moral_standing, Some(39));
     }
 
     #[test]

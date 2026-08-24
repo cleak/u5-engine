@@ -5,6 +5,8 @@ use crate::*;
 pub const Z_STATS_INVENTORY_PANEL_ROWS: usize = 8;
 pub const READY_PICKER_PANEL_ROWS: usize = 8;
 pub const USE_PICKER_PANEL_ROWS: usize = 8;
+pub const READY_PICKER_ESCAPE_MESSAGE: &str = "Done";
+pub const ITEM_PICKER_ESCAPE_MESSAGE: &str = "None!";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZStatsPage {
@@ -136,6 +138,19 @@ pub struct SurfaceChestSession {
     pub x: usize,
     pub y: usize,
     pub verb: SurfaceChestVerb,
+    /// Present when the shared container picker was opened by the dungeon
+    /// chest site. `traps.md §2.1` requires the same interactive picker at
+    /// both sites; keeping the pending cell here lets the existing modal
+    /// input path resume the dungeon operation after confirmation.
+    pub dungeon: Option<DungeonChestSelection>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DungeonChestSelection {
+    pub scene: DungeonScene,
+    pub level: u8,
+    pub index: usize,
+    pub tile: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,6 +198,24 @@ pub struct NewOrderSession {
 pub struct YellSession {
     pub buffer: String,
 }
+
+/// `karma.md §7.1`: the four-field ruined-shrine restoration prompt entered
+/// from outdoor Yell. It is deliberately separate from M-Meditate's session.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShrineRestorationSession {
+    pub word_index: usize,
+    pub target_x: usize,
+    pub target_y: usize,
+    pub response_index: usize,
+    pub all_responses_match: bool,
+    pub transcript: String,
+    pub buffer: String,
+}
+
+pub const SHRINE_RESTORATION_INPUT_MAX_LEN: usize = 15;
+pub const SHRINE_RESTORATION_VIRTUE_PROMPT: &str = "\nUpon what virtue\ndost thou\nmeditate?\n\n:";
+pub const SHRINE_RESTORATION_MANTRA_PROMPT: &str = "\nMantra:";
+pub const SHRINE_RESTORATION_SUCCESS_BANNER: &str = "\n\nThe Shrine is\nrestored!\n";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WishingWellSession {
@@ -260,8 +293,8 @@ pub enum YesNoPromptKind {
         focus: DungeonLookFocus,
     },
     TownExit {
-        entry: TownExitTileEntry,
-        advance_turn: bool,
+        scene: Scene,
+        floor: i8,
     },
     SaveGame,
     ExitToDos,
@@ -430,7 +463,33 @@ impl JimmySession {
 
 impl SurfaceChestSession {
     pub const fn new(x: usize, y: usize, verb: SurfaceChestVerb) -> Self {
-        Self { x, y, verb }
+        Self {
+            x,
+            y,
+            verb,
+            dungeon: None,
+        }
+    }
+
+    pub const fn new_dungeon(
+        scene: DungeonScene,
+        level: u8,
+        x: usize,
+        y: usize,
+        index: usize,
+        tile: u8,
+    ) -> Self {
+        Self {
+            x,
+            y,
+            verb: SurfaceChestVerb::Open,
+            dungeon: Some(DungeonChestSelection {
+                scene,
+                level,
+                index,
+                tile,
+            }),
+        }
     }
 }
 
@@ -480,6 +539,20 @@ impl YellSession {
     }
 }
 
+impl ShrineRestorationSession {
+    pub fn new(word_index: usize, target_x: usize, target_y: usize, opening: String) -> Self {
+        Self {
+            word_index,
+            target_x,
+            target_y,
+            response_index: 0,
+            all_responses_match: true,
+            transcript: format!("{opening}{SHRINE_RESTORATION_VIRTUE_PROMPT}"),
+            buffer: String::new(),
+        }
+    }
+}
+
 impl WishingWellSession {
     pub const fn new(direction: Direction) -> Self {
         Self {
@@ -515,8 +588,27 @@ pub fn cast_input_action(key: char) -> CastInputAction {
 
 pub fn ready_input_action(key: char) -> ReadyInputAction {
     match key {
-        ' ' | '\u{1b}' => ReadyInputAction::Exit,
-        '\r' | '\n' => ReadyInputAction::Confirm,
+        '\u{1b}' => ReadyInputAction::Exit,
+        '\r' | '\n' | ' ' => ReadyInputAction::Confirm,
+        ch if ch as u32 == u32::from(INPUT_CODE_SOUTH) => ReadyInputAction::NextItem,
+        ch if ch as u32 == u32::from(INPUT_CODE_NORTH) => ReadyInputAction::PreviousItem,
+        ch if matches!(
+            ch as u32,
+            value if value == u32::from(INPUT_CODE_SOUTHWEST)
+                || value == u32::from(INPUT_CODE_SOUTHEAST)
+        ) =>
+        {
+            ReadyInputAction::PageNext
+        }
+        ch if matches!(
+            ch as u32,
+            value if value == u32::from(INPUT_CODE_NORTHWEST)
+                || value == u32::from(INPUT_CODE_NORTHEAST)
+        ) =>
+        {
+            ReadyInputAction::PagePrevious
+        }
+        // Retain the terminal harness's printable navigation aliases.
         '>' | '+' => ReadyInputAction::NextItem,
         '<' | '-' => ReadyInputAction::PreviousItem,
         ']' | '}' => ReadyInputAction::PageNext,
@@ -529,8 +621,27 @@ pub fn ready_input_action(key: char) -> ReadyInputAction {
 
 pub fn use_input_action(key: char) -> UseInputAction {
     match key {
-        ' ' | '\u{1b}' => UseInputAction::Exit,
-        '\r' | '\n' => UseInputAction::Confirm,
+        '\u{1b}' => UseInputAction::Exit,
+        '\r' | '\n' | ' ' => UseInputAction::Confirm,
+        ch if ch as u32 == u32::from(INPUT_CODE_SOUTH) => UseInputAction::NextItem,
+        ch if ch as u32 == u32::from(INPUT_CODE_NORTH) => UseInputAction::PreviousItem,
+        ch if matches!(
+            ch as u32,
+            value if value == u32::from(INPUT_CODE_SOUTHWEST)
+                || value == u32::from(INPUT_CODE_SOUTHEAST)
+        ) =>
+        {
+            UseInputAction::PageNext
+        }
+        ch if matches!(
+            ch as u32,
+            value if value == u32::from(INPUT_CODE_NORTHWEST)
+                || value == u32::from(INPUT_CODE_NORTHEAST)
+        ) =>
+        {
+            UseInputAction::PagePrevious
+        }
+        // Retain the terminal harness's printable navigation aliases.
         '>' | '+' => UseInputAction::NextItem,
         '<' | '-' => UseInputAction::PreviousItem,
         ']' | '}' => UseInputAction::PageNext,

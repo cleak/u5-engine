@@ -7,14 +7,16 @@
 use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::path::Path;
+use std::time::Duration;
 
 use u5_runtime::{
-    Area, Direction, INPUT_CODE_EAST, INPUT_CODE_NORTH, INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST,
-    INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST, INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST,
-    PLAY_IGNORED_INPUT_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
-    PLAY_TYPEAHEAD_TOGGLE_KEY, PlayInputDisposition, PlayOptions, PlayState, TileAtlas,
-    TileGraphicsDepth, handle_play_key_input, hash_bytes, hash_palette_indices,
-    input_function_key_code, load_tile_atlas,
+    Area, Direction, ExplorationTurnGateOutcome, INPUT_CODE_EAST, INPUT_CODE_NORTH,
+    INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST, INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST,
+    INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST, PLAY_IGNORED_INPUT_KEY, PLAY_MUSIC_TOGGLE_KEY,
+    PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY, PlayInputDisposition, PlayOptions,
+    PlayState, TileAtlas, TileGraphicsDepth, handle_play_key_input, hash_bytes,
+    hash_palette_indices, input_function_key_code, load_tile_atlas,
+    run_potion_flash_soundless_timing,
 };
 
 pub fn run_play_loop(
@@ -45,6 +47,22 @@ pub fn run_play_loop(
     let mut input = String::new();
     let mut queued_input = VecDeque::new();
     loop {
+        if play_state_accepts_typeahead(&state) {
+            match state.apply_exploration_turn_gate(game_dir)? {
+                ExplorationTurnGateOutcome::Ready { .. } => {}
+                ExplorationTurnGateOutcome::Slept { .. } => {
+                    print_play_frame(&mut state, tile_atlas.as_ref())?;
+                    // Host-side pacing only: the clean spec requires a brief
+                    // pause but does not publish a duration for this shell.
+                    std::thread::sleep(Duration::from_millis(100));
+                    continue;
+                }
+                ExplorationTurnGateOutcome::Rescued { .. } => {
+                    print_play_frame(&mut state, tile_atlas.as_ref())?;
+                    continue;
+                }
+            }
+        }
         print_play_frame(&mut state, tile_atlas.as_ref())?;
         if !play_state_accepts_typeahead(&state) {
             queued_input.clear();
@@ -127,12 +145,18 @@ where
 }
 
 pub fn print_play_frame(state: &mut PlayState, tile_atlas: Option<&TileAtlas>) -> io::Result<()> {
+    complete_headless_blocking_presentations(state, tile_atlas)?;
     println!();
     println!("{}", state.render_text_frame(5));
     println!("{}", state.render_text_window_frame(None));
     if let Some(atlas) = tile_atlas {
         println!("{}", raster_diagnostic_line(state, 5, atlas)?);
     }
+    // The dissolve is a completed blocking driver call. This frontend has no
+    // intermediate pixel page, so printing the resulting state acknowledges
+    // the pending completion records rather than retaining them forever.
+    let _ = state.take_pending_map_viewport_dissolves();
+    let _ = state.take_pending_stonegate_trapdoor_playback();
     Ok(())
 }
 
@@ -140,10 +164,38 @@ pub fn print_play_script_snapshot(
     state: &mut PlayState,
     tile_atlas: Option<&TileAtlas>,
 ) -> io::Result<()> {
+    complete_headless_blocking_presentations(state, tile_atlas)?;
     println!("{}", play_script_state_line(state));
     println!("{}", state.render_text_window_frame(None));
     if let Some(atlas) = tile_atlas {
         println!("{}", raster_diagnostic_line(state, 5, atlas)?);
+    }
+    let _ = state.take_pending_map_viewport_dissolves();
+    let _ = state.take_pending_stonegate_trapdoor_playback();
+    Ok(())
+}
+
+/// Complete synchronous presentation work before a terminal or headless
+/// frontend accepts another command. With an atlas, White's twenty frames run
+/// through the normal map compositor; text-only mode still advances the same
+/// presentation state even though it has no persistent pixel page to display.
+pub fn complete_headless_blocking_presentations(
+    state: &mut PlayState,
+    tile_atlas: Option<&TileAtlas>,
+) -> io::Result<()> {
+    if let Some(playback) = state.take_pending_potion_flash() {
+        let _ = run_potion_flash_soundless_timing(playback);
+    }
+
+    while state.white_potion_sweep.is_some() {
+        let rendered = if let Some(atlas) = tile_atlas {
+            state.render_top_down_base_frame(5, atlas)?.is_some()
+        } else {
+            false
+        };
+        if !rendered {
+            state.advance_presentation_frame();
+        }
     }
     Ok(())
 }
@@ -320,6 +372,7 @@ pub fn handle_play_script_command(
     command: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    settle_play_script_exploration_gate(state, game_dir)?;
     let command = command.trim();
     if is_typeahead_toggle_token(command) {
         return handle_play_key_input(state, PLAY_TYPEAHEAD_TOGGLE_KEY, "", game_dir);
@@ -345,6 +398,7 @@ pub fn handle_play_script_command(
                 if !play_state_accepts_typeahead(state) {
                     break;
                 }
+                settle_play_script_exploration_gate(state, game_dir)?;
                 if handle_play_key_input(state, key, "", game_dir)? == PlayInputDisposition::Quit {
                     return Ok(PlayInputDisposition::Quit);
                 }
@@ -357,6 +411,22 @@ pub fn handle_play_script_command(
         return Ok(PlayInputDisposition::Continue);
     };
     handle_play_key_input(state, key, &suffix, game_dir)
+}
+
+fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    if !play_state_accepts_typeahead(state) {
+        return Ok(());
+    }
+    for _ in 0..PLAY_SCRIPT_MAX_IDLE_TICKS {
+        match state.apply_exploration_turn_gate(game_dir)? {
+            ExplorationTurnGateOutcome::Ready { .. } => return Ok(()),
+            ExplorationTurnGateOutcome::Slept { .. }
+            | ExplorationTurnGateOutcome::Rescued { .. } => {}
+        }
+    }
+    Err(io::Error::other(format!(
+        "party capability did not become command-ready after {PLAY_SCRIPT_MAX_IDLE_TICKS} automatic passes"
+    )))
 }
 
 pub fn play_state_accepts_typeahead(state: &PlayState) -> bool {
@@ -377,6 +447,7 @@ pub fn play_state_accepts_typeahead(state: &PlayState) -> bool {
         && state.active_mix.is_none()
         && state.active_new_order.is_none()
         && state.active_yell.is_none()
+        && state.active_shrine_restoration.is_none()
         && state.active_wishing_well.is_none()
         && state.active_direction_prompt.is_none()
         && state.active_yes_no_prompt.is_none()

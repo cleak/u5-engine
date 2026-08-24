@@ -116,7 +116,7 @@
     }
 
     #[test]
-    fn world_enter_uses_location_entry_y_table_when_world_row_omits_entry_y() {
+    fn world_enter_ignores_retired_location_entry_y_sidecar() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         fs::write(
@@ -133,10 +133,10 @@
         );
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (15, 7));
+        assert_eq!((state.player.x, state.player.y), (15, 30));
         assert_eq!(
             (state.active_objects[0].x, state.active_objects[0].y),
-            (15, 7)
+            (15, 30)
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -144,7 +144,6 @@
     #[test]
     fn town_exit_uses_clean_location_table_when_no_return_snapshot() {
         let dir = debug_game_dir();
-        let scene = Scene::new(17).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
             "BRITANNIA 10 20 CASTLE:0\n",
@@ -156,7 +155,11 @@
             state
                 .step_with_game_dir(Direction::West, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            MoveOutcome::Observed
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(
@@ -168,7 +171,7 @@
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.active_objects[0].z, 0);
         assert_eq!(state.grid[world_cell_index(10, 20)], 5);
-        assert!(state.message.contains("world-location table return point"));
+        assert!(state.message.contains("world-location table point"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -234,8 +237,14 @@
         state.player.x = 0;
         state.player.y = 1;
         assert_eq!(
-            state.step(Direction::West),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            state
+                .step_with_game_dir(Direction::West, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Observed
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
         assert_eq!(
             state.area,
@@ -258,7 +267,7 @@
                 aux3: 0,
             })
         );
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -280,7 +289,6 @@
             x: 10,
             y: 20,
             transport: TransportState::Foot,
-            timing_status: TimingStatusTag::Normal,
             sail_cadence: 0,
             sail_stall_pending: false,
             grid: open_world_grid(),
@@ -300,7 +308,6 @@
             ],
             pending_vehicle: None,
         });
-        state.set_town_npc_alarm_state(Scene::new(17).unwrap(), 0, 2, TownNpcAlarmState::Fleeing);
 
         assert!(state.restore_return_world());
 
@@ -327,7 +334,6 @@
         );
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.active_objects[2], vehicle);
-        assert!(state.town_npc_alarm_states.is_empty());
     }
 
     #[test]
@@ -343,7 +349,8 @@
         };
         let mut state = world_state(open_world_grid(), 10, 20);
         state.player.transport = transport;
-        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.sail_cadence = 1;
         state.sail_stall_pending = true;
         state.sync_player_object();
@@ -356,19 +363,24 @@
         assert_eq!(
             state.return_world.as_ref().map(|ret| (
                 ret.transport,
-                ret.timing_status,
                 ret.sail_cadence,
                 ret.sail_stall_pending
             )),
-            Some((transport, TimingStatusTag::HalfTime, 1, true))
+            Some((transport, 1, true))
         );
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
 
         state.player.x = 0;
         state.player.y = 1;
         assert_eq!(
-            state.step(Direction::West),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            state
+                .step_with_game_dir(Direction::West, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Observed
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(
@@ -378,7 +390,8 @@
             }
         );
         assert_eq!(state.player.transport, transport);
-        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
+        assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert_eq!(state.sail_cadence, 1);
         assert!(state.sail_stall_pending);
         assert_eq!(state.active_objects[0].tile, 168);
@@ -408,7 +421,8 @@
             skiffs: 0,
         };
         state.player.transport = transport;
-        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.sail_cadence = 1;
         state.sail_stall_pending = true;
         state.sync_player_object();
@@ -422,13 +436,12 @@
         assert_eq!(
             state.return_world.as_ref().map(|ret| (
                 ret.transport,
-                ret.timing_status,
                 ret.sail_cadence,
                 ret.sail_stall_pending
             )),
-            Some((transport, TimingStatusTag::HalfTime, 1, true))
+            Some((transport, 1, true))
         );
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
 
         // An up ladder on level zero is the published climb-out route
         // (dungeon-mode.md §13); the withdrawn `0x60` pit bypass is not.
@@ -445,7 +458,8 @@
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.player.transport, transport);
-        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
+        assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert_eq!(state.sail_cadence, 1);
         assert!(state.sail_stall_pending);
         assert_eq!(state.active_objects[0].tile, 168);
@@ -594,6 +608,36 @@
     }
 
     #[test]
+    fn dungeon_fall_trap_chain_freshens_the_monster_on_every_accepted_level() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = vec![0x90; DUNGEON_RECORD_LEN];
+        grid[dungeon_cell_index(0, 2, 1)] = 0x61;
+        grid[dungeon_cell_index(1, 2, 1)] = 0x61;
+        grid[dungeon_cell_index(2, 2, 1)] = 0x90;
+        let mut state = dungeon_state(grid.clone(), 0, 2, 1);
+        let mut expected = dungeon_state(grid, 0, 2, 1);
+
+        expected.area = Area::Dungeon { scene, level: 1 };
+        expected.sync_player_object();
+        assert!(!expected.setup_dungeon_active_monster_fresh());
+        expected.area = Area::Dungeon { scene, level: 2 };
+        expected.sync_player_object();
+        assert!(!expected.setup_dungeon_active_monster_fresh());
+
+        assert_eq!(
+            state
+                .resolve_dungeon_fall_trap_transition(scene, 0, 2, 1, None, false)
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 2 })
+        );
+        assert_eq!(state.prng_state, expected.prng_state);
+        assert_eq!(
+            state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT],
+            expected.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT]
+        );
+    }
+
+    #[test]
     fn dungeon_fall_trap_chain_missing_return_metadata_stays_in_dungeon() {
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
@@ -704,7 +748,6 @@
                 type_byte: 184,
                 tile: 184,
             },
-            timing_status: TimingStatusTag::HalfTime,
             sail_cadence: 3,
             sail_stall_pending: true,
             grid: world_grid,
@@ -737,7 +780,7 @@
         );
         assert_eq!((state.player.x, state.player.y), (2, 1));
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::Normal);
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
         assert_eq!(state.grid[world_cell_index(2, 1)], 7);

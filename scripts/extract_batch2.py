@@ -15,7 +15,7 @@ Extracts (1-based, inclusive):
   clock.rs       part_02.rs lines 554-647
                  GameClock
   npc_runtime.rs part_02.rs lines 649-735
-                 RuntimeNpc, DoorTracker, LocationMarkers
+                 RuntimeNpc, DoorTracker, LocationNpcStartMarkers
 
 Each new module uses `use crate::*;` so it picks up everything we've
 already pub-used at the crate root (constants, Direction, Scene, etc.).

@@ -45,6 +45,8 @@ pub struct LocationFloorEntry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Retired compatibility row. Runtime town entry no longer consults this
+/// table; public issue #94 established one fixed entry cell for every scene.
 pub struct LocationEntryYEntry {
     pub scene: Scene,
     pub y: usize,

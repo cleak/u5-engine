@@ -544,7 +544,8 @@
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(7, 1, 1)] = 0x20;
         let mut state = dungeon_state(grid, 7, 1, 1);
-        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.sail_cadence = 1;
         state.sail_stall_pending = true;
 
@@ -564,7 +565,8 @@
         );
         assert_eq!((state.player.x, state.player.y), (30, 40));
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
+        assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
         assert_eq!(state.active_objects[0].z, WorldPlane::Underworld.save_floor());
@@ -1086,10 +1088,6 @@
     fn adjacent_hostile_town_npc_raises_alarm_without_combat() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 5, 5);
-        let scene = match state.area {
-            Area::Town { scene, .. } => scene,
-            _ => unreachable!(),
-        };
         state.load_scheduled_npcs(&[
             NpcSlot {
                 slot: 0,
@@ -1114,11 +1112,40 @@
 
         assert!(!state.combat_active);
         assert!(state.message.contains("Hostile NPC slot 1"));
-        assert_eq!(
-            state.town_npc_alarm_state(scene, 0, 1),
-            Some(TownNpcAlarmState::Fortified)
-        );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mode_five_adjacent_attack_requires_live_dialogue_awareness() {
+        let mut state = test_state(open_grid(), 5, 5);
+        let scene = match state.area {
+            Area::Town { scene, .. } => scene,
+            _ => unreachable!(),
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x0E,
+                dialog_id: NPC_DIALOG_ID_NONE,
+                schedule: [5, 5, 5, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(state.town_adjacent_event_npc(scene, 0), None);
+
+        state.npcs[0].dialog_id = 2;
+        assert_eq!(
+            state.town_adjacent_event_npc(scene, 0),
+            Some((1, 0x0E, NpcAiBehavior::ReservedEngage))
+        );
     }
 
     #[test]
@@ -1166,11 +1193,170 @@
 
         assert!(state.pending_town_arrest.is_none());
         assert!(state.message.contains("Refused surrender"));
-        assert_eq!(
-            state.town_npc_alarm_state(scene, 0, 2),
-            Some(TownNpcAlarmState::Fortified)
-        );
+        let guard = state.npcs.iter().find(|npc| npc.slot == 2).unwrap();
+        assert_eq!(&guard.schedule[..3], &[7, 7, 7]);
+        assert_eq!(&guard.schedule[12..16], &[0, 0, 0, 0]);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn forced_town_rewrites_preserve_their_published_fields_and_gates() {
+        let schedule = [
+            1, 2, 4, 9, 10, 11, 12, 13, 14, 0, 1, 2, 6, 12, 18, 22,
+        ];
+        let mut near = RuntimeNpc::from_slot(
+            &NpcSlot {
+                slot: 1,
+                type_byte: 0x2E,
+                dialog_id: 0x22,
+                schedule,
+                name: None,
+            },
+            8,
+        );
+        near.force_town_pursuit();
+        assert_eq!(&near.schedule[..3], &[6, 6, 6]);
+        assert_eq!(&near.schedule[3..12], &schedule[3..12]);
+        assert_eq!(&near.schedule[12..16], &[0, 0, 0, 0]);
+        assert_eq!(near.dialog_id, 0x22);
+
+        let mut random = RuntimeNpc::from_slot(
+            &NpcSlot {
+                slot: 2,
+                type_byte: 0x40,
+                dialog_id: 0x23,
+                schedule,
+                name: None,
+            },
+            8,
+        );
+        random.force_town_pursuit();
+        assert_eq!(&random.schedule[..3], &[7, 7, 7]);
+
+        let mut fleeing = RuntimeNpc::from_slot(
+            &NpcSlot {
+                slot: 3,
+                type_byte: 0x73,
+                dialog_id: 0x24,
+                schedule,
+                name: None,
+            },
+            8,
+        );
+        assert!(fleeing.force_town_flight());
+        assert_eq!(&fleeing.schedule[..3], &[3, 3, 3]);
+        assert_eq!(&fleeing.schedule[3..], &schedule[3..]);
+        assert_eq!(fleeing.dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
+
+        let mut rejected = RuntimeNpc::from_slot(
+            &NpcSlot {
+                slot: 4,
+                type_byte: 0x3F,
+                dialog_id: TOWN_NPC_BRUSHOFF_DIALOG_ID,
+                schedule,
+                name: None,
+            },
+            8,
+        );
+        assert!(!rejected.force_town_flight());
+        assert_eq!(rejected.schedule, schedule);
+        assert_eq!(rejected.dialog_id, TOWN_NPC_BRUSHOFF_DIALOG_ID);
+
+        let mut zero_time_schedule = schedule;
+        zero_time_schedule[12..16].fill(0);
+        let mut warned = RuntimeNpc::from_slot(
+            &NpcSlot {
+                slot: 5,
+                type_byte: 0x40,
+                dialog_id: TOWN_NPC_BRUSHOFF_DIALOG_ID,
+                schedule: zero_time_schedule,
+                name: None,
+            },
+            8,
+        );
+        assert!(warned.force_town_flight());
+        assert_eq!(&warned.schedule[..3], &[3, 3, 3]);
+    }
+
+    #[test]
+    fn town_alarm_sweeps_all_floors_with_exact_special_and_draw_routing() {
+        let mut state = test_state(open_grid(), 1, 1);
+        let scheduled = |slot, type_byte, z| NpcSlot {
+            slot,
+            type_byte,
+            dialog_id: 0x20 + slot as u8,
+            schedule: [1, 2, 4, 5, 6, 7, 5, 6, 7, z, z, z, 6, 12, 18, 22],
+            name: None,
+        };
+        let slots = [
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            scheduled(1, SHADOWLORD_ACTOR_TILE, 0),
+            scheduled(2, TOWN_NPC_ALARM_LICH_TYPE, 2),
+            scheduled(3, TOWN_NPC_ALARM_GUARD_TYPE, 3),
+            scheduled(4, 0x50, 0),
+            scheduled(5, 0x50, 2),
+            scheduled(6, 0x30, 3),
+        ];
+        state.load_scheduled_npcs(&slots);
+
+        assert_eq!(state.town_alarm_sweep_with_draws(&[127, 128, 0]), (3, 1));
+        for slot in 1..=3 {
+            let npc = state.npcs.iter().find(|npc| npc.slot == slot).unwrap();
+            assert_eq!(&npc.schedule[..3], &[7, 7, 7]);
+            assert_eq!(&npc.schedule[12..16], &[0, 0, 0, 0]);
+        }
+        let fled = state.npcs.iter().find(|npc| npc.slot == 4).unwrap();
+        assert_eq!(&fled.schedule[..3], &[3, 3, 3]);
+        assert_eq!(fled.dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
+        let unchanged = state.npcs.iter().find(|npc| npc.slot == 5).unwrap();
+        assert_eq!(&unchanged.schedule[..3], &[1, 2, 4]);
+        let rejected = state.npcs.iter().find(|npc| npc.slot == 6).unwrap();
+        assert_eq!(&rejected.schedule[..3], &[1, 2, 4]);
+
+        assert_eq!(state.town_npc_mutations.len(), 4);
+        state.load_scheduled_npcs(&slots);
+        let restored = state.npcs.iter().find(|npc| npc.slot == 4).unwrap();
+        assert_eq!(&restored.schedule[..3], &[3, 3, 3]);
+        assert_eq!(restored.dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
+    }
+
+    #[test]
+    fn brush_off_contact_rewrites_to_flight_without_raising_an_alarm() {
+        let mut state = test_state(open_grid(), 5, 5);
+        let scene = match state.area {
+            Area::Town { scene, .. } => scene,
+            _ => unreachable!(),
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x50,
+                dialog_id: TOWN_NPC_BRUSHOFF_DIALOG_ID,
+                schedule: [7, 7, 7, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.apply_town_npc_contact_event(scene, 0).unwrap(),
+            Some(MoveOutcome::Used)
+        );
+        assert_eq!(state.message, TOWN_NPC_BRUSHOFF_RESPONSE);
+        assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
+        assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
     }
 
     #[test]
@@ -1865,6 +2051,10 @@
         });
         state.blackthorn_story.mark_party_slot_jailed(1);
         state.moral_standing = 12;
+        state.active_effect_tag = Some(AMULET_LB_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = PERMANENT_ACTIVE_EFFECT_DURATION;
+        state.torch_counter = 20;
+        state.light_spell_counter = 30;
 
         assert!(matches!(
             state.apply_blackthorn_rescue_refuge(&dir).unwrap(),
@@ -1872,11 +2062,34 @@
                 if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
         ));
 
+        let dissolves = state.take_pending_map_viewport_dissolves();
+        assert_eq!(dissolves.len(), 2);
+        assert_eq!(
+            dissolves[0].source,
+            MapViewportDissolveSource::BlackthornRescueBlack
+        );
+        assert_eq!(
+            dissolves[1].source,
+            MapViewportDissolveSource::BlackthornRescuePartyOnBlack {
+                cell: BLACKTHORN_RESCUE_PARTY_CELL,
+            }
+        );
+        assert!(dissolves
+            .iter()
+            .all(|playback| playback.rect == MAP_VIEWPORT_DISSOLVE_RECT
+                && playback.copied_pixels == 176 * 176
+                && playback.world_ticks_advanced == 0
+                && playback.caller_redraws_during_dissolve == 0));
+
         assert_eq!(state.moral_standing, BLACKTHORN_RESCUE_STANDING_FLOOR);
         assert!(state.blackthorn_story.jailed_party_slots().is_empty());
         assert_eq!(state.blackthorn_story.captive_cell_counter, 1);
         assert_eq!(state.party[1].status, b'G');
         assert_eq!(state.party[1].hp, 42);
+        assert_eq!(state.active_effect_tag, None);
+        assert_eq!(state.active_effect_counter, 0);
+        assert_eq!(state.torch_counter, 0);
+        assert_eq!(state.light_spell_counter, 0);
         assert_eq!(
             (state.player.x, state.player.y),
             (
@@ -2117,121 +2330,19 @@
     }
 
     #[test]
-    fn player_phantom_npc_is_stationary_and_idempotent() {
-        let mut state = test_state(open_grid(), 3, 4);
+    fn resident_shadowlord_npc_has_fixed_stationary_schedule() {
+        let npc = RuntimeNpc::from_resident_shadowlord(31, 15, 9, 17);
 
-        state.attach_player_phantom_npc();
-        state.attach_player_phantom_npc();
-
-        assert_eq!(state.npcs.len(), 1);
-        let phantom = state
-            .npcs
-            .iter()
-            .find(|npc| npc.is_player_phantom())
-            .unwrap();
-        assert_eq!(phantom.slot, PLAYER_NPC_SLOT);
-        assert_eq!(phantom.type_byte, PLAYER_NPC_SENTINEL_TYPE);
-        assert_eq!(phantom.dialog_id, PLAYER_NPC_DIALOG_ID);
-        assert_eq!((phantom.x, phantom.y, phantom.z), (3, 4, 0));
-        let active_slot = phantom.active_object.unwrap();
-        assert_ne!(active_slot, 0);
-        assert_eq!(
-            state.active_objects[active_slot],
-            player_phantom_active_object(3, 4, 0)
-        );
-        for wp in 0..3 {
-            assert_eq!(phantom.waypoint_position(wp), (3, 4, 0));
+        assert_eq!(npc.slot, 31);
+        assert_eq!(npc.type_byte, SHADOWLORD_ACTOR_TILE);
+        assert_eq!(npc.dialog_id, NPC_DIALOG_ID_NONE);
+        assert_eq!((npc.x, npc.y, npc.z), (15, 9, 0));
+        assert_eq!(npc.state, NPC_STATE_IDLE);
+        assert_eq!(npc.active_object, None);
+        for wp in 0..NPC_SCHEDULE_WAYPOINT_COUNT {
+            assert_eq!(npc.schedule[NPC_SCHEDULE_AI_OFFSET + wp], 0);
+            assert_eq!(npc.waypoint_position(wp), (15, 9, 0));
         }
-
-        state.clock = GameClock::new(17, 59).unwrap();
-        state.advance_turn();
-
-        let phantom = state
-            .npcs
-            .iter()
-            .find(|npc| npc.is_player_phantom())
-            .unwrap();
-        assert_eq!((phantom.x, phantom.y, phantom.z), (3, 4, 0));
-        assert_eq!(phantom.active_object, Some(active_slot));
-        assert_eq!(
-            state.active_objects[active_slot],
-            player_phantom_active_object(3, 4, 0)
-        );
-        assert_eq!(state.active_objects.len(), 2);
-    }
-
-    #[test]
-    fn player_phantom_active_object_is_logical_only_for_surface_interaction() {
-        let mut state = test_state(open_grid(), 3, 1);
-        state.ambient_light = FULL_DAYLIGHT;
-        state.attach_player_phantom_npc();
-        let active_slot = state
-            .npcs
-            .iter()
-            .find(|npc| npc.is_player_phantom())
-            .and_then(|npc| npc.active_object)
-            .unwrap();
-
-        state.player.x = 4;
-        state.player.y = 1;
-        state.sync_player_object();
-
-        assert_eq!(
-            state.active_objects[active_slot],
-            player_phantom_active_object(3, 1, 0)
-        );
-        assert!(state.object_at_current_floor(3, 1).is_none());
-        assert!(state.blocking_object_at(3, 1).is_none());
-        assert!(state.sight_blocking_object_at_current_floor(3, 1).is_none());
-        assert!(
-            state
-                .npc_at_current_floor(3, 1)
-                .is_some_and(|npc| npc.is_player_phantom())
-        );
-
-        let view = state.render_text_view(1);
-        assert!(view.lines().nth(2).unwrap().contains(".@."));
-    }
-
-    #[test]
-    fn player_phantom_npc_blocks_npc_pathing_after_player_leaves_spawn() {
-        let mut state = test_state(open_grid(), 3, 1);
-        state.clock = GameClock::new(17, 59).unwrap();
-        let slots = vec![
-            NpcSlot {
-                slot: 0,
-                type_byte: 0,
-                dialog_id: 0,
-                schedule: [0; 16],
-                name: None,
-            },
-            NpcSlot {
-                slot: 1,
-                type_byte: 1,
-                dialog_id: 0,
-                schedule: [0, 0, 0, 0, 2, 4, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
-                name: None,
-            },
-        ];
-        state.load_scheduled_npcs(&slots);
-        state.attach_player_phantom_npc();
-        state.player.x = 10;
-        state.player.y = 10;
-        state.sync_player_object();
-
-        state.advance_turn();
-
-        let real_npc = state
-            .npcs
-            .iter()
-            .find(|npc| !npc.is_player_phantom())
-            .unwrap();
-        assert_eq!((real_npc.x, real_npc.y), (2, 0));
-        assert!(
-            state
-                .npc_at_current_floor(3, 1)
-                .is_some_and(|npc| npc.is_player_phantom())
-        );
     }
 
     #[test]

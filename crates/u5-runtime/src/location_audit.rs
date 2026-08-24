@@ -17,12 +17,12 @@ pub const LOCATION_AUDIT_VIEW_CLASS_COUNT: usize = 17;
 pub enum LocationCellOwner {
     StaticTerrain,
     NpcStartMarker,
-    SpawnMarker,
-    CosmeticDashMarker,
-    CosmeticPeriodMarker,
+    BeaconLightSource,
+    StandingCropTerrain,
+    FruitTreeTerrain,
     FloorLinkMarker,
     DawnDuskGateMarker,
-    TownExit,
+    TelescopeLook,
     WalkOnStair,
     ClimbTransition,
     Door,
@@ -39,12 +39,12 @@ impl LocationCellOwner {
         match self {
             Self::StaticTerrain => 0,
             Self::NpcStartMarker => 1,
-            Self::SpawnMarker => 2,
-            Self::CosmeticDashMarker => 3,
-            Self::CosmeticPeriodMarker => 4,
+            Self::BeaconLightSource => 2,
+            Self::StandingCropTerrain => 3,
+            Self::FruitTreeTerrain => 4,
             Self::FloorLinkMarker => 5,
             Self::DawnDuskGateMarker => 6,
-            Self::TownExit => 7,
+            Self::TelescopeLook => 7,
             Self::WalkOnStair => 8,
             Self::ClimbTransition => 9,
             Self::Door => 10,
@@ -61,12 +61,12 @@ impl LocationCellOwner {
         match self {
             Self::StaticTerrain => "static-terrain",
             Self::NpcStartMarker => "npc-start-marker",
-            Self::SpawnMarker => "spawn-marker",
-            Self::CosmeticDashMarker => "cosmetic-dash-marker",
-            Self::CosmeticPeriodMarker => "cosmetic-period-marker",
+            Self::BeaconLightSource => "beacon-light-source",
+            Self::StandingCropTerrain => "standing-crop-terrain",
+            Self::FruitTreeTerrain => "fruit-tree-terrain",
             Self::FloorLinkMarker => "npc-floor-link-marker",
             Self::DawnDuskGateMarker => "dawn-dusk-gate-marker",
-            Self::TownExit => "town-exit",
+            Self::TelescopeLook => "telescope-look",
             Self::WalkOnStair => "walk-on-stair",
             Self::ClimbTransition => "climb-transition",
             Self::Door => "door",
@@ -82,12 +82,12 @@ impl LocationCellOwner {
     pub const ALL: [Self; LOCATION_AUDIT_OWNER_COUNT] = [
         Self::StaticTerrain,
         Self::NpcStartMarker,
-        Self::SpawnMarker,
-        Self::CosmeticDashMarker,
-        Self::CosmeticPeriodMarker,
+        Self::BeaconLightSource,
+        Self::StandingCropTerrain,
+        Self::FruitTreeTerrain,
         Self::FloorLinkMarker,
         Self::DawnDuskGateMarker,
-        Self::TownExit,
+        Self::TelescopeLook,
         Self::WalkOnStair,
         Self::ClimbTransition,
         Self::Door,
@@ -136,13 +136,19 @@ pub struct LocationAuditReport {
 }
 
 pub fn classify_location_cell_owner(tile: u8) -> LocationCellOwner {
+    if tile == TOWN_TILE_STANDING_CROP {
+        return LocationCellOwner::StandingCropTerrain;
+    }
+    if tile == TOWN_TILE_FRUIT_TREE {
+        return LocationCellOwner::FruitTreeTerrain;
+    }
     match town_tile_marker(tile) {
         Some(TownTileMarker::NpcStartA | TownTileMarker::NpcStartB) => {
             return LocationCellOwner::NpcStartMarker;
         }
-        Some(TownTileMarker::SpawnAsterisk) => return LocationCellOwner::SpawnMarker,
-        Some(TownTileMarker::DashCosmetic) => return LocationCellOwner::CosmeticDashMarker,
-        Some(TownTileMarker::PeriodCosmetic) => return LocationCellOwner::CosmeticPeriodMarker,
+        Some(TownTileMarker::BeaconLightSource) => {
+            return LocationCellOwner::BeaconLightSource;
+        }
         Some(TownTileMarker::FloorLinkC8 | TownTileMarker::FloorLinkC9) => {
             return LocationCellOwner::FloorLinkMarker;
         }
@@ -151,13 +157,13 @@ pub fn classify_location_cell_owner(tile: u8) -> LocationCellOwner {
     if tile == TOWN_DAWN_DUSK_GATE_MARKER_TILE {
         return LocationCellOwner::DawnDuskGateMarker;
     }
-    if tile == TOWN_EXIT_THRESHOLD_TILE {
-        return LocationCellOwner::TownExit;
+    if tile == TELESCOPE_LOOK_TRIGGER_TILE {
+        return LocationCellOwner::TelescopeLook;
     }
     if is_town_stair_tile(tile) {
         return LocationCellOwner::WalkOnStair;
     }
-    if stair_delta(tile, ClimbIntent::Up).is_some() {
+    if town_klimb_underfoot_intent(tile).is_some() {
         return LocationCellOwner::ClimbTransition;
     }
     if is_town_door_tile(tile) {

@@ -134,7 +134,7 @@ def main() -> int:
     # Map decoders + analysis.
     carve_to_module(
         dest=SRC / "map_decoders.rs",
-        summary="Britannia/underworld chunk decoders, BRIT.DAT chunk index finder, map analysis (analyze_map, harvest_location_markers, etc.), pathfinding helpers.",
+        summary="Britannia/underworld chunk decoders, BRIT.DAT chunk index finder, map analysis (including NPC-start-marker harvesting), pathfinding helpers.",
         sources=[PARTS / "part_14.rs"],
         items=[
             "decode_world_map_bytes",
@@ -143,10 +143,8 @@ def main() -> int:
             "validate_britannia_chunk_index",
             "decode_britannia_map_bytes",
             "analyze_map",
-            "harvest_location_markers",
-            "scrub_location_entry_markers",
-            "is_location_entry_marker",
-            "is_spawn_marker",
+            "harvest_location_npc_start_markers",
+            "scrub_location_npc_start_markers",
             "is_npc_start_marker",
             "append_map_stats",
             "find_path",

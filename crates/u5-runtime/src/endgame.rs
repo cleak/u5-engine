@@ -207,9 +207,14 @@ pub struct EndgameState {
     pub final_narrative: Option<EndNarrative>,
     /// `endgame.md §4`: one pending restoration-announcement beat per
     /// party member the tableau setup pass raised from Dead. Each beat
-    /// is a short blocking wait rendered as its own frame before the
-    /// tableau walk-in starts.
+    /// emits the exact revival line and is interleaved with that member's
+    /// placement and walk-in, in party-slot order.
     pub entry_restoration_beats: u8,
+    /// `endgame.md §4`: next party slot owned by the entry setup loop.
+    /// The loop fully restores (when needed), places, and walks one member
+    /// before advancing to the next. [`ENDGAME_ENTRY_COMPLETE_SLOT`] means
+    /// the greeting/prompt has been published and no entry work remains.
+    pub entry_party_slot: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -227,6 +232,7 @@ pub const ENDGAME_TABLEAU_BOX_ACTOR_BYTE: u8 = 0x0e;
 pub const ENDGAME_TABLEAU_ORB_ACTOR_BYTE: u8 = 0x08;
 pub const ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE: u8 = 0x7c;
 pub const ENDGAME_TABLEAU_PHASE: u8 = 0;
+const ENDGAME_ENTRY_COMPLETE_SLOT: u8 = u8::MAX;
 /// `formats/location-dat.md section 11`: endgame loads MISCMAPS cutscene-map
 /// record 3 as the authored 11x11 terminal tableau scene.
 pub const ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD: usize = 3;
@@ -284,6 +290,7 @@ impl EndgameState {
             messages,
             final_narrative: None,
             entry_restoration_beats: 0,
+            entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
         }
     }
 
@@ -305,6 +312,7 @@ impl EndgameState {
             messages,
             final_narrative: None,
             entry_restoration_beats: 0,
+            entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
         }
     }
 
@@ -339,6 +347,7 @@ impl EndgameState {
                 .then_some(final_narrative)
                 .flatten(),
             entry_restoration_beats: 0,
+            entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
         }
     }
 
@@ -481,7 +490,15 @@ impl EndgameCertificateLine {
     /// left of true centre, and that is plain truncation.
     pub fn column(&self) -> u8 {
         let width = crate::TEXT_SCREEN_COLUMNS as usize;
-        let length = self.text.chars().count().min(width);
+        // §9.3: the two closing-title digraphs each occupy one stored
+        // fixed-font cell, so centring must count the encoded form rather
+        // than its decoded Latin authoring text.
+        let length = if self.runic {
+            runic_line_encoding(&self.text).chars().count()
+        } else {
+            self.text.chars().count()
+        }
+        .min(width);
         ((width - length) / 2) as u8
     }
 }
@@ -599,22 +616,34 @@ pub const ENDGAME_CERTIFICATE_CLOSING_TITLE: [&str; 2] = ["THE QUEST OF THE AVAT
 /// engine re-encodes spaces rather than passing an ASCII blank through
 /// the runic slot.
 pub const RUNIC_WORD_SPACE: char = '@';
+/// `endgame.md §9.3`: one-cell stored code for decoded `TH`.
+pub const RUNIC_TH_DIGRAPH: char = '[';
+/// `endgame.md §9.3`: one-cell stored code for decoded `ST`.
+pub const RUNIC_ST_DIGRAPH: char = '_';
 
 /// Re-encode a decoded Latin line for the runic font slot.
 ///
-/// `cleak/u5-spec#82` publishes two of the three parts of the digraph
-/// encoding: the at-sign is the word space, and TH and ST each occupy a
-/// single character. It does **not** publish which code points the two
-/// digraphs use, and it explicitly allows an engine to "supply your own
-/// rune mapping" instead. Rather than guess two code points and draw
-/// whatever glyphs happen to live there, this applies the published
-/// word-space rule and leaves TH and ST as their two component runes -
-/// a one-rune-per-digraph difference from the original, and the only
-/// part of the certificate that is not exact.
+/// `endgame.md §9.3` / `cleak/u5-spec#127`: scan decoded uppercase Latin
+/// left-to-right, collapse `TH` and `ST` to their exact one-cell stored
+/// characters, map spaces to `@`, and pass every other character through.
 pub fn runic_line_encoding(line: &str) -> String {
-    line.chars()
-        .map(|ch| if ch == ' ' { RUNIC_WORD_SPACE } else { ch })
-        .collect()
+    let mut chars = line.chars().peekable();
+    let mut encoded = String::with_capacity(line.len());
+    while let Some(ch) = chars.next() {
+        match (ch, chars.peek().copied()) {
+            ('T', Some('H')) => {
+                chars.next();
+                encoded.push(RUNIC_TH_DIGRAPH);
+            }
+            ('S', Some('T')) => {
+                chars.next();
+                encoded.push(RUNIC_ST_DIGRAPH);
+            }
+            (' ', _) => encoded.push(RUNIC_WORD_SPACE),
+            _ => encoded.push(ch),
+        }
+    }
+    encoded
 }
 
 /// `endgame.md §7.1` full-screen fade to black, run against the real
@@ -1129,11 +1158,10 @@ impl PlayState {
         if let Some(map) = tableau_map {
             self.install_endgame_tableau_map(&map);
         }
-        // endgame.md §10: dead party members are mutated into a present /
-        // restored state for the ending tableau, with current health restored
-        // from the stored maximum.
-        let restored = self.restore_party_for_endgame_tableau();
-        self.install_endgame_tableau();
+        // endgame.md §4: clear the live table up front, but let the display-
+        // driven entry loop restore, place, and walk party slots one at a time.
+        // Lord British is the one initial scripted actor already present.
+        self.begin_endgame_tableau_entry();
         // endgame.md §4/§7: the tableau actors start at (5,9) and the
         // movement helper steps them one cell per call with one display
         // tick after each movement, so the walk-in is a sequence of
@@ -1142,17 +1170,21 @@ impl PlayState {
         // any input arriving before the walk-in finishes drains it via
         // `finish_endgame_entry_presentation`.
         let mut endgame = EndgameState::awaiting_first_confirmation_with_messages(messages);
-        // endgame.md §4: one short blocking wait per restored member.
-        // cleak/u5-spec#82: the announcement's wording is unpublished,
-        // so the beat is presented as its own held tableau frame and no
-        // clean-room-authored announcement line is composed here.
-        endgame.entry_restoration_beats = restored.min(u8::MAX as usize) as u8;
+        endgame.entry_restoration_beats = self
+            .party
+            .iter()
+            .filter(|member| {
+                character_status_for_byte(member.status)
+                    .is_some_and(endgame_needs_tableau_restoration)
+            })
+            .count()
+            .min(u8::MAX as usize) as u8;
+        endgame.entry_party_slot = 0;
         self.endgame = Some(endgame);
-        self.message = self
-            .endgame
-            .as_ref()
-            .expect("endgame state was just installed")
-            .first_prompt_text(&self.party_leader_name());
+        self.message.clear();
+        if self.party.is_empty() {
+            self.finish_endgame_entry_prompt();
+        }
         MoveOutcome::EndgameEntered
     }
 
@@ -1183,12 +1215,12 @@ impl PlayState {
     }
 
     /// `endgame.md §4`/`§7` entry presentation pump. Returns `true`
-    /// while a frame is still owed: first one frame per pending
-    /// dead-member restoration beat, then one frame per single-cell
-    /// step of the tableau movement helper. The caller renders after
-    /// each `true`.
+    /// while a frame is still owed. Party slots are processed in order; a
+    /// Dead member first gets one exact announcement/restoration beat, then
+    /// that member is placed and walked to the target one cell per frame
+    /// before the next slot starts. The caller renders after each `true`.
     pub fn advance_endgame_entry_presentation(&mut self) -> bool {
-        let Some(endgame) = self.endgame.as_mut() else {
+        let Some(endgame) = self.endgame.as_ref() else {
             return false;
         };
         // Once the confirmation has resolved, the victory / refusal
@@ -1197,11 +1229,6 @@ impl PlayState {
         if endgame.is_terminal() {
             return false;
         }
-        if endgame.entry_restoration_beats > 0 {
-            endgame.entry_restoration_beats -= 1;
-            self.animation.tick_static_tiles();
-            return true;
-        }
         self.advance_endgame_entry_tableau_step()
     }
 
@@ -1209,28 +1236,108 @@ impl PlayState {
     /// steps each one to its target before moving on, so exactly one
     /// actor moves per pumped frame.
     fn advance_endgame_entry_tableau_step(&mut self) -> bool {
-        for placement in endgame_tableau_actor_placements(&self.party) {
-            let Some(object) = self
-                .active_objects
-                .get(placement.active_object_slot)
-                .copied()
+        loop {
+            let Some(slot) = self
+                .endgame
+                .as_ref()
+                .map(|endgame| endgame.entry_party_slot)
             else {
-                continue;
+                return false;
             };
-            if endgame_tableau_role_for_slot(placement.active_object_slot, object)
-                != Some(placement.role)
-            {
+            if slot == ENDGAME_ENTRY_COMPLETE_SLOT {
+                return false;
+            }
+            let slot = usize::from(slot);
+            let party_len = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize);
+            if slot >= party_len {
+                self.finish_endgame_entry_prompt();
+                return false;
+            }
+
+            if self.restore_endgame_party_member_for_tableau(slot) {
+                if let Some(endgame) = self.endgame.as_mut() {
+                    endgame.entry_restoration_beats =
+                        endgame.entry_restoration_beats.saturating_sub(1);
+                }
+                let name = self
+                    .party_names
+                    .get(slot)
+                    .and_then(|name| party_name_to_string(name))
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "endgame restoration slot {slot} has no printable in-party name; valid saves must supply every travelling-party name"
+                        )
+                    });
+                self.message.push_str(&format!("\n{name} lives!\n"));
+                // The frontend has no PC-speaker backend. This tick retains
+                // the published blocking restoration beat; the ordinary
+                // status/tableau compositor performs the post-flourish redraw.
+                self.animation.tick_static_tiles();
+                return true;
+            }
+
+            let placement = endgame_tableau_party_placement(slot, self.party[slot].class_byte)
+                .expect("entry slot is inside the six-member tableau band");
+            let installed = self
+                .active_objects
+                .get(slot)
+                .copied()
+                .is_some_and(|object| {
+                    endgame_tableau_role_for_slot(slot, object) == Some(placement.role)
+                });
+            if !installed && let Some(object) = self.active_objects.get_mut(slot) {
+                write_endgame_tableau_placement(object, placement);
+            }
+
+            let at_target = self
+                .active_objects
+                .get(slot)
+                .is_some_and(|object| (object.x, object.y) == placement.target);
+            if at_target {
+                if let Some(endgame) = self.endgame.as_mut() {
+                    endgame.entry_party_slot = endgame.entry_party_slot.saturating_add(1);
+                }
                 continue;
             }
-            if (object.x, object.y) == placement.target {
-                continue;
+
+            let moved = self.step_endgame_tableau_slot_once_to_target(slot, placement.target);
+            let now_at_target = self
+                .active_objects
+                .get(slot)
+                .is_some_and(|object| (object.x, object.y) == placement.target);
+            if now_at_target {
+                if let Some(endgame) = self.endgame.as_mut() {
+                    endgame.entry_party_slot = endgame.entry_party_slot.saturating_add(1);
+                    if usize::from(endgame.entry_party_slot) >= party_len {
+                        endgame.entry_party_slot = ENDGAME_ENTRY_COMPLETE_SLOT;
+                    }
+                }
+                if self
+                    .endgame
+                    .as_ref()
+                    .is_some_and(|endgame| endgame.entry_party_slot == ENDGAME_ENTRY_COMPLETE_SLOT)
+                {
+                    self.append_endgame_first_prompt();
+                }
             }
-            return self.step_endgame_tableau_slot_once_to_target(
-                placement.active_object_slot,
-                placement.target,
-            );
+            return moved;
         }
-        false
+    }
+
+    fn finish_endgame_entry_prompt(&mut self) {
+        if let Some(endgame) = self.endgame.as_mut() {
+            endgame.entry_party_slot = ENDGAME_ENTRY_COMPLETE_SLOT;
+        }
+        self.append_endgame_first_prompt();
+    }
+
+    fn append_endgame_first_prompt(&mut self) {
+        let prompt = self
+            .endgame
+            .as_ref()
+            .expect("endgame entry prompt requires endgame state")
+            .first_prompt_text(&self.party_leader_name());
+        self.message.push_str(&prompt);
     }
 
     /// Drain any owed entry-presentation frames at once. Used when
@@ -1252,11 +1359,10 @@ impl PlayState {
         self.endgame
             .as_ref()
             .is_some_and(|endgame| !endgame.is_terminal())
-            && (self
+            && self
                 .endgame
                 .as_ref()
-                .is_some_and(|endgame| endgame.entry_restoration_beats > 0)
-                || !self.endgame_tableau_is_settled())
+                .is_some_and(|endgame| endgame.entry_party_slot != ENDGAME_ENTRY_COMPLETE_SLOT)
     }
 
     pub fn ensure_endgame_messages_loaded(
@@ -1287,6 +1393,36 @@ impl PlayState {
             }
         }
         restored
+    }
+
+    fn restore_endgame_party_member_for_tableau(&mut self, slot: usize) -> bool {
+        let Some(member) = self.party.get_mut(slot) else {
+            return false;
+        };
+        if !character_status_for_byte(member.status).is_some_and(endgame_needs_tableau_restoration)
+        {
+            return false;
+        }
+        member.status = CharacterStatus::Good.save_byte();
+        member.hp = member.max_hp;
+        true
+    }
+
+    fn begin_endgame_tableau_entry(&mut self) {
+        self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        for object in &mut self.active_objects {
+            object.type_byte = 0;
+            object.tile = 0;
+        }
+        if let Some(slot) = self
+            .active_objects
+            .get_mut(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
+        {
+            write_endgame_tableau_placement(
+                slot,
+                endgame_tableau_lord_british_placement(ENDGAME_TABLEAU_LORD_BRITISH_START),
+            );
+        }
     }
 
     pub fn install_endgame_tableau(&mut self) {
@@ -1816,8 +1952,8 @@ mod fade_to_black_tests {
         // fixed-cell glyph, and the victory rite has drawn plenty.
         let gate = endgame_fade_to_black_abort_gate();
         assert!(!gate.is_armed());
-        assert!(!gate.samples_input_at(0));
-        assert!(!gate.samples_input_at(1));
+        assert!(!gate.samples_input_after_copy(1));
+        assert!(!gate.samples_input_after_copy(2));
     }
 
     #[test]

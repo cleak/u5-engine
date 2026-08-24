@@ -4,14 +4,11 @@
 //!
 //! # Provenance
 //!
-//! `systems/text-output.md §9` step 3 says gameplay routines call the
-//! rectangle setter to lay out "the main text area, the status panel,
-//! the input prompt, and so on" but never publishes the values.
-//! The rectangle and line cadence here are measured by black-box
-//! observation of the original (see `gameplay_chrome` for the method);
-//! the pending spec question is `cleak/u5-spec#79`.
+//! `systems/text-output.md §10` publishes the standing window-2 rectangle,
+//! bottom-anchored cursor, command-echo cadence, line-prefix composite,
+//! scrolling behavior, and live input line. `cleak/u5-spec#79` is closed.
 //!
-//! Observed cadence, from a capture with five prior turns: each echoed
+//! Each echoed
 //! command occupies one row prefixed by the ribbon end-cap sprite in
 //! column 24 with text from column 25; each pure output line is
 //! unprefixed from column 24; and one blank row follows each command
@@ -67,6 +64,8 @@ impl MessageLineKind {
 pub struct MessageLogLine {
     /// Row text, never wider than `kind.width()`.
     pub text: String,
+    /// Font-preserving cells aligned with `text`.
+    pub glyphs: Vec<crate::TlkRenderedGlyph>,
     /// How the row is drawn.
     pub kind: MessageLineKind,
 }
@@ -104,7 +103,7 @@ impl GameplayMessageLog {
 
     /// Append an echoed command line.
     pub fn push_command(&mut self, text: &str) {
-        self.push_wrapped(text, MessageLineKind::Command);
+        self.push_wrapped_plain(text, MessageLineKind::Command);
     }
 
     /// Append one or more handler-output lines.
@@ -112,7 +111,14 @@ impl GameplayMessageLog {
         if text.trim().is_empty() {
             return;
         }
-        self.push_wrapped(text, MessageLineKind::Output);
+        self.push_wrapped_plain(text, MessageLineKind::Output);
+    }
+
+    pub fn push_tlk_output(&mut self, text: &str, glyphs: &[crate::TlkRenderedGlyph]) {
+        if text.trim().is_empty() {
+            return;
+        }
+        self.push_wrapped_glyphs(glyphs, MessageLineKind::Output);
     }
 
     /// Close a command turn with the single blank row the original
@@ -129,14 +135,24 @@ impl GameplayMessageLog {
         }
         self.lines.push(MessageLogLine {
             text: String::new(),
+            glyphs: Vec::new(),
             kind: MessageLineKind::Blank,
         });
         self.trim();
     }
 
-    fn push_wrapped(&mut self, text: &str, kind: MessageLineKind) {
-        for row in wrap_to_width(text, kind.width()) {
-            self.lines.push(MessageLogLine { text: row, kind });
+    fn push_wrapped_plain(&mut self, text: &str, kind: MessageLineKind) {
+        let glyphs: Vec<_> = text
+            .bytes()
+            .map(crate::TlkRenderedGlyph::ordinary)
+            .collect();
+        self.push_wrapped_glyphs(&glyphs, kind);
+    }
+
+    fn push_wrapped_glyphs(&mut self, glyphs: &[crate::TlkRenderedGlyph], kind: MessageLineKind) {
+        for glyphs in wrap_rendered_to_width(glyphs, kind.width()) {
+            let text = glyphs.iter().map(|glyph| char::from(glyph.byte)).collect();
+            self.lines.push(MessageLogLine { text, glyphs, kind });
         }
         self.trim();
     }
@@ -159,6 +175,8 @@ pub struct MessageWindowRow {
     pub column: u8,
     /// Row text.
     pub text: String,
+    /// Font-preserving cells aligned with `text`.
+    pub glyphs: Vec<crate::TlkRenderedGlyph>,
     /// Whether the ribbon end-cap sprite is drawn in column 24.
     pub prefixed: bool,
 }
@@ -208,6 +226,8 @@ pub fn message_log_from_entries<'a>(
         if entry.is_command_echo {
             log.end_turn();
             log.push_command(&text);
+        } else if text == entry.text {
+            log.push_tlk_output(&text, &entry.glyphs);
         } else {
             log.push_output(&text);
         }
@@ -242,64 +262,78 @@ pub fn layout_message_window(
             row: (first_row + offset) as u8,
             column: MESSAGE_WINDOW_LEFT + u8::from(prefixed),
             text: line.text.clone(),
+            glyphs: line.glyphs.clone(),
             prefixed,
         });
     }
     if let Some(live) = live_input {
         let text: String = live.chars().take(MESSAGE_WINDOW_PREFIXED_WIDTH).collect();
+        let glyphs = text
+            .bytes()
+            .map(crate::TlkRenderedGlyph::ordinary)
+            .collect();
         rows.push(MessageWindowRow {
             row: MESSAGE_WINDOW_BOTTOM,
             column: MESSAGE_WINDOW_LEFT + 1,
             text,
+            glyphs,
             prefixed: true,
         });
     }
     MessageWindowLayout { rows }
 }
 
-/// Word-wrap `text` to `width` cells, hard-splitting words that cannot
-/// fit. Always yields at least one row for non-empty input.
-fn wrap_to_width(text: &str, width: usize) -> Vec<String> {
+fn wrap_rendered_to_width(
+    glyphs: &[crate::TlkRenderedGlyph],
+    width: usize,
+) -> Vec<Vec<crate::TlkRenderedGlyph>> {
     let mut rows = Vec::new();
     if width == 0 {
         return rows;
     }
-    for paragraph in text.split('\n') {
-        let mut current = String::new();
-        for word in paragraph.split_whitespace() {
-            let mut word = word;
-            while word.chars().count() > width {
-                if !current.is_empty() {
-                    rows.push(std::mem::take(&mut current));
+    let mut buffer = Vec::new();
+    let mut last_break = None;
+    for glyph in glyphs.iter().copied() {
+        match glyph.byte {
+            b' ' => {
+                buffer.push(glyph);
+                last_break = Some(buffer.len() - 1);
+            }
+            b'\n' | b'\r' => {
+                trim_trailing_spaces(&mut buffer);
+                rows.push(std::mem::take(&mut buffer));
+                last_break = None;
+            }
+            _ => {
+                if !buffer.is_empty() && buffer.len() + 1 > width {
+                    if let Some(break_at) = last_break {
+                        let mut surplus = buffer.split_off(break_at);
+                        trim_trailing_spaces(&mut buffer);
+                        rows.push(std::mem::take(&mut buffer));
+                        while surplus.first().is_some_and(|glyph| glyph.byte == b' ') {
+                            surplus.remove(0);
+                        }
+                        buffer = surplus;
+                    } else {
+                        rows.push(std::mem::take(&mut buffer));
+                    }
+                    last_break = buffer.iter().rposition(|glyph| glyph.byte == b' ');
                 }
-                let split: String = word.chars().take(width).collect();
-                rows.push(split);
-                word = &word[char_boundary(word, width)..];
+                buffer.push(glyph);
             }
-            if word.is_empty() {
-                continue;
-            }
-            let needed = word.chars().count() + usize::from(!current.is_empty());
-            if current.chars().count() + needed > width {
-                rows.push(std::mem::take(&mut current));
-            }
-            if !current.is_empty() {
-                current.push(' ');
-            }
-            current.push_str(word);
         }
-        if !current.is_empty() {
-            rows.push(current);
-        }
+    }
+    if !buffer.is_empty() {
+        trim_trailing_spaces(&mut buffer);
+        rows.push(buffer);
     }
     rows
 }
 
-fn char_boundary(text: &str, chars: usize) -> usize {
-    text.char_indices()
-        .nth(chars)
-        .map(|(index, _)| index)
-        .unwrap_or(text.len())
+fn trim_trailing_spaces(glyphs: &mut Vec<crate::TlkRenderedGlyph>) {
+    while glyphs.last().is_some_and(|glyph| glyph.byte == b' ') {
+        glyphs.pop();
+    }
 }
 
 /// True when the message is the engine's own scene-entry narration —
@@ -313,4 +347,36 @@ fn char_boundary(text: &str, chars: usize) -> usize {
 /// tests that assert on scene entry.
 pub fn message_is_scene_entry_narration(message: &str, x: usize, y: usize) -> bool {
     message.starts_with("Entered ") && message.contains(&format!(" at ({x}, {y})."))
+}
+
+#[cfg(test)]
+mod font_tests {
+    use super::*;
+    use crate::{TlkGlyphFont, TlkRenderedGlyph};
+
+    #[test]
+    fn styled_wrap_preserves_runic_cells_across_a_word_break() {
+        let mut glyphs: Vec<_> = b"ab "
+            .iter()
+            .copied()
+            .map(TlkRenderedGlyph::ordinary)
+            .collect();
+        glyphs.extend(b"cdef".iter().copied().map(TlkRenderedGlyph::runic));
+
+        let rows = wrap_rendered_to_width(&glyphs, 4);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0].iter().map(|glyph| glyph.byte).collect::<Vec<_>>(),
+            b"ab"
+        );
+        assert_eq!(
+            rows[1].iter().map(|glyph| glyph.byte).collect::<Vec<_>>(),
+            b"cdef"
+        );
+        assert!(
+            rows[1]
+                .iter()
+                .all(|glyph| glyph.font == TlkGlyphFont::Runic)
+        );
+    }
 }

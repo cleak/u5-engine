@@ -65,8 +65,12 @@ impl PlayState {
         } else {
             Vec::new()
         };
+        let preserve_unlinked_shadowlord = self.summoned_shadowlord.is_some();
         for (slot, object) in self.active_objects.iter_mut().enumerate().skip(1) {
-            if object.is_player() && !linked_npc_active_objects.contains(&slot) {
+            if object.is_player()
+                && !linked_npc_active_objects.contains(&slot)
+                && !preserve_unlinked_shadowlord
+            {
                 object.free();
             }
         }
@@ -250,16 +254,10 @@ impl PlayState {
         match self.area {
             Area::Town { scene, floor } => {
                 let tile = self.grid[y * 32 + x];
-                if is_town_stair_tile(tile) || (80..=87).contains(&tile) {
+                if is_town_stair_tile(tile) || town_klimb_underfoot_intent(tile).is_some() {
                     return Ok(false);
                 }
                 if let Some(game_dir) = game_dir {
-                    if self
-                        .town_exit_tile_at(game_dir, scene, floor, x, y, tile)?
-                        .is_some()
-                    {
-                        return Ok(false);
-                    }
                     if self
                         .town_trap_door_at(game_dir, scene, floor, x, y, tile)?
                         .is_some()
@@ -325,7 +323,6 @@ impl PlayState {
 
     pub fn object_occupies(&self, object: ActiveObject, x: usize, y: usize) -> bool {
         !object.is_empty()
-            && !object.is_player_phantom()
             && self
                 .current_floor()
                 .map(|floor| object.x == x && object.y == y && object.z == floor)
@@ -395,76 +392,88 @@ impl PlayState {
     }
 
     pub fn load_scheduled_npcs(&mut self, slots: &[NpcSlot]) {
-        let removed = self.removed_town_npc_markers_for_current_scene();
+        let removed = self.removed_town_npc_mask_for_current_scene();
         self.npcs = effective_npc_slots(slots)
             .filter(|slot| {
                 slot.type_byte != 0
                     && !(town_npc_activation_mask_eligible(slot.type_byte)
-                        && removed.contains(&slot.slot))
+                        && 1u32
+                            .checked_shl(slot.slot as u32)
+                            .is_some_and(|bit| removed & bit != 0))
             })
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
+        self.apply_persisted_town_npc_mutations();
         self.relink_npc_objects();
     }
 
     pub fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
-        let removed = self.removed_town_npc_markers_for_current_scene();
+        let removed = self.removed_town_npc_mask_for_current_scene();
         self.npcs = effective_npc_slots(slots)
             .filter(|slot| {
                 slot.type_byte != 0
                     && !(town_npc_activation_mask_eligible(slot.type_byte)
-                        && removed.contains(&slot.slot))
+                        && 1u32
+                            .checked_shl(slot.slot as u32)
+                            .is_some_and(|bit| removed & bit != 0))
             })
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
+        self.apply_persisted_town_npc_mutations();
         self.link_npcs_to_existing_active_objects();
     }
 
-    pub fn removed_town_npc_markers_for_current_scene(&self) -> Vec<usize> {
-        let Area::Town { scene, floor } = self.area else {
-            return Vec::new();
+    fn apply_persisted_town_npc_mutations(&mut self) {
+        let Area::Town { scene, .. } = self.area else {
+            return;
         };
-        self.removed_town_npcs
+        for mutation in self
+            .town_npc_mutations
             .iter()
-            .filter_map(|(entry_scene, entry_floor, slot)| {
-                (*entry_scene == scene.byte && *entry_floor == floor).then_some(*slot)
-            })
-            .collect()
-    }
-
-    pub fn mark_removed_town_npc_once(&mut self, scene: Scene, floor: i8, slot: usize) -> bool {
-        let marker = (scene.byte, floor, slot);
-        if self.removed_town_npcs.contains(&marker) {
-            return false;
+            .copied()
+            .filter(|mutation| mutation.scene_byte == scene.byte)
+        {
+            if let Some(npc) = self
+                .npcs
+                .iter_mut()
+                .find(|npc| npc.slot == mutation.npc_slot)
+            {
+                mutation.apply_to(npc);
+            }
         }
-        self.removed_town_npcs.push(marker);
-        true
     }
 
-    pub fn attach_player_phantom_npc(&mut self) {
-        let Area::Town { floor, .. } = self.area else {
+    pub(crate) fn record_town_npc_mutation(&mut self, npc_index: usize) {
+        let Area::Town { scene, .. } = self.area else {
             return;
         };
-        if floor < 0 {
+        let Some(npc) = self.npcs.get(npc_index) else {
             return;
-        }
-        let floor = floor as u8;
-        if let Some(index) = self.npcs.iter().position(|npc| npc.is_player_phantom()) {
-            self.npcs[index].sync_player_phantom_floor(floor, self.clock.hour);
-            self.sync_npc_active_object(index, floor);
-            return;
-        }
-        self.npcs.push(RuntimeNpc::from_player_phantom(
-            self.player.x,
-            self.player.y,
-            floor,
-            self.clock.hour,
-        ));
-        let index = self.npcs.len() - 1;
-        if let Some(slot) = self.match_existing_npc_active_object(index, floor, &[]) {
-            self.npcs[index].active_object = Some(slot);
-        }
-        self.sync_npc_active_object(index, floor);
+        };
+        upsert_town_npc_mutation(
+            &mut self.town_npc_mutations,
+            TownNpcMutation::from_runtime(scene, npc),
+        );
+    }
+
+    pub fn removed_town_npc_mask_for_current_scene(&self) -> u32 {
+        let Area::Town { scene, .. } = self.area else {
+            return 0;
+        };
+        self.removed_town_npc_flags
+            .get(&scene.byte)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn mark_removed_town_npc_once(&mut self, scene: Scene, slot: usize) -> bool {
+        let Some(bit) = 1u32.checked_shl(slot as u32) else {
+            return false;
+        };
+        let mask = self.removed_town_npc_flags.entry(scene.byte).or_insert(0);
+        let was_clear = *mask & bit == 0;
+        *mask |= bit;
+        was_clear
     }
 
     pub fn link_npcs_to_existing_active_objects(&mut self) {
@@ -505,35 +514,6 @@ impl PlayState {
     }
 
     pub fn sync_npc_active_object(&mut self, index: usize, floor: u8) -> bool {
-        if self.npcs[index].is_player_phantom() {
-            let (x, y, z, active_object) = {
-                let npc = &self.npcs[index];
-                (npc.x, npc.y, npc.z, npc.active_object)
-            };
-            let should_link = x < 32 && y < 32 && z == floor;
-            if let Some(slot) = active_object {
-                if !should_link {
-                    self.free_active_object_slot(slot);
-                    self.npcs[index].active_object = None;
-                    return true;
-                }
-                let object = player_phantom_active_object(x, y, z);
-                if let Some(active_object) = self.active_objects.get_mut(slot) {
-                    *active_object = object;
-                } else if let Some(slot) = self.allocate_active_object_slot(object) {
-                    self.npcs[index].active_object = Some(slot);
-                } else {
-                    self.npcs[index].active_object = None;
-                }
-                return true;
-            }
-            if should_link {
-                let object = player_phantom_active_object(x, y, z);
-                self.npcs[index].active_object = self.allocate_active_object_slot(object);
-                return self.npcs[index].active_object.is_some();
-            }
-            return false;
-        }
         let scene_byte = match self.area {
             Area::Town { scene, .. } => scene.byte,
             _ => 0,
@@ -589,11 +569,6 @@ impl PlayState {
         self.clear_non_player_active_objects();
         for index in 0..self.npcs.len() {
             self.npcs[index].active_object = None;
-            if self.npcs[index].is_player_phantom() {
-                self.npcs[index].sync_player_phantom_floor(floor, self.clock.hour);
-                self.sync_npc_active_object(index, floor);
-                continue;
-            }
             let npc = &self.npcs[index];
             if npc.x >= 32
                 || npc.y >= 32
@@ -610,93 +585,69 @@ impl PlayState {
         }
     }
 
-    pub fn town_npc_alarm_state(
-        &self,
-        scene: Scene,
-        floor: i8,
-        npc_slot: usize,
-    ) -> Option<TownNpcAlarmState> {
-        self.town_npc_alarm_states
-            .iter()
-            .find(|marker| {
-                marker.scene_byte == scene.byte
-                    && marker.floor == floor
-                    && marker.npc_slot == npc_slot
-            })
-            .map(|marker| marker.state)
-    }
-
-    pub fn set_town_npc_alarm_state(
-        &mut self,
-        scene: Scene,
-        floor: i8,
-        npc_slot: usize,
-        state: TownNpcAlarmState,
-    ) {
-        if let Some(marker) = self.town_npc_alarm_states.iter_mut().find(|marker| {
-            marker.scene_byte == scene.byte && marker.floor == floor && marker.npc_slot == npc_slot
-        }) {
-            marker.state = state;
-            return;
-        }
-        self.town_npc_alarm_states.push(TownNpcAlarmMarker {
-            scene_byte: scene.byte,
-            floor,
-            npc_slot,
-            state,
-        });
-    }
-
     pub fn town_alarm_sweep(
         &mut self,
-        scene: Scene,
-        floor: i8,
-        trigger_slot: Option<usize>,
+        _scene: Scene,
+        _floor: i8,
+        _trigger_slot: Option<usize>,
     ) -> (usize, usize) {
-        let mut fortified = 0;
-        let mut fleeing = 0;
-        let npc_slots: Vec<(usize, u8, bool)> = self
+        let non_special_count = self
             .npcs
             .iter()
-            .filter(|npc| npc.z as i8 == floor)
-            .map(|npc| (npc.slot, npc.type_byte, npc.is_player_phantom()))
-            .collect();
-        for (slot, type_byte, player_phantom) in npc_slots {
-            let state = if player_phantom
-                || trigger_slot == Some(slot)
-                || town_npc_type_fortifies_on_alarm(type_byte)
-                || !town_alarm_rolls_flee(scene.byte, floor, slot, type_byte, self.turn)
-            {
-                fortified += 1;
-                TownNpcAlarmState::Fortified
+            .filter(|npc| {
+                !matches!(
+                    npc.type_byte,
+                    SHADOWLORD_ACTOR_TILE | TOWN_NPC_ALARM_LICH_TYPE | TOWN_NPC_ALARM_GUARD_TYPE
+                )
+            })
+            .count();
+        let draws = (0..non_special_count)
+            .map(|_| self.random_range_u8(0, u8::MAX))
+            .collect::<Vec<_>>();
+        self.town_alarm_sweep_with_draws(&draws)
+    }
+
+    pub fn town_alarm_sweep_with_draws(&mut self, draws: &[u8]) -> (usize, usize) {
+        let mut pursued = 0;
+        let mut fled = 0;
+        let mut draws = draws.iter().copied();
+        for index in 0..self.npcs.len() {
+            let type_byte = self.npcs[index].type_byte;
+            if matches!(
+                type_byte,
+                SHADOWLORD_ACTOR_TILE | TOWN_NPC_ALARM_LICH_TYPE | TOWN_NPC_ALARM_GUARD_TYPE
+            ) {
+                self.npcs[index].force_town_pursuit();
+                self.record_town_npc_mutation(index);
+                pursued += 1;
             } else {
-                fleeing += 1;
-                TownNpcAlarmState::Fleeing
-            };
-            self.set_town_npc_alarm_state(scene, floor, slot, state);
+                let roll = draws
+                    .next()
+                    .expect("one alarm draw is required for every non-special occupied actor");
+                if roll <= 127 && self.npcs[index].force_town_flight() {
+                    self.record_town_npc_mutation(index);
+                    fled += 1;
+                }
+            }
         }
-        (fortified, fleeing)
+        (pursued, fled)
     }
 
     pub fn advance_npc_schedules(&mut self) {
-        let Area::Town { scene, floor } = self.area else {
+        let Area::Town { floor, .. } = self.area else {
             return;
         };
         let floor = floor as u8;
         let mut moved = false;
         for index in 0..self.npcs.len() {
-            if self.npcs[index].is_player_phantom() {
-                self.npcs[index].sync_player_phantom_floor(floor, self.clock.hour);
-                self.sync_npc_active_object(index, floor);
-                continue;
-            }
             let wp = waypoint_for_hour(&self.npcs[index].schedule, self.clock.hour);
             let (tx, ty, tz) = self.npcs[index].waypoint_position(wp);
-            let alarm_state = self.town_npc_alarm_state(scene, floor as i8, self.npcs[index].slot);
-            if alarm_state == Some(TownNpcAlarmState::Pacified) {
-                continue;
-            }
-            if alarm_state == Some(TownNpcAlarmState::Fleeing) && self.npcs[index].z == floor {
+            let raw_ai = self.npcs[index].schedule[NPC_SCHEDULE_AI_OFFSET + wp];
+            let behavior = npc_ai_behavior(raw_ai);
+            if behavior == Some(NpcAiBehavior::Retreating)
+                && self.npcs[index].z == floor
+                && self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS
+            {
                 if let Some((nx, ny)) = self.town_npc_flee_step(index, floor) {
                     self.npcs[index].x = nx;
                     self.npcs[index].y = ny;
@@ -705,24 +656,16 @@ impl PlayState {
                 }
                 continue;
             }
-            let raw_ai = self.npcs[index].schedule[NPC_SCHEDULE_AI_OFFSET + wp];
-            let behavior = if alarm_state == Some(TownNpcAlarmState::Fortified) {
-                if town_npc_type_guard_like(self.npcs[index].type_byte) {
-                    Some(NpcAiBehavior::GuardOrBlock)
-                } else {
-                    Some(NpcAiBehavior::ApproachAndAttack)
-                }
-            } else {
-                npc_ai_behavior(raw_ai)
-            };
             if self.npcs[index].z == floor {
                 if let Some(behavior) = behavior {
-                    if behavior.raises_attack_event()
-                        || behavior.raises_guard_event()
-                        || matches!(behavior, NpcAiBehavior::FollowAtDistance)
-                    {
+                    if behavior.raises_attack_event() || behavior.raises_guard_event() {
+                        let unconditional_chase = matches!(
+                            behavior,
+                            NpcAiBehavior::ReservedEngage | NpcAiBehavior::RandomChase
+                        );
                         if !self.town_npc_adjacent_to_player(index)
-                            && self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS
+                            && (unconditional_chase
+                                || self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS)
                         {
                             if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
                                 self.npcs[index].x = nx;
@@ -1349,17 +1292,4 @@ fn npc_step_from_direction_code(start: (usize, usize), code: u8) -> Option<(usiz
     let nx = start.0 as isize + dx as isize;
     let ny = start.1 as isize + dy as isize;
     ((0..32).contains(&nx) && (0..32).contains(&ny)).then_some((nx as usize, ny as usize))
-}
-
-fn town_npc_type_fortifies_on_alarm(type_byte: u8) -> bool {
-    town_npc_type_guard_like(type_byte) || matches!(type_byte, PLAYER_NPC_SENTINEL_TYPE | 0x00)
-}
-
-fn town_alarm_rolls_flee(scene_byte: u8, floor: i8, slot: usize, type_byte: u8, turn: u64) -> bool {
-    let seed = u64::from(scene_byte)
-        ^ ((floor as i64 as u64) << 8)
-        ^ ((slot as u64) << 16)
-        ^ ((type_byte as u64) << 24)
-        ^ turn.rotate_left(7);
-    seed.count_ones() % 2 == 0
 }

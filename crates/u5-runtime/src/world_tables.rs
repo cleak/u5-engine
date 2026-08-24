@@ -8,6 +8,8 @@ pub struct WorldLocationEntry {
     pub x: usize,
     pub y: usize,
     pub target: PlayTarget,
+    /// Retired sidecar compatibility column. Public issue #94 established
+    /// that town entry ignores this value and always writes row 30.
     pub town_entry_y: Option<usize>,
     pub expected_tile: Option<u8>,
 }

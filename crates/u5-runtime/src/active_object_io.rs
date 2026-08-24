@@ -278,6 +278,9 @@ pub const fn active_object_eviction_phase_is_off_screen(phase: u8) -> bool {
 /// conflated", so the two names are kept apart deliberately even
 /// though the mechanisms are neighbours.
 pub const ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW: u8 = 5;
+/// `active-objects.md §4`: largest adjusted unsigned-axis value that remains
+/// on-screen after adding [`ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW`].
+pub const ACTIVE_OBJECT_EVICTION_ONSCREEN_ADJUSTED_MAX: u8 = 10;
 
 /// `active-objects.md §4`: returns `true` when an active-object slot
 /// at `(slot_x, slot_y)` falls outside the square on-screen window of
@@ -286,33 +289,25 @@ pub const ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW: u8 = 5;
 /// Each axis is tested separately; failing either axis is off-screen.
 ///
 /// Coordinates are the record's stored X/Y bytes (`§3`) and the
-/// separation is formed in **unsigned eight-bit arithmetic**, so it
-/// wraps naturally with the 256-cell coordinate space instead of
-/// needing a map-seam special case. Signed or wider arithmetic
-/// mis-handles a candidate one cell across the seam from the player,
-/// reporting it ~255 cells away and evicting it early.
-///
-/// Spec gap: `§4` states the five-cell window but not its
-/// arithmetic. The unsigned-byte form is carried over from the
-/// prune pass, whose arithmetic `§8.1` does state, on the grounds
-/// that both tests compare stored coordinate bytes on the same
-/// 256-cell torus. If `§4` is ever given an explicit arithmetic that
-/// differs, this is the line to change.
+/// Per public issue `cleak/u5-spec#107`, each axis computes
+/// `(candidate - player + 5) mod 256 <= 10`. This makes wrapped
+/// separations `-5..=5` inclusive on-screen and six cells off-screen.
+/// The caller passes the current player globals, not slot zero or a
+/// viewport origin. Only candidate X/Y participate; floor is ignored.
 pub const fn active_object_eviction_off_screen(
     slot_x: u8,
     slot_y: u8,
     player_x: u8,
     player_y: u8,
 ) -> bool {
-    !window_half_extent_contains(
-        slot_x,
-        player_x,
-        ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW,
-    ) || !window_half_extent_contains(
-        slot_y,
-        player_y,
-        ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW,
-    )
+    slot_x
+        .wrapping_sub(player_x)
+        .wrapping_add(ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW)
+        > ACTIVE_OBJECT_EVICTION_ONSCREEN_ADJUSTED_MAX
+        || slot_y
+            .wrapping_sub(player_y)
+            .wrapping_add(ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW)
+            > ACTIVE_OBJECT_EVICTION_ONSCREEN_ADJUSTED_MAX
 }
 
 /// One axis of a square window **centred** on `centre` with the given
@@ -367,6 +362,25 @@ impl ActiveObjectPassOrder {
     }
 }
 
+/// `active-objects.md §8.1`: exact type-byte classifier for the
+/// overworld per-turn prune pass.
+///
+/// Only byte 0 participates. Byte 1 (`tile`) may have diverged from
+/// the type and must not be consulted or used as a fallback.
+pub const fn active_object_type_is_prunable(type_byte: u8) -> bool {
+    matches!(
+        type_byte,
+        0x2C..=0x2F | 0x80..=0xB3 | 0xB8..=0xE7 | 0xEC..=0xFF
+    )
+}
+
+/// `active-objects.md §8`: orthogonal adjacency is consumed before any
+/// outdoor ranged class test. Inputs are the wrapped signed offsets from the
+/// active object to the party.
+pub const fn outdoor_offsets_are_orthogonally_adjacent(dx: i32, dy: i32) -> bool {
+    (dx == 0 && (dy == -1 || dy == 1)) || (dy == 0 && (dx == -1 || dx == 1))
+}
+
 /// `active-objects.md §8.1`: the overworld per-turn prune-pass
 /// position test. Returns `true` when a slot's stored `(slot_x,
 /// slot_y)` falls outside the loaded window and the slot must be
@@ -374,15 +388,15 @@ impl ActiveObjectPassOrder {
 ///
 /// The pass "compares the slot's stored X and Y against the current
 /// **scroll base** - the top-left corner of the loaded window - and
-/// keeps the slot only when **both** differences fall within
-/// thirty-two. Failing either axis releases the slot."
+/// keeps the slot only when **both** differences are in `0..=31`.
+/// Failing either axis releases the slot."
 ///
 /// Three properties are contract and are each a place implementations
 /// predictably go wrong:
 ///
 /// * **Square window, not a radius.** The two axes are tested
 ///   separately and independently against
-///   [`ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT`]. No distance, no
+///   [`ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT`] (`31`). No distance, no
 ///   hypotenuse, no disc -- a disc prunes the window corners that the
 ///   original keeps.
 /// * **Measured from the scroll base**, the window's origin *corner*,
@@ -396,9 +410,9 @@ impl ActiveObjectPassOrder {
 ///
 /// Two further contract points live at the call site rather than here,
 /// because they are about *which* slots reach this test: slot zero is
-/// never prunable, and a slot whose type byte does not classify as a
-/// prunable kind is skipped **before** the position test runs. See
-/// `PlayState::prune_far_overworld_objects`.
+/// never prunable, and a slot whose type byte fails
+/// [`active_object_type_is_prunable`] is skipped **before** the
+/// position test runs. See `PlayState::prune_far_overworld_objects`.
 pub const fn active_object_should_prune(
     slot_x: u8,
     slot_y: u8,
@@ -504,6 +518,14 @@ pub struct SavedOolMirrorWriteCounts {
     pub under_ool: usize,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SavedOolSaveIoCounts {
+    pub brit_ool_reads: usize,
+    pub under_ool_reads: usize,
+    pub brit_ool_writes: usize,
+    pub under_ool_writes: usize,
+}
+
 pub fn refresh_saved_ool_mirrors_for_load(
     game_dir: &Path,
     needs_underworld_disk_swap: bool,
@@ -544,21 +566,45 @@ pub fn write_saved_ool_mirrors(game_dir: &Path, bytes: &[u8]) -> io::Result<()> 
     Ok(())
 }
 
-pub fn write_saved_ool_mirrors_for_save(
+/// `save-load.md §5.2` steps 4-5: Q-save reads `UNDER.OOL`
+/// first and `BRIT.OOL` second into the canonical underworld/surface
+/// staging halves. It may write the underworld bytes back unchanged,
+/// but never writes `BRIT.OOL`. The returned byte image is ordered as
+/// `SAVED.OOL`: Britannia first, Underworld second.
+pub fn stage_saved_ool_for_save(
     game_dir: &Path,
-    bytes: &[u8],
-    entry_disk_prompt_mode: u8,
-) -> io::Result<SavedOolMirrorWriteCounts> {
-    write_saved_ool_mirrors(game_dir, bytes)?;
-    let mut counts = SavedOolMirrorWriteCounts {
-        brit_ool: 1,
-        under_ool: 1,
+    entry_required_disk: RequiredDisk,
+) -> io::Result<(Vec<u8>, SavedOolSaveIoCounts)> {
+    let underworld = read_ool_plane_for_save(game_dir, UNDER_OOL_FILENAME)?;
+    let britannia = read_ool_plane_for_save(game_dir, BRIT_OOL_FILENAME)?;
+    let mut counts = SavedOolSaveIoCounts {
+        brit_ool_reads: 1,
+        under_ool_reads: 1,
+        brit_ool_writes: 0,
+        under_ool_writes: 0,
     };
-    if save_flow_double_writes_underworld(entry_disk_prompt_mode) {
-        write_disk_file(&game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
-        counts.under_ool += 1;
+    if save_flow_writes_underworld_mirror(entry_required_disk) {
+        write_disk_file(&game_dir.join(UNDER_OOL_FILENAME), &underworld)?;
+        counts.under_ool_writes = 1;
     }
-    Ok(counts)
+    let mut saved_ool = Vec::with_capacity(SAVED_OOL_LEN);
+    saved_ool.extend_from_slice(&britannia);
+    saved_ool.extend_from_slice(&underworld);
+    Ok((saved_ool, counts))
+}
+
+fn read_ool_plane_for_save(game_dir: &Path, file_name: &str) -> io::Result<Vec<u8>> {
+    let bytes = read_disk_file(&game_dir.join(file_name))?;
+    if bytes.len() != OOL_PLANE_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{file_name} must be {OOL_PLANE_LEN} bytes for save staging, got {}",
+                bytes.len()
+            ),
+        ));
+    }
+    Ok(bytes)
 }
 
 pub fn read_saved_ool_bytes(game_dir: &Path) -> io::Result<Vec<u8>> {

@@ -1,4 +1,5 @@
-//! Britannia/underworld chunk decoders, BRIT.DAT chunk index finder, map analysis (analyze_map, harvest_location_markers, etc.), pathfinding helpers.
+//! Britannia/underworld chunk decoders, BRIT.DAT chunk index finder, map analysis
+//! (including NPC-start-marker harvesting), and pathfinding helpers.
 
 use std::collections::{HashMap, VecDeque};
 use std::io;
@@ -132,7 +133,7 @@ pub fn decode_britannia_map_bytes(bytes: &[u8], table: &[u8]) -> io::Result<Vec<
 }
 
 pub fn analyze_map(scene: Scene, floor: usize, grid: &[u8]) -> MapStats {
-    let LocationMarkers { npc_markers } = harvest_location_markers(grid);
+    let LocationNpcStartMarkers { npc_markers } = harvest_location_npc_start_markers(grid);
     let beacon_sources = harvest_location_beacon_sources(grid);
     let mut door_count = 0;
     let mut stair_count = 0;
@@ -142,7 +143,7 @@ pub fn analyze_map(scene: Scene, floor: usize, grid: &[u8]) -> MapStats {
     for y in 0..32 {
         for x in 0..32 {
             let tile = grid[y * 32 + x];
-            if (96..=103).contains(&tile) {
+            if town_command_door_tile(tile) {
                 door_count += 1;
             }
             if (80..=87).contains(&tile) {
@@ -177,7 +178,7 @@ pub fn analyze_map(scene: Scene, floor: usize, grid: &[u8]) -> MapStats {
 /// without appeal to any code — the byte "appears in zero town, castle and
 /// keep floors", and "a player town-entry spawn marker that exists in no
 /// town is not a spawn marker".
-pub fn harvest_location_markers(grid: &[u8]) -> LocationMarkers {
+pub fn harvest_location_npc_start_markers(grid: &[u8]) -> LocationNpcStartMarkers {
     let mut npc_markers = Vec::new();
     for x in 0..32 {
         for y in 0..32 {
@@ -186,7 +187,7 @@ pub fn harvest_location_markers(grid: &[u8]) -> LocationMarkers {
             }
         }
     }
-    LocationMarkers { npc_markers }
+    LocationNpcStartMarkers { npc_markers }
 }
 
 /// `formats/location-dat.md §6`: "companion passes may then rewrite
@@ -199,18 +200,12 @@ pub fn harvest_location_markers(grid: &[u8]) -> LocationMarkers {
 /// positions into resident coordinate *words* at load time, and the beacon
 /// never re-reads the map afterwards", so "a later pass that rewrites the
 /// cell therefore cannot switch the source off".
-pub fn scrub_location_entry_markers(grid: &mut [u8]) {
+pub fn scrub_location_npc_start_markers(grid: &mut [u8]) {
     for tile in grid {
-        if is_location_entry_marker(*tile) {
+        if is_npc_start_marker(*tile) {
             *tile = LOCATION_MARKER_CLEANUP_TILE;
         }
     }
-}
-
-/// The marker bytes the runtime tile buffer replaces on load. Since the
-/// `0x2A` withdrawal this is exactly the NPC start-marker pair.
-pub fn is_location_entry_marker(tile: u8) -> bool {
-    is_npc_start_marker(tile)
 }
 
 pub fn is_npc_start_marker(tile: u8) -> bool {
@@ -273,12 +268,9 @@ pub fn find_path(
 }
 
 pub fn door_probe(grid: &[u8]) -> Option<((usize, usize), bool)> {
-    let idx = grid.iter().position(|tile| (96..=103).contains(tile))?;
+    let idx = grid.iter().position(|tile| town_command_door_tile(*tile))?;
     let mut live = grid.to_vec();
-    // The exact original open-door tile is intentionally not asserted here.
-    // This smoke probe exercises the spec's tile-id rewrite model without
-    // publishing raw map data or pinning unresolved door variants.
-    live[idx] = 16;
+    live[idx] = TOWN_DOOR_CLEARED_TILE;
     Some(((idx % 32, idx / 32), is_probe_walkable(live[idx])))
 }
 

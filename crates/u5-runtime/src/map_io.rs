@@ -406,7 +406,7 @@ pub fn load_town_runtime_floor_with_beacon_sources(
 }
 
 pub fn normalize_town_runtime_floor(grid: &mut [u8], hour: u8) {
-    scrub_location_entry_markers(grid);
+    scrub_location_npc_start_markers(grid);
     if is_town_night_hour(hour) {
         apply_dawn_dusk_substitution(grid);
     }

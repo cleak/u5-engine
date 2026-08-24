@@ -76,6 +76,13 @@ pub const RTV_ACTOR_TRANSPARENT_PIXEL: u8 = 0;
 /// run at the command's tail.
 pub const RTV_CELL_EFFECT_STEPS: u8 = 15;
 pub const RTV_CELL_EFFECT_FINAL_TICKS: u8 = 2;
+/// `u5-spec#117`: carry-set single-cell convergence writes one complete
+/// 16x16 cell, checking input through a full preview tick after every eight
+/// writes except the final group.
+pub const RTV_SINGLE_CELL_WRITES: u16 = 256;
+pub const RTV_SINGLE_CELL_WRITES_PER_CHECKPOINT: u16 = 8;
+pub const RTV_SINGLE_CELL_CHECKPOINTS: u8 = 31;
+pub const RTV_SINGLE_CELL_GALOIS_TAP: u8 = 0xb8;
 /// `#54`: the `0x0B` wipe pairs are `n = 0..4`, and the command runs
 /// three ticks at its tail. There is **no** fixed eight-tick wait: that
 /// was retracted, and the `0x0B` percussive speaker effect is not a
@@ -505,6 +512,7 @@ impl ReturnToViewPreviewState {
                     1,
                     "Return-to-View temporary actor draw counter overflowed",
                 );
+                self.advance_preview_ticks(u32::from(RTV_SINGLE_CELL_CHECKPOINTS));
             }
             ReturnToViewCommand::RestartStream => {
                 return Ok(ReturnToViewControl::Restart);
@@ -671,8 +679,8 @@ pub enum ReturnToViewFrameKind {
     PreviewTick,
     CellEffectStep { step: u8 },
     CellEffectFinalTick { tick: u8 },
-    TemporaryActorDraw,
-    TemporaryActorDrawOverBacking,
+    TemporaryActorDraw { completed_writes: u16 },
+    TemporaryActorDrawOverBacking { completed_writes: u16 },
     FixedWipeRectangle { step: u8 },
     FixedWipeActorDraw,
     FixedWait { tick: u8 },
@@ -682,7 +690,8 @@ pub enum ReturnToViewFrameKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReturnToViewActorDrawSource {
-    TemporaryActorTile,
+    OverlayTile,
+    BackingTerrainTile,
     CurrentActorTile,
 }
 
@@ -1163,11 +1172,11 @@ fn append_return_to_view_playback_frames(
             // `#54`: `y` is a plane row (`0..3`); the `+ 7` screen row
             // offset belongs to the renderer.
             let screen_y = y;
-            for step in 0..RTV_CELL_EFFECT_STEPS {
+            for step in 1..=RTV_CELL_EFFECT_STEPS {
                 push_return_to_view_cell_effect_frame(
                     frames,
                     command_index,
-                    before_ticks + u32::from(step) + 1,
+                    before_ticks + u32::from(step),
                     ReturnToViewFrameKind::CellEffectStep { step },
                     before_state,
                     x,
@@ -1194,11 +1203,12 @@ fn append_return_to_view_playback_frames(
             let (x, y) = before_state
                 .cached_effect_cell
                 .expect("Return-to-View close-cell playback has no cached open-cell coordinate");
-            for step in 0..RTV_CELL_EFFECT_STEPS {
+            for offset in 0..RTV_CELL_EFFECT_STEPS {
+                let step = RTV_CELL_EFFECT_STEPS - offset;
                 push_return_to_view_cell_effect_frame(
                     frames,
                     command_index,
-                    before_ticks + u32::from(step) + 1,
+                    before_ticks + u32::from(offset) + 1,
                     ReturnToViewFrameKind::CellEffectStep { step },
                     before_state,
                     x,
@@ -1222,25 +1232,25 @@ fn append_return_to_view_playback_frames(
             }
         }
         ReturnToViewCommand::TemporaryActorDraw { slot } => {
-            push_return_to_view_actor_draw_frame(
+            push_return_to_view_actor_draw_frames(
                 frames,
                 command_index,
                 before_ticks,
-                ReturnToViewFrameKind::TemporaryActorDraw,
-                state,
+                before_state,
                 slot,
                 ReturnToViewActorDrawControlSource::OriginalActorTile,
+                strip_load_tick,
             );
         }
         ReturnToViewCommand::TemporaryActorDrawOverBacking { slot } => {
-            push_return_to_view_actor_draw_frame(
+            push_return_to_view_actor_draw_frames(
                 frames,
                 command_index,
                 before_ticks,
-                ReturnToViewFrameKind::TemporaryActorDrawOverBacking,
-                state,
+                before_state,
                 slot,
                 ReturnToViewActorDrawControlSource::BackingMapTile,
+                strip_load_tick,
             );
         }
         ReturnToViewCommand::FixedWipeAndActorDraw { slot, .. } => {
@@ -1303,6 +1313,7 @@ fn push_return_to_view_cell_effect_frame(
         .expect("Return-to-View cell-effect playback coordinate is outside preview buffer");
     state.terrain[index] = tile;
     state.backing[index] = tile;
+    state.cached_effect_cell = Some((x, y));
     state.set_playback_tick(elapsed_title_ticks, strip_load_tick);
     frames.push(ReturnToViewPlaybackFrame {
         command_index,
@@ -1332,16 +1343,15 @@ fn push_return_to_view_frame(
     });
 }
 
-fn push_return_to_view_actor_draw_frame(
+fn push_return_to_view_actor_draw_frames(
     frames: &mut Vec<ReturnToViewPlaybackFrame>,
     command_index: usize,
-    elapsed_title_ticks: u32,
-    kind: ReturnToViewFrameKind,
+    before_ticks: u32,
     state: &ReturnToViewPreviewState,
     slot: u8,
     control_source: ReturnToViewActorDrawControlSource,
+    strip_load_tick: u32,
 ) {
-    let mut state = state.clone();
     let slot_index = usize::from(slot);
     let actor = *state
         .actors
@@ -1351,30 +1361,46 @@ fn push_return_to_view_actor_draw_frame(
     let backing_index = preview_cell_index_checked(actor.x, actor.y)
         .expect("Return-to-View actor draw coordinate is outside preview buffer");
     let backing_tile = state.backing[backing_index];
-    state.actors[slot_index].tile0 = RTV_TEMPORARY_ACTOR_TILE;
-    state.actors[slot_index].tile1 = RTV_TEMPORARY_ACTOR_TILE;
-    frames.push(ReturnToViewPlaybackFrame {
-        command_index,
-        elapsed_title_ticks,
-        kind,
-        state,
-        actor_draw: Some(ReturnToViewActorDraw {
-            slot,
-            tile: RTV_TEMPORARY_ACTOR_TILE,
-            x: actor.x,
-            y: actor.y,
-            screen_y: return_to_view_actor_screen_y(actor.y),
-            source: ReturnToViewActorDrawSource::TemporaryActorTile,
-            control: match control_source {
-                ReturnToViewActorDrawControlSource::OriginalActorTile => {
-                    ReturnToViewActorDrawControl::OriginalActorTile(original_tile)
-                }
-                ReturnToViewActorDrawControlSource::BackingMapTile => {
-                    ReturnToViewActorDrawControl::BackingMapTile(backing_tile)
-                }
-            },
-        }),
-    });
+    for group in 1..=RTV_SINGLE_CELL_WRITES / RTV_SINGLE_CELL_WRITES_PER_CHECKPOINT {
+        let completed_writes = group * RTV_SINGLE_CELL_WRITES_PER_CHECKPOINT;
+        let elapsed_title_ticks =
+            before_ticks + u32::from(group.min(u16::from(RTV_SINGLE_CELL_CHECKPOINTS)));
+        let mut frame_state = state.clone();
+        frame_state.actors[slot_index].tile0 = RTV_TEMPORARY_ACTOR_TILE;
+        frame_state.actors[slot_index].tile1 = RTV_TEMPORARY_ACTOR_TILE;
+        frame_state.terrain[backing_index] = 0;
+        frame_state.overlay[backing_index] = RTV_TEMPORARY_ACTOR_TILE;
+        frame_state.set_playback_tick(elapsed_title_ticks, strip_load_tick);
+        let (kind, source, tile, control) = match control_source {
+            ReturnToViewActorDrawControlSource::OriginalActorTile => (
+                ReturnToViewFrameKind::TemporaryActorDraw { completed_writes },
+                ReturnToViewActorDrawSource::OverlayTile,
+                original_tile,
+                ReturnToViewActorDrawControl::OriginalActorTile(original_tile),
+            ),
+            ReturnToViewActorDrawControlSource::BackingMapTile => (
+                ReturnToViewFrameKind::TemporaryActorDrawOverBacking { completed_writes },
+                ReturnToViewActorDrawSource::BackingTerrainTile,
+                backing_tile,
+                ReturnToViewActorDrawControl::BackingMapTile(backing_tile),
+            ),
+        };
+        frames.push(ReturnToViewPlaybackFrame {
+            command_index,
+            elapsed_title_ticks,
+            kind,
+            state: frame_state,
+            actor_draw: Some(ReturnToViewActorDraw {
+                slot,
+                tile,
+                x: actor.x,
+                y: actor.y,
+                screen_y: return_to_view_actor_screen_y(actor.y),
+                source,
+                control,
+            }),
+        });
+    }
 }
 
 fn push_return_to_view_fixed_actor_draw_frame(
@@ -1475,12 +1501,46 @@ pub fn render_return_to_view_playback_frame_over(
     starting_title_tick: u32,
     already_painted: Option<&TileViewport>,
 ) -> io::Result<TileViewport> {
-    render_return_to_view_state_viewport(
+    let mut viewport = render_return_to_view_state_viewport(
         &frame.state,
         atlas,
         return_to_view_animation_frame(starting_title_tick, frame.elapsed_title_ticks),
         already_painted,
-    )
+    )?;
+    match frame.kind {
+        ReturnToViewFrameKind::CellEffectStep { step } => {
+            let (x, y) = frame.state.cached_effect_cell.ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Return-to-View cell-effect frame has no cached target cell",
+                )
+            })?;
+            blit_return_to_view_cell_effect_raster(
+                &mut viewport,
+                atlas,
+                usize::from(x),
+                usize::from(y),
+                step,
+            )?;
+        }
+        ReturnToViewFrameKind::TemporaryActorDraw { completed_writes }
+        | ReturnToViewFrameKind::TemporaryActorDrawOverBacking { completed_writes } => {
+            let actor_draw = frame.actor_draw.as_ref().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Return-to-View convergence frame has no actor-draw metadata",
+                )
+            })?;
+            blit_return_to_view_single_cell_prefix(
+                &mut viewport,
+                atlas,
+                actor_draw,
+                completed_writes,
+            )?;
+        }
+        _ => {}
+    }
+    Ok(viewport)
 }
 
 /// `#54` preview tick: every tick advances the animated-tile frame
@@ -1559,7 +1619,11 @@ fn render_return_to_view_state_viewport(
 
     // Drawable actors are the helper that owns their cells; they paint
     // on top with the sprite's transparent pixel left alone.
-    for actor in state.actors.iter().filter(|actor| actor.drawable) {
+    for actor in state.actors.iter().filter(|actor| {
+        actor.drawable
+            && actor.tile0 != RTV_TEMPORARY_ACTOR_TILE
+            && actor.tile1 != RTV_TEMPORARY_ACTOR_TILE
+    }) {
         let x = usize::from(actor.x);
         let y = usize::from(actor.y);
         if x >= RTV_STRIP_VISIBLE_COLUMNS || y >= RTV_STRIP_VISIBLE_ROWS {
@@ -1582,6 +1646,117 @@ fn render_return_to_view_state_viewport(
         )?;
     }
     Ok(viewport)
+}
+
+/// `u5-spec#117`: exact carry-set `0x66` permutation. The corner is written
+/// first, followed by every nonzero eight-bit Galois state using tap `0xB8`.
+pub fn return_to_view_single_cell_write_coordinates() -> [(u8, u8); 256] {
+    let mut coordinates = [(0u8, 0u8); 256];
+    let mut state = 1u8;
+    let mut write = 1usize;
+    while write < coordinates.len() {
+        coordinates[write] = (state >> 4, state & 0x0f);
+        let old_low_bit = state & 1;
+        state >>= 1;
+        if old_low_bit != 0 {
+            state ^= RTV_SINGLE_CELL_GALOIS_TAP;
+        }
+        write += 1;
+    }
+    debug_assert_eq!(state, 1);
+    coordinates
+}
+
+fn blit_return_to_view_cell_effect_raster(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    cell_x: usize,
+    cell_y: usize,
+    step: u8,
+) -> io::Result<()> {
+    if !(1..=RTV_CELL_EFFECT_STEPS).contains(&step) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Return-to-View cell-effect step {step} is outside 1..=15"),
+        ));
+    }
+    let base = atlas
+        .tile_pixels(usize::from(RTV_CLOSE_EFFECT_FINAL_TILE))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "tile atlas is missing base tile 0x05",
+            )
+        })?;
+    let portal = atlas
+        .tile_pixels(usize::from(RTV_OPEN_EFFECT_FINAL_TILE))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "tile atlas is missing portal tile 0xDC",
+            )
+        })?;
+    let split = TILE_ATLAS_SIDE - usize::from(step);
+    let dst_x = cell_x * TILE_ATLAS_SIDE;
+    let dst_y = cell_y * TILE_ATLAS_SIDE;
+    for y in 0..TILE_ATLAS_SIDE {
+        let (source, source_y) = if y < split {
+            (base, y)
+        } else {
+            (portal, y - split)
+        };
+        let source_start = source_y * TILE_ATLAS_SIDE;
+        let destination_start = (dst_y + y) * viewport.width + dst_x;
+        viewport.pixels[destination_start..destination_start + TILE_ATLAS_SIDE]
+            .copy_from_slice(&source[source_start..source_start + TILE_ATLAS_SIDE]);
+    }
+    Ok(())
+}
+
+fn blit_return_to_view_single_cell_prefix(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    actor_draw: &ReturnToViewActorDraw,
+    completed_writes: u16,
+) -> io::Result<()> {
+    if completed_writes == 0 || completed_writes > RTV_SINGLE_CELL_WRITES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "Return-to-View convergence prefix {completed_writes} is outside 1..={RTV_SINGLE_CELL_WRITES}"
+            ),
+        ));
+    }
+    let tile = match actor_draw.source {
+        ReturnToViewActorDrawSource::OverlayTile => {
+            RTV_OVERLAY_TILE_BASE + usize::from(actor_draw.tile)
+        }
+        ReturnToViewActorDrawSource::BackingTerrainTile => usize::from(actor_draw.tile),
+        ReturnToViewActorDrawSource::CurrentActorTile => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "fixed actor draw cannot drive single-cell convergence",
+            ));
+        }
+    };
+    let source = atlas.tile_pixels(tile).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("tile atlas is missing convergence source tile {tile}"),
+        )
+    })?;
+    let destination_x = usize::from(actor_draw.x) * TILE_ATLAS_SIDE;
+    let destination_y = usize::from(actor_draw.y) * TILE_ATLAS_SIDE;
+    for &(x, y) in return_to_view_single_cell_write_coordinates()
+        .iter()
+        .take(usize::from(completed_writes))
+    {
+        let x = usize::from(x);
+        let y = usize::from(y);
+        viewport.pixels[(destination_y + y) * viewport.width + destination_x + x] =
+            source[y * TILE_ATLAS_SIDE + x];
+    }
+    Ok(())
 }
 
 /// Blit one 512-entry atlas tile index into a preview cell.
@@ -2073,19 +2248,27 @@ mod tests {
         let playback = run_return_to_view_playback_until_restart(&strips, &script, 96).unwrap();
         let effect_index = preview_cell_index(2, 1).unwrap();
 
-        let open_step = playback
+        let open_steps = playback
             .frames
             .iter()
-            .find(|frame| {
-                frame.command_index == 1
-                    && matches!(
-                        frame.kind,
-                        ReturnToViewFrameKind::CellEffectStep { step: 0 }
-                    )
+            .filter_map(|frame| {
+                (frame.command_index == 1)
+                    .then_some(frame)
+                    .and_then(|frame| {
+                        if let ReturnToViewFrameKind::CellEffectStep { step } = frame.kind {
+                            Some((step, frame))
+                        } else {
+                            None
+                        }
+                    })
             })
-            .expect("open effect first step");
+            .collect::<Vec<_>>();
         assert_eq!(
-            open_step.state.terrain[effect_index],
+            open_steps.iter().map(|(step, _)| *step).collect::<Vec<_>>(),
+            (1..=RTV_CELL_EFFECT_STEPS).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            open_steps[0].1.state.terrain[effect_index],
             RTV_EFFECT_SENTINEL_TILE
         );
 
@@ -2105,19 +2288,30 @@ mod tests {
             RTV_OPEN_EFFECT_FINAL_TILE
         );
 
-        let close_step = playback
+        let close_steps = playback
             .frames
             .iter()
-            .find(|frame| {
-                frame.command_index == 2
-                    && matches!(
-                        frame.kind,
-                        ReturnToViewFrameKind::CellEffectStep { step: 0 }
-                    )
+            .filter_map(|frame| {
+                (frame.command_index == 2)
+                    .then_some(frame)
+                    .and_then(|frame| {
+                        if let ReturnToViewFrameKind::CellEffectStep { step } = frame.kind {
+                            Some((step, frame))
+                        } else {
+                            None
+                        }
+                    })
             })
-            .expect("close effect first step");
+            .collect::<Vec<_>>();
         assert_eq!(
-            close_step.state.terrain[effect_index],
+            close_steps
+                .iter()
+                .map(|(step, _)| *step)
+                .collect::<Vec<_>>(),
+            (1..=RTV_CELL_EFFECT_STEPS).rev().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            close_steps[0].1.state.terrain[effect_index],
             RTV_EFFECT_SENTINEL_TILE
         );
 
@@ -2175,10 +2369,10 @@ mod tests {
         let playback = run_return_to_view_playback_until_restart(&strips, &script, 64).unwrap();
 
         assert!(playback.run.report.restart_seen);
-        // 2 preview ticks + 8 for the wipe (five steps, three tail
-        // ticks) + 17 for the cell effect + 7 for `0x0D` = 34. The
-        // retracted eight-tick wait used to inflate this to 36.
-        assert_eq!(playback.run.report.total_ticks, 34);
+        // 2 ordinary ticks + 31 convergence checkpoints + 8 for the wipe
+        // (five steps, three tail ticks) + 17 for the cell effect + 7 for
+        // `0x0D` = 65.
+        assert_eq!(playback.run.report.total_ticks, 65);
         assert_eq!(
             playback
                 .frames
@@ -2228,18 +2422,26 @@ mod tests {
                 .frames
                 .last()
                 .map(|frame| frame.elapsed_title_ticks),
-            Some(34)
+            Some(65)
         );
         assert_eq!(playback.run.state.actors[0].x, 2);
 
         let temporary = playback
             .frames
             .iter()
-            .find(|frame| frame.kind == ReturnToViewFrameKind::TemporaryActorDraw)
+            .find(|frame| {
+                matches!(
+                    frame.kind,
+                    ReturnToViewFrameKind::TemporaryActorDraw {
+                        completed_writes: 8
+                    }
+                )
+            })
             .expect("temporary actor draw frame");
+        assert_eq!(temporary.actor_draw.as_ref().unwrap().tile, 3);
         assert_eq!(
-            temporary.actor_draw.as_ref().unwrap().tile,
-            RTV_TEMPORARY_ACTOR_TILE
+            temporary.actor_draw.as_ref().unwrap().source,
+            ReturnToViewActorDrawSource::OverlayTile
         );
         assert_eq!(temporary.actor_draw.as_ref().unwrap().screen_y, 8);
         assert_eq!(
@@ -2247,6 +2449,25 @@ mod tests {
             ReturnToViewActorDrawControl::OriginalActorTile(3)
         );
         assert_eq!(temporary.state.actors[0].tile0, RTV_TEMPORARY_ACTOR_TILE);
+        assert_eq!(temporary.state.terrain[1 + RTV_STRIP_VISIBLE_COLUMNS], 0);
+        assert_eq!(
+            temporary.state.overlay[1 + RTV_STRIP_VISIBLE_COLUMNS],
+            RTV_TEMPORARY_ACTOR_TILE
+        );
+        let convergence_frames = playback
+            .frames
+            .iter()
+            .filter_map(|frame| match frame.kind {
+                ReturnToViewFrameKind::TemporaryActorDraw { completed_writes } => {
+                    Some((completed_writes, frame.elapsed_title_ticks))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(convergence_frames.len(), 32);
+        assert_eq!(convergence_frames[0], (8, 3));
+        assert_eq!(convergence_frames[30], (248, 33));
+        assert_eq!(convergence_frames[31], (256, 33));
 
         let fixed_actor = playback
             .frames
@@ -2285,7 +2506,14 @@ mod tests {
         let frame = playback
             .frames
             .iter()
-            .find(|frame| frame.kind == ReturnToViewFrameKind::TemporaryActorDrawOverBacking)
+            .find(|frame| {
+                matches!(
+                    frame.kind,
+                    ReturnToViewFrameKind::TemporaryActorDrawOverBacking {
+                        completed_writes: 256
+                    }
+                )
+            })
             .expect("temporary actor backing frame");
 
         assert_eq!(
@@ -2297,6 +2525,7 @@ mod tests {
             return_to_view_actor_screen_y(0)
         );
         assert_eq!(playback.run.state.actors[0].tile0, 0x44);
+        assert_eq!(playback.run.report.total_ticks, 31);
     }
 
     /// A full 512-entry atlas where tile `n` is painted solid with the
@@ -2315,6 +2544,7 @@ mod tests {
             depth: crate::TileGraphicsDepth::Ega16,
             pixels,
             dungeon_billboards: None,
+            dungeon_sprites: None,
         }
     }
 
@@ -2563,6 +2793,7 @@ mod tests {
             depth: crate::TileGraphicsDepth::Ega16,
             pixels,
             dungeon_billboards: None,
+            dungeon_sprites: None,
         };
 
         let (viewport, _report) =
@@ -2571,5 +2802,153 @@ mod tests {
         let x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
         assert_eq!(viewport.pixel(x, 0), Some(7));
         assert_eq!(viewport.pixel(x + 1, 0), Some(5));
+    }
+
+    #[test]
+    fn single_cell_write_order_is_the_exact_corner_plus_b8_permutation() {
+        let coordinates = return_to_view_single_cell_write_coordinates();
+        assert_eq!(coordinates[0], (0, 0));
+        assert_eq!(
+            &coordinates[1..=8],
+            &[
+                (0, 1),
+                (11, 8),
+                (5, 12),
+                (2, 14),
+                (1, 7),
+                (11, 3),
+                (14, 1),
+                (12, 8)
+            ]
+        );
+        assert_eq!(
+            &coordinates[248..],
+            &[
+                (7, 1),
+                (8, 0),
+                (4, 0),
+                (2, 0),
+                (1, 0),
+                (0, 8),
+                (0, 4),
+                (0, 2)
+            ]
+        );
+        let mut seen = [false; 256];
+        for &(x, y) in &coordinates {
+            assert!(x < 16 && y < 16);
+            let index = usize::from(x) * 16 + usize::from(y);
+            assert!(!seen[index], "coordinate ({x},{y}) visited twice");
+            seen[index] = true;
+        }
+        assert!(seen.into_iter().all(|value| value));
+    }
+
+    #[test]
+    fn cell_effect_raster_splices_portal_rows_into_base_and_writes_zero_opaquely() {
+        let mut atlas = rtv_test_atlas();
+        let tile_start = |tile: usize| tile * TILE_ATLAS_SIDE * TILE_ATLAS_SIDE;
+        for y in 0..TILE_ATLAS_SIDE {
+            let base = tile_start(usize::from(RTV_CLOSE_EFFECT_FINAL_TILE)) + y * TILE_ATLAS_SIDE;
+            atlas.pixels[base..base + TILE_ATLAS_SIDE].fill(y as u8);
+            let portal = tile_start(usize::from(RTV_OPEN_EFFECT_FINAL_TILE)) + y * TILE_ATLAS_SIDE;
+            atlas.pixels[portal..portal + TILE_ATLAS_SIDE].fill((15 - y) as u8);
+        }
+        // Portal row zero's first pixel proves index zero overwrites rather
+        // than acting as transparency.
+        atlas.pixels[tile_start(usize::from(RTV_OPEN_EFFECT_FINAL_TILE))] = 0;
+        let mut viewport = TileViewport {
+            depth: atlas.depth,
+            cells_wide: RTV_STRIP_VISIBLE_COLUMNS,
+            cells_high: RTV_STRIP_VISIBLE_ROWS,
+            width: RTV_PREVIEW_PIXEL_WIDTH,
+            height: RTV_PREVIEW_PIXEL_HEIGHT,
+            pixels: vec![9; RTV_PREVIEW_PIXEL_WIDTH * RTV_PREVIEW_PIXEL_HEIGHT],
+        };
+
+        blit_return_to_view_cell_effect_raster(&mut viewport, &atlas, 2, 1, 1).unwrap();
+        let origin_x = 2 * TILE_ATLAS_SIDE;
+        let origin_y = TILE_ATLAS_SIDE;
+        assert_eq!(viewport.pixel(origin_x, origin_y + 14), Some(14));
+        assert_eq!(viewport.pixel(origin_x, origin_y + 15), Some(0));
+        assert_eq!(viewport.pixel(origin_x + 1, origin_y + 15), Some(15));
+
+        blit_return_to_view_cell_effect_raster(&mut viewport, &atlas, 2, 1, 15).unwrap();
+        assert_eq!(viewport.pixel(origin_x, origin_y), Some(0));
+        assert_eq!(viewport.pixel(origin_x, origin_y + 1), Some(0));
+        assert_eq!(viewport.pixel(origin_x + 1, origin_y + 1), Some(15));
+        assert_eq!(viewport.pixel(origin_x + 1, origin_y + 15), Some(1));
+    }
+
+    #[test]
+    fn temporary_actor_convergence_renders_each_exact_opaque_prefix() {
+        let mut strips = rtv_filled_strips();
+        strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0x05;
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::SetActor {
+                    slot: 0,
+                    tile: 3,
+                    x: RTV_REVEAL_CENTRE_COLUMN as u8,
+                    y: 0,
+                },
+                ReturnToViewCommand::TemporaryActorDraw { slot: 0 },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+        let mut atlas = rtv_test_atlas();
+        let source_tile = RTV_OVERLAY_TILE_BASE + 3;
+        let source_start = source_tile * TILE_ATLAS_SIDE * TILE_ATLAS_SIDE;
+        for index in 0..TILE_ATLAS_SIDE * TILE_ATLAS_SIDE {
+            atlas.pixels[source_start + index] = (index % 16) as u8;
+        }
+        let playback = run_return_to_view_playback_until_restart(&strips, &script, 16).unwrap();
+        let frames = playback
+            .frames
+            .iter()
+            .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::TemporaryActorDraw { .. }))
+            .collect::<Vec<_>>();
+        assert_eq!(frames.len(), 32);
+        let previous = TileViewport {
+            depth: atlas.depth,
+            cells_wide: RTV_STRIP_VISIBLE_COLUMNS,
+            cells_high: RTV_STRIP_VISIBLE_ROWS,
+            width: RTV_PREVIEW_PIXEL_WIDTH,
+            height: RTV_PREVIEW_PIXEL_HEIGHT,
+            pixels: vec![9; RTV_PREVIEW_PIXEL_WIDTH * RTV_PREVIEW_PIXEL_HEIGHT],
+        };
+        let first =
+            render_return_to_view_playback_frame_over(frames[0], &atlas, 0, Some(&previous))
+                .unwrap();
+        let cell_x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
+        let order = return_to_view_single_cell_write_coordinates();
+        for &(x, y) in &order[..8] {
+            let expected = atlas.pixels[source_start + usize::from(y) * 16 + usize::from(x)];
+            assert_eq!(
+                first.pixel(cell_x + usize::from(x), usize::from(y)),
+                Some(expected)
+            );
+        }
+        let (untouched_x, untouched_y) = order[8];
+        assert_eq!(
+            first.pixel(cell_x + usize::from(untouched_x), usize::from(untouched_y)),
+            Some(9)
+        );
+        // Corner source index is zero, proving convergence writes zero
+        // opaquely over the prior value 9.
+        assert_eq!(first.pixel(cell_x, 0), Some(0));
+
+        let final_frame =
+            render_return_to_view_playback_frame_over(frames[31], &atlas, 0, Some(&previous))
+                .unwrap();
+        for y in 0..TILE_ATLAS_SIDE {
+            for x in 0..TILE_ATLAS_SIDE {
+                assert_eq!(
+                    final_frame.pixel(cell_x + x, y),
+                    Some(atlas.pixels[source_start + y * TILE_ATLAS_SIDE + x])
+                );
+            }
+        }
     }
 }

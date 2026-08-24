@@ -42,9 +42,12 @@
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-            quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+            removed_town_npc_flags: HashMap::new(),
+            talk_branch_flags: HashMap::new(),
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
+            word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+            shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
             moral_standing: 0,
             toll_progress: 0,
             natural_moongate_counter: 0,
@@ -54,22 +57,25 @@
             light_spell_counter: 0,
             wind: WindState::default(),
             wind_save_byte: 0,
-            timing_status: TimingStatusTag::default(),
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
             fortunes_of_war: 0,
             camp_cooldown: 0,
+            camp_month_cookie: 0,
             active_player: None,
             combat_round_counter: 0,
+            combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
             transport,
             facing: None,
             pending_vehicle: None,
+            pending_vehicle_save: PendingVehicleSaveState::default(),
             inn_registry: Vec::new(),
             blackthorn_story: BlackthornStoryState::default(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: Some(Vec::new()),
+            town_npc_mutations: Vec::new(),
             save_template_source: SaveTemplateSource::PreferSavedGame,
         };
 
@@ -131,6 +137,14 @@
             }
         );
         assert_eq!(state.active_objects.len(), 3);
+        assert_eq!(
+            state.pending_vehicle_save,
+            PendingVehicleSaveState {
+                x: 12,
+                y: 21,
+                class_byte: 0,
+            }
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -141,7 +155,16 @@
             target: PlayTarget::World(WorldPlane::Underworld),
             floor: -1,
             start: Some((10, 20)),
-            pending_vehicle: Some(PendingVehicleAcquisition::Skiff { x: 12, y: 21 }),
+            pending_vehicle: Some(PendingVehicleAcquisition::Skiff {
+                x: 12,
+                y: 21,
+                aux3: 0x15,
+            }),
+            pending_vehicle_save: PendingVehicleSaveState {
+                x: 12,
+                y: 21,
+                class_byte: 0x55,
+            },
             saved_active_objects: Some(Vec::new()),
             ..PlayOptions::default()
         };
@@ -158,10 +181,60 @@
                 z: WorldPlane::Underworld.save_floor(),
                 phase: STEADY_PHASE,
                 aux1: 0,
-                aux3: 0,
+                aux3: 0x15,
+            }
+        );
+        assert_eq!(
+            state.pending_vehicle_save,
+            PendingVehicleSaveState {
+                x: 12,
+                y: 21,
+                class_byte: 0,
             }
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn pending_vehicle_packed_classes_decode_without_normalization() {
+        assert_eq!(
+            PendingVehicleSaveState {
+                x: 9,
+                y: 7,
+                class_byte: 0x3f,
+            }
+            .acquisition(),
+            None
+        );
+        assert_eq!(
+            PendingVehicleSaveState {
+                x: 9,
+                y: 7,
+                class_byte: 0x7f,
+            }
+            .acquisition(),
+            Some(PendingVehicleAcquisition::Skiff {
+                x: 9,
+                y: 7,
+                aux3: 0x3f,
+            })
+        );
+        let packed_frigate = PendingVehicleSaveState {
+            x: 9,
+            y: 7,
+            class_byte: 0xc2,
+        };
+        let frigate = packed_frigate.acquisition().unwrap();
+        assert_eq!(
+            frigate,
+            PendingVehicleAcquisition::Frigate {
+                x: 9,
+                y: 7,
+                skiffs: 0x42,
+            }
+        );
+        assert_eq!(PendingVehicleSaveState::from_acquisition(frigate), packed_frigate);
+        assert_eq!(frigate.active_object(0).aux3, 2);
     }
 
     #[test]
@@ -171,7 +244,11 @@
             target: PlayTarget::World(WorldPlane::Underworld),
             floor: -1,
             start: Some((10, 20)),
-            pending_vehicle: Some(PendingVehicleAcquisition::Skiff { x: 12, y: 21 }),
+            pending_vehicle: Some(PendingVehicleAcquisition::Skiff {
+                x: 12,
+                y: 21,
+                aux3: 0,
+            }),
             saved_active_objects: Some(vec![
                 ActiveObject {
                     type_byte: 170,
@@ -492,6 +569,16 @@
                     );
                     assert_eq!(state.area, Area::Town { scene, floor: 0 });
                     assert_eq!(
+                        (state.player.x, state.player.y),
+                        (LOCATION_DEFAULT_ENTRY_X, LOCATION_DEFAULT_ENTRY_Y),
+                        "{} did not use the fixed public #94 entry cell",
+                        scene.key()
+                    );
+                    assert_eq!(
+                        (state.active_objects[0].x, state.active_objects[0].y),
+                        (LOCATION_DEFAULT_ENTRY_X, LOCATION_DEFAULT_ENTRY_Y)
+                    );
+                    assert_eq!(
                         state.return_world.as_ref().map(|ret| (
                             ret.plane, ret.x, ret.y
                         )),
@@ -666,7 +753,8 @@
             skiffs: 1,
         };
         state.player.transport = transport;
-        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.sail_cadence = 1;
         state.sail_stall_pending = true;
         state.sync_player_object();
@@ -678,7 +766,7 @@
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
         assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
@@ -689,18 +777,18 @@
         assert_eq!(
             state.return_world.as_ref().map(|ret| (
                 ret.transport,
-                ret.timing_status,
                 ret.sail_cadence,
                 ret.sail_stall_pending
             )),
-            Some((transport, TimingStatusTag::HalfTime, 1, true))
+            Some((transport, 1, true))
         );
+        assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert!(state.message.contains("Entered CASTLE:0 from BRITANNIA"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn world_enter_uses_optional_town_entry_y_column() {
+    fn world_enter_ignores_retired_town_entry_y_column() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         fs::write(
@@ -716,10 +804,10 @@
         );
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (15, 7));
+        assert_eq!((state.player.x, state.player.y), (15, 30));
         assert_eq!(
             (state.active_objects[0].x, state.active_objects[0].y),
-            (15, 7)
+            (15, 30)
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -776,7 +864,8 @@
             tile: 176,
         };
         state.player.transport = transport;
-        state.timing_status = TimingStatusTag::NoMinuteLight;
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 10;
         state.sail_cadence = 1;
         state.sail_stall_pending = true;
         state.sync_player_object();
@@ -790,19 +879,22 @@
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.player.facing, Direction::East);
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(
+            state.active_effect_timing_status(),
+            TimingStatusTag::NoMinuteLight
+        );
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
         assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
         assert_eq!(
             state.return_world.as_ref().map(|ret| (
                 ret.transport,
-                ret.timing_status,
                 ret.sail_cadence,
                 ret.sail_stall_pending
             )),
-            Some((transport, TimingStatusTag::NoMinuteLight, 1, true))
+            Some((transport, 1, true))
         );
+        assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
         assert!(state.message.contains("Entered DUNGEON:0"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -961,7 +1053,7 @@ CASTLE:0 6
     }
 
     #[test]
-    fn location_entry_y_table_seeds_direct_town_start() {
+    fn retired_location_entry_y_table_does_not_override_fixed_entry() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         fs::write(dir.join(LOCATION_ENTRY_Y_TABLE_FILE), "CASTLE:0 7\n").unwrap();
@@ -998,9 +1090,12 @@ CASTLE:0 6
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-            quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+            removed_town_npc_flags: HashMap::new(),
+            talk_branch_flags: HashMap::new(),
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
+            word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+            shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
             moral_standing: 0,
             toll_progress: 0,
             natural_moongate_counter: 0,
@@ -1010,31 +1105,34 @@ CASTLE:0 6
             light_spell_counter: 0,
             wind: WindState::default(),
             wind_save_byte: 0,
-            timing_status: TimingStatusTag::default(),
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
             fortunes_of_war: 0,
             camp_cooldown: 0,
+            camp_month_cookie: 0,
             active_player: None,
             combat_round_counter: 0,
+            combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
             transport: TransportState::Foot,
             facing: None,
             pending_vehicle: None,
+            pending_vehicle_save: PendingVehicleSaveState::default(),
             inn_registry: Vec::new(),
             blackthorn_story: BlackthornStoryState::default(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: None,
+            town_npc_mutations: Vec::new(),
             save_template_source: SaveTemplateSource::PreferSavedGame,
         };
 
         let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
-        assert_eq!((state.player.x, state.player.y), (15, 7));
+        assert_eq!((state.player.x, state.player.y), (15, 30));
         assert_eq!(
             (state.active_objects[0].x, state.active_objects[0].y),
-            (15, 7)
+            (15, 30)
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -1095,34 +1193,39 @@ CASTLE:0 8
 
         let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
-        assert!(state.message.contains("Shadowlord entry: Falsehood appears"));
+        assert!(state.message.contains("air of Falsehood"));
+        assert_eq!(state.resident_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
+        let resident = state
+            .npcs
+            .iter()
+            .find(|npc| npc.type_byte == SHADOWLORD_ACTOR_TILE)
+            .unwrap();
+        assert_eq!(resident.slot, 31);
         let object = state
             .active_objects
             .iter()
             .copied()
-            .find(|object| {
-                PlayState::shadowlord_name_encounter_index(*object)
-                    == Some(SHADOWLORD_FALSEHOOD_INDEX)
-            })
+            .skip(1)
+            .find(|object| PlayState::is_shadowlord_actor(*object))
             .unwrap();
         assert_eq!(
             object,
             ActiveObject {
                 type_byte: SHADOWLORD_OBJECT_TILE_BASE,
                 tile: SHADOWLORD_OBJECT_TILE_BASE,
-                x: 5,
-                y: 6,
+                x: SHADOWLORD_TOWN_INSTALL_X,
+                y: SHADOWLORD_TOWN_INSTALL_ROWS[0],
                 z: 0,
-                phase: active_object_phase_from_direction(Direction::North, 0),
-                aux1: SHADOWLORD_FALSEHOOD_INDEX as u8,
-                aux3: 1,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
             }
         );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn town_entry_preserving_reentry_does_not_duplicate_shadowlord_object() {
+    fn town_entry_preserving_reentry_records_host_without_duplicate_shadowlord_actor() {
         let dir = debug_game_dir();
         let scene = Scene::new(1).unwrap();
         fs::write(dir.join("TOWNE.DAT"), open_grid()).unwrap();
@@ -1131,12 +1234,12 @@ CASTLE:0 8
         let existing = ActiveObject {
             type_byte: SHADOWLORD_OBJECT_TILE_BASE,
             tile: SHADOWLORD_OBJECT_TILE_BASE,
-            x: 5,
-            y: 6,
+            x: SHADOWLORD_TOWN_INSTALL_X,
+            y: SHADOWLORD_TOWN_INSTALL_ROWS[0],
             z: 0,
             phase: STEADY_PHASE,
-            aux1: SHADOWLORD_FALSEHOOD_INDEX as u8,
-            aux3: 1,
+            aux1: 0,
+            aux3: 0,
         };
         let mut options = PlayOptions::default();
         options.target = PlayTarget::Town(scene);
@@ -1150,20 +1253,375 @@ CASTLE:0 8
 
         let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
-        assert!(!state.message.contains("Shadowlord entry"));
+        assert!(state.message.contains("air of Falsehood"));
+        assert_eq!(state.resident_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(
             state
                 .active_objects
                 .iter()
                 .copied()
-                .filter(|object| {
-                    PlayState::shadowlord_name_encounter_index(*object)
-                        == Some(SHADOWLORD_FALSEHOOD_INDEX)
-                })
+                .skip(1)
+                .filter(|object| PlayState::is_shadowlord_actor(*object))
                 .count(),
             1
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_entry_row_four_skips_shadowlord_host_and_install() {
+        let mut state = test_state(open_grid(), 5, SHADOWLORD_TOWN_ENTRY_SKIP_Y);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_MOONGLOW).unwrap(),
+            floor: 0,
+        };
+        state.shadowlord_hideouts = [
+            SCENE_MOONGLOW,
+            SHADOWLORD_VANQUISHED,
+            SHADOWLORD_VANQUISHED,
+        ];
+
+        assert_eq!(state.install_shadowlord_entry_encounter(), None);
+        assert_eq!(state.resident_shadowlord, None);
+        assert!(state
+            .active_objects
+            .iter()
+            .copied()
+            .skip(1)
+            .all(|object| !PlayState::is_shadowlord_actor(object)));
+        assert!(state
+            .npcs
+            .iter()
+            .all(|npc| npc.type_byte != SHADOWLORD_ACTOR_TILE));
+    }
+
+    #[test]
+    fn resident_shadowlord_uses_highest_free_npc_index_and_ordinary_actor_slot() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_BRITAIN).unwrap(),
+            floor: 0,
+        };
+        state.shadowlord_hideouts = [
+            SCENE_BRITAIN,
+            SHADOWLORD_VANQUISHED,
+            SHADOWLORD_VANQUISHED,
+        ];
+        for slot in (1..OOL_SLOTS).filter(|slot| *slot != 30) {
+            state.npcs.push(RuntimeNpc::from_slot(
+                &NpcSlot {
+                    slot,
+                    type_byte: 1,
+                    dialog_id: 0,
+                    schedule: [0; NPC_SCHEDULE_RECORD_LEN],
+                    name: None,
+                },
+                state.clock.hour,
+            ));
+        }
+
+        assert_eq!(
+            state.install_shadowlord_entry_encounter(),
+            Some((Some(1), SHADOWLORD_FALSEHOOD_INDEX))
+        );
+        let resident = state
+            .npcs
+            .iter()
+            .find(|npc| npc.type_byte == SHADOWLORD_ACTOR_TILE)
+            .unwrap();
+        assert_eq!(resident.slot, 30);
+        assert_eq!(resident.active_object, Some(1));
+        assert_eq!(
+            (resident.x, resident.y, resident.z),
+            (SHADOWLORD_TOWN_INSTALL_X, SHADOWLORD_TOWN_INSTALL_ROWS[1], 0)
+        );
+    }
+
+    #[test]
+    fn resident_shadowlord_records_host_but_rejects_second_actor() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_JHELOM).unwrap(),
+            floor: 0,
+        };
+        state.shadowlord_hideouts = [
+            SCENE_JHELOM,
+            SHADOWLORD_VANQUISHED,
+            SHADOWLORD_VANQUISHED,
+        ];
+        state.active_objects.push(ActiveObject {
+            type_byte: SHADOWLORD_ACTOR_TILE,
+            tile: SHADOWLORD_ACTOR_TILE,
+            x: 7,
+            y: 7,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.install_shadowlord_entry_encounter(),
+            Some((None, SHADOWLORD_FALSEHOOD_INDEX))
+        );
+        assert_eq!(state.resident_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
+        assert!(state
+            .npcs
+            .iter()
+            .all(|npc| npc.type_byte != SHADOWLORD_ACTOR_TILE));
+        assert_eq!(
+            state
+                .active_objects
+                .iter()
+                .copied()
+                .skip(1)
+                .filter(|object| PlayState::is_shadowlord_actor(*object))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn resident_shadowlord_overwrites_npc_index_31_when_roster_is_full() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_MINOC).unwrap(),
+            floor: 0,
+        };
+        state.shadowlord_hideouts = [
+            SCENE_MINOC,
+            SHADOWLORD_VANQUISHED,
+            SHADOWLORD_VANQUISHED,
+        ];
+        for slot in 1..OOL_SLOTS {
+            state.npcs.push(RuntimeNpc::from_slot(
+                &NpcSlot {
+                    slot,
+                    type_byte: 1,
+                    dialog_id: 0,
+                    schedule: [0; NPC_SCHEDULE_RECORD_LEN],
+                    name: None,
+                },
+                state.clock.hour,
+            ));
+        }
+
+        assert_eq!(
+            state.install_shadowlord_entry_encounter(),
+            Some((Some(1), SHADOWLORD_FALSEHOOD_INDEX))
+        );
+        assert_eq!(state.npcs.len(), OOL_SLOTS - 1);
+        let slot_31 = state.npcs.iter().find(|npc| npc.slot == 31).unwrap();
+        assert_eq!(slot_31.type_byte, SHADOWLORD_ACTOR_TILE);
+        assert_eq!(slot_31.active_object, Some(1));
+        assert_eq!(
+            (slot_31.x, slot_31.y, slot_31.z),
+            (SHADOWLORD_TOWN_INSTALL_X, SHADOWLORD_TOWN_INSTALL_ROWS[4], 0)
+        );
+    }
+
+    #[test]
+    fn resident_hatred_sweep_reproduces_fixed_slot_four_defect() {
+        let mut state = test_state(open_grid(), 5, 5);
+        let scheduled = |slot, type_byte| NpcSlot {
+            slot,
+            type_byte,
+            dialog_id: 0x20 + slot as u8,
+            schedule: [1, 2, 3, 5, 6, 7, 5, 6, 7, 0, 0, 0, 6, 12, 18, 22],
+            name: None,
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            scheduled(1, 0x20),
+            scheduled(2, 0x80),
+            scheduled(4, TOWN_NPC_ORDINARY_TYPE_FIRST),
+        ]);
+        let mut draws = [1; NPC_SLOTS_PER_SUB_MAP];
+        draws[1] = 0;
+        draws[2] = 0;
+
+        assert_eq!(
+            state.apply_resident_shadowlord_npc_sweep_with_draws(
+                SHADOWLORD_HATRED_INDEX,
+                &draws
+            ),
+            (2, 0)
+        );
+        let low = state.npcs.iter().find(|npc| npc.slot == 1).unwrap();
+        assert_eq!(&low.schedule[..3], &[6, 6, 6]);
+        assert_eq!(&low.schedule[12..16], &[0, 0, 0, 0]);
+        assert_eq!(low.dialog_id, TOWN_NPC_BRUSHOFF_DIALOG_ID);
+        let high = state.npcs.iter().find(|npc| npc.slot == 2).unwrap();
+        assert_eq!(&high.schedule[..3], &[7, 7, 7]);
+        assert_eq!(high.dialog_id, TOWN_NPC_BRUSHOFF_DIALOG_ID);
+
+        let mut rejected = test_state(open_grid(), 5, 5);
+        rejected.load_scheduled_npcs(&[
+            scheduled(1, 0x20),
+            scheduled(4, TOWN_NPC_ORDINARY_TYPE_FIRST - 1),
+        ]);
+        let before = rejected.npcs.clone();
+        assert_eq!(
+            rejected.apply_resident_shadowlord_npc_sweep_with_draws(
+                SHADOWLORD_HATRED_INDEX,
+                &[0; NPC_SLOTS_PER_SUB_MAP]
+            ),
+            (0, 0)
+        );
+        assert_eq!(rejected.npcs, before);
+    }
+
+    #[test]
+    fn resident_cowardice_writes_cowering_dialogue_even_when_flight_rejects() {
+        let mut state = test_state(open_grid(), 5, 5);
+        let scheduled = |slot, type_byte| NpcSlot {
+            slot,
+            type_byte,
+            dialog_id: 0x30 + slot as u8,
+            schedule: [1, 2, 3, 5, 6, 7, 5, 6, 7, 0, 0, 0, 6, 12, 18, 22],
+            name: None,
+        };
+        state.load_scheduled_npcs(&[
+            scheduled(1, 0x20),
+            scheduled(2, TOWN_NPC_ORDINARY_TYPE_LAST),
+            scheduled(4, TOWN_NPC_ORDINARY_TYPE_FIRST),
+        ]);
+        let mut draws = [1; NPC_SLOTS_PER_SUB_MAP];
+        draws[1] = 0;
+        draws[2] = 0;
+
+        assert_eq!(
+            state.apply_resident_shadowlord_npc_sweep_with_draws(
+                SHADOWLORD_COWARDICE_INDEX,
+                &draws
+            ),
+            (0, 2)
+        );
+        let rejected = state.npcs.iter().find(|npc| npc.slot == 1).unwrap();
+        assert_eq!(&rejected.schedule[..3], &[1, 2, 3]);
+        assert_eq!(rejected.dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
+        let fled = state.npcs.iter().find(|npc| npc.slot == 2).unwrap();
+        assert_eq!(&fled.schedule[..3], &[3, 3, 3]);
+        assert_eq!(&fled.schedule[12..16], &[6, 12, 18, 22]);
+        assert_eq!(fled.dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
+    }
+
+    #[test]
+    fn resident_sweep_consumes_all_thirty_two_draws_before_other_tests() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.load_scheduled_npcs(&[NpcSlot {
+            slot: 4,
+            type_byte: TOWN_NPC_ORDINARY_TYPE_FIRST - 1,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        }]);
+        state.prng_state = 0x1234;
+        let mut expected_state = state.prng_state;
+        for _ in 0..NPC_SLOTS_PER_SUB_MAP {
+            let _ = u5_prng_range_u16(&mut expected_state, 0, 1);
+        }
+
+        assert_eq!(
+            state.apply_resident_shadowlord_npc_sweep(SHADOWLORD_HATRED_INDEX),
+            (0, 0)
+        );
+        assert_eq!(state.prng_state, expected_state);
+        let before_falsehood = state.prng_state;
+        assert_eq!(
+            state.apply_resident_shadowlord_npc_sweep(SHADOWLORD_FALSEHOOD_INDEX),
+            (0, 0)
+        );
+        assert_eq!(state.prng_state, before_falsehood);
+    }
+
+    #[test]
+    fn resident_shadowlord_rows_cover_all_eight_towns() {
+        for (scene, expected_row) in (SCENE_MOONGLOW..=SCENE_NEW_MAGINCIA)
+            .zip(SHADOWLORD_TOWN_INSTALL_ROWS)
+        {
+            assert_eq!(shadowlord_town_install_row(scene), Some(expected_row));
+        }
+        assert_eq!(shadowlord_town_install_row(SCENE_EAST_BRITANNY), None);
+    }
+
+    #[test]
+    fn shadowlord_blight_is_day_seeded_and_replaces_state_with_host_seed() {
+        let mut grid = vec![
+            SHADOWLORD_BLIGHT_STANDING_CROP_TILE,
+            0x01,
+            SHADOWLORD_BLIGHT_FRUIT_TREE_TILE,
+            SHADOWLORD_BLIGHT_STANDING_CROP_TILE,
+            SHADOWLORD_BLIGHT_FRUIT_TREE_TILE,
+        ];
+        let mut expected = grid.clone();
+        let mut expected_state = 17u16;
+        let mut expected_rewritten = 0;
+        for cell in &mut expected {
+            let replacement = match *cell {
+                SHADOWLORD_BLIGHT_STANDING_CROP_TILE => SHADOWLORD_BLIGHT_PLOWED_PATCH_TILE,
+                SHADOWLORD_BLIGHT_FRUIT_TREE_TILE => SHADOWLORD_BLIGHT_HOLLOW_STUMP_TILE,
+                _ => continue,
+            };
+            if u5_prng_range_u16(&mut expected_state, 0, SHADOWLORD_BLIGHT_ROLL_HIGH) != 0 {
+                *cell = replacement;
+                expected_rewritten += 1;
+            }
+        }
+        let mut actual_state = 0xFFFF;
+
+        assert_eq!(
+            apply_shadowlord_blight(&mut grid, 17, &mut actual_state, 0x093D),
+            expected_rewritten
+        );
+        assert_eq!(grid, expected);
+        assert_eq!(actual_state, 0x093D);
+    }
+
+    #[test]
+    fn rejected_resident_install_still_runs_blight_first() {
+        let mut state = test_state(
+            vec![SHADOWLORD_BLIGHT_STANDING_CROP_TILE; TOWN_GRID_BYTES],
+            5,
+            5,
+        );
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_TRINSIC).unwrap(),
+            floor: 0,
+        };
+        state.clock.day = 11;
+        state.shadowlord_hideouts = [
+            SCENE_TRINSIC,
+            SHADOWLORD_VANQUISHED,
+            SHADOWLORD_VANQUISHED,
+        ];
+        state.active_objects.push(ActiveObject {
+            type_byte: SHADOWLORD_ACTOR_TILE,
+            tile: SHADOWLORD_ACTOR_TILE,
+            x: 1,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let mut expected = vec![SHADOWLORD_BLIGHT_STANDING_CROP_TILE; TOWN_GRID_BYTES];
+        let mut ignored_state = 0;
+        apply_shadowlord_blight(&mut expected, 11, &mut ignored_state, 0);
+
+        assert_eq!(
+            state.install_shadowlord_entry_encounter(),
+            Some((None, SHADOWLORD_FALSEHOOD_INDEX))
+        );
+        assert_eq!(state.grid, expected);
+        assert!(state.visibility_dirty);
+        assert!(state.prng_state <= PRNG_HOST_CLOCK_MASK);
     }
 
     #[test]
@@ -1173,7 +1631,7 @@ CASTLE:0 8
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
         let mut grid = open_grid();
-        grid[0] = 80;
+        grid[0] = TOWN_KLIMB_DESCEND_TILE;
         let mut state = test_state(grid, 0, 0);
 
         assert_eq!(
@@ -1194,7 +1652,7 @@ CASTLE:0 8
         let scene = Scene::new(17).unwrap();
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         let mut grid = open_grid();
-        grid[0] = 80;
+        grid[0] = TOWN_KLIMB_ASCEND_TILE;
         let mut state = test_state(grid, 0, 0);
         state.active_objects.push(ActiveObject {
             type_byte: 192,
@@ -1226,7 +1684,7 @@ CASTLE:0 8
         let scene = Scene::new(17).unwrap();
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         let mut grid = open_grid();
-        grid[0] = 80;
+        grid[0] = TOWN_KLIMB_ASCEND_TILE;
         let mut state = test_state(grid, 0, 0);
         let slots = vec![
             NpcSlot {

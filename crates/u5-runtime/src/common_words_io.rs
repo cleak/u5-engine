@@ -17,7 +17,8 @@ pub type CommonWordDictionary = [String; COMMON_WORD_DICTIONARY_ENTRIES];
 
 /// Public issue #33/#40 common-word table. Array index 0 corresponds to TLK
 /// token `0x01` and SHOPPE phrase token `0x80`; empty strings are the NUL
-/// pointer sentinels that set the leading-space flag.
+/// pointer slots. Conversation emits their raw token through the runic font;
+/// SHOPPE treats them as malformed content.
 pub const PUBLISHED_COMMON_WORD_DICTIONARY: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [
     "the",
     "thou",
@@ -318,7 +319,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_complete_dictionary_and_preserves_empty_sentinels() {
+    fn parses_complete_dictionary_and_preserves_empty_slots() {
         let dictionary = parse_common_word_dictionary(&full_dictionary_text()).unwrap();
         assert_eq!(dictionary[0], "word0");
         assert_eq!(dictionary[11], "");

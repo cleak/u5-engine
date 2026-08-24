@@ -420,6 +420,13 @@ pub const fn shoppe_placeholder(byte: u8) -> Option<ShoppePlaceholder> {
 /// [`crate::PARTY_FOOD_CAP`] so the shop clamp and the carrier
 /// cap stay one value.
 pub const SHOP_FOOD_STOCK_CAP: u16 = crate::PARTY_FOOD_CAP;
+/// `shops.md §6.1`: one tavern provision unit is a pack of twenty-five
+/// servings, not one point on the shared food counter.
+pub const TAVERN_PROVISION_PACK_SERVINGS: u16 = 25;
+/// `shops.md §8.5`: when no provision unit can be afforded, a party below
+/// three food receives one charitable serving; parties at three or more take
+/// the ordinary no-need refusal instead.
+pub const TAVERN_PROVISION_CHARITY_THRESHOLD: u16 = 3;
 /// `shops.md §6` clamps the gold counter after every shop
 /// outcome (sale credit, surcharge, refund) at the same word-sized
 /// 9999 cap inventory.md §2 documents for the party gold counter.
@@ -1055,16 +1062,33 @@ pub struct ProvisionPurchaseOutcome {
     pub gold_after: u16,
     pub food_before: u16,
     pub food_after: u16,
+    pub completion: ProvisionPurchaseCompletion,
+}
+
+/// Why the provision loop returned after accepting a nonzero quantity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProvisionPurchaseCompletion {
+    /// The requested quantity finished, or food reached the 9999 ceiling.
+    /// Both paths use the completed-purchase exit and may take the surcharge.
+    Completed,
+    /// At least one unit was served before gold ran out. The purchased units
+    /// remain, but the post-transaction surcharge is skipped.
+    GoldExhausted,
+    /// No unit was affordable and food was below three, so the shopkeeper
+    /// supplied one free serving and ended the visit.
+    Charity,
+}
+
+impl ProvisionPurchaseCompletion {
+    pub const fn surcharge_applies(self) -> bool {
+        matches!(self, Self::Completed)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProvisionPurchaseError {
     ZeroQuantity,
     NoNeed,
-    InsufficientGold {
-        available: u16,
-        required_per_unit: u16,
-    },
 }
 
 /// `shops.md §8.4`: the inn registry is "a 16-slot, save-backed
@@ -1956,6 +1980,33 @@ pub const fn tavern_menu_letters(tavern: Tavern) -> TavernMenuLetters {
     }
 }
 
+/// `shops.md §8.5`: the four tavern menu states select `SHOPPE.DAT`
+/// list records 69..=72 and follow-up records 73..=76.
+pub const fn tavern_menu_state_index(tavern: Tavern) -> usize {
+    match tavern {
+        Tavern::TheHonestMeal
+        | Tavern::TheWayfarerTavern
+        | Tavern::TheSwordAndKeg
+        | Tavern::TheCatsLair
+        | Tavern::TheFolleyTap => 0,
+        Tavern::TheSlaughteredLamb | Tavern::TheFallenVirgin => 1,
+        Tavern::TheHumblePalate => 2,
+        Tavern::TheBlueBoarTavern => 3,
+    }
+}
+
+pub const fn tavern_menu_record_id(tavern: Tavern) -> usize {
+    69 + tavern_menu_state_index(tavern)
+}
+
+pub const fn tavern_follow_up_record_id(tavern: Tavern) -> usize {
+    73 + tavern_menu_state_index(tavern)
+}
+
+pub const TAVERN_PROVISION_QUOTE_RECORD_FIRST: usize = 77;
+pub const TAVERN_PROVISION_QUOTE_RECORD_LAST: usize = 82;
+pub const TAVERN_TABLE_SCRAPS_RECORD_ID: usize = 90;
+
 pub const fn tavern_round_drink_menu_letter(tavern: Tavern) -> char {
     tavern_menu_letters(tavern).round
 }
@@ -2099,13 +2150,21 @@ pub const fn quote_provision_purchase(
     tavern: Tavern,
     quantity: u16,
 ) -> Result<ProvisionPurchaseQuote, ProvisionPurchaseError> {
+    quote_provision_purchase_at_unit_price(tavern, quantity, tavern_provision_unit_price(tavern))
+}
+
+pub const fn quote_provision_purchase_at_unit_price(
+    tavern: Tavern,
+    quantity: u16,
+    unit_price: u16,
+) -> Result<ProvisionPurchaseQuote, ProvisionPurchaseError> {
     if quantity == 0 {
         return Err(ProvisionPurchaseError::ZeroQuantity);
     }
     Ok(ProvisionPurchaseQuote {
         tavern,
         quantity,
-        unit_price: tavern_provision_unit_price(tavern),
+        unit_price,
     })
 }
 
@@ -2115,25 +2174,51 @@ pub fn apply_provision_purchase(
     tavern: Tavern,
     quantity: u16,
 ) -> Result<ProvisionPurchaseOutcome, ProvisionPurchaseError> {
-    let quote = quote_provision_purchase(tavern, quantity)?;
-    if *food >= SHOP_FOOD_STOCK_CAP {
-        return Err(ProvisionPurchaseError::NoNeed);
-    }
-    if *gold < quote.unit_price {
-        return Err(ProvisionPurchaseError::InsufficientGold {
-            available: *gold,
-            required_per_unit: quote.unit_price,
-        });
-    }
+    apply_provision_purchase_at_unit_price(
+        gold,
+        food,
+        tavern,
+        quantity,
+        tavern_provision_unit_price(tavern),
+    )
+}
 
-    let affordable_units = *gold / quote.unit_price;
-    let food_capacity = SHOP_FOOD_STOCK_CAP - *food;
-    let purchased_quantity = quantity.min(affordable_units).min(food_capacity);
-    let total_price = purchased_quantity * quote.unit_price;
+pub fn apply_provision_purchase_at_unit_price(
+    gold: &mut u16,
+    food: &mut u16,
+    tavern: Tavern,
+    quantity: u16,
+    unit_price: u16,
+) -> Result<ProvisionPurchaseOutcome, ProvisionPurchaseError> {
+    let quote = quote_provision_purchase_at_unit_price(tavern, quantity, unit_price)?;
     let gold_before = *gold;
     let food_before = *food;
-    *gold -= total_price;
-    *food += purchased_quantity;
+    let mut purchased_quantity = 0u16;
+    let completion = loop {
+        if purchased_quantity == quantity {
+            break ProvisionPurchaseCompletion::Completed;
+        }
+        if *gold < quote.unit_price {
+            if purchased_quantity != 0 {
+                break ProvisionPurchaseCompletion::GoldExhausted;
+            }
+            if *food >= TAVERN_PROVISION_CHARITY_THRESHOLD {
+                return Err(ProvisionPurchaseError::NoNeed);
+            }
+            *food = food.saturating_add(1).min(SHOP_FOOD_STOCK_CAP);
+            break ProvisionPurchaseCompletion::Charity;
+        }
+
+        *gold -= quote.unit_price;
+        *food = food
+            .saturating_add(TAVERN_PROVISION_PACK_SERVINGS)
+            .min(SHOP_FOOD_STOCK_CAP);
+        purchased_quantity += 1;
+        if *food == SHOP_FOOD_STOCK_CAP {
+            break ProvisionPurchaseCompletion::Completed;
+        }
+    };
+    let total_price = gold_before - *gold;
 
     Ok(ProvisionPurchaseOutcome {
         quote,
@@ -2144,6 +2229,7 @@ pub fn apply_provision_purchase(
         gold_after: *gold,
         food_before,
         food_after: *food,
+        completion,
     })
 }
 
@@ -2752,11 +2838,15 @@ pub fn apply_shipwright_purchase(
             Some(PendingVehicleAcquisition::Frigate { x, y, skiffs }),
         ) => (
             ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate,
-            Some(PendingVehicleAcquisition::Frigate {
-                x,
-                y,
-                skiffs: skiffs.saturating_add(1),
-            }),
+            if skiffs & 0x7f == 0x7f {
+                None
+            } else {
+                Some(PendingVehicleAcquisition::Frigate {
+                    x,
+                    y,
+                    skiffs: (skiffs & 0x7f) + 1,
+                })
+            },
         ),
         (ShipwrightPurchaseKind::Skiff, Some(PendingVehicleAcquisition::Skiff { .. })) => (
             ShipwrightPurchaseStatus::ExistingDeliveryRefusal,
@@ -2767,6 +2857,7 @@ pub fn apply_shipwright_purchase(
             Some(PendingVehicleAcquisition::Skiff {
                 x: delivery_x,
                 y: delivery_y,
+                aux3: 0,
             }),
         ),
     };
@@ -2935,17 +3026,32 @@ impl PlayState {
         delivery_x: usize,
         delivery_y: usize,
     ) -> Result<ShipwrightPurchaseOutcome, ShipwrightPurchaseError> {
-        let Some(return_world) = self.return_world.as_mut() else {
-            return Err(ShipwrightPurchaseError::NoReturnWorld);
+        let outcome = {
+            let Some(return_world) = self.return_world.as_mut() else {
+                return Err(ShipwrightPurchaseError::NoReturnWorld);
+            };
+            apply_shipwright_purchase(
+                &mut self.gold,
+                &mut return_world.pending_vehicle,
+                shipwright,
+                kind,
+                delivery_x,
+                delivery_y,
+            )?
         };
-        apply_shipwright_purchase(
-            &mut self.gold,
-            &mut return_world.pending_vehicle,
-            shipwright,
-            kind,
-            delivery_x,
-            delivery_y,
-        )
+        self.sync_pending_vehicle_purchase_state(outcome);
+        Ok(outcome)
+    }
+
+    pub(crate) fn sync_pending_vehicle_purchase_state(
+        &mut self,
+        outcome: ShipwrightPurchaseOutcome,
+    ) {
+        self.pending_vehicle_save = match (outcome.pending_before, outcome.pending_after) {
+            (_, Some(after)) => PendingVehicleSaveState::from_acquisition(after),
+            (Some(before), None) => PendingVehicleSaveState::from_acquisition(before).clear_class(),
+            (None, None) => self.pending_vehicle_save,
+        };
     }
 
     pub fn buy_horse(

@@ -214,13 +214,49 @@ pub fn apply_dungeon_room_clear_bitmap(
     }
 }
 
-pub fn stair_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
-    if !(80..=87).contains(&tile) {
-        return None;
+pub const TOWN_KLIMB_ASCEND_TILE: u8 = 0xc8;
+pub const TOWN_KLIMB_DESCEND_TILE: u8 = 0xc9;
+pub const TOWN_KLIMB_DESCEND_GRATE_TILE: u8 = 0x86;
+pub const TOWN_KLIMB_ROCKS_TILE: u8 = 0x4c;
+pub const TOWN_KLIMB_FENCE_FIRST: u8 = 0xca;
+pub const TOWN_KLIMB_FENCE_LAST: u8 = 0xcb;
+pub const TOWN_TRAPDOOR_LIVE_TILE: u8 = 0x8c;
+
+/// `town-mode.md §7`: classify the exact live town tile under the
+/// party for K-Klimb. Town links are directional; unlike dungeon
+/// ladders, no town tile offers both directions.
+pub const fn town_klimb_underfoot_intent(tile: u8) -> Option<ClimbIntent> {
+    match tile {
+        TOWN_KLIMB_ASCEND_TILE => Some(ClimbIntent::Up),
+        TOWN_KLIMB_DESCEND_TILE | TOWN_KLIMB_DESCEND_GRATE_TILE => Some(ClimbIntent::Down),
+        _ => None,
     }
-    // Underfoot K-ladder tiles share the floor-change helper; the public
-    // facing-sensitive walk-on stair family is handled separately below.
-    Some(town_climb_delta(intent))
+}
+
+/// Compatibility name retained for callers that need the signed floor
+/// delta of an exact town K-Klimb link.
+pub const fn stair_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
+    match (town_klimb_underfoot_intent(tile), intent) {
+        (Some(actual), requested) if actual as u8 == requested as u8 => {
+            Some(town_climb_delta(intent))
+        }
+        _ => None,
+    }
+}
+
+/// `town-mode.md §7`: exact adjacent cells the town K-Klimb direction
+/// prompt permits the party to climb over without changing floors.
+pub const fn town_klimb_over_target(tile: u8) -> bool {
+    matches!(
+        tile,
+        TOWN_KLIMB_ROCKS_TILE | TOWN_KLIMB_FENCE_FIRST..=TOWN_KLIMB_FENCE_LAST
+    )
+}
+
+/// `town-mode.md §10`: the exact live tile that runs the town trapdoor
+/// underfoot reaction after a consumed action.
+pub const fn is_town_trapdoor_live_tile(tile: u8) -> bool {
+    tile == TOWN_TRAPDOOR_LIVE_TILE
 }
 
 pub fn town_walk_on_stair_delta(tile: u8, direction: Direction) -> Option<i8> {
@@ -248,7 +284,7 @@ fn town_cardinal_direction_code(direction: Direction) -> Option<u8> {
     }
 }
 
-pub fn town_climb_delta(intent: ClimbIntent) -> i8 {
+pub const fn town_climb_delta(intent: ClimbIntent) -> i8 {
     match intent {
         ClimbIntent::Up => 1,
         ClimbIntent::Down => -1,
@@ -318,72 +354,7 @@ pub fn render_glyph(tile: u8) -> char {
 }
 
 pub fn surface_view_class(tile: u8) -> u8 {
-    match tile {
-        0x00 | 0xc0..=0xc3 | 0xcc..=0xcf | 0xff => 0x00,
-        0x05 | 0x30..=0x37 => 0x01,
-        0x09..=0x0a | 0x2d => 0x02,
-        0x07
-        | 0x1c
-        | 0x1e..=0x1f
-        | 0x40
-        | 0x44
-        | 0x48..=0x49
-        | 0x6a..=0x6b
-        | 0x70..=0x7f
-        | 0x87
-        | 0x8c
-        | 0x8f
-        | 0xaa
-        | 0xbc
-        | 0xdd => 0x03,
-        0x1d
-        | 0x38
-        | 0x47
-        | 0x5a
-        | 0x5c..=0x5d
-        | 0x94..=0x96
-        | 0x9a..=0x9c
-        | 0xab..=0xac
-        | 0xbe => 0x04,
-        0x10..=0x1b
-        | 0x29..=0x2b
-        | 0x2e..=0x2f
-        | 0x41..=0x43
-        | 0x4c
-        | 0x58..=0x59
-        | 0x5b
-        | 0x5e..=0x5f
-        | 0x80..=0x85
-        | 0x88..=0x8b
-        | 0x8d..=0x8e
-        | 0x90..=0x93
-        | 0x9d..=0xa9
-        | 0xad..=0xb7
-        | 0xbd
-        | 0xbf
-        | 0xc8..=0xcb
-        | 0xde..=0xdf
-        | 0xe8..=0xeb
-        | 0xfa..=0xfd => 0x05,
-        0x0d
-        | 0x45
-        | 0x4a..=0x4b
-        | 0x86
-        | 0x97..=0x99
-        | 0xb8..=0xbb
-        | 0xc4..=0xc7
-        | 0xec..=0xf9 => 0x06,
-        0x0c | 0x27..=0x28 | 0x39..=0x3f | 0x46 | 0x4d..=0x57 | 0xd0..=0xd3 | 0xfe => 0x07,
-        0x0b | 0x0e..=0x0f => 0x08,
-        0x06 | 0x08 | 0x2c => 0x09,
-        0x03 | 0x60..=0x69 | 0x6c..=0x6f | 0xe4..=0xe7 => 0x0a,
-        0x02 | 0xd4..=0xd7 => 0x0b,
-        0x01 => 0x0c,
-        0x04 => 0x0d,
-        0xe0..=0xe3 => 0x0e,
-        0xd8..=0xdc => 0x0f,
-        0x20..=0x26 => 0x10,
-    }
+    crate::view_classes::tile_view_class(tile)
 }
 
 pub fn render_surface_view_class(class: u8) -> char {
@@ -458,24 +429,7 @@ pub fn active_object_matches_runtime_npc(
     {
         return false;
     }
-    if npc.is_player_phantom() {
-        object.type_byte == PLAYER_NPC_SENTINEL_TYPE
-    } else {
-        object.type_byte == npc_tile(npc.type_byte)
-    }
-}
-
-pub fn player_phantom_active_object(x: usize, y: usize, z: u8) -> ActiveObject {
-    ActiveObject {
-        type_byte: PLAYER_NPC_SENTINEL_TYPE,
-        tile: 0,
-        x,
-        y,
-        z: z as i8,
-        phase: STEADY_PHASE,
-        aux1: 0,
-        aux3: 0,
-    }
+    object.type_byte == npc_tile(npc.type_byte)
 }
 
 pub fn step_toward(from: (usize, usize), to: (usize, usize)) -> Option<(usize, usize)> {
@@ -698,18 +652,6 @@ pub fn is_ship_object(object: ActiveObject) -> bool {
 
 pub fn is_whirlpool_object(object: ActiveObject) -> bool {
     (0xec..=0xef).contains(&object.type_byte) || (0xec..=0xef).contains(&object.tile)
-}
-
-pub fn outdoor_combat_arena_index_for_object(object: ActiveObject) -> Option<usize> {
-    outdoor_combat_arena_index_for_byte(object.type_byte)
-}
-
-pub fn outdoor_combat_arena_index_for_byte(byte: u8) -> Option<usize> {
-    match byte {
-        0x2c..=0x2f => Some(1),
-        0x40..=0x7f => Some(((byte - 0x40) / 4) as usize),
-        _ => None,
-    }
 }
 
 pub fn direction_from_active_object_phase(phase: u8) -> Option<Direction> {

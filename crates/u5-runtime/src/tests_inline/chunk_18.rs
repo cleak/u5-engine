@@ -177,15 +177,15 @@
     }
 
     #[test]
-    fn cast_magic_lock_rewrites_direction_unlocked_magic_lock_sidecar() {
+    fn cast_magic_lock_rewrites_the_exact_live_unlocked_door_tile() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_LOCK_TABLE_FILE),
-            "CASTLE:0 0 2 1 96 97 MAGIC\n",
+            "CASTLE:0 0 2 1 151 184 MAGIC\n",
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = 0xB8;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::North;
         state.visibility_dirty = false;
@@ -198,22 +198,22 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.grid[32 + 2], 0x97);
         assert_eq!(state.spell_charges[MAGIC_LOCK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Magic lock!");
+        assert_eq!(state.message, "Success!");
 
         state.player.facing = Direction::East;
         assert_eq!(
             state.jimmy_facing_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::LockTried
         );
-        assert_eq!(state.grid[32 + 2], 96);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Magic lock!");
+        assert_eq!(state.grid[32 + 2], 0x97);
+        assert_eq!(state.turn, 2);
+        assert_eq!(state.message, "Key broke!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -238,7 +238,7 @@
     }
 
     #[test]
-    fn lock_utility_spells_require_direction_before_resources_outside_combat() {
+    fn lock_utility_spells_spend_resources_before_direction_followup() {
         let mut town_magic_lock = test_state(open_grid(), 5, 5);
         town_magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
         town_magic_lock.party[0].mana = MAGIC_LOCK_COST;
@@ -248,11 +248,11 @@
             town_magic_lock
                 .cast_spell_from_suffix("1AEP", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Observed
         );
 
-        assert_eq!(town_magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 1);
-        assert_eq!(town_magic_lock.party[0].mana, MAGIC_LOCK_COST);
+        assert_eq!(town_magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 0);
+        assert_eq!(town_magic_lock.party[0].mana, 0);
         assert_eq!(town_magic_lock.turn, 0);
         assert_eq!(
             town_magic_lock.message,
@@ -268,14 +268,14 @@
             town_unlock_magic
                 .cast_spell_from_suffix("1EIP", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Observed
         );
 
         assert_eq!(
             town_unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX],
-            1
+            0
         );
-        assert_eq!(town_unlock_magic.party[0].mana, UNLOCK_MAGIC_COST);
+        assert_eq!(town_unlock_magic.party[0].mana, 0);
         assert_eq!(town_unlock_magic.turn, 0);
         assert_eq!(
             town_unlock_magic.message,
@@ -285,7 +285,7 @@
     }
 
     #[test]
-    fn combat_lock_utility_spells_fail_without_arena_mutation_or_target_prompt() {
+    fn combat_lock_utility_spells_rewrite_adjacent_arena_terrain() {
         let mut magic_lock = britannia_state(open_world_grid(), 5, 5);
         magic_lock.combat_active = true;
         magic_lock.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -298,7 +298,7 @@
             5,
             5,
         ]);
-        magic_lock.combat_terrain[5][6] = 97;
+        magic_lock.combat_terrain[5][6] = 0xB8;
         magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
         magic_lock.party[0].mana = MAGIC_LOCK_COST;
         magic_lock.party[0].level = MAGIC_LOCK_COST;
@@ -306,17 +306,17 @@
 
         assert_eq!(
             magic_lock
-                .cast_spell_from_suffix("1AEP", Path::new(""))
+                .cast_spell_from_suffix("1AEP6", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Cast
         );
 
-        assert_eq!(magic_lock.combat_terrain[5][6], 97);
+        assert_eq!(magic_lock.combat_terrain[5][6], 0x97);
         assert_eq!(magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 0);
         assert_eq!(magic_lock.party[0].mana, 0);
         assert_eq!(magic_lock.turn, 1);
         assert_eq!(magic_lock.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(magic_lock.message, "Failed!");
+        assert_eq!(magic_lock.message, "Success!");
 
         let mut unlock_magic = britannia_state(open_world_grid(), 5, 5);
         unlock_magic.combat_active = true;
@@ -330,7 +330,7 @@
             5,
             5,
         ]);
-        unlock_magic.combat_terrain[5][6] = 96;
+        unlock_magic.combat_terrain[5][6] = 0x97;
         unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX] = 1;
         unlock_magic.party[0].mana = UNLOCK_MAGIC_COST;
         unlock_magic.party[0].level = UNLOCK_MAGIC_COST;
@@ -338,17 +338,17 @@
 
         assert_eq!(
             unlock_magic
-                .cast_spell_from_suffix("1EIP", Path::new(""))
+                .cast_spell_from_suffix("1EIP6", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Cast
         );
 
-        assert_eq!(unlock_magic.combat_terrain[5][6], 96);
+        assert_eq!(unlock_magic.combat_terrain[5][6], 0xB8);
         assert_eq!(unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 0);
         assert_eq!(unlock_magic.party[0].mana, 0);
         assert_eq!(unlock_magic.turn, 1);
         assert_eq!(unlock_magic.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(unlock_magic.message, "Failed!");
+        assert_eq!(unlock_magic.message, "Success!");
     }
 
     #[test]
@@ -400,7 +400,7 @@
     }
 
     #[test]
-    fn cast_unlock_magic_rewrites_direction_magic_lock_sidecar() {
+    fn cast_unlock_magic_rewrites_the_exact_live_magic_lock_tile() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_LOCK_TABLE_FILE),
@@ -408,7 +408,7 @@
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 96;
+        grid[32 + 2] = 0x97;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::North;
         state.visibility_dirty = false;
@@ -421,30 +421,13 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.grid[32 + 2], 97);
+        assert_eq!(state.grid[32 + 2], 0xB8);
         assert_eq!(state.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Unlocked!");
-
-        state.player.facing = Direction::East;
-        assert_eq!(
-            state.open_facing_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::DoorOpened
-        );
-        assert_eq!(state.grid[32 + 2], 16);
-        assert_eq!(state.message, "Opened!");
-        assert_eq!(
-            state.door_tracker,
-            Some(DoorTracker {
-                previous_tile: 97,
-                x: 2,
-                y: 1,
-                turns_remaining: 4,
-            })
-        );
+        assert_eq!(state.message, "Success!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -473,7 +456,7 @@
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = 0xB9;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::North;
         state.spell_charges[UNLOCK_MAGIC_SPELL_INDEX] = 1;
@@ -485,7 +468,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.grid[32 + 2], 97);
+        assert_eq!(state.grid[32 + 2], 0xB9);
         assert_eq!(state.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);

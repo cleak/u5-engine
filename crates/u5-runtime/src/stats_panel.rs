@@ -3,14 +3,22 @@
 use crate::*;
 
 /// Stats-panel text area width in cells: columns 24..=38, bounded by
-/// the white rules at `x=191` and `x=312`. See `gameplay_chrome` for
-/// the geometry's provenance and the pending spec question.
+/// the white rules at `x=191` and `x=312` (`text-output.md §10.1`).
 pub const STATS_PANEL_WIDTH: usize = 15;
 pub const STATS_PANEL_PARTY_ROWS: usize = SAVE_PARTY_SIZE_MAX as usize;
-pub const MAIN_TEXT_WINDOW_INDEX: usize = 0;
+/// Full-screen window used by the standing chrome writers.
+pub const FULL_SCREEN_TEXT_WINDOW_INDEX: usize = 0;
 pub const STATS_PANEL_TEXT_WINDOW_INDEX: usize = 1;
-pub const TALK_SHOP_TEXT_WINDOW_INDEX: usize = 2;
-pub const PROMPT_TEXT_WINDOW_INDEX: usize = 3;
+/// Standing gameplay message window: command echoes, output, Talk/shop
+/// dialogue, and the live prompt line all share this descriptor.
+pub const MESSAGE_TEXT_WINDOW_INDEX: usize = 2;
+/// Compatibility name retained for callers that describe ordinary gameplay
+/// output as the main text stream.
+pub const MAIN_TEXT_WINDOW_INDEX: usize = MESSAGE_TEXT_WINDOW_INDEX;
+pub const TALK_SHOP_TEXT_WINDOW_INDEX: usize = MESSAGE_TEXT_WINDOW_INDEX;
+/// Prompts are not a fourth gameplay window; they use the last row of window 2.
+pub const PROMPT_TEXT_WINDOW_INDEX: usize = MESSAGE_TEXT_WINDOW_INDEX;
+pub const UNUSED_TEXT_WINDOW_INDEX: usize = 3;
 pub const MESSAGE_TEXT_WINDOW_RIGHT: u8 = MESSAGE_WINDOW_RIGHT;
 pub const STATS_PANEL_TEXT_LEFT: u8 = 24;
 /// `text-output.md §4`: a window's printable width is
@@ -37,6 +45,29 @@ pub const INN_PICKUP_REGISTER_TOP: u8 = 1;
 pub const INN_PICKUP_REGISTER_INITIAL_RIGHT: u8 = 38;
 pub const INN_PICKUP_REGISTER_FRAME_RIGHT: u8 = 39;
 pub const INN_PICKUP_REGISTER_BOTTOM: u8 = 9;
+pub const INN_PICKUP_REGISTER_BORDER_FIRST_ROW: u8 = 2;
+pub const INN_PICKUP_REGISTER_BORDER_LAST_ROW: u8 = 8;
+pub const ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX: usize = STATS_PANEL_TEXT_WINDOW_INDEX;
+pub const ARMS_SELL_BROWSER_LEFT: u8 = 24;
+pub const ARMS_SELL_BROWSER_TOP: u8 = 1;
+pub const ARMS_SELL_BROWSER_INITIAL_RIGHT: u8 = 38;
+pub const ARMS_SELL_BROWSER_INITIAL_BOTTOM: u8 = 6;
+pub const ARMS_SELL_BROWSER_FRAME_RIGHT: u8 = 39;
+pub const ARMS_SELL_BROWSER_FRAME_BOTTOM: u8 = 9;
+pub const ARMS_SELL_BROWSER_BORDER_FIRST_ROW: u8 = 2;
+pub const ARMS_SELL_BROWSER_BORDER_LAST_ROW: u8 = 5;
+pub const ARMS_SELL_BROWSER_PAGE_BADGE_LOCAL_COLUMN: u8 = 6;
+pub const ARMS_SELL_BROWSER_PAGE_BADGE_LOCAL_ROW: u8 = 6;
+pub const ARMS_SELL_BROWSER_PAGE_BADGE_OPEN: u8 = 0x02;
+pub const ARMS_SELL_BROWSER_PAGE_BADGE_CLOSE: u8 = 0x01;
+pub const ARMS_SELL_BROWSER_PAGE_GLYPH_DOWN: u8 = 0x19;
+pub const ARMS_SELL_BROWSER_PAGE_GLYPH_UP: u8 = 0x18;
+pub const ARMS_SELL_BROWSER_PAGE_GLYPH_BOTH: u8 = 0x12;
+pub const ARMS_SELL_BROWSER_STATS_LABEL: &str = "Arms";
+/// Both shop-owned side panels place their paired bracket caps at
+/// window-local columns 0 and 14, i.e. absolute columns 24 and 38.
+pub const SHOP_SIDE_PANEL_LEFT_BORDER_COLUMN: u8 = 24;
+pub const SHOP_SIDE_PANEL_RIGHT_BORDER_COLUMN: u8 = 38;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StatsPanelCombatRowOverlay {
@@ -72,13 +103,20 @@ pub fn render_stats_panel(state: &PlayState, active_cursor: Option<usize>) -> St
 /// input line is its own bottom row rather than a separate bottom-left
 /// prompt window. Text row 24 is never covered by any window.
 pub fn configure_play_text_windows(system: &mut TextWindowSystem) {
+    // `text-output.md §10.1`: assembly first narrows window 0 over the
+    // intro's lower text block, restores its full-screen rectangle, and then
+    // clears through that restored descriptor before installing the standing
+    // gameplay windows.
+    system.set_window_rect(FULL_SCREEN_TEXT_WINDOW_INDEX, 1, 16, 38, 23);
     system.set_window_rect(
-        MAIN_TEXT_WINDOW_INDEX,
-        MESSAGE_WINDOW_LEFT,
-        MESSAGE_WINDOW_TOP,
-        MESSAGE_WINDOW_RIGHT,
-        MESSAGE_WINDOW_BOTTOM,
+        FULL_SCREEN_TEXT_WINDOW_INDEX,
+        0,
+        0,
+        TEXT_SCREEN_COLUMNS - 1,
+        TEXT_SCREEN_ROWS - 1,
     );
+    system.set_active_window(FULL_SCREEN_TEXT_WINDOW_INDEX);
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.set_window_rect(
         STATS_PANEL_TEXT_WINDOW_INDEX,
         STATS_PANEL_TEXT_LEFT,
@@ -87,23 +125,19 @@ pub fn configure_play_text_windows(system: &mut TextWindowSystem) {
         STATS_PANEL_TEXT_BOTTOM,
     );
     system.set_window_rect(
-        PROMPT_TEXT_WINDOW_INDEX,
-        MESSAGE_WINDOW_LEFT,
-        MESSAGE_WINDOW_BOTTOM,
-        MESSAGE_WINDOW_RIGHT,
-        MESSAGE_WINDOW_BOTTOM,
-    );
-    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
-}
-
-pub fn configure_talk_shop_text_window(system: &mut TextWindowSystem) {
-    system.set_window_rect(
-        TALK_SHOP_TEXT_WINDOW_INDEX,
+        MESSAGE_TEXT_WINDOW_INDEX,
         MESSAGE_WINDOW_LEFT,
         MESSAGE_WINDOW_TOP,
         MESSAGE_WINDOW_RIGHT,
         MESSAGE_WINDOW_BOTTOM,
     );
+    system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
+    system.set_active_cursor(0, MESSAGE_WINDOW_BOTTOM - MESSAGE_WINDOW_TOP);
+}
+
+pub fn configure_talk_shop_text_window(system: &mut TextWindowSystem) {
+    // `text-output.md §9`: Talk/shop overlays inherit the standing window-2
+    // descriptor and cursor; they do not reshape or home it.
     system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
 }
 
@@ -127,6 +161,7 @@ pub fn render_play_text_window_system(
     }
     paint_stats_panel_text_window(&mut system, state, active_cursor);
     if state.active_shop.is_some() {
+        paint_arms_sell_browser_text_window(&mut system, state);
         paint_inn_pickup_register_text_window(&mut system, state);
     }
     if let Some(input_echo) = input_echo {
@@ -151,7 +186,7 @@ pub fn render_play_text_window_ascii(
 }
 
 pub fn paint_message_text_window(system: &mut TextWindowSystem, message: &str) {
-    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.set_active_cursor(0, 0);
     system.print_wrapped_string(message);
@@ -218,6 +253,145 @@ pub fn paint_inn_pickup_register_text_window(system: &mut TextWindowSystem, stat
     system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
 }
 
+/// Paint the published arms-shop `S` browser and its four row interiors.
+///
+/// `shops.md §8.1` fixes the window-1 clear/widen handoff, ascending
+/// nonzero equipment rows, fixed short labels, inverse selected row,
+/// blank tail rows. The gameplay-chrome pass owns the stats-ribbon `Arms`
+/// label and exact three-cell page-status badge so their cap cells retain
+/// the shared two-colour ribbon treatment.
+pub fn paint_arms_sell_browser_text_window(system: &mut TextWindowSystem, state: &PlayState) {
+    let Some(browser) = active_arms_sell_browser(state) else {
+        return;
+    };
+
+    system.set_active_window(ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX);
+    system.set_window_rect(
+        ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX,
+        ARMS_SELL_BROWSER_LEFT,
+        ARMS_SELL_BROWSER_TOP,
+        ARMS_SELL_BROWSER_INITIAL_RIGHT,
+        ARMS_SELL_BROWSER_INITIAL_BOTTOM,
+    );
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    system.set_window_rect(
+        ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX,
+        ARMS_SELL_BROWSER_LEFT,
+        ARMS_SELL_BROWSER_TOP,
+        ARMS_SELL_BROWSER_FRAME_RIGHT,
+        ARMS_SELL_BROWSER_FRAME_BOTTOM,
+    );
+
+    for (row, item) in browser
+        .visible_items(&state.equipment_stock)
+        .into_iter()
+        .enumerate()
+    {
+        let selected = item == Some(browser.selected);
+        let line = item.map_or_else(
+            || " ".repeat(13),
+            |item| arms_sell_browser_row(item, state.equipment_stock[usize::from(item)]),
+        );
+        system.set_active_cursor(1, (row + 1) as u8);
+        if selected {
+            system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+        }
+        for byte in line.bytes().take(13) {
+            system.emit_byte(byte);
+        }
+        if selected {
+            system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+        }
+    }
+    system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
+}
+
+pub const fn arms_sell_page_indicator_bytes(
+    indicator: crate::shop_runtime::ArmsSellPageIndicator,
+) -> Option<[u8; 3]> {
+    use crate::shop_runtime::ArmsSellPageIndicator;
+    let middle = match indicator {
+        ArmsSellPageIndicator::None => return None,
+        ArmsSellPageIndicator::Down => ARMS_SELL_BROWSER_PAGE_GLYPH_DOWN,
+        ArmsSellPageIndicator::Up => ARMS_SELL_BROWSER_PAGE_GLYPH_UP,
+        ArmsSellPageIndicator::Both => ARMS_SELL_BROWSER_PAGE_GLYPH_BOTH,
+    };
+    Some([
+        ARMS_SELL_BROWSER_PAGE_BADGE_OPEN,
+        middle,
+        ARMS_SELL_BROWSER_PAGE_BADGE_CLOSE,
+    ])
+}
+
+pub fn arms_sell_browser_row(item: u8, count: u8) -> String {
+    let label = crate::EQUIPMENT_SHORT_LABELS
+        .get(usize::from(item))
+        .copied()
+        .unwrap_or("");
+    let content = if count == u8::MAX {
+        label.to_string()
+    } else {
+        format!("{count:>2}-{label}")
+    };
+    format!("{:<13}", truncate_ascii_chars(&content, 13))
+}
+
+pub fn active_arms_sell_browser(state: &PlayState) -> Option<crate::shop_runtime::ArmsSellBrowser> {
+    use crate::shop_runtime::ArmsShopState;
+    use crate::shop_session::ActiveShopSession;
+
+    let shop_state = match state.active_shop.as_ref()? {
+        ActiveShopSession::Arms(shop_state)
+        | ActiveShopSession::ArmsLocal(shop_state, _)
+        | ActiveShopSession::ArmsStocked(shop_state, _) => shop_state,
+        _ => return None,
+    };
+    match *shop_state {
+        ArmsShopState::SellPickItem(browser) | ArmsShopState::SellConfirm { browser, .. } => {
+            Some(browser)
+        }
+        _ => None,
+    }
+}
+
+pub fn active_arms_sell_page_indicator(
+    state: &PlayState,
+) -> Option<crate::shop_runtime::ArmsSellPageIndicator> {
+    active_arms_sell_browser(state).map(|browser| browser.page_indicator(&state.equipment_stock))
+}
+
+/// Inclusive absolute screen rows whose paired bracket caps form the
+/// active shop-owned side panel. The local row ranges are `1..=7` for
+/// the inn register and `1..=4` for the arms sell browser.
+pub fn active_shop_side_panel_border_rows(state: &PlayState) -> Option<(u8, u8)> {
+    match state.active_shop.as_ref()? {
+        crate::shop_session::ActiveShopSession::Innkeeper(
+            crate::shop_runtime::InnkeeperState::PickUpCompanion { .. },
+        ) => Some((
+            INN_PICKUP_REGISTER_BORDER_FIRST_ROW,
+            INN_PICKUP_REGISTER_BORDER_LAST_ROW,
+        )),
+        crate::shop_session::ActiveShopSession::Arms(
+            crate::shop_runtime::ArmsShopState::SellPickItem(_)
+            | crate::shop_runtime::ArmsShopState::SellConfirm { .. },
+        )
+        | crate::shop_session::ActiveShopSession::ArmsLocal(
+            crate::shop_runtime::ArmsShopState::SellPickItem(_)
+            | crate::shop_runtime::ArmsShopState::SellConfirm { .. },
+            _,
+        )
+        | crate::shop_session::ActiveShopSession::ArmsStocked(
+            crate::shop_runtime::ArmsShopState::SellPickItem(_)
+            | crate::shop_runtime::ArmsShopState::SellConfirm { .. },
+            _,
+        ) => Some((
+            ARMS_SELL_BROWSER_BORDER_FIRST_ROW,
+            ARMS_SELL_BROWSER_BORDER_LAST_ROW,
+        )),
+        _ => None,
+    }
+}
+
 pub fn paint_stats_panel_text_window(
     system: &mut TextWindowSystem,
     state: &PlayState,
@@ -265,11 +439,12 @@ pub fn paint_prompt_text_window_with_cursor(
     input_echo: &str,
     cursor_glyph: Option<u8>,
 ) {
-    system.set_active_window(PROMPT_TEXT_WINDOW_INDEX);
-    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
+    let prompt_row = MESSAGE_WINDOW_BOTTOM - MESSAGE_WINDOW_TOP;
+    system.clear_active_row(prompt_row);
     // Column 24 carries the two-colour ribbon end-cap sprite, painted
     // by the chrome pass; the echoed text starts one column in.
-    system.set_active_cursor(1, 0);
+    system.set_active_cursor(1, prompt_row);
     system.print_wrapped_string(input_echo);
     if let Some(cursor_glyph) = cursor_glyph {
         system.paint_cursor_glyph(cursor_glyph);

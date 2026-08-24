@@ -70,6 +70,7 @@ pub enum ShoppeDatError {
     MissingRecord { id: usize, slots: usize },
     EmptyRecord { id: usize },
     MissingCommonWordDictionary { id: usize },
+    EmptyCommonWordDictionaryEntry { token: u8, index: usize },
 }
 
 impl fmt::Display for ShoppeDatError {
@@ -107,6 +108,11 @@ impl fmt::Display for ShoppeDatError {
             Self::MissingCommonWordDictionary { id } => write!(
                 f,
                 "SHOPPE.DAT record {id} has no common-word dictionary for phrase-token expansion"
+            ),
+            Self::EmptyCommonWordDictionaryEntry { token, index } => write!(
+                f,
+                "SHOPPE.DAT phrase token {token:#04X} resolves to empty dictionary index {}",
+                index + 1
             ),
         }
     }
@@ -345,19 +351,14 @@ impl From<ShoppeRecords> for ShoppeTextRenderer {
 /// Render one bark record byte slice into a String, substituting the
 /// seven placeholder sigils and expanding high-bit phrase-token
 /// indices through the optional dictionary.
-pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> String {
+pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> Result<String, ShoppeDatError> {
     let mut out = String::with_capacity(bytes.len());
     let dictionary = ctx.dictionary.unwrap_or(&PUBLISHED_COMMON_WORD_DICTIONARY);
-    let mut leading_space_pending = false;
-    for &byte in bytes {
+    for (position, &byte) in bytes.iter().enumerate() {
         if byte == 0 {
             break;
         }
         if let Some(kind) = shop_placeholder_kind(byte) {
-            if leading_space_pending {
-                out.push(' ');
-                leading_space_pending = false;
-            }
             match kind {
                 ShopPlaceholderKind::Gold => out.push_str(&ctx.gold.to_string()),
                 ShopPlaceholderKind::Quantity => out.push_str(&ctx.quantity.to_string()),
@@ -372,25 +373,29 @@ pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> String {
         if let Some(idx) = shoppe_dictionary_index(byte) {
             let word = dictionary.get(idx).copied().unwrap_or("");
             if word.is_empty() {
-                leading_space_pending = true;
-                continue;
+                return Err(ShoppeDatError::EmptyCommonWordDictionaryEntry {
+                    token: byte,
+                    index: idx,
+                });
             }
-            if leading_space_pending {
-                out.push(' ');
-                leading_space_pending = false;
-            }
+            // `shops.md §4.2`: every token has one leading space. A
+            // trailing space is emitted only when the following record byte
+            // is ordinary text rather than another token or NUL.
+            out.push(' ');
             out.push_str(word);
+            if bytes
+                .get(position + 1)
+                .is_some_and(|next| *next != 0 && shoppe_dictionary_index(*next).is_none())
+            {
+                out.push(' ');
+            }
             continue;
         }
         if (0x20..0x7F).contains(&byte) {
-            if leading_space_pending {
-                out.push(' ');
-                leading_space_pending = false;
-            }
             out.push(byte as char);
         }
     }
-    out
+    Ok(out)
 }
 
 /// Look up and render a non-empty SHOPPE.DAT record.
@@ -400,7 +405,7 @@ pub fn render_shoppe_record(
     ctx: &ShoppeBarkContext,
 ) -> Result<String, ShoppeDatError> {
     let record = records.required_record(id)?;
-    Ok(render_shoppe_bark(record, ctx))
+    render_shoppe_bark(record, ctx)
 }
 
 /// Render every non-empty record and return sanitized aggregate coverage.
@@ -456,7 +461,9 @@ pub fn audit_shoppe_records(records: &ShoppeRecords, ctx: &ShoppeBarkContext) ->
         let placeholders = record
             .iter()
             .any(|byte| shop_placeholder_kind(*byte).is_some());
-        let rendered_len = render_shoppe_bark(record, ctx).len();
+        let rendered_len = render_shoppe_bark(record, ctx)
+            .expect("validated SHOPPE.DAT record must not reference an empty dictionary entry")
+            .len();
 
         audit.non_empty_records += 1;
         audit.rendered_records += 1;
@@ -792,7 +799,7 @@ mod tests {
             hour: 9,
             ..Default::default()
         };
-        let rendered = render_shoppe_bark(bytes, &ctx);
+        let rendered = render_shoppe_bark(bytes, &ctx).unwrap();
         assert!(rendered.contains("25"));
         assert!(rendered.contains("morning"));
     }
@@ -808,7 +815,7 @@ mod tests {
             quantity: 3,
             ..Default::default()
         };
-        let rendered = render_shoppe_bark(bytes, &ctx);
+        let rendered = render_shoppe_bark(bytes, &ctx).unwrap();
         assert!(rendered.contains("Alric"));
         assert!(rendered.contains("Mace"));
         assert!(rendered.contains("Yew"));
@@ -825,7 +832,7 @@ mod tests {
             dictionary: Some(&dict),
             ..Default::default()
         };
-        let rendered = render_shoppe_bark(&bytes, &ctx);
+        let rendered = render_shoppe_bark(&bytes, &ctx).unwrap();
         assert!(rendered.contains("buy"));
         assert!(rendered.contains("swords"));
     }
@@ -833,7 +840,7 @@ mod tests {
     #[test]
     fn render_shoppe_record_uses_published_dictionary_for_tokenized_record() {
         let records = ShoppeRecords {
-            records: vec![vec![b'b', b'u', b'y', b' ', 0x80]],
+            records: vec![vec![b'b', b'u', b'y', 0x80]],
         };
 
         assert_eq!(
@@ -858,28 +865,40 @@ mod tests {
     #[test]
     fn dictionary_token_without_override_uses_published_table() {
         let bytes = vec![0x82u8];
-        let rendered = render_shoppe_bark(&bytes, &ShoppeBarkContext::default());
-        assert_eq!(rendered, "of");
+        let rendered = render_shoppe_bark(&bytes, &ShoppeBarkContext::default()).unwrap();
+        assert_eq!(rendered, " of");
     }
 
     #[test]
-    fn published_empty_dictionary_slot_sets_leading_space() {
+    fn dictionary_spacing_distinguishes_token_token_and_token_text() {
+        let bytes = vec![0x80, 0x81, b'!'];
+        let rendered = render_shoppe_bark(&bytes, &ShoppeBarkContext::default()).unwrap();
+        assert_eq!(rendered, " the thou !");
+    }
+
+    #[test]
+    fn published_empty_dictionary_slot_is_malformed_shop_content() {
         let bytes = vec![b'a', 0x87u8, b'b'];
-        let rendered = render_shoppe_bark(&bytes, &ShoppeBarkContext::default());
-        assert_eq!(rendered, "a b");
+        assert_eq!(
+            render_shoppe_bark(&bytes, &ShoppeBarkContext::default()),
+            Err(ShoppeDatError::EmptyCommonWordDictionaryEntry {
+                token: 0x87,
+                index: 7,
+            })
+        );
     }
 
     #[test]
     fn null_byte_terminates_render() {
         let bytes = b"first\0second";
-        let rendered = render_shoppe_bark(bytes, &ShoppeBarkContext::default());
+        let rendered = render_shoppe_bark(bytes, &ShoppeBarkContext::default()).unwrap();
         assert_eq!(rendered, "first");
     }
 
     #[test]
     fn non_printable_low_bytes_are_stripped() {
         let bytes = vec![b'a', 0x01, 0x1F, b'b'];
-        let rendered = render_shoppe_bark(&bytes, &ShoppeBarkContext::default());
+        let rendered = render_shoppe_bark(&bytes, &ShoppeBarkContext::default()).unwrap();
         assert_eq!(rendered, "ab");
     }
 
@@ -892,21 +911,24 @@ mod tests {
                 hour: 8,
                 ..Default::default()
             },
-        );
+        )
+        .unwrap();
         let afternoon = render_shoppe_bark(
             bytes,
             &ShoppeBarkContext {
                 hour: 14,
                 ..Default::default()
             },
-        );
+        )
+        .unwrap();
         let evening = render_shoppe_bark(
             bytes,
             &ShoppeBarkContext {
                 hour: 22,
                 ..Default::default()
             },
-        );
+        )
+        .unwrap();
         assert_eq!(morning, "morning");
         assert_eq!(afternoon, "afternoon");
         assert_eq!(evening, "evening");

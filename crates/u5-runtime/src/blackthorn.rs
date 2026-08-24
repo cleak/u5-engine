@@ -4,6 +4,128 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+/// `conversation.md §2.1` / `blackthorn.md §7a`: the roster dialog
+/// marker that bypasses `.TLK` loading and enters the regime guard
+/// demand handler.
+pub const BLACKTHORN_GUARD_DEMAND_DIALOG_ID: u8 = 0xff;
+pub const BLACKTHORN_GUARD_TRIBUTE_PER_LIVING_MEMBER: u16 = 10;
+pub const BLACKTHORN_GUARD_PASSWORD_INPUT_MAX: usize = 14;
+pub const BLACKTHORN_GUARD_PASSWORD_COMPARE_LEN: usize = 4;
+pub const BLACKTHORN_GUARD_PASSWORD: &str = "IMPERA";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornGuardDemandPrompt {
+    PalacePassword,
+    MinocCharity,
+    Tribute { amount: u16 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornGuardDemandStart {
+    Prompt(BlackthornGuardDemandPrompt),
+    Refused,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornGuardDemandResolution {
+    AwaitingInput,
+    PaidOrPassed { gold: u16 },
+    Refused { gold: u16 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActiveBlackthornGuardDemand {
+    pub prompt: BlackthornGuardDemandPrompt,
+    pub arrest: crate::TownArrestPrompt,
+}
+
+impl BlackthornGuardDemandPrompt {
+    pub fn message(self) -> String {
+        match self {
+            Self::PalacePassword => "Black Badge bearer, give the password:".to_string(),
+            Self::MinocCharity => "Give half thy gold to charity? (Y/N).".to_string(),
+            Self::Tribute { amount } => {
+                format!("Pay {amount} gold tribute to Blackthorn? (Y/N).")
+            }
+        }
+    }
+}
+
+/// Classify the scene-keyed demand without mutating gameplay state.
+/// The palace branch refuses immediately unless the Black Badge aura
+/// is the currently active shared timed effect. The caller supplies
+/// that predicate so this pure classifier does not own live save state.
+pub const fn begin_blackthorn_guard_demand(
+    scene_byte: u8,
+    black_badge_aura_active: bool,
+    living_party_members: u16,
+) -> BlackthornGuardDemandStart {
+    if scene_byte == crate::SCENE_LORD_BLACKTHORNS_CASTLE {
+        if black_badge_aura_active {
+            BlackthornGuardDemandStart::Prompt(BlackthornGuardDemandPrompt::PalacePassword)
+        } else {
+            BlackthornGuardDemandStart::Refused
+        }
+    } else if scene_byte == crate::SCENE_MINOC {
+        BlackthornGuardDemandStart::Prompt(BlackthornGuardDemandPrompt::MinocCharity)
+    } else {
+        BlackthornGuardDemandStart::Prompt(BlackthornGuardDemandPrompt::Tribute {
+            amount: living_party_members.saturating_mul(BLACKTHORN_GUARD_TRIBUTE_PER_LIVING_MEMBER),
+        })
+    }
+}
+
+/// Resolve one guard-demand prompt. Yes/no prompts ignore other input;
+/// the palace password compares only the first four of at most fourteen
+/// typed characters, case-insensitively. A refusal never changes gold.
+pub fn resolve_blackthorn_guard_demand(
+    prompt: BlackthornGuardDemandPrompt,
+    input: &str,
+    gold: u16,
+) -> BlackthornGuardDemandResolution {
+    match prompt {
+        BlackthornGuardDemandPrompt::PalacePassword => {
+            let typed = input
+                .chars()
+                .take(BLACKTHORN_GUARD_PASSWORD_INPUT_MAX)
+                .collect::<String>();
+            let typed_prefix = typed
+                .chars()
+                .take(BLACKTHORN_GUARD_PASSWORD_COMPARE_LEN)
+                .collect::<String>();
+            let expected_prefix = BLACKTHORN_GUARD_PASSWORD
+                .chars()
+                .take(BLACKTHORN_GUARD_PASSWORD_COMPARE_LEN)
+                .collect::<String>();
+            if typed_prefix.eq_ignore_ascii_case(&expected_prefix) {
+                BlackthornGuardDemandResolution::PaidOrPassed { gold }
+            } else {
+                BlackthornGuardDemandResolution::Refused { gold }
+            }
+        }
+        BlackthornGuardDemandPrompt::MinocCharity => match yes_no_demand_input(input) {
+            Some(true) => BlackthornGuardDemandResolution::PaidOrPassed { gold: gold / 2 },
+            Some(false) => BlackthornGuardDemandResolution::Refused { gold },
+            None => BlackthornGuardDemandResolution::AwaitingInput,
+        },
+        BlackthornGuardDemandPrompt::Tribute { amount } => match yes_no_demand_input(input) {
+            Some(true) if gold >= amount => BlackthornGuardDemandResolution::PaidOrPassed {
+                gold: gold - amount,
+            },
+            Some(true) | Some(false) => BlackthornGuardDemandResolution::Refused { gold },
+            None => BlackthornGuardDemandResolution::AwaitingInput,
+        },
+    }
+}
+
+fn yes_no_demand_input(input: &str) -> Option<bool> {
+    match input.trim_start().chars().next()?.to_ascii_lowercase() {
+        'y' => Some(true),
+        'n' => Some(false),
+        _ => None,
+    }
+}
+
 /// Clean-engine companion save file for Blackthorn story state whose
 /// exact original `SAVED.GAM` byte offsets are not yet public. The
 /// main save image remains byte-preserving for unknown fields; this
@@ -723,5 +845,84 @@ pub const fn blackthorn_rescue_post_print_standing(standing: u8) -> u8 {
         BLACKTHORN_RESCUE_STANDING_FLOOR
     } else {
         standing
+    }
+}
+
+#[cfg(test)]
+mod guard_demand_tests {
+    use super::*;
+
+    #[test]
+    fn scene_dispatch_requires_badge_aura_only_at_the_palace() {
+        assert_eq!(
+            begin_blackthorn_guard_demand(crate::SCENE_LORD_BLACKTHORNS_CASTLE, false, 3),
+            BlackthornGuardDemandStart::Refused
+        );
+        assert_eq!(
+            begin_blackthorn_guard_demand(crate::SCENE_LORD_BLACKTHORNS_CASTLE, true, 3),
+            BlackthornGuardDemandStart::Prompt(BlackthornGuardDemandPrompt::PalacePassword)
+        );
+        assert_eq!(
+            begin_blackthorn_guard_demand(crate::SCENE_MINOC, false, 3),
+            BlackthornGuardDemandStart::Prompt(BlackthornGuardDemandPrompt::MinocCharity)
+        );
+        assert_eq!(
+            begin_blackthorn_guard_demand(crate::SCENE_JHELOM, false, 3),
+            BlackthornGuardDemandStart::Prompt(BlackthornGuardDemandPrompt::Tribute { amount: 30 })
+        );
+    }
+
+    #[test]
+    fn palace_password_uses_case_insensitive_four_character_prefix() {
+        for accepted in ["IMPE", "impera", "ImPeachment"] {
+            assert_eq!(
+                resolve_blackthorn_guard_demand(
+                    BlackthornGuardDemandPrompt::PalacePassword,
+                    accepted,
+                    99
+                ),
+                BlackthornGuardDemandResolution::PaidOrPassed { gold: 99 }
+            );
+        }
+        assert_eq!(
+            resolve_blackthorn_guard_demand(
+                BlackthornGuardDemandPrompt::PalacePassword,
+                "IMPA",
+                99
+            ),
+            BlackthornGuardDemandResolution::Refused { gold: 99 }
+        );
+    }
+
+    #[test]
+    fn charity_and_tribute_mutate_only_gold_on_accepted_affordable_input() {
+        assert_eq!(
+            resolve_blackthorn_guard_demand(BlackthornGuardDemandPrompt::MinocCharity, "yes", 101),
+            BlackthornGuardDemandResolution::PaidOrPassed { gold: 50 }
+        );
+        assert_eq!(
+            resolve_blackthorn_guard_demand(
+                BlackthornGuardDemandPrompt::Tribute { amount: 30 },
+                "Y",
+                30
+            ),
+            BlackthornGuardDemandResolution::PaidOrPassed { gold: 0 }
+        );
+        assert_eq!(
+            resolve_blackthorn_guard_demand(
+                BlackthornGuardDemandPrompt::Tribute { amount: 30 },
+                "Y",
+                29
+            ),
+            BlackthornGuardDemandResolution::Refused { gold: 29 }
+        );
+        assert_eq!(
+            resolve_blackthorn_guard_demand(
+                BlackthornGuardDemandPrompt::Tribute { amount: 30 },
+                "later",
+                99
+            ),
+            BlackthornGuardDemandResolution::AwaitingInput
+        );
     }
 }

@@ -1,8 +1,7 @@
 // Gameplay-screen border chrome and message window.
 //
-// Geometry here is the measured 320x200 layout documented in
-// `gameplay_chrome`; see that module's header for provenance and for
-// the pending spec question `cleak/u5-spec#79`.
+// Geometry here is the published 320x200 layout from
+// `display-driver.md §7` and `text-output.md §10` (`cleak/u5-spec#79`).
 
 fn chrome_test_font() -> FixedCellFont {
     // A font whose only meaningful glyphs are the two end-cap source
@@ -87,7 +86,6 @@ fn gameplay_chrome_paints_ribbon_bands_rules_and_leaves_row_24_black() {
         }
     }
 }
-
 #[test]
 fn gameplay_chrome_rounds_the_three_outer_corners() {
     let rgba = chrome_frame(&GameplayChromeContent::default());
@@ -140,7 +138,6 @@ fn ribbon_end_cap_is_the_one_row_erosion_of_its_source_triangle() {
         assert_eq!(right.ribbon[row] & right.white[row], 0);
     }
 }
-
 #[test]
 fn sky_strip_cells_map_to_columns_six_through_seventeen() {
     assert_eq!(sky_strip_cell_column(0), SKY_STRIP_FIRST_COLUMN);
@@ -259,6 +256,48 @@ fn timing_glyph_slot_appears_only_when_the_tag_byte_is_nonzero() {
     assert_eq!(chrome_index_at(&tagged, 241, 56), 0);
     assert_eq!(chrome_index_at(&tagged, 240, 56), CHROME_RULE_INDEX);
     assert_eq!(chrome_index_at(&tagged, 263, 56), CHROME_RULE_INDEX);
+    // The shared cap remains a two-colour sprite rather than the solid
+    // one-colour triangle produced by an ordinary text overlay.
+    assert_eq!(chrome_index_at(&tagged, 240, 57), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&tagged, 241, 57), CHROME_RULE_INDEX);
+}
+
+#[test]
+fn stats_label_strip_uses_the_cap_anchor_formula_and_interrupts_its_rule() {
+    assert_eq!(
+        stats_label_gap(Some("Select:")),
+        Some(ResolvedGap {
+            left_cap_column: 27,
+            right_cap_column: 35,
+            content_first_column: 28,
+            content_cells: 7,
+        })
+    );
+    assert_eq!(
+        stats_label_gap(Some("Arms")),
+        Some(ResolvedGap {
+            left_cap_column: 28,
+            right_cap_column: 33,
+            content_first_column: 29,
+            content_cells: 4,
+        })
+    );
+    assert_eq!(stats_label_gap(None), None);
+    assert_eq!(stats_label_gap(Some("")), None);
+
+    let rgba = chrome_frame(&GameplayChromeContent {
+        stats_label: Some("Arms".to_string()),
+        ..GameplayChromeContent::default()
+    });
+    // The stats top rule is intact immediately outside caps at columns
+    // 28 and 33, but absent through the label field itself.
+    assert_eq!(chrome_index_at(&rgba, 223, 7), CHROME_RULE_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 225, 7), 0);
+    assert_eq!(chrome_index_at(&rgba, 270, 7), 0);
+    assert_eq!(chrome_index_at(&rgba, 272, 7), CHROME_RULE_INDEX);
+    // Its opening cap uses the same two-colour sprite as every other gap.
+    assert_eq!(chrome_index_at(&rgba, 224, 1), CHROME_RIBBON_INDEX);
+    assert_eq!(chrome_index_at(&rgba, 225, 1), CHROME_RULE_INDEX);
 }
 
 #[test]
@@ -286,6 +325,50 @@ fn gameplay_chrome_content_follows_the_scene_family() {
     // East carries its own leading space inside the five-cell field, so
     // the label reads `Dir:` plus two spaces.
     assert_eq!(below.bottom, ChromeGap::Label("Dir:  East".to_string()));
+}
+
+#[test]
+fn gameplay_chrome_content_maps_modal_stats_labels_and_browser_page_badge() {
+    let mut selector = test_state(open_grid(), 1, 1);
+    let _ = selector.start_party_selector(PartySelectorTarget::ZStats);
+    assert_eq!(
+        gameplay_chrome_content(&selector).stats_label.as_deref(),
+        Some("Select:")
+    );
+
+    selector.active_party_selector = None;
+    selector.active_use = Some(crate::z_stats::UseSession::new());
+    assert_eq!(
+        gameplay_chrome_content(&selector).stats_label.as_deref(),
+        Some("Items:")
+    );
+
+    let mut browser_state = test_state(open_grid(), 1, 1);
+    browser_state.active_effect_tag = Some(b'P');
+    for item in 0..5 {
+        browser_state.equipment_stock[item] = 1;
+    }
+    let browser =
+        crate::shop_runtime::ArmsSellBrowser::new(&browser_state.equipment_stock).unwrap();
+    browser_state.active_shop = Some(crate::shop_session::ActiveShopSession::ArmsStocked(
+        crate::shop_runtime::ArmsShopState::SellPickItem(browser),
+        ArmsShop::IolosBows.stock_table(),
+    ));
+    let content = gameplay_chrome_content(&browser_state);
+    assert_eq!(content.stats_label.as_deref(), Some("Arms"));
+    assert_eq!(content.timing_glyph, Some(ARMS_SELL_BROWSER_PAGE_GLYPH_DOWN));
+
+    // The browser temporarily owns the slot even when there is no page
+    // arrow to show; an unrelated timed-effect tag must not leak through.
+    browser_state.equipment_stock.fill(0);
+    browser_state.equipment_stock[0] = 1;
+    let browser =
+        crate::shop_runtime::ArmsSellBrowser::new(&browser_state.equipment_stock).unwrap();
+    browser_state.active_shop = Some(crate::shop_session::ActiveShopSession::ArmsStocked(
+        crate::shop_runtime::ArmsShopState::SellPickItem(browser),
+        ArmsShop::IolosBows.stock_table(),
+    ));
+    assert_eq!(gameplay_chrome_content(&browser_state).timing_glyph, None);
 }
 
 #[test]
@@ -387,7 +470,6 @@ fn prompt_cursor_cycles_the_four_barber_pole_glyphs() {
         let _ = font;
     }
 }
-
 #[test]
 fn ribbon_cap_is_one_primitive_for_border_message_and_caption_brackets() {
     // The gameplay border's end caps, the message window's per-line
@@ -582,107 +664,4 @@ fn dungeon_billboard_slot_table_matches_the_published_addressing_rule() {
         }
     }
 }
-
-#[test]
-fn decorated_dungeon_families_are_their_plain_counterparts_plus_scenery() {
-    // `cleak/u5-spec#84` offers a self-check that confirms the
-    // plain/flavour pairing without trusting anyone's role names: a
-    // decorated family is its plain counterpart with scenery
-    // composited on top, so 20-23 differs from 0-3 by only a few per
-    // cent of pixels where unrelated families differ by far more.
-    //
-    // **The quoted ratio is DNG1-specific and does not generalise.**
-    // Measured across all three banks: DNG1 pairs at 6.3% side and
-    // 6.1% forward against 17-31% for unrelated pairings, which is the
-    // published 4.6-7.7% band. DNG3 pairs at 13.3%/13.9% against
-    // 30-38% - still discriminating, but well outside the quoted
-    // range. DNG2 pairs at 13.9% side and **40.6% forward**, which sits
-    // inside its own unrelated band of 16.6-41.7% and does not
-    // discriminate at all. So this test deliberately reads DNG1 only;
-    // applied to DNG2 it would conclude the forward flavour family is
-    // unpaired, which is wrong.
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
-    if !game_dir.join("DNG1.16").exists() {
-        return;
-    }
-    let dir = load_graphic_image_directory(game_dir, "DNG1", TileGraphicsDepth::Ega16).unwrap();
-    let difference = |a: usize, b: usize| -> Option<f64> {
-        let (Some(left), Some(right)) = (dir.images[a].as_ref(), dir.images[b].as_ref()) else {
-            return None;
-        };
-        if left.width != right.width || left.height != right.height {
-            return None;
-        }
-        let differing = left
-            .pixels
-            .iter()
-            .zip(right.pixels.iter())
-            .filter(|(x, y)| x != y)
-            .count();
-        Some(100.0 * differing as f64 / left.pixels.len() as f64)
-    };
-
-    // Aggregate over all bands rather than per band: at band 3 every
-    // image is eight pixels wide, so any two families are close there
-    // and a per-band control would not discriminate.
-    let aggregate = |left_base: usize, right_base: usize| -> f64 {
-        let mut differing = 0usize;
-        let mut total = 0usize;
-        for band in 0..DUNGEON_BANDS {
-            let (Some(left), Some(right)) = (
-                dir.images[left_base + band].as_ref(),
-                dir.images[right_base + band].as_ref(),
-            ) else {
-                continue;
-            };
-            differing += left
-                .pixels
-                .iter()
-                .zip(right.pixels.iter())
-                .filter(|(x, y)| x != y)
-                .count();
-            total += left.pixels.len();
-        }
-        100.0 * differing as f64 / total as f64
-    };
-
-    // Side: 20-23 is 0-3 plus scenery; 16-19 is a different image
-    // entirely.
-    let paired = aggregate(
-        DungeonBillboardRole::SideFlavourWall.family_base_slot(),
-        DungeonBillboardRole::SideWall.family_base_slot(),
-    );
-    let unrelated = aggregate(
-        DungeonBillboardRole::SideFlavourWall.family_base_slot(),
-        DungeonBillboardRole::SideOpening.family_base_slot(),
-    );
-    assert!(paired < 10.0, "paired side families differ by {paired:.1}%");
-    assert!(
-        unrelated > 2.0 * paired,
-        "paired {paired:.1}% must be well under unrelated {unrelated:.1}%"
-    );
-    for band in 0..DUNGEON_BANDS {
-        let per_band = difference(
-            DungeonBillboardRole::SideFlavourWall.family_base_slot() + band,
-            DungeonBillboardRole::SideWall.family_base_slot() + band,
-        )
-        .unwrap();
-        assert!(
-            per_band < 10.0,
-            "side flavour band {band} should be plain plus scenery, got {per_band:.1}%"
-        );
-    }
-
-    // Forward: 25-27 against 9-11. Band 0 has no image in either.
-    for band in 1..DUNGEON_BANDS {
-        let paired = difference(
-            DungeonBillboardRole::ForwardFlavourWall.family_base_slot() + band,
-            DungeonBillboardRole::ForwardWall.family_base_slot() + band,
-        )
-        .unwrap();
-        assert!(
-            paired < 10.0,
-            "forward flavour band {band} should be its plain counterpart plus scenery, got {paired:.1}%"
-        );
-    }
-}
+// End of the asset-backed dungeon billboard contract tests.

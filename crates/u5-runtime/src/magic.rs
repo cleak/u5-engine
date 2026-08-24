@@ -62,6 +62,49 @@ pub const COMBAT_FIELD_KIND_SLEEP: u8 = 0x34;
 pub const COMBAT_FIELD_KIND_FIRE: u8 = 0x35;
 pub const COMBAT_FIELD_KIND_ENERGY: u8 = 0x36;
 
+/// `magic.md §8` shared destination tile for a successful An Ylem
+/// (Vanish) live-terrain rewrite.
+pub const VANISH_CLEARED_TILE: u8 = 0x44;
+
+/// `magic.md §8` exact live-terrain ids accepted by An Ylem.  This is
+/// deliberately a tile table rather than an active-object class range:
+/// the same test is used against town and combat-arena terrain.
+pub const VANISH_REMOVABLE_TILES: [u8; 13] = [
+    0x5B, 0x90, 0x91, 0x92, 0x93, 0x9D, 0xA5, 0xA6, 0xA8, 0xA9, 0xAD, 0xAE, 0xAF,
+];
+
+/// `magic.md §8` shared directed utility-spell live-tile rewrite.
+///
+/// Vanish, Open, Magic Lock, and Unlock Magic all inspect the live tile
+/// one cardinal cell from the caster. Open's separate kind-1 chest-object
+/// arm is stateful and remains with the caller; this function owns only the
+/// exact terrain mappings common to surface and combat scenes.
+pub const fn directed_utility_tile_rewrite(spell_index: usize, tile: u8) -> Option<u8> {
+    match spell_index {
+        VANISH_SPELL_INDEX => match tile {
+            0x5B | 0x90 | 0x91 | 0x92 | 0x93 | 0x9D | 0xA5 | 0xA6 | 0xA8 | 0xA9 | 0xAD | 0xAE
+            | 0xAF => Some(VANISH_CLEARED_TILE),
+            _ => None,
+        },
+        OPEN_SPELL_INDEX => match tile {
+            0xB9 => Some(0xB8),
+            0xBB => Some(0xBA),
+            _ => None,
+        },
+        MAGIC_LOCK_SPELL_INDEX => match tile {
+            0xB8 | 0xB9 => Some(0x97),
+            0xBA | 0xBB => Some(0x98),
+            _ => None,
+        },
+        UNLOCK_MAGIC_SPELL_INDEX => match tile {
+            0x97 => Some(0xB8),
+            0x98 => Some(0xBA),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// `magic.md §8` field-placement spell -> combat field-kind byte
 /// the shared arena helper consumes in combat / non-dungeon scenes.
 /// This is a separate dispatch table from the dungeon image bytes
@@ -614,28 +657,28 @@ pub const fn spell_indoor_absorbs(
 /// `magic.md §8` Conjure spell weighted-summon class.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConjureSummon {
-    /// Six of fifteen outcomes — Giant Rat.
+    /// Six of sixteen outcomes — Giant Rat.
     GiantRat,
-    /// Five of fifteen outcomes — Giant Spider.
+    /// Five of sixteen outcomes — Giant Spider.
     GiantSpider,
-    /// Three of fifteen outcomes — Bat.
+    /// Three of sixteen outcomes — Bat.
     Bat,
-    /// One of fifteen outcomes — Python.
+    /// One of sixteen outcomes — Python.
     Python,
 }
 
-/// `magic.md §8` Conjure outcome bound — fifteen weighted outcomes.
-pub const CONJURE_OUTCOME_COUNT: u8 = 15;
+/// `magic.md §8` Conjure outcome bound — sixteen weighted outcomes.
+pub const CONJURE_OUTCOME_COUNT: u8 = 16;
 
 /// `magic.md §8`: classify the Conjure-roll outcome. Caller passes
-/// the raw `0..=14` roll the spell makes against its fifteen-row
+/// the raw `0..=15` roll the spell makes against its sixteen-row
 /// weighted table. Returns `None` for any roll outside the bound.
 pub const fn conjure_summon_for_roll(roll: u8) -> Option<ConjureSummon> {
     Some(match roll {
         0..=5 => ConjureSummon::GiantRat,
         6..=10 => ConjureSummon::GiantSpider,
         11..=13 => ConjureSummon::Bat,
-        14 => ConjureSummon::Python,
+        14..=15 => ConjureSummon::Python,
         _ => return None,
     })
 }

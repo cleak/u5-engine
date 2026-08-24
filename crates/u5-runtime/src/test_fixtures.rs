@@ -30,12 +30,13 @@ pub fn synthetic_tile_atlas(depth: TileGraphicsDepth) -> TileAtlas {
         depth,
         pixels,
         dungeon_billboards: None,
+        dungeon_sprites: None,
     }
 }
 
 pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
     let scene = Scene::new(0x11).unwrap();
-    PlayState {
+    let mut state = PlayState {
         area: Area::Town { scene, floor: 0 },
         player: Player {
             x,
@@ -63,8 +64,14 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         clock: GameClock::default(),
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),
+        dungeon_fountain_frame: 0,
         natural_moongate_counter: 0,
         last_natural_moongate_transit: None,
+        pending_map_viewport_dissolves: Vec::new(),
+        pending_potion_flash: None,
+        pending_stonegate_trapdoor_playback: None,
+        pending_stonegate_status_provision_pass: false,
+        pending_stonegate_object_epilogue: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(PLAY_START_HOUR),
         food: DEFAULT_FOOD_STOCK,
@@ -94,9 +101,13 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         dungeon_room_clear_bitmap: [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
         moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
         shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-        quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+        resident_shadowlord: None,
+        summoned_shadowlord: None,
+        removed_town_npc_flags: HashMap::new(),
         shrine_ordained_mask: 0,
         shrine_codex_mask: 0,
+        word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+        shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
         moral_standing: 0,
         toll_progress: 0,
         avatar_stats: AvatarStats::default(),
@@ -106,6 +117,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         ambient_light: FULL_DAYLIGHT,
         light_beacon: LightBeaconState::new(),
         beacon_bearing_stencils: synthetic_beacon_bearing_stencils(),
+        local_light_mask: [false; TOWN_GRID_BYTES],
         visibility_dirty: false,
         visibility_grid: [0; VISIBILITY_GRID_LEN],
         terrain_band: [0; TERRAIN_BAND_LEN],
@@ -113,18 +125,20 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         world_underfoot_blackout_latched: false,
         wind: WindState::default(),
         wind_save_byte: 0,
-        timing_status: TimingStatusTag::default(),
         time_stop_counter: 0,
         active_effect_tag: None,
         active_effect_counter: 0,
         fortunes_of_war: 0,
         camp_cooldown: 0,
+        camp_month_cookie: 0,
         active_player: None,
         combat_round_counter: 0,
+        combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
         combat_active: false,
         combat_frame_snapshot: None,
         pending_combat_actor_slot: None,
         pending_combat_terrain_trigger_slot: None,
+        pending_outdoor_reaction_slots: Vec::new(),
         next_combat_actor_slot: 0,
         combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
         combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
@@ -134,6 +148,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
         sail_cadence: 0,
         sail_stall_pending: false,
+        pending_vehicle_save: PendingVehicleSaveState::default(),
         turn: 0,
         message: String::new(),
         message_transcript: Vec::new(),
@@ -147,6 +162,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         save_template_source: SaveTemplateSource::PreferSavedGame,
         typeahead_buffer_enabled: false,
         music_enabled: true,
+        active_blackthorn_guard_demand: None,
         pending_town_arrest: None,
         endgame: None,
         active_blackthorn: None,
@@ -155,6 +171,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         active_shop: None,
         common_word_dictionary: None,
         active_conversation: None,
+        active_conversation_npc_slot: None,
         active_conversation_join_candidate: None,
         active_z_stats: None,
         active_party_selector: None,
@@ -169,27 +186,25 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         active_mix: None,
         active_new_order: None,
         active_yell: None,
+        active_shrine_restoration: None,
         active_wishing_well: None,
         active_view_overlay: None,
         white_potion_sweep: None,
-        combat_potion_presentation: None,
         active_direction_prompt: None,
         active_yes_no_prompt: None,
-        pickpocketed_npcs: Vec::new(),
-        removed_town_npcs: Vec::new(),
-        town_npc_alarm_states: Vec::new(),
+        town_npc_mutations: Vec::new(),
         talk_branch_flags: HashMap::new(),
-        conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
         conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
-        conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
-        conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
         inn_registry: Vec::new(),
-    }
+    };
+    state.rebuild_surface_local_light_mask();
+    state.visibility_dirty = false;
+    state
 }
 
 pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState {
     let scene = DungeonScene::new(33).unwrap();
-    PlayState {
+    let mut state = PlayState {
         area: Area::Dungeon { scene, level },
         player: Player {
             x,
@@ -217,8 +232,14 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         clock: GameClock::default(),
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),
+        dungeon_fountain_frame: 0,
         natural_moongate_counter: 0,
         last_natural_moongate_transit: None,
+        pending_map_viewport_dissolves: Vec::new(),
+        pending_potion_flash: None,
+        pending_stonegate_trapdoor_playback: None,
+        pending_stonegate_status_provision_pass: false,
+        pending_stonegate_object_epilogue: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(PLAY_START_HOUR),
         food: DEFAULT_FOOD_STOCK,
@@ -248,9 +269,13 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         dungeon_room_clear_bitmap: [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
         moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
         shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-        quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+        resident_shadowlord: None,
+        summoned_shadowlord: None,
+        removed_town_npc_flags: HashMap::new(),
         shrine_ordained_mask: 0,
         shrine_codex_mask: 0,
+        word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+        shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
         moral_standing: 0,
         toll_progress: 0,
         avatar_stats: AvatarStats::default(),
@@ -260,6 +285,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         ambient_light: 0,
         light_beacon: LightBeaconState::new(),
         beacon_bearing_stencils: synthetic_beacon_bearing_stencils(),
+        local_light_mask: [false; TOWN_GRID_BYTES],
         visibility_dirty: false,
         visibility_grid: [0; VISIBILITY_GRID_LEN],
         terrain_band: [0; TERRAIN_BAND_LEN],
@@ -267,18 +293,20 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         world_underfoot_blackout_latched: false,
         wind: WindState::default(),
         wind_save_byte: 0,
-        timing_status: TimingStatusTag::default(),
         time_stop_counter: 0,
         active_effect_tag: None,
         active_effect_counter: 0,
         fortunes_of_war: 0,
         camp_cooldown: 0,
+        camp_month_cookie: 0,
         active_player: None,
         combat_round_counter: 0,
+        combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
         combat_active: false,
         combat_frame_snapshot: None,
         pending_combat_actor_slot: None,
         pending_combat_terrain_trigger_slot: None,
+        pending_outdoor_reaction_slots: Vec::new(),
         next_combat_actor_slot: 0,
         combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
         combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
@@ -288,6 +316,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
         sail_cadence: 0,
         sail_stall_pending: false,
+        pending_vehicle_save: PendingVehicleSaveState::default(),
         turn: 0,
         message: String::new(),
         message_transcript: Vec::new(),
@@ -301,6 +330,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         save_template_source: SaveTemplateSource::PreferSavedGame,
         typeahead_buffer_enabled: false,
         music_enabled: true,
+        active_blackthorn_guard_demand: None,
         pending_town_arrest: None,
         endgame: None,
         active_blackthorn: None,
@@ -309,6 +339,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         active_shop: None,
         common_word_dictionary: None,
         active_conversation: None,
+        active_conversation_npc_slot: None,
         active_conversation_join_candidate: None,
         active_z_stats: None,
         active_party_selector: None,
@@ -323,28 +354,29 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         active_mix: None,
         active_new_order: None,
         active_yell: None,
+        active_shrine_restoration: None,
         active_wishing_well: None,
         active_view_overlay: None,
         white_potion_sweep: None,
-        combat_potion_presentation: None,
         active_direction_prompt: None,
         active_yes_no_prompt: None,
-        pickpocketed_npcs: Vec::new(),
-        removed_town_npcs: Vec::new(),
-        town_npc_alarm_states: Vec::new(),
+        town_npc_mutations: Vec::new(),
         talk_branch_flags: HashMap::new(),
-        conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
         conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
-        conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
-        conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
         inn_registry: Vec::new(),
-    }
+    };
+    state.rebuild_surface_local_light_mask();
+    state.visibility_dirty = false;
+    state
 }
 
 pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
     let world_live_chunks =
-        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Underworld, &grid, x, y, |_| false).ok();
-    PlayState {
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Underworld, &grid, x, y, |_| {
+            LiveChunkSubstitutionPolicy::NONE
+        })
+        .ok();
+    let mut state = PlayState {
         area: Area::World {
             plane: WorldPlane::Underworld,
         },
@@ -374,8 +406,14 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         clock: GameClock::default(),
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),
+        dungeon_fountain_frame: 0,
         natural_moongate_counter: 0,
         last_natural_moongate_transit: None,
+        pending_map_viewport_dissolves: Vec::new(),
+        pending_potion_flash: None,
+        pending_stonegate_trapdoor_playback: None,
+        pending_stonegate_status_provision_pass: false,
+        pending_stonegate_object_epilogue: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(PLAY_START_HOUR),
         food: DEFAULT_FOOD_STOCK,
@@ -405,9 +443,13 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         dungeon_room_clear_bitmap: [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
         moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
         shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-        quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+        resident_shadowlord: None,
+        summoned_shadowlord: None,
+        removed_town_npc_flags: HashMap::new(),
         shrine_ordained_mask: 0,
         shrine_codex_mask: 0,
+        word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+        shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
         moral_standing: 0,
         toll_progress: 0,
         avatar_stats: AvatarStats::default(),
@@ -417,6 +459,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         ambient_light: FULL_DAYLIGHT,
         light_beacon: LightBeaconState::new(),
         beacon_bearing_stencils: synthetic_beacon_bearing_stencils(),
+        local_light_mask: [false; TOWN_GRID_BYTES],
         visibility_dirty: false,
         visibility_grid: [0; VISIBILITY_GRID_LEN],
         terrain_band: [0; TERRAIN_BAND_LEN],
@@ -424,18 +467,20 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         world_underfoot_blackout_latched: false,
         wind: WindState::default(),
         wind_save_byte: 0,
-        timing_status: TimingStatusTag::default(),
         time_stop_counter: 0,
         active_effect_tag: None,
         active_effect_counter: 0,
         fortunes_of_war: 0,
         camp_cooldown: 0,
+        camp_month_cookie: 0,
         active_player: None,
         combat_round_counter: 0,
+        combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
         combat_active: false,
         combat_frame_snapshot: None,
         pending_combat_actor_slot: None,
         pending_combat_terrain_trigger_slot: None,
+        pending_outdoor_reaction_slots: Vec::new(),
         next_combat_actor_slot: 0,
         combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
         combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
@@ -445,6 +490,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
         sail_cadence: 0,
         sail_stall_pending: false,
+        pending_vehicle_save: PendingVehicleSaveState::default(),
         turn: 0,
         message: String::new(),
         message_transcript: Vec::new(),
@@ -458,6 +504,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         save_template_source: SaveTemplateSource::PreferSavedGame,
         typeahead_buffer_enabled: false,
         music_enabled: true,
+        active_blackthorn_guard_demand: None,
         pending_town_arrest: None,
         endgame: None,
         active_blackthorn: None,
@@ -466,6 +513,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         active_shop: None,
         common_word_dictionary: None,
         active_conversation: None,
+        active_conversation_npc_slot: None,
         active_conversation_join_candidate: None,
         active_z_stats: None,
         active_party_selector: None,
@@ -480,22 +528,20 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         active_mix: None,
         active_new_order: None,
         active_yell: None,
+        active_shrine_restoration: None,
         active_wishing_well: None,
         active_view_overlay: None,
         white_potion_sweep: None,
-        combat_potion_presentation: None,
         active_direction_prompt: None,
         active_yes_no_prompt: None,
-        pickpocketed_npcs: Vec::new(),
-        removed_town_npcs: Vec::new(),
-        town_npc_alarm_states: Vec::new(),
+        town_npc_mutations: Vec::new(),
         talk_branch_flags: HashMap::new(),
-        conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
         conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
-        conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
-        conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
         inn_registry: Vec::new(),
-    }
+    };
+    state.rebuild_surface_local_light_mask();
+    state.visibility_dirty = false;
+    state
 }
 
 /// Refuse to use the player's pristine asset install as a *write*
@@ -672,6 +718,14 @@ pub fn ool_plane_with_object(slot: usize, object: ActiveObject) -> Vec<u8> {
     bytes
 }
 
+/// Install the two per-plane mirror files required by the Q-save
+/// staging contract. Keep this opt-in so tests for missing/corrupt
+/// mirror failures can continue to start from [`debug_game_dir`].
+pub fn write_empty_ool_mirrors(game_dir: &Path) {
+    fs::write(game_dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+    fs::write(game_dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+}
+
 pub fn write_ool_object(bytes: &mut [u8], slot: usize, object: ActiveObject) {
     assert!(slot < OOL_SLOTS);
     let offset = slot * OOL_RECORD_LEN;
@@ -719,6 +773,11 @@ pub fn synthetic_data_ovl() -> Vec<u8> {
     // stays unambiguous.
     data.resize(BEACON_STENCIL_TABLE_OFFSET, 0);
     data.extend_from_slice(&synthetic_beacon_stencil_table());
+    data.resize(CAMP_NO_EFFECT_MESSAGE_OFFSET + 16, 0);
+    data[CAMP_SUCCESS_MESSAGE_OFFSET..CAMP_SUCCESS_MESSAGE_OFFSET + 9]
+        .copy_from_slice(b"RESTED!\n\0");
+    data[CAMP_NO_EFFECT_MESSAGE_OFFSET..CAMP_NO_EFFECT_MESSAGE_OFFSET + 12]
+        .copy_from_slice(b"NO EFFECT!\n\0");
     data
 }
 

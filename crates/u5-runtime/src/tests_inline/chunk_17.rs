@@ -313,6 +313,45 @@
     }
 
     #[test]
+    fn directed_utility_followup_spends_first_ignores_escape_and_accepts_pass() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.spell_charges[VANISH_SPELL_INDEX] = 1;
+        state.party[0].mana = VANISH_COST;
+        state.party[0].level = VANISH_COST;
+
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(state
+            .step_active_cast('A', "Y", Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state
+            .step_active_cast(' ', "", Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state.active_cast_followup.is_some());
+        assert_eq!(state.spell_charges[VANISH_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 0);
+
+        assert!(state
+            .step_active_cast_followup('\u{1b}', "", Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state.active_cast_followup.is_some());
+        assert!(state.message.starts_with(SPELL_DIRECTION_PROMPT_PREFIX));
+
+        let result = state
+            .step_active_cast_followup(' ', "", Path::new(""))
+            .unwrap()
+            .expect("Space/Pass should finish the already-spent Vanish cast");
+        assert_eq!(result.0, MoveOutcome::Cast);
+        assert_eq!(result.1, None);
+        assert!(state.active_cast_followup.is_none());
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+    }
+
+    #[test]
     fn active_cast_direction_followup_collects_cardinal_before_spending_resources() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.spell_charges[BLINK_SPELL_INDEX] = 1;
@@ -559,7 +598,8 @@
         assert!(state.active_yell.is_none());
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Yelled FALLAX"));
-        assert!(state.message.contains("Word of Power for Deceit"));
+        assert!(state.message.contains("Nothing happens."));
+        assert!(!state.message.contains("Word of Power"));
     }
 
     #[test]
@@ -680,7 +720,7 @@
         assert_eq!(get.player.facing, Direction::South);
 
         let mut grid = open_grid();
-        grid[32 + 2] = 96;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         let mut open = test_state(grid, 1, 1);
         open.player.facing = Direction::South;
         assert_eq!(
@@ -694,14 +734,14 @@
             PlayInputDisposition::Continue
         );
         assert!(open.active_direction_prompt.is_none());
-        assert_eq!(open.grid[32 + 2], 16);
+        assert_eq!(open.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(open.turn, 1);
         assert_eq!(open.player.facing, Direction::South);
         assert_eq!(open.message, "Opened!");
 
         fs::write(
             dir.join(SECRET_DOOR_TABLE_FILE),
-            "TOWN CASTLE:0 0 2 1 96\n",
+            "TOWN CASTLE:0 0 2 1 184\n",
         )
         .unwrap();
         let mut grid = open_grid();
@@ -719,7 +759,7 @@
             PlayInputDisposition::Continue
         );
         assert!(search.active_direction_prompt.is_none());
-        assert_eq!(search.grid[32 + 2], 96);
+        assert_eq!(search.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(search.turn, 1);
         assert_eq!(search.player.facing, Direction::South);
         assert_eq!(search.message, "Revealed secret door at (2, 1).");
@@ -810,7 +850,7 @@
 
         assert!(state.active_use.is_none());
         assert_eq!(state.message, "No usable items.");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
@@ -827,12 +867,25 @@
         assert!(state.message.contains("Pocket Watch"));
 
         assert_eq!(
-            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
         assert!(state.active_use.is_none());
-        assert_eq!(state.message, "Pocket Watch: 1 P.M.");
+        assert_eq!(state.message, "Pocket Watch: 1:00 P.M.");
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn shared_use_picker_escape_prints_its_published_cancel_literal() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+
+        handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.message, ITEM_PICKER_ESCAPE_MESSAGE);
         assert_eq!(state.turn, 1);
     }
 
@@ -973,7 +1026,7 @@
 
         assert!(state.active_use.is_none());
         assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
             "Shard of Falsehood: no matching Eternal Flame is here."
@@ -1011,7 +1064,7 @@
 
             assert!(state.active_use.is_none());
             assert_eq!(state.special_items[item_index], 1);
-            assert_eq!(state.turn, 0);
+            assert_eq!(state.turn, 1);
             assert_eq!(state.message, expected_message);
         }
     }
@@ -1077,6 +1130,7 @@
         };
         state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
         state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+        state.summoned_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
         let z = state.current_floor().unwrap();
         state.active_objects.push(
             state
@@ -1094,8 +1148,8 @@
         assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 0);
         assert!(state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(
-            state.quest_progress_word & SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT,
-            SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT
+            state.removed_town_npc_flags.get(&STONEGATE_SCENE_BYTE),
+            Some(&(1 << SHADOWLORD_FALSEHOOD_STONEGATE_NPC_SLOT))
         );
         assert!(!state.shadowlord_name_encounter_present(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(state.turn, 1);
@@ -1157,6 +1211,7 @@
                 "published flame at scene {scene} floor {floor} ({x}, {y})"
             );
 
+            state.summoned_shadowlord = Some(shadowlord);
             let z = state.current_floor().unwrap();
             state.active_objects.push(
                 state
@@ -1228,6 +1283,7 @@
         let mut state = test_state(grid, 5, 4);
         state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
         state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+        state.summoned_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
         let z = state.current_floor().unwrap();
         state.active_objects.push(
             state
@@ -1285,6 +1341,7 @@
         let mut state = test_state(grid, 4, 4);
         state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
         state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+        state.summoned_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
         let z = state.current_floor().unwrap();
         state.active_objects.push(
             state
@@ -1314,6 +1371,7 @@
         let mut state = test_state(open_grid(), 5, 5);
         state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
         state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+        state.summoned_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
         let z = state.current_floor().unwrap();
         state.active_objects.push(
             state
@@ -1352,7 +1410,7 @@
         assert!(state.active_use.is_none());
         assert_eq!(state.torches, 1);
         assert_eq!(state.torch_counter, 0);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, use_prompt_message());
 
         assert_eq!(
@@ -1362,7 +1420,7 @@
 
         assert!(state.active_use.is_none());
         assert_eq!(state.gems, 1);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 2);
         assert_eq!(state.message, use_prompt_message());
     }
 
@@ -1881,6 +1939,7 @@
         let dir = debug_game_dir();
         fs::write(dir.join("SAVED.GAM"), saved_game_seed_bytes(0, 0xff, 10, 20)).unwrap();
         fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+        write_empty_ool_mirrors(&dir);
         let mut state = world_state(open_world_grid(), 10, 20);
         state.party = vec![
             PartyMember {
@@ -2032,13 +2091,11 @@
         assert_eq!(state.turn, 3);
     }
 
-    /// `inventory.md §5`/§8: the charge is **per invocation**, not per
-    /// attempt — the picker stays open across repeated attempts within
-    /// that one turn, so opening it costs one turn and the equip and
-    /// unequip inside it cost nothing further. An earlier revision of this
-    /// suite asserted the whole sequence was free; that is withdrawn.
+    /// `inventory.md §5`/§8 establishes the sole mode-loop charge and that
+    /// the picker stays open across repeated attempts. Public issue #113
+    /// confirms that nothing in the subtree adds a per-attempt clock advance.
     #[test]
-    fn active_ready_picker_charges_one_turn_for_the_whole_invocation() {
+    fn active_ready_picker_applies_exactly_one_mode_loop_charge() {
         let mut state = test_state(open_grid(), 1, 1);
         state.party_strengths = vec![50];
         state.party_equipment = default_party_equipment(1);
@@ -2059,7 +2116,9 @@
         handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
         assert!(state.message.contains("26: Bow"));
 
-        handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
+        // inventory.md §5: Space and Enter are separate accepted confirm
+        // bytes. Use Space for the first attempt and Enter for the second.
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
         assert_eq!(
             state.party_equipment[0][EQUIP_SLOT_WEAPON],
             EQUIPMENT_ID_BOW as u8
@@ -2076,10 +2135,207 @@
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Unequipped Bow"));
 
-        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
         assert!(state.active_ready.is_none());
-        assert_eq!(state.message, "Ready closed.");
+        assert_eq!(state.message, READY_PICKER_ESCAPE_MESSAGE);
         assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn ready_invocation_uses_exact_mode_clock_cost_and_shared_time_modifiers() {
+        let dungeon = Area::Dungeon {
+            scene: DungeonScene::new(FIRST_DUNGEON_SCENE_BYTE).unwrap(),
+            level: 0,
+        };
+        let cases = [
+            ("world normal", Area::World { plane: WorldPlane::Britannia }, None, 2),
+            ("town normal", test_state(open_grid(), 1, 1).area, None, 1),
+            ("dungeon normal", dungeon, None, 1),
+            (
+                "world Quickness",
+                Area::World { plane: WorldPlane::Britannia },
+                Some((QUICKNESS_ACTIVE_EFFECT_TAG, QUICKNESS_ACTIVE_EFFECT_DURATION)),
+                1,
+            ),
+            (
+                "town Quickness",
+                test_state(open_grid(), 1, 1).area,
+                Some((QUICKNESS_ACTIVE_EFFECT_TAG, QUICKNESS_ACTIVE_EFFECT_DURATION)),
+                1,
+            ),
+            (
+                "dungeon Quickness",
+                dungeon,
+                Some((QUICKNESS_ACTIVE_EFFECT_TAG, QUICKNESS_ACTIVE_EFFECT_DURATION)),
+                1,
+            ),
+            (
+                "world Negate Time",
+                Area::World { plane: WorldPlane::Britannia },
+                Some((NEGATE_TIME_ACTIVE_EFFECT_TAG, TIME_STOP_DURATION)),
+                0,
+            ),
+            (
+                "town Negate Time",
+                test_state(open_grid(), 1, 1).area,
+                Some((NEGATE_TIME_ACTIVE_EFFECT_TAG, TIME_STOP_DURATION)),
+                0,
+            ),
+            (
+                "dungeon Negate Time",
+                dungeon,
+                Some((NEGATE_TIME_ACTIVE_EFFECT_TAG, TIME_STOP_DURATION)),
+                0,
+            ),
+        ];
+
+        for (label, area, effect, expected_minutes) in cases {
+            let mut state = match area {
+                Area::World { .. } => world_state(open_world_grid(), 1, 1),
+                Area::Town { .. } | Area::Dungeon { .. } => test_state(open_grid(), 1, 1),
+            };
+            state.area = area;
+            state.clock = GameClock::new(12, 0).unwrap();
+            state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+            if let Some((tag, counter)) = effect {
+                state.active_effect_tag = Some(tag);
+                state.active_effect_counter = counter;
+            }
+
+            assert_eq!(
+                handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue,
+                "{label}"
+            );
+
+            assert!(state.active_ready.is_some(), "{label}");
+            assert_eq!(state.turn, 1, "{label}");
+            assert_eq!((state.clock.hour, state.clock.minute), (12, expected_minutes), "{label}");
+        }
+    }
+
+    #[test]
+    fn ready_member_selection_cancel_and_item_picker_escape_use_distinct_literals() {
+        let mut member_cancel = test_state(open_grid(), 1, 1);
+        member_cancel.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+        handle_play_key_input(&mut member_cancel, 'R', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut member_cancel, '\u{1b}', "", Path::new("")).unwrap();
+        assert!(member_cancel.active_ready.is_none());
+        assert_eq!(member_cancel.message, ITEM_PICKER_ESCAPE_MESSAGE);
+
+        let mut picker_exit = test_state(open_grid(), 1, 1);
+        picker_exit.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+        handle_play_key_input(&mut picker_exit, 'R', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut picker_exit, '1', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut picker_exit, '\u{1b}', "", Path::new("")).unwrap();
+        assert!(picker_exit.active_ready.is_none());
+        assert_eq!(picker_exit.message, READY_PICKER_ESCAPE_MESSAGE);
+    }
+
+    #[test]
+    fn ready_member_selector_cycles_confirms_highlight_and_retries_zero() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 10,
+            max_hp: 10,
+            level: 1,
+        });
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+        state.party_equipment = default_party_equipment(2);
+        state.party_strengths = vec![50; 2];
+        state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+
+        handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '0', "", Path::new("")).unwrap();
+        assert_eq!(
+            state.active_ready.as_ref().unwrap().selected_party_index,
+            None
+        );
+
+        handle_play_key_input(
+            &mut state,
+            char::from(INPUT_CODE_SOUTH),
+            "",
+            Path::new(""),
+        )
+        .unwrap();
+        assert_eq!(state.active_ready.as_ref().unwrap().cursor, 1);
+
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        assert_eq!(
+            state.active_ready.as_ref().unwrap().selected_party_index,
+            Some(1)
+        );
+        assert!(state.message.contains("party member 2"));
+    }
+
+    #[test]
+    fn ready_and_use_picker_actions_accept_native_vertical_and_corner_codes() {
+        for (code, ready, use_action) in [
+            (
+                INPUT_CODE_NORTH,
+                ReadyInputAction::PreviousItem,
+                UseInputAction::PreviousItem,
+            ),
+            (
+                INPUT_CODE_SOUTH,
+                ReadyInputAction::NextItem,
+                UseInputAction::NextItem,
+            ),
+            (
+                INPUT_CODE_NORTHWEST,
+                ReadyInputAction::PagePrevious,
+                UseInputAction::PagePrevious,
+            ),
+            (
+                INPUT_CODE_NORTHEAST,
+                ReadyInputAction::PagePrevious,
+                UseInputAction::PagePrevious,
+            ),
+            (
+                INPUT_CODE_SOUTHWEST,
+                ReadyInputAction::PageNext,
+                UseInputAction::PageNext,
+            ),
+            (
+                INPUT_CODE_SOUTHEAST,
+                ReadyInputAction::PageNext,
+                UseInputAction::PageNext,
+            ),
+        ] {
+            let key = char::from(code);
+            assert_eq!(ready_input_action(key), ready);
+            assert_eq!(use_input_action(key), use_action);
+        }
+        assert_eq!(ready_input_action(' '), ReadyInputAction::Confirm);
+        assert_eq!(use_input_action(' '), UseInputAction::Confirm);
+        assert_eq!(ready_input_action('\u{1b}'), ReadyInputAction::Exit);
+        assert_eq!(use_input_action('\u{1b}'), UseInputAction::Exit);
+    }
+
+    #[test]
+    fn ready_magic_ring_vanish_closes_picker_without_done_literal() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.turn = 5;
+        state.party_strengths = vec![50];
+        state.party_equipment = default_party_equipment(1);
+        state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY] = 1;
+
+        handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+
+        assert!(state.active_ready.is_none());
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY], 0);
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
+        assert!(state.message.contains("vanished"));
+        assert!(!state.message.contains(READY_PICKER_ESCAPE_MESSAGE));
+        assert_eq!(state.turn, 6);
     }
 
     #[test]
@@ -2540,6 +2796,7 @@
         state.combat_active = true;
         state.party[0].mana = CAUSE_FEAR_COST;
         state.party[0].level = CAUSE_FEAR_COST;
+        state.party_intelligence[0] = u8::MAX;
         state.spell_charges[CAUSE_FEAR_SPELL_INDEX] = 1;
         state.combat_actors[0] = CombatActorDescriptor::from_row([
             20,
@@ -2625,11 +2882,12 @@
     }
 
     #[test]
-    fn cast_cause_fear_skips_charmed_monsters_as_same_faction() {
+    fn cast_cause_fear_has_no_faction_filter_for_charmed_monsters() {
         let mut state = test_state(open_grid(), 1, 1);
         state.combat_active = true;
         state.party[0].mana = CAUSE_FEAR_COST;
         state.party[0].level = CAUSE_FEAR_COST;
+        state.party_intelligence[0] = u8::MAX;
         state.spell_charges[CAUSE_FEAR_SPELL_INDEX] = 1;
         state.combat_actors[0] = CombatActorDescriptor::from_row([
             20,
@@ -2664,12 +2922,15 @@
 
         assert_eq!(state.cast_cause_fear(0), MoveOutcome::Cast);
 
-        assert_eq!(state.combat_actors[6].hp_or_wound, 50);
+        assert_eq!(
+            state.combat_actors[6].hp_or_wound,
+            cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_DAEMON).unwrap().max_hp)
+        );
         assert_eq!(
             state.combat_actors[7].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
-        assert_eq!(state.message, "Cause Fear affected 1 combat actor(s).");
+        assert_eq!(state.message, "Cause Fear affected 2 combat actor(s).");
     }
 
     #[test]
@@ -3169,7 +3430,7 @@
         );
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
@@ -3203,7 +3464,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
         assert_eq!(state.gold, starting_gold);
         assert_eq!(state.torches, starting_torches);
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
@@ -3221,7 +3482,7 @@
     #[test]
     fn cast_an_sanct_opens_ordinary_surface_doors_without_open_tracker() {
         let mut town_grid = open_grid();
-        town_grid[1 * 32 + 2] = 0x97;
+        town_grid[1 * 32 + 2] = 0xB9;
         let mut town = test_state(town_grid, 1, 1);
         town.spell_charges[OPEN_SPELL_INDEX] = 1;
         town.party[0].mana = OPEN_SPELL_COST;
@@ -3243,10 +3504,10 @@
             unreachable!("test state should be a town");
         };
         assert!(!town.is_recorded_open_town_door(scene, floor, 2, 1));
-        assert_eq!(town.message, "Opened!");
+        assert_eq!(town.message, "Success!");
 
         let mut world_grid = open_world_grid();
-        world_grid[world_cell_index(4, 5)] = 0x98;
+        world_grid[world_cell_index(4, 5)] = 0xBB;
         let mut world = britannia_state(world_grid, 5, 5);
         world.spell_charges[OPEN_SPELL_INDEX] = 1;
         world.party[0].mana = OPEN_SPELL_COST;
@@ -3263,7 +3524,7 @@
         assert_eq!(world.turn, 1);
         assert_eq!(world.clock, GameClock::new(12, 2).unwrap());
         assert_eq!(world.door_tracker, None);
-        assert_eq!(world.message, "Opened!");
+        assert_eq!(world.message, "Success!");
     }
 
     #[test]
@@ -3315,7 +3576,7 @@
     }
 
     #[test]
-    fn combat_allowed_open_uses_failed_utility_fallback_without_target_prompt() {
+    fn combat_open_rewrites_the_adjacent_live_arena_door() {
         let mut grid = open_world_grid();
         grid[world_cell_index(6, 5)] = 0x97;
         let mut state = britannia_state(grid, 5, 5);
@@ -3330,7 +3591,7 @@
             5,
             5,
         ]);
-        state.combat_terrain[5][6] = 97;
+        state.combat_terrain[5][6] = 0xB9;
         state.spell_charges[OPEN_SPELL_INDEX] = 1;
         state.party[0].mana = OPEN_SPELL_COST;
         state.party[0].level = OPEN_SPELL_COST;
@@ -3338,22 +3599,62 @@
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1AS", Path::new(""))
+                .cast_spell_from_suffix("1AS6", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Cast
         );
 
         assert_eq!(state.grid[world_cell_index(6, 5)], 0x97);
-        assert_eq!(state.combat_terrain[5][6], 97);
+        assert_eq!(state.combat_terrain[5][6], 0xB8);
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(state.message, "Failed!");
+        assert_eq!(state.message, "Success!");
     }
 
     #[test]
-    fn combat_vanish_uses_failed_utility_fallback_without_arena_mutation() {
+    fn combat_open_clears_the_adjacent_kind_one_chest_trap_bit() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.combat_active = true;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.active_objects.resize(3, ActiveObject::empty());
+        state.active_objects[2] = ActiveObject {
+            type_byte: COMBAT_DEFAULT_DEATH_DROP_TILE,
+            tile: COMBAT_DEFAULT_DEATH_DROP_TILE,
+            x: 6,
+            y: 5,
+            z: 7,
+            aux1: 0xA5,
+            ..ActiveObject::empty()
+        };
+        state.spell_charges[OPEN_SPELL_INDEX] = 1;
+        state.party[0].mana = OPEN_SPELL_COST;
+        state.party[0].level = OPEN_SPELL_COST;
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1AS6", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert_eq!(state.active_objects[2].aux1, 0x25);
+        assert_eq!(state.message, "Success!");
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn combat_vanish_rewrites_only_the_adjacent_live_arena_tile() {
         let mut object_state = test_state(open_grid(), 5, 5);
         object_state.combat_active = true;
         object_state.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -3374,6 +3675,7 @@
             y: 5,
             ..ActiveObject::empty()
         };
+        object_state.combat_terrain[5][6] = 0x90;
         object_state.spell_charges[VANISH_SPELL_INDEX] = 1;
         object_state.party[0].mana = VANISH_COST;
         object_state.party[0].level = VANISH_COST;
@@ -3381,16 +3683,17 @@
 
         assert_eq!(
             object_state
-                .cast_spell_from_suffix("1AY", Path::new(""))
+                .cast_spell_from_suffix("1AY6", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Cast
         );
 
         assert_eq!(object_state.active_objects[1].tile, 0x50);
+        assert_eq!(object_state.combat_terrain[5][6], VANISH_CLEARED_TILE);
         assert_eq!(object_state.spell_charges[VANISH_SPELL_INDEX], 0);
         assert_eq!(object_state.party[0].mana, 0);
         assert_eq!(object_state.turn, 1);
-        assert_eq!(object_state.message, "Failed!");
+        assert_eq!(object_state.message, "POOF!");
 
         let mut field_state = test_state(open_grid(), 5, 5);
         field_state.combat_active = true;
@@ -3418,7 +3721,7 @@
 
         assert_eq!(
             field_state
-                .cast_spell_from_suffix("1AY", Path::new(""))
+                .cast_spell_from_suffix("1AY6", Path::new(""))
                 .unwrap(),
             MoveOutcome::Blocked
         );

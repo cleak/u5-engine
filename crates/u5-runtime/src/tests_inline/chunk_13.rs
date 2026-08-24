@@ -302,14 +302,14 @@ fn combat_target_group_and_round_result_chains() {
 
 #[test]
 fn conjure_animal_outcome_count_aliases_to_conjure_outcome_count() {
-    // magic.md §8: the Conjure spell rolls one of fifteen
+    // magic.md §8: the Conjure spell rolls one of sixteen
     // weighted outcomes. combat_actor.rs declared
-    // CONJURE_ANIMAL_OUTCOME_COUNT = 15 as a bare literal in
-    // parallel with magic::CONJURE_OUTCOME_COUNT = 15. Anchor
+    // CONJURE_ANIMAL_OUTCOME_COUNT in parallel with
+    // magic::CONJURE_OUTCOME_COUNT. Anchor
     // the combat-side count through to the magic-side
     // anchor so both refer to the same outcome bound.
     assert_eq!(CONJURE_ANIMAL_OUTCOME_COUNT, CONJURE_OUTCOME_COUNT);
-    assert_eq!(CONJURE_ANIMAL_OUTCOME_COUNT, 15);
+    assert_eq!(CONJURE_ANIMAL_OUTCOME_COUNT, 16);
 }
 
 #[test]
@@ -1070,21 +1070,23 @@ fn town_rest_tick_budget_anchors_to_hours_per_day_times_ticks_per_hour() {
 
 #[test]
 fn rest_tick_minute_cadences_derive_from_minutes_per_hour() {
-    // rest-and-camp.md §3, §4: rest tick cadences derive from
-    // MINUTES_PER_HOUR. Watch-mode rest ticks 20 minutes each
-    // (60/3); town rest ticks 10 minutes each (60/6). Anchor
-    // the per-tick minute lengths to MINUTES_PER_HOUR /
-    // ticks-per-hour so the cadence/tick-count partition has
-    // one source of truth.
+    // rest-and-camp.md §5: wilderness camp uses five-minute steps,
+    // dungeon watch-rest uses twenty-minute steps, and town bed rest
+    // uses ten-minute steps.
     assert_eq!(
         REST_WATCH_MINUTES_PER_TICK,
         MINUTES_PER_HOUR / REST_WATCH_TICKS_PER_HOUR,
+    );
+    assert_eq!(
+        WILDERNESS_CAMP_MINUTES_PER_TICK,
+        MINUTES_PER_HOUR / WILDERNESS_CAMP_TICKS_PER_HOUR,
     );
     assert_eq!(
         TOWN_REST_MINUTES_PER_TICK,
         MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR,
     );
     assert_eq!(REST_WATCH_MINUTES_PER_TICK, 20);
+    assert_eq!(WILDERNESS_CAMP_MINUTES_PER_TICK, 5);
     assert_eq!(TOWN_REST_MINUTES_PER_TICK, 10);
 }
 
@@ -1488,27 +1490,6 @@ fn tlk_goto_label_band_spans_the_published_fifteen_values() {
     assert_eq!(TLK_CONTROL_CODE_LAST, 0x90);
     assert_eq!(TLK_CODE_LABEL_RECORD, TLK_CONTROL_CODE_LAST);
     assert_eq!(TLK_CONTROL_CODE_LAST + 1, TLK_LABEL_FIRST);
-}
-
-#[test]
-fn tlk_gold_payment_arm_labels_are_particular_labels_not_band_bounds() {
-    // The runner's paid/refused gold-payment arms used to borrow the
-    // GOTO band's boundary constants, which is how one two-value fact
-    // masqueraded as two. They are two PARTICULAR label values inside
-    // the band, and they carry no band meaning.
-    //
-    // conversation.md §7.6 does not publish this pairing: it says only
-    // that an unaffordable demand "prints the refusal line, clears its
-    // multi-byte state, and re-enters the keyword prompt rather than
-    // continuing the response". These values preserve existing engine
-    // behaviour unchanged and are flagged as unpublished at their
-    // definition; this test pins them so widening the label band can
-    // never silently re-route the paid arm to 0x91, the most common
-    // label byte in shipped content.
-    assert_eq!(TLK_GOLD_PAYMENT_PAID_LABEL, 0x9E);
-    assert_eq!(TLK_GOLD_PAYMENT_REFUSED_LABEL, 0x9F);
-    assert!(is_tlk_label_byte(TLK_GOLD_PAYMENT_PAID_LABEL));
-    assert!(is_tlk_label_byte(TLK_GOLD_PAYMENT_REFUSED_LABEL));
 }
 
 #[test]
@@ -2484,7 +2465,8 @@ fn save_location_and_lighting_offsets_chain() {
     // formats/saved-gam.md §5 location cluster: scene byte at
     // 0x02ed, scratch byte at 0x02ee, party Z/X/Y at
     // 0x02ef/0x02f0/0x02f1. formats/saved-gam.md §6: torch
-    // counter follows light-spell counter at 0x0300/0x0301.
+    // counter follows light-spell counter at 0x0300/0x0301, then §6.1's
+    // 32-byte combat-interference source map fills 0x0302..=0x0321.
     // Anchor Z, X, Y to the chain rooted at SAVE_SCENE_OFFSET;
     // anchor SAVE_TORCH_COUNTER to SAVE_LIGHT_SPELL_COUNTER.
     assert_eq!(SAVE_Z_OFFSET, SAVE_SCENE_OFFSET + 2);
@@ -2498,6 +2480,13 @@ fn save_location_and_lighting_offsets_chain() {
     assert_eq!(SAVE_X_OFFSET, 0x02f0);
     assert_eq!(SAVE_Y_OFFSET, 0x02f1);
     assert_eq!(SAVE_TORCH_COUNTER_OFFSET, 0x0301);
+    assert_eq!(SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET, 0x0302);
+    assert_eq!(SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN, OOL_SLOTS);
+    assert_eq!(
+        SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET
+            + SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN,
+        SAVE_SHADOWLORD_HIDEOUTS_OFFSET
+    );
 }
 
 #[test]
@@ -2521,7 +2510,7 @@ fn save_calendar_bounds_anchor_to_time_constants() {
 #[test]
 fn save_pre_calendar_state_offsets_chain_through_transport_marker() {
     // formats/saved-gam.md §5: bytes 0x02d4..=0x02d6 are three
-    // adjacent state bytes — timing/status tag, active player
+    // adjacent state bytes — active-effect code, active player
     // slot, transport marker — preceding the calendar chain.
     // Anchor each offset to the per-byte chain so resizing any
     // of these bytes only happens in one place.
@@ -2668,7 +2657,7 @@ fn active_object_consumed_clear_clears_first_six_encoded_fields_only() {
         aux3: 0x77,
     };
 
-    object.clear_consumed_record_fields();
+    object.clear_record_prefix();
 
     assert!(object.is_empty());
     assert_eq!(object.type_byte, 0);
@@ -3208,15 +3197,15 @@ fn local_view_overlay_dimensions_match_spec() {
 #[test]
 fn jimmy_chest_threshold_arithmetic_uses_named_constants() {
     // doors-and-z-transitions.md §3 chest-pick threshold:
-    //   object: (difficulty - member_class + 30) / 2
-    //   dungeon: (2 * depth - member_class + 30) / 2
+    //   object: (difficulty - Dexterity + 30) / 2
+    //   dungeon: (2 * depth - Dexterity + 30) / 2
     assert_eq!(JIMMY_CHEST_THRESHOLD_BIAS, 30);
     assert_eq!(JIMMY_CHEST_THRESHOLD_DIVISOR, 2);
     assert_eq!(JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER, 2);
-    // Dungeon: depth 4, class 20 -> (8 - 20 + 30) / 2 = 9.
+    // Dungeon: depth 4, Dexterity 20 -> (8 - 20 + 30) / 2 = 9.
     assert_eq!(dungeon_chest_jimmy_threshold(4, 20), 9);
     // Object: difficulty 0x91 (high bit set, low 7 = 17),
-    // class 20 -> (17 - 20 + 30) / 2 = 13.
+    // Dexterity 20 -> (17 - 20 + 30) / 2 = 13.
     assert_eq!(object_chest_jimmy_threshold(0x91, 20), Some(13));
     // Object with high bit clear returns None (broken-lock state).
     assert_eq!(object_chest_jimmy_threshold(0x11, 20), None);
@@ -4076,19 +4065,22 @@ fn u4_transfer_attribute_translator_bands_match_spec() {
 }
 
 #[test]
-fn save_flow_double_underworld_routes_through_canonical_mode() {
-    // save-load.md §5.2 step 5: the underworld mirror double-flush
-    // runs unless the entry disk-prompt mode is already canonical
-    // (mode 1). Route the predicate's bare literal through the
-    // named DISK_PROMPT_MODE_CANONICAL.
-    assert!(!save_flow_double_writes_underworld(
-        DISK_PROMPT_MODE_CANONICAL
+fn save_flow_underworld_write_uses_entry_required_disk() {
+    // save-load.md §5.2 step 5: the one save-time UNDER.OOL
+    // write is skipped only when the entry required-disk state is
+    // already canonical Britannia index 1.
+    assert!(!save_flow_writes_underworld_mirror(
+        RequiredDisk::Britannia
     ));
-    assert!(save_flow_double_writes_underworld(0));
-    // Alias modes still trigger the double-write before
-    // normalisation collapses them.
-    assert!(save_flow_double_writes_underworld(DISK_PROMPT_MODE_ALIAS_A));
-    assert!(save_flow_double_writes_underworld(DISK_PROMPT_MODE_ALIAS_B));
+    assert!(save_flow_writes_underworld_mirror(
+        RequiredDisk::Program
+    ));
+    assert!(save_flow_writes_underworld_mirror(
+        RequiredDisk::UltimaVSave
+    ));
+    assert!(save_flow_writes_underworld_mirror(
+        RequiredDisk::UltimaIvPlayer
+    ));
 }
 
 #[test]
@@ -4316,11 +4308,11 @@ fn save_party_size_max_caps_iteration() {
 }
 
 #[test]
-fn location_default_entry_x_matches_spec() {
-    // formats/location-dat.md §6: the default per-scene town-entry
-    // coordinate is not stored in the .DAT file; X is fixed at
-    // fifteen and Y comes from the per-scene LocationEntryYTable.
+fn location_default_entry_cell_matches_spec() {
+    // town-mode.md §5 / public #94: overworld entry writes this fixed
+    // cell for every town-family scene; it performs no table lookup.
     assert_eq!(LOCATION_DEFAULT_ENTRY_X, 15);
+    assert_eq!(LOCATION_DEFAULT_ENTRY_Y, 30);
 }
 
 #[test]
@@ -4531,24 +4523,14 @@ fn shop_placeholder_byte_constants_match_spec() {
 }
 
 #[test]
-fn britannia_chunk_map_renderer_dimensions_match_spec() {
-    // view.md §4: the full chunk-map view paints an eight-row by
-    // twenty-two-column shorthand map of Britannia chunks,
-    // wrapping the chunk walk at the world edges and marking the
-    // party's current chunk with a crosshair. The traced LOOKOBJ
-    // path that enters this renderer from ordinary Look is keyed
-    // by tile id 0x59. Promote the dimensions and trigger tile so
-    // future implementations have named constants instead of bare
-    // literals.
-    assert_eq!(BRITANNIA_CHUNK_MAP_ROWS, 8);
-    assert_eq!(BRITANNIA_CHUNK_MAP_COLUMNS, 22);
-    assert_eq!(BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE, 0x59);
-    // Sanity-check that 8x22 fits inside the message-panel cell
-    // dimensions used by other view-system rectangles (well under
-    // the 40-column screen width and 25-row height defined by
-    // TEXT_SCREEN_COLUMNS/_ROWS).
-    assert!(BRITANNIA_CHUNK_MAP_COLUMNS < TEXT_SCREEN_COLUMNS);
-    assert!(BRITANNIA_CHUNK_MAP_ROWS < TEXT_SCREEN_ROWS);
+fn sky_renderer_dimensions_and_telescope_trigger_match_spec() {
+    // view.md §4.2: the telescope view occupies the 176x176 main
+    // viewport and contains eight calendar-driven rows over a
+    // twenty-two-column ring.
+    assert_eq!(SKY_VIEW_ROWS, 8);
+    assert_eq!(SKY_VIEW_COLUMNS, 22);
+    assert_eq!(SKY_VIEW_PIXEL_SIDE, 176);
+    assert_eq!(TELESCOPE_LOOK_TRIGGER_TILE, 0x59);
 }
 
 #[test]
@@ -4566,7 +4548,7 @@ fn monster_reward_unit_derivation_constants_match_spec() {
         name: "test",
         tier: 0,
         speed_seed: 0,
-        hp_comparison: 0,
+        endurance: 0,
         defense: 0,
         attack_cap: 0,
         max_hp: hp,
@@ -4646,20 +4628,20 @@ fn dungeon_pit_fall_and_bomb_trap_byte_constants_match_spec() {
 fn jimmy_chest_threshold_bias_is_shared_across_object_and_dungeon_paths() {
     // doors-and-z-transitions.md §3: both the per-map object
     // chest and the dungeon chest pick the lock threshold by
-    // `(difficulty - member_class + 30) / 2`. The `+30` bias is
+    // `(difficulty - Dexterity + 30) / 2`. The `+30` bias is
     // shared spec data and was duplicated as a bare literal in
     // both helpers. Promote it to JIMMY_CHEST_THRESHOLD_BIAS and
     // pin the resulting threshold equality for matching inputs.
     assert_eq!(JIMMY_CHEST_THRESHOLD_BIAS, 30);
     // A 2*depth value equal to an object difficulty produces the
-    // same threshold for the same member-class. Use difficulty
+    // same threshold for the same Dexterity. Use difficulty
     // 8 (object stat 0x88) versus dungeon depth 4 (`2*4 = 8`).
     let object_stat = 0x80 | 8u8;
     let dungeon_depth = 4u8;
-    for class in 0u8..30 {
-        let obj = object_chest_jimmy_threshold(object_stat, class).unwrap();
-        let dun = dungeon_chest_jimmy_threshold(dungeon_depth, class);
-        assert_eq!(obj, dun, "class {class}: object {obj} vs dungeon {dun}");
+    for dexterity in 0u8..30 {
+        let obj = object_chest_jimmy_threshold(object_stat, dexterity).unwrap();
+        let dun = dungeon_chest_jimmy_threshold(dungeon_depth, dexterity);
+        assert_eq!(obj, dun, "Dexterity {dexterity}: object {obj} vs dungeon {dun}");
     }
 }
 
@@ -4810,33 +4792,6 @@ fn chargen_starting_calendar_matches_endgame_elapsed_time_baseline() {
 }
 
 #[test]
-fn disk_prompt_mode_alias_constants_match_spec_normalisation() {
-    // screen-mode-dispatch.md §5: the disk-prompt request folds
-    // historical modes 2 and 5 to mode 1, and lets other values
-    // pass through. Promote the canonical mode and the two
-    // aliased inputs so the normalizer does not bake `1`, `2`,
-    // and `5` as bare literals.
-    assert_eq!(DISK_PROMPT_MODE_CANONICAL, 1);
-    assert_eq!(DISK_PROMPT_MODE_ALIAS_A, 2);
-    assert_eq!(DISK_PROMPT_MODE_ALIAS_B, 5);
-    assert_eq!(
-        normalize_disk_prompt_mode(DISK_PROMPT_MODE_ALIAS_A),
-        DISK_PROMPT_MODE_CANONICAL
-    );
-    assert_eq!(
-        normalize_disk_prompt_mode(DISK_PROMPT_MODE_ALIAS_B),
-        DISK_PROMPT_MODE_CANONICAL
-    );
-    // Every other input passes through unchanged.
-    for mode in 0u8..=u8::MAX {
-        if mode == DISK_PROMPT_MODE_ALIAS_A || mode == DISK_PROMPT_MODE_ALIAS_B {
-            continue;
-        }
-        assert_eq!(normalize_disk_prompt_mode(mode), mode);
-    }
-}
-
-#[test]
 fn disk_read_retry_wrapper_retries_zero_and_accepts_short_read() {
     let mut calls = 0;
     let mut prompts = Vec::new();
@@ -4979,7 +4934,7 @@ fn save_image_and_saved_ool_reads_use_disk_zero_byte_contract() {
 }
 
 #[test]
-fn saved_ool_mirror_write_counts_capture_load_and_save_extra_underworld_writes() {
+fn saved_ool_io_counts_distinguish_load_mirroring_from_save_staging() {
     let dir = debug_game_dir();
     let mut saved_ool = vec![0; SAVED_OOL_LEN];
     saved_ool[..OOL_PLANE_LEN].fill(0x11);
@@ -4999,18 +4954,27 @@ fn saved_ool_mirror_write_counts_capture_load_and_save_extra_underworld_writes()
             under_ool: 2,
         }
     );
+    let (staged, counts) =
+        stage_saved_ool_for_save(&dir, RequiredDisk::Britannia).unwrap();
+    assert_eq!(staged, saved_ool);
     assert_eq!(
-        write_saved_ool_mirrors_for_save(&dir, &saved_ool, DISK_PROMPT_MODE_CANONICAL).unwrap(),
-        SavedOolMirrorWriteCounts {
-            brit_ool: 1,
-            under_ool: 1,
+        counts,
+        SavedOolSaveIoCounts {
+            brit_ool_reads: 1,
+            under_ool_reads: 1,
+            brit_ool_writes: 0,
+            under_ool_writes: 0,
         }
     );
+    let (staged, counts) = stage_saved_ool_for_save(&dir, RequiredDisk::Program).unwrap();
+    assert_eq!(staged, saved_ool);
     assert_eq!(
-        write_saved_ool_mirrors_for_save(&dir, &saved_ool, 0).unwrap(),
-        SavedOolMirrorWriteCounts {
-            brit_ool: 1,
-            under_ool: 2,
+        counts,
+        SavedOolSaveIoCounts {
+            brit_ool_reads: 1,
+            under_ool_reads: 1,
+            brit_ool_writes: 0,
+            under_ool_writes: 1,
         }
     );
     assert_eq!(
@@ -5808,6 +5772,7 @@ fn display_driver_loaded_tile_graphics_save_restore_and_plane_swap() {
         depth: TileGraphicsDepth::Ega16,
         pixels: vec![0; TILE_ATLAS_TILE_PIXELS * 3],
         dungeon_billboards: None,
+        dungeon_sprites: None,
     };
     atlas.pixels[0] = 0x02;
     atlas.pixels[TILE_ATLAS_TILE_PIXELS] = 0x04;
@@ -6227,6 +6192,39 @@ fn dungeon_active_object_spawn_band_matches_spec() {
 }
 
 #[test]
+fn fresh_dungeon_monster_setup_writes_the_public_record_shape() {
+    let mut state = dungeon_state(vec![0x70; DUNGEON_RECORD_LEN], 3, 1, 1);
+
+    assert!(state.setup_dungeon_active_monster_fresh());
+
+    let object = state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT];
+    let family = usize::from(object.type_byte);
+    assert!(family < 8);
+    assert_eq!(object.tile, object.type_byte);
+    assert_eq!(object.aux1, DUNGEON_MONSTER_COMBAT_CLASSES[family]);
+    assert_eq!(object.phase, DUNGEON_MONSTER_INITIAL_STATES[family]);
+    assert_eq!(object.z, 3);
+    assert_ne!((object.x, object.y), (state.player.x, state.player.y));
+    assert!(dungeon_active_object_spawn_accepts(state.dungeon_cell(3, object.x, object.y)));
+    assert!(matches!(object.aux3, DUNGEON_MONSTER_FLOOR_DEP3 | DUNGEON_MONSTER_UPPER_DEP3));
+    if object.aux3 == DUNGEON_MONSTER_UPPER_DEP3 {
+        assert!(matches!(family, 2 | 4));
+    }
+}
+
+#[test]
+fn failed_dungeon_monster_setup_uses_dep1_as_the_inactive_marker() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
+    assert!(!state.setup_dungeon_active_monster_fresh());
+
+    let object = state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT];
+    assert_eq!((object.type_byte, object.tile, object.x, object.y), (0, 0, 0, 0));
+    assert_eq!(object.aux1, DUNGEON_MONSTER_INACTIVE_DEP1);
+    assert!(!dungeon_monster_record_active(object));
+}
+
+#[test]
 fn talk_branch_flag_bank_caps_at_thirty_two_bits() {
     // conversation.md §10: "Branch bit indices `32` and above
     // build a zero mask rather than wrapping, so such tests read
@@ -6270,47 +6268,6 @@ fn talk_through_tile_band_constants_match_spec() {
     // The neighbouring tiles on either side do not.
     assert!(!is_talk_through_tile(TALK_THROUGH_TILE_FIRST - 1));
     assert!(!is_talk_through_tile(TALK_THROUGH_TILE_LAST + 1));
-}
-
-#[test]
-fn protection_active_effect_adds_three_to_defense() {
-    // magic.md §8: while Protection's `P` active-effect tag is
-    // live, the resident party-member defense helper adds three
-    // points after equipment defense is summed. Promote the
-    // bonus to PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS so the
-    // resolve_protection_defense_bonus helper does not bake `3`
-    // as a bare literal.
-    assert_eq!(PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS, 3);
-    // While active, the helper raises the base defense by the
-    // bonus.
-    assert_eq!(
-        resolve_protection_defense_bonus(
-            10,
-            Some(PROTECTION_ACTIVE_EFFECT_TAG),
-            PROTECTION_ACTIVE_EFFECT_DURATION,
-        ),
-        10 + PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS
-    );
-    // The saturating_add must not wrap when base defense is at
-    // or near the byte ceiling.
-    assert_eq!(
-        resolve_protection_defense_bonus(
-            254,
-            Some(PROTECTION_ACTIVE_EFFECT_TAG),
-            PROTECTION_ACTIVE_EFFECT_DURATION,
-        ),
-        u8::MAX
-    );
-    // Without the live tag, base defense passes through
-    // unchanged.
-    assert_eq!(
-        resolve_protection_defense_bonus(
-            10,
-            Some(QUICKNESS_ACTIVE_EFFECT_TAG),
-            QUICKNESS_ACTIVE_EFFECT_DURATION,
-        ),
-        10
-    );
 }
 
 #[test]
@@ -6820,12 +6777,12 @@ fn shop_refuses_mounted_horse_except_at_horse_trader() {
 }
 
 #[test]
-fn common_word_dictionary_nul_sentinel_count_matches_spec() {
-    // shops.md §4.2 / public issue #33/#40: token zero plus the
-    // published empty dictionary rows act as word-boundary sentinels.
+fn common_word_dictionary_null_reference_count_matches_spec() {
+    // common-word-dictionary.md §3: the unreachable index-zero pointer plus
+    // ten empty catalog slots are null references, not word boundaries.
     // The SHOPPE.DAT phrase-token byte range is 0x80..=0xFF.
     assert_eq!(COMMON_WORD_DICTIONARY_ENTRIES, 128);
-    assert_eq!(COMMON_WORD_DICTIONARY_NUL_SENTINELS, 11);
+    assert_eq!(COMMON_WORD_DICTIONARY_NULL_REFERENCES, 11);
     assert_eq!(SHOPPE_PHRASE_TOKEN_FIRST, 0x80);
     assert_eq!(SHOPPE_PHRASE_TOKEN_LAST, 0xFF);
     // The phrase-token range covers exactly the 128 dictionary
@@ -7356,7 +7313,7 @@ fn npc_ai_behavior_event_predicates_match_published_table() {
     assert!(!NpcAiBehavior::GuardOrBlock.raises_attack_event());
     for behavior in [
         NpcAiBehavior::Stationary,
-        NpcAiBehavior::FollowAtDistance,
+        NpcAiBehavior::Retreating,
         NpcAiBehavior::BoundedWander,
         NpcAiBehavior::UnboundedWander,
     ] {
@@ -7368,7 +7325,7 @@ fn npc_ai_behavior_event_predicates_match_published_table() {
     assert!(NpcAiBehavior::UnboundedWander.is_wander());
     for behavior in [
         NpcAiBehavior::Stationary,
-        NpcAiBehavior::FollowAtDistance,
+        NpcAiBehavior::Retreating,
         NpcAiBehavior::ApproachAndAttack,
         NpcAiBehavior::ReservedEngage,
         NpcAiBehavior::GuardOrBlock,
@@ -8133,28 +8090,43 @@ fn yell_published_message_constants_match_spec_text() {
     // commands.md §11: the ship-aboard Y branch prints the
     // sail-state message; the free-text branch prints
     // "Nothing said." on empty input. Spec text is verbatim.
-    assert_eq!(YELL_SAILS_HOISTED_MESSAGE, "Sails hoisted.");
-    assert_eq!(YELL_SAILS_FURLED_MESSAGE, "Sails furled.");
+    assert_eq!(YELL_SAILS_HOISTED_MESSAGE, "HOIST!");
+    assert_eq!(YELL_SAILS_FURLED_MESSAGE, "FURL!");
     assert_eq!(YELL_NOTHING_SAID_MESSAGE, "Nothing said.");
 }
 
 #[test]
-fn jimmy_npc_pickpocket_karma_reward_is_two() {
-    // doors-and-z-transitions.md §3: a successful NPC pickpocket
+fn yell_ship_sail_scene_gate_covers_the_unsigned_byte_boundary() {
+    for scene_byte in 0..=u8::MAX {
+        assert_eq!(
+            yell_routes_to_ship_sails(scene_byte, true),
+            scene_byte < 0x80,
+            "frigate scene byte 0x{scene_byte:02x}"
+        );
+        assert!(
+            !yell_routes_to_ship_sails(scene_byte, false),
+            "non-frigate scene byte 0x{scene_byte:02x}"
+        );
+    }
+}
+
+#[test]
+fn jimmy_prisoner_release_karma_reward_is_two() {
+    // doors-and-z-transitions.md §3: a successful prisoner release
     // raises the shared moral-standing selector by +2, clamped
     // at the published cap. Failure does not advance the
     // picked/thanked state and does not apply this increase.
-    assert_eq!(JIMMY_NPC_PICKPOCKET_KARMA_REWARD, 2);
+    assert_eq!(JIMMY_PRISONER_RELEASE_KARMA_REWARD, 2);
     // The standing-clamp helper still owns the 0..=99 cap; the
     // reward is the unclamped per-event delta.
     let standing: u8 = 98;
     let next = standing
-        .saturating_add(JIMMY_NPC_PICKPOCKET_KARMA_REWARD)
+        .saturating_add(JIMMY_PRISONER_RELEASE_KARMA_REWARD)
         .min(MORAL_STANDING_MAX);
     assert_eq!(next, MORAL_STANDING_MAX);
     let standing: u8 = 0;
     let next = standing
-        .saturating_add(JIMMY_NPC_PICKPOCKET_KARMA_REWARD)
+        .saturating_add(JIMMY_PRISONER_RELEASE_KARMA_REWARD)
         .min(MORAL_STANDING_MAX);
     assert_eq!(next, 2);
 }
@@ -8341,16 +8313,25 @@ fn numeric_prompt_accumulates_digits_and_pops_on_backspace() {
 }
 
 #[test]
-fn toll_progress_counter_increments_per_payment_and_bumps_standing_at_milestone() {
-    // `karma.md §4` and `formats/saved-gam.md §10`: every successful
-    // three-digit gold payment increments the saved toll-progress
-    // counter; when the counter reaches the milestone value the
-    // helper resets it to zero and bumps the moral-standing
-    // selector. Zero-gold post-debit adds the +2 bonus on top.
-    let mut state = britannia_state(open_world_grid(), 5, 5);
+fn tlk_payment_milestone_requires_live_beggar_speaker_and_aged_cooldown() {
+    // `karma.md §4.1`: payment debits always, but only a live speaker of
+    // actor class 108 can consume an already-aged threshold and award
+    // standing. The payment does not increment the counter.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: TLK_GOLD_PAYMENT_KARMA_SPEAKER_CLASS,
+            dialog_id: 1,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    state.active_conversation_npc_slot = Some(1);
     state.gold = 50;
     state.moral_standing = 10;
-    state.toll_progress = TOLL_PROGRESS_MILESTONE - 1;
+    state.toll_progress = TOLL_PROGRESS_MILESTONE;
     let payments = [crate::conversation_session::ConversationGoldPayment {
         amount: 25,
         accepted: true,
@@ -8359,11 +8340,11 @@ fn toll_progress_counter_increments_per_payment_and_bumps_standing_at_milestone(
     // Gold debited and counter rolled over.
     assert_eq!(state.gold, 25);
     assert_eq!(state.toll_progress, 0);
-    // Non-zero post-debit gold: only the +1 milestone bump applies.
     assert_eq!(state.moral_standing, 11);
 
-    // Second cycle with a payment that drains the party to zero gold.
-    state.toll_progress = TOLL_PROGRESS_MILESTONE - 1;
+    // A second fully aged qualifying payment that empties the purse adds
+    // the nested +2 zero-gold bonus after the ordinary +1.
+    state.toll_progress = TOLL_PROGRESS_MILESTONE;
     let drain = [crate::conversation_session::ConversationGoldPayment {
         amount: 25,
         accepted: true,
@@ -8371,8 +8352,48 @@ fn toll_progress_counter_increments_per_payment_and_bumps_standing_at_milestone(
     state.apply_tlk_gold_payments(&drain);
     assert_eq!(state.gold, 0);
     assert_eq!(state.toll_progress, 0);
-    // +1 milestone +2 zero-gold bonus = +3 total over the previous 11.
     assert_eq!(state.moral_standing, 14);
+
+    // Below threshold: debit only, and payment itself does not age the byte.
+    state.gold = 10;
+    state.toll_progress = TOLL_PROGRESS_MILESTONE - 1;
+    state.apply_tlk_gold_payments(&[crate::conversation_session::ConversationGoldPayment {
+        amount: 1,
+        accepted: true,
+    }]);
+    assert_eq!(state.gold, 9);
+    assert_eq!(state.toll_progress, TOLL_PROGRESS_MILESTONE - 1);
+    assert_eq!(state.moral_standing, 14);
+
+    // The actor must still be live/linked when the payment is applied.
+    state.npcs[0].active_object = None;
+    state.toll_progress = TOLL_PROGRESS_MILESTONE;
+    state.apply_tlk_gold_payments(&[crate::conversation_session::ConversationGoldPayment {
+        amount: 1,
+        accepted: true,
+    }]);
+    assert_eq!(state.gold, 8);
+    assert_eq!(state.toll_progress, TOLL_PROGRESS_MILESTONE);
+    assert_eq!(state.moral_standing, 14);
+}
+
+#[test]
+fn ordinary_turns_age_the_payment_cooldown_and_combat_does_not() {
+    // `karma.md §4.1`: ordinary world/town/dungeon actions increment the
+    // saved cooldown once and saturate at 255. Combat has its own actor loop.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.toll_progress = TOLL_PROGRESS_MILESTONE - 1;
+    state.advance_turn_with_minutes(0);
+    assert_eq!(state.toll_progress, TOLL_PROGRESS_MILESTONE);
+
+    state.toll_progress = u8::MAX;
+    state.advance_turn_with_minutes(0);
+    assert_eq!(state.toll_progress, u8::MAX);
+
+    state.toll_progress = 7;
+    state.combat_active = true;
+    state.advance_turn_with_minutes(0);
+    assert_eq!(state.toll_progress, 7);
 }
 
 #[test]
@@ -8766,44 +8787,6 @@ fn age_character_month_counter_caps_at_twenty_five() {
 }
 
 #[test]
-fn conversation_cleanup_reconciliation_follows_published_priority() {
-    // quest-flags.md §5: zero-sentinel cleanup branches in fixed
-    // priority order, decrementing at most one byte-sized signal
-    // per call. Gold-debit fallback only fires when every byte
-    // array is empty.
-    use ConversationCleanupReconciliation::*;
-
-    // Resource band wins outright when it has any nonzero entry.
-    assert_eq!(
-        conversation_cleanup_reconciliation(true, false, false),
-        ResourceBand
-    );
-    assert_eq!(
-        conversation_cleanup_reconciliation(true, true, true),
-        ResourceBand
-    );
-    // Generic signal array wins when the resource band is empty.
-    assert_eq!(
-        conversation_cleanup_reconciliation(false, true, false),
-        GenericSignalArray
-    );
-    assert_eq!(
-        conversation_cleanup_reconciliation(false, true, true),
-        GenericSignalArray
-    );
-    // Eight-slot arrays take the next priority.
-    assert_eq!(
-        conversation_cleanup_reconciliation(false, false, true),
-        EightSlotSignalArrays
-    );
-    // Gold debit only when everything else is empty.
-    assert_eq!(
-        conversation_cleanup_reconciliation(false, false, false),
-        GoldDebitFallback
-    );
-}
-
-#[test]
 fn equipped_item_weight_stat_sums_six_slots_with_protection_bonus() {
     // inventory.md §2.1 / catalogs/item-list.md §5.1: the
     // equipped-item statistic helper sums the published
@@ -9194,7 +9177,102 @@ fn sceptre_barrier_constants_match_catalog() {
 fn white_potion_sweep_constants_match_catalog() {
     // catalogs/item-list.md §7.2
     assert_eq!(POTION_WHITE_SWEEP_FRAMES, 20);
-    assert_eq!(POTION_WHITE_SWEEP_RADIUS, 32);
+    assert_eq!(POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME, 1);
+    assert_eq!(POTION_WHITE_VISIBILITY_THRESHOLD, 32);
+}
+
+#[test]
+fn selected_potion_flash_playback_matches_exact_shared_geometry_and_timings() {
+    // catalogs/item-list.md §7.2: the selected bottle owns the presentation,
+    // independently of any later variation-selected effect.
+    let expected_timings = [
+        (8_000, 10_000),
+        (9_600, 14_000),
+        (11_200, 18_000),
+        (12_800, 22_000),
+        (14_400, 26_000),
+        (16_000, 30_000),
+        (17_600, 34_000),
+        (19_200, 38_000),
+    ];
+    for (selected_index, (rumble_target, sweep_iterations)) in
+        expected_timings.into_iter().enumerate()
+    {
+        let playback = potion_flash_playback(selected_index).unwrap();
+        assert_eq!(playback.selected_index, selected_index);
+        assert_eq!(playback.playfield_left, 8);
+        assert_eq!(playback.playfield_top, 8);
+        assert_eq!(playback.playfield_right, 183);
+        assert_eq!(playback.playfield_bottom, 183);
+        assert_eq!(playback.palette_xor_mask, 15);
+        assert_eq!(playback.envelope_sweep_count, 2);
+        assert!(playback.blocks_until_complete());
+        assert!(!playback.polls_input());
+        assert!(!playback.advances_gameplay_clock());
+        assert!(playback.sound_disabled_still_runs_timing());
+        assert_eq!(playback.rumble_accumulator_target, rumble_target);
+        assert_eq!(playback.envelope_sweep_iterations, sweep_iterations);
+    }
+    assert_eq!(POTION_FLASH_RUMBLE_TARGET_BASE, 8_000);
+    assert_eq!(POTION_FLASH_RUMBLE_TARGET_STEP, 1_600);
+    assert_eq!(POTION_FLASH_SWEEP_ITERATIONS_BASE, 10_000);
+    assert_eq!(POTION_FLASH_SWEEP_ITERATIONS_STEP, 4_000);
+    assert_eq!(potion_flash_playback(POTION_COUNT), None);
+}
+
+#[test]
+fn soundless_potion_flash_executes_the_typed_rumble_and_both_sweeps() {
+    let playback = potion_flash_playback(POTION_WHITE_INDEX).unwrap();
+
+    let work = run_potion_flash_soundless_timing(playback);
+
+    assert_eq!(work.rumble_iterations, 19_200);
+    assert_eq!(work.envelope_sweeps, 2);
+    assert_eq!(work.envelope_iterations, 76_000);
+}
+
+#[test]
+fn selected_potion_flash_is_a_single_consumer_presentation_event() {
+    let mut state = test_state(open_grid(), 10, 10);
+    let playback = potion_flash_playback(POTION_ORANGE_INDEX).unwrap();
+    state.pending_potion_flash = Some(playback);
+
+    assert_eq!(state.take_pending_potion_flash(), Some(playback));
+    assert_eq!(state.take_pending_potion_flash(), None);
+}
+
+#[test]
+fn potion_flash_xor_pair_is_lossless_and_touches_only_the_playfield() {
+    let playback = potion_flash_playback(POTION_WHITE_INDEX).unwrap();
+    let mut pixels = (0..320 * 200)
+        .map(|index| (index as u8) & 0x0F)
+        .collect::<Vec<_>>();
+    let original = pixels.clone();
+
+    assert!(apply_potion_flash_xor_pass(
+        &mut pixels,
+        320,
+        200,
+        playback
+    ));
+    assert_eq!(pixels[8 * 320 + 8], original[8 * 320 + 8] ^ 15);
+    assert_eq!(pixels[183 * 320 + 183], original[183 * 320 + 183] ^ 15);
+    assert_eq!(pixels[8 * 320 + 7], original[8 * 320 + 7]);
+    assert_eq!(pixels[184 * 320 + 8], original[184 * 320 + 8]);
+
+    assert!(apply_potion_flash_xor_pass(
+        &mut pixels,
+        320,
+        200,
+        playback
+    ));
+    assert_eq!(pixels, original);
+    assert!(!apply_potion_flash_xor_pass(
+        &mut vec![0; 176 * 176],
+        176,
+        176,
+        playback
+    ));
 }
 
 #[test]
@@ -9982,12 +10060,42 @@ fn text_window_system_applies_controls_clear_and_cursor_rules() {
     assert_eq!(system.active_cursor(), (3, 1));
     system.set_active_cursor(1, 0);
     assert_eq!(system.active_cursor(), (1, 0));
+
+    system.set_active_cursor(3, 0);
+    system.emit_byte(b'\n');
+    assert_eq!(
+        system.active_cursor(),
+        (0, 1),
+        "line feed is a combined carriage return and row advance"
+    );
 }
 
 #[test]
-fn text_window_system_scrolls_within_active_rectangle() {
+fn tlk_message_transcript_preserves_per_glyph_font_selection() {
+    let mut state = test_state(vec![0; 32 * 32], 1, 1);
+    let rendered = TlkRenderedText {
+        text: "AB".to_string(),
+        glyphs: vec![
+            TlkRenderedGlyph::ordinary(b'A'),
+            TlkRenderedGlyph::runic(b'B'),
+        ],
+    };
+    state.emit_tlk_message(rendered);
+    let entry = state.message_entries().last().unwrap();
+    assert_eq!(entry.text, "AB");
+    assert_eq!(entry.glyphs[0].font, TlkGlyphFont::Ordinary);
+    assert_eq!(entry.glyphs[1].font, TlkGlyphFont::Runic);
+}
+
+#[test]
+fn text_window_system_scrolls_the_row_below_into_the_vacated_bottom() {
     let mut system = TextWindowSystem::new();
+    system.set_active_cursor(0, 2);
+    for byte in b"ijkl" {
+        system.emit_byte(*byte);
+    }
     system.set_window_rect(0, 0, 0, 4, 1);
+    system.set_active_cursor(0, 0);
 
     for byte in b"abcd" {
         system.emit_byte(*byte);
@@ -10001,9 +10109,11 @@ fn text_window_system_scrolls_within_active_rectangle() {
         .map(|x| char::from(system.cell(x, 0).unwrap().byte))
         .collect();
     assert_eq!(row0, "efgh");
-    for x in 0..=4 {
-        assert_eq!(system.cell(x, 1), None);
-    }
+    let row1: String = (0..4)
+        .map(|x| char::from(system.cell(x, 1).unwrap().byte))
+        .collect();
+    assert_eq!(row1, "ijkl");
+    assert_eq!(system.cell(4, 1), None);
     assert_eq!(system.active_cursor(), (0, 1));
 }
 
@@ -10171,7 +10281,7 @@ fn dungeon_scene_for_word_of_power_inverts_word_table() {
 #[test]
 fn word_of_power_seal_rows_match_public_issue_32() {
     let expected = [
-        ("FALLAX", "Deceit", WorldPlane::Britannia, 240, 73, 0x16),
+        ("FALLAX", "Deceit", WorldPlane::Britannia, 240, 73, 0x18),
         ("VILIS", "Despise", WorldPlane::Britannia, 91, 67, 0x16),
         ("INOPIA", "Destard", WorldPlane::Britannia, 72, 168, 0x16),
         ("MALUM", "Wrong", WorldPlane::Britannia, 126, 20, 0x18),
@@ -10181,8 +10291,8 @@ fn word_of_power_seal_rows_match_public_issue_32() {
         ("VERAMOCOR", "Doom", WorldPlane::Underworld, 128, 128, 0x16),
     ];
     assert_eq!(WORD_OF_POWER_SEALS.len(), expected.len());
-    assert_eq!(WORD_OF_POWER_SEAL_XOR, 0xDF);
-    for (seal, (word, dungeon, plane, x, y, closed_tile)) in
+    assert_eq!(WORD_OF_POWER_SEALED_TILE, 0xDF);
+    for (seal, (word, dungeon, plane, x, y, unsealed_tile)) in
         WORD_OF_POWER_SEALS.iter().zip(expected)
     {
         assert_eq!(seal.word, word);
@@ -10190,7 +10300,7 @@ fn word_of_power_seal_rows_match_public_issue_32() {
         assert_eq!(seal.plane, plane);
         assert_eq!(seal.x, x);
         assert_eq!(seal.y, y);
-        assert_eq!(seal.closed_tile, closed_tile);
+        assert_eq!(seal.unsealed_tile, unsealed_tile);
         assert_eq!(word_of_power_seal_for_word(word), Some(*seal));
     }
     assert_eq!(
@@ -10198,6 +10308,62 @@ fn word_of_power_seal_rows_match_public_issue_32() {
         Some(240)
     );
     assert_eq!(word_of_power_seal_for_word("DAWN"), None);
+}
+
+#[test]
+fn yell_scene_context_is_exhaustive_and_uses_only_outdoors_or_three_keeps() {
+    for scene_byte in 0u8..=u8::MAX {
+        let expected = match scene_byte {
+            SCENE_OVERWORLD => YellInputContext::WordOfPower,
+            SCENE_THE_LYCAEUM | SCENE_EMPATH_ABBEY | SCENE_SERPENTS_HOLD => {
+                YellInputContext::ShadowlordName
+            }
+            _ => YellInputContext::NoEffect,
+        };
+        assert_eq!(yell_input_context(scene_byte), expected, "scene {scene_byte}");
+    }
+}
+
+#[test]
+fn word_of_power_scanner_accepts_the_first_complete_word_prefix() {
+    assert_eq!(
+        word_of_power_seal_prefix_match("FALLAX PLEASE").map(|(index, seal)| (index, seal.word)),
+        Some((0, "FALLAX"))
+    );
+    assert_eq!(word_of_power_seal_prefix_match("FALLA"), None);
+    assert_eq!(word_of_power_seal_prefix_match("DAWN"), None);
+}
+
+#[test]
+fn world_quest_tile_substitution_uses_chunk_owners_and_opposite_defaults() {
+    let mut grid = vec![5; WORLD_CELLS];
+    let fallax = WORD_OF_POWER_SEALS[0];
+    let fallax_index = world_cell_index(fallax.x, fallax.y);
+    grid[fallax_index] = fallax.unsealed_tile;
+    let same_word_chunk_index = world_cell_index(fallax.x + 1, fallax.y);
+    grid[same_word_chunk_index] = 0x16;
+    let unowned_entrance_index = world_cell_index(10, 40);
+    grid[unowned_entrance_index] = 0x17;
+
+    let honesty = WORLD_SHRINE_COORDINATES[0];
+    let honesty_index = world_cell_index(honesty.0, honesty.1);
+    grid[honesty_index] = WORLD_SHRINE_TILE;
+    let unowned_shrine_index = world_cell_index(40, 40);
+    grid[unowned_shrine_index] = WORLD_SHRINE_TILE;
+
+    let mut word_flags = [SAVE_QUEST_TILE_FLAG_HIGH_BIT; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT];
+    word_flags[0] = 0;
+    let mut shrine_flags = [0; SAVE_SHRINE_RUIN_FLAG_COUNT];
+    shrine_flags[0] = SAVE_QUEST_TILE_FLAG_HIGH_BIT;
+    apply_world_quest_tile_substitutions(&mut grid, &word_flags, &shrine_flags);
+
+    assert_eq!(grid[fallax_index], WORD_OF_POWER_SEALED_TILE);
+    assert_eq!(grid[same_word_chunk_index], WORD_OF_POWER_SEALED_TILE);
+    assert_eq!(grid[unowned_entrance_index], WORD_OF_POWER_SEALED_TILE);
+    assert_eq!(grid[honesty_index], WORLD_RUINED_SHRINE_TILE);
+    assert_eq!(grid[unowned_shrine_index], WORLD_SHRINE_TILE);
+    assert_eq!(word_of_power_chunk_owner(fallax.x, fallax.y), Some(0));
+    assert_eq!(shrine_chunk_owner(honesty.0, honesty.1), Some(0));
 }
 
 #[test]
@@ -11277,8 +11443,10 @@ fn shadowlord_hideout_predicates_match_spec() {
     assert_eq!(SHADOWLORD_HIDEOUT_LAST, 8);
     assert_eq!(SHADOWLORD_HIDEOUT_VANQUISHED, 0xFF);
     assert_eq!(SAVE_SHADOWLORD_HIDEOUTS_OFFSET, 0x0322);
-    assert_eq!(SAVE_QUEST_PROGRESS_WORD_OFFSET, 0x0624);
-    assert_eq!(SAVE_QUEST_PROGRESS_WORD_LEN, 2);
+    assert_eq!(SAVE_NPC_REMOVED_MASKS_OFFSET, 0x05B4);
+    assert_eq!(SAVE_NPC_NAME_KNOWN_MASKS_OFFSET, 0x0634);
+    assert_eq!(SAVE_NPC_MASK_BANK_LEN, 0x80);
+    assert_eq!(SAVE_NPC_NAME_KNOWN_MASKS_OFFSET + SAVE_NPC_MASK_BANK_LEN, 0x06B4);
     assert_eq!(
         SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT - 1,
         0x0324
@@ -11322,8 +11490,21 @@ fn party_target_selector_action_decodes_keystrokes() {
         party_target_selector_action(0x1B),
         PartyTargetSelectorAction::Cancel
     );
+    // Cardinal navigation cycles the highlighted slot.
+    for byte in [INPUT_CODE_NORTH, INPUT_CODE_WEST] {
+        assert_eq!(
+            party_target_selector_action(byte),
+            PartyTargetSelectorAction::PreviousSlot
+        );
+    }
+    for byte in [INPUT_CODE_SOUTH, INPUT_CODE_EAST] {
+        assert_eq!(
+            party_target_selector_action(byte),
+            PartyTargetSelectorAction::NextSlot
+        );
+    }
     // Other bytes are silently discarded.
-    for byte in [b'7', b'A', b'a', 0x00, 0xC9, 0xFB, 0xFF] {
+    for byte in [b'7', b'A', b'a', 0x00, 0xC9, 0xFF] {
         assert_eq!(
             party_target_selector_action(byte),
             PartyTargetSelectorAction::Discard,
@@ -11422,7 +11603,7 @@ fn world_location_table_scene_for_row_covers_towns_and_dungeons() {
 }
 
 #[test]
-fn town_exit_lands_underworld_only_for_stonegate() {
+fn town_exit_lands_underworld_only_for_ararat() {
     // overworld.md §2
     assert_eq!(TOWN_EXIT_UNDERWORLD_SCENE, 0x19);
     assert!(town_exit_lands_underworld(0x19));
@@ -11441,7 +11622,6 @@ fn town_stair_intent_decodes_facing_low_bits() {
     // Stair tile family bounds.
     assert_eq!(TOWN_STAIR_TILE_FIRST, 0xC4);
     assert_eq!(TOWN_STAIR_TILE_LAST, 0xC7);
-    assert_eq!(TOWN_EXIT_THRESHOLD_TILE, 0x59);
     // 0xC4 (stair_facing=0/N): facing 0 -> Up, facing 2 -> Down,
     // facing 1 or 3 -> Cross.
     assert_eq!(town_stair_intent(0xC4, 0), Some(TownStairIntent::Up));
@@ -12033,7 +12213,7 @@ fn intro_story6_secondary_subimage_matches_spec_table() {
 #[test]
 fn conjure_summon_for_roll_distributes_per_spec_weights() {
     // magic.md §8
-    assert_eq!(CONJURE_OUTCOME_COUNT, 15);
+    assert_eq!(CONJURE_OUTCOME_COUNT, 16);
     // Six Giant Rat outcomes (rolls 0..=5).
     for roll in 0u8..=5 {
         assert_eq!(conjure_summon_for_roll(roll), Some(ConjureSummon::GiantRat));
@@ -12049,10 +12229,11 @@ fn conjure_summon_for_roll_distributes_per_spec_weights() {
     for roll in 11u8..=13 {
         assert_eq!(conjure_summon_for_roll(roll), Some(ConjureSummon::Bat));
     }
-    // One Python outcome (roll 14).
+    // Two Python outcomes (rolls 14..=15).
     assert_eq!(conjure_summon_for_roll(14), Some(ConjureSummon::Python));
+    assert_eq!(conjure_summon_for_roll(15), Some(ConjureSummon::Python));
     // Out-of-range rolls return None.
-    assert_eq!(conjure_summon_for_roll(15), None);
+    assert_eq!(conjure_summon_for_roll(16), None);
     assert_eq!(conjure_summon_for_roll(255), None);
 }
 
@@ -12523,7 +12704,7 @@ fn npc_type_byte_class_recognises_published_special_values() {
     );
     assert_eq!(
         npc_type_byte_class(0xFC),
-        NpcTypeByteClass::RuntimePlayerMirror
+        NpcTypeByteClass::ShadowlordActor
     );
     // Stable shipped sprite-class tags fall through to the
     // ordinary derived-sprite path.
@@ -12536,7 +12717,7 @@ fn npc_type_byte_class_recognises_published_special_values() {
     // Occupancy: any non-zero byte is occupied; zero is empty.
     assert!(!npc_type_byte_occupied(NPC_TYPE_EMPTY));
     assert!(npc_type_byte_occupied(NPC_TYPE_DEFAULT_HUMAN_SPRITE));
-    assert!(npc_type_byte_occupied(NPC_TYPE_RUNTIME_PLAYER_MIRROR));
+    assert!(npc_type_byte_occupied(NPC_TYPE_SHADOWLORD_ACTOR));
     assert!(npc_type_byte_occupied(0x50));
 }
 
@@ -12627,30 +12808,6 @@ fn persistent_visibility_lazy_refill_updates_zero_cells_and_restamps_player() {
 
     assert_eq!(state.visibility_grid[edge_grid], VISIBILITY_CLEAR);
     assert_eq!(state.terrain_band[edge_terrain], 77);
-}
-
-#[test]
-fn outer_loop_flags_skip_overworld_only_when_pending_and_zero_scene() {
-    // main-loop.md §4
-    let pending = OuterLoopFlags {
-        exit_pending: true,
-        previous_was_dungeon: false,
-    };
-    // Pending flag + overworld scene -> skip the redundant overworld pass.
-    assert!(pending.should_skip_overworld(SCENE_OVERWORLD));
-    // Pending flag but a different scene -> the outer loop still routes
-    // normally; no-op cancellation can't produce a non-zero scene byte
-    // here, but the predicate is conservatively scoped.
-    assert!(!pending.should_skip_overworld(1));
-    assert!(!pending.should_skip_overworld(33));
-
-    // Default flags never skip.
-    let cleared = OuterLoopFlags::default();
-    assert!(!cleared.exit_pending);
-    assert!(!cleared.previous_was_dungeon);
-    for scene in [0u8, 1, 17, 33, 0xFF] {
-        assert!(!cleared.should_skip_overworld(scene));
-    }
 }
 
 #[test]
@@ -13012,6 +13169,50 @@ fn spell_route_family_covers_every_published_spell_row() {
         assert_eq!(spell_index_from_code(code), Some(index));
     }
     assert_eq!(spell_route_family(SPELL_COUNT), None);
+}
+
+#[test]
+fn directed_utility_live_tile_rewrites_match_magic_contract() {
+    assert_eq!(
+        VANISH_REMOVABLE_TILES,
+        [
+            0x5B, 0x90, 0x91, 0x92, 0x93, 0x9D, 0xA5, 0xA6, 0xA8, 0xA9, 0xAD, 0xAE,
+            0xAF,
+        ]
+    );
+    for tile in 0u8..=u8::MAX {
+        let expected = VANISH_REMOVABLE_TILES
+            .contains(&tile)
+            .then_some(VANISH_CLEARED_TILE);
+        assert_eq!(
+            directed_utility_tile_rewrite(VANISH_SPELL_INDEX, tile),
+            expected,
+            "Vanish tile 0x{tile:02X}"
+        );
+    }
+    for (spell, accepted) in [
+        (OPEN_SPELL_INDEX, &[(0xB9, 0xB8), (0xBB, 0xBA)][..]),
+        (
+            MAGIC_LOCK_SPELL_INDEX,
+            &[(0xB8, 0x97), (0xB9, 0x97), (0xBA, 0x98), (0xBB, 0x98)][..],
+        ),
+        (
+            UNLOCK_MAGIC_SPELL_INDEX,
+            &[(0x97, 0xB8), (0x98, 0xBA)][..],
+        ),
+    ] {
+        for tile in 0u8..=u8::MAX {
+            let expected = accepted
+                .iter()
+                .find_map(|(source, target)| (*source == tile).then_some(*target));
+            assert_eq!(
+                directed_utility_tile_rewrite(spell, tile),
+                expected,
+                "spell {spell} tile 0x{tile:02X}"
+            );
+        }
+    }
+    assert_eq!(directed_utility_tile_rewrite(SPELL_COUNT, 0xB9), None);
 }
 
 #[test]
@@ -13885,23 +14086,26 @@ fn local_view_class_for_tile_matches_spec_table_spot_check() {
     );
     assert_eq!(
         local_view_class_for_tile(0x60),
-        LocalViewClass::FourCornerRing
+        LocalViewClass::WaterCorners
     );
     assert_eq!(
         local_view_class_for_tile(0x02),
         LocalViewClass::DiagonalBlits
     );
-    assert_eq!(local_view_class_for_tile(0x01), LocalViewClass::NoopDefault);
+    assert_eq!(local_view_class_for_tile(0x01), LocalViewClass::DeepWater);
     assert_eq!(
         local_view_class_for_tile(0x04),
-        LocalViewClass::CreatureComposite
+        LocalViewClass::FixedModalComposite
     );
     assert_eq!(
         local_view_class_for_tile(0xE0),
         LocalViewClass::VerticalWallDoor
     );
-    assert_eq!(local_view_class_for_tile(0xD8), LocalViewClass::PeerVariant);
-    assert_eq!(local_view_class_for_tile(0x20), LocalViewClass::FenceWall);
+    assert_eq!(
+        local_view_class_for_tile(0xD8),
+        LocalViewClass::NormalTerrainFrame
+    );
+    assert_eq!(local_view_class_for_tile(0x20), LocalViewClass::Road);
     // Exhaustive sweep: every tile id classifies (no panic).
     for t in 0u8..=255 {
         let _ = local_view_class_for_tile(t);
@@ -14330,18 +14534,22 @@ fn input_function_key_remap_and_cursor_blink_match_spec() {
 
 #[test]
 fn town_tile_marker_classifies_harvested_bytes() {
-    // town-mode.md §3
+    // town-mode.md §3 / formats/location-dat.md §6: `0x2A` is
+    // harvested for the indoor beacon, never for player placement.
     assert_eq!(TOWN_TILE_NPC_START_A, 0x48);
     assert_eq!(TOWN_TILE_NPC_START_B, 0x49);
-    assert_eq!(TOWN_TILE_SPAWN_ASTERISK, b'*');
-    assert_eq!(TOWN_TILE_DASH_MARKER, b'-');
-    assert_eq!(TOWN_TILE_PERIOD_MARKER, b'.');
+    assert_eq!(TOWN_TILE_BEACON_LIGHT_SOURCE, b'*');
+    assert_eq!(TOWN_TILE_STANDING_CROP, 0x2D);
+    assert_eq!(TOWN_TILE_FRUIT_TREE, 0x2E);
 
     assert_eq!(town_tile_marker(0x48), Some(TownTileMarker::NpcStartA));
     assert_eq!(town_tile_marker(0x49), Some(TownTileMarker::NpcStartB));
-    assert_eq!(town_tile_marker(b'*'), Some(TownTileMarker::SpawnAsterisk));
-    assert_eq!(town_tile_marker(b'-'), Some(TownTileMarker::DashCosmetic));
-    assert_eq!(town_tile_marker(b'.'), Some(TownTileMarker::PeriodCosmetic));
+    assert_eq!(
+        town_tile_marker(b'*'),
+        Some(TownTileMarker::BeaconLightSource)
+    );
+    assert_eq!(town_tile_marker(TOWN_TILE_STANDING_CROP), None);
+    assert_eq!(town_tile_marker(TOWN_TILE_FRUIT_TREE), None);
     assert_eq!(town_tile_marker(0xC8), Some(TownTileMarker::FloorLinkC8));
     assert_eq!(town_tile_marker(0xC9), Some(TownTileMarker::FloorLinkC9));
     // Ordinary terrain bytes are not markers.
@@ -14357,11 +14565,9 @@ fn town_tile_marker_classifies_harvested_bytes() {
 
 #[test]
 fn active_object_eviction_off_screen_is_a_square_window_not_a_radius() {
-    // active-objects.md §4: "a candidate more than roughly five cells
-    // from the player in either axis is considered eligible for the
-    // off-screen phases". Both axes are tested separately against the
-    // same bound; there is no distance, no hypotenuse and no disc.
+    // active-objects.md §4 / public #107: separations -5..=5 are inclusive.
     assert_eq!(ACTIVE_OBJECT_EVICTION_ONSCREEN_HALF_WINDOW, 5);
+    assert_eq!(ACTIVE_OBJECT_EVICTION_ONSCREEN_ADJUSTED_MAX, 10);
     // Inside the window -> on-screen.
     assert!(!active_object_eviction_off_screen(50, 50, 50, 50));
     assert!(!active_object_eviction_off_screen(45, 50, 50, 50));
@@ -14380,11 +14586,7 @@ fn active_object_eviction_off_screen_is_a_square_window_not_a_radius() {
 
 #[test]
 fn active_object_eviction_off_screen_keeps_the_window_corners() {
-    // active-objects.md §4 / §8.1: the square window's diagonal corner
-    // is 5 cells out on both axes. A Euclidean radius (~7.07) or a
-    // squared-distance threshold (50 > 25) would call it off-screen;
-    // the published per-axis test keeps it. This is the exact shape
-    // error §8.1 calls out, pinned so it cannot regress.
+    // The published test is axis-wise, so all inclusive ±5 corners remain.
     for (dx, dy) in [(5i32, 5i32), (-5, 5), (5, -5), (-5, -5)] {
         let x = (100 + dx) as u8;
         let y = (100 + dy) as u8;
@@ -14400,12 +14602,7 @@ fn active_object_eviction_off_screen_keeps_the_window_corners() {
 
 #[test]
 fn active_object_eviction_off_screen_wraps_across_the_map_seam() {
-    // active-objects.md §8 states the outdoor per-turn walker's
-    // proximity tests in wrapped dx/dy (cf.
-    // outdoor_water_creature_attack_aligned). A player at x=2 and a
-    // slot at x=253 are five cells apart across the 256-cell seam, so
-    // the slot is on-screen. Signed or wider arithmetic would report
-    // ~251 cells and evict it.
+    // Public #107 boundary rows for player `(2,2)`.
     assert!(!active_object_eviction_off_screen(253, 2, 2, 2));
     assert!(!active_object_eviction_off_screen(2, 253, 2, 2));
     // Six cells across the seam is outside the window.
@@ -14414,6 +14611,23 @@ fn active_object_eviction_off_screen_wraps_across_the_map_seam() {
     // Symmetric from the other side of the seam.
     assert!(!active_object_eviction_off_screen(2, 253, 253, 253));
     assert!(active_object_eviction_off_screen(3, 253, 253, 253));
+}
+
+#[test]
+fn active_object_eviction_off_screen_exhausts_all_wrapped_axis_separations() {
+    for separation in 0u8..=u8::MAX {
+        let expected_on_screen = separation <= 5 || separation >= 251;
+        assert_eq!(
+            !active_object_eviction_off_screen(separation, 0, 0, 0),
+            expected_on_screen,
+            "X separation {separation}"
+        );
+        assert_eq!(
+            !active_object_eviction_off_screen(0, separation, 0, 0),
+            expected_on_screen,
+            "Y separation {separation}"
+        );
+    }
 }
 
 #[test]
@@ -14432,21 +14646,30 @@ fn active_object_pass_order_matches_spec() {
 
 #[test]
 fn live_chunk_substituted_tile_matches_spec_rules() {
-    // overworld.md §3
+    // formats/brit-dat.md §9.1
     assert_eq!(LIVE_CHUNK_SUBSTITUTION_TARGET_DF, 0xDF);
     assert_eq!(LIVE_CHUNK_SUBSTITUTION_TARGET_1A, 0x1A);
-    // 0x16..=0x18 rewrite unconditionally to 0xDF.
+    let none = LiveChunkSubstitutionPolicy::NONE;
+    let seal = LiveChunkSubstitutionPolicy {
+        seal_entrances: true,
+        ruin_shrine: false,
+    };
+    let ruin = LiveChunkSubstitutionPolicy {
+        seal_entrances: false,
+        ruin_shrine: true,
+    };
+    // The two families are independently gated.
     for tile in 0x16u8..=0x18 {
-        assert_eq!(live_chunk_substituted_tile(tile, true), 0xDF);
-        assert_eq!(live_chunk_substituted_tile(tile, false), 0xDF);
+        assert_eq!(live_chunk_substituted_tile(tile, seal), 0xDF);
+        assert_eq!(live_chunk_substituted_tile(tile, none), tile);
+        assert_eq!(live_chunk_substituted_tile(tile, ruin), tile);
     }
-    // 0x19 rewrites only when the classifier accepts.
-    assert_eq!(live_chunk_substituted_tile(0x19, true), 0x1A);
-    assert_eq!(live_chunk_substituted_tile(0x19, false), 0x19);
-    // Other tiles pass through under both classifier states.
+    assert_eq!(live_chunk_substituted_tile(0x19, ruin), 0x1A);
+    assert_eq!(live_chunk_substituted_tile(0x19, none), 0x19);
+    assert_eq!(live_chunk_substituted_tile(0x19, seal), 0x19);
     for tile in [0x00u8, 0x01, 0x15, 0x1A, 0x1B, 0xDE, 0xE0, 0xFF] {
-        assert_eq!(live_chunk_substituted_tile(tile, true), tile);
-        assert_eq!(live_chunk_substituted_tile(tile, false), tile);
+        assert_eq!(live_chunk_substituted_tile(tile, seal), tile);
+        assert_eq!(live_chunk_substituted_tile(tile, ruin), tile);
     }
 }
 
@@ -14468,8 +14691,10 @@ fn world_live_chunk_buffer_projects_four_quadrants_from_full_grid() {
     }
 
     let buffer =
-        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Underworld, &grid, 8, 8, |_| false)
-            .unwrap();
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Underworld, &grid, 8, 8, |_| {
+            LiveChunkSubstitutionPolicy::NONE
+        })
+        .unwrap();
 
     assert_eq!(buffer.scroll_base, (0, 0));
     assert_eq!(
@@ -14495,8 +14720,10 @@ fn world_live_chunk_buffer_wraps_scroll_base_around_world_edges() {
     grid[world_cell_index(0, 0)] = 0xBB;
 
     let buffer =
-        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 0, 0, |_| false)
-            .unwrap();
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 0, 0, |_| {
+            LiveChunkSubstitutionPolicy::NONE
+        })
+        .unwrap();
 
     assert_eq!(buffer.scroll_base, (240, 240));
     assert_eq!(buffer.quadrant_chunk_origin(0), (240, 240));
@@ -14519,7 +14746,10 @@ fn world_live_chunk_buffer_applies_live_substitution_without_mutating_source_gri
 
     let buffer =
         WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 8, 8, |descriptor| {
-            descriptor.logical_slot == 1
+            LiveChunkSubstitutionPolicy {
+                seal_entrances: descriptor.logical_slot == 0,
+                ruin_shrine: descriptor.logical_slot == 1,
+            }
         })
         .unwrap();
 
@@ -14545,14 +14775,20 @@ fn world_live_chunk_buffer_decodes_britannia_water_and_stored_chunks() {
     }
 
     let stored =
-        WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 8, 8, |_| false).unwrap();
+        WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 8, 8, |_| {
+            LiveChunkSubstitutionPolicy::NONE
+        })
+        .unwrap();
     assert_eq!(stored.tile_at(0, 0), 0x80);
     assert_eq!(stored.tile_at(16, 0), 0x81);
     assert_eq!(stored.tile_at(0, 16), 0x90);
     assert_eq!(stored.descriptors[0].file_index, Some(0));
 
     let water =
-        WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 0, 0, |_| false).unwrap();
+        WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 0, 0, |_| {
+            LiveChunkSubstitutionPolicy::NONE
+        })
+        .unwrap();
     assert_eq!(water.tile_at(255, 255), BRIT_DEEP_WATER_TILE);
     assert_eq!(water.descriptors[0].logical_slot, 255);
     assert!(water.descriptors[0].all_water);
@@ -14565,7 +14801,10 @@ fn world_live_chunk_buffer_decodes_underworld_dense_chunk_offsets() {
     under[under_file_offset(16, 16)] = 0x44;
 
     let buffer =
-        WorldLiveChunkBuffer::from_underworld_bytes(&under, 8, 8, |_| false).unwrap();
+        WorldLiveChunkBuffer::from_underworld_bytes(&under, 8, 8, |_| {
+            LiveChunkSubstitutionPolicy::NONE
+        })
+        .unwrap();
 
     assert_eq!(buffer.tile_at(16, 16), 0x44);
     assert_eq!(buffer.descriptors[3].logical_slot, 17);
@@ -14589,8 +14828,10 @@ fn world_live_chunk_buffer_shuffle_preserves_overlapping_chunks() {
         }
     }
     let buffer =
-        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 8, 8, |_| false)
-            .unwrap();
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 8, 8, |_| {
+            LiveChunkSubstitutionPolicy::NONE
+        })
+        .unwrap();
 
     let shuffled = buffer.shuffled_to_scroll_base((16, 0));
 
@@ -14885,27 +15126,6 @@ fn monster_kill_xp_reward_matches_spec() {
     assert_eq!(monster_kill_xp_reward(255), 64);
     // u16::MAX yields (65535/4) + 1 = 16384.
     assert_eq!(monster_kill_xp_reward(u16::MAX), 16384);
-}
-
-#[test]
-fn fire_and_energy_field_raw_damage_match_spec() {
-    // combat.md §11
-    assert_eq!(FIRE_FIELD_DAMAGE_MIN, 1);
-    assert_eq!(FIRE_FIELD_DAMAGE_MAX, 21);
-    assert_eq!(ENERGY_FIELD_RAW_DAMAGE, 0);
-    // Fire field rolls range 1..=21.
-    for seed in 0u8..=20 {
-        let dmg = fire_field_raw_damage(seed);
-        assert!(
-            (FIRE_FIELD_DAMAGE_MIN..=FIRE_FIELD_DAMAGE_MAX).contains(&dmg),
-            "seed {seed} -> dmg {dmg}"
-        );
-    }
-    assert_eq!(fire_field_raw_damage(0), 1);
-    assert_eq!(fire_field_raw_damage(20), 21);
-    // Modulo wraparound covers larger seeds without overflow.
-    assert_eq!(fire_field_raw_damage(21), 1);
-    assert_eq!(fire_field_raw_damage(42), 1);
 }
 
 #[test]
@@ -15443,38 +15663,77 @@ fn stats_panel_middle_counter_picks_ship_hull_for_ship_marker() {
 }
 
 #[test]
-fn outdoor_arena_id_for_class_matches_spec_table() {
-    // encounters.md §4
+fn outdoor_combat_class_and_arena_selectors_match_spec_tables() {
+    // encounters.md §4 keeps class identification independent from arena
+    // selection. Every ordinary four-frame family through 0xFF is covered.
     assert_eq!(OUTDOOR_ARENA_COUNT, 16);
-    // Linear formula across 0x40..=0x7F.
-    for arena in 0u8..16 {
-        let first = OUTDOOR_ARENA_CLASS_FIRST + arena * 4;
-        for offset in 0u8..4 {
-            let class_byte = first + offset;
+    for type_byte in 0x40u8..=0xff {
+        assert_eq!(
+            outdoor_combat_class_id(type_byte),
+            Some((type_byte - 0x40) / 4),
+            "type {type_byte:#04x}"
+        );
+    }
+    for type_byte in 0x2cu8..=0x2f {
+        assert_eq!(outdoor_combat_class_id(type_byte), Some(1));
+        assert_eq!(outdoor_combat_banner_name(type_byte), Some("Pirates"));
+    }
+    assert_eq!(outdoor_combat_class_id(0x2b), None);
+    assert_eq!(outdoor_combat_class_id(0x30), None);
+
+    // Priority overrides.
+    assert_eq!(outdoor_combat_arena_index(0xfc, 5, true, 1), Some(10));
+    assert_eq!(outdoor_combat_arena_index(0x2c, 1, true, 0), Some(14));
+    assert_eq!(outdoor_combat_arena_index(0x80, 5, true, 0), Some(11));
+    assert_eq!(outdoor_combat_arena_index(0xc0, 5, true, 0), Some(13));
+    assert_eq!(outdoor_combat_arena_index(0x2f, 1, false, 0), Some(12));
+    assert_eq!(outdoor_combat_arena_index(0x8f, 5, false, 0), Some(15));
+    assert_eq!(outdoor_combat_arena_index(0xc0, 0x60, false, 0), Some(15));
+    assert_eq!(outdoor_combat_arena_index(0xc0, 0x6f, false, 0), Some(15));
+
+    for (terrain, arena) in [
+        (4, 1),
+        (5, 2),
+        (6, 3),
+        (8, 3),
+        (7, 4),
+        (30, 4),
+        (31, 4),
+        (9, 5),
+        (10, 5),
+        (11, 6),
+        (15, 6),
+        (29, 7),
+        (72, 7),
+        (73, 7),
+        (106, 7),
+        (107, 7),
+        (68, 8),
+    ] {
+        assert_eq!(
+            outdoor_combat_arena_index(0xc0, terrain, false, 0),
+            Some(arena),
+            "terrain {terrain:#04x}"
+        );
+    }
+    assert_eq!(outdoor_combat_arena_index(0xc0, 0x55, false, 0), Some(2));
+    assert_eq!(outdoor_combat_arena_index(0xc0, 0x55, false, 1), Some(8));
+    assert_eq!(outdoor_combat_arena_index(0x20, 5, false, 0), None);
+}
+
+#[test]
+fn generic_adjacent_hostile_impact_gate_is_exact() {
+    for terrain in 0u8..=u8::MAX {
+        for marker in 0u8..=u8::MAX {
+            let expected = terrain <= 3
+                && ((0x14..=0x15).contains(&marker) || (0x28..=0x2b).contains(&marker));
             assert_eq!(
-                outdoor_arena_id_for_class(class_byte),
-                Some(arena),
-                "class {class_byte:#x} expected arena {arena}"
+                generic_adjacent_hostile_uses_impact(terrain, marker),
+                expected,
+                "terrain={terrain:#04x} marker={marker:#04x}"
             );
         }
     }
-    // Skiff/pirate-ship body family 0x2C..=0x2F hard-codes arena 1.
-    for class_byte in 0x2cu8..=0x2f {
-        assert_eq!(
-            outdoor_arena_id_for_class(class_byte),
-            Some(OUTDOOR_ARENA_SKIFF_INDEX)
-        );
-    }
-    assert_eq!(
-        OUTDOOR_ARENA_PIRATE_CLASS_FAMILY & OUTDOOR_ARENA_PIRATE_CLASS_MASK,
-        OUTDOOR_ARENA_PIRATE_CLASS_FAMILY
-    );
-    // Out-of-window classes fall through to scripted handling.
-    assert_eq!(outdoor_arena_id_for_class(0x00), None);
-    assert_eq!(outdoor_arena_id_for_class(0x18), None);
-    assert_eq!(outdoor_arena_id_for_class(0x3F), None);
-    assert_eq!(outdoor_arena_id_for_class(0x80), None);
-    assert_eq!(outdoor_arena_id_for_class(0xFF), None);
 }
 
 #[test]
@@ -15878,14 +16137,13 @@ fn search_trap_detection_threshold_matches_spec_formulas() {
     assert_eq!(search_trap_detection_threshold(false, 0, 10), 10);
     assert_eq!(search_trap_detection_threshold(false, 99, 10), 10);
     assert_eq!(search_trap_detection_threshold(false, 0, 30), 0);
-    // Negative raw -> 0
-    assert_eq!(search_trap_detection_threshold(false, 0, 100), 0);
+    // The unsigned-word intermediate wraps instead of clamping negative.
+    assert_eq!(search_trap_detection_threshold(false, 0, 100), 32733);
     // Trappable: (difficulty - stat + 30) / 2
     assert_eq!(search_trap_detection_threshold(true, 10, 10), 15);
     assert_eq!(search_trap_detection_threshold(true, 30, 0), 30);
     assert_eq!(search_trap_detection_threshold(true, 0, 30), 0);
-    // Below the floor -> 0
-    assert_eq!(search_trap_detection_threshold(true, 0, 100), 0);
+    assert_eq!(search_trap_detection_threshold(true, 0, 100), 32733);
 }
 
 #[test]
@@ -17329,10 +17587,11 @@ fn doom_final_room_trigger_enters_endgame_without_room_rewrite() {
         0xf0 | DOOM_FINAL_ROOM_SLOT
     );
     assert_eq!(state.turn, 0);
-    assert_eq!(
-        state.endgame,
-        Some(EndgameState::awaiting_first_confirmation())
-    );
+    let mut expected = EndgameState::awaiting_first_confirmation();
+    expected.entry_party_slot = 0;
+    assert_eq!(state.endgame, Some(expected));
+    assert!(state.message.is_empty());
+    state.finish_endgame_entry_presentation();
     assert!(state.message.contains("Lord British asks"));
 }
 
@@ -17404,6 +17663,10 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
         DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
     record[source_base] = DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE;
     record[source_base + 1] = 0x44;
+    record[DUNGEON_ROOM_SOURCE_X_ROW * COMBAT_ARENA_ROW_STRIDE
+        + COMBAT_ARENA_METADATA_START] = 5;
+    record[DUNGEON_ROOM_SOURCE_Y_ROW * COMBAT_ARENA_ROW_STRIDE
+        + COMBAT_ARENA_METADATA_START] = 1;
     let mut dungeon_cbt = Vec::new();
     for index in 0..DUNGEON_CBT_RECORDS {
         if index == DUNGEON_CBT_RECORDS - 1 {
@@ -17443,7 +17706,7 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     let mut no_absorption = state.clone();
     no_absorption.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
     let no_absorption_application =
-        no_absorption.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        no_absorption.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
     assert_eq!(
         no_absorption_application.result_code,
         COMBAT_ROUND_RESULT_SUCCESS
@@ -17451,17 +17714,23 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     assert!(no_absorption_application.restored_snapshot);
     assert_eq!(no_absorption.endgame, None);
 
-    let (marker_x, marker_y) = state
+    let marker = state
         .active_objects
         .iter()
         .find(|object| object.type_byte == DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE)
-        .map(|object| (object.x as u8, object.y as u8))
         .expect("Doom final room should place the absorbable marker");
-    state.combat_actors[0].x = marker_x;
-    state.combat_actors[0].y = marker_y;
-    let absorption = state
-        .apply_combat_absorbable_field_contact_for_actor_position(0)
-        .expect("actor on Doom marker should set absorption result");
+    assert_eq!((marker.x, marker.y), (5, 1));
+    state.combat_actors[0].x = 5;
+    state.combat_actors[0].y = 2;
+    let renderer_slot = usize::from(state.combat_actors[0].active_object_slot);
+    state.active_objects[renderer_slot].x = 5;
+    state.active_objects[renderer_slot].y = 2;
+    let application = state
+        .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
+        .expect("committed action beneath Doom marker should dispatch");
+    let absorption = application
+        .absorbable_contact
+        .expect("committed action beneath Doom marker should set absorption result");
     assert!(absorption.armed_endgame_result);
     assert_eq!(
         state
@@ -17472,7 +17741,7 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     );
 
     state.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-    let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+    let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
 
     assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
     assert!(application.restored_snapshot);
@@ -17490,6 +17759,7 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
         scene,
         DOOM_FINAL_ROOM_SLOT
     ));
+    state.finish_endgame_entry_presentation();
     assert!(state.message.contains("Welcome back"));
     assert!(state.message.contains("Hast thou brought my box?"));
     let _ = fs::remove_dir_all(dir);
@@ -17533,7 +17803,7 @@ fn doom_final_room_defeated_dungeon_cbt_combat_does_not_enter_endgame() {
     assert!(application.restored_snapshot);
     assert!(!state.combat_active);
     assert_eq!(state.endgame, None);
-    assert!(state.message.contains("entered dungeon combat"));
+    assert_eq!(state.message, "\nBATTLE IS LOST!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -17619,6 +17889,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     loaded
         .enter_endgame_from_game_dir(Some(&dir))
         .expect("synthetic ENDMSG.DAT should load");
+    loaded.finish_endgame_entry_presentation();
     assert!(loaded.message.contains("Welcome back"));
     assert!(loaded.message.contains("Hast thou brought my box?"));
     let _ = fs::remove_dir_all(dir);
@@ -17626,6 +17897,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     let mut refusal = dungeon_state(open_dungeon_record(), 0, 1, 1);
     refusal.party_names = vec![*b"AVATAR\0\0\0"];
     refusal.enter_endgame_with_messages(Some(messages.clone()));
+    refusal.finish_endgame_entry_presentation();
     assert!(refusal.message.contains("AVATAR"));
     assert!(refusal.message.contains("Welcome back"));
     assert!(refusal.message.contains("Hast thou brought my box?"));
@@ -17900,7 +18172,30 @@ fn endgame_certificate_centring_uses_the_forty_column_form() {
     assert_eq!(line("IS FOREVER").column(), 15); // 10
     assert_eq!(line("to Lord British at Origin Systems!").column(), 3); // 34
     // Odd length: truncation puts it half a cell left of true centre.
-    assert_eq!(line("THE QUEST OF THE AVATAR").column(), 8); // 23
+    assert_eq!(line("THE QUEST OF THE AVATAR").column(), 8); // 23 decoded Roman cells
+
+    let runic = |text: &str| EndgameCertificateLine {
+        row: 16,
+        text: text.to_string(),
+        inverse: true,
+        runic: true,
+    };
+    assert_eq!(runic("THE QUEST OF THE AVATAR").column(), 10); // 20 encoded cells
+    assert_eq!(runic("IS FOREVER").column(), 15); // 10 encoded cells
+}
+
+#[test]
+fn endgame_closing_title_uses_exact_published_rune_encoding_vectors() {
+    // endgame.md §9.3 / cleak/u5-spec#127: exact stored characters,
+    // excluding the line feeds owned by the certificate row sequence.
+    assert_eq!(RUNIC_TH_DIGRAPH, '[');
+    assert_eq!(RUNIC_ST_DIGRAPH, '_');
+    assert_eq!(RUNIC_WORD_SPACE, '@');
+    assert_eq!(
+        runic_line_encoding("THE QUEST OF THE AVATAR"),
+        "[E@QUE_@OF@[E@AVATAR"
+    );
+    assert_eq!(runic_line_encoding("IS FOREVER"), "IS@FOREVER");
 }
 
 #[test]
@@ -17944,9 +18239,8 @@ fn endgame_narrative_window_without_end_dat_text_fails_loudly() {
 
 #[test]
 fn enter_endgame_restores_dead_party_for_tableau() {
-    // endgame.md §10: dead party members are mutated into a present /
-    // restored state for the ending tableau, with current health restored
-    // from the stored maximum.
+    // endgame.md §4: the slot-order entry loop restores Dead members with
+    // the exact announcement, while preserving every other status.
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
     state.party = vec![
         PartyMember {
@@ -17990,11 +18284,22 @@ fn enter_endgame_restores_dead_party_for_tableau() {
             level: 5,
         },
     ];
+    state.party_names = vec![
+        *b"AVATAR\0\0\0",
+        *b"IOLO\0\0\0\0\0",
+        *b"MARIAH\0\0\0",
+        *b"DUPRE\0\0\0\0",
+    ];
 
     state.enter_endgame();
 
+    assert_eq!(state.party[0].status, b'D');
+    assert_eq!(state.party[0].hp, 0);
+    assert!(state.advance_endgame_entry_presentation());
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.party[0].hp, 60);
+    assert_eq!(state.message, "\nAVATAR lives!\n");
+    state.finish_endgame_entry_presentation();
     assert_eq!(state.party[1].status, b'P');
     assert_eq!(state.party[1].hp, 12);
     assert_eq!(state.party[2].status, b'S');
@@ -19645,16 +19950,18 @@ fn daylight_base_value_matches_spec_table() {
 }
 
 #[test]
-fn normalize_disk_prompt_mode_folds_2_and_5_to_1() {
-    // screen-mode-dispatch.md §5
-    assert_eq!(normalize_disk_prompt_mode(0), 0);
-    assert_eq!(normalize_disk_prompt_mode(1), 1);
-    assert_eq!(normalize_disk_prompt_mode(2), 1);
-    assert_eq!(normalize_disk_prompt_mode(3), 3);
-    assert_eq!(normalize_disk_prompt_mode(4), 4);
-    assert_eq!(normalize_disk_prompt_mode(5), 1);
-    assert_eq!(normalize_disk_prompt_mode(6), 6);
-    assert_eq!(normalize_disk_prompt_mode(255), 255);
+fn required_disk_requests_fold_aliases_and_reject_other_indices() {
+    // disk-prompt.md §2/§7
+    assert_eq!(canonical_required_disk_index(0), Ok(0));
+    assert_eq!(canonical_required_disk_index(1), Ok(1));
+    assert_eq!(canonical_required_disk_index(2), Ok(1));
+    assert_eq!(canonical_required_disk_index(3), Ok(3));
+    assert_eq!(canonical_required_disk_index(4), Ok(4));
+    assert_eq!(canonical_required_disk_index(5), Ok(1));
+    assert_eq!(
+        canonical_required_disk_index(6),
+        Err(UnsupportedRequiredDiskIndex(6))
+    );
 }
 
 #[test]
@@ -19781,7 +20088,7 @@ fn ool_filenames_and_plane_table_layout_match_spec() {
 }
 
 #[test]
-fn save_load_disk_swap_and_double_write_predicates() {
+fn save_load_disk_swap_and_conditional_write_predicates() {
     // save-load.md §4.2 step 6: enter the underworld disk-swap loop
     // only when overworld scene + non-zero Z.
     assert_eq!(SAVE_SCENE_OVERWORLD, 0);
@@ -19791,10 +20098,17 @@ fn save_load_disk_swap_and_double_write_predicates() {
     assert!(!save_load_needs_underworld_disk_swap(13, 1));
     assert!(!save_load_needs_underworld_disk_swap(33, 0));
 
-    // save-load.md §5.2 step 5: defensive UNDER.OOL re-flush.
-    assert!(save_flow_double_writes_underworld(0));
-    assert!(!save_flow_double_writes_underworld(1));
-    assert!(save_flow_double_writes_underworld(2));
+    // save-load.md §5.2 step 5: the staged UNDER.OOL bytes are
+    // written back once unless entry state is Britannia index 1.
+    assert!(save_flow_writes_underworld_mirror(
+        RequiredDisk::Program
+    ));
+    assert!(!save_flow_writes_underworld_mirror(
+        RequiredDisk::Britannia
+    ));
+    assert!(save_flow_writes_underworld_mirror(
+        RequiredDisk::UltimaVSave
+    ));
 
     // save-load.md §3.1: file lengths and Z sentinel.
     assert_eq!(SAVED_OOL_FILE_LEN, 512);
@@ -19981,7 +20295,7 @@ fn npc_ai_behavior_classifies_per_spec_table() {
     assert_eq!(npc_ai_behavior(0), Some(NpcAiBehavior::Stationary));
     assert_eq!(npc_ai_behavior(1), Some(NpcAiBehavior::BoundedWander));
     assert_eq!(npc_ai_behavior(2), Some(NpcAiBehavior::UnboundedWander));
-    assert_eq!(npc_ai_behavior(3), Some(NpcAiBehavior::FollowAtDistance));
+    assert_eq!(npc_ai_behavior(3), Some(NpcAiBehavior::Retreating));
     assert_eq!(npc_ai_behavior(4), Some(NpcAiBehavior::ApproachAndAttack));
     assert_eq!(npc_ai_behavior(5), Some(NpcAiBehavior::ReservedEngage));
     assert_eq!(npc_ai_behavior(6), Some(NpcAiBehavior::GuardOrBlock));
@@ -20169,27 +20483,52 @@ fn active_object_should_prune_is_a_square_window_from_the_scroll_base() {
     // active-objects.md §8.1: the pass "compares the slot's stored X
     // and Y against the current scroll base - the top-left corner of
     // the loaded window - and keeps the slot only when both
-    // differences fall within thirty-two. Failing either axis releases
-    // the slot."
+    // differences are in 0..=31. Failing either axis releases the slot."
     //
     // The base is a CORNER, not a centre: the window runs forward from
     // it. An earlier revision of this test asserted a centred +/-32
     // band, which §8.1 refutes.
-    assert_eq!(ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT, 32);
+    assert_eq!(ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT, 31);
     assert_eq!(ACTIVE_OBJECT_SAVE_BYTES, 256);
     // Inside the window (forward from the base on both axes): keep.
     assert!(!active_object_should_prune(100, 100, 100, 100));
-    assert!(!active_object_should_prune(132, 100, 100, 100));
-    assert!(!active_object_should_prune(100, 132, 100, 100));
-    assert!(!active_object_should_prune(132, 132, 100, 100));
+    assert!(!active_object_should_prune(131, 100, 100, 100));
+    assert!(!active_object_should_prune(100, 131, 100, 100));
+    assert!(!active_object_should_prune(131, 131, 100, 100));
     // One past the bound on either axis: prune.
-    assert!(active_object_should_prune(133, 100, 100, 100));
-    assert!(active_object_should_prune(100, 133, 100, 100));
+    assert!(active_object_should_prune(132, 100, 100, 100));
+    assert!(active_object_should_prune(100, 132, 100, 100));
     // Behind the base is outside the window, not inside a centred band.
     assert!(active_object_should_prune(99, 100, 100, 100));
     assert!(active_object_should_prune(100, 99, 100, 100));
     assert!(active_object_should_prune(68, 100, 100, 100));
     assert!(active_object_should_prune(100, 68, 100, 100));
+}
+
+#[test]
+fn active_object_prune_type_classifier_matches_every_published_byte_range() {
+    // active-objects.md §8.1 publishes a complete 256-value table. Keep this
+    // exhaustive so a broadened semantic shortcut cannot silently reappear.
+    for type_byte in u8::MIN..=u8::MAX {
+        let expected = (0x2c..=0x2f).contains(&type_byte)
+            || (0x80..=0xb3).contains(&type_byte)
+            || (0xb8..=0xe7).contains(&type_byte)
+            || (0xec..=0xff).contains(&type_byte);
+        assert_eq!(
+            active_object_type_is_prunable(type_byte),
+            expected,
+            "type byte {type_byte:#04x}"
+        );
+    }
+
+    // Named boundary consequences from the spec.
+    for parked_vehicle in [0x10, 0x11, 0x1b, 0x24, 0x2b] {
+        assert!(!active_object_type_is_prunable(parked_vehicle));
+    }
+    assert!(active_object_type_is_prunable(0x2c));
+    assert!(!active_object_type_is_prunable(0x30));
+    assert!(!active_object_type_is_prunable(0x7f));
+    assert!(!active_object_type_is_prunable(0xb5));
 }
 
 #[test]
@@ -20201,13 +20540,13 @@ fn active_object_should_prune_keeps_the_window_corners() {
     // to compute a Euclidean or squared distance, which prunes the
     // corners of the window that the original keeps."
     //
-    // The far corner is 32 out on both axes: Euclidean ~45.25 and
-    // squared 2048 both exceed 32, so either metric would prune it.
-    assert!(!active_object_should_prune(132, 132, 100, 100));
+    // The far corner is 31 out on both axes: Euclidean ~43.84 and
+    // squared 1922 both exceed 31, so either metric would prune it.
+    assert!(!active_object_should_prune(131, 131, 100, 100));
     // And the corner is genuinely the extreme: one further on either
     // axis leaves the window.
-    assert!(active_object_should_prune(133, 132, 100, 100));
-    assert!(active_object_should_prune(132, 133, 100, 100));
+    assert!(active_object_should_prune(132, 131, 100, 100));
+    assert!(active_object_should_prune(131, 132, 100, 100));
 }
 
 #[test]
@@ -20223,10 +20562,10 @@ fn active_object_should_prune_wraps_in_unsigned_eight_bit_arithmetic() {
     assert!(!active_object_should_prune(240, 240, 240, 240));
     assert!(!active_object_should_prune(255, 255, 240, 240));
     assert!(!active_object_should_prune(0, 0, 240, 240)); // 0 - 240 = 16
-    assert!(!active_object_should_prune(16, 16, 240, 240)); // 16 - 240 = 32
+    assert!(!active_object_should_prune(15, 15, 240, 240)); // 15 - 240 = 31
     // One cell past the wrapped bound.
-    assert!(active_object_should_prune(17, 16, 240, 240));
-    assert!(active_object_should_prune(16, 17, 240, 240));
+    assert!(active_object_should_prune(16, 15, 240, 240));
+    assert!(active_object_should_prune(15, 16, 240, 240));
     // Signed subtraction would make this look like -239 (inside a
     // +/-32 band on the wrong side); unsigned makes it 17.
     assert!(active_object_should_prune(1, 1, 240, 240) == false);
@@ -20440,33 +20779,39 @@ fn table_food_get_directional_rules_match_spec() {
 #[test]
 fn jimmy_helpers_match_spec_formulas() {
     // doors-and-z-transitions.md §3
-    // Door pick: class > roll
-    assert_eq!(JIMMY_DOOR_DIE_LOW, 1);
+    // Door/restraint pick: Dexterity > a uniform 0..=29 roll.
+    assert_eq!(JIMMY_DOOR_DIE_LOW, 0);
     assert_eq!(JIMMY_DOOR_DIE_HIGH, 29);
     assert!(jimmy_door_succeeds(20, 19));
     assert!(!jimmy_door_succeeds(20, 20));
     assert!(!jimmy_door_succeeds(20, 21));
-    assert!(jimmy_door_succeeds(29, 1));
+    assert!(!jimmy_door_succeeds(0, 0));
+    assert!(jimmy_door_succeeds(30, 29));
 
-    // Object chest: requires high bit; threshold = (diff - class + 30)/2
+    // Object chest: requires high bit; threshold = (diff - Dexterity + 30)/2
     assert_eq!(object_chest_jimmy_threshold(0x40, 10), None);
-    // diff=0x10=16, class=10 -> (16-10+30)/2 = 18
+    // diff=0x10=16, Dexterity=10 -> (16-10+30)/2 = 18
     assert_eq!(object_chest_jimmy_threshold(0x90, 10), Some(18));
-    // diff=20, class=40 -> (20-40+30)/2 = 5
+    // diff=20, Dexterity=40 -> (20-40+30)/2 = 5
     assert_eq!(object_chest_jimmy_threshold(0x94, 40), Some(5));
-    // Negative raw -> 0
-    assert_eq!(object_chest_jimmy_threshold(0x81, 100), Some(0));
-    assert!(object_chest_jimmy_succeeds(18, 1));
-    assert!(object_chest_jimmy_succeeds(18, 18));
-    assert!(!object_chest_jimmy_succeeds(18, 19));
+    // The unsigned-word intermediate wraps instead of clamping negative.
+    assert_eq!(object_chest_jimmy_threshold(0x81, 100), Some(32733));
+    assert!(!object_chest_jimmy_succeeds(18, 1));
+    assert!(!object_chest_jimmy_succeeds(18, 18));
+    assert!(object_chest_jimmy_succeeds(18, 19));
 
-    // Dungeon chest: threshold = (2*depth - class + 30)/2
-    // depth=4, class=20 -> (8-20+30)/2 = 9
+    // Dungeon chest: threshold = (2*depth - Dexterity + 30)/2
+    // depth=4, Dexterity=20 -> (8-20+30)/2 = 9
     assert_eq!(dungeon_chest_jimmy_threshold(4, 20), 9);
-    // depth=8, class=10 -> (16-10+30)/2 = 18
+    // depth=8, Dexterity=10 -> (16-10+30)/2 = 18
     assert_eq!(dungeon_chest_jimmy_threshold(8, 10), 18);
-    assert!(dungeon_chest_jimmy_succeeds(9, 9));
-    assert!(!dungeon_chest_jimmy_succeeds(9, 10));
+    assert!(!dungeon_chest_jimmy_succeeds(9, 9));
+    assert!(dungeon_chest_jimmy_succeeds(9, 10));
+
+    // Opening clears mutable subtype/trap bits and preserves only bit 0x08.
+    assert_eq!(dungeon_open_chest_rewrite(0x40), 0x70);
+    assert_eq!(dungeon_open_chest_rewrite(0x48), 0x78);
+    assert_eq!(dungeon_open_chest_rewrite(0x4b), 0x78);
 
     assert_eq!(DOOR_AUTO_CLOSE_TURNS, 4);
 }
@@ -21257,13 +21602,15 @@ fn read_codex_urn_no_ordained_branch_when_no_bits_set() {
 
 #[test]
 fn town_tile_predicates_match_published_catalog_ranges() {
-    // catalogs/tile-catalog.md §6: door 96..=103, stair 0xC4..=0xC7,
+    // doors-and-z-transitions.md §2: command door ids are dispersed;
+    // stairs remain 0xC4..=0xC7,
     // chair 0x8C, NPC floor-link markers 0xC8 and 0xC9.
-    assert!(is_town_door_tile(96));
-    assert!(is_town_door_tile(99));
-    assert!(is_town_door_tile(103));
-    assert!(!is_town_door_tile(95));
-    assert!(!is_town_door_tile(104));
+    for tile in [0x97, 0x98, 0xB8, 0xB9, 0xBA, 0xBB] {
+        assert!(is_town_door_tile(tile));
+    }
+    for tile in [0x60, 0x63, 0x67, 0xAF, 0xBC] {
+        assert!(!is_town_door_tile(tile));
+    }
 
     assert!(is_town_stair_tile(0xC4));
     assert!(is_town_stair_tile(0xC7));
@@ -21281,15 +21628,13 @@ fn town_tile_predicates_match_published_catalog_ranges() {
 #[test]
 fn spell_damage_caps_and_kill_sentinel_match_spec_table() {
     // catalogs/spell-list.md §5: Magic Missile raw 1..16 (id 1),
-    // Fireball raw 1..30 (id 13), Kill is single-target instant kill
-    // (id 37). combat.md §11 fixes Fire Field raw at 1..21 and §12
-    // names the instant-kill sentinel value 99.
+    // Fireball raw 1..30 (id 13), and Kill is single-target instant kill
+    // (id 37) through the published instant-kill sentinel.
     assert_eq!(SPELL_CODES[MAGIC_MISSILE_SPELL_INDEX], "GP");
     assert_eq!(MAGIC_MISSILE_RAW_DAMAGE_MAX, 16);
     assert_eq!(SPELL_CODES[FIREBALL_SPELL_INDEX], "FV");
     assert_eq!(FIREBALL_RAW_DAMAGE_MAX, 30);
     assert_eq!(SPELL_CODES[KILL_SPELL_INDEX], "CX");
-    assert_eq!(FIRE_FIELD_RAW_DAMAGE_MAX, 21);
 }
 
 #[test]
@@ -22351,15 +22696,14 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     state.enter_endgame();
 
     assert_eq!(state.active_objects.len(), OOL_SLOTS);
-    // endgame.md §4/§7: the tableau walk-in is a rendered sequence, so
-    // entry leaves the party actors on their published start cell and
-    // owes one frame per one-cell step.
+    // endgame.md §4: the entry loop fully processes party members in slot
+    // order. Entry has cleared the live table and installed Lord British,
+    // but slot zero is not placed until its first display-driven step.
     assert!(state.endgame_entry_presentation_pending());
     assert!(!state.endgame_tableau_is_settled());
-    assert_eq!(
-        (state.active_objects[0].x, state.active_objects[0].y),
-        ENDGAME_TABLEAU_PARTY_START
-    );
+    assert!(state.active_objects[0].is_empty());
+    assert!(state.advance_endgame_entry_presentation());
+    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 8));
     assert!(state.finish_endgame_entry_presentation() > 0);
     assert!(!state.endgame_entry_presentation_pending());
     assert!(state.endgame_tableau_is_settled());
@@ -22443,11 +22787,26 @@ fn endgame_tableau_six_member_layout_restores_dead_and_omits_lord_british_until_
             level: 1,
         })
         .collect();
+    state.party_names = ["Avatar", "Mariah", "Iolo", "Dupre", "Julia", "Geoffrey"]
+        .into_iter()
+        .map(|name| {
+            let mut bytes = [0; SAVE_CHARACTER_NAME_LEN];
+            bytes[..name.len()].copy_from_slice(name.as_bytes());
+            bytes
+        })
+        .collect();
 
     state.enter_endgame();
 
+    // Restoration is not performed ahead of the visible setup loop.
+    assert_eq!(state.party[4].status, b'D');
+    assert_eq!(state.party[4].hp, 0);
+    assert!(state.active_objects[0].is_empty());
+    state.finish_endgame_entry_presentation();
+
     assert_eq!(state.party[4].status, b'G');
     assert_eq!(state.party[4].hp, state.party[4].max_hp);
+    assert!(state.message.contains("\nJulia lives!\n"));
     for (slot, class) in classes.iter().enumerate() {
         let object = state.active_objects[slot];
         let expected_tile = endgame_tableau_tile_for_class_byte(*class);
@@ -22472,6 +22831,51 @@ fn endgame_tableau_six_member_layout_restores_dead_and_omits_lord_british_until_
         ),
         Some(EndgameTableauActorRole::SandalwoodBox)
     );
+}
+
+#[test]
+fn endgame_entry_restores_announces_places_and_walks_each_member_in_slot_order() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party = vec![state.party[0]; 2];
+    state.party[1].slot = 1;
+    state.party[1].class_byte = b'B';
+    state.party[1].status = CharacterStatus::Dead.save_byte();
+    state.party[1].hp = 0;
+    state.party[1].max_hp = 77;
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+
+    state.enter_endgame();
+
+    // Slot zero walks all four cells to (5,5) before slot one is touched.
+    for expected_y in (5..=8).rev() {
+        assert!(state.advance_endgame_entry_presentation());
+        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, expected_y));
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.party[1].status, CharacterStatus::Dead.save_byte());
+    }
+
+    // The next frame is the exact line-feed/name/literal/line-feed revival
+    // beat. Mutation happens with the announcement; placement waits.
+    assert!(state.advance_endgame_entry_presentation());
+    assert_eq!(state.message, "\nIOLO lives!\n");
+    assert_eq!(state.party[1].status, CharacterStatus::Good.save_byte());
+    assert_eq!(state.party[1].hp, 77);
+    assert!(state.active_objects[1].is_empty());
+    assert_eq!(
+        state.endgame.as_ref().map(|endgame| endgame.entry_restoration_beats),
+        Some(0)
+    );
+
+    // Only the following display frame places slot one and performs its first
+    // one-cell movement toward (4,6).
+    assert!(state.advance_endgame_entry_presentation());
+    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 8));
+    assert!(state.message.ends_with("\nIOLO lives!\n"));
+
+    state.finish_endgame_entry_presentation();
+    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (4, 6));
+    assert!(state.message.contains("IOLO lives!"));
+    assert!(state.message.contains("Lord British asks"));
 }
 
 #[test]
@@ -22969,7 +23373,7 @@ fn dungeon_o_key_routes_to_underfoot_open() {
 
     assert!(state.handle_dungeon_key('O', Path::new("")).unwrap());
 
-    assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+    assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
     assert_eq!(state.turn, 1);
     assert!(state.message.contains("Opened dungeon chest"));
 }
@@ -22983,8 +23387,10 @@ fn dungeon_v_key_routes_to_gem_map() {
 
     assert_eq!(state.gems, 0);
     assert_eq!(state.turn, 0);
-    assert!(state.message.contains("Dungeon view"));
-    assert!(state.message.contains("22x22 flood map"));
+    assert!(state.message.is_empty());
+    let overlay = state.active_view_overlay.as_ref().unwrap();
+    assert!(overlay.title.contains("Dungeon view"));
+    assert!(overlay.title.contains("22x22 flood map"));
 }
 
 #[test]
@@ -23004,13 +23410,13 @@ fn dungeon_attack_forward_monster_clears_active_object_and_consumes_turn() {
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
     state.player.facing = Direction::East;
     state.active_objects.push(ActiveObject {
-        type_byte: 0xc0,
-        tile: 0xc0,
+        type_byte: 0,
+        tile: 0,
         x: 2,
         y: 1,
         z: 0,
         phase: STEADY_PHASE,
-        aux1: 0,
+        aux1: 20,
         aux3: 0,
     });
 
@@ -23019,9 +23425,9 @@ fn dungeon_attack_forward_monster_clears_active_object_and_consumes_turn() {
     assert_eq!(state.turn, 1);
     assert!(state.combat_active);
     assert!(state.combat_frame_snapshot.as_ref().unwrap().active_objects[1].is_empty());
-    assert_eq!(state.active_objects[6].tile, 0xc0);
+    assert_eq!(state.active_objects[6].aux1, 20);
     assert!(!state.combat_actors[6].is_empty());
-    assert!(state.message.contains("Attacked dungeon monster tile 192"));
+    assert!(state.message.contains("Attacked dungeon monster tile 0"));
     assert!(state.message.contains("entered dungeon combat"));
     assert!(!state.message.contains("pending"));
 }
@@ -23037,7 +23443,7 @@ fn dungeon_attack_forward_non_class_object_reports_no_combat_class() {
         y: 1,
         z: 0,
         phase: STEADY_PHASE,
-        aux1: 0,
+        aux1: 48,
         aux3: 0,
     });
 
@@ -23474,13 +23880,13 @@ fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() 
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
     state.player.facing = Direction::North;
     state.active_objects.push(ActiveObject {
-        type_byte: 192,
-        tile: 192,
+        type_byte: 0,
+        tile: 0,
         x: 2,
         y: 1,
         z: 0,
         phase: 0x20,
-        aux1: 0,
+        aux1: 20,
         aux3: 0,
     });
 
@@ -23492,7 +23898,7 @@ fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() 
     assert_eq!(state.player.facing, Direction::East);
     assert!(state.combat_active);
     assert!(state.combat_frame_snapshot.as_ref().unwrap().active_objects[1].is_empty());
-    assert_eq!(state.active_objects[6].tile, 192);
+    assert_eq!(state.active_objects[6].aux1, 20);
     assert!(!state.combat_actors[6].is_empty());
     assert!(state.message.contains("approaches from the East"));
     assert!(state.message.contains("entered dungeon combat"));
@@ -23510,7 +23916,7 @@ fn dungeon_post_turn_non_class_contact_reports_no_combat_class() {
         y: 1,
         z: 0,
         phase: 0x20,
-        aux1: 0,
+        aux1: 48,
         aux3: 0,
     });
 
@@ -23641,7 +24047,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
         ('N', "New order:", 0),
         ('R', "Ready:", 1),
-        ('U', "No usable items.", 0),
+        ('U', "No usable items.", 1),
         ('W', "What?", 0),
         ('Y', "Yell what?", 0),
         ('Z', "Player:", 0),

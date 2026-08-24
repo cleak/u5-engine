@@ -880,7 +880,7 @@ mod light_beacon_shipped_map_sources {
             &grid,
             lighthouse_x,
             lighthouse_y,
-            |_| false,
+            |_| LiveChunkSubstitutionPolicy::NONE,
         )
         .unwrap();
         let sources =

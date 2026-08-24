@@ -12,11 +12,13 @@ mod chunk_07;
 mod chunk_08;
 mod chunk_09;
 mod chunk_10;
+pub use chunk_11::ExplorationTurnGateOutcome;
 mod chunk_11;
 mod chunk_12;
 
 pub(crate) use chunk_09::surface_local_light_mask_index;
 pub use chunk_09::{
-    town_free_roaming_direction, town_free_roaming_facing_byte, town_free_roaming_object_eligible,
+    outdoor_active_object_step_accepts_tile, town_free_roaming_direction,
+    town_free_roaming_facing_byte, town_free_roaming_object_eligible,
     town_free_roaming_pen_tile_blocks,
 };

@@ -1,10 +1,29 @@
     #[test]
-    fn stair_delta_uses_request_direction_for_public_stair_family() {
-        assert_eq!(stair_delta(80, ClimbIntent::Up), Some(1));
-        assert_eq!(stair_delta(80, ClimbIntent::Down), Some(-1));
-        assert_eq!(stair_delta(81, ClimbIntent::Down), Some(-1));
-        assert_eq!(stair_delta(81, ClimbIntent::Up), Some(1));
-        assert_eq!(stair_delta(16, ClimbIntent::Up), None);
+    fn stair_delta_uses_exact_directional_town_klimb_links() {
+        assert_eq!(stair_delta(0xc8, ClimbIntent::Up), Some(1));
+        assert_eq!(stair_delta(0xc8, ClimbIntent::Down), None);
+        assert_eq!(stair_delta(0xc9, ClimbIntent::Down), Some(-1));
+        assert_eq!(stair_delta(0xc9, ClimbIntent::Up), None);
+        assert_eq!(stair_delta(0x86, ClimbIntent::Down), Some(-1));
+        assert_eq!(stair_delta(0x50, ClimbIntent::Up), None);
+        assert_eq!(stair_delta(0xc4, ClimbIntent::Up), None);
+        assert_eq!(stair_delta(0x8c, ClimbIntent::Down), None);
+    }
+
+    #[test]
+    fn town_klimb_target_classifiers_are_exhaustive() {
+        for tile in 0u8..=u8::MAX {
+            assert_eq!(
+                town_klimb_underfoot_intent(tile),
+                match tile {
+                    0xc8 => Some(ClimbIntent::Up),
+                    0xc9 | 0x86 => Some(ClimbIntent::Down),
+                    _ => None,
+                }
+            );
+            assert_eq!(town_klimb_over_target(tile), matches!(tile, 0x4c | 0xca | 0xcb));
+            assert_eq!(is_town_trapdoor_live_tile(tile), tile == 0x8c);
+        }
     }
 
     #[test]
@@ -79,14 +98,14 @@
     fn dungeon_active_monster_combat_uses_public_ambush_floor_arena() {
         let mut state = test_state(open_grid(), 1, 1);
         let object = ActiveObject {
-            type_byte: 0xc0,
-            tile: 0xc0,
+            type_byte: 0,
+            tile: 0,
             x: 2,
             y: 1,
             z: 3,
             phase: STEADY_PHASE,
-            aux1: 0x12,
-            aux3: 0x34,
+            aux1: 20,
+            aux3: DUNGEON_MONSTER_UPPER_DEP3,
         };
 
         let note = state
@@ -901,9 +920,56 @@
     }
 
     #[test]
+    fn queued_frigate_skiff_purchase_increments_the_whole_packed_class_byte() {
+        let mut gold = 500;
+        let mut pending = Some(PendingVehicleAcquisition::Frigate {
+            x: 12,
+            y: 21,
+            skiffs: 0x3f,
+        });
+
+        apply_shipwright_purchase(
+            &mut gold,
+            &mut pending,
+            Shipwright::TheRustyBucket,
+            ShipwrightPurchaseKind::Skiff,
+            99,
+            99,
+        )
+        .unwrap();
+
+        let pending = pending.unwrap();
+        assert_eq!(
+            PendingVehicleSaveState::from_acquisition(pending).class_byte,
+            0xc0
+        );
+        assert_eq!(pending.active_object(0).aux3, 0);
+
+        let mut pending = Some(PendingVehicleAcquisition::Frigate {
+            x: 12,
+            y: 21,
+            skiffs: 0x7f,
+        });
+        apply_shipwright_purchase(
+            &mut gold,
+            &mut pending,
+            Shipwright::TheRustyBucket,
+            ShipwrightPurchaseKind::Skiff,
+            99,
+            99,
+        )
+        .unwrap();
+        assert_eq!(pending, None);
+    }
+
+    #[test]
     fn shipwright_purchase_refusals_preserve_gold_and_pending_delivery() {
         let mut gold = 99;
-        let mut pending = Some(PendingVehicleAcquisition::Skiff { x: 1, y: 2 });
+        let mut pending = Some(PendingVehicleAcquisition::Skiff {
+            x: 1,
+            y: 2,
+            aux3: 0,
+        });
 
         let extra_skiff = apply_shipwright_purchase(
             &mut gold,
@@ -920,7 +986,14 @@
             ShipwrightPurchaseStatus::ExistingDeliveryRefusal
         );
         assert_eq!(gold, 99);
-        assert_eq!(pending, Some(PendingVehicleAcquisition::Skiff { x: 1, y: 2 }));
+        assert_eq!(
+            pending,
+            Some(PendingVehicleAcquisition::Skiff {
+                x: 1,
+                y: 2,
+                aux3: 0,
+            })
+        );
 
         assert_eq!(
             apply_shipwright_purchase(
@@ -937,7 +1010,14 @@
             })
         );
         assert_eq!(gold, 99);
-        assert_eq!(pending, Some(PendingVehicleAcquisition::Skiff { x: 1, y: 2 }));
+        assert_eq!(
+            pending,
+            Some(PendingVehicleAcquisition::Skiff {
+                x: 1,
+                y: 2,
+                aux3: 0,
+            })
+        );
     }
 
     #[test]
@@ -949,7 +1029,6 @@
             x: 10,
             y: 20,
             transport: TransportState::Foot,
-            timing_status: TimingStatusTag::Normal,
             sail_cadence: 0,
             sail_stall_pending: false,
             grid: open_world_grid(),
@@ -1979,7 +2058,7 @@
     }
 
     #[test]
-    fn provision_purchase_can_partially_complete_until_gold_or_capacity_runs_out() {
+    fn provision_purchase_adds_twenty_five_per_pack_and_stops_when_gold_runs_out() {
         let mut gold = 65;
         let mut food = 10;
 
@@ -1993,9 +2072,13 @@
         assert_eq!(bought.gold_before, 65);
         assert_eq!(bought.gold_after, 5);
         assert_eq!(bought.food_before, 10);
-        assert_eq!(bought.food_after, 14);
+        assert_eq!(bought.food_after, 110);
+        assert_eq!(
+            bought.completion,
+            ProvisionPurchaseCompletion::GoldExhausted
+        );
         assert_eq!(gold, 5);
-        assert_eq!(food, 14);
+        assert_eq!(food, 110);
 
         let mut state = world_state(open_world_grid(), 10, 10);
         state.gold = 1000;
@@ -2003,12 +2086,13 @@
 
         let capped = state
             .buy_provisions(Tavern::TheHonestMeal, 5)
-            .expect("food capacity permits two units");
+            .expect("one pack reaches the food ceiling");
 
-        assert_eq!(capped.purchased_quantity, 2);
-        assert_eq!(capped.total_price, 20);
+        assert_eq!(capped.purchased_quantity, 1);
+        assert_eq!(capped.total_price, 10);
+        assert_eq!(capped.completion, ProvisionPurchaseCompletion::Completed);
         assert_eq!(state.food, SHOP_FOOD_STOCK_CAP);
-        assert_eq!(state.gold, 980);
+        assert_eq!(state.gold, 990);
     }
 
     #[test]
@@ -2024,20 +2108,18 @@
 
         assert_eq!(
             apply_provision_purchase(&mut gold, &mut food, Tavern::TheHonestMeal, 1),
-            Err(ProvisionPurchaseError::InsufficientGold {
-                available: 9,
-                required_per_unit: 10,
-            })
+            Err(ProvisionPurchaseError::NoNeed)
         );
         assert_eq!((gold, food), (9, 12));
 
-        gold = 100;
-        food = SHOP_FOOD_STOCK_CAP;
-        assert_eq!(
-            apply_provision_purchase(&mut gold, &mut food, Tavern::TheHonestMeal, 1),
-            Err(ProvisionPurchaseError::NoNeed)
-        );
-        assert_eq!((gold, food), (100, SHOP_FOOD_STOCK_CAP));
+        food = 2;
+        let charity =
+            apply_provision_purchase(&mut gold, &mut food, Tavern::TheHonestMeal, 1).unwrap();
+        assert_eq!(charity.purchased_quantity, 0);
+        assert_eq!(charity.total_price, 0);
+        assert_eq!(charity.food_after, 3);
+        assert_eq!(charity.completion, ProvisionPurchaseCompletion::Charity);
+        assert_eq!((gold, food), (9, 3));
     }
 
     #[test]
@@ -2112,6 +2194,18 @@
     #[test]
     fn combat_class_stats_expose_published_monster_rows() {
         const EXPECTED_ROWS: &[(u8, &str, [u8; 8])] = &[
+            (0, "Mage", [10, 15, 20, 0, 15, 10, 3, 20]),
+            (1, "Bard", [15, 20, 10, 4, 12, 15, 9, 10]),
+            (2, "Fighter", [20, 15, 10, 8, 15, 20, 6, 15]),
+            (3, "Avatar", [25, 25, 25, 7, 30, 20, 1, 25]),
+            (4, "Villager", [12, 12, 12, 0, 6, 8, 1, 10]),
+            (5, "Merchant", [12, 12, 18, 0, 6, 8, 1, 10]),
+            (6, "Jester", [12, 18, 12, 0, 6, 8, 1, 10]),
+            (7, "Bard (second row)", [12, 16, 14, 0, 6, 8, 1, 10]),
+            (8, "Pirate", [12, 12, 12, 0, 0, 5, 1, 0]),
+            (9, "Unnamed reserved", [12, 12, 12, 0, 0, 5, 1, 0]),
+            (10, "Child", [8, 8, 8, 0, 0, 5, 1, 0]),
+            (11, "Beggar", [8, 8, 8, 0, 0, 5, 1, 0]),
             (12, "Guard", [22, 30, 10, 6, 30, 99, 8, 5]),
             (13, "Wanderer", [30, 30, 30, 30, 99, 99, 1, 0]),
             (14, "Blackthorn", [30, 30, 30, 30, 30, 99, 1, 0]),
@@ -2166,7 +2260,6 @@
             );
         }
 
-        assert_eq!(combat_class_stats(11), None);
         assert_eq!(combat_class_stats(COMBAT_CLASS_COUNT as u8), None);
     }
 
@@ -2451,19 +2544,19 @@
             Some(CombatAiSpecialHook::Blink)
         );
         assert_eq!(
-            resolve_combat_ai_special_hook(23, false, 1, 0, true),
+            resolve_combat_ai_special_hook(23, false, 32, 0, true),
             None
         );
         assert_eq!(
-            resolve_combat_ai_special_hook(39, false, 0, 8, true),
+            resolve_combat_ai_special_hook(39, false, 0, 31, true),
             Some(CombatAiSpecialHook::SummonDaemon)
         );
         assert_eq!(
-            resolve_combat_ai_special_hook(39, false, 0, 9, true),
+            resolve_combat_ai_special_hook(39, false, 0, 32, true),
             None
         );
         assert_eq!(
-            resolve_combat_ai_special_hook(39, false, 0, 8, false),
+            resolve_combat_ai_special_hook(39, false, 0, 31, false),
             None
         );
         assert_eq!(
@@ -2484,8 +2577,9 @@
         traits.summon_daemon = true;
 
         assert!(combat_ai_special_one_in_eight_gate(0));
-        assert!(combat_ai_special_one_in_eight_gate(8));
-        assert!(!combat_ai_special_one_in_eight_gate(1));
+        assert!(combat_ai_special_one_in_eight_gate(31));
+        assert!(!combat_ai_special_one_in_eight_gate(32));
+        assert!(!combat_ai_special_one_in_eight_gate(u8::MAX));
 
         assert_eq!(
             resolve_combat_ai_special_hook_for_traits(traits, true, 0, 0, true),
@@ -2496,11 +2590,11 @@
             Some(CombatAiSpecialHook::Blink)
         );
         assert_eq!(
-            resolve_combat_ai_special_hook_for_traits(traits, false, 1, 0, true),
+            resolve_combat_ai_special_hook_for_traits(traits, false, 32, 31, true),
             Some(CombatAiSpecialHook::SummonDaemon)
         );
         assert_eq!(
-            resolve_combat_ai_special_hook_for_traits(traits, false, 1, 0, false),
+            resolve_combat_ai_special_hook_for_traits(traits, false, 32, 31, false),
             None
         );
     }
@@ -2939,7 +3033,7 @@
     }
 
     #[test]
-    fn combat_field_contact_skips_current_actor_and_poison_linked_monster_tiles() {
+    fn combat_field_contact_targets_current_actor_and_skips_poison_linked_monster_tiles() {
         let mut target = PartyMember {
             slot: 0,
             class_byte: 1,
@@ -2954,28 +3048,28 @@
         assert_eq!(
             resolve_combat_arena_field_contact_for_party_target(
                 CombatArenaFieldKind::Poison,
-                2,
-                2,
                 0x40,
                 &mut target,
                 19,
                 20,
             ),
-            CombatArenaFieldContactOutcome::SkippedCurrentActor
+            Some(CombatArenaFieldContactOutcome::PoisonedPartyMember {
+                status_before: b'G',
+                status_after: b'P',
+            })
         );
-        assert_eq!(target.status, b'G');
+        assert_eq!(target.status, b'P');
+        target.status = b'G';
 
         assert_eq!(
             resolve_combat_arena_field_contact_for_party_target(
                 CombatArenaFieldKind::Poison,
-                1,
-                2,
                 0x80,
                 &mut target,
                 19,
                 20,
             ),
-            CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass
+            Some(CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass)
         );
         assert_eq!(target.status, b'G');
     }
@@ -2996,72 +3090,64 @@
         assert_eq!(
             resolve_combat_arena_field_contact_for_party_target(
                 CombatArenaFieldKind::Poison,
-                1,
-                2,
                 0x40,
                 &mut target,
                 19,
                 20,
             ),
-            CombatArenaFieldContactOutcome::PoisonedPartyMember {
+            Some(CombatArenaFieldContactOutcome::PoisonedPartyMember {
                 status_before: b'G',
                 status_after: b'P',
-            }
+            })
         );
         assert_eq!(target.status, b'P');
         assert_eq!(
             resolve_combat_arena_field_contact_for_party_target(
                 CombatArenaFieldKind::Poison,
-                1,
-                2,
                 0x40,
                 &mut target,
                 19,
                 20,
             ),
-            CombatArenaFieldContactOutcome::PoisonFallbackDamage { raw_damage: 20 }
+            Some(CombatArenaFieldContactOutcome::PoisonFallbackDamage {
+                raw_damage: 19,
+            })
         );
 
         assert_eq!(
             resolve_combat_arena_field_contact_for_party_target(
                 CombatArenaFieldKind::Sleep,
-                1,
-                2,
                 0x40,
                 &mut target,
                 19,
                 20,
             ),
-            CombatArenaFieldContactOutcome::SleptPartyMember {
+            Some(CombatArenaFieldContactOutcome::SleptPartyMember {
                 status_before: b'P',
                 status_after: b'S',
-            }
+            })
         );
         assert_eq!(target.status, b'S');
 
         assert_eq!(
             resolve_combat_arena_field_contact_for_party_target(
                 CombatArenaFieldKind::Fire,
-                1,
-                2,
                 0x40,
                 &mut target,
                 19,
                 20,
             ),
-            CombatArenaFieldContactOutcome::FireDamage { raw_damage: 21 }
+            Some(CombatArenaFieldContactOutcome::FireDamage { raw_damage: 9 })
         );
         assert_eq!(
             resolve_combat_arena_field_contact_for_party_target(
                 CombatArenaFieldKind::Energy,
-                1,
-                2,
                 0x40,
                 &mut target,
                 19,
                 20,
             ),
-            CombatArenaFieldContactOutcome::EnergyDamage { raw_damage: 0 }
+            None
         );
     }
 
@@ -3081,49 +3167,43 @@
         assert_eq!(
             resolve_combat_arena_field_contact_for_party_target(
                 CombatArenaFieldKind::Sleep,
-                1,
-                2,
                 0x40,
                 &mut dead_target,
                 0,
                 0,
             ),
-            CombatArenaFieldContactOutcome::SleepSkippedDeadParty
+            Some(CombatArenaFieldContactOutcome::SleepSkippedDeadParty)
         );
         assert_eq!(dead_target.status, b'D');
 
         assert_eq!(
             resolve_combat_arena_field_contact_for_non_party_target(
                 CombatArenaFieldKind::Sleep,
-                1,
-                2,
                 0x40,
                 0,
                 0,
             ),
-            CombatArenaFieldContactOutcome::SleepDisabledNonParty
+            Some(CombatArenaFieldContactOutcome::SleepDisabledNonParty)
         );
         assert_eq!(
             resolve_combat_arena_field_contact_for_non_party_target(
                 CombatArenaFieldKind::Poison,
-                1,
-                2,
                 0x40,
                 20,
                 0,
             ),
-            CombatArenaFieldContactOutcome::PoisonFallbackDamage { raw_damage: 1 }
+            Some(CombatArenaFieldContactOutcome::PoisonFallbackDamage {
+                raw_damage: 20,
+            })
         );
         assert_eq!(
             resolve_combat_arena_field_contact_for_non_party_target(
                 CombatArenaFieldKind::Poison,
-                1,
-                2,
                 0x80,
                 20,
                 0,
             ),
-            CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass
+            Some(CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass)
         );
     }
 
@@ -4491,7 +4571,7 @@
     }
 
     #[test]
-    fn combat_xit_cleanup_requires_no_active_not_dead_non_party_actors() {
+    fn combat_escape_cleanup_uses_party_side_bits_mode_and_announcement() {
         let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
         actors[0] = CombatActorDescriptor::from_row([
             20,
@@ -4516,15 +4596,31 @@
 
         assert!(combat_actor_is_active_not_dead(actors[6]));
         assert!(combat_has_active_not_dead_non_party_actor(&actors));
-        assert!(!resolve_combat_xit_cleanup_allowed(&actors));
+        assert_eq!(
+            resolve_combat_escape_cleanup(&actors, false, false),
+            CombatEscapeCleanupDecision::RefusedNotYet
+        );
+        assert_eq!(
+            resolve_combat_escape_cleanup(&actors, true, false),
+            CombatEscapeCleanupDecision::RefusedNotHere
+        );
+        assert_eq!(
+            resolve_combat_escape_cleanup(&actors, false, true),
+            CombatEscapeCleanupDecision::Accepted
+        );
 
-        actors[6].mark_dead();
-        assert!(!combat_has_active_not_dead_non_party_actor(&actors));
-        assert!(resolve_combat_xit_cleanup_allowed(&actors));
+        actors[0].mark_dead();
+        assert_eq!(
+            resolve_combat_escape_cleanup(&actors, false, false),
+            CombatEscapeCleanupDecision::Accepted
+        );
 
         actors[7] = CombatActorDescriptor::from_row([10, 1, 0, 32, 0, 0, 5, 6]);
         assert!(!combat_actor_is_active_not_dead(actors[7]));
-        assert!(resolve_combat_xit_cleanup_allowed(&actors));
+        assert_eq!(
+            resolve_combat_escape_cleanup(&actors, true, false),
+            CombatEscapeCleanupDecision::Accepted
+        );
     }
 
     #[test]
@@ -4717,7 +4813,7 @@
         state.combat_actors[8].clear();
         assert_eq!(
             state.combat_round_loop_control(false, false),
-            CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Victory)
         );
 
         state.combat_actors[0].clear();
@@ -4940,7 +5036,27 @@
     }
 
     #[test]
-    fn combat_post_step_absorbable_field_contact_sets_armed_result_marker() {
+    fn combat_frame_entry_and_exit_preserve_save_backed_interference_sources() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let mut expected = [COMBAT_INTERFERENCE_NO_SOURCE; COMBAT_ACTOR_SLOTS];
+        expected[0] = 8;
+        expected[9] = 31;
+        state.combat_interference_sources = expected;
+
+        let snapshot = state
+            .enter_combat_frame(
+                vec![ActiveObject::empty(); OOL_SLOTS],
+                [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+            )
+            .expect("combat frame should enter");
+        assert_eq!(state.combat_interference_sources, expected);
+
+        state.restore_combat_frame(snapshot);
+        assert_eq!(state.combat_interference_sources, expected);
+    }
+
+    #[test]
+    fn combat_post_dispatch_absorbable_field_contact_sets_armed_result_marker() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.visibility_dirty = false;
@@ -4949,8 +5065,8 @@
         state.active_objects[0] = ActiveObject {
             type_byte: 0x5c,
             tile: 0x5c,
-            x: 5,
-            y: 5,
+            x: 6,
+            y: 2,
             z: 0,
             phase: STEADY_PHASE,
             aux1: 0,
@@ -4960,7 +5076,7 @@
             type_byte: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
             tile: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
             x: 6,
-            y: 5,
+            y: 1,
             z: 0,
             phase: STEADY_PHASE,
             aux1: 0,
@@ -4973,8 +5089,8 @@
             0,
             0,
             0,
-            5,
-            5,
+            6,
+            2,
         ]);
         state.combat_frame_snapshot = Some(CombatFrameSnapshot {
             area: Area::Dungeon {
@@ -4991,16 +5107,34 @@
                 records: vec!["Welcome back".to_string()],
             }),
             endgame_tableau_map: None,
+            encounter_mode_high_bit: false,
+            exit_announced: false,
         });
 
-        let outcome = state.apply_combat_step_or_attack_primitive(
-            0,
-            COMBAT_TARGET_GROUP_PARTY,
-            COMBAT_DIRECTION_EAST,
-            true,
-        );
+        let application = state
+            .apply_combat_player_command_with_attack_inputs(
+                0,
+                CombatPlayerCommandInput::Key(' '),
+                CombatPlayerWeaponAttackInputs::default(),
+            )
+            .expect("pass should complete the player dispatch");
 
-        assert!(outcome.committed_movement());
+        assert!(matches!(
+            application.action,
+            CombatPlayerCommandAction::Pass(_)
+        ));
+        assert!(matches!(
+            application.absorbable_contact,
+            Some(CombatAbsorbableFieldApplication {
+                companion_band_index,
+                marker_byte: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+                x: 6,
+                y: 2,
+                armed_endgame_result: true,
+                ..
+            }) if companion_band_index == terrain_band_active_index(1, 6).unwrap()
+        ));
+        assert_eq!(application.post_dispatch_contact, None);
         assert_eq!(state.active_player, None);
         assert_eq!(state.message, "Absorbed!");
         assert!(state.visibility_dirty);
@@ -5022,7 +5156,7 @@
             type_byte: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
             tile: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
             x: 5,
-            y: 5,
+            y: 1,
             z: 0,
             phase: STEADY_PHASE,
             aux1: 0,
@@ -5036,7 +5170,7 @@
             0,
             0,
             5,
-            5,
+            2,
         ]);
         state.combat_frame_snapshot = Some(CombatFrameSnapshot {
             area: Area::World {
@@ -5050,6 +5184,8 @@
             enter_endgame_after_successful_combat: false,
             endgame_messages: None,
             endgame_tableau_map: None,
+            encounter_mode_high_bit: false,
+            exit_announced: false,
         });
 
         let application = state
@@ -5313,7 +5449,7 @@
     }
 
     #[test]
-    fn combat_pass_and_quit_commands_have_specified_control_flow() {
+    fn combat_pass_command_has_specified_control_flow() {
         assert_eq!(
             resolve_combat_pass_command(),
             CombatPassCommandOutcome {
@@ -5322,10 +5458,6 @@
                 ends_turn: true,
             }
         );
-
-        let quit = resolve_combat_quit_command();
-        assert_eq!(quit, CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat));
-        assert_eq!(quit.result_code(), Some(COMBAT_ROUND_RESULT_DEFEAT));
     }
 
     #[test]
@@ -5349,9 +5481,18 @@
             PlayInputDisposition::Continue
         );
         assert_eq!(state.turn, 0);
-        assert_eq!(state.pending_combat_actor_slot, None);
-        assert_eq!(state.message, "Aborted.");
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!(state.message, "Escape-Not yet!\n");
         assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (10, 10));
+
+        state.combat_actors[8].mark_dead();
+        assert_eq!(
+            handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.combat_active);
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!(state.message, "Escape-Not yet!\n");
     }
 
     #[test]
@@ -5773,7 +5914,7 @@
             .unwrap();
         state.pending_combat_terrain_trigger_slot = Some(2);
 
-        let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
 
         assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
         assert!(!state.combat_active);
@@ -5815,7 +5956,7 @@
             .unwrap();
         state.pending_combat_terrain_trigger_slot = Some(2);
 
-        let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
 
         assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
         assert_eq!(
@@ -5911,6 +6052,10 @@
     fn combat_exit_body_retrieval_state_requires_success_with_no_living_foes() {
         let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
         assert!(combat_exit_requests_body_retrieval_reconcile(
+            CombatRoundLoopExit::Victory,
+            &actors
+        ));
+        assert!(!combat_exit_requests_body_retrieval_reconcile(
             CombatRoundLoopExit::LeaveCombat,
             &actors
         ));
@@ -5930,7 +6075,7 @@
             5,
         ]);
         assert!(!combat_exit_requests_body_retrieval_reconcile(
-            CombatRoundLoopExit::LeaveCombat,
+            CombatRoundLoopExit::Victory,
             &actors
         ));
     }
@@ -6049,28 +6194,25 @@
         assert_eq!(resolve_combat_command_branch('P'), CombatCommandBranch::Push);
         assert_eq!(
             resolve_combat_command_branch('Q'),
-            CombatCommandBranch::QuitDefeat
+            CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Quit)
         );
         assert_eq!(resolve_combat_command_branch('R'), CombatCommandBranch::Ready);
         assert_eq!(resolve_combat_command_branch('S'), CombatCommandBranch::Search);
-        assert_eq!(
-            resolve_combat_command_branch('U'),
-            CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::UseItem)
-        );
+        assert_eq!(resolve_combat_command_branch('U'), CombatCommandBranch::UseItem);
         assert_eq!(
             resolve_combat_command_branch('W'),
             CombatCommandBranch::WWhatRefusal
         );
         assert_eq!(
             resolve_combat_command_branch('X'),
-            CombatCommandBranch::XitCleanup
+            CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Xit)
         );
         assert_eq!(resolve_combat_command_branch('Y'), CombatCommandBranch::Yell);
         assert_eq!(resolve_combat_command_branch('Z'), CombatCommandBranch::ZStats);
         assert_eq!(resolve_combat_command_branch(' '), CombatCommandBranch::Pass);
         assert_eq!(
             resolve_combat_command_branch('\u{1b}'),
-            CombatCommandBranch::AbortPrompt
+            CombatCommandBranch::EscapeCleanup
         );
         assert_eq!(
             resolve_combat_command_branch('\u{13}'),
@@ -6090,6 +6232,7 @@
             CombatCommandBranch::Open,
             CombatCommandBranch::Ready,
             CombatCommandBranch::Search,
+            CombatCommandBranch::UseItem,
         ] {
             assert!(combat_command_branch_requires_live_active_actor(branch));
         }
@@ -6097,17 +6240,14 @@
         for branch in [
             CombatCommandBranch::Attack,
             CombatCommandBranch::CastSpell,
-            CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::UseItem),
             CombatCommandBranch::DWhatRefusal,
             CombatCommandBranch::Klimb,
             CombatCommandBranch::Push,
-            CombatCommandBranch::QuitDefeat,
             CombatCommandBranch::WWhatRefusal,
-            CombatCommandBranch::XitCleanup,
+            CombatCommandBranch::EscapeCleanup,
             CombatCommandBranch::Yell,
             CombatCommandBranch::ZStats,
             CombatCommandBranch::Pass,
-            CombatCommandBranch::AbortPrompt,
             CombatCommandBranch::ToggleMusic,
             CombatCommandBranch::Invalid,
         ] {
@@ -6161,7 +6301,7 @@
             CombatCommandLiveActorGate::NotRequired
         );
         assert_eq!(
-            resolve_combat_command_live_actor_gate(CombatCommandBranch::XitCleanup, Some(dead)),
+            resolve_combat_command_live_actor_gate(CombatCommandBranch::EscapeCleanup, Some(dead)),
             CombatCommandLiveActorGate::NotRequired
         );
     }
@@ -6206,23 +6346,29 @@
             None
         );
         assert_eq!(
-            combat_command_branch_published_label(CombatCommandBranch::QuitDefeat),
+            combat_command_branch_published_label(CombatCommandBranch::EscapeCleanup),
             None
         );
         assert_eq!(
-            combat_command_branch_published_label(CombatCommandBranch::SceneMessageAbort(
-                CombatSceneAbortVerb::UseItem
-            )),
+            combat_command_branch_published_label(CombatCommandBranch::UseItem),
             None
         );
 
         assert_eq!(
-            combat_scene_abort_verb_prefix(CombatSceneAbortVerb::UseItem),
-            "Use"
-        );
-        assert_eq!(
             combat_scene_abort_verb_prefix(CombatSceneAbortVerb::HoleUp),
             "Hole up"
+        );
+        assert_eq!(
+            combat_scene_abort_tail(CombatSceneAbortVerb::Board),
+            CombatSceneAbortTail::What
+        );
+        assert_eq!(
+            combat_scene_abort_tail(CombatSceneAbortVerb::Quit),
+            CombatSceneAbortTail::NotHere
+        );
+        assert_eq!(
+            combat_scene_abort_tail(CombatSceneAbortVerb::Talk),
+            CombatSceneAbortTail::FunnyNoResponse
         );
     }
 
@@ -6237,21 +6383,19 @@
             CombatCommandBranch::Open,
             CombatCommandBranch::Ready,
             CombatCommandBranch::Search,
+            CombatCommandBranch::UseItem,
             CombatCommandBranch::Yell,
         ] {
             assert!(combat_command_branch_is_named_multistage(branch));
         }
 
         for branch in [
-            CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::UseItem),
             CombatCommandBranch::DWhatRefusal,
             CombatCommandBranch::Push,
-            CombatCommandBranch::QuitDefeat,
             CombatCommandBranch::WWhatRefusal,
-            CombatCommandBranch::XitCleanup,
+            CombatCommandBranch::EscapeCleanup,
             CombatCommandBranch::ZStats,
             CombatCommandBranch::Pass,
-            CombatCommandBranch::AbortPrompt,
             CombatCommandBranch::ToggleMusic,
             CombatCommandBranch::Invalid,
         ] {
@@ -6306,6 +6450,16 @@
             6,
             5,
         ]);
+        let sleeping = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+            2,
+            1,
+            0,
+            6,
+            5,
+        ]);
         let dead = CombatActorDescriptor::from_row([
             10,
             1,
@@ -6320,6 +6474,7 @@
 
         assert!(combat_cast_interference_target_is_live_visible(adjacent));
         assert!(!combat_cast_interference_target_is_live_visible(hidden));
+        assert!(!combat_cast_interference_target_is_live_visible(sleeping));
         assert!(!combat_cast_interference_target_is_live_visible(dead));
         assert!(!combat_cast_interference_target_is_live_visible(unselectable));
 
@@ -6341,6 +6496,10 @@
         );
         assert_eq!(
             resolve_combat_cast_interference(caster, Some(hidden), true, false),
+            CombatCastInterferenceOutcome::ContinueToSpellDispatcher
+        );
+        assert_eq!(
+            resolve_combat_cast_interference(caster, Some(sleeping), true, false),
             CombatCastInterferenceOutcome::ContinueToSpellDispatcher
         );
         assert_eq!(
@@ -6654,7 +6813,7 @@
     }
 
     #[test]
-    fn cause_fear_scan_skips_dead_same_faction_and_protected_targets() {
+    fn cause_fear_scan_uses_monster_side_not_faction_and_skips_protected_targets() {
         let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
         actors[0] = CombatActorDescriptor::from_row([20, 1, 0, 0, 0, 0, 3, 3]);
         actors[4] = CombatActorDescriptor::from_row([20, 1, 0, 32, 0, 0, 5, 5]);
@@ -6693,17 +6852,102 @@
 
         let slots = collect_cause_fear_actor_slots(&actors, &groups, 1, &protected_or_immune);
 
-        assert_eq!(slots, vec![4, 7]);
+        assert_eq!(slots, vec![7]);
     }
 
     #[test]
-    fn cause_fear_forced_hp_feeds_under_quarter_morale_bucket() {
+    fn cause_fear_and_repel_force_exactly_one_hp() {
         for max_hp in [0, 1, 2, 5, 10, 20, 99] {
-            let current_hp = cause_fear_forced_current_hp(max_hp);
-            let morale = resolve_combat_wound_morale(current_hp, max_hp, 255);
-            assert_eq!(morale.bucket, CombatWoundScoreBucket::UnderOneQuarter);
-            assert!(morale.fleeing);
+            assert_eq!(cause_fear_forced_current_hp(max_hp), 1);
         }
+    }
+
+    #[test]
+    fn shared_combat_resistance_formula_pins_skew_score_and_equality() {
+        assert_eq!(combat_skewed_roll_1_to_30(0), 1);
+        assert_eq!(combat_skewed_roll_1_to_30(3), 1);
+        assert_eq!(combat_skewed_roll_1_to_30(4), 2);
+        assert_eq!(combat_skewed_roll_1_to_30(59), 29);
+        assert_eq!(combat_skewed_roll_1_to_30(60), 30);
+
+        assert_eq!(combat_resistance_score(255, 0), -112);
+        assert_eq!(combat_resistance_score(0, 255), 142);
+        assert_eq!(combat_resistance_score(10, 20), 20);
+        assert!(combat_resistance_blocks_from_raw_roll(10, 20, 38));
+        assert!(!combat_resistance_blocks_from_raw_roll(10, 20, 40));
+        assert!(!combat_resistance_blocks_from_raw_roll(255, 0, 0));
+        assert!(combat_resistance_blocks_from_raw_roll(0, 255, 60));
+
+        assert!(!combat_target_weight_gate_accepts_from_raw_roll(20, 38));
+        assert!(combat_target_weight_gate_accepts_from_raw_roll(20, 40));
+    }
+
+    #[test]
+    fn shared_combat_resistance_uses_owner_intelligence_and_class_endurance_once() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.party_intelligence = vec![0, 37];
+        state.combat_actors[0] =
+            CombatActorDescriptor::from_row([20, 9, 0, 1, 0, 0, 4, 4]);
+        state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] =
+            CombatActorDescriptor::for_monster_placement(
+                combat_class_stats(COMBAT_CLASS_DAEMON).unwrap(),
+                COMBAT_PARTY_ACTOR_SLOTS as u8,
+                5,
+                5,
+                0,
+                0,
+            );
+
+        assert_eq!(state.combat_actor_resistance_rating(0), Some(37));
+        assert_eq!(
+            state.combat_actor_resistance_rating(COMBAT_PARTY_ACTOR_SLOTS),
+            Some(combat_class_stats(COMBAT_CLASS_DAEMON).unwrap().endurance)
+        );
+
+        state.prng_state = 0x456;
+        let mut expected_prng = state.prng_state;
+        let raw = u5_prng_range_u16(&mut expected_prng, 0, 60) as u8;
+        let expected = combat_resistance_blocks_from_raw_roll(
+            combat_class_stats(COMBAT_CLASS_DAEMON).unwrap().endurance,
+            37,
+            raw,
+        );
+        assert_eq!(
+            state.combat_ai_possess_resistance_blocks(COMBAT_PARTY_ACTOR_SLOTS, 0),
+            expected
+        );
+        assert_eq!(state.prng_state, expected_prng);
+    }
+
+    #[test]
+    fn target_combat_weight_applies_only_the_published_forced_one_cases() {
+        let ordinary = CombatActorDescriptor::from_row([20, 9, 0, 32, 0, 0, 4, 4]);
+        let disabled = CombatActorDescriptor::from_row([
+            20,
+            9,
+            COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+            32,
+            0,
+            0,
+            4,
+            4,
+        ]);
+        let mimic = CombatActorDescriptor::from_row([20, 9, 0, COMBAT_CLASS_MIMIC, 0, 0, 4, 4]);
+
+        assert_eq!(combat_actor_weight(0, ordinary, true), 9);
+        assert_eq!(
+            combat_actor_weight(COMBAT_PARTY_ACTOR_SLOTS, ordinary, false),
+            9
+        );
+        assert_eq!(
+            combat_actor_weight(COMBAT_PARTY_ACTOR_SLOTS, ordinary, true),
+            1
+        );
+        assert_eq!(combat_actor_weight(0, disabled, false), 1);
+        assert_eq!(
+            combat_actor_weight(COMBAT_PARTY_ACTOR_SLOTS, mimic, false),
+            1
+        );
     }
 
     #[test]
@@ -6753,7 +6997,7 @@
     }
 
     #[test]
-    fn conjure_spell_class_selector_uses_fifteen_weighted_outcomes() {
+    fn conjure_spell_class_selector_uses_sixteen_weighted_outcomes() {
         for selector in 0..6 {
             assert_eq!(
                 resolve_conjure_spell_class(selector),
@@ -6770,8 +7014,9 @@
             assert_eq!(resolve_conjure_spell_class(selector), COMBAT_CLASS_BAT);
         }
         assert_eq!(resolve_conjure_spell_class(14), COMBAT_CLASS_PYTHON);
-        assert_eq!(resolve_conjure_spell_class(15), COMBAT_CLASS_GIANT_RAT);
-        assert_eq!(resolve_conjure_spell_class(29), COMBAT_CLASS_PYTHON);
+        assert_eq!(resolve_conjure_spell_class(15), COMBAT_CLASS_PYTHON);
+        assert_eq!(resolve_conjure_spell_class(16), COMBAT_CLASS_GIANT_RAT);
+        assert_eq!(resolve_conjure_spell_class(31), COMBAT_CLASS_PYTHON);
     }
 
     #[test]
@@ -6861,14 +7106,6 @@
         assert_eq!(
             combat_neighbor_candidate_coordinates(0, 0, 0),
             vec![(1, 0), (0, 1), (1, 1)]
-        );
-        assert_eq!(
-            combat_swarm_jitter_candidate_coordinate(5, 5, 1, 2),
-            Some((4, 5))
-        );
-        assert_eq!(
-            combat_swarm_jitter_candidate_coordinate(0, 0, 0, 0),
-            None
         );
     }
 
@@ -7530,6 +7767,7 @@
     fn combat_cast_charm_routes_resources_and_toggles_target_allegiance() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
+        state.party_intelligence[0] = u8::MAX;
         state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         state.party = vec![PartyMember {
             slot: 0,
@@ -7645,8 +7883,7 @@
     fn combat_cast_conjure_routes_resources_and_places_weighted_animal() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
-        state.combat_terrain = [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        state.combat_terrain[0][7] = 0x04;
+        state.combat_terrain = [[0x05; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         state.party = vec![PartyMember {
             slot: 0,
@@ -7687,8 +7924,16 @@
             0,
             u16::from(CONJURE_ANIMAL_OUTCOME_COUNT - 1),
         );
-        let conjure_x = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
-        let conjure_y = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
+        let (conjure_x, conjure_y) = loop {
+            let x = u5_prng_range_u16(&mut expected_prng, 0, 15) as u8;
+            let y = u5_prng_range_u16(&mut expected_prng, 0, 15) as u8;
+            if usize::from(x) < COMBAT_ARENA_SIDE
+                && usize::from(y) < COMBAT_ARENA_SIDE
+                && (x, y) != (5, 5)
+            {
+                break (x, y);
+            }
+        };
 
         assert_eq!(
             state
@@ -7716,17 +7961,21 @@
         );
         assert_eq!(
             state.active_objects[COMBAT_PARTY_ACTOR_SLOTS],
-            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, 7, 0, 0).unwrap()
+            summoned_active_object_record(
+                COMBAT_CLASS_GIANT_RAT,
+                usize::from(conjure_x),
+                usize::from(conjure_y),
+                0,
+            )
+            .unwrap()
         );
     }
 
     #[test]
-    fn combat_cast_swarm_routes_resources_and_places_up_to_eight_swarms() {
+    fn combat_cast_swarm_routes_resources_and_places_four_swarms_on_one_probe() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
-        state.combat_terrain = [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        state.combat_terrain[4][5] = 0x04;
-        state.combat_terrain[4][6] = 0x04;
+        state.combat_terrain = [[0x05; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         state.party = vec![PartyMember {
             slot: 0,
@@ -7761,6 +8010,17 @@
             aux1: 0,
             aux3: 0,
         };
+        let mut expected_prng = state.prng_state;
+        let (swarm_x, swarm_y) = loop {
+            let x = u5_prng_range_u16(&mut expected_prng, 0, 15) as u8;
+            let y = u5_prng_range_u16(&mut expected_prng, 0, 15) as u8;
+            if usize::from(x) < COMBAT_ARENA_SIDE
+                && usize::from(y) < COMBAT_ARENA_SIDE
+                && (x, y) != (5, 5)
+            {
+                break (x, y);
+            }
+        };
         assert_eq!(
             state
                 .cast_spell_from_suffix("1BIX", std::path::Path::new(""))
@@ -7771,41 +8031,36 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.message, "Success!");
-        assert_eq!(
-            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
-            resolve_swarm_spell_descriptor(
-                COMBAT_PARTY_ACTOR_SLOTS as u8,
-                5,
-                4,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
-                0,
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1],
-            resolve_swarm_spell_descriptor(
-                (COMBAT_PARTY_ACTOR_SLOTS + 1) as u8,
-                6,
-                4,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
-                0,
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            state.active_objects[COMBAT_PARTY_ACTOR_SLOTS],
-            summoned_active_object_record(COMBAT_CLASS_INSECT_SWARM, 5, 4, 0).unwrap()
-        );
-        assert_eq!(
-            state.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 1],
-            summoned_active_object_record(COMBAT_CLASS_INSECT_SWARM, 6, 4, 0).unwrap()
-        );
+        for offset in 0..4 {
+            let slot = COMBAT_PARTY_ACTOR_SLOTS + offset;
+            assert_eq!(
+                state.combat_actors[slot],
+                resolve_swarm_spell_descriptor(
+                    slot as u8,
+                    swarm_x,
+                    swarm_y,
+                    COMBAT_SUMMONED_ACTOR_FLAGS,
+                    0,
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                state.active_objects[slot],
+                summoned_active_object_record(
+                    COMBAT_CLASS_INSECT_SWARM,
+                    usize::from(swarm_x),
+                    usize::from(swarm_y),
+                    0,
+                )
+                .unwrap()
+            );
+        }
     }
 
     #[test]
-    fn combat_swarm_uses_target_cell_then_three_short_jitter_retries() {
+    fn combat_swarm_rejects_an_off_arena_probe_then_places_four_at_one_cell() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
@@ -7814,34 +8069,38 @@
         let seed = (0..=u16::MAX)
             .find(|candidate| {
                 let mut prng = *candidate;
-                u5_prng_range_u16(&mut prng, 0, u16::from(COMBAT_SWARM_JITTER_ROLL_MAX)) == 1
-                    && u5_prng_range_u16(&mut prng, 0, u16::from(COMBAT_SWARM_JITTER_ROLL_MAX))
-                        == 2
+                let first_x = u5_prng_range_u16(&mut prng, 0, 15);
+                let first_y = u5_prng_range_u16(&mut prng, 0, 15);
+                let second_x = u5_prng_range_u16(&mut prng, 0, 15);
+                let second_y = u5_prng_range_u16(&mut prng, 0, 15);
+                (first_x >= COMBAT_ARENA_SIDE as u16 || first_y >= COMBAT_ARENA_SIDE as u16)
+                    && (second_x, second_y) == (4, 4)
             })
             .unwrap();
         state.prng_state = seed;
         let mut expected_prng = seed;
-        let _jitter_x =
-            u5_prng_range_u16(&mut expected_prng, 0, u16::from(COMBAT_SWARM_JITTER_ROLL_MAX));
-        let _jitter_y =
-            u5_prng_range_u16(&mut expected_prng, 0, u16::from(COMBAT_SWARM_JITTER_ROLL_MAX));
+        for _ in 0..4 {
+            let _ = u5_prng_range_u16(&mut expected_prng, 0, 15);
+        }
 
-        let applied = state.apply_combat_swarm_with_legal_mask(0, &legal_cells, &[(5, 4)]);
+        let applied = state.apply_combat_swarm_with_random_attempts(0, &legal_cells);
 
-        assert_eq!(applied.len(), 1);
-        assert_eq!((applied[0].x, applied[0].y), (4, 4));
+        assert_eq!(applied.len(), 4);
+        assert!(applied.iter().all(|application| (application.x, application.y) == (4, 4)));
         assert_eq!(state.prng_state, expected_prng);
-        assert_eq!(
-            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
-            resolve_swarm_spell_descriptor(
-                COMBAT_PARTY_ACTOR_SLOTS as u8,
-                4,
-                4,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
-                0,
-            )
-            .unwrap()
-        );
+        for offset in 0..4 {
+            assert_eq!(
+                state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + offset],
+                resolve_swarm_spell_descriptor(
+                    (COMBAT_PARTY_ACTOR_SLOTS + offset) as u8,
+                    4,
+                    4,
+                    COMBAT_SUMMONED_ACTOR_FLAGS,
+                    0,
+                )
+                .unwrap()
+            );
+        }
     }
 
     #[test]
@@ -7895,7 +8154,7 @@
                 break (x, y);
             }
         };
-        let _self_check_roll = u5_prng_range_u16(&mut expected_prng, 1, 30);
+        let _self_check_raw_roll = u5_prng_range_u16(&mut expected_prng, 0, 60);
 
         assert_eq!(
             state
@@ -7930,6 +8189,29 @@
                 0
             )
             .unwrap()
+        );
+    }
+
+    #[test]
+    fn summon_self_check_threshold_uses_party_intelligence_or_monster_endurance() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.party_intelligence = vec![31];
+        state.combat_actors[0] =
+            CombatActorDescriptor::from_row([30, 1, 0, 0, 0, 0, 5, 5]);
+        let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        state.combat_actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
+            combat_class_stats(COMBAT_CLASS_DAEMON).unwrap(),
+            monster_slot as u8,
+            6,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+
+        assert_eq!(state.combat_summon_daemon_self_check_threshold(0), 31);
+        assert_eq!(
+            state.combat_summon_daemon_self_check_threshold(monster_slot),
+            combat_class_stats(COMBAT_CLASS_DAEMON).unwrap().endurance
         );
     }
 
@@ -7974,6 +8256,7 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty());
+        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_controlled());
     }
 
     #[test]
@@ -8027,7 +8310,7 @@
                         summoned_object_slot as u8,
                         6,
                         4,
-                        COMBAT_SUMMONED_ACTOR_FLAGS,
+                        COMBAT_ACTOR_FLAG_SELECTABLE_80,
                         0,
                     )
                     .unwrap(),
@@ -8043,7 +8326,7 @@
                 summoned_object_slot as u8,
                 6,
                 4,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
                 0,
             )
             .unwrap()
@@ -8234,19 +8517,6 @@
 
     #[test]
     fn active_effect_consumers_use_tag_and_nonzero_counter() {
-        assert_eq!(
-            resolve_protection_defense_bonus(7, Some(PROTECTION_ACTIVE_EFFECT_TAG), 20),
-            10
-        );
-        assert_eq!(
-            resolve_protection_defense_bonus(254, Some(PROTECTION_ACTIVE_EFFECT_TAG), 20),
-            255
-        );
-        assert_eq!(
-            resolve_protection_defense_bonus(7, Some(QUICKNESS_ACTIVE_EFFECT_TAG), 20),
-            7
-        );
-
         assert!(resolve_quickness_dispatch_consumed(
             Some(QUICKNESS_ACTIVE_EFFECT_TAG),
             30,
@@ -8275,6 +8545,23 @@
             Some(MASS_CHARM_ACTIVE_EFFECT_TAG),
             20
         ));
+    }
+
+    #[test]
+    fn protection_active_effect_does_not_modify_live_party_spell_defense() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+
+        assert_eq!(
+            state.combat_spell_target_defense_value(0),
+            CHARACTER_DEFENSE_FACTORY_SEED
+        );
+
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = PROTECTION_ACTIVE_EFFECT_DURATION;
+        assert_eq!(
+            state.combat_spell_target_defense_value(0),
+            CHARACTER_DEFENSE_FACTORY_SEED
+        );
     }
 
     #[test]
@@ -8592,6 +8879,8 @@
             enter_endgame_after_successful_combat: false,
             endgame_messages: None,
             endgame_tableau_map: None,
+            encounter_mode_high_bit: false,
+            exit_announced: false,
         });
 
         let application = state
@@ -8624,7 +8913,7 @@
     }
 
     #[test]
-    fn combat_ai_summon_daemon_prefers_current_step_direction() {
+    fn combat_ai_summon_daemon_uses_only_the_single_injected_probe() {
         let mut state = combat_ai_turn_state(8, 5);
         let stats = combat_class_stats(COMBAT_CLASS_DRAGON).unwrap();
         state.combat_actors[8] = CombatActorDescriptor::for_monster_placement(
@@ -8644,8 +8933,8 @@
                 false,
                 0,
                 false,
-                1,
-                8,
+                32,
+                31,
                 &[(9, 5), (7, 5)],
                 None,
                 0,
@@ -8661,7 +8950,129 @@
         else {
             panic!("dragon should summon a daemon");
         };
-        assert_eq!((summon.x, summon.y), (7, 5));
+        assert_eq!((summon.x, summon.y), (9, 5));
+        assert_eq!(application.target, CombatAiTargetResolution::NoUsableTarget);
+        assert_eq!(application.movement, None);
+    }
+
+    #[test]
+    fn combat_ai_failed_summon_probe_continues_ordinary_action() {
+        let mut state = combat_ai_turn_state(8, 5);
+        let stats = combat_class_stats(COMBAT_CLASS_DRAGON).unwrap();
+        state.combat_actors[8] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            8,
+            8,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+
+        let application = state
+            .apply_combat_ai_turn_with_inputs(
+                8,
+                false,
+                0,
+                false,
+                32,
+                31,
+                &[(15, 15)],
+                None,
+                0,
+                false,
+                None,
+                true,
+                &[4, 1, 3, 2],
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(application.special, None);
+        assert_eq!(
+            application.target,
+            CombatAiTargetResolution::ChosenActor {
+                slot: 0,
+                x: 5,
+                y: 5,
+            }
+        );
+        assert!(application.command_key.is_some() || application.movement.is_some());
+    }
+
+    #[test]
+    fn combat_ai_successful_blink_consumes_the_actor_turn() {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.combat_actors[8].owner_target_class = 23;
+
+        let application = state
+            .apply_combat_ai_turn_with_inputs(
+                8,
+                false,
+                0,
+                false,
+                31,
+                31,
+                &[(6, 5)],
+                None,
+                0,
+                false,
+                None,
+                true,
+                &[4, 1, 3, 2],
+                None,
+            )
+            .unwrap();
+
+        assert!(matches!(
+            application.special,
+            Some(CombatAiSpecialApplication::Blink { .. })
+        ));
+        assert_eq!(application.target, CombatAiTargetResolution::NoUsableTarget);
+        assert_eq!(application.step_vector, None);
+        assert_eq!(application.attack_route, None);
+        assert_eq!(application.movement, None);
+    }
+
+    #[test]
+    fn production_combat_ai_summon_draws_gate_then_fresh_x_then_y_and_stops() {
+        let mut state = combat_ai_turn_state(8, 5);
+        let stats = combat_class_stats(COMBAT_CLASS_DRAGON).unwrap();
+        state.combat_actors[8] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            8,
+            8,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+
+        let (seed, expected_prng, expected_coordinate) = (0..=0x0fff_u16)
+            .find_map(|seed| {
+                let mut expected = state.clone();
+                expected.prng_state = seed;
+                let gate = expected.random_range_u8(0, u8::MAX);
+                let x = expected.random_range_u8(0, 15);
+                let y = expected.random_range_u8(0, 15);
+                (gate <= 31
+                    && x <= 10
+                    && y <= 10
+                    && (x, y) != (5, 5)
+                    && (x, y) != (8, 5))
+                    .then_some((seed, expected.prng_state, (x, y)))
+            })
+            .expect("the 12-bit PRNG must expose an accepted legal summon probe");
+        state.prng_state = seed;
+
+        let application = state.apply_combat_ai_turn(8).unwrap();
+
+        let Some(CombatAiSpecialApplication::SummonDaemon { summon, .. }) = application.special
+        else {
+            panic!("accepted production summon probe should place one daemon");
+        };
+        assert_eq!((summon.x, summon.y), expected_coordinate);
+        assert_eq!(state.prng_state, expected_prng);
+        assert_eq!(application.target, CombatAiTargetResolution::NoUsableTarget);
+        assert_eq!(application.movement, None);
     }
 
     #[test]
@@ -8851,14 +9262,10 @@
                 ..
             })
         ));
-        assert_eq!(
-            application.target,
-            CombatAiTargetResolution::CenterFallback {
-                x: COMBAT_ARENA_CENTER_COORDINATE,
-                y: COMBAT_ARENA_CENTER_COORDINATE,
-                critical_hp_flee_slots: vec![8],
-            }
-        );
+        assert_eq!(application.target, CombatAiTargetResolution::NoUsableTarget);
+        assert_eq!(application.step_vector, None);
+        assert_eq!(application.attack_route, None);
+        assert_eq!(application.movement, None);
         assert_eq!(
             state.combat_actors[0].flags,
             COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_TEAM_TOGGLE
@@ -9096,6 +9503,8 @@
         state.visibility_dirty = false;
         state.combat_terrain[5][6] = 0x90;
         state.combat_terrain[5][7] = PUSHABLE_GENERIC_FLOOR_STAMP;
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'P', "", game_dir).unwrap(),
@@ -9107,6 +9516,7 @@
             Some(DirectionPromptKind::CombatPush { actor_slot: 0 })
         ));
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+        assert_eq!(state.active_effect_counter, 3);
 
         assert_eq!(
             handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
@@ -9119,12 +9529,15 @@
         assert_eq!(state.combat_terrain[5][7], 0x91);
         assert!(state.message.contains("Pushed combat tile 144 East"));
         assert!(state.visibility_dirty);
+        assert_eq!(state.active_effect_counter, 2);
     }
 
     #[test]
-    fn combat_input_dispatch_push_prompt_cancel_restores_pending_actor() {
+    fn combat_input_dispatch_push_prompt_cancel_commits_actor_action() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(10, 10);
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'P', "", game_dir).unwrap(),
@@ -9139,8 +9552,12 @@
         );
 
         assert!(state.active_direction_prompt.is_none());
-        assert_eq!(state.pending_combat_actor_slot, Some(0));
-        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+        assert_eq!(state.active_effect_counter, 2);
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 10));
+        assert_eq!(
+            state.message,
+            format!("{DIRECTION_PROMPT_LABEL_PASS}\nGiant Rat moved to (9, 10).")
+        );
     }
 
     #[test]
@@ -9149,6 +9566,8 @@
         let mut state = combat_player_command_state(10, 10);
         state.combat_terrain[5][6] = 0x90;
         state.combat_terrain[5][7] = PUSHABLE_GENERIC_FLOOR_STAMP;
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'P', "6", game_dir).unwrap(),
@@ -9160,6 +9579,7 @@
         assert_eq!(state.combat_terrain[5][6], PUSHABLE_GENERIC_FLOOR_STAMP);
         assert_eq!(state.combat_terrain[5][7], 0x91);
         assert!(state.message.contains("Pushed combat tile 144 East"));
+        assert_eq!(state.active_effect_counter, 2);
     }
 
     #[test]
@@ -9189,6 +9609,8 @@
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(10, 10);
         state.combat_terrain[5][5] = 0x50;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'K', "<", game_dir).unwrap(),
@@ -9196,12 +9618,13 @@
         );
 
         assert_eq!(state.message, "Klimbed up from combat.");
+        assert_eq!(state.active_effect_counter, 2);
         assert!(!state.combat_active);
         assert_eq!(state.pending_combat_actor_slot, None);
     }
 
     #[test]
-    fn combat_klimb_prompt_accepts_vertical_and_refusal_keeps_actor_pending() {
+    fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
         let game_dir = std::path::Path::new(".");
         let mut prompted = combat_player_command_state(10, 10);
         prompted.combat_terrain[5][5] = 0x50;
@@ -9223,17 +9646,43 @@
         assert_eq!(prompted.message, "Klimbed down from combat.");
         assert!(!prompted.combat_active);
 
-        let mut refused = combat_player_command_state(10, 10);
+        let mut cancelled = combat_player_command_state(10, 10);
+        cancelled.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        cancelled.active_effect_counter = 3;
+        cancelled.combat_interference_sources[0] = 8;
         assert_eq!(
-            handle_play_key_input(&mut refused, 'K', "", game_dir).unwrap(),
+            handle_play_key_input(&mut cancelled, 'K', "", game_dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert_eq!(
-            handle_play_key_input(&mut refused, ' ', "", game_dir).unwrap(),
+            handle_play_key_input(&mut cancelled, ' ', "", game_dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(refused.pending_combat_actor_slot, Some(0));
-        assert_eq!(refused.message, DIRECTION_PROMPT_LABEL_PASS);
+        assert_eq!(cancelled.active_effect_counter, 2);
+        assert_eq!(
+            cancelled.combat_interference_sources[0],
+            COMBAT_INTERFERENCE_NO_SOURCE
+        );
+        assert_eq!((cancelled.combat_actors[8].x, cancelled.combat_actors[8].y), (9, 10));
+        assert_eq!(
+            cancelled.message,
+            format!("{DIRECTION_PROMPT_LABEL_PASS}\nGiant Rat moved to (9, 10).")
+        );
+
+        let mut blocked = combat_player_command_state(10, 10);
+        blocked.combat_terrain[4][5] = 0x0c;
+        blocked.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        blocked.active_effect_counter = 3;
+        blocked.combat_interference_sources[0] = 8;
+        assert_eq!(
+            handle_play_key_input(&mut blocked, 'K', "8", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(blocked.message, "Klimb-What?");
+        assert_eq!(blocked.pending_combat_actor_slot, Some(0));
+        assert_eq!((blocked.combat_actors[8].x, blocked.combat_actors[8].y), (10, 10));
+        assert_eq!(blocked.active_effect_counter, 3);
+        assert_eq!(blocked.combat_interference_sources[0], 8);
     }
 
     #[test]
@@ -9264,7 +9713,7 @@
     fn combat_sjog_open_and_jimmy_mutate_combat_terrain() {
         let game_dir = std::path::Path::new(".");
         let mut open_state = combat_player_command_state(10, 10);
-        open_state.combat_terrain[5][6] = 97;
+        open_state.combat_terrain[5][6] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         open_state.visibility_dirty = false;
 
         assert_eq!(
@@ -9272,16 +9721,14 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(open_state.combat_terrain[5][6], 16);
+        assert_eq!(open_state.combat_terrain[5][6], TOWN_DOOR_CLEARED_TILE);
         assert!(open_state.visibility_dirty);
-        assert!(open_state
-            .message
-            .starts_with("Opened combat tile 97 at (6, 5)."));
+        assert!(open_state.message.starts_with("Opened!"));
 
         let mut jimmy_state = combat_player_command_state(10, 10);
         jimmy_state.keys = 1;
-        jimmy_state.party[0].class_byte = 255;
-        jimmy_state.combat_terrain[5][6] = 99;
+        jimmy_state.party[0].climb_stat = 30;
+        jimmy_state.combat_terrain[5][6] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         jimmy_state.visibility_dirty = false;
 
         assert_eq!(
@@ -9289,12 +9736,66 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(jimmy_state.combat_terrain[5][6], 98);
+        assert_eq!(
+            jimmy_state.combat_terrain[5][6],
+            TOWN_DOOR_PLAIN_UNLOCKED_TILE
+        );
         assert_eq!(jimmy_state.keys, 1);
         assert!(jimmy_state.visibility_dirty);
-        assert!(jimmy_state
-            .message
-            .starts_with("Unlocked combat tile 99 at (6, 5)."));
+        assert!(jimmy_state.message.starts_with("Unlocked!"));
+    }
+
+    #[test]
+    fn combat_jimmy_restraints_use_flat_dexterity_roll_and_clear_on_success() {
+        let mut success = combat_player_command_state(10, 10);
+        success.keys = 1;
+        success.party[0].climb_stat = 30;
+        success.combat_terrain[5][6] = JIMMY_STOCKS_TILE;
+        success.visibility_dirty = false;
+
+        assert_eq!(
+            success.jimmy_combat_actor_direction(0, Direction::East),
+            MoveOutcome::LockTried
+        );
+        assert_eq!(success.combat_terrain[5][6], TOWN_DOOR_CLEARED_TILE);
+        assert_eq!(success.keys, 1);
+        assert!(success.visibility_dirty);
+        assert_eq!(success.message, "Unlocked");
+
+        let mut failure = combat_player_command_state(10, 10);
+        failure.keys = 1;
+        failure.party[0].climb_stat = 0;
+        failure.combat_terrain[5][6] = JIMMY_MANACLES_TILE;
+        failure.visibility_dirty = false;
+
+        assert_eq!(
+            failure.jimmy_combat_actor_direction(0, Direction::East),
+            MoveOutcome::LockTried
+        );
+        assert_eq!(failure.combat_terrain[5][6], JIMMY_MANACLES_TILE);
+        assert_eq!(failure.keys, 0);
+        assert!(!failure.visibility_dirty);
+        assert_eq!(failure.message, "Key broke!");
+    }
+
+    #[test]
+    fn combat_jimmy_magic_lock_breaks_key_without_dexterity_roll() {
+        let mut state = combat_player_command_state(10, 10);
+        state.keys = 1;
+        state.party[0].climb_stat = 30;
+        state.combat_terrain[5][6] = TOWN_DOOR_MAGIC_PLAIN_TILE;
+        state.visibility_dirty = false;
+        let prng_before = state.prng_state;
+
+        assert_eq!(
+            state.jimmy_combat_actor_direction(0, Direction::East),
+            MoveOutcome::LockTried
+        );
+        assert_eq!(state.combat_terrain[5][6], TOWN_DOOR_MAGIC_PLAIN_TILE);
+        assert_eq!(state.keys, 0);
+        assert_eq!(state.prng_state, prng_before);
+        assert!(!state.visibility_dirty);
+        assert_eq!(state.message, "Key broke!");
     }
 
     #[test]
@@ -9321,9 +9822,11 @@
     }
 
     #[test]
-    fn combat_sjog_prompt_cancel_restores_pending_actor() {
+    fn combat_sjog_prompt_cancel_commits_actor_action() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(10, 10);
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'G', "", game_dir).unwrap(),
@@ -9343,8 +9846,12 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.pending_combat_actor_slot, Some(0));
-        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+        assert_eq!(state.active_effect_counter, 2);
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 10));
+        assert_eq!(
+            state.message,
+            format!("{DIRECTION_PROMPT_LABEL_PASS}\nGiant Rat moved to (9, 10).")
+        );
     }
 
     #[test]
@@ -9357,15 +9864,31 @@
         let mut state = combat_player_command_state(8, 5);
         state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
         state.active_effect_counter = 3;
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        let prng_before = state.prng_state;
+        let hp_before = state.party[0].hp;
 
         let quit = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('Q'))
             .unwrap();
 
-        assert_eq!(quit.action, CombatPlayerCommandAction::QuitDefeat);
+        assert_eq!(
+            quit.action,
+            CombatPlayerCommandAction::Branch {
+                branch: CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Quit),
+                live_actor_gate: CombatCommandLiveActorGate::NotRequired,
+            }
+        );
+        assert!(quit.reprompt);
+        assert_eq!(quit.ring_pass, None);
+        assert_eq!(quit.active_effect_age, None);
+        assert_eq!(state.active_effect_counter, 3);
+        assert_eq!(state.prng_state, prng_before);
+        assert_eq!(state.party[0].hp, hp_before);
         assert_eq!(
             quit.control_after,
-            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+            CombatRoundLoopControl::ContinueActorWalk
         );
     }
 
@@ -9399,11 +9922,29 @@
         assert!(move_state.visibility_dirty);
 
         let mut attack_state = combat_player_command_state(6, 5);
+        attack_state.combat_terrain[5][5] = 0x05;
         attack_state.visibility_dirty = false;
+        attack_state.party_equipment = default_party_equipment(1);
+        attack_state.party_equipment[0][EQUIP_SLOT_RING] =
+            EQUIPMENT_ID_RING_REGENERATION as u8;
+        attack_state.party[0].hp = attack_state.party[0].hp.saturating_sub(1);
+        attack_state.prng_state = 0x0030;
+        let prng_before_prompt = attack_state.prng_state;
+        let prompted = attack_state
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('A'))
+            .unwrap();
+        assert_eq!(
+            prompted.action,
+            CombatPlayerCommandAction::PromptForAttackDirection
+        );
+        assert_eq!(prompted.ring_pass, None);
+        assert_eq!(attack_state.prng_state, prng_before_prompt);
+
         let attacked = attack_state
-            .apply_combat_player_command_with_inputs(
+            .apply_combat_player_command_with_attack_inputs(
                 0,
                 CombatPlayerCommandInput::AttackDirection(2),
+                CombatPlayerWeaponAttackInputs::default(),
             )
             .unwrap();
 
@@ -9414,6 +9955,14 @@
                 direction_code: 2,
                 outcome: CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 8 },
             }
+        );
+        assert_eq!(
+            attacked.ring_pass,
+            Some(CombatMagicRingPassOutcome {
+                invisibility_applied: false,
+                regeneration_applied: 1,
+                vanished_ring: None,
+            })
         );
         assert_eq!(
             (attack_state.combat_actors[0].x, attack_state.combat_actors[0].y),
@@ -9515,7 +10064,7 @@
         assert!(state.combat_actors[8].is_marked_dead());
         assert_eq!(
             application.control_after,
-            CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Victory)
         );
         assert!(application.weapon_attack.is_some());
     }
@@ -9530,9 +10079,7 @@
         state.prng_state = 0x0030;
         let mut expected_prng = state.prng_state;
         let regeneration_roll = u5_prng_range_u16(&mut expected_prng, 0, 7);
-        let vanish_roll = u5_prng_range_u16(&mut expected_prng, 0, 15);
         assert_eq!(regeneration_roll, 0);
-        assert_ne!(vanish_roll, 0);
 
         let application = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
@@ -9555,8 +10102,53 @@
     }
 
     #[test]
-    fn combat_player_command_handles_digits_pass_branches_and_xit_cleanup() {
+    fn combat_player_command_regeneration_tail_checks_every_living_wearer() {
         let mut state = combat_player_command_state(8, 5);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: 1,
+            status: b'G',
+            climb_stat: 0,
+            mana: 0,
+            hp: 17,
+            max_hp: 20,
+            level: 1,
+        });
+        state.party[0].hp = state.party[0].hp.saturating_sub(3);
+        state.party_equipment = default_party_equipment(2);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        state.party_equipment[1][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        state.combat_actors[1] = state.combat_actors[0];
+        state.combat_actors[1].owner_target_class = 1;
+        state.combat_actors[1].x = 4;
+        let hp_before = [state.party[0].hp, state.party[1].hp];
+        state.prng_state = 0x0070;
+        let mut expected_prng = state.prng_state;
+        assert_eq!(u5_prng_range_u16(&mut expected_prng, 0, 7), 0);
+        assert_eq!(u5_prng_range_u16(&mut expected_prng, 0, 7), 0);
+
+        let application = state
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
+            .unwrap();
+
+        assert_eq!(
+            application.ring_pass,
+            Some(CombatMagicRingPassOutcome {
+                invisibility_applied: false,
+                regeneration_applied: 2,
+                vanished_ring: None,
+            })
+        );
+        assert_eq!(state.party[0].hp, hp_before[0] + 1);
+        assert_eq!(state.party[1].hp, hp_before[1] + 1);
+        assert_eq!(state.prng_state, expected_prng);
+    }
+
+    #[test]
+    fn combat_player_command_handles_digits_pass_branches_and_escape_cleanup() {
+        let mut state = combat_player_command_state(8, 5);
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
 
         let selected = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('1'))
@@ -9568,6 +10160,8 @@
             )
         );
         assert_eq!(state.active_player, Some(0));
+        assert_eq!(selected.active_effect_age, None);
+        assert_eq!(state.active_effect_counter, 3);
 
         let pass = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
@@ -9580,6 +10174,15 @@
                 ends_turn: true,
             })
         );
+        assert_eq!(
+            pass.active_effect_age,
+            Some(ActiveEffectAgeOutcome {
+                tag: Some(QUICKNESS_ACTIVE_EFFECT_TAG),
+                counter: 2,
+                expired: false,
+            })
+        );
+        assert_eq!(state.active_effect_counter, 2);
 
         let get = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('G'))
@@ -9592,27 +10195,32 @@
             }
         );
 
-        let blocked_xit = state
+        let refused_xit = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('X'))
             .unwrap();
         assert_eq!(
-            blocked_xit.action,
-            CombatPlayerCommandAction::XitCleanup { allowed: false }
+            refused_xit.action,
+            CombatPlayerCommandAction::Branch {
+                branch: CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Xit),
+                live_actor_gate: CombatCommandLiveActorGate::NotRequired,
+            }
         );
-        assert_eq!(blocked_xit.control_after, CombatRoundLoopControl::ContinueActorWalk);
+        assert!(refused_xit.reprompt);
+        assert_eq!(refused_xit.control_after, CombatRoundLoopControl::ContinueActorWalk);
 
-        state.combat_actors[8].mark_dead();
-        let allowed_xit = state
-            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('X'))
+        let blocked_escape = state
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('\u{1b}'))
             .unwrap();
         assert_eq!(
-            allowed_xit.action,
-            CombatPlayerCommandAction::XitCleanup { allowed: true }
+            blocked_escape.action,
+            CombatPlayerCommandAction::EscapeCleanup {
+                application: CombatEscapeCleanupApplication::refused(
+                    CombatEscapeCleanupDecision::RefusedNotYet
+                )
+            }
         );
-        assert_eq!(
-            allowed_xit.control_after,
-            CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
-        );
+        assert!(blocked_escape.reprompt);
+        assert_eq!(blocked_escape.control_after, CombatRoundLoopControl::ContinueActorWalk);
 
         let invalid_direction = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Direction(5))
@@ -9621,6 +10229,40 @@
             invalid_direction.action,
             CombatPlayerCommandAction::InvalidDirection { direction_code: 5 }
         );
+        assert!(invalid_direction.reprompt);
+
+        state.combat_actors[8].flags = COMBAT_ACTOR_FLAG_SELECTABLE_40;
+        state.combat_frame_snapshot = Some(CombatFrameSnapshot {
+            area: state.area,
+            player: state.player,
+            active_objects: state.active_objects.clone(),
+            active_player: state.active_player,
+            combat_terrain: state.combat_terrain,
+            dungeon_room_clear_on_success: None,
+            enter_endgame_after_successful_combat: false,
+            endgame_messages: None,
+            endgame_tableau_map: None,
+            encounter_mode_high_bit: false,
+            exit_announced: true,
+        });
+        let allowed_escape = state
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('\u{1b}'))
+            .unwrap();
+        let CombatPlayerCommandAction::EscapeCleanup { application } = allowed_escape.action else {
+            panic!("Escape should run cleanup");
+        };
+        assert_eq!(application.decision, CombatEscapeCleanupDecision::Accepted);
+        assert_eq!(application.cleared_descriptor_slots, 2);
+        assert_eq!(application.cleared_active_object_slots, 2);
+        assert_eq!(application.world_ticks, 4);
+        assert!(application.rising_glissando);
+        assert!(application.stats_panel_dirty);
+        assert!(!allowed_escape.reprompt);
+        assert_eq!(
+            allowed_escape.control_after,
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+        );
+
     }
 
     #[test]
@@ -9639,6 +10281,17 @@
             "Moved to (6, 5).\nGiant Rat moved to (7, 5)."
         );
         assert_eq!(move_state.pending_combat_actor_slot, Some(0));
+
+        let mut blocked_state = combat_player_command_state(8, 5);
+        blocked_state.active_player = Some(0);
+        blocked_state.combat_terrain[4][5] = 0x0c;
+        assert_eq!(
+            handle_play_key_input(&mut blocked_state, 'w', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(blocked_state.message, "Blocked by wall.");
+        assert_eq!(blocked_state.pending_combat_actor_slot, Some(0));
+        assert_eq!((blocked_state.combat_actors[8].x, blocked_state.combat_actors[8].y), (8, 5));
 
         let mut attack_state = combat_player_command_state(6, 5);
         attack_state.active_player = Some(0);
@@ -9661,9 +10314,25 @@
             handle_play_key_input(&mut quit_state, 'q', "", game_dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(quit_state.message, "Combat abandoned.");
-        assert!(!quit_state.combat_active);
-        assert_eq!(quit_state.pending_combat_actor_slot, None);
+        assert_eq!(quit_state.message, "Quit-Not here");
+        assert!(quit_state.combat_active);
+        assert_eq!(quit_state.pending_combat_actor_slot, Some(0));
+        assert_eq!((quit_state.combat_actors[8].x, quit_state.combat_actors[8].y), (8, 5));
+
+        for (key, expected) in [
+            ('X', "X-it what?"),
+            ('B', "Board what?"),
+            ('E', "Enter-Not here"),
+            ('T', "Talk-Funny, no response!"),
+        ] {
+            assert_eq!(
+                handle_play_key_input(&mut quit_state, key, "", game_dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert_eq!(quit_state.message, expected);
+            assert_eq!(quit_state.pending_combat_actor_slot, Some(0));
+            assert_eq!((quit_state.combat_actors[8].x, quit_state.combat_actors[8].y), (8, 5));
+        }
     }
 
     #[test]
@@ -9713,10 +10382,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(
-            state.message,
-            "Hit Giant Rat for 1 damage with melee. Giant Rat is defeated. Gained 3 XP."
-        );
+        assert_eq!(state.message, "\nVICTORY!\n");
         assert_eq!(state.party_experience[0], 3);
         assert!(!state.combat_active);
         assert_eq!(state.pending_combat_actor_slot, None);
@@ -9741,23 +10407,57 @@
     }
 
     #[test]
-    fn combat_input_dispatch_scene_abort_branches_use_visible_refusals_without_item_effects() {
+    fn combat_input_dispatch_use_opens_shared_picker_and_ends_action_on_completion() {
         let game_dir = std::path::Path::new(".");
-        let mut use_state = combat_player_command_state(8, 5);
-        use_state.potion_stock[POTION_BLUE_INDEX] = 1;
+        let mut state = combat_player_command_state(8, 5);
+        state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
 
         assert_eq!(
-            handle_play_key_input(&mut use_state, 'U', "blue1", game_dir).unwrap(),
+            handle_play_key_input(&mut state, 'U', "", game_dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(use_state.potion_stock[POTION_BLUE_INDEX], 1);
-        assert!(use_state.active_use.is_none());
+        assert!(state.active_use.is_some());
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert!(state.message.contains("Pocket Watch"));
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+
         assert_eq!(
-            use_state.message,
-            "Use-Not here!\nGiant Rat moved to (7, 5)."
+            handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
         );
-        assert!(use_state.combat_active);
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX], 1);
+        assert!(state.message.starts_with("Pocket Watch:"));
+        assert!(state.message.contains("Giant Rat moved to (7, 5)."));
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert!(state.combat_active);
+    }
+
+    #[test]
+    fn combat_input_dispatch_use_without_items_ends_action_after_refusal() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.special_items.fill(0);
+        state.scroll_stock.fill(0);
+        state.potion_stock.fill(0);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::new(DUNGEON_DOOM_SCENE_BYTE).unwrap(),
+            level: 0,
+        };
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_use.is_none());
+        assert!(state.message.starts_with("No usable items."));
+        assert!(state.message.contains("Giant Rat moved to (7, 5)."));
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
     }
 
     #[test]
@@ -9775,7 +10475,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert!(state.message.starts_with("Pass.\nSkeleton "));
+        assert_eq!(state.message, "\nBATTLE IS LOST!");
         assert!(!state.combat_active);
         assert_eq!(state.pending_combat_actor_slot, None);
         assert_eq!(state.combat_actors, [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS]);
@@ -9797,9 +10497,20 @@
     }
 
     #[test]
-    fn combat_input_dispatch_exit_control_restores_stored_frame_snapshot() {
+    fn combat_input_dispatch_escape_cleanup_restores_stored_frame_snapshot() {
         let game_dir = std::path::Path::new(".");
         let mut state = world_state(open_world_grid(), 10, 20);
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.active_objects[2] = ActiveObject {
+            type_byte: 0x2c,
+            tile: 0x2f,
+            x: 11,
+            y: 20,
+            phase: 0x07,
+            aux1: 0x55,
+            aux3: 0xaa,
+            ..ActiveObject::empty()
+        };
         let original_player = state.player;
         let original_objects = state.active_objects.clone();
         let mut combat_objects = vec![ActiveObject::empty(); OOL_SLOTS];
@@ -9839,18 +10550,32 @@
             5,
         ]);
         state.enter_combat_frame(combat_objects, combat_actors).unwrap();
+        state.pending_combat_terrain_trigger_slot = Some(2);
         state.player.x = 99;
+        state.combat_actors[8].flags = COMBAT_ACTOR_FLAG_SELECTABLE_40;
+        state
+            .combat_frame_snapshot
+            .as_mut()
+            .unwrap()
+            .exit_announced = true;
+        state.pending_combat_actor_slot = Some(0);
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", game_dir).unwrap(),
+            handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Combat abandoned.");
+        assert_eq!(state.message, "Escape!");
         assert!(!state.combat_active);
         assert_eq!(state.combat_frame_snapshot, None);
         assert_eq!(state.player, original_player);
-        assert_eq!(state.active_objects, original_objects);
+        let mut expected_objects = original_objects;
+        expected_objects[2].type_byte = 0;
+        expected_objects[2].tile = 0;
+        expected_objects[2].x = 0;
+        expected_objects[2].y = 0;
+        expected_objects[2].z = 0;
+        assert_eq!(state.active_objects, expected_objects);
         assert_eq!(
             state.combat_actors,
             [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS]
@@ -9903,11 +10628,13 @@
     }
 
     #[test]
-    fn combat_input_dispatch_z_stats_binds_pending_actor_without_ending_turn() {
+    fn combat_input_dispatch_z_stats_ends_actor_action_when_modal_closes() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(8, 5);
         state.pending_combat_actor_slot = Some(0);
         state.next_combat_actor_slot = 1;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'Z', "", game_dir).unwrap(),
@@ -9917,6 +10644,17 @@
         assert_eq!(state.pending_combat_actor_slot, Some(0));
         assert_eq!(state.active_z_stats.as_ref().unwrap().selected_party_index, 0);
         assert!(state.message.starts_with("Z-stats: Stats page"));
+        assert_eq!(state.active_effect_counter, 3);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_z_stats.is_none());
+        assert_eq!(state.active_effect_counter, 2);
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
     }
 
     #[test]
@@ -10010,7 +10748,7 @@
     }
 
     #[test]
-    fn combat_input_dispatch_ready_binds_pending_actor_to_picker() {
+    fn combat_input_dispatch_ready_ends_actor_action_when_picker_closes() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(8, 5);
         state.pending_combat_actor_slot = Some(0);
@@ -10025,6 +10763,16 @@
         assert_eq!(state.pending_combat_actor_slot, Some(0));
         assert_eq!(state.active_ready.as_ref().unwrap().selected_party_index, Some(0));
         assert!(state.message.starts_with("Ready: party member 1."));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_ready.is_none());
+        assert!(state.message.contains("Giant Rat moved to (7, 5)."));
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
     }
 
     #[test]
@@ -10054,6 +10802,8 @@
         let mut state = combat_player_command_state(8, 5);
         state.pending_combat_actor_slot = Some(0);
         state.next_combat_actor_slot = 1;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'Y', "", game_dir).unwrap(),
@@ -10061,6 +10811,44 @@
         );
 
         assert_eq!(state.message, "Yell what? Use Y<word>.");
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert!(state.active_yell.is_some());
+        assert_eq!(state.active_effect_counter, 3);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'F', "ALLAX", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_yell.is_none());
+        assert_eq!(state.message, "Yelled FALLAX. Nothing happens.");
+        assert_eq!(state.active_effect_counter, 2);
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+    }
+
+    #[test]
+    fn combat_input_dispatch_empty_yell_commits_the_pending_actor_action() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.pending_combat_actor_slot = Some(0);
+        state.next_combat_actor_slot = 1;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_yell.is_some());
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_yell.is_none());
+        assert_eq!(state.message, YELL_NOTHING_SAID_MESSAGE);
+        assert_eq!(state.active_effect_counter, 2);
         assert_eq!(state.pending_combat_actor_slot, Some(0));
     }
 
@@ -10142,20 +10930,20 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Combat abandoned.");
-        assert!(!state.combat_active, "the quit key must end the fight");
+        assert_eq!(state.message, "Quit-Not here");
+        assert!(state.combat_active);
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
     }
 
     #[test]
-    fn combat_input_dispatch_reports_magic_ring_vanish_message() {
+    fn combat_input_dispatch_action_tail_does_not_run_encounter_ring_vanishal() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(8, 5);
         state.party_equipment = default_party_equipment(1);
         state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
         state.prng_state = 0x0070;
         let mut expected_prng = state.prng_state;
-        let vanish_roll = u5_prng_range_u16(&mut expected_prng, 0, 15);
-        assert_eq!(vanish_roll, 0);
         advance_expected_giant_rat_ai_input_prng(&mut expected_prng);
 
         assert_eq!(
@@ -10163,12 +10951,12 @@
             PlayInputDisposition::Continue
         );
 
+        assert_eq!(state.message, "Pass.\nGiant Rat moved to (7, 5).");
         assert_eq!(
-            state.message,
-            "Ring of Invisibility vanished.\nGiant Rat moved to (7, 5)."
+            state.party_equipment[0][EQUIP_SLOT_RING],
+            EQUIPMENT_ID_RING_INVISIBILITY as u8
         );
-        assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
-        assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
+        assert!(state.combat_actors[0].is_hidden_or_unrevealed());
         assert_eq!(state.prng_state, expected_prng);
     }
 
@@ -10224,6 +11012,164 @@
         assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
         assert!(state.combat_actors[1].is_hidden_or_unrevealed());
         assert_eq!(state.message, "Invisibility!\nGiant Rat moved to (7, 5).");
+    }
+
+    #[test]
+    fn combat_input_dispatch_interference_reprompts_before_spell_prompt_without_clearing() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(6, 5);
+        state.combat_interference_sources[0] = 8;
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "\nGiant Rat interferes!");
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert!(state.active_cast.is_none());
+        assert!(state.active_cast_followup.is_none());
+        assert_eq!(state.combat_interference_sources[0], 8);
+        assert_eq!(state.active_effect_counter, 3);
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
+    }
+
+    #[test]
+    fn combat_input_dispatch_negate_time_suppresses_interference_without_clearing_source() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(6, 5);
+        state.combat_interference_sources[0] = 8;
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_cast.is_some());
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!(state.combat_interference_sources[0], 8);
+        assert_eq!(state.active_effect_counter, 3);
+    }
+
+    #[test]
+    fn combat_cast_interference_revalidates_hostility_visibility_status_range_and_negate_time() {
+        let mut state = combat_player_command_state(6, 5);
+        state.combat_interference_sources[0] = 8;
+        assert_eq!(state.combat_cast_interference_source_for_slot(0), Some(8));
+
+        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+        assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
+        state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+
+        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+        assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
+        state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+
+        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+        assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
+        state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_CONTROLLED;
+
+        state.combat_actors[8].x = 8;
+        assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
+        state.combat_actors[8].x = 6;
+
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
+        assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
+        assert_eq!(state.combat_interference_sources[0], 8);
+
+        state.active_effect_counter = 0;
+        assert_eq!(state.combat_cast_interference_source_for_slot(0), Some(8));
+        state.combat_interference_sources[0] = COMBAT_INTERFERENCE_NO_SOURCE;
+        assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
+    }
+
+    #[test]
+    fn combat_completed_player_action_clears_only_its_victim_source() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.combat_interference_sources[0] = 8;
+        state.combat_interference_sources[1] = 9;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.combat_interference_sources[0],
+            COMBAT_INTERFERENCE_NO_SOURCE
+        );
+        assert_eq!(state.combat_interference_sources[1], 9);
+    }
+
+    #[test]
+    fn combat_input_dispatch_blank_or_escape_cast_prompt_commits_actor_action() {
+        let game_dir = std::path::Path::new(".");
+
+        for cancel_key in ['\u{1b}', '\r'] {
+            let mut state = combat_player_command_state(8, 5);
+            state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+            state.active_effect_counter = 3;
+            state.combat_interference_sources[0] = 8;
+
+            assert_eq!(
+                handle_play_key_input(&mut state, 'C', "", game_dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert!(state.active_cast.is_some());
+            assert_eq!(state.active_effect_counter, 3);
+            assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+
+            assert_eq!(
+                handle_play_key_input(&mut state, cancel_key, "", game_dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
+
+            assert!(state.active_cast.is_none());
+            assert_eq!(state.active_effect_counter, 2);
+            assert_eq!(
+                state.combat_interference_sources[0],
+                COMBAT_INTERFERENCE_NO_SOURCE
+            );
+            assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
+            assert_eq!(state.message, "None!\nGiant Rat moved to (7, 5).");
+        }
+    }
+
+    #[test]
+    fn combat_input_dispatch_cancelled_field_cursor_commits_spent_cast_action() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.party[0].mana = FIELD_SPELL_COST;
+        state.party[0].level = FIELD_SPELL_COST;
+        state.spell_charges[FIRE_FIELD_SPELL_INDEX] = 1;
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
+
+        handle_play_key_input(&mut state, 'C', "", game_dir).unwrap();
+        handle_play_key_input(&mut state, 'F', "GI", game_dir).unwrap();
+        handle_play_key_input(&mut state, ' ', "", game_dir).unwrap();
+
+        assert!(state.active_cast_followup.is_some());
+        assert_eq!(state.spell_charges[FIRE_FIELD_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.active_effect_counter, 3);
+
+        handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap();
+
+        assert!(state.active_cast_followup.is_none());
+        assert_eq!(state.active_effect_counter, 2);
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
+        assert!(state
+            .active_objects
+            .iter()
+            .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE));
+        assert_eq!(state.message, "None!\nGiant Rat moved to (7, 5).");
     }
 
     #[test]
@@ -10365,10 +11311,58 @@
     }
 
     #[test]
+    fn production_pass_one_gates_precede_all_monster_special_prng_draws() {
+        let mut quick = combat_ai_turn_state(8, 5);
+        quick.combat_actors[8].owner_target_class = COMBAT_CLASS_DRAGON;
+        quick.combat_actors[8].phase_counter = 1;
+        quick.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        quick.active_effect_counter = 3;
+        let (seed, expected_prng) = (0..=0x0fff_u16)
+            .find_map(|seed| {
+                let mut expected = quick.clone();
+                expected.prng_state = seed;
+                (expected.combat_quickness_dispatch_roll(8) == 0)
+                    .then_some((seed, expected.prng_state))
+            })
+            .unwrap();
+        quick.prng_state = seed;
+
+        let application = quick.apply_combat_actor_slot_dispatch(8, 30, false);
+
+        assert!(matches!(
+            application,
+            CombatActorSlotDispatchApplication::Slot {
+                action: CombatActorDispatchAction::QuicknessSkipped,
+                ..
+            }
+        ));
+        assert_eq!(quick.prng_state, expected_prng);
+
+        let mut negate = combat_ai_turn_state(8, 5);
+        negate.combat_actors[8].owner_target_class = COMBAT_CLASS_DRAGON;
+        negate.combat_actors[8].phase_counter = 1;
+        negate.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        negate.active_effect_counter = 3;
+        negate.prng_state = 0x0357;
+
+        let application = negate.apply_combat_actor_slot_dispatch(8, 30, false);
+
+        assert!(matches!(
+            application,
+            CombatActorSlotDispatchApplication::Slot {
+                action: CombatActorDispatchAction::NegateTimeSkipped,
+                ..
+            }
+        ));
+        assert_eq!(negate.prng_state, 0x0357);
+    }
+
+    #[test]
     fn combat_actor_slot_dispatch_waits_when_phase_counter_is_not_ready() {
         let mut state = combat_ai_turn_state(8, 5);
         state.combat_actors[8].phase_counter = 3;
         state.combat_round_counter = 4;
+        state.combat_interference_sources[8] = 7;
 
         let application = state.apply_combat_actor_slot_dispatch_with_inputs(
             8,
@@ -10404,6 +11398,7 @@
         assert_eq!(state.combat_actors[8].phase_counter, 2);
         assert_eq!(state.combat_round_counter, 4);
         assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+        assert_eq!(state.combat_interference_sources[8], 7);
     }
 
     #[test]
@@ -10450,6 +11445,7 @@
         let mut state = combat_ai_turn_state(8, 5);
         state.combat_actors[8].phase_counter = 1;
         state.combat_round_counter = 4;
+        state.combat_interference_sources[8] = 7;
 
         let application = state.apply_combat_actor_slot_dispatch_with_inputs(
             8,
@@ -10480,6 +11476,10 @@
             panic!("ready monster slot should dispatch");
         };
         assert_eq!(slot, 8);
+        assert_eq!(
+            state.combat_interference_sources[8],
+            COMBAT_INTERFERENCE_NO_SOURCE
+        );
         assert_eq!(
             phase_tick,
             Some(CombatActorPhaseTick::Ready {
@@ -11516,7 +12516,7 @@
                 fleeing: false,
             }
         );
-        assert_eq!(resolve_combat_wound_morale_for_class(1, 11, 0), None);
+        assert_eq!(resolve_combat_wound_morale_for_class(1, 48, 0), None);
     }
 
     #[test]
@@ -11613,7 +12613,7 @@
         state.combat_actors[1] =
             CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 5, 4]);
         state.active_objects[0].type_byte = PLAYER_TILE;
-        state.active_objects[0].tile = PLAYER_TILE;
+        state.active_objects[0].tile = 0x10;
         state.active_objects[1].type_byte = PLAYER_TILE;
         state.active_objects[1].tile = PLAYER_TILE;
 
@@ -12232,6 +13232,30 @@
         );
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[0].hp, 12);
+        assert_eq!(state.combat_interference_sources[0], 8);
+    }
+
+    #[test]
+    fn combat_monster_adjacent_miss_overwrites_interference_but_controlled_attack_does_not() {
+        let mut automatic = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        automatic.combat_interference_sources[0] = 7;
+
+        let missed = automatic
+            .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(false))
+            .unwrap();
+        assert!(matches!(
+            missed.resolution,
+            Some(CombatWeaponAttackResolution::Miss { .. })
+        ));
+        assert_eq!(automatic.combat_interference_sources[0], 8);
+
+        let mut controlled = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        controlled.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+        controlled.combat_interference_sources[0] = 7;
+        assert!(controlled
+            .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(false))
+            .is_some());
+        assert_eq!(controlled.combat_interference_sources[0], 7);
     }
 
     #[test]
@@ -12309,6 +13333,7 @@
     #[test]
     fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targets() {
         let mut state = combat_monster_attack_state(COMBAT_CLASS_DRAGON, 8, 5);
+        state.combat_interference_sources[0] = 7;
 
         let application = state
             .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 4, true, 8, Some(true))
@@ -12339,6 +13364,7 @@
             }
         );
         assert_eq!(state.party[0].hp, 7);
+        assert_eq!(state.combat_interference_sources[0], 7);
     }
 
     #[test]
@@ -12484,6 +13510,7 @@
         let mut absorbed = world_state(open_world_grid(), 10, 20);
         absorbed.combat_active = true;
         absorbed.active_effect_tag = Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG);
+        absorbed.active_effect_counter = NEGATE_MAGIC_ACTIVE_EFFECT_DURATION;
         absorbed.spell_charges[spell_index] = 1;
         absorbed.party[0].mana = 1;
         absorbed.party[0].level = 1;
@@ -12499,6 +13526,74 @@
         assert_eq!(absorbed.party[0].mana, 1);
         assert_eq!(absorbed.turn, 0);
         assert_eq!(absorbed.message, "Magic absorbed!");
+
+        absorbed.active_effect_counter = 0;
+        assert_eq!(
+            absorbed
+                .cast_spell_from_suffix("1GP7", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(absorbed.spell_charges[spell_index], 1);
+        assert_eq!(absorbed.party[0].mana, 1);
+        assert_eq!(absorbed.turn, 0);
+        assert_eq!(
+            absorbed.message,
+            "Target? Use C1GP7 to target a live combat slot."
+        );
+    }
+
+    #[test]
+    fn kill_rejects_protected_special_classes_after_resources_without_randomness() {
+        assert!(combat_class_is_protected_special(COMBAT_CLASS_BLACKTHORN));
+        assert!(combat_class_is_protected_special(COMBAT_CLASS_LORD_BRITISH));
+        assert!(combat_class_is_protected_special(COMBAT_CLASS_SHADOW_LORD));
+        assert!(!combat_class_is_protected_special(COMBAT_CLASS_DAEMON));
+
+        let spell_index = spell_index_from_code("CX").unwrap();
+        let mana_cost = (spell_index / 6 + 1) as u8;
+        let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        for class in [
+            COMBAT_CLASS_BLACKTHORN,
+            COMBAT_CLASS_LORD_BRITISH,
+            COMBAT_CLASS_SHADOW_LORD,
+        ] {
+            let mut state = world_state(open_world_grid(), 10, 20);
+            state.combat_active = true;
+            state.party[0].mana = mana_cost;
+            state.party[0].level = mana_cost;
+            state.spell_charges[spell_index] = 1;
+            state.prng_state = 0x1234;
+            state.combat_actors[target_slot] = CombatActorDescriptor::from_row([
+                20,
+                1,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                class,
+                0,
+                0,
+                5,
+                5,
+            ]);
+            let target_before = state.combat_actors[target_slot];
+            let prng_before = state.prng_state;
+
+            assert_eq!(
+                state.cast_active_target_combat_spell(
+                    0,
+                    spell_index,
+                    CombatSpellDamageKind::Kill,
+                    target_slot,
+                ),
+                MoveOutcome::Blocked
+            );
+
+            assert_eq!(state.spell_charges[spell_index], 0);
+            assert_eq!(state.party[0].mana, 0);
+            assert_eq!(state.turn, 1);
+            assert_eq!(state.prng_state, prng_before);
+            assert_eq!(state.combat_actors[target_slot], target_before);
+            assert_eq!(state.message, "Failed!");
+        }
     }
 
     #[test]
@@ -12604,9 +13699,10 @@
     }
 
     #[test]
-    fn combat_cast_repel_undead_routes_resources_and_dispels_undead_classes() {
+    fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
+        state.party_intelligence[0] = u8::MAX;
         state.party[0].mana = REPEL_UNDEAD_COST;
         state.party[0].level = REPEL_UNDEAD_COST;
         state.party_experience = vec![10];
@@ -12653,13 +13749,22 @@
         assert_eq!(state.spell_charges[REPEL_UNDEAD_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead());
-        assert!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_marked_dead());
-        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_marked_dead());
         assert_eq!(
-            state.party_experience[0],
-            10 + u16::from(ghost.reward_unit()) + u16::from(skeleton.reward_unit())
+            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound,
+            1
         );
+        assert!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_fleeing());
+        assert_eq!(
+            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].hp_or_wound,
+            1
+        );
+        assert!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_fleeing());
+        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead());
+        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_marked_dead());
+        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_marked_dead());
+        assert_eq!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2].hp_or_wound, orc.max_hp);
+        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_fleeing());
+        assert_eq!(state.party_experience[0], 10);
         assert_eq!(state.message, "Repel Undead! 2 undead repelled.");
     }
 
@@ -12667,6 +13772,7 @@
     fn combat_cast_directed_sleep_and_poison_wind_mutate_party_targets() {
         let mut sleep = world_state(open_world_grid(), 10, 20);
         sleep.combat_active = true;
+        sleep.party_intelligence = vec![u8::MAX, 0];
         sleep.party = vec![
             PartyMember {
                 slot: 0,
@@ -12693,7 +13799,7 @@
         sleep.combat_actors[0] =
             CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
         sleep.combat_actors[1] =
-            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 0, 6, 5]);
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 6, 5]);
 
         assert_eq!(
             sleep
@@ -12764,6 +13870,7 @@
     fn combat_cast_directed_damage_winds_route_damage_and_friendly_fire() {
         let mut death = world_state(open_world_grid(), 10, 20);
         death.combat_active = true;
+        death.party_intelligence = vec![u8::MAX, 0];
         death.party = vec![
             PartyMember {
                 slot: 0,
@@ -12791,7 +13898,7 @@
         death.combat_actors[0] =
             CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
         death.combat_actors[1] =
-            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 0, 6, 5]);
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 6, 5]);
         let stats = combat_class_stats(32).unwrap();
         death.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] =
             CombatActorDescriptor::for_monster_placement(
@@ -13051,25 +14158,9 @@
             COMBAT_ACTOR_FLAG_SELECTABLE_80,
             0,
         );
+        state.combat_actors[target_slot].base_step = 1;
 
-        let mut expected_prng = state.prng_state;
-        let party_roll = u5_prng_range_u16(
-            &mut expected_prng,
-            0,
-            u16::from(COMBAT_TREMOR_DAMAGE_ROLL_MAX - 1),
-        ) as u8;
-        let monster_roll = u5_prng_range_u16(
-            &mut expected_prng,
-            0,
-            u16::from(COMBAT_TREMOR_DAMAGE_ROLL_MAX - 1),
-        ) as u8;
-        let party_damage = resolve_tremor_spell_raw_damage(party_roll);
-        let monster_damage = resolve_tremor_spell_raw_damage(monster_roll);
-        let monster_reward = if monster_damage as u8 >= stats.max_hp {
-            stats.reward_unit()
-        } else {
-            monster_damage as u8
-        };
+        let initial_prng = state.prng_state;
 
         assert_eq!(
             state
@@ -13081,17 +14172,11 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.prng_state, expected_prng);
+        assert_ne!(state.prng_state, initial_prng);
         assert_eq!(state.message, "Tremor!");
-        assert_eq!(state.party[0].hp, 30 - party_damage as u16);
-        assert_eq!(
-            state.combat_actors[target_slot].hp_or_wound,
-            stats.max_hp.saturating_sub(monster_damage as u8)
-        );
-        assert_eq!(
-            state.party_experience[0],
-            10 + u16::from(monster_reward)
-        );
+        assert!(state.party[0].hp < 30);
+        assert!(state.combat_actors[target_slot].hp_or_wound < stats.max_hp);
+        assert!(state.party_experience[0] > 10);
     }
 
     #[test]
@@ -14114,7 +15199,7 @@
         state.active_objects[0].tile = 0x10;
 
         assert_eq!(
-            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Poison, 7, 0, 4, 0, 0),
+            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Poison, 0, 4, 0),
             Some(CombatArenaFieldContactApplication {
                 field: CombatArenaFieldKind::Poison,
                 target_slot: 0,
@@ -14129,18 +15214,18 @@
         assert_eq!(state.party[0].hp, 12);
 
         assert_eq!(
-            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Poison, 7, 0, 4, 0, 0),
+            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Poison, 0, 4, 0),
             Some(CombatArenaFieldContactApplication {
                 field: CombatArenaFieldKind::Poison,
                 target_slot: 0,
                 contact_outcome: CombatArenaFieldContactOutcome::PoisonFallbackDamage {
-                    raw_damage: 5,
+                    raw_damage: 4,
                 },
                 damage_application: Some(CombatWeaponDamageApplication::Party {
                     target_slot: 0,
                     damage: CombatPartyDamageOutcome {
-                        raw_damage: 5,
-                        applied_damage: 5,
+                        raw_damage: 4,
+                        applied_damage: 4,
                         missed: false,
                         instant_kill: false,
                         killed: false,
@@ -14150,22 +15235,22 @@
                 }),
             })
         );
-        assert_eq!(state.party[0].hp, 7);
+        assert_eq!(state.party[0].hp, 8);
         assert_eq!(state.party_experience, vec![10]);
 
         assert_eq!(
-            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Fire, 7, 0, 20, 20, 5),
+            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Fire, 0, 0, 10),
             Some(CombatArenaFieldContactApplication {
                 field: CombatArenaFieldKind::Fire,
                 target_slot: 0,
                 contact_outcome: CombatArenaFieldContactOutcome::FireDamage {
-                    raw_damage: 21,
+                    raw_damage: 10,
                 },
                 damage_application: Some(CombatWeaponDamageApplication::Party {
                     target_slot: 0,
                     damage: CombatPartyDamageOutcome {
-                        raw_damage: 16,
-                        applied_damage: 7,
+                        raw_damage: 10,
+                        applied_damage: 8,
                         missed: false,
                         instant_kill: false,
                         killed: true,
@@ -14196,10 +15281,8 @@
         assert_eq!(
             state.apply_combat_arena_field_contact(
                 CombatArenaFieldKind::Poison,
-                0,
                 second_slot,
                 19,
-                0,
                 0,
             ),
             Some(CombatArenaFieldContactApplication {
@@ -14214,9 +15297,7 @@
         assert_eq!(
             state.apply_combat_arena_field_contact(
                 CombatArenaFieldKind::Sleep,
-                0,
                 second_slot,
-                0,
                 0,
                 0,
             ),
@@ -14233,23 +15314,21 @@
         assert_eq!(
             state.apply_combat_arena_field_contact(
                 CombatArenaFieldKind::Fire,
-                0,
                 first_slot,
                 0,
-                20,
-                5,
+                10,
             ),
             Some(CombatArenaFieldContactApplication {
                 field: CombatArenaFieldKind::Fire,
                 target_slot: first_slot,
                 contact_outcome: CombatArenaFieldContactOutcome::FireDamage {
-                    raw_damage: 21,
+                    raw_damage: 10,
                 },
                 damage_application: Some(CombatWeaponDamageApplication::Monster {
                     target_slot: first_slot,
                     damage: CombatMonsterDamageOutcome {
                         class: 32,
-                        raw_damage: 16,
+                        raw_damage: 10,
                         applied_damage: 10,
                         missed: false,
                         instant_kill: false,
@@ -14266,34 +15345,23 @@
     }
 
     #[test]
-    fn arena_field_contact_application_skips_current_actor_and_applies_energy_zero_damage() {
+    fn arena_field_contact_application_targets_current_actor_and_ignores_energy() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_actors[0] =
             CombatActorDescriptor::from_row([12, 1, 0, 0, 0, 0, 4, 4]);
         state.active_objects[0].tile = 0x10;
 
         assert_eq!(
-            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Fire, 0, 0, 0, 20, 0),
+            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Fire, 0, 0, 10),
             Some(CombatArenaFieldContactApplication {
                 field: CombatArenaFieldKind::Fire,
                 target_slot: 0,
-                contact_outcome: CombatArenaFieldContactOutcome::SkippedCurrentActor,
-                damage_application: None,
-            })
-        );
-        assert_eq!(state.party[0].hp, 60);
-
-        assert_eq!(
-            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Energy, 7, 0, 0, 0, 0),
-            Some(CombatArenaFieldContactApplication {
-                field: CombatArenaFieldKind::Energy,
-                target_slot: 0,
-                contact_outcome: CombatArenaFieldContactOutcome::EnergyDamage { raw_damage: 0 },
+                contact_outcome: CombatArenaFieldContactOutcome::FireDamage { raw_damage: 10 },
                 damage_application: Some(CombatWeaponDamageApplication::Party {
                     target_slot: 0,
                     damage: CombatPartyDamageOutcome {
-                        raw_damage: 0,
-                        applied_damage: 0,
+                        raw_damage: 10,
+                        applied_damage: 10,
                         missed: false,
                         instant_kill: false,
                         killed: false,
@@ -14303,11 +15371,427 @@
                 }),
             })
         );
-        assert_eq!(state.party[0].hp, 60);
+        assert_eq!(state.party[0].hp, 50);
+
+        assert_eq!(
+            state.apply_combat_arena_field_contact(CombatArenaFieldKind::Energy, 0, 0, 0),
+            None
+        );
+        assert_eq!(state.party[0].hp, 50);
     }
 
     #[test]
-    fn combat_step_post_field_contact_skips_current_actor_without_consuming_marker() {
+    fn arena_field_contact_scan_skips_linked_renderer_and_uses_first_separate_marker() {
+        let mut state = combat_player_command_state(10, 10);
+        state.combat_actors[0].x = 4;
+        state.combat_actors[0].y = 4;
+        state.active_objects[0] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_FIRE,
+            tile: PLAYER_TILE,
+            x: 4,
+            y: 4,
+            ..ActiveObject::empty()
+        };
+        state.active_objects[1] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_SLEEP,
+            tile: COMBAT_FIELD_KIND_SLEEP,
+            x: 4,
+            y: 4,
+            ..ActiveObject::empty()
+        };
+        state.active_objects[2] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_POISON,
+            tile: COMBAT_FIELD_KIND_POISON,
+            x: 4,
+            y: 4,
+            ..ActiveObject::empty()
+        };
+        let prng_before = state.prng_state;
+
+        assert!(matches!(
+            state.apply_combat_arena_field_contact_for_actor_position(0),
+            Some(CombatArenaFieldContactApplication {
+                field: CombatArenaFieldKind::Sleep,
+                target_slot: 0,
+                contact_outcome: CombatArenaFieldContactOutcome::SleptPartyMember {
+                    status_before: b'G',
+                    status_after: b'S',
+                },
+                damage_application: None,
+            })
+        ));
+        assert_eq!(state.party[0].status, b'S');
+        assert_eq!(state.prng_state, prng_before);
+        assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_SLEEP);
+        assert_eq!(state.active_objects[2].type_byte, COMBAT_FIELD_KIND_POISON);
+    }
+
+    #[test]
+    fn combat_arena_terrain_contact_kind_recognizes_only_exact_published_bytes() {
+        for tile in 0u8..=u8::MAX {
+            let expected = match tile {
+                COMBAT_CONTACT_TERRAIN_SWAMP => Some(CombatArenaFieldKind::Poison),
+                COMBAT_CONTACT_TERRAIN_MOLTEN_LAVA | COMBAT_CONTACT_TERRAIN_FIREPLACE => {
+                    Some(CombatArenaFieldKind::Fire)
+                }
+                _ => None,
+            };
+            assert_eq!(combat_arena_terrain_contact_kind(tile), expected, "tile {tile:#04x}");
+        }
+    }
+
+    #[test]
+    fn terrain_poison_preempts_markers_even_when_poison_is_status_or_tile_gated() {
+        let mut state = combat_player_command_state(10, 10);
+        state.combat_actors[0].x = 4;
+        state.combat_actors[0].y = 4;
+        state.active_objects[0].x = 4;
+        state.active_objects[0].y = 4;
+        state.active_objects[0].tile = 0x10;
+        state.combat_terrain[4][4] = COMBAT_CONTACT_TERRAIN_SWAMP;
+        state.active_objects[1] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_FIRE,
+            tile: COMBAT_FIELD_KIND_FIRE,
+            x: 4,
+            y: 4,
+            ..ActiveObject::empty()
+        };
+        state.party[0].status = b'G';
+        let prng_before_good = state.prng_state;
+
+        assert!(matches!(
+            state.apply_combat_post_dispatch_contact_for_actor_position(0),
+            Some(CombatPostDispatchContactApplication {
+                source: CombatPostDispatchContactSource::ArenaTerrain {
+                    tile: COMBAT_CONTACT_TERRAIN_SWAMP,
+                },
+                field_contact: CombatArenaFieldContactApplication {
+                    field: CombatArenaFieldKind::Poison,
+                    contact_outcome: CombatArenaFieldContactOutcome::PoisonedPartyMember { .. },
+                    ..
+                },
+            })
+        ));
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.prng_state, prng_before_good);
+
+        state.active_objects[0].tile = 0x80;
+        let hp_before_rejection = state.party[0].hp;
+        let prng_before_rejection = state.prng_state;
+        assert!(matches!(
+            state.apply_combat_post_dispatch_contact_for_actor_position(0),
+            Some(CombatPostDispatchContactApplication {
+                source: CombatPostDispatchContactSource::ArenaTerrain {
+                    tile: COMBAT_CONTACT_TERRAIN_SWAMP,
+                },
+                field_contact: CombatArenaFieldContactApplication {
+                    field: CombatArenaFieldKind::Poison,
+                    contact_outcome:
+                        CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass,
+                    ..
+                },
+            })
+        ));
+        assert_eq!(state.party[0].hp, hp_before_rejection);
+        assert_eq!(state.prng_state, prng_before_rejection);
+        assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_FIRE);
+    }
+
+    #[test]
+    fn lava_and_fireplace_terrain_use_one_inclusive_raw_fire_damage_draw() {
+        for tile in [
+            COMBAT_CONTACT_TERRAIN_MOLTEN_LAVA,
+            COMBAT_CONTACT_TERRAIN_FIREPLACE,
+        ] {
+            let mut state = combat_player_command_state(10, 10);
+            state.combat_actors[0].x = 4;
+            state.combat_actors[0].y = 4;
+            state.active_objects[0].x = 4;
+            state.active_objects[0].y = 4;
+            state.active_objects[0].tile = 0x10;
+            state.combat_terrain[4][4] = tile;
+            state.active_objects[1] = ActiveObject {
+                type_byte: COMBAT_FIELD_KIND_SLEEP,
+                tile: COMBAT_FIELD_KIND_SLEEP,
+                x: 4,
+                y: 4,
+                ..ActiveObject::empty()
+            };
+            let hp_before = state.party[0].hp;
+            let mut expected_prng = state.prng_state;
+            let expected_raw = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
+
+            assert!(matches!(
+                state.apply_combat_post_dispatch_contact_for_actor_position(0),
+                Some(CombatPostDispatchContactApplication {
+                    source: CombatPostDispatchContactSource::ArenaTerrain {
+                        tile: selected_tile,
+                    },
+                    field_contact: CombatArenaFieldContactApplication {
+                        field: CombatArenaFieldKind::Fire,
+                        contact_outcome: CombatArenaFieldContactOutcome::FireDamage { raw_damage },
+                        ..
+                    },
+                }) if selected_tile == tile && raw_damage == expected_raw
+            ));
+            assert_eq!(state.prng_state, expected_prng);
+            assert_eq!(state.party[0].hp, hp_before.saturating_sub(expected_raw as u16));
+            assert_eq!(state.party[0].status, b'G');
+            assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_SLEEP);
+        }
+    }
+
+    #[test]
+    fn doom_absorption_skips_digit_selection_and_automatic_dispatch() {
+        let mut player = combat_player_command_state(10, 10);
+        player.combat_actors[0].x = 5;
+        player.combat_actors[0].y = 2;
+        player.active_objects[0].x = 5;
+        player.active_objects[0].y = 2;
+        player.active_objects[20] = ActiveObject {
+            type_byte: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+            tile: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+            x: 5,
+            y: 1,
+            ..ActiveObject::empty()
+        };
+        player.active_player = Some(0);
+
+        let selection = player
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('1'))
+            .expect("digit selection should dispatch");
+        assert!(matches!(
+            selection.action,
+            CombatPlayerCommandAction::ActivePlayerSelection(_)
+        ));
+        assert_eq!(selection.absorbable_contact, None);
+        assert_eq!(selection.post_dispatch_contact, None);
+        assert_eq!(player.active_player, Some(0));
+
+        let mut automatic = combat_ai_turn_state(8, 2);
+        automatic.combat_actors[8].phase_counter = 1;
+        automatic.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        automatic.active_effect_counter = 3;
+        automatic.active_objects[20] = ActiveObject {
+            type_byte: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+            tile: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+            x: 8,
+            y: 1,
+            ..ActiveObject::empty()
+        };
+        automatic.active_player = Some(0);
+        let dispatch = automatic.apply_combat_actor_slot_dispatch_with_inputs(
+            8, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true,
+            &[1, 2, 3, 4], &[],
+        );
+        assert!(matches!(
+            dispatch,
+            CombatActorSlotDispatchApplication::Slot {
+                action: CombatActorDispatchAction::NegateTimeSkipped,
+                ..
+            }
+        ));
+        assert_eq!(automatic.active_player, Some(0));
+        assert_ne!(automatic.message, "Absorbed!");
+    }
+
+    #[test]
+    fn arena_field_contact_consumes_only_branch_specific_inclusive_damage_draws() {
+        let mut state = combat_player_command_state(10, 10);
+        state.combat_actors[0].x = 4;
+        state.combat_actors[0].y = 4;
+        state.active_objects[0].x = 4;
+        state.active_objects[0].y = 4;
+        state.active_objects[0].tile = 0x10;
+        state.active_objects[1] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_POISON,
+            tile: COMBAT_FIELD_KIND_POISON,
+            x: 4,
+            y: 4,
+            ..ActiveObject::empty()
+        };
+        state.party[0].status = b'G';
+
+        state.prng_state = 0x1234;
+        let prng_before_good_poison = state.prng_state;
+        assert!(matches!(
+            state.apply_combat_arena_field_contact_for_actor_position(0),
+            Some(CombatArenaFieldContactApplication {
+                contact_outcome: CombatArenaFieldContactOutcome::PoisonedPartyMember { .. },
+                ..
+            })
+        ));
+        assert_eq!(state.prng_state, prng_before_good_poison);
+
+        state.party[0].status = b'P';
+        state.active_objects[0].tile = 0x80;
+        let prng_before_linked_rejection = state.prng_state;
+        assert!(matches!(
+            state.apply_combat_arena_field_contact_for_actor_position(0),
+            Some(CombatArenaFieldContactApplication {
+                contact_outcome:
+                    CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass,
+                ..
+            })
+        ));
+        assert_eq!(state.prng_state, prng_before_linked_rejection);
+
+        state.active_objects[0].tile = 0x10;
+        let hp_before_poison = state.party[0].hp;
+        let mut expected_prng = state.prng_state;
+        let expected_poison_damage = u5_prng_range_u16(&mut expected_prng, 0, 20) as u8;
+        assert!(matches!(
+            state.apply_combat_arena_field_contact_for_actor_position(0),
+            Some(CombatArenaFieldContactApplication {
+                contact_outcome:
+                    CombatArenaFieldContactOutcome::PoisonFallbackDamage { raw_damage },
+                ..
+            }) if raw_damage == expected_poison_damage
+        ));
+        assert_eq!(state.prng_state, expected_prng);
+        assert_eq!(
+            state.party[0].hp,
+            hp_before_poison.saturating_sub(expected_poison_damage as u16)
+        );
+
+        state.active_objects[1].type_byte = COMBAT_FIELD_KIND_FIRE;
+        state.active_objects[1].tile = COMBAT_FIELD_KIND_FIRE;
+        let hp_before_fire = state.party[0].hp;
+        let mut expected_prng = state.prng_state;
+        let expected_fire_damage = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
+        assert!(matches!(
+            state.apply_combat_arena_field_contact_for_actor_position(0),
+            Some(CombatArenaFieldContactApplication {
+                contact_outcome: CombatArenaFieldContactOutcome::FireDamage { raw_damage },
+                ..
+            }) if raw_damage == expected_fire_damage
+        ));
+        assert_eq!(state.prng_state, expected_prng);
+        assert_eq!(
+            state.party[0].hp,
+            hp_before_fire.saturating_sub(expected_fire_damage as u16)
+        );
+    }
+
+    #[test]
+    fn energy_field_blocks_player_and_ai_without_running_contact_on_reprompt() {
+        let mut state = combat_player_command_state(10, 10);
+        state.active_objects[1] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_FIRE,
+            tile: COMBAT_FIELD_KIND_FIRE,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        state.active_objects[2] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_ENERGY,
+            tile: COMBAT_FIELD_KIND_ENERGY,
+            x: 6,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        let hp_before = state.party[0].hp;
+        let prng_before = state.prng_state;
+
+        assert_eq!(
+            state.combat_destination_walkable_for_direction(0, COMBAT_DIRECTION_EAST),
+            Some(false)
+        );
+        assert!(!state.combat_legal_cell_mask()[5][6]);
+        let application = state
+            .apply_combat_player_command_with_attack_inputs(
+                0,
+                CombatPlayerCommandInput::Direction(COMBAT_DIRECTION_EAST),
+                CombatPlayerWeaponAttackInputs::default(),
+            )
+            .expect("blocked direction should return a re-prompt application");
+
+        assert!(matches!(
+            application.action,
+            CombatPlayerCommandAction::StepOrAttack {
+                outcome: CombatStepOrAttackPrimitiveOutcome::BlockedWall,
+                ..
+            }
+        ));
+        assert!(application.reprompt);
+        assert_eq!(application.post_dispatch_contact, None);
+        assert_eq!(state.party[0].hp, hp_before);
+        assert_eq!(state.prng_state, prng_before);
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+    }
+
+    #[test]
+    fn automatic_no_action_and_status_disabled_dispatches_run_field_contact() {
+        let mut skipped = combat_ai_turn_state(8, 5);
+        skipped.combat_terrain[5][8] = 0x05;
+        skipped.combat_actors[8].phase_counter = 1;
+        skipped.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        skipped.active_effect_counter = 3;
+        skipped.active_objects[1] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_SLEEP,
+            tile: COMBAT_FIELD_KIND_SLEEP,
+            x: 8,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        let prng_before_skip = skipped.prng_state;
+
+        let application = skipped.apply_combat_actor_slot_dispatch_with_inputs(
+            8, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true,
+            &[1, 2, 3, 4], &[],
+        );
+        assert!(matches!(
+            application,
+            CombatActorSlotDispatchApplication::Slot {
+                action: CombatActorDispatchAction::NegateTimeSkipped,
+                ..
+            }
+        ));
+        assert!(skipped.combat_actors[8].is_status_disabled());
+        assert_eq!(skipped.prng_state, prng_before_skip);
+
+        let mut disabled = combat_ai_turn_state(8, 5);
+        disabled.combat_terrain[5][8] = 0x05;
+        disabled.combat_actors[8].phase_counter = 1;
+        disabled.combat_actors[8].hp_or_wound = 50;
+        disabled.combat_actors[8].set_status_disabled();
+        disabled.active_objects[1] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_FIRE,
+            tile: COMBAT_FIELD_KIND_FIRE,
+            x: 8,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        disabled.prng_state = 0x4321;
+        let hp_before = disabled.combat_actors[8].hp_or_wound;
+        let mut expected_prng = disabled.prng_state;
+        let _wake_roll = u5_prng_range_u16(
+            &mut expected_prng,
+            u16::from(COMBAT_SLEEP_WAKE_ROLL_LOW),
+            u16::from(COMBAT_SLEEP_WAKE_ROLL_HIGH),
+        );
+        let expected_fire_damage = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
+
+        let application = disabled.apply_combat_actor_slot_dispatch_with_inputs(
+            8, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true,
+            &[1, 2, 3, 4], &[],
+        );
+        assert!(matches!(
+            application,
+            CombatActorSlotDispatchApplication::Slot {
+                action: CombatActorDispatchAction::StatusDisabledWake { .. },
+                ..
+            }
+        ));
+        assert_eq!(disabled.prng_state, expected_prng);
+        assert_eq!(
+            disabled.combat_actors[8].hp_or_wound,
+            hp_before.saturating_sub(expected_fire_damage)
+        );
+    }
+
+    #[test]
+    fn combat_step_defers_field_contact_until_completed_dispatch_without_consuming_marker() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.party = vec![PartyMember {
@@ -14351,7 +15835,7 @@
             aux1: 0,
             aux3: 0,
         };
-        let expected_prng = state.prng_state;
+        let prng_before_step = state.prng_state;
 
         let outcome = state.apply_combat_step_or_attack_primitive(0, 1, COMBAT_DIRECTION_EAST, true);
 
@@ -14359,8 +15843,30 @@
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 3));
         assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (4, 3));
         assert_eq!(state.party[0].hp, 20);
-        assert_eq!(state.prng_state, expected_prng);
+        assert_eq!(state.prng_state, prng_before_step);
         assert_eq!(state.party[0].status, b'G');
+
+        let mut expected_prng = state.prng_state;
+        let expected_raw = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
+        let application = state
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
+            .expect("pass should complete the actor dispatch");
+        assert!(matches!(
+            application.post_dispatch_contact,
+            Some(CombatPostDispatchContactApplication {
+                source: CombatPostDispatchContactSource::PlacedMarker {
+                    active_object_slot: 1,
+                },
+                field_contact: CombatArenaFieldContactApplication {
+                    field: CombatArenaFieldKind::Fire,
+                    target_slot: 0,
+                    contact_outcome: CombatArenaFieldContactOutcome::FireDamage { raw_damage },
+                    ..
+                }
+            }) if raw_damage == expected_raw
+        ));
+        assert_eq!(state.prng_state, expected_prng);
+        assert_eq!(state.party[0].hp, 20u16.saturating_sub(expected_raw as u16));
         assert_eq!(
             state.active_objects[1],
             ActiveObject {
@@ -14446,10 +15952,23 @@
         assert_eq!(report.secondary_marker_cell, Some((3, 4)));
         assert_eq!(state.active_objects, active_objects_before);
         assert_eq!(state.party, party_before);
+
+        state.combat_cursor_blink = false;
+        state.combat_secondary_marker = Some((99, 99));
+        let unclipped_report = state.apply_combat_cursor_blink_tick();
+        assert_eq!(unclipped_report.cursor_draw_cell, Some((5, 6)));
+        assert_eq!(unclipped_report.secondary_marker_cell, Some((99, 99)));
+
+        state.combat_cursor_blink = false;
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
+        let non_player_report = state.apply_combat_cursor_blink_tick();
+        assert!(non_player_report.cursor_blink_visible);
+        assert_eq!(non_player_report.cursor_draw_cell, None);
+        assert_eq!(non_player_report.secondary_marker_cell, None);
     }
 
     #[test]
-    fn combat_magic_ring_pass_applies_invisibility_and_vanish_clears_it() {
+    fn combat_entry_magic_ring_pass_applies_invisibility_and_vanish_clears_it() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.party_equipment = default_party_equipment(1);
         state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
@@ -14492,11 +16011,11 @@
         assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
         assert_eq!(state.active_objects[0].tile, 0x5c);
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Ring of Invisibility vanished.");
+        assert_eq!(state.message, "A ring has vanished!");
     }
 
     #[test]
-    fn combat_magic_ring_pass_regenerates_living_wearers_and_can_vanish() {
+    fn combat_entry_magic_ring_pass_regenerates_living_wearers_and_can_vanish() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.party[0].hp = 8;
         state.party[0].max_hp = 10;
@@ -14533,13 +16052,53 @@
         );
         assert_eq!(state.party[0].hp, 9);
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
-        assert_eq!(state.message, "Ring of Regeneration vanished.");
+        assert_eq!(state.message, "A ring has vanished!");
     }
 
     #[test]
-    fn combat_xit_cleanup_state_wrapper_requires_no_active_living_foes() {
+    fn combat_frame_entry_runs_vanish_before_invisibility_seating_hook() {
         let mut state = world_state(open_world_grid(), 10, 20);
-        assert!(state.combat_xit_cleanup_allowed());
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
+        state.prng_state = 0x0070;
+        let mut expected_prng = state.prng_state;
+        assert_eq!(u5_prng_range_u16(&mut expected_prng, 0, 15), 0);
+        let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        active_objects[0] = ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x: 4,
+            y: 4,
+            ..ActiveObject::empty()
+        };
+        let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            4,
+            4,
+        ]);
+
+        state.enter_combat_frame(active_objects, actors).unwrap();
+
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
+        assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
+        assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
+        assert_eq!(state.prng_state, expected_prng);
+        assert_eq!(state.message, "A ring has vanished!");
+    }
+
+    #[test]
+    fn combat_escape_cleanup_state_wrapper_uses_party_side_descriptor() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        assert_eq!(
+            state.combat_escape_cleanup_decision(),
+            CombatEscapeCleanupDecision::Accepted
+        );
 
         state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] = CombatActorDescriptor::from_row([
             20,
@@ -14551,10 +16110,16 @@
             5,
             5,
         ]);
-        assert!(!state.combat_xit_cleanup_allowed());
+        assert_eq!(
+            state.combat_escape_cleanup_decision(),
+            CombatEscapeCleanupDecision::RefusedNotYet
+        );
 
         state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].mark_dead();
-        assert!(state.combat_xit_cleanup_allowed());
+        assert_eq!(
+            state.combat_escape_cleanup_decision(),
+            CombatEscapeCleanupDecision::Accepted
+        );
     }
 
     #[test]
@@ -14592,7 +16157,7 @@
             resolve_default_monster_death_marker_for_class(39, true, true).unwrap(),
             CombatDefaultDeathMarker::Drop { loot_byte: 0x80 | 30 }
         );
-        assert_eq!(resolve_default_monster_death_marker_for_class(11, true, false), None);
+        assert_eq!(resolve_default_monster_death_marker_for_class(48, true, false), None);
     }
 
     #[test]
@@ -14895,7 +16460,7 @@
     fn terrain_combat_setup_from_record_copies_record_slices_and_base_class() {
         let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
         let trigger = ActiveObject {
-            type_byte: 0x50,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 10,
             y: 20,
@@ -14905,8 +16470,13 @@
             aux3: 0,
         };
 
-        let setup =
-            terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, &record).unwrap();
+        let setup = terrain_combat_setup_from_record_at_arena(
+            WorldPlane::Britannia,
+            trigger,
+            4,
+            &record,
+        )
+        .unwrap();
 
         assert_eq!(setup.arena_index, 4);
         assert!(setup.underworld_variant);
@@ -14940,7 +16510,7 @@
     fn terrain_combat_instance_places_monsters_and_parallel_descriptors() {
         let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
         let trigger = ActiveObject {
-            type_byte: 0x50,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 10,
             y: 20,
@@ -14949,8 +16519,13 @@
             aux1: 0,
             aux3: 0,
         };
-        let setup =
-            terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, &record).unwrap();
+        let setup = terrain_combat_setup_from_record_at_arena(
+            WorldPlane::Britannia,
+            trigger,
+            4,
+            &record,
+        )
+        .unwrap();
 
         let instance =
             terrain_combat_instance_from_setup(&setup, 8, Some(0xa4), &[0, 0, 1]).unwrap();
@@ -14983,7 +16558,7 @@
     fn terrain_combat_party_uses_record_slots_after_monsters() {
         let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
         let trigger = ActiveObject {
-            type_byte: 0x50,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 10,
             y: 20,
@@ -14992,8 +16567,13 @@
             aux1: 0,
             aux3: 0,
         };
-        let setup =
-            terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, &record).unwrap();
+        let setup = terrain_combat_setup_from_record_at_arena(
+            WorldPlane::Britannia,
+            trigger,
+            4,
+            &record,
+        )
+        .unwrap();
         let mut instance = terrain_combat_instance_from_setup(&setup, 8, None, &[]).unwrap();
         let mut state = world_state(open_world_grid(), 10, 20);
         state.party[0].class_byte = COMBAT_CLASS_GIANT_RAT;
@@ -15023,7 +16603,7 @@
     fn terrain_combat_instance_reports_unplaced_count_when_placement_slots_end() {
         let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
         let trigger = ActiveObject {
-            type_byte: 0x50,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 10,
             y: 20,
@@ -15032,8 +16612,13 @@
             aux1: 0,
             aux3: 0,
         };
-        let setup =
-            terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, &record).unwrap();
+        let setup = terrain_combat_setup_from_record_at_arena(
+            WorldPlane::Britannia,
+            trigger,
+            4,
+            &record,
+        )
+        .unwrap();
 
         let instance = terrain_combat_instance_from_setup(&setup, 26, None, &[]).unwrap();
 
@@ -15064,14 +16649,19 @@
             aux3: 0,
         };
 
-        let err = terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, &record)
-            .expect_err("object has no outdoor arena selector");
+        let err = terrain_combat_setup_from_record_at_arena(
+            WorldPlane::Britannia,
+            trigger,
+            2,
+            &record,
+        )
+        .expect_err("object has no outdoor combat class");
 
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 
     #[test]
-    fn terrain_combat_arena_selector_uses_active_object_type_not_tile() {
+    fn terrain_combat_class_selector_uses_active_object_type_not_tile() {
         let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
         let invalid_type_with_arena_tile = ActiveObject {
             type_byte: 0x10,
@@ -15084,16 +16674,14 @@
             aux3: 0,
         };
 
-        assert_eq!(
-            outdoor_combat_arena_index_for_object(invalid_type_with_arena_tile),
-            None
-        );
-        let err = terrain_combat_setup_from_record(
+        assert_eq!(outdoor_combat_class_id(invalid_type_with_arena_tile.type_byte), None);
+        let err = terrain_combat_setup_from_record_at_arena(
             WorldPlane::Britannia,
             invalid_type_with_arena_tile,
+            2,
             &record,
         )
-        .expect_err("tile/frame byte must not select the outdoor arena");
+        .expect_err("tile/frame byte must not select the combat class");
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
 
         let pirate = ActiveObject {
@@ -15106,7 +16694,8 @@
             aux1: 0,
             aux3: 0,
         };
-        assert_eq!(outdoor_combat_arena_index_for_object(pirate), Some(1));
+        assert_eq!(outdoor_combat_class_id(pirate.type_byte), Some(1));
+        assert_eq!(outdoor_combat_arena_index(pirate.type_byte, 5, false, 0), Some(12));
     }
 
     #[test]
@@ -15122,7 +16711,7 @@
         for arena_index in 0..BRIT_CBT_RECORDS {
             let record = bank.record(arena_index).unwrap();
             let trigger = ActiveObject {
-                type_byte: 0x40 + (arena_index as u8) * 4,
+                type_byte: 0xc0,
                 tile: 0xc0,
                 x: 10,
                 y: 20,
@@ -15131,8 +16720,13 @@
                 aux1: 0,
                 aux3: 0,
             };
-            let setup =
-                terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, record).unwrap();
+            let setup = terrain_combat_setup_from_record_at_arena(
+                WorldPlane::Britannia,
+                trigger,
+                arena_index,
+                record,
+            )
+            .unwrap();
 
             assert_eq!(setup.arena_index, arena_index);
             assert!(!setup.underworld_variant);

@@ -1,5 +1,6 @@
 //! Loaders that turn SAVED.GAM/SAVED.OOL/INIT.GAM into PlayOptions.
 
+use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
@@ -14,6 +15,7 @@ pub fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
     refresh_saved_ool_mirrors_for_load(game_dir, needs_underworld_disk_swap)?;
     load_world_progress_state(game_dir)?.apply_sidecar_only_to_play_options(&mut options);
     options.blackthorn_story = load_blackthorn_story_state(game_dir)?;
+    options.town_npc_mutations = load_town_npc_mutations(game_dir)?;
     options.save_template_source = SaveTemplateSource::SavedGame;
     Ok(options)
 }
@@ -194,7 +196,13 @@ pub fn play_options_from_save_bytes_named(
     shadowlord_hideouts.copy_from_slice(
         &bytes[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT],
     );
-    let quest_progress_word = u16_at(bytes, SAVE_QUEST_PROGRESS_WORD_OFFSET);
+    let removed_town_npc_flags = decode_npc_mask_bank(bytes, SAVE_NPC_REMOVED_MASKS_OFFSET);
+    let talk_branch_flags = decode_npc_mask_bank(bytes, SAVE_NPC_NAME_KNOWN_MASKS_OFFSET);
+    let mut combat_interference_sources = [0; COMBAT_ACTOR_SLOTS];
+    combat_interference_sources.copy_from_slice(
+        &bytes[SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET
+            ..SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET + SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN],
+    );
 
     let transport_marker = bytes[SAVE_TRANSPORT_MARKER_OFFSET];
     let mut transport = transport_from_save_marker(transport_marker);
@@ -248,9 +256,18 @@ pub fn play_options_from_save_bytes_named(
         saved_dungeon_working_buffer,
         moonstone_slots,
         shadowlord_hideouts,
-        quest_progress_word,
+        removed_town_npc_flags,
+        talk_branch_flags,
         shrine_ordained_mask: bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET],
         shrine_codex_mask: bytes[SAVE_SHRINE_CODEX_MASK_OFFSET],
+        word_of_power_seal_flags: bytes[SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET
+            ..SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET + SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT]
+            .try_into()
+            .expect("fixed Word-of-Power seal flag slice"),
+        shrine_ruin_flags: bytes[SAVE_SHRINE_RUIN_FLAGS_OFFSET
+            ..SAVE_SHRINE_RUIN_FLAGS_OFFSET + SAVE_SHRINE_RUIN_FLAG_COUNT]
+            .try_into()
+            .expect("fixed shrine-ruin flag slice"),
         moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],
         toll_progress: bytes[SAVE_TOLL_PROGRESS_OFFSET],
         // `overworld.md §9.1` (spec HEAD c00bf63): the gate-presence
@@ -263,21 +280,31 @@ pub fn play_options_from_save_bytes_named(
         light_spell_counter: bytes[SAVE_LIGHT_SPELL_COUNTER_OFFSET],
         wind: WindState::from_save_byte(bytes[SAVE_WIND_OFFSET]),
         wind_save_byte: bytes[SAVE_WIND_OFFSET],
-        timing_status: TimingStatusTag::from_save_byte(bytes[SAVE_TIMING_STATUS_TAG_OFFSET]),
         time_stop_counter: 0,
-        active_effect_tag: None,
-        active_effect_counter: 0,
+        active_effect_tag: (bytes[SAVE_ACTIVE_EFFECT_CODE_OFFSET] != 0)
+            .then_some(bytes[SAVE_ACTIVE_EFFECT_CODE_OFFSET]),
+        active_effect_counter: bytes[SAVE_ACTIVE_EFFECT_DURATION_OFFSET],
         fortunes_of_war: bytes[SAVE_FORTUNES_OF_WAR_OFFSET],
-        // `rest-and-camp.md §5` camp cooldown: engine-only state with no
-        // published `SAVED.GAM` offset, so a loaded save starts it at
-        // zero. See `PlayState::camp_cooldown` for why it is not
-        // persisted and what that costs.
-        camp_cooldown: 0,
+        // `rest-and-camp.md §5` / `formats/saved-gam.md §10`,
+        // published in the answer to cleak/u5-spec#95.
+        camp_cooldown: bytes[SAVE_CAMP_COOLDOWN_OFFSET],
+        camp_month_cookie: bytes[SAVE_CAMP_MONTH_COOKIE_OFFSET],
         active_player: decode_active_player_slot(bytes[SAVE_ACTIVE_PLAYER_OFFSET], party_size),
         combat_round_counter: bytes[SAVE_COMBAT_ROUND_COUNTER_OFFSET],
+        combat_interference_sources,
         transport,
         facing: transport_marker_facing(transport_marker),
-        pending_vehicle: None,
+        pending_vehicle: PendingVehicleSaveState {
+            x: bytes[SAVE_PENDING_VEHICLE_X_OFFSET],
+            y: bytes[SAVE_PENDING_VEHICLE_Y_OFFSET],
+            class_byte: bytes[SAVE_PENDING_VEHICLE_CLASS_OFFSET],
+        }
+        .acquisition(),
+        pending_vehicle_save: PendingVehicleSaveState {
+            x: bytes[SAVE_PENDING_VEHICLE_X_OFFSET],
+            y: bytes[SAVE_PENDING_VEHICLE_Y_OFFSET],
+            class_byte: bytes[SAVE_PENDING_VEHICLE_CLASS_OFFSET],
+        },
         inn_registry,
         blackthorn_story: BlackthornStoryState::default(),
         initial_britannia_overlay: None,
@@ -287,8 +314,33 @@ pub fn play_options_from_save_bytes_named(
         } else {
             None
         },
+        town_npc_mutations: Vec::new(),
         save_template_source: SaveTemplateSource::PreferSavedGame,
     })
+}
+
+/// Decode one native 32-scene NPC mask bank. Zero entries are omitted
+/// from the runtime map but reproduce as zero when encoded.
+pub fn decode_npc_mask_bank(bytes: &[u8], offset: usize) -> HashMap<u8, u32> {
+    let mut masks = HashMap::new();
+    for scene_index in 0..SAVE_NPC_MASK_SCENE_COUNT {
+        let start = offset + scene_index * SAVE_NPC_MASK_BYTES_PER_SCENE;
+        let mask = u32::from_le_bytes(bytes[start..start + 4].try_into().unwrap());
+        if mask != 0 {
+            masks.insert((scene_index + 1) as u8, mask);
+        }
+    }
+    masks
+}
+
+/// Encode one native 32-scene NPC mask bank in scene order.
+pub fn encode_npc_mask_bank(bytes: &mut [u8], offset: usize, masks: &HashMap<u8, u32>) {
+    for scene_index in 0..SAVE_NPC_MASK_SCENE_COUNT {
+        let start = offset + scene_index * SAVE_NPC_MASK_BYTES_PER_SCENE;
+        let scene = (scene_index + 1) as u8;
+        bytes[start..start + 4]
+            .copy_from_slice(&masks.get(&scene).copied().unwrap_or(0).to_le_bytes());
+    }
 }
 
 pub fn decode_special_items(bytes: &[u8]) -> [u8; SPECIAL_ITEM_COUNT] {
@@ -580,35 +632,12 @@ pub const fn save_load_needs_underworld_disk_swap(scene_byte: u8, party_z: u8) -
     scene_byte == SAVE_SCENE_OVERWORLD && party_z != 0
 }
 
-/// `save-load.md §5.2` step 5: the save handler writes the underworld
-/// staging half to `UNDER.OOL` once unconditionally, then a second time
-/// as a defensive re-flush when the entry disk-prompt mode was *not*
-/// already [`DISK_PROMPT_MODE_CANONICAL`]. Returns `true` when the
-/// second write should run.
-pub const fn save_flow_double_writes_underworld(entry_disk_prompt_mode: u8) -> bool {
-    entry_disk_prompt_mode != DISK_PROMPT_MODE_CANONICAL
-}
-
-/// `screen-mode-dispatch.md §5`: canonical disk-prompt mode the
-/// normalizer folds the historical values `2` and `5` to.
-pub const DISK_PROMPT_MODE_CANONICAL: u8 = 1;
-/// `screen-mode-dispatch.md §5`: first historical disk-prompt mode
-/// value that the normalizer collapses to
-/// [`DISK_PROMPT_MODE_CANONICAL`]. Preserve the alias mapping rather
-/// than the input values themselves; gameplay-side callers should
-/// never depend on the raw input value.
-pub const DISK_PROMPT_MODE_ALIAS_A: u8 = 2;
-pub const DISK_PROMPT_MODE_ALIAS_B: u8 = 5;
-
-/// `screen-mode-dispatch.md §5`: the disk-prompt request normalizes the
-/// historical mode values `2` and `5` to mode `1`; other values pass
-/// through unchanged.
-pub const fn normalize_disk_prompt_mode(requested_mode: u8) -> u8 {
-    if requested_mode == DISK_PROMPT_MODE_ALIAS_A || requested_mode == DISK_PROMPT_MODE_ALIAS_B {
-        DISK_PROMPT_MODE_CANONICAL
-    } else {
-        requested_mode
-    }
+/// `save-load.md §5.2` step 5: after reading both per-plane mirrors,
+/// the save handler writes the staged underworld bytes back once unless
+/// its entry required-disk state was already Britannia index 1. There
+/// is never a corresponding save-time `BRIT.OOL` write.
+pub const fn save_flow_writes_underworld_mirror(entry_required_disk: RequiredDisk) -> bool {
+    !matches!(entry_required_disk, RequiredDisk::Britannia)
 }
 
 /// `save-load.md §3.1`: file lengths in bytes for the `.OOL`

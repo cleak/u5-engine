@@ -247,11 +247,11 @@ pub fn parse_secret_door_entries(text: &str) -> io::Result<Vec<SecretDoorEntry>>
                         ),
                     )
                 })?;
-                if !(96..=103).contains(&reveal_tile) {
+                if !openable_town_door(reveal_tile) {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!(
-                            "{SECRET_DOOR_TABLE_FILE} line {line_number} town reveal tile must be a door tile in 96..103, got {reveal_tile}"
+                            "{SECRET_DOOR_TABLE_FILE} line {line_number} town reveal tile must be a native unlocked door tile, got {reveal_tile}"
                         ),
                     ));
                 }

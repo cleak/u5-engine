@@ -6,8 +6,10 @@
 //! in the play-state dispatcher; this is just the canonical
 //! letter-to-name table.
 
-use crate::Direction;
-use crate::input_case_fold;
+use crate::{
+    Direction, SCENE_EMPATH_ABBEY, SCENE_OVERWORLD, SCENE_SERPENTS_HOLD, SCENE_THE_LYCAEUM,
+    input_case_fold, tile_view_class,
+};
 
 /// `commands.md §4` resident A-Z command identities.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,9 +86,15 @@ impl Command {
 /// window share one source of truth.
 pub const LOCAL_VIEW_OVERLAY_SIDE: usize = crate::TOWN_GRID_SIDE;
 /// `view.md §4` LOOKOBJ local-view per-cell pixel scale. Each cell
-/// in the overlay renders at a four-pixel square inside the
-/// message-panel region.
+/// in the overlay renders as a four-pixel square.
 pub const LOCAL_VIEW_CELL_PIXEL_SCALE: usize = 4;
+/// `view.md §4` absolute screen origin of the local View/Peer/X-Ray
+/// overlay. The published cell-anchor formula is
+/// `anchor_x = 32 + column * 4`, `anchor_y = 32 + row * 4`, so the
+/// 128-by-128 raster occupies `(32,32)..=(159,159)` inside the main
+/// play viewport.
+pub const LOCAL_VIEW_OVERLAY_ORIGIN_X: usize = 32;
+pub const LOCAL_VIEW_OVERLAY_ORIGIN_Y: usize = 32;
 
 /// `view.md §4` LOOKOBJ local-view 32x32 overlay class. Each
 /// sampled cell is reduced to a view class and drawn by a
@@ -116,20 +124,20 @@ pub enum LocalViewClass {
     DiagonalStep,
     /// `9` — hybrid vegetation pattern.
     VegetationHybrid,
-    /// `0xA` — four-corner room/feature ring.
-    FourCornerRing,
+    /// `0xA` — water corners with river-shoreline source selection.
+    WaterCorners,
     /// `0xB` — two diagonal blits (peer/gem-view bank-aware).
     DiagonalBlits,
-    /// `0xC` — table-mapped no-op default for tile id 0x01.
-    NoopDefault,
-    /// `0xD` — creature-on-terrain composite.
-    CreatureComposite,
+    /// `0xC` — deep water's single modal micro-blit.
+    DeepWater,
+    /// `0xD` — fixed-secondary top plus modal-terrain bottom composite.
+    FixedModalComposite,
     /// `0xE` — vertical two-line wall/door presentation.
     VerticalWallDoor,
-    /// `0xF` — peer-spell/gem-view variant on the alternate bank.
-    PeerVariant,
-    /// `0x10` — fence/wall renderer with edge-bit selection.
-    FenceWall,
+    /// `0xF` — direct normal-terrain filled-frame chain.
+    NormalTerrainFrame,
+    /// `0x10` — road body, connection stubs, and elbow corner notch.
+    Road,
 }
 
 /// `view.md §4`: classify a tile id into its LOOKOBJ local-view
@@ -138,73 +146,25 @@ pub enum LocalViewClass {
 /// (consistent with the `0` view class's "pass-through" contract for
 /// unmapped values).
 pub const fn local_view_class_for_tile(tile: u8) -> LocalViewClass {
-    match tile {
-        0x00 | 0xC0..=0xC3 | 0xCC..=0xCF | 0xFF => LocalViewClass::Empty,
-        0x05 | 0x30..=0x37 => LocalViewClass::SparseCheckers,
-        0x09..=0x0A | 0x2D => LocalViewClass::SolidFill,
-        0x07
-        | 0x1C
-        | 0x1E..=0x1F
-        | 0x40
-        | 0x44
-        | 0x48..=0x49
-        | 0x6A..=0x6B
-        | 0x70..=0x7F
-        | 0x87
-        | 0x8C
-        | 0x8F
-        | 0xAA
-        | 0xBC
-        | 0xDD => LocalViewClass::FilledFrame,
-        0x1D
-        | 0x38
-        | 0x47
-        | 0x5A
-        | 0x5C..=0x5D
-        | 0x94..=0x96
-        | 0x9A..=0x9C
-        | 0xAB..=0xAC
-        | 0xBE => LocalViewClass::HorizontalRails,
-        0x10..=0x1B
-        | 0x29..=0x2B
-        | 0x2E..=0x2F
-        | 0x41..=0x43
-        | 0x4C
-        | 0x58..=0x59
-        | 0x5B
-        | 0x5E..=0x5F
-        | 0x80..=0x85
-        | 0x88..=0x8B
-        | 0x8D..=0x8E
-        | 0x90..=0x93
-        | 0x9D..=0xA9
-        | 0xAD..=0xB7
-        | 0xBD
-        | 0xBF
-        | 0xC8..=0xCB
-        | 0xDE..=0xDF
-        | 0xE8..=0xEB
-        | 0xFA..=0xFD => LocalViewClass::CentredBars,
-        0x0D
-        | 0x45
-        | 0x4A..=0x4B
-        | 0x86
-        | 0x97..=0x99
-        | 0xB8..=0xBB
-        | 0xC4..=0xC7
-        | 0xEC..=0xF9 => LocalViewClass::HollowRectangle,
-        0x0C | 0x27..=0x28 | 0x39..=0x3F | 0x46 | 0x4D..=0x57 | 0xD0..=0xD3 | 0xFE => {
-            LocalViewClass::DiagonalStyle
-        }
-        0x0B | 0x0E..=0x0F => LocalViewClass::DiagonalStep,
-        0x06 | 0x08 | 0x2C => LocalViewClass::VegetationHybrid,
-        0x03 | 0x60..=0x69 | 0x6C..=0x6F | 0xE4..=0xE7 => LocalViewClass::FourCornerRing,
-        0x02 | 0xD4..=0xD7 => LocalViewClass::DiagonalBlits,
-        0x01 => LocalViewClass::NoopDefault,
-        0x04 => LocalViewClass::CreatureComposite,
-        0xE0..=0xE3 => LocalViewClass::VerticalWallDoor,
-        0xD8..=0xDC => LocalViewClass::PeerVariant,
-        0x20..=0x26 => LocalViewClass::FenceWall,
+    match tile_view_class(tile) {
+        0x00 => LocalViewClass::Empty,
+        0x01 => LocalViewClass::SparseCheckers,
+        0x02 => LocalViewClass::SolidFill,
+        0x03 => LocalViewClass::FilledFrame,
+        0x04 => LocalViewClass::HorizontalRails,
+        0x05 => LocalViewClass::CentredBars,
+        0x06 => LocalViewClass::HollowRectangle,
+        0x07 => LocalViewClass::DiagonalStyle,
+        0x08 => LocalViewClass::DiagonalStep,
+        0x09 => LocalViewClass::VegetationHybrid,
+        0x0A => LocalViewClass::WaterCorners,
+        0x0B => LocalViewClass::DiagonalBlits,
+        0x0C => LocalViewClass::DeepWater,
+        0x0D => LocalViewClass::FixedModalComposite,
+        0x0E => LocalViewClass::VerticalWallDoor,
+        0x0F => LocalViewClass::NormalTerrainFrame,
+        0x10 => LocalViewClass::Road,
+        _ => LocalViewClass::Empty,
     }
 }
 
@@ -269,19 +229,6 @@ pub fn wishing_well_wish(typed: &str) -> Option<WishingWellWish> {
 pub fn wishing_well_wish_accepted(typed: &str) -> bool {
     wishing_well_wish(typed).is_some()
 }
-
-/// `view.md §4` Britannia chunk-map renderer dimensions. The full
-/// chunk-map view paints an eight-row by twenty-two-column shorthand
-/// map of Britannia chunks, wrapping the chunk walk at the world
-/// edges and marking the party's current chunk with a crosshair-style
-/// marker.
-pub const BRITANNIA_CHUNK_MAP_ROWS: u8 = 8;
-pub const BRITANNIA_CHUNK_MAP_COLUMNS: u8 = 22;
-
-/// `view.md §4`: the LOOKOBJ chunk-map renderer is entered from
-/// ordinary Look via this tile id. Final tile-catalog naming for
-/// `0x59` is a separate verification item.
-pub const BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE: u8 = 0x59;
 
 /// `formats/look2-dat.md §5` command-owned surface/town special
 /// handler range for the LOOKOBJ fountain-style presentation path.
@@ -369,24 +316,45 @@ pub const YELL_INPUT_MAX_LEN: usize = 30;
 /// `commands.md §11` published Y-Yell narration strings. The
 /// ship-aboard branch prints the sail-state message; the free-text
 /// branch prints the nothing-said message on empty input.
-pub const YELL_SAILS_HOISTED_MESSAGE: &str = "Sails hoisted.";
-pub const YELL_SAILS_FURLED_MESSAGE: &str = "Sails furled.";
+pub const YELL_SAILS_HOISTED_MESSAGE: &str = "HOIST!";
+pub const YELL_SAILS_FURLED_MESSAGE: &str = "FURL!";
 pub const YELL_NOTHING_SAID_MESSAGE: &str = "Nothing said.";
+
+/// `commands.md §11` / `vehicles.md §6`: the no-input sail shortcut
+/// is selected only for a frigate marker in the unsigned low scene-byte
+/// half. This deliberately admits world, town, dungeon, and defensive
+/// custom bytes `0x00..=0x7f`; `0x80..=0xff` use the ordinary word prompt.
+pub const fn yell_routes_to_ship_sails(scene_byte: u8, aboard_frigate: bool) -> bool {
+    aboard_frigate && scene_byte < 0x80
+}
 
 /// `commands.md §11` scene routing for the typed Y-Yell input. The
 /// engine selects the scanner family from the active scene context;
 /// other contexts produce no effect after the prompt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum YellInputContext {
-    /// Shadowlord arena scene family — the typed word is compared
-    /// against the three Shadowlord names.
+    /// The three Eternal Flame keeps — the typed word is compared against the
+    /// three Shadowlord names.
     ShadowlordName,
-    /// Dungeon Word-of-Power context — the typed word is compared
+    /// Outdoor scene zero on either world surface — the typed word is compared
     /// against the eight dungeon words in fixed order.
     WordOfPower,
     /// Any other non-ship context — the prompt completes without
     /// effect after empty or non-matching input.
     NoEffect,
+}
+
+/// `commands.md §11`: select exactly one typed-word scanner from the unsigned
+/// scene byte. The world plane is intentionally absent because both outdoor
+/// surfaces use scene zero.
+pub const fn yell_input_context(scene_byte: u8) -> YellInputContext {
+    match scene_byte {
+        SCENE_OVERWORLD => YellInputContext::WordOfPower,
+        SCENE_THE_LYCAEUM | SCENE_EMPATH_ABBEY | SCENE_SERPENTS_HOLD => {
+            YellInputContext::ShadowlordName
+        }
+        _ => YellInputContext::NoEffect,
+    }
 }
 
 /// `commands.md §8` P-Push pushable static-tile family. The

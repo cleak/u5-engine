@@ -9,16 +9,18 @@ use std::path::Path;
 use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     CHROME_RULE_INDEX, COMBAT_ARENA_SIDE, ChromeFonts, ChromePalette, DungeonScene, FixedCellFont,
-    GameplayMessageLog, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT, Scene,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
-    TextWindowSystem, TileGraphicsDepth, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode,
-    WorldPlane, configure_play_text_windows, gameplay_chrome_content, hash_bytes,
-    layout_message_window, load_ibm_ch_font, load_runes_ch_font, load_tile_atlas,
-    paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
-    paint_stats_panel_text_window, render_text_panel_rgba, render_text_window_rgba,
+    PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT, Scene, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE, TextWindowSystem, TileGraphicsDepth,
+    VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode, WorldPlane, configure_play_text_windows,
+    gameplay_chrome_content, hash_bytes, layout_message_window, load_ibm_ch_font,
+    load_runes_ch_font, load_tile_atlas, message_log_from_entries, paint_fixed_cell_glyph,
+    paint_gameplay_frame_chrome, paint_message_line_cap, paint_stats_panel_text_window,
+    render_text_panel_rgba, render_text_window_rgba,
 };
 
-use crate::{raster_frame_kind, replay_play_script_commands};
+use crate::{
+    complete_headless_blocking_presentations, raster_frame_kind, replay_play_script_commands,
+};
 
 const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
@@ -223,6 +225,7 @@ fn save_frame_capture(
     if let Some(commands) = script {
         replay_play_script_commands(&mut state, game_dir, &commands, |_, _, _| Ok(()))?;
     }
+    complete_headless_blocking_presentations(&mut state, Some(&atlas))?;
 
     save_frame_capture_state(state, &atlas, out)
 }
@@ -252,6 +255,13 @@ fn save_frame_capture_state(
             );
         }
         if let Some(overlay) = state.render_active_view_overlay(atlas.depth) {
+            let (origin_x, origin_y) = match state.active_view_overlay.as_ref().map(|o| o.kind) {
+                Some(
+                    u5_runtime::ViewOverlayKind::Dungeon { .. }
+                    | u5_runtime::ViewOverlayKind::Sky(_),
+                ) => (VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y),
+                _ => (OVERLAY_SIDE_PANEL_X, OVERLAY_SIDE_PANEL_Y),
+            };
             blit_rgba(
                 &mut rgba,
                 TEXT_WINDOW_RENDER_WIDTH,
@@ -259,8 +269,8 @@ fn save_frame_capture_state(
                 &overlay.to_rgba(),
                 overlay.width,
                 overlay.height,
-                OVERLAY_SIDE_PANEL_X,
-                OVERLAY_SIDE_PANEL_Y,
+                origin_x,
+                origin_y,
             );
         }
         (
@@ -499,7 +509,7 @@ fn seed_surface_view_class_gallery(state: &mut PlayState, mode: ViewOverlayMode)
         ViewOverlayMode::XRaySpell => {
             state.activate_x_ray_view_overlay();
         }
-        ViewOverlayMode::SurfaceLook | ViewOverlayMode::BritanniaOverview => {
+        ViewOverlayMode::SurfaceLook | ViewOverlayMode::SkyView => {
             unreachable!("surface view class gallery uses local surface-view modes")
         }
     }
@@ -785,6 +795,7 @@ pub fn run_save_screen(
     if let Some(commands) = script {
         replay_play_script_commands(&mut state, game_dir, &commands, |_, _, _| Ok(()))?;
     }
+    complete_headless_blocking_presentations(&mut state, Some(&atlas))?;
     let ibm = load_ibm_ch_font(game_dir)?;
     let runes = load_runes_ch_font(game_dir)?;
     let rgba = compose_gameplay_screen(&mut state, &atlas, &ibm, &runes)?;
@@ -848,22 +859,35 @@ pub fn compose_gameplay_screen(
         dst.copy_from_slice(src);
     }
 
-    let mut log = GameplayMessageLog::new();
-    log.push_output(&state.message);
+    let mut log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
+    if !state.message.trim().is_empty()
+        && !state
+            .message_entries()
+            .last()
+            .is_some_and(|entry| entry.text == state.message)
+    {
+        log.push_output(&state.message);
+    }
     for row in layout_message_window(&log, Some("")).rows {
         if row.prefixed {
             paint_message_line_cap(&mut rgba, width, height, ibm, row.row, ChromePalette::EGA);
         }
-        paint_fixed_cell_text(
-            &mut rgba,
-            width,
-            height,
-            ibm,
-            &row.text,
-            row.column,
-            row.row,
-            CHROME_RULE_INDEX,
-        );
+        for (offset, glyph) in row.glyphs.iter().enumerate() {
+            let font = match glyph.font {
+                u5_runtime::TlkGlyphFont::Ordinary => ibm,
+                u5_runtime::TlkGlyphFont::Runic => runes,
+            };
+            paint_fixed_cell_glyph(
+                &mut rgba,
+                width,
+                height,
+                font,
+                glyph.byte,
+                row.column.saturating_add(offset as u8),
+                row.row,
+                CHROME_RULE_INDEX,
+            );
+        }
     }
 
     if let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, atlas)? {

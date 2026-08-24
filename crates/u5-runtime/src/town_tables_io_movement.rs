@@ -1,4 +1,4 @@
-//! Loaders/parsers for town stair, trap-door, exit, and lock tables.
+//! Loaders/parsers for town stair, trap-door, and lock tables.
 
 use std::fs;
 use std::io;
@@ -300,133 +300,6 @@ pub fn parse_town_trap_door_entries(text: &str) -> io::Result<Vec<TownTrapDoorEn
     Ok(entries)
 }
 
-pub fn load_town_exit_tile_entries(game_dir: &Path) -> io::Result<Option<Vec<TownExitTileEntry>>> {
-    let path = game_dir.join(TOWN_EXIT_TILE_TABLE_FILE);
-    let text = match fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
-    };
-    parse_town_exit_tile_entries(&text).map(Some)
-}
-
-pub fn parse_town_exit_tile_entries(text: &str) -> io::Result<Vec<TownExitTileEntry>> {
-    let mut entries = Vec::new();
-    for (line_index, line) in text.lines().enumerate() {
-        let line_number = line_index + 1;
-        let line = line
-            .split_once('#')
-            .map_or(line, |(prefix, _)| prefix)
-            .trim();
-        if line.is_empty() {
-            continue;
-        }
-        let parts: Vec<_> = line
-            .split(|ch: char| ch == ',' || ch == '\t' || ch.is_whitespace())
-            .filter(|part| !part.is_empty())
-            .collect();
-        if !(4..=5).contains(&parts.len()) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} must be: SCENE FLOOR X Y [TILE]"
-                ),
-            ));
-        }
-
-        let scene = match PlayTarget::from_key(parts[0]).map_err(|err| {
-            io::Error::new(
-                err.kind(),
-                format!(
-                    "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} has invalid scene `{}`: {err}",
-                    parts[0]
-                ),
-            )
-        })? {
-            PlayTarget::Town(scene) => scene,
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} requires a town-family scene"
-                    ),
-                ));
-            }
-        };
-        let floor = parse_i8_literal(parts[1]).map_err(|err| {
-            io::Error::new(
-                err.kind(),
-                format!(
-                    "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} has invalid floor `{}`: {err}",
-                    parts[1]
-                ),
-            )
-        })?;
-        let x = parse_u8_literal(parts[2]).map_err(|err| {
-            io::Error::new(
-                err.kind(),
-                format!(
-                    "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} has invalid X `{}`: {err}",
-                    parts[2]
-                ),
-            )
-        })? as usize;
-        let y = parse_u8_literal(parts[3]).map_err(|err| {
-            io::Error::new(
-                err.kind(),
-                format!(
-                    "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} has invalid Y `{}`: {err}",
-                    parts[3]
-                ),
-            )
-        })? as usize;
-        if x >= 32 || y >= 32 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} coordinate must be inside 0..31, got ({x}, {y})"
-                ),
-            ));
-        }
-        let expected_tile = if let Some(tile) = parts.get(4) {
-            Some(parse_u8_literal(tile).map_err(|err| {
-                io::Error::new(
-                    err.kind(),
-                    format!(
-                        "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} has invalid tile `{tile}`: {err}"
-                    ),
-                )
-            })?)
-        } else {
-            None
-        };
-        if entries.iter().any(|entry: &TownExitTileEntry| {
-            entry.scene == scene && entry.floor == floor && entry.x == x && entry.y == y
-        }) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "{TOWN_EXIT_TILE_TABLE_FILE} line {line_number} duplicates {} floor {floor} at ({x}, {y})",
-                    scene.key()
-                ),
-            ));
-        }
-        entries.push(TownExitTileEntry {
-            scene,
-            floor,
-            x,
-            y,
-            expected_tile,
-        });
-    }
-    Ok(entries)
-}
-
 pub fn load_town_lock_entries(game_dir: &Path) -> io::Result<Option<Vec<TownLockEntry>>> {
     let path = game_dir.join(TOWN_LOCK_TABLE_FILE);
     let text = match fs::read_to_string(&path) {
@@ -538,22 +411,6 @@ pub fn parse_town_lock_entries(text: &str) -> io::Result<Vec<TownLockEntry>> {
                 ),
             )
         })?;
-        if !(96..=103).contains(&locked_tile) || !(96..=103).contains(&unlocked_tile) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "{TOWN_LOCK_TABLE_FILE} line {line_number} lock tiles must be in the public door range 96..103"
-                ),
-            ));
-        }
-        if locked_tile == unlocked_tile {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "{TOWN_LOCK_TABLE_FILE} line {line_number} locked and unlocked tiles must differ"
-                ),
-            ));
-        }
         let kind = parts
             .get(6)
             .map_or(Ok(TownLockKind::Locked), |kind| {
@@ -566,6 +423,18 @@ pub fn parse_town_lock_entries(text: &str) -> io::Result<Vec<TownLockEntry>> {
                     )
                 })
             })?;
+        let valid_pair = match kind {
+            TownLockKind::Locked => jimmy_locked_door_rewrite(locked_tile) == Some(unlocked_tile),
+            TownLockKind::Magic => magic_unlock_door_rewrite(locked_tile) == Some(unlocked_tile),
+        };
+        if !valid_pair {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{TOWN_LOCK_TABLE_FILE} line {line_number} does not use a native locked/unlocked door pair"
+                ),
+            ));
+        }
         if entries.iter().any(|entry: &TownLockEntry| {
             entry.scene == scene && entry.floor == floor && entry.x == x && entry.y == y
         }) {

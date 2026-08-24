@@ -164,6 +164,7 @@ impl PlayState {
         direction: Option<Direction>,
         advance_turn: bool,
     ) -> MoveOutcome {
+        let changed_level = entry.level != entry.to_level;
         self.area = Area::Dungeon {
             scene,
             level: entry.to_level,
@@ -171,6 +172,9 @@ impl PlayState {
         self.player.x = entry.to_x;
         self.player.y = entry.to_y;
         self.sync_player_object();
+        if changed_level {
+            self.setup_dungeon_active_monster_fresh();
+        }
         self.mark_visibility_dirty();
         if advance_turn {
             self.advance_turn();
@@ -562,7 +566,7 @@ impl PlayState {
 
     pub fn clear_town_visit_state(&mut self) {
         self.clear_open_town_door_state();
-        self.town_npc_alarm_states.clear();
+        self.active_blackthorn_guard_demand = None;
     }
 
     pub fn clear_town_floor_reload_door_state(&mut self) {
@@ -601,7 +605,7 @@ impl PlayState {
             }
             let idx = y * 32 + x;
             self.grid[idx] = if self.is_recorded_open_town_door(scene, floor, x, y) {
-                16
+                TOWN_DOOR_CLEARED_TILE
             } else {
                 reveal_tile
             };
@@ -651,6 +655,9 @@ impl PlayState {
             };
 
             level = next_level;
+            self.area = Area::Dungeon { scene, level };
+            self.sync_player_object();
+            self.setup_dungeon_active_monster_fresh();
             let destination = dungeon_cell_index(level, x, y);
             if self.grid[destination] < 0x90 {
                 self.grid[destination] |= 0x08;
@@ -692,7 +699,6 @@ impl PlayState {
             self.player.x = x;
             self.player.y = y;
             self.player.transport = TransportState::Foot;
-            self.timing_status = return_world.timing_status;
             self.sail_cadence = 0;
             self.sail_stall_pending = false;
             self.grid = return_world.grid;
@@ -747,6 +753,11 @@ impl PlayState {
             self.player.y = y;
             self.force_foot_transport();
             self.grid = load_world_map(game_dir, plane)?;
+            apply_world_quest_tile_substitutions(
+                &mut self.grid,
+                &self.word_of_power_seal_flags,
+                &self.shrine_ruin_flags,
+            );
             self.rebuild_world_live_chunks_from_grid(plane)?;
             self.natural_moongate_live_cells.clear();
             self.npcs.clear();
@@ -827,7 +838,7 @@ impl PlayState {
         {
             if let Some(game_dir) = game_dir {
                 if game_dir.join(BRIT_CBT_FILE).exists()
-                    && outdoor_combat_arena_index_for_object(object).is_some()
+                    && !is_whirlpool_object(object)
                     && terrain_combat_base_class(object).is_some()
                 {
                     self.advance_turn();

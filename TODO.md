@@ -14,20 +14,69 @@ this file alone.
 
 Last known verification state:
 
-2026-08-23, engine `intro-preflourish-phase` at `9e437d5`, after the
-audit-and-repair pass that implemented `#72` and `#73`, retracted three invented
-or misattributed models, and wired two published mechanisms that had been fully
-modelled and never called:
+2026-08-24, current worktree after the audit-and-repair pass through public
+issue `#116`, the corrected telescope/Spyglass sky renderer, the shared
+item-picker audit, and the shared exploration party-capability gate. The gate
+now records the first Good/Poisoned member, advances no-input sleep passes,
+runs town's wake-before-underfoot rolls, skips dungeon post-action effects, and
+routes Stonegate's scripted wipe through the ordinary Blackthorn rescue on the
+  next iteration. Public issue `#124`, resolved by clean-spec commit `d3863ef`,
+now gives overworld sleep its full ordinary two-minute turn tail and makes
+overworld defeat write the unchanged complete live object table to the current
+plane mirror before rescue. Dungeon defeat's graphics teardown is a no-op in
+this engine's permanently resident-atlas architecture and mutates no gameplay
+  or presentation state before rescue. Public issues `#125` and `#126`, resolved
+  by clean-spec commits `0a0b867` and `b600bc6`, move combat field contact to the
+  common post-dispatch tail, target the acting descriptor, make Energy
+  blocking-only, and fix Poison/Fire draw order and raw ranges. Terrain contact
+  recognizes only swamp `0x04` as Poison and lava/fireplace `0x8F`/`0xBC` as
+  Fire, with terrain taking priority over markers. Doom absorption is separate:
+  committed non-digit player actions inspect row 1 of the renderer companion
+  band while the live actor stands on row 2, before the common hook. The
+  town-cell audit now labels `0x2A` as the harvested beacon
+light source rather than the withdrawn spawn-marker model, and its NPC-only
+harvest/scrub APIs are named accordingly. Public issue `#112` is resolved in
+spec commit `8a73d12`; public commit `82daf8d` resolves `#113` with exactly one
+Ready charge per invocation and nominal 2/1/1-minute world/town/dungeon costs:
+
+Public issues `#127` and `#128` are resolved in clean-spec commits `21698d6`
+and `98dfd45`. The certificate now emits exact `[`/`_`/`@` TH/ST/space cells
+and centres from the 20-cell encoded first line. TLK `0x85` has no extra
+confirmation or outcome labels: affordable demands continue in place, while
+refusals print the exact fixed line and run the nested ordinary keyword loop.
+Public issue `#129` is resolved in clean-spec commit `a7e55bf`: monster special
+hooks now draw lazily from the shared PRNG, use exact contiguous 32/256 gates,
+draw summon X then Y independently, attempt one cell, consume the actor's turn
+only on handled success, and continue ordinary AI after every summon failure.
+Public `#130` is resolved in clean-spec commit `e335918`: local View clears the
+full `(8,8)..(183,183)` gameplay viewport, draws its 128x128 raster at absolute
+`(32,32)`, never touches the side panel, and closes through ordinary world
+redraw rather than saved-background restoration.
+Public `#131` is resolved in clean-spec commit `60ac944`. The engine now uses
+the published signed, unclamped resistance score and skewed `1..30` roll for
+possession and every shared caller, while Tremor and Poison Wind use their
+distinct target-weight comparison with the published forced-weight cases.
+The 2026-08-24 corrective spell audit also reconciled the final public `#11`
+answer: Kill excludes protected classes 14/15/47; Cause Fear and Repel Undead
+write exactly 1 HP plus fleeing; Repel neither kills nor awards XP; Conjure has
+sixteen weighted outcomes; all three conjuration spells use whole-candidate
+`0..=15` probes; Swarm places up to four actors at one accepted cell; and only
+successful party Summon stamps its Daemon controlled. Public `#132` is resolved
+in clean-spec commit `1e28720`: protected Kill rejection occurs after the charge
+and 7 MP are spent, skips resistance PRNG and target effects, reports `Failed!`,
+and commits the combat action without reopening the cursor or actor prompt.
 
 - `cargo fmt --all -- --check` clean.
-- `cargo test -p u5-runtime --lib` 2902 passed.
-- `cargo test -p u5-bevy` 170 passed.
-- `cargo test -p u5-tui --features visual` 96 passed (11 + 51 + 34).
+- `cargo test -p u5-runtime --lib` 3211 passed.
+- `cargo test -p u5-bevy` 181 passed.
+- `cargo test -p u5-tui -- --test-threads=1` 103 passed (14 + 51 + 38).
 - `cargo clippy --workspace --all-targets` **zero errors**. Style warnings
-  remain (19 in the `u5-bevy` lib) and are not gated.
-- `--route-smoke` all 495 scripted cases passed.
+  remain across the existing workspace (333 in the runtime test target in the
+  latest run, many duplicated) and are not gated.
+- `--route-smoke` all 507 scripted cases passed, including the overworld-defeat
+  pre-rescue OOL-persistence path through the real command-boundary gate.
 - `--visual-frame-suite` wrote 193 PNGs and runs to completion.
-- `--visual-route-suite` wrote 1814 PNGs, including the whole victory
+- `--visual-route-suite` wrote 1856 PNGs, including the whole victory
   ending through to the certificate. Exactly one is black by contract: the
   `endgame.md §7.1` fade-to-black frame between the throne tableau and the first
   `END.DAT` window.
@@ -42,7 +91,40 @@ modelled and never called:
   Every refusal that remains is structural (a graphical screen with no terminal
   surface) or an injection guard; see `docs/completion-audit.md`, "Refusals that
   remain".
-- The `cleak/u5-spec` queue is empty: **88 closed, 0 open**.
+- Public commit `574f1d8` closed `cleak/u5-spec#109`; ordinary alarms now
+  destructively rewrite all occupied roster slots across every floor through
+  the exact `0xFC`/`0xD8`/`0x70` pursuit exceptions and shared-stream byte
+  draws, while resident Hatred/Cowardice entry sweeps consume all 32 coin draws
+  and deliberately reproduce the fixed-slot-4 type-test defect. Pursuit,
+  flight, and `0xFD`/`0xFE` Talk routing are implemented without synthetic NPC
+  alarm markers. Public commit `06494e0` closed `cleak/u5-spec#108`; the exact host-clock
+  seed transform and its caller timing are implemented for gameplay-state
+  construction, Shadowlord blight, wilderness camp, stranger greetings, and
+  Falsehood theft. Public commit
+  `bc0c761` closed `#107` and confirmed
+  the allocator's wrapped inclusive ±5,
+  current-player-global, floor-independent screen predicate; the engine's
+  existing behavior now has exhaustive separation and source tests. `#106`
+  closed in public commit `b34ae69` and is implemented. `#103` closed in public commit
+  `a4167b0`; its exact generic-adjacent impact gate, type-only combat class
+  mapping, independent terrain/transport arena selector, and high-to-low
+  continuation across returning combat are implemented. `#102` is also closed
+  and implemented.
+- The town free-roaming object walker now treats the map edge at the published
+  destination-bounds stage rather than as an invented pen blocker. Edge animals
+  can choose valid inward steps; outward choices still consume the chance,
+  axis, and sign draws before failing without mutating the record.
+- A fresh audit of closed issue `#79` corrected the resident gameplay text
+  state: window 0 is restored full-screen, window 1 is the stats panel, window
+  2 is the message rectangle with its cursor initially on the bottom row, and
+  window 3 remains the unused default. Line feed is combined CR+LF, scrolling
+  copies the row below into the vacated bottom row without blanking it, and the
+  live prompt shares window 2's bottom row.
+- The public shared-word catalog now drives exact TLK and SHOPPE token
+  semantics. TLK preserves the unconditional leading space, pending-space
+  state, empty-token raw runic glyph, and `0x8E` runic font through both
+  frontends; SHOPPE enforces its distinct trailing-space rule and rejects an
+  empty referenced dictionary entry as malformed content.
 - Asset-backed runs used a **copy** of the asset directory. `C:\Games\U5-Clean`
   is a read-only clean-room input; the engine now refuses a write destination
   that resolves to `DEFAULT_GAME_DIR`, and `copy_asset_writable` clears the
@@ -107,7 +189,7 @@ Earlier verification detail, kept for history:
   #44 sleeping/praying Talk refusals, public #48 Blink ray landing,
   Locate, In Lor/Light/Open, restore-spell, active-effect, all-cardinal directed Sleep/Poison
   Wind/Death Wind/Flame Wind combat casts, combat field marker casts/removal,
-  combat utility fallback casts,
+  combat directed-utility tile casts,
   targeted Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone,
   Conjure/Swarm/Summon Daemon, special death-marker Kill combat spell casts,
   asset-backed combat-entry party descriptor routes, and combat terminal cleanup routes,
@@ -122,8 +204,8 @@ Earlier verification detail, kept for history:
   that verify published dock-coordinate delivery, and public #21
   active-monster attack/contact ambush routes)
   covering world/town look and
-  save-refusal prompts, surface/town/dungeon View overlays, Spyglass
-  Britannia chunk-map overlay (`2ea15622716e09aa`), Peer and X-Ray overlays,
+  save-refusal prompts, surface/town/dungeon View overlays, the corrected
+  telescope/Spyglass night-sky overlay, Peer and X-Ray overlays,
   U-Use utility items including Pocket Watch/Sextant/Magic Carpet
   (`c2f7ff2c1000c8fd`), HMS Cape plans (`8c425fda6007db98`), and Wooden Box
   (`d5684b90a48f2d73`),
@@ -136,7 +218,7 @@ Earlier verification detail, kept for history:
   dungeon turn/block movement, public `0xE?` heavy-door blocking, dungeon exit confirmation/refusal, a Doom room
   trigger that enters a combat raster viewport, dungeon Attack/Search/Get/
   Jimmy/Open/refusal command routing, and combat pass, active-player digit
-  selection/clear, raw Escape abort (`54a47033c570623a`), Ctrl-S music toggle
+  selection/clear, Escape foes-remain refusal, Ctrl-S music toggle
   (`74636efa99055e5d`), lowercase direct movement, Attack, Board, Cast, Down,
   Enter, Fire, Get, Hole-up, Ignite, Jimmy, Klimb, Mix, New Order, Open, Push,
   Ready, Talk, Up, View, West, X-it, Yell, Z-stats, refusal, and Search-prompt
@@ -200,8 +282,8 @@ Earlier verification detail, kept for history:
   `29289813c0f0397c`, `combat-play` `9b1937b3e807ba05`,
   `combat-status-highlight` `8f619b26cbe87bed`,
   `surface-view-overlay` `2ee1809341456a23`, `dungeon-view-overlay`
-  `450b8690ef5bc292`, `britannia-chunk-map-overlay`
-  `12d68ef9587532c6`, `peer-view-overlay` `2c64191172043730`,
+  `450b8690ef5bc292`, `night-sky-overlay` `ab070c8b603b0cc0`,
+  `peer-view-overlay` `2c64191172043730`,
   `x-ray-view-overlay` `2c64191172043730`, `z-stats-modal`
   `bee4e11801862ad1`, `endgame-status` `d6c3450bd51d97f0`,
   `surface-view-class-gallery` `1c725f8e26c826f4`,
@@ -274,8 +356,8 @@ Earlier verification detail, kept for history:
   `09710bf07543b67e`, and
   `route-underworld-doom-word-of-power-seal-opens-01-yveramocor`
   `456def28b0dff5b1`,
-  `route-britannia-spyglass-chunk-map-00-initial` `ee035bc3da0ecedd`,
-  `route-britannia-spyglass-chunk-map-01-usp` `00e243b8973a3bc5`,
+  `route-britannia-spyglass-night-sky-00-initial` and
+  `route-britannia-spyglass-night-sky-01-usp`,
   `route-castle-save-refusal-00-initial` `2beb3b7734800e11`,
   `route-castle-save-refusal-01-q` `c58e3249e4d12730`,
   `route-castle-save-refusal-02-n` `6465878cfb486dd1`,
@@ -332,12 +414,12 @@ Earlier verification detail, kept for history:
   Backspace, Enter, and prompt-safe Escape. The
   latest combat visual-route expansion adds composed-frame Doom combat
   command coverage for digit selection/clear, direct movement,
-  Use/Drop/Wear/Enter/Fire/Hole-up/Ignite/Mix/New Order/Talk/View/Look
-  refusal or label branches, Cast/Get/Jimmy/Open/Push/Klimb directed
-  prompts, Ready, Yell, and X-it, including representative terminal frames
+  the shared Use picker, Drop/Wear/Enter/Fire/Hole-up/Ignite/Mix/New
+  Order/Talk/View/Look refusal or label branches, Cast/Get/Jimmy/Open/Push/Klimb directed
+  prompts, Ready, Yell, and the free X-it refusal, including representative terminal frames
   `route-doom-combat-cast-refusal-02-c1il` `325a6f1641bb2455`,
   `route-doom-combat-ready-prompt-02-r` `c1ffc74f45610145`,
-  and `route-doom-combat-xit-foes-remain-02-x` `c1ffc74f45610145`. The
+  and `route-doom-combat-xit-refusal-02-x`. The
   latest long-route expansion adds extended Britannia/castle/dungeon play
   sessions plus sustained Doom combat pass rounds, including
   `route-britannia-extended-exploration-12-empty` `96d8b1b3118012d7`,
@@ -372,7 +454,7 @@ Earlier verification detail, kept for history:
   expansion added public #48 Blink
   `route-britannia-blink-east-ray-01-c1ip6` `17ceb1f94bc6c6e3`,
   Locate, In Lor/Light/Open, restore-spell, active-effect, directed Sleep/Poison
-  Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts,
+  Wind/Death Wind/Flame Wind combat casts, combat directed-utility tile casts,
   dungeon level, dungeon field/dispel, and dungeon Open spell route frames,
   public #51 poison gas `route-castle-poison-gas-step-01-d`
   `33ebf44d5ea24373`, public #15 inn rest
@@ -410,9 +492,11 @@ Current worktree context when this TODO was refreshed:
 - `u5-spec` was current with GitHub `origin/master` at `da0654d`.
 - `journal/capture/notes.py` was not present in the workspace, engine, or spec
   repository.
-- Town-family exit thresholds now prompt both when stepped onto and when
-  observed underfoot after a consumed turn; accepting exits through clean
-  return metadata, refusing leaves town mode active.
+- Town-family exits now prompt only for outward steps from the 32-by-32 grid;
+  accepting exits through clean return metadata, while refusal/cancel discards
+  the step. The withdrawn `0x59`/`town_exit_tiles.tsv` model is removed. Public
+  issue `cleak/u5-spec#110` fixes the shared `(31,31)` terrain sample, true
+  out-of-grid occupancy coordinate, and exact blocked/yes/no/cancel turn costs.
 - Natural moongate live-tile refresh now keeps mode-zero scene/light cleanup
   from advancing the shared gate-presence counter. The cached Trammel/Felucca
   glyph bytes now refresh from the public hour-indexed tables on construction,
@@ -454,9 +538,11 @@ Current worktree context when this TODO was refreshed:
   eastward Britannia ray.
 - Create Food follows the latest public `cleak/u5-spec#49` guidance with a
   tiny `1..=3` food PRNG grant capped at the party food cap.
-- TLK `0x85` accepted toll payments debit gold, increment the toll-progress
-  counter, and apply the published milestone karma behavior from
-  `cleak/u5-spec#27`.
+- TLK `0x85` accepted payments debit gold and continue in place without an
+  extra confirmation or invented outcome label. Ordinary exploration actions
+  age the saved cooldown; a live class-108 speaker consumes a threshold-ready
+  counter and applies the published milestone karma behavior. Unaffordable
+  demands use `#128`'s exact refusal and nested-loop unwind.
 - The shipped `.TLK` asset corpus has a sanitized runtime test that scans raw
   fields for public side-effect controls without committing dialogue text:
   action-dispatch grants `A`, `C`, `F`, `J`, and `K`, plus `0x85` payments,
@@ -476,7 +562,13 @@ Current worktree context when this TODO was refreshed:
 - Tavern round-drink prompts now use the public `cleak/u5-spec#13`/shops table
   letters (`M`, `B`, `F`, or `C` by tavern), secondary-tavern letters,
   provisions letters (`R` or `P` where present), and per-tavern lore letters
-  with lore gated behind an accepted continuation branch.
+  with lore gated behind an accepted continuation branch. The live machine now
+  keeps the published `Anything else?` Y/N state instead of jumping directly
+  back to the menu, renders the state list/follow-up and random `77..=82`
+  provision quote records, applies the speaker-Intelligence price, adds 25 food
+  per paid pack, skips the Falsehood surcharge after a gold-exhausted partial,
+  and implements both terminating zero-service outcomes including the one-food
+  charity below three provisions.
 - Paid sage rumours use the public `cleak/u5-spec#13` 26-row topic table,
   strict topic matching, SHOPPE.DAT record 84 fee quotes, SHOPPE.DAT record 91
   short-funds refusal, and success-record random draw only after the accepted
@@ -492,13 +584,23 @@ Current worktree context when this TODO was refreshed:
   the party; successful destruction marks the native hideout byte and ORs the
   save-backed quest-progress word bits. Route smoke covers Lycaeum, Empath
   Abbey, and Serpent's Hold native paths.
-- The 2026-05-24 clean-engine audit retired #1/#3/#5/#8/#9/#10/#11/#12/#13/#18/#19/#20/#31/#36/#38/#41/#43/#47/#49/#51/#54/#56/#57/#58
-  as gameplay blockers after applying the current public answers and checked-in
-  spec. Current response-needed public blockers are #53, #60, and #62. #59
-  and #61 are implemented from their latest answers. Clean-engine follow-up
-  comments are currently latest on the response-needed issues, so do not post
-  duplicate comments unless new spec evidence or implementation questions
-  appear.
+- The clean-engine audit has reconciled the closed public issue queue through
+  #135. Public commit `24f4aa4` supplies the ruined-shrine Word-of-Power
+  restoration dialogue and mutation contract; the exact four-answer flow,
+  silent failure, tile restoration, and shrine-only flag change are implemented.
+  Public commit `574f1d8` supplies the destructive town alarm and
+  resident-Shadowlord schedule/dialogue sweep contracts, including the fixed
+  slot-4 defect and exact shared-PRNG consumption; those paths are implemented
+  and covered by deterministic focused tests. Public commit `06494e0` supplies
+  the host-clock PRNG equation and caller timing.
+  Public commit `b1e8e08` closed #105; the engine pins exact Shape B and Escape
+  text, free re-prompts before maintenance, committed non-digit ring/effect
+  hooks, entry-only ring vanishing, and exact victory/defeat text. Public commit
+  `b34ae69` closed #106; the two Blackthorn rescue calls and the lit-dungeon
+  Search reveal tail now use the exact shared blocking viewport dissolve, while
+  darkness, bomb, narration-only, and Open paths bypass it. Bevy and TUI
+  acknowledge the completed blocking-call records when presenting the final
+  caller-composed state, preventing transient playback accumulation.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -512,11 +614,17 @@ Current worktree context when this TODO was refreshed:
   and slots 3+ omitted.
 - Return-to-View now expands the MISCMAPS command stream into a per-title-tick
   playback timeline for preview ticks, cell-effect timing, fixed-wipe
-  rectangles, eight-title-tick waits, trailing ticks, and one-shot actor draws.
+  rectangles, trailing ticks, and temporary-actor convergence checkpoints.
   The loader copies the 4x19 on-disk strip source into the public 4x19
   visible preview, derives captions from LoadMapStrip, and applies the
-  `(x, y + 7)` local cell-effect coordinate rule. Exact effect rasters remain
-  presentation work.
+  `(x, y + 7)` local cell-effect coordinate rule. Public issue `#117` / commit
+  `fcc8181` supplies the exact opaque `0x05`/`0xDC` row-splice rasters and the
+  corner-first plus `0xB8` 256-write single-cell permutation. Temporary actor
+  draws now run 31 complete preview-tick/input checkpoints after write counts
+  `8..248`, select overlay versus backing graphics directly, preserve the
+  helper-owned suppression state during convergence, and write palette index
+  zero opaquely. Open/close metadata carries the actual driver step values
+  `1..15` and `15..1` instead of the former synthetic `0..14`.
 - Combat rendering now consumes the post-round cursor/secondary-marker hook:
   the tactical viewport draws the blinking active-player cursor marker and
   explicit secondary marker cell from shared runtime state. The Bevy visual
@@ -530,14 +638,15 @@ Current worktree context when this TODO was refreshed:
   alternate-bank colors for `0x0A`, `0x0B`, and `0x0F`; the TUI and Bevy frame
   suites emit the same class-gallery PNGs for visual audit.
 - Save/load now persists queued shipwright deliveries even when the player
-  saves before leaving the town/shop scene. The `SAVED.OOL` encoder gives the
-  matching `return_world.pending_vehicle` priority over a stale cached world
-  overlay, mirrors the result to `BRIT.OOL`, and regression tests cover both
-  frigate and skiff deliveries.
+  saves before leaving the town/shop scene. The published `SAVED.GAM` bytes at
+  `0x03AD`, `0x03AE`, and `0x105F` preserve inactive and packed classes exactly;
+  successful delivery clears only the class byte. Neither `SAVED.OOL` nor a
+  per-plane mirror carries the queue. Regression tests cover frigate, skiff,
+  packed-byte increment/wrap, save round trips, and delivery.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
-  seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map
-  overlay, world/dungeon H-Hole-up rest routes, and direct U-Use routes for
+  seeded ship/skiff sailing routes, a Spyglass-triggered night-sky overlay,
+  world/dungeon H-Hole-up rest routes, and direct U-Use routes for
   key utility items, plus broader dungeon and combat command branches; native
   exact coordinate-table coverage still depends on public gazetteer/sidecar
   rows.
@@ -634,19 +743,38 @@ non-combat-first version before moving into Bevy.
 - Ready (`R`).
   - Current behavior opens the Ready picker with carried-stock, ammunition,
     strength, occupied-slot, hand-occupancy, ring-vanish, and combat
-    body-armour gates.
+    body-armour gates. It charges one turn per invocation, accepts Enter or
+    Space as item confirmation, consumes the native up/down and four corner
+    input codes, prints `Done` only for Escape from the item picker, and closes
+    silently after a magic-ring vanish result.
   - Remaining work:
     - audit any item-specific equipment rules newly published in the spec,
-    - keep town, world, dungeon, and combat routing covered by tests,
-    - confirm turn-spend behavior when parity details are published.
+    - keep town, world, dungeon, and combat routing covered by tests.
+
+- Use (`U`).
+  - The shared item picker accepts Enter or Space, native vertical/corner
+    navigation, and the published `None!` Escape result. Success, handler
+    refusal, no usable items, and cancellation each commit one normal action
+    and run the current exploration mode's ordinary turn processing; picker
+    navigation itself remains free.
+  - Remaining work:
+    - audit any item-specific activation rules newly published in the spec,
+    - keep town, world, dungeon, and combat routing covered by tests.
 
 - Yell (`Y`).
   - Current behavior separates ship sail toggles from generic Yell input and
-    supports Shadowlord names and public issue #32 Word-of-Power seal opening:
-    matching words at their published coordinates flip the closed seal tile
-    with `^ 0xDF` and dirty visibility.
+    routes typed words strictly by scene: outdoor Words of Power, Shadowlord
+    names only in the three Eternal Flame keeps, and generic no-effect elsewhere.
+    A recognized Word scans west/south/east/north for an adjacent target,
+    toggles `0xDF` with the word's own entrance tile at the published horizontal
+    coordinate on either world surface, toggles the save-backed high bit, and
+    dirties visibility. A ruined-shrine hit runs the published virtue plus three
+    mantra prompts; success clears only that shrine's ruin high bit and restores
+    its live tile. Submitting the ordinary prompt empty is an acted result in
+    every mode, while opening the prompt remains free. World loads re-derive
+    entrance and shrine presentation from the two eight-byte flag arrays without
+    modifying asset files.
   - Remaining work:
-    - audit any newly specified mode-specific Yell presentation effects,
     - keep tests proving ship `Y` toggles sails and non-ship `Y` does not.
 
 - Attack (`A`).
@@ -692,12 +820,13 @@ non-combat-first version before moving into Bevy.
     - audit horse stride edge cases around hazards, moongates, and encounters.
 
 - Town movement.
-  - Already supports stairs, trap doors, exit tiles, NPC blocking, schedules,
-    doors, secret doors, fire sources, pickups, and floor reloads.
+  - Already supports the exact `0xC4..=0xC7` facing-sensitive walk-on stairs,
+    directional K-Klimb links (`0xC8`, `0xC9`, and grate `0x86`), adjacent
+    rubble/fence climb-over, generic post-turn `0x8C` trapdoors with carpet
+    suppression and mass damage, exit boundaries, NPC blocking, schedules,
+    doors, secret doors, fire sources, pickups, and full floor reloads.
   - Remaining work:
-    - exact town stair subtype table,
-    - exact town boundary tile values,
-    - exact trap-door/chute encodings,
+    - audit town boundary-exit presentation parity,
     - exact item/tile pickup mappings,
     - richer interaction with shop/counter furniture.
 
@@ -752,7 +881,6 @@ tables are not yet public or not yet encoded.
     the public `0x48..=0x49` bed pair in published inn scenes)
   - `town_stairs.tsv`
   - `town_trap_doors.tsv`
-  - `town_exit_tiles.tsv`
   - `town_locks.tsv`
   - `eternal_flames.tsv` (override/extension for the public native flame table)
   - `location_floor_pages.tsv`
@@ -824,7 +952,7 @@ clean-engine session without losing supported state.
     - continue broadening save/load tests for shrine completion, Codex urns,
       and Codex turn-in.
 
-- Vehicles and timing tags.
+- Vehicles and active-effect tags.
   - Current tests cover ship/skiff/carpet/horse transport markers, hull/skiff
     side bytes for boarded and parked ships, board/exit/fire active-object
     overlay save/load, skiff/carpet ship-exit fallback save/load, and
@@ -834,7 +962,8 @@ clean-engine session without losing supported state.
       public marker evidence,
     - continue auditing hull/skiff persistence across shop delivery and exotic
       transition paths,
-    - all timing/status tags beyond currently recognized `Q` and `T`.
+    - continue auditing behavioral meanings for active-effect codes beyond
+      currently recognized `Q` and `T`; unknown nonzero codes round-trip.
 
 ## Milestone 3: Rendering And Presentation
 
@@ -857,15 +986,18 @@ or wrong, against black-box observation of the shipped assets:
 - **Visibility and lighting** - the interior visibility carve, the ambient byte
   read as a squared-distance threshold, and `#42`'s local light corrected to a
   squared-distance disc (`dx*dx + dy*dy <= 10`, 37 cells) rather than the
-  withdrawn Chebyshev square.
+  withdrawn Chebyshev square. The local-light mask is now a persistent resource
+  rebuilt only at `visibility.md §12.4`'s three published trigger sites, with
+  the rotating night beacon stamped afterward before the visibility carve.
 - **Commands and text** - the command-echo transcript and the wrap fix.
 - **Intro story slides** - all 21 steps from observation-derived proportional
   metrics, including step 6 from the published `#69` doorway text, with `#53`'s
   rectangle dissolve replacing the withdrawn column sweep.
-- **Endgame, chargen, U4 transfer, harness** - the endgame's own surface (no
-  gameplay stats panel, text never under the tableau blit), the `§7.1` fade to
-  black before the first `END.DAT` window, the tableau walk-in as rendered
-  frames, the chargen prompt screen at `§5.1`'s published cells, the U4
+- **Endgame, chargen, U4 transfer, harness** - the endgame's shared gameplay
+  surface and standing message window, the `§7.1` fade to black before the
+  first `END.DAT` window, the per-member exact revival line and slot-ordered
+  restoration/place/walk sequence, the chargen prompt screen at `§5.1`'s
+  published cells, the U4
   retryable-media branch, and the guards that stop harness paths writing into
   the pristine asset install.
 
@@ -905,21 +1037,32 @@ The graphical U4 transfer preview is built (`f3ecfd1`, `cleak/u5-spec#73`), and
 so is the acknowledgements phase sequence (`6db6135`, `#72`). Nothing published
 on the intro path is unbuilt any more.
 
-What is still open is engine work rather than missing contracts, listed in
-`docs/completion-audit.md` under "Published but not implemented":
+No fully published gameplay contract is currently known to be unimplemented. The
+event-driven input boundary performs `main-loop.md §4` scene-byte dispatch
+directly, collapsing the historical exit-pending flag as §14 permits. The
+dungeon first-person renderer uses #84's published seven-family billboard slot
+table; the withdrawn sparse-wall-table interpretation and #84's retracted
+numeric pixel-ratio self-check have been removed. Public #100 now supplies the
+backward pass: `ITEMS` object sprites, `MON0`-`MON7` wandering monsters, field
+strobes, fountain water, decoration states, and the raw-`0x08` rising-pit
+overlay are implemented. The sprite parser now treats its header as a sprite
+count (20 `ITEMS` sprites and 6 per monster bank), fixing the old half-bank
+decode. Public #101's exact setup, record, Negate Time, and tone contracts are
+implemented too. Public issue #102 subsequently published and closed the exact
+overworld-prune type-byte classifier, which is implemented as well.
+Malformed present corridor or sprite resources fail instead of rendering blank.
 
-- The `visibility.md §12.6` night-time light beacon - no bearing counter, no
-  rotating beam, nothing.
-- `overworld.md §9.2`'s blocking moongate transit presentation (the two-stage
-  dissolve). Gate *presence* is implemented; transit is instantaneous.
-- The `active-objects.md §8` outdoor walker's first phase - adjacent hostile
-  engagement, sea-serpent/dragon breath, whirlpool transition, ship broadside.
-  The predicates exist with **zero production call sites**, so none of it runs.
-- The dungeon first-person wall/scenery tables. `#84` published the billboard
-  slot-to-role mapping and the corridor draws from its banks now, but no
-  wall/scenery table exists in `crates/`.
-- The required-disk contract. There is no disk-swap handling, which is correct
-  for a single-directory install but means we carry no model of it.
+Public issue #103 closed the last outdoor-reaction boundary. The walker stages
+reactions in slot order from 31 down through 1, preserves lower reactions across
+a terrain-combat frame, and keeps the first-reaction movement suppression as a
+separate running gate. The generic arm implements the exact low-water and
+carpet/skiff impact intersection; every other recognized hostile enters the full
+class-and-arena terrain-combat path.
+
+The rotating beacon, blocking moongate transit, outdoor active-object reactions,
+and typed required-disk/session contract have all moved off this list. Issues
+`#95` through `#99` also close the camp persistence/event gate, queued shipwright
+save bytes, and shared regalia-effect/Blackthorn guard contracts.
 
 Three models were retracted in the same pass and should not reappear:
 `combat.md §7`'s post-round maintenance pass, the water/lava/brazier/torch
@@ -965,19 +1108,22 @@ eviction cascade and the spell scene allow-mask.
     sources, and multiple-source union. #42's "radius-three Chebyshev" reading
     was withdrawn - the source mask is a squared-distance disc,
     `dx*dx + dy*dy <= 10`, 37 cells. A local-light *influence mask* that
-    reveals cells beyond the threshold is a separate, still-unpublished gap
-    (our `#83`).
+    reveals cells beyond the threshold is implemented from public issue `#83`;
+    `§12.4`'s persistent-mask cadence and three explicit refresh triggers are
+    implemented as well.
   - Top-down radius-5 raster rendering now drives the public `visibility.md`
     persistent scratch model: an 11-active-cell, 32-byte-stride visibility
     grid plus 16-byte-stride terrain companion band, full rebuild on dirty
     frames, lazy refill on clean frames, fog marker refinement, active-object
     companion stamps, and scratch-byte preservation.
   - Show status/message panels.
-  - A spec-backed fixed-cell text-window core now covers four descriptors,
-    cursor preservation, style controls, clear/scroll, wrapped strings,
-    numeric output, typed-input erasure, and a shared message/prompt/stats
-    screen surface used by TUI and Bevy status/modal summaries. Bevy gameplay
-    status now renders the shared surface through `IBM.CH` into a texture.
+  - A spec-backed fixed-cell text-window core now covers the exact resident
+    gameplay descriptor state: full-screen window 0, stats window 1, shared
+    message/prompt window 2, and untouched unused window 3. It implements
+    cursor preservation, style controls, combined CR+LF, nonblanking scroll,
+    wrapped strings, numeric output, typed-input erasure, and a shared screen
+    surface used by TUI and Bevy status/modal summaries. Bevy gameplay status
+    renders the shared surface through `IBM.CH` into a texture.
   - Verify with screenshots or pixel hashes where practical.
   - `--visual-route-suite <DIR>` replays representative world, town modal,
     town View-overlay, and dungeon movement/search routes through the Bevy
@@ -1012,11 +1158,69 @@ eviction cascade and the spell scene allow-mask.
     one-column-per-title-tick wipe in full; the dissolve is one blocking call
     visiting every pixel once in a deterministic pseudo-random order, and the
     engine completes it as such rather than inventing a rate,
-  - Return-to-View exact effect rasters (the public #54 scheduler timing, fixed
-    captions and 4x19 visible geometry are implemented),
+  - Return-to-View effect rasters are no longer deferred. Public issue `#117` /
+    commit `fcc8181` publishes and the engine pins the exact shimmer row splice,
+    single-cell permutation, opaque writes, source selection, and checkpoint
+    schedule. Bevy repeats the expanded playback cycle when the shipped `0x09`
+    restarts the stream and accepts Escape on every preview frame, so the
+    attract scene loops until any preview-tick key aborts it rather than
+    freezing after one cycle,
+  - subtitle ignition is no longer deferred: public issues `#118` and `#120` /
+    commits `12485b3` and `36780cb` publish the pass countdown/tails, polling and
+    abort order, exact `0x3500` Galois vector, gate/pitch recurrences, pacing
+    branches, publication anchors, and burst totals; runtime and Bevy implement
+    them, including preserving an aborting key for the menu's first input poll
+    instead of consuming it at the driver boundary,
+  - the exact shop-owned window-1 clear/widen/restore shells and border-cell row
+    metadata are implemented for the inn register and arms `S` browser. Public
+    issue `#119` / commit `58e9b9c` now supplies the browser paging, rows,
+    controls, sale/refusal continuations, and draw boundaries; these are
+    implemented. Public issue `#121` / commit `5b9445f` also publishes the exact
+    three-cell page badge and none/down/up/both fixed-font byte sequences. The
+    compositor now paints that badge, plus the browser's `Arms` and selector
+    `Select:`/`Items:` stats-ribbon labels, through the shared two-colour chrome
+    cap primitive instead of flattening the caps in the later text overlay,
+  - Combat cursor-box and secondary-marker raster geometry is no longer
+    deferred. Public issue `#114` / commit `7046ca8` publishes the exact white
+    two-pixel ring, four-group white/black secondary raster, eligibility gate,
+    draw order, solid replacement writes, and display-clipping policy; runtime
+    and Bevy pixel tests pin the complete result,
+  - potion presentation is no longer deferred. Public issue `#115` / commit
+    `edba057` publishes the selected-bottle 176-by-176 paired XOR flash and the
+    Orange/Purple/White sound-loop values, Orange's persistent `0x1E` display
+    tile and one-in-seventeen wake restoration, Purple's persistent two-field
+    `0x90` rewrite, and White's frozen threshold-32 twenty-frame visibility
+    repaint. Bevy consumes the flash as a blocking pre-effect framebuffer
+    event and paces White from the typed one-BIOS-tick playback field without
+    double-advancing animation. Terminal and headless raster paths now execute
+    the same shared sound-disabled timing work and complete all twenty White
+    frames before accepting another command or saving the resulting frame.
+    The static White marks, sleep `Z`, and one-frame Poof star are removed,
+  - public issue `#116` / commit `01e2e1b` completes the timing table for all
+    eight selected bottles: rumble target `8,000 + 1,600i`, then two sweeps of
+    `10,000 + 4,000i` iterations. Sound-disabled Bevy playback executes all
+    three work loops, and input batching stops at the blocking flash boundary,
+  - public issue `#122` / commit `c869c5b` closes the remaining presentation
+    status-poll boundary. The first gated start/menu dissolve copies before its
+    odd-visit polls, so a pending-at-entry key leaves exactly `(1,0)` copied;
+    the loader then consumes that key, locally downgrades to an instant plain
+    completion, skips subtitle ignition, and leaves the caller's automatic
+    Return-to-View one-shot armed. Return-to-View consumes every abort key and
+    restores the menu for a fresh poll with no key handoff,
+  - public issue `#123` / clean-spec commit `4d03a662` closes the Stonegate
+    trapdoor gap. After generic mass damage, Stonegate stays on the current
+    floor, records its direct-black/tone/rumble blocking presentation, fills
+    the 1,024-cell town grid with `0x8F`, clears all 32 object records before
+    restoring only slot-zero X/Y/Z, and sets every in-party member to zero HP
+    and Dead. It writes no durable imprisonment flag and adds no time beyond
+    the triggering town action. Asset-backed TUI and Bevy routes now discover
+    a live Stonegate trapdoor tile at runtime and verify the automatic
+    next-command-boundary rescue without committing map coordinates,
   - broader `EGA.DRV` behavior beyond the canonical EGA/Tandy-equivalent path,
-  - exact remote-view panel for X-Ray/Peer,
-  - exact dungeon minimap glyph/floodability edge cases.
+  - empirical screenshot QA for the now-published local View and dungeon
+    minimap pixel contracts. The control flow, 4x4 class strokes, river/road
+    rules, two-font glyph table, vectors, flood order, and bounds are no longer
+    deferred.
 - No longer deferred: the title-tick silhouette pixels are `ULTIMA` records
   1..=4, read from the shipped asset at runtime. The clean-room flame generator
   and palette-cycle table are deleted.
@@ -1061,13 +1265,15 @@ the public combat contract while exact combat presentation evolves.
     arena state and legal in-arena landing checks.
   - View, Peer, and X-Ray overlays now carry explicit runtime modes, and the
     surface/dungeon overlay rasters apply the public peer/gem alternate
-    bank/tint branch for affected cell classes. Exact remote-view panel pixels
-    remain presentation parity work.
+    bank/tint branch for affected cell classes. Exact historical local-view
+    source pixels remain presentation parity work.
   - Dungeon Up/Down spells implement the public one-level movement hook inside
     level bounds; the command-overlay dungeon escape helper remains separate
     and does not currently imply a spell-dispatch gap.
-  - Combat-side active-effect consumers are implemented broadly, but parity
-    still needs audit coverage.
+  - Combat-side active-effect consumers are implemented broadly. The live
+    Negate Magic gate now requires the shared `N` tag and a nonzero duration,
+    and Protection remains timer/display state only: the invented `+3` party
+    spell-defense consumer has been removed. Parity still needs audit coverage.
 
 - Gate Travel.
   - Recently fixed to report a transition outcome so destination underfoot
@@ -1123,20 +1329,39 @@ as public details become available.
   - Continue auditing player movement and targeting parity.
   - Continue auditing monster AI parity.
   - Combat descriptor byte-2 flags now use the public issue #6/#7 controlled
-    and flee bits. Charmed/possessed and summoned non-party actors route through
-    the player-command path, Conjure uses fresh random arena-coordinate attempts,
-    Swarm uses the caster ring, and player Summon uses independent random
-    arena-coordinate probes plus its self-checking Oops branch. Issue #8
+    and flee bits. Charmed/possessed actors and controlled Conjure/Swarm actors
+    route through the player-command path. Conjure, Swarm, and party Summon use
+    the shared whole-candidate `0..=15` arena probe; Swarm places up to four
+    actors at its one accepted cell. Party Summon stamps controlled only after
+    its skewed-roll self-check succeeds, while Oops and monster-AI summons leave
+    the Daemon hostile. Issue #8
     non-party sleep now has the published own-turn 1-in-17 wake check; disabled
     actors remain present, occupy their cells, and spend the dispatch that
     clears the bit.
-  - Combat field placement now separates marker materialization from post-step
-    contact and follows the corrected public issue #10 answer: player combat
+  - Combat field placement now separates marker materialization from common
+    post-dispatch contact and follows public issues #10 and #125: player combat
     C-Cast Fire/Poison/Sleep/Energy Field uses the arena cursor and a confirmed
     impact coordinate, not an adjacent direction prompt. Cursor Escape cancels
     after charge/mana debit but before marker placement; Fire/Sleep/Energy no
     longer use a random placement gate, while Poison still uses its
-    unconditional placement path.
+    unconditional placement path. Spell-name Escape/blank and follow-up Escape
+    now finish the already accepted C-Cast action, run committed-action
+    maintenance, and resume the round instead of granting the caster a free
+    retry. After any completed player or automatic actor dispatch, the acting
+    descriptor remains the target; the marker scan skips only its linked
+    renderer record and takes the first separate colocated marker in ascending
+    active-object order. Poison and Fire use one direct raw `0..20` or `0..10`
+    draw only on their damage arms, Sleep uses no hook-local draw, Energy blocks
+    both player and AI movement without a contact payload, and markers are not
+    consumed. Parser-local refusals and blocked-direction re-prompts do not run
+    the hook. Public issue #126 resolves the priority arm: exact terrain byte
+    `0x04` selects Poison and `0x8F`/`0xBC` select Fire before any marker scan;
+    every other terrain byte falls through, and a selected terrain arm suppresses
+    markers even if Poison is later rejected. Doom absorption is not one of
+    those contact arms: the committed non-digit player-action tail first checks
+    whether its live actor stands on row 2 with renderer companion-band byte
+    `0x3C..0x3F` immediately north on row 1. It consumes no PRNG; digit selection,
+    parser refusal, and automatic actor dispatch skip it.
   - Combat-local ambush/camp reveal records now follow the public helper shape:
     up to eight trigger coordinates, consume-on-fire, one or two in-range
     terrain stamps, out-of-range target sentinels, ordinary-combat clearing, and
@@ -1149,9 +1374,32 @@ as public details become available.
     write-only - and route-smoke's cases were unchanged by its removal. What
     is real is the combat-only cursor highlight (blink toggle, active-actor box,
     optional secondary marker), which has live renderer consumers.
-  - Combat Vanish, Magic Lock, Unlock Magic, and Open use the public issue
-    #37/#39 utility fallback: no target prompt, no arena mutation, resources
-    consumed after gates, turn advanced, and `Failed!` reported.
+  - The all-48-spell production audit found that Combat Vanish, Magic Lock,
+    Unlock Magic, and Open were still wired to a retracted unconditional-failure
+    substitute. They now share `magic.md §8`'s cardinal live-tile helper in town
+    and combat: Vanish uses the exact thirteen-id set and writes `0x44`, Open
+    performs `0xB9 -> 0xB8` / `0xBB -> 0xBA` plus the kind-1 chest-bit arm,
+    Magic Lock maps the two ordinary door pairs to `0x97`/`0x98`, and Unlock
+    Magic performs the exact inverse. The active combat actor supplies the
+    arena origin. Resource gates run before the direction follow-up, Escape
+    re-polls, and Space/Pass quietly commits the already-spent cast.
+  - Combat U-Use now follows the published live-actor-gated multistage branch
+    and enters the shared item picker. Use, Ready, and Z-stats retain the acting
+    slot while their modal is open and end that combatant's action when it
+    closes; the withdrawn `Use-Not here!` branch is removed.
+  - Combat direction prompts now honor §8's exhaustive re-prompt rule. Push and
+    Get/Jimmy/Open/Search run committed-action maintenance and end the action
+    after either a direction or prompt cancellation; Klimb cancellation also
+    commits, while an actual blocked Klimb remains the named free retry.
+  - Combat Cast interference now follows public issue #111 and `magic.md §7`.
+    The save-backed 32-victim source map preserves the factory zero seed and
+    survives combat boundaries; ordinary automatic adjacent hits and misses
+    write or overwrite it, while ranged, failed-range, and controlled attacks
+    preserve the old source. C-Cast revalidates source hostility, visibility,
+    awake state, adjacency, and Negate Time before either re-prompting the same
+    actor for interference or entering the spell prompt. Only a completed
+    victim action clears that victim's entry; skipped/not-ready slots and free
+    re-prompts leave it intact.
   - Default monster death/drop markers, party corpses, vanish-on-death actor
     clearing, Gazer eye-burst, and Gargoyle lava-then-default-death transitions
     are implemented in the temporary combat active-object table; continue

@@ -281,13 +281,14 @@ pub const fn search_trap_detection_threshold(
     trappable: bool,
     difficulty: u8,
     member_trap_detection: u8,
-) -> u8 {
+) -> u16 {
     if trappable {
-        let raw = (difficulty as i16) - (member_trap_detection as i16) + 30;
-        if raw < 0 { 0 } else { (raw as u16 / 2) as u8 }
+        (difficulty as u16)
+            .wrapping_sub(member_trap_detection as u16)
+            .wrapping_add(30)
+            / 2
     } else {
-        let raw = 30i16 - member_trap_detection as i16;
-        if raw < 0 { 0 } else { (raw as u16 / 2) as u8 }
+        30u16.wrapping_sub(member_trap_detection as u16) / 2
     }
 }
 
@@ -338,10 +339,10 @@ pub enum DungeonBombSearchOutcome {
 /// "spring" branch is `roll > threshold`; equal-or-below leaves the
 /// cell alone.
 pub const fn dungeon_bomb_search_outcome(
-    threshold: u8,
+    threshold: u16,
     roll_1_to_30: u8,
 ) -> DungeonBombSearchOutcome {
-    if roll_1_to_30 > threshold {
+    if roll_1_to_30 as u16 > threshold {
         DungeonBombSearchOutcome::SpringBomb
     } else {
         DungeonBombSearchOutcome::NothingOnPit
@@ -374,13 +375,13 @@ pub enum DungeonChestSearchOutcome {
 /// an unmarked chest or the current Z on a marked chest, and is
 /// then classified by [`dungeon_chest_trap_tier`].
 pub const fn dungeon_chest_search_outcome(
-    threshold: u8,
+    threshold: u16,
     first_roll_1_to_30: u8,
     fresh_tier_1_to_8: u8,
     current_depth_z: u8,
     chest_byte_marked: bool,
 ) -> DungeonChestSearchOutcome {
-    if first_roll_1_to_30 > threshold && !chest_byte_marked {
+    if first_roll_1_to_30 as u16 > threshold && !chest_byte_marked {
         return DungeonChestSearchOutcome::NoTrap;
     }
     let tier = if chest_byte_marked {

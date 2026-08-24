@@ -88,6 +88,15 @@ impl PlayState {
         else {
             return MoveOutcome::Blocked;
         };
+        let tile = self.combat_terrain[y][x];
+        if tile == TOWN_OPEN_ALREADY_OPEN_TILE {
+            self.message = "It's open!".to_string();
+            return MoveOutcome::DoorOpened;
+        }
+        if jimmy_locked_door_rewrite(tile).is_some() || jimmy_magic_locked_door(tile) {
+            self.message = "Locked!".to_string();
+            return MoveOutcome::Blocked;
+        }
         if self
             .combat_actor_slot_at(x as u8, y as u8, actor_slot)
             .is_some()
@@ -95,20 +104,14 @@ impl PlayState {
             self.message = "Nothing to open there.".to_string();
             return MoveOutcome::Blocked;
         }
-
-        let tile = self.combat_terrain[y][x];
-        if tile == 16 {
-            self.message = "It's open!".to_string();
-            return MoveOutcome::DoorOpened;
-        }
-        if !(96..=103).contains(&tile) {
+        if !openable_town_door(tile) {
             self.message = "Nothing to open here.".to_string();
             return MoveOutcome::Blocked;
         }
 
-        self.combat_terrain[y][x] = 16;
+        self.combat_terrain[y][x] = TOWN_DOOR_CLEARED_TILE;
         self.mark_visibility_dirty();
-        self.message = format!("Opened combat tile {tile} at ({x}, {y}).");
+        self.message = "Opened!".to_string();
         MoveOutcome::DoorOpened
     }
 
@@ -125,6 +128,23 @@ impl PlayState {
             self.message = "No keys!".to_string();
             return MoveOutcome::Blocked;
         }
+        let tile = self.combat_terrain[y][x];
+        if jimmy_magic_locked_door(tile) {
+            self.keys = self.keys.saturating_sub(1);
+            self.message = "Key broke!".to_string();
+            return MoveOutcome::LockTried;
+        }
+        if jimmy_restraint_tile(tile) {
+            if !self.jimmy_lock_pick_succeeds(actor_slot) {
+                self.keys = self.keys.saturating_sub(1);
+                self.message = "Key broke!".to_string();
+                return MoveOutcome::LockTried;
+            }
+            self.combat_terrain[y][x] = TOWN_DOOR_CLEARED_TILE;
+            self.mark_visibility_dirty();
+            self.message = "Unlocked".to_string();
+            return MoveOutcome::LockTried;
+        }
         if self
             .combat_actor_slot_at(x as u8, y as u8, actor_slot)
             .is_some()
@@ -132,8 +152,6 @@ impl PlayState {
             self.message = "No lock!".to_string();
             return MoveOutcome::Blocked;
         }
-
-        let tile = self.combat_terrain[y][x];
         let Some(unlocked_tile) = Self::visible_jimmy_unlock_tile(tile) else {
             self.message = "No lock!".to_string();
             return MoveOutcome::Blocked;
@@ -146,7 +164,7 @@ impl PlayState {
 
         self.combat_terrain[y][x] = unlocked_tile;
         self.mark_visibility_dirty();
-        self.message = format!("Unlocked combat tile {tile} at ({x}, {y}).");
+        self.message = "Unlocked!".to_string();
         MoveOutcome::LockTried
     }
 
@@ -194,7 +212,20 @@ impl PlayState {
             ClimbIntent::Down => "down",
         };
         self.message = format!("Klimbed {label} from combat.");
-        self.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        // Successful vertical Klimb restores the suspended frame immediately,
+        // so its committed-action maintenance must run while the acting
+        // descriptor is still present.
+        let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
+        let _ = self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
+        let _ = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
+        let _ = self.age_active_effect();
+        let exit = match self.combat_round_loop_control(true, false) {
+            CombatRoundLoopControl::Exit(exit) => exit,
+            CombatRoundLoopControl::ContinueActorWalk | CombatRoundLoopControl::StartNextRound => {
+                CombatRoundLoopExit::LeaveCombat
+            }
+        };
+        self.apply_combat_round_loop_exit(exit);
         MoveOutcome::Moved
     }
 
@@ -267,7 +298,6 @@ impl PlayState {
         y: usize,
         idx: usize,
         tile: u8,
-        verb: &str,
     ) -> MoveOutcome {
         // `traps.md §2.1`/§4: the dungeon chest site uses the same shared
         // acting-member selection, minus the combat override - the Open
@@ -277,33 +307,50 @@ impl PlayState {
         let acting_member = self.dungeon_container_acting_member();
         let target_slot = match acting_member {
             ActingMemberSelection::Selected(slot) => slot,
-            // Two or more qualify: the dungeon site has no picker of its
-            // own in this engine, so the scan's last match stands in. The
-            // choice is observable only for effect ids 0 and 1; ids 2 and
-            // 3 ignore the slot entirely.
             ActingMemberSelection::Prompt => {
-                self.acting_member_scan_last_eligible_slot().unwrap_or(0)
+                self.active_surface_chest = Some(SurfaceChestSession::new_dungeon(
+                    scene, level, x, y, idx, tile,
+                ));
+                self.message = self.render_active_surface_chest();
+                return MoveOutcome::Observed;
             }
             ActingMemberSelection::NoneAble => {
                 self.message = "No party members are available.".to_string();
                 return MoveOutcome::Blocked;
             }
         };
+        self.finish_open_dungeon_chest(scene, level, x, y, idx, tile, target_slot)
+    }
+
+    pub(crate) fn finish_open_dungeon_chest(
+        &mut self,
+        scene: DungeonScene,
+        level: u8,
+        x: usize,
+        y: usize,
+        idx: usize,
+        tile: u8,
+        target_slot: usize,
+    ) -> MoveOutcome {
+        if self.grid.get(idx).copied() != Some(tile) || tile >> 4 != 0x4 {
+            self.message = "Nothing to open!".to_string();
+            return MoveOutcome::Blocked;
+        }
         let trap_note = if self.dungeon_chest_trap_detail(level, x, y, tile) == "no trap" {
             None
         } else {
             Some(self.apply_shared_trap_effect_to_slot(target_slot))
         };
-        self.grid[idx] = 0x70 | (tile & 0x0f);
+        self.grid[idx] = dungeon_open_chest_rewrite(tile);
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = match trap_note {
             Some(trap) => format!(
-                "{verb} dungeon chest at ({x}, {y}) on {} level {level}; {trap}, marked visit-local open chest.",
+                "Opened dungeon chest at ({x}, {y}) on {} level {level}; {trap}, marked visit-local open chest.",
                 scene.key()
             ),
             None => format!(
-                "{verb} dungeon chest at ({x}, {y}) on {} level {level}; marked visit-local open chest.",
+                "Opened dungeon chest at ({x}, {y}) on {} level {level}; marked visit-local open chest.",
                 scene.key()
             ),
         };
@@ -334,18 +381,18 @@ impl PlayState {
         y: usize,
         tile: u8,
     ) -> &'static str {
-        let class_byte = self
+        let trap_detection_stat = self
             .party
             .iter()
             .find(|member| member.living())
             .map(|member| member.class_byte)
             .unwrap_or_default();
-        let threshold = Self::dungeon_chest_pick_threshold(level, class_byte);
+        let threshold = Self::dungeon_chest_pick_threshold(level, trap_detection_stat);
         let roll = self.dungeon_chest_trap_roll(level, x, y, tile, 0, 30);
-        let detail = if roll > threshold && Self::is_plain_closed_dungeon_chest(tile) {
+        let detail = if u16::from(roll) > threshold && Self::is_plain_closed_dungeon_chest(tile) {
             "no trap"
         } else {
-            let tier = if roll <= threshold {
+            let tier = if u16::from(roll) <= threshold {
                 self.dungeon_chest_trap_roll(level, x, y, tile, 1, 8)
             } else {
                 level
@@ -359,12 +406,8 @@ impl PlayState {
         detail
     }
 
-    pub fn dungeon_chest_pick_threshold(level: u8, class_byte: u8) -> u8 {
-        level
-            .wrapping_mul(2)
-            .wrapping_sub(class_byte)
-            .wrapping_add(30)
-            / 2
+    pub fn dungeon_chest_pick_threshold(level: u8, dexterity: u8) -> u16 {
+        dungeon_chest_jimmy_threshold(level, dexterity)
     }
 
     pub fn is_plain_closed_dungeon_chest(tile: u8) -> bool {
@@ -681,7 +724,6 @@ impl PlayState {
             *slot = slot.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
         }
         self.player.transport = transport;
-        self.timing_status = TimingStatusTag::for_transport(transport);
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
@@ -693,7 +735,6 @@ impl PlayState {
 
     pub fn force_foot_transport(&mut self) {
         self.player.transport = TransportState::Foot;
-        self.timing_status = TimingStatusTag::Normal;
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
     }
@@ -702,8 +743,14 @@ impl PlayState {
         if slot == 0 {
             return;
         }
+        let dungeon_monster =
+            matches!(self.area, Area::Dungeon { .. }) && slot == DUNGEON_ACTIVE_MONSTER_SLOT;
         if let Some(object) = self.active_objects.get_mut(slot) {
             object.free();
+            if dungeon_monster {
+                object.tile = 0;
+                object.aux1 = DUNGEON_MONSTER_INACTIVE_DEP1;
+            }
         }
     }
 
@@ -712,7 +759,7 @@ impl PlayState {
             return;
         }
         if let Some(object) = self.active_objects.get_mut(slot) {
-            object.clear_consumed_record_fields();
+            object.clear_record_prefix();
         }
     }
 
@@ -850,10 +897,9 @@ impl PlayState {
         None
     }
 
-    /// `active-objects.md §4` off-screen gate for the eviction cascade's
-    /// phases 2..=5: a square window centred on the player's current cell,
-    /// each axis tested independently in unsigned eight-bit arithmetic. Not a
-    /// radius and not a disc.
+    /// `active-objects.md §4` off-screen gate for eviction phases 2..=5. It
+    /// passes the current player globals and candidate record X/Y into the
+    /// exact wrapped-byte predicate; candidate floor is deliberately ignored.
     pub fn active_object_off_screen(&self, object: ActiveObject) -> bool {
         active_object_eviction_off_screen(
             object.x as u8,
@@ -940,7 +986,6 @@ impl PlayState {
                         tile: FIRST_PLAYABLE_SKIFF_TILE,
                     }
                     .with_facing(self.player.facing);
-                    self.timing_status = TimingStatusTag::for_transport(self.player.transport);
                     self.sail_cadence = 0;
                     self.sail_stall_pending = false;
                     self.sync_player_object();
@@ -970,7 +1015,6 @@ impl PlayState {
                         type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
                         tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
                     };
-                    self.timing_status = TimingStatusTag::for_transport(self.player.transport);
                     self.sail_cadence = 0;
                     self.sail_stall_pending = false;
                     self.sync_player_object();
@@ -979,7 +1023,14 @@ impl PlayState {
                     self.message = "Redeployed stowed magic carpet from the ship.".to_string();
                     return Ok(MoveOutcome::ExitedVehicle);
                 }
+                // `vehicles.md §5` / `doors-and-z-transitions.md §11`: once
+                // the furled-ship branch has established that no nearby
+                // landing, carried skiff, or stowed carpet is available,
+                // this is the no-skiffs refusal.
+                self.message = SHIP_NO_SKIFFS_WARNING.to_string();
+                return Ok(MoveOutcome::Blocked);
             }
+            // Every non-ship family retains its location-specific refusal.
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
@@ -1048,7 +1099,9 @@ impl PlayState {
     }
 
     pub fn yell_command(&mut self, word: Option<&str>) -> MoveOutcome {
-        if matches!(self.player.transport, TransportState::Ship { .. }) {
+        let scene_byte = self.current_scene_byte();
+        let aboard_frigate = matches!(self.player.transport, TransportState::Ship { .. });
+        if yell_routes_to_ship_sails(scene_byte, aboard_frigate) {
             return self.toggle_sails();
         }
 
@@ -1059,36 +1112,56 @@ impl PlayState {
         let word = Self::normalize_yell_word(word);
         if word.is_empty() {
             self.message = YELL_NOTHING_SAID_MESSAGE.to_string();
-            return MoveOutcome::PromptDeclined;
+            self.advance_turn();
+            return MoveOutcome::Used;
         }
 
         self.advance_turn();
-        if let Some(seal) = word_of_power_seal_for_word(&word) {
-            let opened = self.open_word_of_power_seal(seal);
-            let context = if opened {
-                "The seal opens."
-            } else {
-                "No matching Word-of-Power seal is present."
-            };
-            self.message = format!(
-                "Yelled {word}, the Word of Power for {}. A word of power is uttered. {} {context}",
-                seal.dungeon,
-                Self::word_of_power_presentation_message()
-            );
-            return MoveOutcome::Used;
-        }
-        if let Some(index) = Self::shadowlord_name_index(&word) {
-            let shadowlord = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
-            self.message = if let Some(slot) = self.place_shadowlord_name_encounter(index) {
-                format!(
-                    "Yelled {word}, the name of {shadowlord}. {shadowlord} appears in active-object slot {slot}."
-                )
-            } else if self.shadowlord_alive(index) {
-                format!("Yelled {word}, the name of {shadowlord}. No Shadowlord answers here.")
-            } else {
-                format!("Yelled {word}, the name of {shadowlord}. {shadowlord} is vanquished.")
-            };
-            return MoveOutcome::Used;
+        match yell_input_context(scene_byte) {
+            YellInputContext::WordOfPower => {
+                if let Some((word_index, seal)) = word_of_power_seal_prefix_match(&word) {
+                    let outcome = self.open_word_of_power_seal(word_index, seal);
+                    let utterance = format!(
+                        "Yelled {word}, the Word of Power for {}. A word of power is uttered. {}",
+                        seal.dungeon,
+                        Self::word_of_power_presentation_message()
+                    );
+                    if let WordOfPowerTargetOutcome::RuinedShrine { x, y } = outcome {
+                        self.active_shrine_restoration =
+                            Some(ShrineRestorationSession::new(word_index, x, y, utterance));
+                        self.message = self.render_active_shrine_restoration();
+                        return MoveOutcome::Used;
+                    }
+                    let context = match outcome {
+                        WordOfPowerTargetOutcome::EntranceToggled { open: true, .. } => {
+                            " The seal opens."
+                        }
+                        WordOfPowerTargetOutcome::EntranceToggled { open: false, .. } => {
+                            " The entrance collapses shut."
+                        }
+                        WordOfPowerTargetOutcome::RuinedShrine { .. } => unreachable!(),
+                        WordOfPowerTargetOutcome::NoQualifyingNeighbor
+                        | WordOfPowerTargetOutcome::WrongCoordinate { .. } => " Nothing happens.",
+                    };
+                    self.message = format!("{utterance}{context}");
+                    return MoveOutcome::Used;
+                }
+            }
+            YellInputContext::ShadowlordName => {
+                if let Some(index) = Self::shadowlord_name_index(&word) {
+                    let shadowlord =
+                        Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
+                    self.message = if let Some(slot) = self.place_shadowlord_name_encounter(index) {
+                        format!(
+                            "Yelled {word}, the name of {shadowlord}. {shadowlord} appears in active-object slot {slot}."
+                        )
+                    } else {
+                        format!("Yelled {word}. Nothing happens.")
+                    };
+                    return MoveOutcome::Used;
+                }
+            }
+            YellInputContext::NoEffect => {}
         }
 
         self.message = format!("Yelled {word}. Nothing happens.");
@@ -1122,20 +1195,143 @@ impl PlayState {
         "A low rumble and full-viewport flash answer the word."
     }
 
-    pub fn open_word_of_power_seal(&mut self, seal: WordOfPowerSeal) -> bool {
-        let Area::World { plane } = self.area else {
-            return false;
+    pub fn render_active_shrine_restoration(&self) -> String {
+        self.active_shrine_restoration
+            .as_ref()
+            .map(|session| format!("{}{}", session.transcript, session.buffer))
+            .unwrap_or_default()
+    }
+
+    pub fn step_active_shrine_restoration(
+        &mut self,
+        key: char,
+        suffix: &str,
+    ) -> Option<MoveOutcome> {
+        let Some(mut session) = self.active_shrine_restoration.take() else {
+            return None;
         };
-        if plane != seal.plane || self.player.x != seal.x || self.player.y != seal.y {
-            return false;
+        if key == '\u{1b}' {
+            session.buffer.clear();
+            self.message = format!("{}{}", session.transcript, session.buffer);
+            self.active_shrine_restoration = Some(session);
+            return None;
         }
-        let idx = world_cell_index(seal.x, seal.y);
-        if self.grid.get(idx).copied() != Some(seal.closed_tile) {
-            return false;
+        if matches!(key, '\u{8}' | '\u{7f}') {
+            session.buffer.pop();
+            self.message = format!("{}{}", session.transcript, session.buffer);
+            self.active_shrine_restoration = Some(session);
+            return None;
         }
-        self.grid[idx] ^= WORD_OF_POWER_SEAL_XOR;
+
+        let mut response = String::new();
+        if !matches!(key, '\r' | '\n') && !key.is_control() {
+            response.push(key);
+        }
+        response.push_str(suffix);
+        session.buffer.extend(
+            response
+                .chars()
+                .filter(|ch| ch.is_ascii() && !ch.is_control())
+                .take(SHRINE_RESTORATION_INPUT_MAX_LEN.saturating_sub(session.buffer.len())),
+        );
+        if response.is_empty() && !matches!(key, '\r' | '\n') {
+            self.message = format!("{}{}", session.transcript, session.buffer);
+            self.active_shrine_restoration = Some(session);
+            return None;
+        }
+
+        let virtue = ShrineVirtue::from_index(session.word_index)
+            .expect("Word-of-Power index is a standard virtue index");
+        let required = if session.response_index == 0 {
+            virtue.name()
+        } else {
+            virtue.mantra()
+        };
+        let matches = !session.buffer.is_empty()
+            && session
+                .buffer
+                .to_ascii_lowercase()
+                .contains(&required.to_ascii_lowercase());
+        session.all_responses_match &= matches;
+        session.transcript.push_str(&session.buffer);
+        session.buffer.clear();
+
+        if session.response_index < 3 {
+            session.response_index += 1;
+            session
+                .transcript
+                .push_str(SHRINE_RESTORATION_MANTRA_PROMPT);
+            self.message = session.transcript.clone();
+            self.active_shrine_restoration = Some(session);
+            return None;
+        }
+
+        let coordinate_matches = session.word_index != ShrineVirtue::Spirituality.index()
+            && WORLD_SHRINE_COORDINATES.get(session.word_index).copied()
+                == Some((session.target_x, session.target_y));
+        let target_index = world_cell_index(session.target_x, session.target_y);
+        let target_still_ruined =
+            self.grid.get(target_index).copied() == Some(WORLD_RUINED_SHRINE_TILE);
+        if session.all_responses_match && coordinate_matches && target_still_ruined {
+            self.shrine_ruin_flags[session.word_index] &= !SAVE_QUEST_TILE_FLAG_HIGH_BIT;
+            self.grid[target_index] = WORLD_SHRINE_TILE;
+            session
+                .transcript
+                .push_str(SHRINE_RESTORATION_SUCCESS_BANNER);
+            session
+                .transcript
+                .push_str(Self::word_of_power_presentation_message());
+            let _ = self.refresh_world_live_chunks_for_current_area();
+            self.mark_visibility_dirty();
+        } else {
+            session.transcript.push('\n');
+        }
+        self.message = session.transcript;
+        Some(MoveOutcome::Used)
+    }
+
+    pub fn open_word_of_power_seal(
+        &mut self,
+        word_index: usize,
+        seal: WordOfPowerSeal,
+    ) -> WordOfPowerTargetOutcome {
+        if !matches!(self.area, Area::World { .. }) {
+            return WordOfPowerTargetOutcome::NoQualifyingNeighbor;
+        }
+        let adjacent = [
+            (self.player.x.wrapping_sub(1) % WORLD_SIDE, self.player.y),
+            (self.player.x, (self.player.y + 1) % WORLD_SIDE),
+            ((self.player.x + 1) % WORLD_SIDE, self.player.y),
+            (self.player.x, self.player.y.wrapping_sub(1) % WORLD_SIDE),
+        ];
+        let Some((x, y, tile)) = adjacent.into_iter().find_map(|(x, y)| {
+            let tile = self.world_live_tile_at(x, y);
+            matches!(
+                tile,
+                value if value == seal.unsealed_tile
+                    || value == WORD_OF_POWER_SEALED_TILE
+                    || value == WORLD_RUINED_SHRINE_TILE
+            )
+            .then_some((x, y, tile))
+        }) else {
+            return WordOfPowerTargetOutcome::NoQualifyingNeighbor;
+        };
+        if tile == WORLD_RUINED_SHRINE_TILE {
+            return WordOfPowerTargetOutcome::RuinedShrine { x, y };
+        }
+        if (x, y) != (seal.x, seal.y) {
+            return WordOfPowerTargetOutcome::WrongCoordinate { x, y };
+        }
+        let open = tile == WORD_OF_POWER_SEALED_TILE;
+        self.grid[world_cell_index(x, y)] = if open {
+            seal.unsealed_tile
+        } else {
+            WORD_OF_POWER_SEALED_TILE
+        };
+        self.word_of_power_seal_flags[word_index] ^= SAVE_QUEST_TILE_FLAG_HIGH_BIT;
+        let _ = self.refresh_world_live_chunks_for_current_area();
         self.mark_visibility_dirty();
-        true
+        WordOfPowerTargetOutcome::EntranceToggled { x, y, open }
     }
 
     pub fn shadowlord_name(word: &str) -> Option<&'static str> {
@@ -1161,7 +1357,7 @@ impl PlayState {
     }
 
     pub fn shadowlord_object_tile_for_index(index: usize) -> Option<u8> {
-        (index < SHADOWLORD_COUNT).then_some(SHADOWLORD_OBJECT_TILE_BASE + index as u8)
+        (index < SHADOWLORD_COUNT).then_some(SHADOWLORD_ACTOR_TILE)
     }
 
     pub fn shadowlord_name_encounter_object(
@@ -1181,24 +1377,37 @@ impl PlayState {
             y,
             z,
             phase: active_object_phase_toward_player(dx, dy),
-            aux1: index as u8,
-            aux3: self.current_shadowlord_hideout_id().unwrap_or(0),
+            aux1: 0,
+            aux3: 0,
         })
     }
 
-    pub fn shadowlord_name_encounter_index(object: ActiveObject) -> Option<usize> {
-        let index = object.aux1 as usize;
-        let tile = Self::shadowlord_object_tile_for_index(index)?;
-        (!object.is_empty() && object.type_byte == tile && object.tile == tile).then_some(index)
+    pub fn is_shadowlord_actor(object: ActiveObject) -> bool {
+        !object.is_empty() && object.type_byte == SHADOWLORD_ACTOR_TILE
     }
 
     pub fn shadowlord_name_encounter_present(&self, index: usize) -> bool {
+        if self.summoned_shadowlord != Some(index) {
+            return false;
+        }
         let Some(floor) = self.current_floor() else {
             return false;
         };
-        self.active_objects.iter().copied().any(|object| {
-            object.z == floor && Self::shadowlord_name_encounter_index(object) == Some(index)
-        })
+        self.active_objects
+            .iter()
+            .copied()
+            .skip(1)
+            .any(|object| object.z == floor && Self::is_shadowlord_actor(object))
+    }
+
+    /// `commands.md §11` / `town-mode.md §13` shared one-at-a-time
+    /// predicate. Shadowlord identity is stored separately; any live
+    /// `0xFC` actor blocks another summon or resident installation.
+    pub fn shadowlord_actor_present(&self) -> bool {
+        self.active_objects
+            .iter()
+            .skip(1)
+            .any(|object| !object.is_empty() && object.type_byte == SHADOWLORD_ACTOR_TILE)
     }
 
     pub fn matching_shadowlord_name_encounter_north(&self, index: usize) -> bool {
@@ -1209,58 +1418,221 @@ impl PlayState {
             return false;
         };
         let x = self.player.x;
-        self.active_objects.iter().copied().any(|object| {
+        self.active_objects.iter().copied().skip(1).any(|object| {
             object.z == floor
                 && object.x == x
                 && object.y == y
-                && Self::shadowlord_name_encounter_index(object) == Some(index)
+                && self.summoned_shadowlord == Some(index)
+                && Self::is_shadowlord_actor(object)
         })
     }
 
     pub fn place_shadowlord_name_encounter(&mut self, index: usize) -> Option<usize> {
-        let current = self.current_shadowlord_hideout_id()?;
-        if self.shadowlord_hideouts.get(index).copied() != Some(current) {
+        let Area::Town { scene, .. } = self.area else {
+            return None;
+        };
+        if !matches!(
+            scene.byte,
+            SCENE_THE_LYCAEUM | SCENE_EMPATH_ABBEY | SCENE_SERPENTS_HOLD
+        ) || !self.shadowlord_alive(index)
+            || self.player.y < 2
+            || self.shadowlord_actor_present()
+        {
             return None;
         }
         let z = self.current_floor()?;
-        let (x, y) = self.shadowlord_name_encounter_position()?;
+        let (x, y) = (self.player.x, self.player.y - 2);
         let object = self.shadowlord_name_encounter_object(index, x, y, z)?;
-        let slot = self.allocate_active_object_slot(object)?;
+        let slot = self.allocate_highest_empty_active_object_slot(object)?;
+        self.summoned_shadowlord = Some(index);
         self.mark_visibility_dirty();
         Some(slot)
     }
 
-    pub fn install_shadowlord_entry_encounter(&mut self) -> Option<(usize, usize)> {
-        let current = self.current_shadowlord_hideout_id()?;
-        for index in 0..SHADOWLORD_COUNT {
-            if self.shadowlord_hideouts.get(index).copied() != Some(current)
-                || self.shadowlord_name_encounter_present(index)
-            {
-                continue;
+    /// Highest-empty active-object discipline used by name/Yell summons.
+    /// Slot zero remains the player; a full table has no empty slot.
+    pub fn allocate_highest_empty_active_object_slot(
+        &mut self,
+        object: ActiveObject,
+    ) -> Option<usize> {
+        self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        let slot = (1..OOL_SLOTS)
+            .rev()
+            .find(|slot| self.active_objects[*slot].is_empty())?;
+        // An off-floor NPC may retain a link to a descriptor that is empty on
+        // the current floor. Acquisition transfers ownership of that record;
+        // detach the stale link so the next schedule pass cannot reclaim and
+        // overwrite the summoned actor.
+        for npc in &mut self.npcs {
+            if npc.active_object == Some(slot) {
+                npc.active_object = None;
             }
-            let slot = self.place_shadowlord_name_encounter(index)?;
-            return Some((slot, index));
         }
-        None
+        self.active_objects[slot] = object;
+        Some(slot)
     }
 
-    pub fn shadowlord_name_encounter_position(&self) -> Option<(usize, usize)> {
-        [
-            self.player.facing,
-            Direction::North,
-            Direction::East,
-            Direction::South,
-            Direction::West,
-            Direction::NorthEast,
-            Direction::SouthEast,
-            Direction::SouthWest,
-            Direction::NorthWest,
-        ]
-        .into_iter()
-        .find_map(|direction| {
-            let (x, y) = self.adjacent_position(direction)?;
-            matches!(self.player_can_land_on_foot(None, x, y), Ok(true)).then_some((x, y))
-        })
+    /// `town-mode.md §13` entry-time resident selector and actor install.
+    /// `Some((None, index))` records a host whose actor was rejected by the
+    /// shared one-at-a-time gate; `Some((Some(slot), index))` installed it.
+    pub fn install_shadowlord_entry_encounter(&mut self) -> Option<(Option<usize>, usize)> {
+        self.resident_shadowlord = None;
+        if self.player.y == SHADOWLORD_TOWN_ENTRY_SKIP_Y {
+            return None;
+        }
+        let Area::Town { scene, floor } = self.area else {
+            return None;
+        };
+        let shadowlord_index = self
+            .shadowlord_hideouts
+            .iter()
+            .position(|hideout| *hideout == scene.byte)?;
+        self.resident_shadowlord = Some(shadowlord_index);
+        let _ = self.apply_resident_shadowlord_blight_with_seed(host_clock_prng_seed_now());
+        if self.shadowlord_actor_present() {
+            return Some((None, shadowlord_index));
+        }
+
+        let active_slot = self.insert_resident_shadowlord_npc(scene, floor)?;
+        let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
+        self.mark_visibility_dirty();
+        Some((active_slot, shadowlord_index))
+    }
+
+    fn insert_resident_shadowlord_npc(&mut self, scene: Scene, floor: i8) -> Option<Option<usize>> {
+        let y = shadowlord_town_install_row(scene.byte)?;
+        let npc_slot = (1..OOL_SLOTS)
+            .rev()
+            .find(|slot| !self.npcs.iter().any(|npc| npc.slot == *slot))
+            .unwrap_or(OOL_SLOTS - 1);
+        if let Some(existing_index) = self.npcs.iter().position(|npc| npc.slot == npc_slot) {
+            if let Some(active_slot) = self.npcs[existing_index].active_object {
+                self.free_active_object_slot(active_slot);
+            }
+            self.npcs.remove(existing_index);
+        }
+        self.npcs.push(RuntimeNpc::from_resident_shadowlord(
+            npc_slot,
+            SHADOWLORD_TOWN_INSTALL_X,
+            y,
+            self.clock.hour,
+        ));
+        self.npcs.sort_by_key(|npc| npc.slot);
+
+        let active_slot = if floor == 0 {
+            let npc_index = self
+                .npcs
+                .iter()
+                .position(|npc| npc.slot == npc_slot)
+                .expect("resident Shadowlord descriptor was just inserted");
+            self.sync_npc_active_object(npc_index, 0);
+            self.npcs[npc_index].active_object
+        } else {
+            None
+        };
+        Some(active_slot)
+    }
+
+    /// `town-mode.md §3` resident-only deterministic terrain walk followed
+    /// by the published fresh host-clock state replacement.
+    pub fn apply_resident_shadowlord_blight_with_seed(
+        &mut self,
+        trailing_host_seed: u16,
+    ) -> Option<usize> {
+        self.resident_shadowlord?;
+        let rewritten = apply_shadowlord_blight(
+            &mut self.grid,
+            self.clock.day,
+            &mut self.prng_state,
+            trailing_host_seed,
+        );
+        self.mark_visibility_dirty();
+        Some(rewritten)
+    }
+
+    /// `town-mode.md §13`: consume one coin draw for every roster index,
+    /// then apply the host-specific destructive schedule/dialogue sweep.
+    pub fn apply_resident_shadowlord_npc_sweep(
+        &mut self,
+        shadowlord_index: usize,
+    ) -> (usize, usize) {
+        if !matches!(
+            shadowlord_index,
+            SHADOWLORD_HATRED_INDEX | SHADOWLORD_COWARDICE_INDEX
+        ) {
+            return (0, 0);
+        }
+        let draws = std::array::from_fn(|_| self.random_range_u8(0, 1));
+        self.apply_resident_shadowlord_npc_sweep_with_draws(shadowlord_index, &draws)
+    }
+
+    /// Deterministic form of the resident sweep. The fixed-slot-4 type test is
+    /// intentionally reproduced for compatibility with the published defect.
+    pub fn apply_resident_shadowlord_npc_sweep_with_draws(
+        &mut self,
+        shadowlord_index: usize,
+        draws: &[u8; NPC_SLOTS_PER_SUB_MAP],
+    ) -> (usize, usize) {
+        let fixed_type_passes = self
+            .npcs
+            .iter()
+            .find(|npc| npc.slot == 4)
+            .is_some_and(|npc| {
+                (TOWN_NPC_ORDINARY_TYPE_FIRST..=TOWN_NPC_ORDINARY_TYPE_LAST)
+                    .contains(&npc.type_byte)
+            });
+        if !fixed_type_passes {
+            return (0, 0);
+        }
+
+        let mut pursued = 0;
+        let mut cowering = 0;
+        for roster_index in 0..NPC_SLOTS_PER_SUB_MAP {
+            if draws[roster_index] != 0 {
+                continue;
+            }
+            let Some(index) = self.npcs.iter().position(|npc| npc.slot == roster_index) else {
+                continue;
+            };
+            if !self.npcs[index].has_nonzero_schedule_time_boundary() {
+                continue;
+            }
+            match shadowlord_index {
+                SHADOWLORD_HATRED_INDEX => {
+                    self.npcs[index].force_town_pursuit();
+                    self.npcs[index].dialog_id = TOWN_NPC_BRUSHOFF_DIALOG_ID;
+                    self.record_town_npc_mutation(index);
+                    pursued += 1;
+                }
+                SHADOWLORD_COWARDICE_INDEX => {
+                    let _ = self.npcs[index].force_town_flight();
+                    self.npcs[index].dialog_id = TOWN_NPC_COWERING_DIALOG_ID;
+                    self.record_town_npc_mutation(index);
+                    cowering += 1;
+                }
+                _ => {}
+            }
+        }
+        (pursued, cowering)
+    }
+
+    /// Restore the resident Shadowlord's logical high-index NPC descriptor
+    /// after an in-town floor reload rebuilt the ordinary roster from disk.
+    pub fn restore_resident_shadowlord_after_floor_reload(&mut self) -> Option<usize> {
+        let Area::Town { scene, floor } = self.area else {
+            return None;
+        };
+        self.resident_shadowlord = None;
+        if self.player.y == SHADOWLORD_TOWN_ENTRY_SKIP_Y {
+            return None;
+        }
+        self.resident_shadowlord = self
+            .shadowlord_hideouts
+            .iter()
+            .position(|hideout| *hideout == scene.byte);
+        self.resident_shadowlord?;
+        let _ = self.apply_resident_shadowlord_blight_with_seed(host_clock_prng_seed_now());
+        self.insert_resident_shadowlord_npc(scene, floor).flatten()
     }
 
     pub fn shadowlord_slot_is_living(value: u8) -> bool {
@@ -1297,8 +1669,10 @@ impl PlayState {
             return false;
         }
         self.shadowlord_hideouts[index] = SHADOWLORD_VANQUISHED;
-        if let Some(bit) = shadowlord_quest_progress_bit(index) {
-            self.quest_progress_word |= bit;
+        if let Some(slot) = shadowlord_stonegate_npc_slot(index) {
+            let scene = Scene::new(STONEGATE_SCENE_BYTE)
+                .expect("Stonegate scene byte is a valid town scene");
+            self.mark_removed_town_npc_once(scene, slot);
         }
         true
     }
@@ -1370,10 +1744,17 @@ impl PlayState {
         plane: WorldPlane,
         object: ActiveObject,
     ) -> io::Result<String> {
-        let Some(arena) = outdoor_combat_arena_index_for_object(object) else {
+        let hostile_terrain = self.grid[world_cell_index(object.x, object.y)];
+        let aboard_ship = matches!(self.player.transport, TransportState::Ship { .. });
+        let Some(arena) = outdoor_combat_arena_index(
+            object.type_byte,
+            hostile_terrain,
+            aboard_ship,
+            SCENE_OVERWORLD,
+        ) else {
             return Ok(format!(
-                "no terrain-combat arena selected for active-object type 0x{:02X} tile 0x{:02X}",
-                object.type_byte, object.tile
+                "no terrain-combat class for active-object type 0x{:02X}",
+                object.type_byte
             ));
         };
         let variant = if plane == WorldPlane::Underworld || object.z < 0 {
@@ -1402,7 +1783,7 @@ impl PlayState {
                 format!("BRIT.CBT has no arena record {arena}"),
             )
         })?;
-        let setup = terrain_combat_setup_from_record(plane, object, record)?;
+        let setup = terrain_combat_setup_from_record_at_arena(plane, object, arena, record)?;
         let terrain_origin = setup.terrain[0][0];
         let first_placement =
             setup
@@ -1445,10 +1826,7 @@ impl PlayState {
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
             self.advance_turn();
-            if combat_class_stats_for_sprite_byte(object.tile)
-                .or_else(|| combat_class_stats_for_sprite_byte(object.type_byte))
-                .is_some()
-            {
+            if combat_class_stats(object.aux1).is_some() {
                 let note = self.enter_dungeon_active_monster_combat(level, object)?;
                 self.message = format!(
                     "Attacked dungeon monster tile {} at ({x}, {y}) on {} level {level}; {note}.",
@@ -1480,7 +1858,7 @@ impl PlayState {
             if let Area::World { plane } = self.area {
                 if let Some(game_dir) = game_dir {
                     if game_dir.join(BRIT_CBT_FILE).exists()
-                        && outdoor_combat_arena_index_for_object(object).is_some()
+                        && !is_whirlpool_object(object)
                         && terrain_combat_base_class(object).is_some()
                     {
                         self.advance_turn();
@@ -1516,28 +1894,22 @@ impl PlayState {
                         TownNpcAttackResolution::DeathMask => {
                             self.free_active_object_slot(object_slot);
                             self.npcs.remove(npc_index);
-                            self.mark_removed_town_npc_once(scene, floor, npc_slot);
-                            let (fortified, fleeing) =
+                            self.mark_removed_town_npc_once(scene, npc_slot);
+                            let (pursued, fled) =
                                 self.town_alarm_sweep(scene, floor, Some(npc_slot));
                             self.mark_visibility_dirty();
                             self.message = format!(
-                                "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; target removed from {} floor {floor}; alarm raised ({fortified} fortified, {fleeing} fleeing).",
+                                "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; target removed from {} floor {floor}; alarm raised ({pursued} pursuing, {fled} fleeing).",
                                 direction.name(),
                                 scene.key()
                             );
                             return Ok(MoveOutcome::Used);
                         }
                         TownNpcAttackResolution::AlarmOnly => {
-                            let (fortified, fleeing) =
+                            let (pursued, fled) =
                                 self.town_alarm_sweep(scene, floor, Some(npc_slot));
-                            self.set_town_npc_alarm_state(
-                                scene,
-                                floor,
-                                npc_slot,
-                                TownNpcAlarmState::Fortified,
-                            );
                             self.message = format!(
-                                "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; alarm raised ({fortified} fortified, {fleeing} fleeing).",
+                                "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; alarm raised ({pursued} pursuing, {fled} fleeing).",
                                 direction.name()
                             );
                             return Ok(MoveOutcome::Used);
@@ -1587,12 +1959,18 @@ impl PlayState {
     }
 
     pub fn dungeon_active_monster_at(&self, x: usize, y: usize) -> Option<(usize, ActiveObject)> {
-        self.active_objects
-            .iter()
-            .copied()
-            .enumerate()
-            .skip(1)
-            .find_map(|(slot, object)| self.object_occupies(object, x, y).then_some((slot, object)))
+        let Area::Dungeon { level, .. } = self.area else {
+            return None;
+        };
+        let object = self
+            .active_objects
+            .get(DUNGEON_ACTIVE_MONSTER_SLOT)
+            .copied()?;
+        (dungeon_monster_record_active(object)
+            && object.z == level as i8
+            && object.x == x
+            && object.y == y)
+            .then_some((DUNGEON_ACTIVE_MONSTER_SLOT, object))
     }
 
     pub fn town_attack_target_at(
@@ -1606,7 +1984,7 @@ impl PlayState {
         }
         let floor = floor as u8;
         self.npcs.iter().enumerate().find_map(|(index, npc)| {
-            if npc.is_player_phantom() || npc.x != x || npc.y != y || npc.z != floor {
+            if npc.x != x || npc.y != y || npc.z != floor {
                 return None;
             }
             let object_slot = npc.active_object.or_else(|| {
@@ -1700,7 +2078,7 @@ impl PlayState {
                 );
             }
             TownFireTarget::Door { x, y, tile } => {
-                self.grid[y * 32 + x] = 16;
+                self.grid[y * 32 + x] = TOWN_DOOR_CLEARED_TILE;
                 self.record_open_town_door(scene, floor, x, y);
                 self.forget_revealed_town_secret_door(scene, floor, x, y);
                 self.door_tracker = None;
@@ -1817,7 +2195,7 @@ impl PlayState {
             }
 
             let tile = self.grid[y * 32 + x];
-            if (96..=103).contains(&tile) {
+            if town_command_door_tile(tile) {
                 return TownFireTarget::Door { x, y, tile };
             }
             if surface_tile_blocks_projectile(tile) {
@@ -2569,22 +2947,27 @@ impl PlayState {
         // plane-transition effect when the party is not on foot.
         let object_epilogue_runs = self.world_object_epilogue_runs_for_turn(turn_before);
         if object_epilogue_runs {
-            if let Some(transition) = self.apply_world_whirlpool_engagement(game_dir, plane)? {
-                let transition_message = self.message.clone();
-                self.message = if pre_effect_message.is_empty() {
-                    transition_message
+            if let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)? {
+                if outcome.is_transition() {
+                    let transition_message = self.message.clone();
+                    self.message = if pre_effect_message.is_empty() {
+                        transition_message
+                    } else {
+                        format!("{pre_effect_message} {transition_message}")
+                    };
+                } else if self.combat_active {
+                    let engagement_message = self.message.clone();
+                    self.message = if pre_effect_message.is_empty() {
+                        engagement_message
+                    } else {
+                        format!("{pre_effect_message} {engagement_message}")
+                    };
                 } else {
-                    format!("{pre_effect_message} {transition_message}")
-                };
-                return Ok(Some(MoveOutcome::Transition(transition)));
-            }
-            if let Some(outcome) = self.apply_world_active_object_engagement(game_dir, plane)? {
-                let engagement_message = self.message.clone();
-                self.message = if pre_effect_message.is_empty() {
-                    engagement_message
-                } else {
-                    format!("{pre_effect_message} {engagement_message}")
-                };
+                    // Immediate reaction lines were emitted to the transcript
+                    // as they occurred; preserve the command result in the
+                    // compatibility message slot.
+                    self.message = pre_effect_message;
+                }
                 return Ok(Some(outcome));
             }
         }
@@ -2600,33 +2983,95 @@ impl PlayState {
         Ok(None)
     }
 
+    /// Resolve the high-to-low reaction list staged by the active-object
+    /// walker. A terrain combat pauses this list in place; production input
+    /// dispatch resumes it immediately after the combat frame returns.
+    pub fn apply_pending_outdoor_reactions(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let mut reacted = false;
+        while !self.pending_outdoor_reaction_slots.is_empty() {
+            let slot = self.pending_outdoor_reaction_slots.remove(0);
+            let Some(object) = self.active_objects.get(slot).copied() else {
+                continue;
+            };
+            if object.is_empty() || object.z != plane.save_floor() {
+                continue;
+            }
+
+            if self.outdoor_active_object_is_adjacent(slot) {
+                if is_whirlpool_object(object) {
+                    let outcome =
+                        self.apply_world_whirlpool_slot_engagement(game_dir, plane, slot)?;
+                    reacted = true;
+                    if outcome.is_transition() {
+                        self.pending_outdoor_reaction_slots.clear();
+                        return Ok(Some(outcome));
+                    }
+                    continue;
+                }
+                if outdoor_sand_trap_class(object.type_byte) {
+                    self.apply_world_sand_trap_slot_engagement(slot);
+                    reacted = true;
+                    continue;
+                }
+                if let Some(outcome) = self
+                    .apply_world_generic_adjacent_slot_engagement(game_dir, plane, slot, object)?
+                {
+                    reacted = true;
+                    if self.combat_active {
+                        return Ok(Some(outcome));
+                    }
+                }
+                continue;
+            }
+
+            if self
+                .outdoor_first_phase_ranged_attack_detail(slot)
+                .is_some()
+            {
+                reacted = true;
+            }
+        }
+        Ok(reacted.then_some(MoveOutcome::Used))
+    }
+
     pub fn apply_world_whirlpool_engagement(
         &mut self,
         game_dir: &Path,
         plane: WorldPlane,
-    ) -> io::Result<Option<AreaTransition>> {
-        // active-objects.md §8: no-op when the party marker is the ordinary
-        // on-foot avatar.
-        if self.player.transport.is_foot() {
-            return Ok(None);
-        }
-        let px = self.player.x as isize;
-        let py = self.player.y as isize;
-        let mut whirlpool_slot = None;
-        for (dx, dy) in [(0isize, -1isize), (0, 1), (-1, 0), (1, 0)] {
-            let x = (px + dx).rem_euclid(WORLD_SIDE as isize) as usize;
-            let y = (py + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-            if let Some((slot, object)) = self.world_object_slot_at(x, y) {
-                if is_whirlpool_object(*object) {
-                    whirlpool_slot = Some(slot);
-                    break;
-                }
-            }
-        }
-        let Some(whirlpool_slot) = whirlpool_slot else {
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(whirlpool_slot) = (1..self.active_objects.len()).rev().find(|slot| {
+            self.outdoor_active_object_is_adjacent(*slot)
+                && is_whirlpool_object(self.active_objects[*slot])
+        }) else {
             return Ok(None);
         };
+        self.apply_world_whirlpool_slot_engagement(game_dir, plane, whirlpool_slot)
+            .map(Some)
+    }
+
+    fn apply_world_whirlpool_slot_engagement(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+        whirlpool_slot: usize,
+    ) -> io::Result<MoveOutcome> {
+        // `overworld.md §8` correction: both marker arms reach the shared
+        // §6.2.4 impact payload. On foot this is the whole-party damage pass;
+        // it skips only the transition and does not clear the whirlpool slot.
+        if self.player.transport.is_foot() {
+            self.apply_outdoor_impact();
+            return Ok(MoveOutcome::Used);
+        }
+
+        // Apply impact before changing planes so absorption sees the restored
+        // original transport marker. A frigate therefore takes its hull roll
+        // (and can sink) immediately before the durable transition.
         self.free_active_object_slot(whirlpool_slot);
+        self.apply_outdoor_impact();
         let entry = WorldPlaneTransitionEntry {
             from_plane: plane,
             x: self.player.x,
@@ -2643,10 +3088,37 @@ impl PlayState {
             entry.to_y,
             self.wind_status_message()
         );
-        Ok(Some(AreaTransition::ChangedWorldPlane {
+        Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
             from: plane,
             to: WorldPlane::Underworld,
         }))
+    }
+
+    pub fn apply_world_sand_trap_engagement(&mut self, plane: WorldPlane) -> Option<MoveOutcome> {
+        let sand_trap_slot = (1..self.active_objects.len()).rev().find(|slot| {
+            let object = self.active_objects[*slot];
+            if object.z != plane.save_floor() || !outdoor_sand_trap_class(object.type_byte) {
+                return false;
+            }
+            let (dx, dy) = wrapped_deltas_to_player(
+                object.x as u8,
+                object.y as u8,
+                self.player.x as u8,
+                self.player.y as u8,
+            );
+            outdoor_offsets_are_orthogonally_adjacent(dx, dy)
+        })?;
+
+        // `active-objects.md §8`: the sand-trap adjacency arm reaches the
+        // shared impact payload directly and silently. It is not combat and
+        // does not clear the active-object slot.
+        self.apply_world_sand_trap_slot_engagement(sand_trap_slot);
+        Some(MoveOutcome::Used)
+    }
+
+    fn apply_world_sand_trap_slot_engagement(&mut self, sand_trap_slot: usize) {
+        let _ = sand_trap_slot;
+        self.apply_outdoor_impact();
     }
 
     pub fn apply_town_post_turn_effects_after_turn(
@@ -2660,39 +3132,104 @@ impl PlayState {
         let Area::Town { scene, floor } = self.area else {
             return Ok(None);
         };
-        if let Some(outcome) = self.apply_town_npc_contact_event(scene, floor)? {
-            return Ok(Some(outcome));
+        // `town-mode.md §7`: the town underfoot handler starts by giving
+        // every sleeping active member an independent 1-in-16 wake roll.
+        // This intentionally precedes trapdoor damage and every other tile
+        // effect, including on the automatic no-input sleep pass.
+        for member in &mut self.party {
+            if member.status == b'S'
+                && u5_prng_range_u16(&mut self.prng_state, 0, u16::from(TOWN_SLEEP_WAKE_ROLL_MAX))
+                    == 0
+            {
+                member.status = b'G';
+            }
         }
         let tile = self.grid[self.player.y * 32 + self.player.x];
-        if let Some(entry) =
-            self.town_exit_tile_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
-        {
-            let pre_effect_message = self.message.clone();
-            let outcome = self.start_town_exit_prompt(entry, false);
-            let prompt_message = self.message.clone();
-            self.message = if pre_effect_message.is_empty() {
-                prompt_message
-            } else {
-                format!("{pre_effect_message} {prompt_message}")
-            };
-            return Ok(Some(outcome));
+        if !matches!(self.player.transport, TransportState::Carpet { .. }) {
+            if let Some(entry) =
+                self.town_trap_door_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
+            {
+                let pre_effect_message = self.message.clone();
+                self.apply_town_trapdoor_party_damage();
+                if scene.byte == STONEGATE_SCENE_BYTE {
+                    self.apply_stonegate_trapdoor_script(floor);
+                    self.message = if pre_effect_message.is_empty() {
+                        "A TRAPDOOR!".to_string()
+                    } else {
+                        format!("{pre_effect_message} A TRAPDOOR!")
+                    };
+                    return Ok(Some(MoveOutcome::Used));
+                }
+                let outcome =
+                    self.apply_town_trap_door_transition(game_dir, scene, entry, false)?;
+                let transition_message = self.message.clone();
+                self.message = if pre_effect_message.is_empty() {
+                    transition_message
+                } else {
+                    format!("{pre_effect_message} {transition_message}")
+                };
+                return Ok(Some(outcome));
+            }
+        }
+        self.apply_town_npc_contact_event(scene, floor)
+    }
+
+    pub fn apply_town_trapdoor_party_damage(&mut self) {
+        let slots = self.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
+        for slot in 0..slots {
+            if self.party[slot].status == CharacterStatus::Dead.save_byte() {
+                continue;
+            }
+            let damage = self.random_range_u8(1, TRAP_BOMB_DAMAGE_MAX);
+            self.apply_shared_party_damage(slot, damage);
+        }
+    }
+
+    /// Stonegate's trapdoor exception after the shared mass-damage pass.
+    ///
+    /// Public issue `cleak/u5-spec#123`, resolved at clean-spec commit
+    /// `4d03a662`, confirms that this is a same-scene scripted defeat rather
+    /// than a floor transition or a durable rescue flag. The presentation is
+    /// recorded separately; the durable mutations here match the cutscene's
+    /// live-grid, active-object, and party writes.
+    pub fn apply_stonegate_trapdoor_script(&mut self, floor: i8) {
+        self.pending_stonegate_trapdoor_playback =
+            Some(StonegateTrapdoorPlayback::complete(self.party.len()));
+
+        self.grid.fill(STONEGATE_TRAPDOOR_GRID_TILE);
+        self.mark_visibility_dirty();
+
+        self.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+
+        for member in &mut self.party {
+            member.hp = 0;
+            member.status = CharacterStatus::Dead.save_byte();
         }
 
-        let Some(entry) =
-            self.town_trap_door_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
-        else {
-            return Ok(None);
-        };
+        // The status/provision tail follows the deaths. If this action crossed
+        // an hour boundary, its normal pass was deferred by `advance_turn` so
+        // it observes zero provision eaters and no regenerating/poisoned live
+        // members. The same tail clears an in-party active-member selector.
+        if self
+            .active_player
+            .is_some_and(|slot| slot < self.party.len())
+        {
+            self.active_player = None;
+        }
+        if std::mem::take(&mut self.pending_stonegate_status_provision_pass) {
+            self.apply_hourly_status_provision_pass();
+        }
 
-        let pre_effect_message = self.message.clone();
-        let outcome = self.apply_town_trap_door_transition(game_dir, scene, entry, false)?;
-        let transition_message = self.message.clone();
-        self.message = if pre_effect_message.is_empty() {
-            transition_message
-        } else {
-            format!("{pre_effect_message} {transition_message}")
-        };
-        Ok(Some(outcome))
+        // The normal coordinate-only record-zero tail follows the all-zero
+        // script boundary. The zero-type animal pass cannot move it; the NPC
+        // schedule then retains its ordinary opportunity to write records.
+        self.active_objects[0].x = self.player.x;
+        self.active_objects[0].y = self.player.y;
+        self.active_objects[0].z = floor;
+        if std::mem::take(&mut self.pending_stonegate_object_epilogue) {
+            self.advance_active_objects();
+            self.advance_npc_schedules();
+        }
     }
 
     pub fn town_poison_gas_at(
@@ -2778,7 +3315,21 @@ impl PlayState {
         else {
             return Ok(None);
         };
+        if let Some(index) = self.npcs.iter().position(|npc| npc.slot == npc_slot)
+            && self.npcs[index].dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID
+        {
+            let _ = self.npcs[index].force_town_flight();
+            self.record_town_npc_mutation(index);
+            self.message = TOWN_NPC_BRUSHOFF_RESPONSE.to_string();
+            return Ok(Some(MoveOutcome::Used));
+        }
         if behavior.raises_guard_event() {
+            if let Some((x, y)) = self.npcs.iter().find_map(|npc| {
+                (npc.slot == npc_slot && npc.dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID)
+                    .then_some((npc.x, npc.y))
+            }) {
+                return Ok(Some(self.begin_blackthorn_guard_demand(x, y, false)));
+            }
             self.pending_town_arrest = Some(TownArrestPrompt {
                 scene_byte: scene.byte,
                 floor,
@@ -2795,15 +3346,14 @@ impl PlayState {
             return Ok(Some(MoveOutcome::Used));
         }
         if behavior.raises_attack_event() {
-            let (fortified, fleeing) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
-            self.set_town_npc_alarm_state(scene, floor, npc_slot, TownNpcAlarmState::Fortified);
+            let (pursued, fled) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
             self.message = if self.message.is_empty() {
                 format!(
-                    "Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({fortified} fortified, {fleeing} fleeing)."
+                    "Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({pursued} pursuing, {fled} fleeing)."
                 )
             } else {
                 format!(
-                    "{} Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({fortified} fortified, {fleeing} fleeing).",
+                    "{} Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({pursued} pursuing, {fled} fleeing).",
                     self.message
                 )
             };
@@ -2814,31 +3364,26 @@ impl PlayState {
 
     pub fn town_adjacent_event_npc(
         &self,
-        scene: Scene,
+        _scene: Scene,
         floor: i8,
     ) -> Option<(usize, u8, NpcAiBehavior)> {
         let floor_u8 = floor as u8;
         self.npcs.iter().find_map(|npc| {
-            if npc.is_player_phantom()
-                || npc.z != floor_u8
+            if npc.z != floor_u8
                 || npc.x.abs_diff(self.player.x) + npc.y.abs_diff(self.player.y) != 1
-                || self.town_npc_alarm_state(scene, floor, npc.slot)
-                    == Some(TownNpcAlarmState::Pacified)
             {
                 return None;
             }
             let wp = waypoint_for_hour(&npc.schedule, self.clock.hour);
-            let alarm_state = self.town_npc_alarm_state(scene, floor, npc.slot);
-            let behavior = if alarm_state == Some(TownNpcAlarmState::Fortified) {
-                if town_npc_type_guard_like(npc.type_byte) {
-                    NpcAiBehavior::GuardOrBlock
-                } else {
-                    NpcAiBehavior::ApproachAndAttack
-                }
-            } else {
-                npc_ai_behavior(npc.schedule[NPC_SCHEDULE_AI_OFFSET + wp])?
-            };
-            (behavior.raises_attack_event() || behavior.raises_guard_event()).then_some((
+            let behavior = npc_ai_behavior(npc.schedule[NPC_SCHEDULE_AI_OFFSET + wp])?;
+            // `doors-and-z-transitions.md §3.1`: released prisoners retain
+            // mode 5 pursuit for the current visit, but clearing their live
+            // dialogue/awareness byte suppresses mode 5's adjacent attack
+            // event. Other attacking AI families are not dialogue-gated.
+            let raises_attack = behavior.raises_attack_event()
+                && !(behavior == NpcAiBehavior::ReservedEngage
+                    && npc.dialog_id == NPC_DIALOG_ID_NONE);
+            (raises_attack || behavior.raises_guard_event()).then_some((
                 npc.slot,
                 npc.type_byte,
                 behavior,
@@ -2865,10 +3410,10 @@ impl PlayState {
             'n' => {
                 self.pending_town_arrest = None;
                 let scene = Scene::new(prompt.scene_byte)?;
-                let (fortified, fleeing) =
+                let (pursued, fled) =
                     self.town_alarm_sweep(scene, prompt.floor, Some(prompt.npc_slot));
                 self.message = format!(
-                    "Refused surrender; alarm raised ({fortified} fortified, {fleeing} fleeing)."
+                    "Refused surrender; alarm raised ({pursued} pursuing, {fled} fleeing)."
                 );
                 Ok(Some(MoveOutcome::Used))
             }
@@ -2899,12 +3444,10 @@ impl PlayState {
         self.player.y = TOWN_ARREST_JAIL_Y as usize;
         self.player.transport = TransportState::Foot;
         self.clear_town_floor_reload_door_state();
-        self.town_npc_alarm_states
-            .retain(|marker| marker.scene_byte == scene.byte && marker.floor == floor);
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
         self.load_scheduled_npcs(&npc_slots);
-        self.attach_player_phantom_npc();
+        let _ = self.restore_resident_shadowlord_after_floor_reload();
         self.sync_player_object();
         self.mark_visibility_dirty();
         let mut cleanup_ticks = 0;
@@ -3244,12 +3787,10 @@ impl PlayState {
             self.blackthorn_story.captive_cell_counter = 1;
         }
         self.clear_town_floor_reload_door_state();
-        self.town_npc_alarm_states
-            .retain(|marker| marker.scene_byte == scene.byte && marker.floor == floor);
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
         self.load_scheduled_npcs(&npc_slots);
-        self.attach_player_phantom_npc();
+        let _ = self.restore_resident_shadowlord_after_floor_reload();
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.message = format!(
@@ -3267,11 +3808,30 @@ impl PlayState {
         let verdict = blackthorn_rescue_verdict_record(self.moral_standing);
         let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
         let previous_standing = self.moral_standing;
-        self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
+
+        // `blackthorn.md §7` (public spec b34ae69): after the
+        // unending-darkness line, the first blocking call publishes a hidden
+        // viewport containing colour zero only. It precedes scratch-state
+        // clearing, tableau construction, and every durable handoff write.
+        self.run_map_viewport_dissolve(MapViewportDissolveSource::BlackthornRescueBlack);
+
         for member in &mut self.party {
             member.status = b'G';
             member.hp = member.max_hp.max(1);
         }
+
+        // The verdict and party restoration precede the second call. Its
+        // hidden viewport is black except for the on-foot party tile at the
+        // centre cell; the castle view is not this dissolve's source.
+        self.run_map_viewport_dissolve(MapViewportDissolveSource::BlackthornRescuePartyOnBlack {
+            cell: BLACKTHORN_RESCUE_PARTY_CELL,
+        });
+
+        // All handoff state follows completion of that second blocking call.
+        self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
+        self.clear_active_effect_slot();
+        self.torch_counter = 0;
+        self.light_spell_counter = 0;
         self.blackthorn_story.clear_jailed_party_slots();
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
         let floor = 0i8;
@@ -3299,7 +3859,7 @@ impl PlayState {
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
         self.load_scheduled_npcs(&npc_slots);
-        self.attach_player_phantom_npc();
+        let _ = self.restore_resident_shadowlord_after_floor_reload();
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.message = format!(
@@ -3430,10 +3990,7 @@ impl PlayState {
             self.player.facing = direction;
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
-            if combat_class_stats_for_sprite_byte(object.tile)
-                .or_else(|| combat_class_stats_for_sprite_byte(object.type_byte))
-                .is_some()
-            {
+            if combat_class_stats(object.aux1).is_some() {
                 let note = self.enter_dungeon_active_monster_combat(level, object)?;
                 let contact_message = format!(
                     "Dungeon monster tile {} approaches from the {} on {} level {level}; {note}.",
@@ -3535,15 +4092,15 @@ impl PlayState {
     }
 
     pub fn dungeon_active_monster(&self) -> Option<(usize, ActiveObject)> {
-        let Area::Dungeon { .. } = self.area else {
+        let Area::Dungeon { level, .. } = self.area else {
             return None;
         };
-        self.active_objects
-            .iter()
-            .copied()
-            .enumerate()
-            .skip(1)
-            .find(|(_, object)| self.object_occupies(*object, object.x, object.y))
+        let object = self
+            .active_objects
+            .get(DUNGEON_ACTIVE_MONSTER_SLOT)
+            .copied()?;
+        (dungeon_monster_record_active(object) && object.z == level as i8)
+            .then_some((DUNGEON_ACTIVE_MONSTER_SLOT, object))
     }
 
     pub fn dungeon_monster_step_seed(&self, slot: usize) -> u8 {
@@ -3573,14 +4130,13 @@ impl PlayState {
         game_dir: &Path,
         request: impl Into<InlineRestRequest>,
     ) -> io::Result<MoveOutcome> {
+        self.clear_active_effect_slot();
         let request = request.into();
         match self.area {
             Area::Town { scene, floor } => {
                 self.hole_up_town_command(game_dir, request.hours, scene, floor)
             }
-            Area::World { .. } | Area::Dungeon { .. } => {
-                self.rest_with_watch(request, Some(game_dir))
-            }
+            Area::World { .. } | Area::Dungeon { .. } => self.rest_with_watch(request, game_dir),
         }
     }
 
@@ -3669,7 +4225,10 @@ impl PlayState {
         floor: i8,
     ) -> bool {
         for _ in 0..TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS {
-            self.advance_turn_with_minutes(0);
+            // `karma.md §4.1`: these zero-minute schedule-only setup
+            // ticks are not one of the ten-minute rest ticks that age the
+            // conversation-payment cooldown.
+            self.advance_turn_with_minutes_policy(0, true, true, true, false);
             if !self.town_rest_bed_still_accepts(entries, scene, floor) {
                 return false;
             }
@@ -3693,11 +4252,11 @@ impl PlayState {
     }
 }
 
-pub const fn shadowlord_quest_progress_bit(index: usize) -> Option<u16> {
+pub const fn shadowlord_stonegate_npc_slot(index: usize) -> Option<usize> {
     match index {
-        SHADOWLORD_FALSEHOOD_INDEX => Some(SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT),
-        SHADOWLORD_HATRED_INDEX => Some(SHADOWLORD_HATRED_QUEST_PROGRESS_BIT),
-        SHADOWLORD_COWARDICE_INDEX => Some(SHADOWLORD_COWARDICE_QUEST_PROGRESS_BIT),
+        SHADOWLORD_FALSEHOOD_INDEX => Some(SHADOWLORD_FALSEHOOD_STONEGATE_NPC_SLOT),
+        SHADOWLORD_HATRED_INDEX => Some(SHADOWLORD_HATRED_STONEGATE_NPC_SLOT),
+        SHADOWLORD_COWARDICE_INDEX => Some(SHADOWLORD_COWARDICE_STONEGATE_NPC_SLOT),
         _ => None,
     }
 }

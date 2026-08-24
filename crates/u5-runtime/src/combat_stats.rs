@@ -36,7 +36,7 @@ pub struct CombatClassStats {
     pub name: &'static str,
     pub tier: u8,
     pub speed_seed: u8,
-    pub hp_comparison: u8,
+    pub endurance: u8,
     pub defense: u8,
     pub attack_cap: u8,
     pub max_hp: u8,
@@ -64,7 +64,7 @@ impl CombatClassStats {
         [
             self.tier,
             self.speed_seed,
-            self.hp_comparison,
+            self.endurance,
             self.defense,
             self.attack_cap,
             self.max_hp,
@@ -74,7 +74,7 @@ impl CombatClassStats {
     }
 
     pub const fn mass_charm_threshold(self) -> u8 {
-        self.hp_comparison
+        self.endurance
     }
 }
 
@@ -114,7 +114,7 @@ macro_rules! stats {
             name: $name,
             tier: $tier,
             speed_seed: $speed,
-            hp_comparison: $hp_cmp,
+            endurance: $hp_cmp,
             defense: $defense,
             attack_cap: $attack,
             max_hp: $hp,
@@ -182,6 +182,18 @@ impl CombatClassTraits {
 
 pub fn combat_class_stats(class: u8) -> Option<CombatClassStats> {
     match class {
+        0 => Some(stats!(0, "Mage", 10, 15, 20, 0, 15, 10, 3, 20)),
+        1 => Some(stats!(1, "Bard", 15, 20, 10, 4, 12, 15, 9, 10)),
+        2 => Some(stats!(2, "Fighter", 20, 15, 10, 8, 15, 20, 6, 15)),
+        3 => Some(stats!(3, "Avatar", 25, 25, 25, 7, 30, 20, 1, 25)),
+        4 => Some(stats!(4, "Villager", 12, 12, 12, 0, 6, 8, 1, 10)),
+        5 => Some(stats!(5, "Merchant", 12, 12, 18, 0, 6, 8, 1, 10)),
+        6 => Some(stats!(6, "Jester", 12, 18, 12, 0, 6, 8, 1, 10)),
+        7 => Some(stats!(7, "Bard (second row)", 12, 16, 14, 0, 6, 8, 1, 10)),
+        8 => Some(stats!(8, "Pirate", 12, 12, 12, 0, 0, 5, 1, 0)),
+        9 => Some(stats!(9, "Unnamed reserved", 12, 12, 12, 0, 0, 5, 1, 0)),
+        10 => Some(stats!(10, "Child", 8, 8, 8, 0, 0, 5, 1, 0)),
+        11 => Some(stats!(11, "Beggar", 8, 8, 8, 0, 0, 5, 1, 0)),
         12 => Some(stats!(12, "Guard", 22, 30, 10, 6, 30, 99, 8, 5)),
         13 => Some(stats!(13, "Wanderer", 30, 30, 30, 30, 99, 99, 1, 0)),
         14 => Some(stats!(14, "Blackthorn", 30, 30, 30, 30, 30, 99, 1, 0)),

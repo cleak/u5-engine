@@ -16,35 +16,34 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
-#[cfg(test)]
-use u5_runtime::INTRO_DOORWAY_SECOND_LINE_PEN_Y;
 use u5_runtime::TITLE_TICK_FRAME_Y;
 #[cfg(test)]
 use u5_runtime::placeholder_title_tick_frames;
 use u5_runtime::{
-    AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
-    BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT,
-    CGA_PALETTE_RGB, CH_CELL_SIDE, CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX,
-    CHARGEN_RESULT_PARAGRAPH_BOX, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
-    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
-    COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE,
-    COMBAT_FIELD_KIND_POISON, COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
-    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE,
-    COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST,
-    CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
-    CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
-    DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
-    DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, Direction,
+    AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLACKTHORN_RESCUE_HANDOFF_SCENE,
+    BLINK_COST, BLINK_SPELL_INDEX, BRIT_CBT_RECORDS, BRIT_DAT_FILENAME, BRIT_OOL_FILENAME,
+    BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT, CGA_PALETTE_RGB, CH_CELL_SIDE,
+    CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX, CHARGEN_RESULT_PARAGRAPH_BOX,
+    CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80,
+    COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
+    COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_POISON,
+    COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
+    COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE, COMBAT_VANISH_DEATH_MARKER_TILE,
+    CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, ChargenSession,
+    ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS,
+    DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
+    DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
+    DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES, Direction,
     DisplayDriverFamily, DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB,
     ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
     EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
-    EQUIPMENT_ID_RING_REGENERATION, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
-    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
-    FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
-    GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
-    HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
-    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_DOORWAY_LINES, INTRO_INLINE_DOORWAY_STEP,
-    INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,
+    EQUIPMENT_ID_RING_REGENERATION, ExplorationTurnGateOutcome, FIELD_SPELL_COST,
+    FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
+    FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FULL_SCREEN_TEXT_WINDOW_INDEX, FixedCellFont,
+    GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock,
+    GraphicImage, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist,
+    IN_LOR_COST, IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_DOORWAY_LINES,
+    INTRO_INLINE_DOORWAY_STEP, INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,
     INTRO_MENU_COPYRIGHT_CAPTION_ROW, INTRO_MENU_FRAME_BORDER_COLOR,
     INTRO_MENU_FRAME_BOTTOM_RULE_Y, INTRO_MENU_FRAME_BOTTOM_Y, INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y,
     INTRO_MENU_FRAME_INTERIOR_COLOR, INTRO_MENU_FRAME_INTERIOR_LEFT_X,
@@ -57,15 +56,18 @@ use u5_runtime::{
     INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
     INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
     INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots,
-    IntroStoryArtPlacement, JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1,
-    LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX,
-    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MonochromeBitmap, MoonstoneGateSlot,
-    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
-    NEGATE_MAGIC_SPELL_INDEX, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_TILE,
-    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y,
-    PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PreFlourishOutcome,
+    IntroStoryArtPlacement, JIMMY_MANACLES_TILE, JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE,
+    JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2,
+    LOAD_EMPTY_SAVE_LINE_3, LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y,
+    MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MORAL_STANDING_MAX, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
+    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NPC_DIALOG_ID_NONE,
+    NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS,
+    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
+    PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAYER_TILE, POISON_FIELD_SPELL_INDEX,
+    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE,
+    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyCapability, PartyMember, PlayInputDisposition,
+    PlayOptions, PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome,
     ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
     REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
     RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
@@ -74,26 +76,29 @@ use u5_runtime::{
     SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
     SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
-    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
+    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_LEFT,
-    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable,
-    StoryRecords, TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
-    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH,
-    TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_FLOURISH_FRAME_COUNT,
-    TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
-    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX,
-    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowDescriptor,
-    TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages,
-    TitleBitPlacement, TitleTickFrameSet, TransportState, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT,
-    ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
-    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
-    ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
+    TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_CTRL_CLEAR_WINDOW, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
+    TITLE_BIT_INITIAL_SOURCE_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
+    TITLE_FLOURISH_FRAME_COUNT, TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT,
+    TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK,
+    TOWN_DOOR_MAGIC_PLAIN_TILE, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, TOWN_TRAPDOOR_LIVE_TILE, Tavern, TerrainCombatSetup,
+    TextWindowDescriptor, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport,
+    TitleBitAsset, TitleBitImages, TitleBitPlacement, TitleTickFrameSet, TransportState,
+    ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST,
+    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE,
+    WORLD_SHRINE_COORDINATES, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST,
+    X_RAY_SPELL_INDEX, YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE,
     blit_tile_id_to_viewport, combat_actor_is_active_not_dead, combat_class_stats,
     commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
@@ -113,13 +118,14 @@ use u5_runtime::{
     load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
     load_tile_atlas, load_title_bit, load_ultima_title_tick_frames,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
-    paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
+    paint_arms_sell_browser_text_window, paint_inn_pickup_register_text_window,
+    paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
+    paint_talk_shop_text_window, play_options_from_save_bytes_named,
     published_world_location_entries, read_save_image_file, render_play_text_window_system,
     render_return_to_view_playback_frame_over, render_text_panel_rgba, render_text_window_rgba,
     return_to_view_caption_start_column, return_to_view_fixed_wipe_rectangles,
-    run_intro_pre_flourish_phase, run_return_to_view_playback_until_restart,
-    save_image_has_active_avatar,
+    run_intro_pre_flourish_phase, run_potion_flash_soundless_timing,
+    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -128,19 +134,20 @@ use u5_runtime::{
     spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_visible,
     summarize_return_to_view_preview, summoned_active_object_record,
     terrain_combat_instance_from_setup, terrain_combat_raw_replacement_tile_for_arena,
-    terrain_combat_setup_from_record, terrain_combat_tile_for_spawn_index, title_flourish_band,
-    title_flourish_content_row, title_flourish_step_state, title_flourish_total_steps,
-    title_flourish_visible_rows, title_tick_next_frame, town_resident_name, u5_prng_range_u16,
-    word_of_power_seal_for_word,
+    terrain_combat_setup_from_record_at_arena, terrain_combat_tile_for_spawn_index,
+    title_flourish_band, title_flourish_content_row, title_flourish_step_state,
+    title_flourish_total_steps, title_flourish_visible_rows, title_tick_next_frame,
+    town_resident_name, u5_prng_advance_state, u5_prng_range_u16, word_of_power_seal_for_word,
 };
+#[cfg(test)]
+use u5_runtime::{INTRO_DOORWAY_SECOND_LINE_PEN_Y, STATS_PANEL_TEXT_LEFT};
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
     RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, configure_play_text_windows,
     gameplay_chrome_content, layout_message_window, load_runes_ch_font,
     message_is_scene_entry_narration, message_log_from_entries, paint_fixed_cell_glyph,
-    paint_fixed_cell_text, paint_gameplay_frame_chrome, paint_message_line_cap,
-    prompt_cursor_glyph, ribbon_cap_sprite,
+    paint_gameplay_frame_chrome, paint_message_line_cap, prompt_cursor_glyph, ribbon_cap_sprite,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -148,7 +155,7 @@ use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
 // full 40-column screen width (endgame.md §3).
 // The endgame builds its own full-screen text window (endgame.md §3),
 // which the gameplay chrome path no longer needs.
-use u5_runtime::{TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS, paint_message_text_window};
+use u5_runtime::{TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS};
 
 /// `systems/u4-transfer.md §6` transfer preview compositor
 /// (`cleak/u5-spec#73`). Kept out of this file because the screen is
@@ -173,7 +180,8 @@ const INTRO_DISPLAY_SCALE: f32 = 2.5;
 // rate 1_193_182 / 65_536), i.e. ~54.945 ms per tick. The pump
 // produces one such tick per advance and drops accumulated time
 // beyond one slot (§5.3, no catch-up).
-const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = 65_536.0 / 1_193_182.0;
+const BIOS_USER_TICK_INTERVAL_SECS: f32 = 65_536.0 / 1_193_182.0;
+const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = BIOS_USER_TICK_INTERVAL_SECS;
 
 /// `systems/timing.md §5.1` (`cleak/u5-spec#77`): the `TITLE.BIT`
 /// flourish is **not** BIOS-tick paced. It is one call into the
@@ -183,6 +191,12 @@ const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = 65_536.0 / 1_193_182.0;
 /// whole 85-step script. The earlier "one BIOS tick per row-reveal
 /// group" reading was retracted upstream.
 const INTRO_FLOURISH_STEP_INTERVAL_SECS: f32 = 0.014;
+
+/// Modern-host scale for a silent 50-unit subtitle-ignition publication.
+/// `timing.md §5.1` publishes calibrated work rather than a portable wall-clock
+/// duration, so the Bevy shell keeps the existing 14 ms presentation target but
+/// applies the exact 45/50-unit branch ratio from public commit `12485b3`.
+const INTRO_SUBTITLE_IGNITION_SILENT_PUBLISH_INTERVAL_SECS: f32 = 0.014;
 
 /// `systems/intro.md §3` step 2 (`cleak/u5-spec#77`): after the
 /// flourish returns, the finished mark plus the slot-7 "Presents"
@@ -217,6 +231,12 @@ struct IntroDisplayBuffer {
     width: usize,
     height: usize,
     pixels: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DissolveTransferReport {
+    copied_pixels: usize,
+    aborted_after: Option<(usize, usize)>,
 }
 
 impl IntroDisplayBuffer {
@@ -395,6 +415,13 @@ impl IntroDisplayBuffer {
     /// the staged band already carries the cleared flanks at columns
     /// `0..=15` and `304..=319`.
     fn draw_title_tick(&mut self, frame: u8, frames: &TitleTickFrameSet) {
+        self.draw_title_tick_band_pixels(frames.frame_pixels(frame));
+    }
+
+    /// Carry-set `0x69` subtitle-ignition publish. Unlike an ordinary title
+    /// tick this receives a partially restored transient band, but it uses the
+    /// same opaque full-width destination copy.
+    fn draw_title_tick_band_pixels(&mut self, frame_pixels: &[u8]) {
         let width = TITLE_TICK_FRAME_WIDTH as usize;
         let height = TITLE_TICK_FRAME_HEIGHT as usize;
         let dst_x = TITLE_TICK_FRAME_X as usize;
@@ -405,8 +432,11 @@ impl IntroDisplayBuffer {
             self.width,
             self.height
         );
-        let frame_pixels = frames.frame_pixels(frame);
-        debug_assert_eq!(frame_pixels.len(), TITLE_TICK_FRAME_PIXELS);
+        assert_eq!(
+            frame_pixels.len(),
+            TITLE_TICK_FRAME_PIXELS,
+            "title-tick band publish must supply exactly one 320x49 frame"
+        );
         for row in 0..height {
             let src_start = row * width;
             let dst_start = (dst_y + row) * self.width + dst_x;
@@ -502,6 +532,25 @@ impl IntroDisplayBuffer {
         source: &IntroDisplayBuffer,
         rect: (u16, u16, u16, u16),
     ) -> usize {
+        self.dissolve_rect_from_with_pending_key(
+            source,
+            rect,
+            u5_runtime::DissolveAbortGate::on_driver_load(),
+            false,
+        )
+        .copied_pixels
+    }
+
+    /// The first start/menu reveal's gated driver call. Each pixel is copied
+    /// before the alternating status test. `key_pending` models the driver's
+    /// non-consuming status poll; the loader owns the later consuming read.
+    fn dissolve_rect_from_with_pending_key(
+        &mut self,
+        source: &IntroDisplayBuffer,
+        rect: (u16, u16, u16, u16),
+        gate: u5_runtime::DissolveAbortGate,
+        key_pending: bool,
+    ) -> DissolveTransferReport {
         assert_eq!(
             (self.width, self.height),
             (source.width, source.height),
@@ -525,12 +574,52 @@ impl IntroDisplayBuffer {
             y1: usize::from(y1),
         });
         let mut copied = 0;
+        // The exact first visit is newly public only for the first gated
+        // start/menu rectangle. Keep the otherwise contract-compatible
+        // generic scattered walk, but lead with `(1, 0)` and suppress the
+        // generic walk's later visit to that coordinate.
+        let published_first = (rect == (0, 0, 319, 100) && gate.is_armed()).then_some((1, 0));
+        if let Some((x, y)) = published_first {
+            let index = y * self.width + x;
+            self.pixels[index] = source.pixels[index];
+            copied = 1;
+            if key_pending && gate.samples_input_after_copy(copied as u32) {
+                return DissolveTransferReport {
+                    copied_pixels: copied,
+                    aborted_after: Some((x, y)),
+                };
+            }
+        }
         while let Some((x, y)) = state.next_pixel() {
+            if published_first == Some((x, y)) {
+                continue;
+            }
             let index = y * self.width + x;
             self.pixels[index] = source.pixels[index];
             copied += 1;
+            if key_pending && gate.samples_input_after_copy(copied as u32) {
+                return DissolveTransferReport {
+                    copied_pixels: copied,
+                    aborted_after: Some((x, y)),
+                };
+            }
         }
-        copied
+        DissolveTransferReport {
+            copied_pixels: copied,
+            aborted_after: None,
+        }
+    }
+
+    fn copy_rect_from(&mut self, source: &IntroDisplayBuffer, rect: (u16, u16, u16, u16)) {
+        assert_eq!((self.width, self.height), (source.width, source.height));
+        let (x0, y0, x1, y1) = rect;
+        assert!(x0 <= x1 && y0 <= y1);
+        assert!(usize::from(x1) < self.width && usize::from(y1) < self.height);
+        for y in usize::from(y0)..=usize::from(y1) {
+            let start = y * self.width + usize::from(x0);
+            let end = y * self.width + usize::from(x1) + 1;
+            self.pixels[start..end].copy_from_slice(&source.pixels[start..end]);
+        }
     }
     fn from_rgba(width: usize, height: usize, rgba: &[u8]) -> Self {
         assert!(
@@ -839,7 +928,7 @@ pub fn run_visual_loop(
         .insert_resource(AnimationPump::default())
         .add_systems(
             Update,
-            (drive_visual, animate_static_tiles, screenshot_system),
+            (drive_visual, animate_static_tiles, screenshot_system).chain(),
         )
         .run();
 
@@ -1176,7 +1265,7 @@ pub fn visual_route_suite(
     let mut reports = Vec::new();
 
     for case in visual_route_suite_cases() {
-        let route_game_dir = prepare_visual_route_case_game_dir(case.label)?;
+        let route_game_dir = prepare_visual_route_case_game_dir(game_dir, case.label)?;
         let reload_save_dir = prepare_visual_route_reload_save_dir(game_dir, case.label)?;
         let reload_checkpoints = visual_route_reload_checkpoints(case.label);
         let command_game_dir = route_game_dir.as_deref().unwrap_or(game_dir);
@@ -1226,6 +1315,7 @@ pub fn visual_route_suite(
             previous_hash = report.byte_hash;
             reports.push(report);
         }
+        validate_visual_route_final_state(&state, case.label, command_game_dir)?;
         if let Some(dir) = &reload_save_dir {
             let _ = std::fs::remove_dir_all(dir);
         }
@@ -1246,6 +1336,265 @@ pub fn visual_route_suite(
     }
     write_visual_frame_suite_manifest(out_dir, &reports)?;
     Ok(reports)
+}
+
+fn validate_visual_route_final_state(
+    state: &PlayState,
+    label: &str,
+    game_dir: &Path,
+) -> io::Result<()> {
+    match label {
+        "route-castle-jimmy-magic-lock-no-picker" => {
+            if state.turn != 1
+                || state.keys != DEFAULT_KEY_STOCK - 1
+                || state.prng_state != 0x3456
+                || state.active_jimmy.is_some()
+                || state.grid[TOWN_GRID_SIDE + 2] != TOWN_DOOR_MAGIC_PLAIN_TILE
+                || state.message != "Key broke!"
+            {
+                return Err(io::Error::other(
+                    "Jimmy magic-lock visual route did not take the promptless key-break path",
+                ));
+            }
+            return Ok(());
+        }
+        "route-castle-jimmy-empty-restraint-no-picker" => {
+            if state.turn != 1
+                || state.keys != DEFAULT_KEY_STOCK
+                || state.prng_state != 0x3456
+                || state.active_jimmy.is_some()
+                || state.grid[TOWN_GRID_SIDE + 2] != JIMMY_STOCKS_TILE
+                || state.message != "No one is there!"
+            {
+                return Err(io::Error::other(
+                    "empty-restraint visual route did not stop before picker and PRNG",
+                ));
+            }
+            return Ok(());
+        }
+        "route-castle-jimmy-prisoner-release" => {
+            let released = state.npcs.iter().find(|npc| npc.slot == 1);
+            if state.turn != 1
+                || state.keys != DEFAULT_KEY_STOCK
+                || state.moral_standing != MORAL_STANDING_MAX
+                || state.removed_town_npc_flags.get(&17).copied().unwrap_or(0) & 0b10 == 0
+                || state.grid[TOWN_GRID_SIDE + 2] != JIMMY_MANACLES_TILE
+                || released.is_none_or(|npc| {
+                    npc.dialog_id != NPC_DIALOG_ID_NONE
+                        || npc.schedule[NPC_SCHEDULE_AI_OFFSET
+                            ..NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT]
+                            .iter()
+                            .any(|mode| *mode != JIMMY_RELEASE_AI_MODE)
+                })
+                || state.active_jimmy.is_some()
+                || state.message != "I thank thee!"
+            {
+                return Err(io::Error::other(
+                    "prisoner-release visual route did not preserve the live release mutation, reward, and dialogue-gated contact",
+                ));
+            }
+            return Ok(());
+        }
+        "route-reload-castle-jimmy-prisoner-release" => {
+            if state.turn != 1
+                || state.keys != DEFAULT_KEY_STOCK
+                || state.moral_standing != MORAL_STANDING_MAX
+                || state.removed_town_npc_flags.get(&17).copied().unwrap_or(0) & 0b10 == 0
+            {
+                return Err(io::Error::other(
+                    "prisoner-release visual route did not preserve its native removal mask and reward across reload",
+                ));
+            }
+            return Ok(());
+        }
+        "route-dungeon-jimmy-no-keys-commits-action"
+        | "route-dungeon-jimmy-no-lock-commits-action"
+        | "route-dungeon-jimmy-cancel-commits-action"
+        | "route-dungeon-jimmy-success-clears-trap-subtype" => {
+            let index = dungeon_cell_index(
+                state.current_floor().unwrap_or(0) as u8,
+                state.player.x,
+                state.player.y,
+            );
+            let expected = match label {
+                "route-dungeon-jimmy-no-keys-commits-action" => {
+                    state.keys == 0
+                        && state.grid[index] == 0x4b
+                        && state.prng_state == 0x1234
+                        && state.message == "No keys!"
+                }
+                "route-dungeon-jimmy-no-lock-commits-action" => {
+                    state.keys == 2
+                        && state.grid[index] == 0x00
+                        && state.prng_state == 0x1234
+                        && state.message == "No lock!"
+                }
+                "route-dungeon-jimmy-cancel-commits-action" => {
+                    state.keys == 2
+                        && state.grid[index] == 0x4b
+                        && state.prng_state == 0x1234
+                        && state.message == "None!"
+                }
+                "route-dungeon-jimmy-success-clears-trap-subtype" => {
+                    state.keys == 2
+                        && state.grid[index] == 0x78
+                        && state.prng_state == u5_prng_advance_state(0x1234)
+                        && state.message == "Unlocked!"
+                }
+                _ => unreachable!("grouped Jimmy visual-route labels are exhaustive"),
+            };
+            if state.turn != 1 || state.active_jimmy.is_some() || !expected {
+                return Err(io::Error::other(format!(
+                    "visual route `{label}` missed the committed dungeon Jimmy outcome"
+                )));
+            }
+            return Ok(());
+        }
+        "route-dungeon-sjog-underfoot-open" | "route-dungeon-open-chest-spell" => {
+            let index = dungeon_cell_index(
+                state.current_floor().unwrap_or(0) as u8,
+                state.player.x,
+                state.player.y,
+            );
+            let expected_message = if label == "route-dungeon-open-chest-spell" {
+                state.spell_charges[OPEN_SPELL_INDEX] == 0
+                    && state.party.first().is_some_and(|member| member.mana == 0)
+                    && state.message.contains("Safely opened dungeon chest")
+            } else {
+                state.message.contains("Opened dungeon chest")
+            };
+            if state.turn != 1 || state.grid[index] != 0x78 || !expected_message {
+                return Err(io::Error::other(format!(
+                    "visual route `{label}` did not clear dungeon chest trap/subtype bits while preserving the visit marker"
+                )));
+            }
+            return Ok(());
+        }
+        "route-ship-xit-launches-skiff" => {
+            let parked_ship = state.active_objects.iter().skip(1).find(|object| {
+                object.type_byte == FIRST_PLAYABLE_FRIGATE_TILE
+                    && object.x == state.player.x
+                    && object.y == state.player.y
+                    && object.z == WorldPlane::Britannia.save_floor()
+            });
+            if state.turn != 2
+                || !matches!(state.player.transport, TransportState::Skiff { .. })
+                || parked_ship.is_none_or(|object| {
+                    object.aux1 != FIRST_PLAYABLE_FULL_SHIP_HULL || object.aux3 != 1
+                })
+            {
+                return Err(io::Error::other(
+                    "ship X-it visual route did not launch a skiff while parking the decremented ship hull",
+                ));
+            }
+            return Ok(());
+        }
+        "route-ship-xit-no-skiffs-refusal" => {
+            if state.turn != 0
+                || !matches!(
+                    state.player.transport,
+                    TransportState::Ship {
+                        sails_hoisted: false,
+                        hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+                        skiffs: 0,
+                        ..
+                    }
+                )
+                || state.message != SHIP_NO_SKIFFS_WARNING
+            {
+                return Err(io::Error::other(
+                    "ship X-it visual route did not preserve the furled ship on the published no-skiffs refusal",
+                ));
+            }
+            return Ok(());
+        }
+        "route-ship-yell-toggles-town-band" | "route-ship-yell-toggles-dungeon-band" => {
+            let expected_scene = if label == "route-ship-yell-toggles-town-band" {
+                0x11
+            } else {
+                0x21
+            };
+            if state.current_scene_byte() != expected_scene
+                || state.turn != 1
+                || !state.player.transport.is_ship_under_sail()
+                || state.message != YELL_SAILS_HOISTED_MESSAGE
+            {
+                return Err(io::Error::other(format!(
+                    "visual route `{label}` did not take the published low-scene-byte sail shortcut"
+                )));
+            }
+            return Ok(());
+        }
+        "route-britannia-empty-yell-is-acted" => {
+            if state.turn != 1
+                || state.active_yell.is_some()
+                || state.message != YELL_NOTHING_SAID_MESSAGE
+            {
+                return Err(io::Error::other(
+                    "empty-Yell visual route did not commit the prompted action",
+                ));
+            }
+            return Ok(());
+        }
+        _ => {}
+    }
+    if label == "route-world-defeat-persists-ool-before-rescue" {
+        let rescue_scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
+        let bytes = std::fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
+        let offset = 31 * OOL_RECORD_LEN;
+        let expected = [0x71, 0x72, 73, 74, 0, 0x75, 0x76, 0x77];
+        if state.area
+            != (u5_runtime::Area::Town {
+                scene: rescue_scene,
+                floor: 0,
+            })
+            || state.turn != 0
+            || state.party.is_empty()
+            || state
+                .party
+                .iter()
+                .any(|member| member.status != b'G' || member.hp != member.max_hp.max(1))
+            || state.player.transport != TransportState::Foot
+            || bytes.get(offset..offset + OOL_RECORD_LEN) != Some(expected.as_slice())
+        {
+            return Err(io::Error::other(
+                "world-defeat visual route did not persist the complete live Britannia OOL table before the shared rescue",
+            ));
+        }
+        return Ok(());
+    }
+    if label != "route-stonegate-trapdoor-rescue" {
+        return Ok(());
+    }
+    let rescue_scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
+    if state.area
+        != (u5_runtime::Area::Town {
+            scene: rescue_scene,
+            floor: 0,
+        })
+        || state.turn != 1
+        || state.party.is_empty()
+        || state
+            .party
+            .iter()
+            .any(|member| member.status != b'G' || member.hp != member.max_hp.max(1))
+        || state.player.transport != TransportState::Foot
+    {
+        return Err(io::Error::other(format!(
+            "Stonegate visual route did not complete one trapdoor turn followed by the shared rescue: area={}, turn={}, party={:?}, transport={:?}, modal={}, capability={:?}",
+            state.current_area_label(),
+            state.turn,
+            state
+                .party
+                .iter()
+                .map(|member| (member.status, member.hp, member.max_hp))
+                .collect::<Vec<_>>(),
+            state.player.transport,
+            visual_modal_prompt_active(state),
+            state.party_capability(),
+        )));
+    }
+    Ok(())
 }
 
 fn apply_visual_route_initial_setup(
@@ -1298,6 +1647,19 @@ fn apply_visual_route_initial_setup(
             state.shrine_ordained_mask = 0;
             state.shrine_codex_mask = ShrineVirtue::Compassion.bit();
             state.moral_standing = 10;
+        }
+        "route-castle-jimmy-magic-lock-no-picker" => {
+            seed_visual_route_jimmy_unoccupied_target(state, TOWN_DOOR_MAGIC_PLAIN_TILE);
+            state.party[0].climb_stat = 0;
+            state.prng_state = 0x3456;
+        }
+        "route-castle-jimmy-empty-restraint-no-picker" => {
+            seed_visual_route_jimmy_unoccupied_target(state, JIMMY_STOCKS_TILE);
+            state.party[0].climb_stat = 0;
+            state.prng_state = 0x3456;
+        }
+        "route-castle-jimmy-prisoner-release" | "route-reload-castle-jimmy-prisoner-release" => {
+            seed_visual_route_jimmy_prisoner(state);
         }
         _ => {}
     }
@@ -1522,15 +1884,34 @@ fn visual_route_shrine_virtue(label: &str) -> Option<ShrineVirtue> {
     ShrineVirtue::from_key(key)
 }
 
-fn prepare_visual_route_case_game_dir(case_label: &str) -> io::Result<Option<PathBuf>> {
-    if case_label != "route-codex-urn-honesty-read" {
+fn prepare_visual_route_case_game_dir(
+    game_dir: &Path,
+    case_label: &str,
+) -> io::Result<Option<PathBuf>> {
+    if case_label != "route-codex-urn-honesty-read"
+        && case_label != "route-world-defeat-persists-ool-before-rescue"
+    {
         return Ok(None);
     }
     let dir = visual_route_temp_dir(case_label, "case")?;
-    std::fs::write(
-        dir.join(CODEX_URN_TABLE_FILE),
-        format!("BRITANNIA 62 124 {SHRINE_ALTAR_TILE_FIRST}\n"),
-    )?;
+    if case_label == "route-world-defeat-persists-ool-before-rescue" {
+        for file_name in [BRIT_DAT_FILENAME, "CASTLE.DAT", "CASTLE.NPC", "CASTLE.TLK"] {
+            u5_runtime::test_fixtures::copy_asset_writable(
+                &game_dir.join(file_name),
+                &dir.join(file_name),
+            )?;
+        }
+        let karma = game_dir.join("KARMA.DAT");
+        if karma.exists() {
+            u5_runtime::test_fixtures::copy_asset_writable(&karma, &dir.join("KARMA.DAT"))?;
+        }
+    }
+    if case_label == "route-codex-urn-honesty-read" {
+        std::fs::write(
+            dir.join(CODEX_URN_TABLE_FILE),
+            format!("BRITANNIA 62 124 {SHRINE_ALTAR_TILE_FIRST}\n"),
+        )?;
+    }
     Ok(Some(dir))
 }
 
@@ -1569,11 +1950,20 @@ fn seed_visual_route_save_files(game_dir: &Path, save_dir: &Path) -> io::Result<
         .is_err()
     {
         if game_dir.join("INIT.OOL").exists() {
-            copy_visual_route_save_file(game_dir, save_dir, "INIT.OOL", SAVED_OOL_FILENAME)?;
+            let init_ool = std::fs::read(game_dir.join("INIT.OOL"))?;
+            let mut saved_ool = vec![0; SAVED_OOL_LEN];
+            let copied_len = init_ool.len().min(saved_ool.len() / 2);
+            saved_ool[..copied_len].copy_from_slice(&init_ool[..copied_len]);
+            std::fs::write(save_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
         } else {
             std::fs::write(save_dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN])?;
         }
     }
+    // Reload checkpoints perform a real Q-save. The published save flow reads
+    // both per-plane mirrors rather than deriving them from SAVED.OOL, so the
+    // isolated writable fixture must carry the complete four-file contract.
+    let saved_ool = std::fs::read(save_dir.join(SAVED_OOL_FILENAME))?;
+    u5_runtime::write_saved_ool_mirrors(save_dir, &saved_ool)?;
     Ok(())
 }
 
@@ -1601,7 +1991,8 @@ fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
         | "route-reload-dungeon-ladder-down-up-route"
         | "route-reload-dungeon-surface-exit-return-world" => &[1],
         "route-reload-underworld-fixed-hidden-stack-search-get-search"
-        | "route-reload-horse-trader-horse-and-rider-buy-pass" => &[2],
+        | "route-reload-horse-trader-horse-and-rider-buy-pass"
+        | "route-reload-castle-jimmy-prisoner-release" => &[2],
         _ => &[],
     }
 }
@@ -1905,7 +2296,7 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
             synthetic_combat: false,
         },
         VisualGameplayFrameCase {
-            label: "britannia-chunk-map-overlay",
+            label: "night-sky-overlay",
             frame_kind: "visual view overlay frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
@@ -1996,7 +2387,7 @@ fn seed_visual_suite_combat(state: &mut PlayState, game_dir: &Path) -> io::Resul
         )
     })?;
     let trigger = ActiveObject {
-        type_byte: 0x40 + (ARENA_INDEX as u8) * 4,
+        type_byte: 0xc0,
         tile: 0xc0,
         x: 0,
         y: 0,
@@ -2005,7 +2396,12 @@ fn seed_visual_suite_combat(state: &mut PlayState, game_dir: &Path) -> io::Resul
         aux1: 0,
         aux3: 0,
     };
-    let setup = terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, record)?;
+    let setup = terrain_combat_setup_from_record_at_arena(
+        WorldPlane::Britannia,
+        trigger,
+        ARENA_INDEX,
+        record,
+    )?;
     let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(ARENA_INDEX);
     let replacement_rolls = vec![0; usize::from(REQUESTED_MONSTERS)];
     let mut instance = terrain_combat_instance_from_setup(
@@ -2110,7 +2506,7 @@ fn seed_surface_view_class_gallery(state: &mut PlayState, mode: ViewOverlayMode)
         ViewOverlayMode::XRaySpell => {
             state.activate_x_ray_view_overlay();
         }
-        ViewOverlayMode::SurfaceLook | ViewOverlayMode::BritanniaOverview => {
+        ViewOverlayMode::SurfaceLook | ViewOverlayMode::SkyView => {
             unreachable!("surface view class gallery uses local surface-view modes")
         }
     }
@@ -2163,9 +2559,8 @@ fn push_visual_combat_gallery_reports(
                 format!("BRIT.CBT has no outdoor arena record {arena_index}"),
             )
         })?;
-        let type_byte = 0x40 + (arena_index as u8) * 4;
         let trigger = ActiveObject {
-            type_byte,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 0,
             y: 0,
@@ -2174,7 +2569,12 @@ fn push_visual_combat_gallery_reports(
             aux1: 0,
             aux3: 0,
         };
-        let setup = terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, record)?;
+        let setup = terrain_combat_setup_from_record_at_arena(
+            WorldPlane::Britannia,
+            trigger,
+            arena_index,
+            record,
+        )?;
         let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(arena_index);
         let replacement_rolls = vec![0; 16];
         let mut instance =
@@ -2823,8 +3223,8 @@ const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
 const VISUAL_KEY_READY_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_r", KeyCode::KeyR),
     VisualKeyStep::key("digit_1", KeyCode::Digit1),
-    VisualKeyStep::key("enter", KeyCode::Enter),
     VisualKeyStep::key("space", KeyCode::Space),
+    VisualKeyStep::key("escape", KeyCode::Escape),
 ];
 const VISUAL_KEY_STATS_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_z", KeyCode::KeyZ),
@@ -2832,7 +3232,7 @@ const VISUAL_KEY_STATS_STEPS: &[VisualKeyStep] = &[
 ];
 const VISUAL_KEY_USE_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_u", KeyCode::KeyU),
-    VisualKeyStep::key("enter", KeyCode::Enter),
+    VisualKeyStep::key("space", KeyCode::Space),
 ];
 const VISUAL_KEY_MIX_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_m", KeyCode::KeyM),
@@ -3027,6 +3427,23 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         target: PlayTarget::World(WorldPlane::Underworld),
         ..PlayOptions::default()
     };
+    let town_jimmy_no_roll = PlayOptions {
+        target: PlayTarget::Town(castle),
+        start: Some((1, 1)),
+        facing: Some(Direction::East),
+        keys: DEFAULT_KEY_STOCK,
+        party: vec![route_visual_party_member(0, b'A', b'G', 20, 20)],
+        ..PlayOptions::default()
+    };
+    let town_jimmy_release = PlayOptions {
+        target: PlayTarget::Town(castle),
+        start: Some((1, 1)),
+        facing: Some(Direction::East),
+        keys: DEFAULT_KEY_STOCK,
+        moral_standing: 98,
+        party: vec![route_visual_party_member(0, b'A', b'G', 20, 20)],
+        ..PlayOptions::default()
+    };
     let world_to_castle = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         debug_enter: Some(PlayTarget::Town(castle)),
@@ -3047,11 +3464,31 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         transport: ship_transport,
         ..PlayOptions::default()
     };
+    let ship_xit_no_skiffs = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: TransportState::Ship {
+            type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+            skiffs: 0,
+        },
+        ..PlayOptions::default()
+    };
     let ship_sail = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         transport: ship_transport,
         wind: WindState::East,
         wind_save_byte: WindState::East.save_byte(),
+        ..PlayOptions::default()
+    };
+    let ship_yell_town = PlayOptions {
+        target: PlayTarget::Town(castle),
+        ..PlayOptions::default()
+    };
+    let ship_yell_dungeon = PlayOptions {
+        target: PlayTarget::Dungeon(dungeon),
+        torch_counter: 9,
         ..PlayOptions::default()
     };
     let mut britannia_utility_use = PlayOptions {
@@ -3314,6 +3751,34 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-castle-jimmy-magic-lock-no-picker",
+            frame_kind: "visual route town frame",
+            options: town_jimmy_no_roll.clone(),
+            script: &["J"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-jimmy-empty-restraint-no-picker",
+            frame_kind: "visual route town frame",
+            options: town_jimmy_no_roll,
+            script: &["J"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-jimmy-prisoner-release",
+            frame_kind: "visual route town frame",
+            options: town_jimmy_release.clone(),
+            script: &["J", "1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-castle-jimmy-prisoner-release",
+            frame_kind: "visual route town frame",
+            options: town_jimmy_release,
+            script: &["J", "1", "empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-town-status-modal",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -3446,7 +3911,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
-            label: "route-britannia-spyglass-chunk-map",
+            label: "route-britannia-spyglass-night-sky",
             frame_kind: "visual route world frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
@@ -3777,7 +4242,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-debug-enter-castle-return-world",
             frame_kind: "visual route world frame",
             options: world_to_castle,
-            script: &["e", "w", "idle:1"],
+            script: &["e", "s", "s", "Y"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -3831,6 +4296,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-ship-xit-no-skiffs-refusal",
+            frame_kind: "visual route world frame",
+            options: ship_xit_no_skiffs,
+            script: &["X"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-reload-ship-xit-skiff-pass",
             frame_kind: "visual route world frame",
             options: ship_xit,
@@ -3843,6 +4315,20 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             options: ship_sail,
             script: &["Y", "d", "empty"],
             configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-ship-yell-toggles-town-band",
+            frame_kind: "visual route town frame",
+            options: ship_yell_town,
+            script: &["Y"],
+            configure: Some(seed_visual_route_ship_yell_frigate),
+        },
+        VisualRouteSuiteCase {
+            label: "route-ship-yell-toggles-dungeon-band",
+            frame_kind: "visual route dungeon frame",
+            options: ship_yell_dungeon,
+            script: &["Y"],
+            configure: Some(seed_visual_route_ship_yell_frigate),
         },
         VisualRouteSuiteCase {
             label: "route-ship-broadside-fire",
@@ -3912,14 +4398,14 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 ..PlayOptions::default()
             },
             script: &["H1"],
-            configure: None,
+            configure: Some(seed_visual_route_no_rest_ambush),
         },
         VisualRouteSuiteCase {
             label: "route-dungeon-hole-up-no-direct-recovery",
             frame_kind: "visual route dungeon frame",
             options: dungeon_rest_no_direct_recovery,
             script: &["H1"],
-            configure: None,
+            configure: Some(seed_visual_route_no_rest_ambush),
         },
         VisualRouteSuiteCase {
             label: "route-dungeon-long-camp-recovery",
@@ -4062,6 +4548,54 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-dungeon-jimmy-no-keys-commits-action",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["J", "1"],
+            configure: Some(seed_visual_route_dungeon_jimmy_no_keys),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-jimmy-no-lock-commits-action",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["J", "1"],
+            configure: Some(seed_visual_route_dungeon_jimmy_no_lock),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-jimmy-cancel-commits-action",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["J", "\x1b"],
+            configure: Some(seed_visual_route_dungeon_jimmy_chest),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-jimmy-success-clears-trap-subtype",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["J", "1"],
+            configure: Some(seed_visual_route_dungeon_jimmy_chest),
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-sjog-underfoot-open",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -4071,7 +4605,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 ..PlayOptions::default()
             },
             script: &["O"],
-            configure: None,
+            configure: Some(seed_visual_route_dungeon_open_command_chest),
         },
         VisualRouteSuiteCase {
             label: "route-debug-enter-dungeon",
@@ -4425,7 +4959,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "M", "R", "1", "N"],
+            script: &["Y", "M", "Y", "R", "1", "N"],
             configure: Some(seed_visual_route_tavern),
         },
         VisualRouteSuiteCase {
@@ -4435,7 +4969,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "M", "R", "1", "N"],
+            script: &["Y", "M", "Y", "R", "1", "N"],
             configure: Some(seed_visual_route_tavern),
         },
         VisualRouteSuiteCase {
@@ -4445,7 +4979,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_honest_meal_lore),
         },
         VisualRouteSuiteCase {
@@ -4455,7 +4989,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_wayfarer_lore),
         },
         VisualRouteSuiteCase {
@@ -4465,7 +4999,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_sword_and_keg_lore),
         },
         VisualRouteSuiteCase {
@@ -4475,7 +5009,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "R", "H", "HONE", "Y"],
+            script: &["Y", "R", "Y", "H", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_slaughtered_lamb_lore),
         },
         VisualRouteSuiteCase {
@@ -4485,7 +5019,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "S", "A", "HONE", "Y"],
+            script: &["Y", "S", "Y", "A", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_humble_palate_lore),
         },
         VisualRouteSuiteCase {
@@ -4495,7 +5029,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "C", "T", "HONE", "Y"],
+            script: &["Y", "C", "Y", "T", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_blue_boar_lore),
         },
         VisualRouteSuiteCase {
@@ -4505,7 +5039,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_cats_lair_lore),
         },
         VisualRouteSuiteCase {
@@ -4515,7 +5049,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "R", "H", "HONE", "Y"],
+            script: &["Y", "R", "Y", "H", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_fallen_virgin_lore),
         },
         VisualRouteSuiteCase {
@@ -4525,7 +5059,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             configure: Some(seed_visual_route_tavern_folley_tap_lore),
         },
         VisualRouteSuiteCase {
@@ -4914,43 +5448,43 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_dispel_empty),
         },
         VisualRouteSuiteCase {
-            label: "route-combat-utility-vanish-failure",
+            label: "route-combat-utility-vanish-tile",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
                 ..PlayOptions::default()
             },
-            script: &["C1AY"],
+            script: &["C1AY6"],
             configure: Some(seed_visual_route_combat_utility_vanish),
         },
         VisualRouteSuiteCase {
-            label: "route-combat-utility-open-failure",
+            label: "route-combat-utility-open-tile",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
                 ..PlayOptions::default()
             },
-            script: &["C1AS"],
+            script: &["C1AS6"],
             configure: Some(seed_visual_route_combat_utility_open),
         },
         VisualRouteSuiteCase {
-            label: "route-combat-utility-magic-lock-failure",
+            label: "route-combat-utility-magic-lock-tile",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
                 ..PlayOptions::default()
             },
-            script: &["C1AEP"],
+            script: &["C1AEP6"],
             configure: Some(seed_visual_route_combat_utility_magic_lock),
         },
         VisualRouteSuiteCase {
-            label: "route-combat-utility-unlock-magic-failure",
+            label: "route-combat-utility-unlock-magic-tile",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
                 ..PlayOptions::default()
             },
-            script: &["C1EIP"],
+            script: &["C1EIP6"],
             configure: Some(seed_visual_route_combat_utility_unlock_magic),
         },
         VisualRouteSuiteCase {
@@ -5114,7 +5648,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_kill_gargoyle),
         },
         VisualRouteSuiteCase {
-            label: "route-combat-kill-shadowlord-vanish-marker",
+            label: "route-combat-kill-shadowlord-protected-rejection",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
@@ -5134,13 +5668,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
-            label: "route-terrain-combat-xit-no-foes-clean-exit",
+            label: "route-terrain-combat-escape-announced-cleanup",
             frame_kind: "visual route world frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
                 ..PlayOptions::default()
             },
-            script: &["setup:terrain-combat-no-foes", "X"],
+            script: &["setup:terrain-combat-no-foes", "\x1b"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -5440,6 +5974,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-world-defeat-persists-ool-before-rescue",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["setup:world-defeat", "q"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-virtue-town-shadowlord-entry",
             frame_kind: "visual route town frame",
             options: shadowlord_town_entry,
@@ -5482,6 +6026,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-stonegate-trapdoor-rescue",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(stonegate),
+                ..PlayOptions::default()
+            },
+            script: &["setup:stonegate-trapdoor", "empty", "q"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-britannia-word-of-power-seal-opens",
             frame_kind: "visual route world frame",
             options: PlayOptions {
@@ -5492,6 +6046,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_britannia_word_of_power),
         },
         VisualRouteSuiteCase {
+            label: "route-britannia-empty-yell-is-acted",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-underworld-doom-word-of-power-seal-opens",
             frame_kind: "visual route world frame",
             options: PlayOptions {
@@ -5500,6 +6064,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["YVERAMOCOR"],
             configure: Some(seed_visual_route_underworld_word_of_power),
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-ruined-honesty-shrine-restoration",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["YFALLAX", "Honesty", "Ahm", "Ahm", "Ahm"],
+            configure: Some(seed_visual_route_ruined_honesty_shrine),
         },
         VisualRouteSuiteCase {
             label: "route-endgame-missing-box-terminal-jitter",
@@ -5643,7 +6217,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["s", "s", "d", "d", "w", "w", "Q", "N", "Z"],
+            script: &["w", "w", "d", "d", "s", "s", "Q", "N", "Z"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -5681,8 +6255,8 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
-            label: "route-doom-combat-quit-defeat",
-            frame_kind: "visual route dungeon frame",
+            label: "route-doom-combat-quit-refusal",
+            frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::Dungeon(doom),
                 floor: 0,
@@ -5783,13 +6357,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         visual_doom_combat_case("route-doom-combat-view-label-only", doom, &["", "V"]),
         visual_doom_combat_case("route-doom-combat-look-label-only", doom, &["", "L"]),
         visual_doom_combat_case("route-doom-combat-attack-direction", doom, &["", "A6"]),
-        visual_doom_combat_case("route-doom-combat-escape-abort", doom, &["", "\x1b"]),
+        visual_doom_combat_case("route-doom-combat-escape-not-yet", doom, &["", "\x1b"]),
         visual_doom_combat_case("route-doom-combat-music-toggle", doom, &["", "\u{13}"]),
         visual_doom_combat_case("route-doom-combat-select-clear", doom, &["", "0"]),
         visual_doom_combat_case("route-doom-combat-select-one", doom, &["", "1"]),
         visual_doom_combat_case("route-doom-combat-select-six", doom, &["", "6"]),
         visual_doom_combat_case("route-doom-combat-step-east", doom, &["", "d"]),
-        visual_doom_combat_case("route-doom-combat-use-refusal", doom, &["", "U"]),
+        visual_doom_combat_case("route-doom-combat-use-picker", doom, &["", "U"]),
         visual_doom_combat_case("route-doom-combat-drop-refusal", doom, &["", "D"]),
         visual_doom_combat_case("route-doom-combat-wear-refusal", doom, &["", "W"]),
         visual_doom_combat_case("route-doom-combat-enter-refusal", doom, &["", "E"]),
@@ -5809,7 +6383,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         visual_doom_combat_case("route-doom-combat-klimb-direction", doom, &["", "K6"]),
         visual_doom_combat_case("route-doom-combat-ready-prompt", doom, &["", "R"]),
         visual_doom_combat_case("route-doom-combat-yell-word", doom, &["", "YFALLAX"]),
-        visual_doom_combat_case("route-doom-combat-xit-foes-remain", doom, &["", "X"]),
+        visual_doom_combat_case("route-doom-combat-xit-refusal", doom, &["", "X"]),
     ]);
     append_directed_wind_visual_route_cases(&mut cases);
     append_asset_backed_conversation_visual_route_cases(&mut cases);
@@ -5947,6 +6521,7 @@ fn append_asset_backed_conversation_visual_route_cases(cases: &mut Vec<VisualRou
                     frame_kind: "visual route town frame",
                     options: PlayOptions {
                         target: PlayTarget::Town(scene),
+                        shadowlord_hideouts: [SHADOWLORD_VANQUISHED; 3],
                         ..PlayOptions::default()
                     },
                     script,
@@ -6075,6 +6650,18 @@ fn seed_visual_route_natural_moongate(state: &mut PlayState) {
     state.mark_visibility_dirty();
 }
 
+fn seed_visual_route_ship_yell_frigate(state: &mut PlayState) {
+    state.player.transport = TransportState::Ship {
+        type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+        skiffs: 2,
+    };
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
 fn seed_visual_route_underworld_fixed_hidden_stack(state: &mut PlayState) {
     state.player.x = 232;
     state.player.y = 233;
@@ -6166,6 +6753,9 @@ fn seed_visual_route_talk_ordinary_keyword(state: &mut PlayState) {
     state.player.y = 15;
     state.player.facing = Direction::East;
     state.sync_player_object();
+    for object in state.active_objects.iter_mut().skip(1) {
+        *object = ActiveObject::empty();
+    }
 
     let mut schedule = [0u8; 16];
     schedule[3..6].copy_from_slice(&[16, 16, 16]);
@@ -6231,16 +6821,44 @@ fn seed_visual_route_dungeon_active_monster(state: &mut PlayState, phase: u8) {
     state.player.facing = Direction::East;
     state.sync_player_object();
     state.active_objects.push(ActiveObject {
-        type_byte: 0xC0,
-        tile: 0xC0,
+        type_byte: 0,
+        tile: 0,
         x: 2,
         y: 1,
         z: state.current_floor().unwrap_or(0),
         phase,
-        aux1: 0,
+        aux1: DUNGEON_MONSTER_COMBAT_CLASSES[0],
         aux3: 0,
     });
     state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_dungeon_jimmy_chest(state: &mut PlayState) {
+    let index = dungeon_cell_index(
+        state.current_floor().unwrap_or(0) as u8,
+        state.player.x,
+        state.player.y,
+    );
+    state.grid[index] = 0x4b;
+    state.keys = 2;
+    state.party[0].climb_stat = 30;
+    state.prng_state = 0x1234;
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_dungeon_jimmy_no_keys(state: &mut PlayState) {
+    seed_visual_route_dungeon_jimmy_chest(state);
+    state.keys = 0;
+}
+
+fn seed_visual_route_dungeon_jimmy_no_lock(state: &mut PlayState) {
+    seed_visual_route_dungeon_jimmy_chest(state);
+    let index = dungeon_cell_index(
+        state.current_floor().unwrap_or(0) as u8,
+        state.player.x,
+        state.player.y,
+    );
+    state.grid[index] = 0x00;
 }
 
 fn seed_visual_route_command_workflows(state: &mut PlayState) {
@@ -6347,7 +6965,7 @@ fn seed_visual_route_light_open(state: &mut PlayState) {
     state.player.facing = Direction::East;
     let target = state.player.y * TOWN_GRID_SIDE + state.player.x + 1;
     if let Some(cell) = state.grid.get_mut(target) {
-        *cell = 0x97;
+        *cell = 0xB9;
     }
     state.spell_charges[VAS_LOR_SPELL_INDEX] = 1;
     state.spell_charges[OPEN_SPELL_INDEX] = 1;
@@ -6399,6 +7017,13 @@ fn seed_visual_route_long_camp_recovery(state: &mut PlayState) {
     state.party_intelligence = vec![22, 24, 20, 18, 12, 8];
     state.party_equipment = default_party_equipment(6);
     state.party_roster = default_party_roster(6);
+    state.prng_state = visual_long_camp_no_ambush_seed();
+}
+
+fn seed_visual_route_no_rest_ambush(state: &mut PlayState) {
+    // The completed-rest routes and the sleep-ambush routes are distinct
+    // integration cases. Keep this fixture off the ambush branch instead of
+    // letting a host-clock seed choose which endpoint the route asserts.
     state.prng_state = visual_long_camp_no_ambush_seed();
 }
 
@@ -6833,7 +7458,12 @@ fn seed_visual_route_combat_dispel_route(state: &mut PlayState, place_field: boo
         .expect("visual route combat field dispel frame should seed");
 }
 
-fn seed_visual_route_combat_utility_failure(state: &mut PlayState, spell_index: usize, cost: u8) {
+fn seed_visual_route_combat_utility_tile(
+    state: &mut PlayState,
+    spell_index: usize,
+    cost: u8,
+    source_tile: u8,
+) {
     state.party = vec![route_visual_party_member(0, b'A', b'G', 20, 20)];
     state.party_names = default_party_names(1);
     state.party_experience = vec![0];
@@ -6858,23 +7488,23 @@ fn seed_visual_route_combat_utility_failure(state: &mut PlayState, spell_index: 
     state
         .enter_combat_frame(active_objects, actors)
         .expect("visual route combat utility frame should seed");
-    state.combat_terrain[5][6] = 0x97;
+    state.combat_terrain[5][6] = source_tile;
 }
 
 fn seed_visual_route_combat_utility_vanish(state: &mut PlayState) {
-    seed_visual_route_combat_utility_failure(state, VANISH_SPELL_INDEX, VANISH_COST);
+    seed_visual_route_combat_utility_tile(state, VANISH_SPELL_INDEX, VANISH_COST, 0x90);
 }
 
 fn seed_visual_route_combat_utility_open(state: &mut PlayState) {
-    seed_visual_route_combat_utility_failure(state, OPEN_SPELL_INDEX, OPEN_SPELL_COST);
+    seed_visual_route_combat_utility_tile(state, OPEN_SPELL_INDEX, OPEN_SPELL_COST, 0xB9);
 }
 
 fn seed_visual_route_combat_utility_magic_lock(state: &mut PlayState) {
-    seed_visual_route_combat_utility_failure(state, MAGIC_LOCK_SPELL_INDEX, MAGIC_LOCK_COST);
+    seed_visual_route_combat_utility_tile(state, MAGIC_LOCK_SPELL_INDEX, MAGIC_LOCK_COST, 0xB8);
 }
 
 fn seed_visual_route_combat_utility_unlock_magic(state: &mut PlayState) {
-    seed_visual_route_combat_utility_failure(state, UNLOCK_MAGIC_SPELL_INDEX, UNLOCK_MAGIC_COST);
+    seed_visual_route_combat_utility_tile(state, UNLOCK_MAGIC_SPELL_INDEX, UNLOCK_MAGIC_COST, 0x97);
 }
 
 fn seed_visual_route_combat_magic_missile(state: &mut PlayState) {
@@ -7150,16 +7780,20 @@ fn seed_visual_route_dungeon_field_cycle(state: &mut PlayState) {
 }
 
 fn seed_visual_route_dungeon_open_chest(state: &mut PlayState) {
-    state.player.x = 1;
-    state.player.y = 1;
-    let current = dungeon_cell_index(0, state.player.x, state.player.y);
-    if let Some(cell) = state.grid.get_mut(current) {
-        *cell = 0x40;
-    }
+    seed_visual_route_dungeon_open_command_chest(state);
     state.spell_charges[OPEN_SPELL_INDEX] = 1;
     if let Some(caster) = state.party.first_mut() {
         caster.mana = OPEN_SPELL_COST;
         caster.level = OPEN_SPELL_COST;
+    }
+}
+
+fn seed_visual_route_dungeon_open_command_chest(state: &mut PlayState) {
+    state.player.x = 1;
+    state.player.y = 1;
+    let current = dungeon_cell_index(0, state.player.x, state.player.y);
+    if let Some(cell) = state.grid.get_mut(current) {
+        *cell = 0x4b;
     }
     state.sync_player_object();
     state.mark_visibility_dirty();
@@ -7453,7 +8087,6 @@ fn seed_visual_route_shipwright_shop(state: &mut PlayState, shipwright: Shipwrig
         x: 1,
         y: 2,
         transport: state.player.transport,
-        timing_status: state.timing_status,
         sail_cadence: state.sail_cadence,
         sail_stall_pending: state.sail_stall_pending,
         grid: state.grid.clone(),
@@ -7510,7 +8143,6 @@ fn seed_visual_route_dungeon_surface_exit(state: &mut PlayState) {
         x: 62,
         y: 124,
         transport: TransportState::Foot,
-        timing_status: state.timing_status,
         sail_cadence: state.sail_cadence,
         sail_stall_pending: state.sail_stall_pending,
         grid: vec![0; WORLD_SIDE * WORLD_SIDE],
@@ -7553,6 +8185,32 @@ fn seed_visual_route_yew_wanted_poster(state: &mut PlayState) {
     });
     state.sync_player_object();
     state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_jimmy_unoccupied_target(state: &mut PlayState, tile: u8) {
+    state.player.x = 1;
+    state.player.y = 1;
+    state.player.facing = Direction::East;
+    let floor = state.current_floor().unwrap_or(0);
+    let target_x = 2;
+    let target_y = 1;
+    state.npcs.clear();
+    for object in &mut state.active_objects {
+        if !object.is_empty() && object.x == target_x && object.y == target_y && object.z == floor {
+            *object = ActiveObject::empty();
+        }
+    }
+    state.grid[target_y * TOWN_GRID_SIDE + target_x] = tile;
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_jimmy_prisoner(state: &mut PlayState) {
+    seed_visual_route_jimmy_unoccupied_target(state, JIMMY_MANACLES_TILE);
+    seed_visual_route_town_scheduled_npc(state, 1, 0x0E, 2, 1, 0);
+    if let Some(npc) = state.npcs.iter_mut().find(|npc| npc.slot == 1) {
+        npc.dialog_id = 2;
+    }
 }
 
 fn seed_visual_route_town_scheduled_npc(
@@ -7672,13 +8330,15 @@ fn seed_visual_route_cowardice_shard(state: &mut PlayState) {
 fn seed_visual_route_word_of_power(state: &mut PlayState, word: &str) {
     if let Some(seal) = word_of_power_seal_for_word(word) {
         if matches!(state.area, u5_runtime::Area::World { plane } if plane == seal.plane) {
-            state.player.x = seal.x;
+            state.player.x = (seal.x + 1) % WORLD_SIDE;
             state.player.y = seal.y;
             state.sync_player_object();
             let idx = seal.y * WORLD_SIDE + seal.x;
             if let Some(cell) = state.grid.get_mut(idx) {
-                *cell = seal.closed_tile;
+                *cell = WORD_OF_POWER_SEALED_TILE;
             }
+            state.word_of_power_seal_flags.fill(0);
+            let _ = state.refresh_world_live_chunks_for_current_area();
             state.mark_visibility_dirty();
         }
     }
@@ -7690,6 +8350,18 @@ fn seed_visual_route_britannia_word_of_power(state: &mut PlayState) {
 
 fn seed_visual_route_underworld_word_of_power(state: &mut PlayState) {
     seed_visual_route_word_of_power(state, "VERAMOCOR");
+}
+
+fn seed_visual_route_ruined_honesty_shrine(state: &mut PlayState) {
+    let (x, y) = WORLD_SHRINE_COORDINATES[0];
+    state.player.x = (x + 1) % WORLD_SIDE;
+    state.player.y = y;
+    state.sync_player_object();
+    state.grid[y * WORLD_SIDE + x] = WORLD_RUINED_SHRINE_TILE;
+    state.shrine_ruin_flags[0] = 0x85;
+    state.word_of_power_seal_flags[0] = 0x27;
+    let _ = state.refresh_world_live_chunks_for_current_area();
+    state.mark_visibility_dirty();
 }
 
 /// `Y`, `Y`, then keystrokes enough to run the victory ending to its
@@ -7741,6 +8413,17 @@ fn seed_visual_route_endgame_class_tableau(state: &mut PlayState) {
             ..template
         })
         .collect();
+    // The real save validator requires a printable name for every in-party
+    // record. Keep the synthetic six-member endgame route equally valid so
+    // the published revival line can name its seeded Dead member exactly.
+    state.party_names = vec![
+        *b"AVATAR\0\0\0",
+        *b"MARIAH\0\0\0",
+        *b"IOLO\0\0\0\0\0",
+        *b"DUPRE\0\0\0\0",
+        *b"JULIA\0\0\0\0",
+        *b"GEOFFREY\0",
+    ];
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 0;
 }
 
@@ -7751,12 +8434,52 @@ fn apply_visual_route_command(
 ) -> io::Result<PlayInputDisposition> {
     let command = command.trim();
     let lower = command.to_ascii_lowercase();
+    if !lower.starts_with("setup:") && !visual_modal_prompt_active(state) {
+        settle_visual_route_exploration_gate(state, game_dir)?;
+    }
+    if lower == "setup:stonegate-trapdoor" {
+        let index = state
+            .grid
+            .iter()
+            .position(|tile| *tile == TOWN_TRAPDOOR_LIVE_TILE)
+            .ok_or_else(|| {
+                io::Error::other(
+                    "Stonegate runtime floor contains no live trapdoor tile for visual route",
+                )
+            })?;
+        state.player.x = index % TOWN_GRID_SIDE;
+        state.player.y = index / TOWN_GRID_SIDE;
+        state.force_foot_transport();
+        state.sync_player_object();
+        state.mark_visibility_dirty();
+        return Ok(PlayInputDisposition::Continue);
+    }
     if lower == "setup:blackthorn-audience" {
         state.begin_blackthorn_audience_capture(game_dir)?;
         return Ok(PlayInputDisposition::Continue);
     }
     if lower == "setup:blackthorn-rescue" {
         state.apply_blackthorn_rescue_refuge(game_dir)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if lower == "setup:world-defeat" {
+        state
+            .active_objects
+            .resize(OOL_SLOTS, ActiveObject::empty());
+        state.active_objects[31] = ActiveObject {
+            type_byte: 0x71,
+            tile: 0x72,
+            x: 73,
+            y: 74,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: 0x76,
+            aux1: 0x75,
+            aux3: 0x77,
+        };
+        for member in &mut state.party {
+            member.status = b'D';
+            member.hp = 0;
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     if lower == "setup:whirlpool-engagement" {
@@ -7784,6 +8507,9 @@ fn apply_visual_route_command(
         }
         state.active_player = Some(0);
         state.pending_combat_actor_slot = Some(0);
+        if let Some(snapshot) = state.combat_frame_snapshot.as_mut() {
+            snapshot.exit_announced = true;
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     if lower == "setup:terrain-combat-east-edge" {
@@ -7827,7 +8553,7 @@ fn apply_visual_route_command(
         return Ok(PlayInputDisposition::Continue);
     }
     if matches!(lower.as_str(), "empty" | "pass") {
-        handle_play_key_input(state, '\n', "", game_dir)?;
+        handle_empty_visual_route_input(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);
     }
     if matches!(lower.as_str(), "idle" | "tick" | "ticks") {
@@ -7861,6 +8587,31 @@ fn apply_visual_route_command(
         return handle_play_key_input(state, '\n', "", game_dir);
     };
     handle_play_key_input(state, key, chars.as_str(), game_dir)
+}
+
+fn handle_empty_visual_route_input(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    if state.combat_active || visual_modal_prompt_active(state) {
+        let _ = handle_play_key_input(state, '\n', "", game_dir)?;
+    } else if state
+        .resolve_current_dungeon_room_trigger(Some(game_dir))?
+        .is_none()
+    {
+        state.pass_turn_with_game_dir(Some(game_dir))?;
+    }
+    Ok(())
+}
+
+fn settle_visual_route_exploration_gate(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    for _ in 0..PLAY_SCRIPT_MAX_IDLE_TICKS {
+        match state.apply_exploration_turn_gate(game_dir)? {
+            ExplorationTurnGateOutcome::Ready { .. } => return Ok(()),
+            ExplorationTurnGateOutcome::Slept { .. }
+            | ExplorationTurnGateOutcome::Rescued { .. } => {}
+        }
+    }
+    Err(io::Error::other(format!(
+        "party capability did not become command-ready after {PLAY_SCRIPT_MAX_IDLE_TICKS} automatic passes"
+    )))
 }
 
 fn seed_visual_route_terrain_combat_party_entry(
@@ -8063,22 +8814,56 @@ fn screenshot_system(
     // system) before the screenshot delay finishes counting down.
     if !state.preset_keys_applied && !config.preset_keys.is_empty() {
         if let Some(mut visual) = visual {
-            let game_dir = visual.game_dir.clone();
-            for ch in &config.preset_keys {
-                handle_play_key_input(&mut visual.state, *ch, "", &game_dir)
-                    .unwrap_or_else(|err| panic!("screenshot preset play input failed: {err}"));
+            if visual.potion_flash_restore_pending.is_some()
+                || visual.state.white_potion_sweep.is_some()
+                || visual.white_idle_redraw_pending
+            {
+                // Scripted screenshot input follows the same blocking potion
+                // boundary as live keyboard input. Leave the remaining key
+                // queue intact until the presentation has completed.
+                return;
             }
-            // Re-render the framebuffer to reflect the new state.
+            let game_dir = visual.game_dir.clone();
+            while let Some(ch) = config.preset_keys.get(state.preset_key_cursor).copied() {
+                handle_play_key_input(&mut visual.state, ch, "", &game_dir)
+                    .unwrap_or_else(|err| panic!("screenshot preset play input failed: {err}"));
+                state.preset_key_cursor += 1;
+                if visual.state.pending_potion_flash.is_some() {
+                    break;
+                }
+            }
             let v: &mut VisualState = visual.as_mut();
-            let ctx = PlayFrameContext {
-                ibm: &v.text_font,
-                runes: &v.rune_font,
-                game_dir: &game_dir,
-                cursor_frame: v.prompt_cursor_frame,
-            };
-            let rgba = render_visual_play_frame_with_input(&mut v.state, &v.atlas, ctx, "", "");
-            replace_visual_image_data(&mut images, &v.image_handle, rgba, "screenshot preset play");
-            state.preset_keys_applied = true;
+            if let Some(playback) = v.state.take_pending_potion_flash() {
+                let mut rgba = images
+                    .get(&v.image_handle)
+                    .and_then(|image| image.data.clone())
+                    .expect("screenshot potion flash requires the current framebuffer");
+                assert!(apply_visual_potion_flash_xor(&mut rgba, playback));
+                replace_visual_image_data(
+                    &mut images,
+                    &v.image_handle,
+                    rgba,
+                    "screenshot preset potion flash",
+                );
+                run_potion_flash_soundless_timing(playback);
+                v.potion_flash_restore_pending = Some(playback);
+            } else {
+                // Re-render the framebuffer to reflect the new state.
+                let ctx = PlayFrameContext {
+                    ibm: &v.text_font,
+                    runes: &v.rune_font,
+                    game_dir: &game_dir,
+                    cursor_frame: v.prompt_cursor_frame,
+                };
+                let rgba = render_visual_play_frame_with_input(&mut v.state, &v.atlas, ctx, "", "");
+                replace_visual_image_data(
+                    &mut images,
+                    &v.image_handle,
+                    rgba,
+                    "screenshot preset play",
+                );
+            }
+            state.preset_keys_applied = state.preset_key_cursor >= config.preset_keys.len();
         } else if let Some(mut intro) = intro {
             // `systems/intro.md §3` pre-flourish J shortcut and the
             // chargen / Journey Onward subflows may have already
@@ -8183,6 +8968,16 @@ struct VisualState {
     prompt_cursor_frame: u64,
     input_line: String,
     prompt_cursor_visible: bool,
+    /// The shared potion flash is currently displaying the inverted
+    /// pre-effect framebuffer. The next Update restores by rendering the
+    /// resulting gameplay state.
+    potion_flash_restore_pending: Option<PotionFlashPlayback>,
+    /// Prevent the animation pump from painting a second frame in the same
+    /// Update that restores a potion flash.
+    skip_animation_pump_once: bool,
+    /// White owns one ordinary idle redraw immediately after its twentieth
+    /// frozen-visibility repaint.
+    white_idle_redraw_pending: bool,
 }
 
 #[derive(Resource)]
@@ -8249,6 +9044,12 @@ struct VisualIntroState {
 enum VisualIntroPanel {
     #[default]
     Menu,
+    /// `systems/intro.md §5` carry-set `0x69`: transient two-pass masked
+    /// ignition publishes before the lower menu window is drawn.
+    SubtitleIgnition {
+        playback: u5_runtime::SubtitleIgnitionPlayback,
+        publish_index: usize,
+    },
     CharacterCreation {
         session: ChargenSession,
         input_line: String,
@@ -8594,6 +9395,17 @@ impl Default for VisualIntroAnimationPump {
     }
 }
 
+fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> (bool, f32) {
+    state
+        .white_potion_sweep
+        .map_or((false, ordinary_interval), |sweep| {
+            (
+                true,
+                BIOS_USER_TICK_INTERVAL_SECS * f32::from(sweep.pause_bios_ticks_per_frame.max(1)),
+            )
+        })
+}
+
 fn animate_static_tiles(
     time: Res<Time>,
     mut pump: ResMut<AnimationPump>,
@@ -8603,18 +9415,87 @@ fn animate_static_tiles(
     let Some(mut visual) = visual else {
         return;
     };
+    if visual.potion_flash_restore_pending.is_some() {
+        return;
+    }
+    if visual.skip_animation_pump_once {
+        visual.skip_animation_pump_once = false;
+        pump.accumulator = 0.0;
+        return;
+    }
+
+    if visual.white_idle_redraw_pending {
+        visual.state.advance_visual_tick();
+        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        visual.white_idle_redraw_pending = false;
+        let v: &mut VisualState = visual.as_mut();
+        let input_line = v.input_line.clone();
+        let ctx = PlayFrameContext {
+            ibm: &v.text_font,
+            runes: &v.rune_font,
+            game_dir: &v.game_dir,
+            cursor_frame: v.prompt_cursor_frame,
+        };
+        let rgba = render_visual_play_frame_with_input_and_cursor(
+            &mut v.state,
+            &v.atlas,
+            ctx,
+            &input_line,
+            "",
+            v.prompt_cursor_visible,
+        );
+        replace_visual_image_data(&mut images, &v.image_handle, rgba, "White idle redraw");
+        pump.accumulator = 0.0;
+        return;
+    }
+
     pump.accumulator += time.delta_secs();
     let mut advanced = false;
-    while pump.accumulator >= pump.interval {
-        pump.accumulator -= pump.interval;
+    let (white_active, interval) = visual_animation_pump_interval(&visual.state, pump.interval);
+    while pump.accumulator >= interval {
+        if white_active {
+            // White is a paced blocking presentation. Never catch up by
+            // skipping multiple visible repaints after a slow host frame.
+            pump.accumulator = 0.0;
+        } else {
+            pump.accumulator -= interval;
+        }
         let mut prompt_cursor_visible = visual.prompt_cursor_visible;
-        advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
+        let gate_outcome = if visual_modal_prompt_active(&visual.state) {
+            None
+        } else {
+            let game_dir = visual.game_dir.clone();
+            match visual.state.apply_exploration_turn_gate(&game_dir) {
+                Ok(outcome) => Some(outcome),
+                Err(err) => {
+                    visual.state.message = format!("Party capability error: {err}");
+                    Some(ExplorationTurnGateOutcome::Slept { transition: None })
+                }
+            }
+        };
+        let automatic_gate_pass = matches!(
+            gate_outcome,
+            Some(
+                ExplorationTurnGateOutcome::Slept { .. }
+                    | ExplorationTurnGateOutcome::Rescued { .. }
+            )
+        );
+        if !automatic_gate_pass {
+            advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
+        } else {
+            // Never catch up multiple automatic sleep/rescue passes in one
+            // host frame; each receives one ordinary visual-pump interval.
+            pump.accumulator = 0.0;
+        }
         visual.prompt_cursor_visible = prompt_cursor_visible;
         // The live input line's barber pole scrolls one phase per pump
         // tick whether or not a line prompt is open, so every tick needs
         // a redraw regardless of what the wait frame itself reported.
         visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
         advanced = true;
+        if white_active || automatic_gate_pass {
+            break;
+        }
     }
     if !advanced {
         return;
@@ -8635,6 +9516,9 @@ fn animate_static_tiles(
         "",
         v.prompt_cursor_visible,
     );
+    if white_active && v.state.white_potion_sweep.is_none() {
+        v.white_idle_redraw_pending = true;
+    }
     replace_visual_image_data(&mut images, &v.image_handle, rgba, "static tile animation");
 }
 
@@ -8705,6 +9589,9 @@ fn setup(
         prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
+        potion_flash_restore_pending: None,
+        skip_animation_pump_once: false,
+        white_idle_redraw_pending: false,
     });
     commands.remove_resource::<PendingBootstrap>();
 }
@@ -8759,13 +9646,7 @@ fn drive_visual_intro(
     };
     let mut handled = false;
     if keyboard.just_pressed(KeyCode::Escape) {
-        if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
-            if visual_intro_return_to_view_complete(&intro.panel)
-                && step_visual_intro_panel(&mut intro, '\x1b')
-            {
-                handled = true;
-            }
-        } else if cancel_visual_intro_panel(&mut intro) {
+        if cancel_visual_intro_panel(&mut intro) {
             handled = true;
         } else {
             exit.write(AppExit::Success);
@@ -8872,6 +9753,9 @@ fn transition_visual_intro_to_gameplay(
         prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
+        potion_flash_restore_pending: None,
+        skip_animation_pump_once: false,
+        white_idle_redraw_pending: false,
     });
     commands.remove_resource::<VisualIntroState>();
 }
@@ -8912,6 +9796,18 @@ fn animate_visual_intro_title_effects(
 /// presentation step (`cleak/u5-spec#77`); the signature walker, the
 /// title tick and the menu idle pump are DOS BIOS user-ticks.
 fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
+    if let VisualIntroPanel::SubtitleIgnition {
+        playback,
+        publish_index,
+    } = &intro.panel
+    {
+        let wait_units = playback
+            .publishes
+            .get(*publish_index)
+            .map(|publish| publish.wait_units)
+            .expect("subtitle ignition interval requires a current publish");
+        return subtitle_ignition_publish_interval(wait_units);
+    }
     let flourish_phase = matches!(intro.panel, VisualIntroPanel::Menu)
         && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
         && !intro.title_flourish_complete;
@@ -8920,6 +9816,11 @@ fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
     } else {
         INTRO_ANIMATION_TICK_INTERVAL_SECS
     }
+}
+
+fn subtitle_ignition_publish_interval(wait_units: u8) -> f32 {
+    INTRO_SUBTITLE_IGNITION_SILENT_PUBLISH_INTERVAL_SECS * f32::from(wait_units)
+        / f32::from(u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS)
 }
 
 fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32) -> bool {
@@ -8932,15 +9833,9 @@ fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32)
         delta.is_finite() && delta >= 0.0,
         "intro animation delta must be non-negative and finite, got {delta}"
     );
-    // `cleak/u5-spec#68` is still open upstream: the spec asks for a
-    // confirmed per-phase wall-clock cadence (DOS BIOS timer rate,
-    // vblank, delay loop, or per-operation), and for catch-up policy
-    // when host frames slip. Until the spec ratifies a final answer,
-    // the engine adopts the DOS BIOS 18.2 Hz baseline that the
-    // historical loader uses — documented as a v1 placeholder, NOT a
-    // forbidden silent fallback. The interval lives in
-    // `VisualIntroAnimationPump::default()` and is consumed here as a
-    // simple accumulator with a one-tick-per-pump-step catch-up cap.
+    // `systems/timing.md §5.3`: every published intro cadence uses a simple
+    // accumulator with a one-step-per-pump catch-up cap. The phase-specific
+    // interval is selected immediately above this helper.
     pump.accumulator += delta;
     if pump.accumulator < pump.interval {
         return false;
@@ -8976,6 +9871,9 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
     //     see `BritishPth::next_signature_progress`.
     // §5.3 catch-up policy (at most one step per tick, no
     // accumulation) is enforced by `advance_intro_animation_pump`.
+    if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
+        return advance_visual_intro_subtitle_ignition(intro);
+    }
     if matches!(intro.panel, VisualIntroPanel::Menu) {
         let mut advanced = false;
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
@@ -9036,7 +9934,7 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
                 // the intro jumps straight to the start/menu load.
                 intro.title_signature_progress = 0;
                 intro.title_signature_complete = true;
-                finish_visual_intro_title_to_menu(intro);
+                finish_visual_intro_title_to_menu(intro, false);
             }
             advanced = true;
         } else if title_phase && !intro.title_signature_complete {
@@ -9059,7 +9957,7 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
             }
             advanced = true;
         } else if title_phase && intro.title_signature_complete {
-            finish_visual_intro_title_to_menu(intro);
+            finish_visual_intro_title_to_menu(intro, false);
             advanced = true;
         }
         return advanced;
@@ -9085,6 +9983,54 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
 fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
     intro.title_tick_visible_frame = intro.title_tick_frame;
     intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+}
+
+fn advance_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) -> bool {
+    let (publish_index, publish_count, final_frame) = match &intro.panel {
+        VisualIntroPanel::SubtitleIgnition {
+            playback,
+            publish_index,
+        } => (
+            *publish_index,
+            playback.publishes.len(),
+            playback.final_frame,
+        ),
+        _ => return false,
+    };
+    assert!(
+        publish_count > 0,
+        "subtitle ignition emitted no threshold publishes"
+    );
+    if publish_index + 1 < publish_count {
+        let VisualIntroPanel::SubtitleIgnition { publish_index, .. } = &mut intro.panel else {
+            unreachable!("subtitle ignition panel changed during its own advance")
+        };
+        *publish_index += 1;
+        return true;
+    }
+
+    intro.title_tick_frame = final_frame;
+    intro.panel = VisualIntroPanel::Menu;
+    complete_visual_intro_start_menu_loader(intro);
+    true
+}
+
+fn abort_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) -> bool {
+    let next_frame = match &intro.panel {
+        VisualIntroPanel::SubtitleIgnition {
+            playback,
+            publish_index,
+        } => playback
+            .publishes
+            .get(*publish_index)
+            .map(|publish| title_tick_next_frame(publish.frame))
+            .expect("subtitle ignition abort requires a visible publish"),
+        _ => return false,
+    };
+    intro.title_tick_frame = next_frame;
+    intro.panel = VisualIntroPanel::Menu;
+    complete_visual_intro_start_menu_loader(intro);
+    true
 }
 
 // `cleak/u5-spec#71` was resolved by `u5-spec` commit `6f9132f`: the
@@ -9120,8 +10066,43 @@ fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
 ///   Return-to-View preview once, before the menu is polled for the
 ///   first time. Only this first automatic showing is conditional;
 ///   the idle timeout and the explicit `R` command are unaffected.
-fn run_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
-    let animated = !intro.title_sequence_skipped;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct StartMenuLoaderOutcome {
+    animated_after_reveal: bool,
+    reveal_abort_key_consumed: bool,
+}
+
+fn run_visual_intro_start_menu_loader(
+    intro: &mut VisualIntroState,
+    reveal_key_pending: bool,
+) -> StartMenuLoaderOutcome {
+    const REVEAL_RECT: (u16, u16, u16, u16) = (0, 0, 319, 100);
+
+    // Step 4. The animated call owns the driver's first-use abort gate. Its
+    // status test is non-consuming, so a pending key first leaves exactly one
+    // copied pixel. The loader then performs its ordinary consuming read,
+    // downgrades only this by-value `animated` flag, and completes the same
+    // rectangle with the plain copy. The caller's title skip flag is untouched.
+    let mut source = new_intro_display_buffer();
+    draw_visual_intro_start_menu_art_to_buffer(&mut source, &intro.game_dir, intro.raster_depth);
+    let mut animated = !intro.title_sequence_skipped;
+    let mut reveal_abort_key_consumed = false;
+    if animated {
+        let report = intro.surface.dissolve_rect_from_with_pending_key(
+            &source,
+            REVEAL_RECT,
+            u5_runtime::DissolveAbortGate::on_driver_load(),
+            reveal_key_pending,
+        );
+        if report.aborted_after.is_some() {
+            reveal_abort_key_consumed = true;
+            animated = false;
+            intro.surface.copy_rect_from(&source, REVEAL_RECT);
+        }
+    } else {
+        intro.surface.copy_rect_from(&source, REVEAL_RECT);
+    }
+
     if animated {
         // Step 7. `WD.BIT` is published (a raw 288x49 one-bit image,
         // `formats/bit.md §4.3`) and the transition's mechanism is
@@ -9129,18 +10110,10 @@ fn run_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
         // carry set: save the hidden surface, clear it, run a
         // pseudo-random per-pixel reveal interleaved with idle-strip
         // steps and a percussive effect, then restore the hidden
-        // surface). What is *not* published is where the 288x49
-        // lettering is stamped for the reveal.
-        //
-        // The engine therefore loads the resource — which proves the
-        // asset is present and parses to the published geometry — but
-        // does not play the transition. That omission is provably
-        // lossless for the finished screen rather than a hidden gap:
-        // the entry restores the hidden surface it saved, and step 8
-        // then runs one clear-carry title tick that overwrites the
-        // whole `(0, 65)` `320 x 49` band opaquely, so the ignition
-        // leaves no pixel behind on either surface. Only the transient
-        // animation is missing. See `cleak/u5-spec#78`.
+        // surface). Public commits `12485b3` and `36780cb` fix the per-pass
+        // countdown, unpublished tails and corner fixups, draw-before-advance
+        // order, per-state keyboard polls, exact `0x3500` fourteen-bit walk,
+        // gate/publication vectors, burst totals, and 45/50-unit waits.
         let lettering = u5_runtime::load_wd_bit(&intro.game_dir)
             .unwrap_or_else(|err| panic!("intro animated start/menu path requires WD.BIT: {err}"));
         assert_eq!(
@@ -9151,13 +10124,44 @@ fn run_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
             ),
             "WD.BIT must be the published 288x49 lettering image"
         );
-        intro.pending_auto_return_to_view = true;
+        let frames = ensure_title_tick_frames(intro).clone();
+        let playback = u5_runtime::build_subtitle_ignition_playback(
+            &frames,
+            &lettering,
+            intro.title_tick_frame,
+        )
+        .unwrap_or_else(|err| panic!("subtitle ignition could not be built: {err}"));
+        assert!(
+            !playback.publishes.is_empty(),
+            "subtitle ignition must publish at least one intermediate band"
+        );
+        intro.panel = VisualIntroPanel::SubtitleIgnition {
+            playback,
+            publish_index: 0,
+        };
+    }
+
+    StartMenuLoaderOutcome {
+        animated_after_reveal: animated,
+        reveal_abort_key_consumed,
     }
 }
 
-fn finish_visual_intro_title_to_menu(intro: &mut VisualIntroState) {
+fn finish_visual_intro_title_to_menu(
+    intro: &mut VisualIntroState,
+    reveal_key_pending: bool,
+) -> StartMenuLoaderOutcome {
     intro.title_presents_hold_ticks = 0;
-    run_visual_intro_start_menu_loader(intro);
+    let outcome = run_visual_intro_start_menu_loader(intro, reveal_key_pending);
+    if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
+        return outcome;
+    }
+    complete_visual_intro_start_menu_loader(intro);
+    outcome
+}
+
+fn complete_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
+    intro.pending_auto_return_to_view = !intro.title_sequence_skipped;
     intro.dispatch.dismiss_title();
     clear_carry_visual_intro_title_tick(intro);
     intro.menu_idle_ticks = 0;
@@ -9340,27 +10344,22 @@ fn advance_visual_intro_return_to_view(
     let next = preview_frame_index
         .checked_add(1)
         .expect("Return-to-View preview frame index overflowed");
-    if next >= preview_frames.len() {
-        return false;
-    }
-    *preview_frame_index = next;
+    assert!(
+        !preview_frames.is_empty(),
+        "Return-to-View preview must contain at least one playback frame"
+    );
+    // `formats/location-dat.md §11`: the shipped stream ends in `0x09`,
+    // which resets the command pointer to its first byte, so the scene loops
+    // until a preview-tick keyboard poll aborts it. The runtime expands one
+    // complete stream cycle; wrapping that frame sequence reproduces the
+    // restart instead of freezing forever on the cycle's last frame.
+    *preview_frame_index = if next == preview_frames.len() {
+        0
+    } else {
+        next
+    };
     *title_tick_frame = title_tick_frame.wrapping_add(1) % u5_runtime::TITLE_TICK_FRAME_COUNT;
     true
-}
-
-fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
-    let VisualIntroPanel::ReturnToView {
-        preview_frames,
-        preview_frame_index,
-        ..
-    } = panel
-    else {
-        return false;
-    };
-    preview_frame_index
-        .checked_add(1)
-        .expect("Return-to-View preview frame index overflowed")
-        >= preview_frames.len()
 }
 
 /// `systems/intro.md §3`: the single automatic Return-to-View preview
@@ -9443,6 +10442,16 @@ fn move_visual_intro_menu_highlight(intro: &mut VisualIntroState, down: bool) {
 }
 
 fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
+    if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
+        // `systems/intro.md §5`: the driver's per-state status poll aborts
+        // without consuming the pending key. The loader completes its normal
+        // clean title tick, then the menu's first input poll receives that
+        // same key. Keep dispatching below after replacing the ignition panel
+        // with the newly built menu instead of swallowing the key here.
+        if !abort_visual_intro_subtitle_ignition(intro) {
+            return false;
+        }
+    }
     if !matches!(intro.panel, VisualIntroPanel::Menu) {
         return step_visual_intro_panel(intro, ch);
     }
@@ -9456,7 +10465,7 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.title_tick_frame = 0;
             intro.title_tick_visible_frame = 0;
             intro.title_sequence_skipped = true;
-            finish_visual_intro_title_to_menu(intro);
+            finish_visual_intro_title_to_menu(intro, false);
             return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
         }
         // `systems/intro.md §3` + `cleak/u5-spec#67`: a keystroke does
@@ -9485,7 +10494,7 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.title_signature_complete = true;
             intro.title_tick_frame = 0;
             intro.title_tick_visible_frame = 0;
-            finish_visual_intro_title_to_menu(intro);
+            finish_visual_intro_title_to_menu(intro, false);
             return true;
         }
         if !intro.title_signature_complete {
@@ -9499,7 +10508,10 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
         }
         intro.title_tick_frame = 0;
         intro.title_tick_visible_frame = 0;
-        finish_visual_intro_title_to_menu(intro);
+        // The title sequence has already completed. This key is first seen by
+        // the start/menu dissolve's status poll, then consumed by the loader;
+        // it is not a title skip and must not fall through to the menu.
+        finish_visual_intro_title_to_menu(intro, true);
         return true;
     }
 
@@ -9556,6 +10568,9 @@ enum VisualIntroPanelOutcome {
 fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
     let outcome = match &mut intro.panel {
         VisualIntroPanel::Menu => return false,
+        VisualIntroPanel::SubtitleIgnition { .. } => {
+            unreachable!("subtitle ignition input is handled before panel dispatch")
+        }
         VisualIntroPanel::CharacterCreation {
             session,
             input_line,
@@ -9632,6 +10647,12 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
 }
 
 fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
+    if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
+        // Escape reaches the same non-consuming ignition status poll as every
+        // other key, so let the ordinary step finish the loader and offer the
+        // byte to the menu rather than dropping it in this frontend shortcut.
+        return step_visual_intro(intro, '\x1b');
+    }
     // `u4-transfer.md §6.5`: once the drive has been selected no key
     // aborts the transfer — `Esc` at any confirmation prompt is simply
     // ignored, and there is no cancel path back to the menu. `§6.3`'s
@@ -9649,6 +10670,9 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     }
     let Some((subflow, result, message)) = (match intro.panel {
         VisualIntroPanel::Menu => None,
+        VisualIntroPanel::SubtitleIgnition { .. } => {
+            unreachable!("subtitle ignition Escape is handled above")
+        }
         VisualIntroPanel::CharacterCreation { .. } => Some((
             IntroSubflow::CharacterCreation,
             IntroSubflowResult::Cancelled,
@@ -9897,6 +10921,51 @@ fn drive_visual(
     let Some(mut visual) = visual else {
         return;
     };
+    if let Some(playback) = visual.potion_flash_restore_pending.take() {
+        let v: &mut VisualState = visual.as_mut();
+        v.skip_animation_pump_once = true;
+        let restored = images
+            .get_mut(&v.image_handle)
+            .and_then(|image| image.data.as_mut())
+            .expect("potion flash restore requires the inverted visual framebuffer");
+        assert!(
+            apply_visual_potion_flash_xor(restored, playback),
+            "potion flash restorative XOR does not fit the visual framebuffer"
+        );
+        v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
+        let input_line = v.input_line.clone();
+        let ctx = PlayFrameContext {
+            ibm: &v.text_font,
+            runes: &v.rune_font,
+            game_dir: &v.game_dir,
+            cursor_frame: v.prompt_cursor_frame,
+        };
+        let rgba = render_visual_play_frame_with_input_and_cursor(
+            &mut v.state,
+            &v.atlas,
+            ctx,
+            &input_line,
+            "",
+            v.prompt_cursor_visible,
+        );
+        replace_visual_image_data(&mut images, &v.image_handle, rgba, "potion flash restore");
+        return;
+    }
+    if visual.state.white_potion_sweep.is_some() || visual.white_idle_redraw_pending {
+        // White is synchronous and polls no input through its twenty paced
+        // repaints and final ordinary idle redraw.
+        return;
+    }
+    if !visual_modal_prompt_active(&visual.state) {
+        match visual.state.party_capability() {
+            PartyCapability::CanAct { member_index } => {
+                visual.state.active_player = Some(member_index);
+            }
+            // The animation pump owns these automatic branches at its paced
+            // cadence. Input is rejected until it makes the roster ready.
+            PartyCapability::Sleeping | PartyCapability::Defeated => return,
+        }
+    }
     if keyboard.just_pressed(KeyCode::Escape) && should_escape_quit_visual(&visual.state) {
         exit.write(AppExit::Success);
         return;
@@ -9925,6 +10994,9 @@ fn drive_visual(
                 }
                 Ok(Some(PlayInputDisposition::Continue)) => {
                     handled = true;
+                    if visual.state.pending_potion_flash.is_some() {
+                        break;
+                    }
                     continue;
                 }
                 Ok(None) => continue,
@@ -9944,7 +11016,12 @@ fn drive_visual(
                 exit.write(AppExit::Success);
                 return;
             }
-            Ok(PlayInputDisposition::Continue) => handled = true,
+            Ok(PlayInputDisposition::Continue) => {
+                handled = true;
+                if visual.state.pending_potion_flash.is_some() {
+                    break;
+                }
+            }
             Err(err) => {
                 visual.state.message = format!("Input error: {err}");
                 handled = true;
@@ -9957,6 +11034,20 @@ fn drive_visual(
 
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
+    if let Some(playback) = v.state.take_pending_potion_flash() {
+        let mut rgba = images
+            .get(&v.image_handle)
+            .and_then(|image| image.data.clone())
+            .expect("potion flash requires the current visual framebuffer");
+        assert!(
+            apply_visual_potion_flash_xor(&mut rgba, playback),
+            "potion flash playfield does not fit the visual framebuffer"
+        );
+        replace_visual_image_data(&mut images, &v.image_handle, rgba, "potion flash inversion");
+        run_potion_flash_soundless_timing(playback);
+        v.potion_flash_restore_pending = Some(playback);
+        return;
+    }
     let input_line = v.input_line.clone();
     let ctx = PlayFrameContext {
         ibm: &v.text_font,
@@ -9978,6 +11069,22 @@ fn drive_visual(
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
     match &intro.panel {
         VisualIntroPanel::Menu => {}
+        VisualIntroPanel::SubtitleIgnition {
+            playback,
+            publish_index,
+        } => {
+            let publish = playback
+                .publishes
+                .get(*publish_index)
+                .expect("subtitle ignition summary requires a current publish");
+            return format!(
+                "Subtitle ignition: publish {} of {}, {:?} pass, {} positions restored.",
+                publish_index + 1,
+                playback.publishes.len(),
+                publish.pass,
+                publish.restored_positions,
+            );
+        }
         VisualIntroPanel::CharacterCreation {
             session,
             input_line,
@@ -10159,6 +11266,9 @@ fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> Strin
 }
 
 fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
+        return render_subtitle_ignition_intro_frame(intro);
+    }
     if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
         return render_return_to_view_intro_frame(intro);
     }
@@ -10228,6 +11338,25 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         let summary = summarize_intro(intro);
         panic!("unhandled visual intro panel fell through renderer: {summary}")
     }
+}
+
+fn render_subtitle_ignition_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    let pixels = match &intro.panel {
+        VisualIntroPanel::SubtitleIgnition {
+            playback,
+            publish_index,
+        } => playback
+            .publishes
+            .get(*publish_index)
+            .map(|publish| publish.pixels.clone())
+            .expect("subtitle ignition current publish is missing"),
+        _ => panic!("subtitle ignition renderer called for another intro panel"),
+    };
+    let game_dir = intro.game_dir.clone();
+    let raster_depth = intro.raster_depth;
+    draw_visual_intro_start_menu_art_to_buffer(&mut intro.surface, &game_dir, raster_depth);
+    intro.surface.draw_title_tick_band_pixels(&pixels);
+    intro.surface.to_rgba()
 }
 
 /// `systems/intro.md §3` step 1: the finished flourish mark with the
@@ -12074,6 +13203,30 @@ fn ega_palette_index_from_rgba(rgba: &[u8]) -> u8 {
     best_index
 }
 
+/// Apply one shared potion-flash XOR pass directly to the Bevy RGBA surface.
+/// The playfield is entirely palette-derived, so conversion back to an EGA
+/// index is lossless for the inclusive contract rectangle.
+fn apply_visual_potion_flash_xor(rgba: &mut [u8], playback: PotionFlashPlayback) -> bool {
+    let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+    let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
+    if width <= playback.playfield_right
+        || height <= playback.playfield_bottom
+        || rgba.len() < width.saturating_mul(height).saturating_mul(4)
+    {
+        return false;
+    }
+    for y in playback.playfield_top..=playback.playfield_bottom {
+        for x in playback.playfield_left..=playback.playfield_right {
+            let offset = (y * width + x) * 4;
+            let old_index = ega_palette_index_from_rgba(&rgba[offset..offset + 4]);
+            let new_index = usize::from(old_index ^ playback.palette_xor_mask);
+            let rgb = EGA_PALETTE_RGB[new_index];
+            rgba[offset..offset + 3].copy_from_slice(&rgb);
+        }
+    }
+    true
+}
+
 fn blit_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -12827,8 +13980,6 @@ fn write_visual_acknowledgements_report(
 
 const VISUAL_PLAY_FRAME_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
 const VISUAL_PLAY_FRAME_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
-const VISUAL_OVERLAY_SIDE_PANEL_X: usize = STATS_PANEL_TEXT_LEFT as usize * 8;
-const VISUAL_OVERLAY_SIDE_PANEL_Y: usize = 0;
 
 /// Everything the gameplay frame compositor needs beyond the tile
 /// atlas: both fixed-cell fonts (`IBM.CH` for text and the ribbon end
@@ -12936,18 +14087,26 @@ fn render_visual_play_frame_with_input_and_cursor(
     default_message: &str,
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
-    if state.endgame.is_some() {
-        return render_endgame_framebuffer(state, atlas, input_line, default_message, ctx);
-    }
-    render_visual_play_frame_over_viewport(
-        state,
-        atlas,
-        ctx,
-        input_line,
-        default_message,
-        prompt_cursor_visible,
-        EndgameViewport::World,
-    )
+    let rgba = if state.endgame.is_some() {
+        render_endgame_framebuffer(state, atlas, input_line, default_message, ctx)
+    } else {
+        render_visual_play_frame_over_viewport(
+            state,
+            atlas,
+            ctx,
+            input_line,
+            default_message,
+            prompt_cursor_visible,
+            EndgameViewport::World,
+        )
+    };
+    // The runtime exhausts these self-paced blocking driver calls before
+    // returning. Presenting the caller-composed end state acknowledges every
+    // completed record in order; retaining them would only grow transient
+    // state across later frames.
+    let _ = state.take_pending_map_viewport_dissolves();
+    let _ = state.take_pending_stonegate_trapdoor_playback();
+    rgba
 }
 
 /// Which raster fills the ordinary gameplay viewport.
@@ -12989,6 +14148,18 @@ fn render_visual_play_frame_over_viewport(
         ChromePalette::EGA,
     );
 
+    // Generate the viewport while the pass-entry active-player selector is
+    // still live. The stats surface consumes that one-shot selector below,
+    // but `combat.md §7` requires the same idle pass to use it for the combat
+    // cursor and its gated secondary marker. The raster is still composited
+    // last, preserving the visible layer order documented for this function.
+    let viewport = match which {
+        EndgameViewport::World => render_base_framebuffer(state, atlas),
+        EndgameViewport::Tableau => render_endgame_tableau_viewport(state, atlas)
+            .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"))
+            .to_rgba(),
+    };
+
     let surface = render_integrated_status_framebuffer(
         state,
         input_line,
@@ -12999,12 +14170,6 @@ fn render_visual_play_frame_over_viewport(
     overlay_nonblack_rgba(&mut rgba, &surface.rgba);
     paint_message_window_rows(&mut rgba, width, height, ctx, &surface.message_rows);
 
-    let viewport = match which {
-        EndgameViewport::World => render_base_framebuffer(state, atlas),
-        EndgameViewport::Tableau => render_endgame_tableau_viewport(state, atlas)
-            .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"))
-            .to_rgba(),
-    };
     blit_rgba(
         &mut rgba,
         width,
@@ -13036,16 +14201,22 @@ fn paint_message_window_rows(
         if row.prefixed {
             paint_message_line_cap(rgba, width, height, ctx.ibm, row.row, ChromePalette::EGA);
         }
-        paint_fixed_cell_text(
-            rgba,
-            width,
-            height,
-            ctx.ibm,
-            &row.text,
-            row.column,
-            row.row,
-            CHROME_RULE_INDEX,
-        );
+        for (offset, glyph) in row.glyphs.iter().enumerate() {
+            let font = match glyph.font {
+                u5_runtime::TlkGlyphFont::Ordinary => ctx.ibm,
+                u5_runtime::TlkGlyphFont::Runic => ctx.runes,
+            };
+            paint_fixed_cell_glyph(
+                rgba,
+                width,
+                height,
+                font,
+                glyph.byte,
+                row.column.saturating_add(offset as u8),
+                row.row,
+                CHROME_RULE_INDEX,
+            );
+        }
     }
 }
 
@@ -13185,14 +14356,16 @@ fn render_endgame_full_screen_framebuffer(
     let display_state = state.clone();
     let mut system = TextWindowSystem::new();
     system.set_window_rect(
-        MAIN_TEXT_WINDOW_INDEX,
+        FULL_SCREEN_TEXT_WINDOW_INDEX,
         0,
         0,
         TEXT_SCREEN_COLUMNS - 1,
         TEXT_SCREEN_ROWS - 1,
     );
-    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
-    paint_message_text_window(&mut system, &display_state.message);
+    system.set_active_window(FULL_SCREEN_TEXT_WINDOW_INDEX);
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    system.set_active_cursor(0, 0);
+    system.print_wrapped_string(&display_state.message);
     let mut rgba = render_text_window_rgba(&system, ctx.ibm)
         .unwrap_or_else(|err| panic!("visual endgame text window render failed: {err}"));
     apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
@@ -13600,15 +14773,32 @@ fn blit_active_view_overlay_rgba(
     let Some(overlay) = state.render_active_view_overlay(depth) else {
         return;
     };
-    // `view.md §6`/`dungeon-mode.md §12.1`: the dungeon V-View map
-    // clears and fills the viewport interior `(8,8)`-`(183,183)` —
-    // the same area the first-person view uses — as 22x22 cells of
-    // 8x8 pixels. The surface/Britannia overlays keep the side-panel
-    // placement they were sized for (32 cells x 4 px = 128 px, the
-    // panel's exact width).
-    let (origin_x, origin_y) = match state.active_view_overlay.as_ref().map(|o| o.kind) {
-        Some(u5_runtime::ViewOverlayKind::Dungeon { .. }) => (VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y),
-        _ => (VISUAL_OVERLAY_SIDE_PANEL_X, VISUAL_OVERLAY_SIDE_PANEL_Y),
+    // `view.md §6`/`dungeon-mode.md §12.1`: dungeon V-View and the
+    // `view.md §4.2.2` telescope sky replace the full viewport
+    // interior. `view.md §4` gives local View/Peer/X-Ray the absolute
+    // cell anchor `(32 + column*4, 32 + row*4)`, centering their
+    // 128-by-128 raster inside that same play viewport after clearing the
+    // whole inclusive `(8,8)..(183,183)` modal compose rectangle.
+    let full_viewport_overlay = matches!(
+        state.active_view_overlay.as_ref().map(|o| o.kind),
+        Some(u5_runtime::ViewOverlayKind::Dungeon { .. } | u5_runtime::ViewOverlayKind::Sky(_))
+    );
+    if !full_viewport_overlay {
+        fill_rgba_rect_inclusive(
+            dst,
+            dst_width,
+            dst_height,
+            VIEWPORT_ORIGIN_X,
+            VIEWPORT_ORIGIN_Y,
+            VIEWPORT_ORIGIN_X + VIEWPORT_SIZE_PX as usize - 1,
+            VIEWPORT_ORIGIN_Y + VIEWPORT_SIZE_PX as usize - 1,
+            [0, 0, 0, 255],
+        );
+    }
+    let (origin_x, origin_y) = if full_viewport_overlay {
+        (VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y)
+    } else {
+        (LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y)
     };
     let rgba = overlay.to_rgba();
     blit_rgba(
@@ -13742,6 +14932,7 @@ fn render_integrated_status_framebuffer(
     }
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
     if display_state.active_shop.is_some() {
+        paint_arms_sell_browser_text_window(&mut system, &display_state);
         paint_inn_pickup_register_text_window(&mut system, &display_state);
         // Shop line prompts keep their own prompt window on the message
         // window's bottom row; the non-shop live line is placed by the
@@ -13770,7 +14961,7 @@ fn render_integrated_status_framebuffer(
     // it; it only drives the shop path's own prompt window.
     if display_state.active_shop.is_none() {
         if let Some(live) = message_rows.last() {
-            let column = live.column + live.text.chars().count().min(15) as u8;
+            let column = live.column + live.glyphs.len().min(15) as u8;
             paint_fixed_cell_glyph(
                 &mut rgba,
                 VISUAL_PLAY_FRAME_WIDTH as usize,
@@ -13876,6 +15067,7 @@ fn visual_line_prompt_active(state: &PlayState) -> bool {
         || state.active_blackthorn.is_some()
         || state.active_shrine.is_some()
         || state.active_yell.is_some()
+        || state.active_shrine_restoration.is_some()
         || state
             .active_wishing_well
             .as_ref()
@@ -14204,13 +15396,53 @@ mod tests {
         SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
         SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN, SAVED_OOL_FILENAME,
         SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
-        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth, WorldPlane,
+        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth, TlkRenderedGlyph, WorldPlane,
         dungeon_cell_index, parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit,
         parse_legacy_lzw_title_bit, parse_title_bit, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
         text.bytes().map(|b| b ^ TLK_TEXT_XOR_MASK).collect()
+    }
+
+    #[test]
+    fn message_rows_select_runes_font_for_tlk_protected_glyphs() {
+        let ibm = parse_ch_font(&vec![0x00; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let runes = parse_ch_font(&vec![0xff; CH_FONT_LEN], "RUNES.CH").unwrap();
+        let ctx = PlayFrameContext {
+            ibm: &ibm,
+            runes: &runes,
+            game_dir: Path::new("."),
+            cursor_frame: 0,
+        };
+        let row = MessageWindowRow {
+            row: 0,
+            column: 0,
+            text: "AB".to_string(),
+            glyphs: vec![
+                TlkRenderedGlyph::ordinary(b'A'),
+                TlkRenderedGlyph::runic(b'B'),
+            ],
+            prefixed: false,
+        };
+        let width = 16usize;
+        let height = 8usize;
+        let mut rgba = vec![0u8; width * height * 4];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel[3] = 0xff;
+        }
+        paint_message_window_rows(&mut rgba, width, height, ctx, &[row]);
+
+        let cell_is_nonblack = |cell_x: usize| {
+            (0..CH_CELL_SIDE).any(|y| {
+                (0..CH_CELL_SIDE).any(|x| {
+                    let pixel = ((y * width) + cell_x * CH_CELL_SIDE + x) * 4;
+                    rgba[pixel..pixel + 3] != [0, 0, 0]
+                })
+            })
+        };
+        assert!(!cell_is_nonblack(0));
+        assert!(cell_is_nonblack(1));
     }
 
     fn temp_output_dir(name: &str) -> PathBuf {
@@ -14468,6 +15700,39 @@ mod tests {
         ]
     }
 
+    #[test]
+    fn potion_flash_rgba_xor_is_inclusive_lossless_and_playfield_only() {
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
+        let mut rgba = Vec::with_capacity(width * height * 4);
+        for index in 0..width * height {
+            let rgb = EGA_PALETTE_RGB[index & 0x0f];
+            rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 0x7e]);
+        }
+        let original = rgba.clone();
+        let playback = u5_runtime::potion_flash_playback(u5_runtime::POTION_WHITE_INDEX).unwrap();
+
+        assert!(apply_visual_potion_flash_xor(&mut rgba, playback));
+        for (x, y) in [(8, 8), (183, 183)] {
+            let old_index = (y * width + x) & 0x0f;
+            let mut expected = ega_rgba(old_index ^ 15);
+            expected[3] = 0x7e;
+            assert_eq!(rgba_pixel(&rgba, width, x, y), expected);
+        }
+        assert_eq!(
+            rgba_pixel(&rgba, width, 7, 8),
+            rgba_pixel(&original, width, 7, 8)
+        );
+        assert_eq!(
+            rgba_pixel(&rgba, width, 184, 183),
+            rgba_pixel(&original, width, 184, 183)
+        );
+
+        assert!(apply_visual_potion_flash_xor(&mut rgba, playback));
+        assert_eq!(rgba, original);
+        assert!(!apply_visual_potion_flash_xor(&mut [], playback));
+    }
+
     fn solid_bitmap(width: usize, height: usize, value: u8) -> MonochromeBitmap {
         MonochromeBitmap {
             width,
@@ -14637,6 +15902,25 @@ mod tests {
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
 
+        let runtime_viewport = state
+            .render_top_down_viewport(VIEWPORT_RADIUS, &atlas)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            runtime_viewport.pixels[(4 * 16 + 6) * runtime_viewport.width + 3 * 16 + 6],
+            15
+        );
+        let base_rgba = render_base_framebuffer(&mut state, &atlas);
+        assert_eq!(
+            rgba_pixel(
+                &base_rgba,
+                VIEWPORT_SIZE_PX as usize,
+                3 * 16 + 6,
+                4 * 16 + 6
+            ),
+            ega_rgba(15)
+        );
+
         let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
         // The viewport is blitted at its measured origin inside the
@@ -14658,8 +15942,24 @@ mod tests {
             rgba_pixel(&rgba, width, x, y),
             ega_rgba(usize::from(COMBAT_FIELD_KIND_POISON) % 16)
         );
-        let (x, y) = cell_center(3, 4);
-        assert_eq!(rgba_pixel(&rgba, width, x, y), ega_rgba(11));
+        assert_eq!(
+            rgba_pixel(
+                &rgba,
+                width,
+                VIEWPORT_ORIGIN_X + 3 * TILE_ATLAS_SIDE + 6,
+                VIEWPORT_ORIGIN_Y + 4 * TILE_ATLAS_SIDE + 6,
+            ),
+            ega_rgba(15)
+        );
+        assert_eq!(
+            rgba_pixel(
+                &rgba,
+                width,
+                VIEWPORT_ORIGIN_X + 3 * TILE_ATLAS_SIDE + 5,
+                VIEWPORT_ORIGIN_Y + 4 * TILE_ATLAS_SIDE + 5,
+            ),
+            ega_rgba(0)
+        );
         assert_eq!(
             rgba_pixel(
                 &rgba,
@@ -14667,7 +15967,7 @@ mod tests {
                 VIEWPORT_ORIGIN_X + 5 * TILE_ATLAS_SIDE,
                 VIEWPORT_ORIGIN_Y + 8 * TILE_ATLAS_SIDE
             ),
-            ega_rgba(14)
+            ega_rgba(15)
         );
     }
 
@@ -15441,6 +16741,36 @@ mod tests {
     }
 
     #[test]
+    fn intro_start_menu_reveal_copies_first_pixel_before_odd_visit_abort_poll() {
+        // `cleak/u5-spec#122`: the zero-initialized phase polls visits
+        // 1, 3, 5, ... after copying. A key pending at entry therefore
+        // transfers exactly the walk's first coordinate `(1, 0)`.
+        let mut source = new_intro_display_buffer();
+        source.clear(9);
+        let mut destination = new_intro_display_buffer();
+        destination.clear(0);
+
+        let report = destination.dissolve_rect_from_with_pending_key(
+            &source,
+            INTRO_START_MENU_REVEAL_RECT,
+            u5_runtime::DissolveAbortGate::on_driver_load(),
+            true,
+        );
+
+        assert_eq!(report.copied_pixels, 1);
+        assert_eq!(report.aborted_after, Some((1, 0)));
+        assert_eq!(destination.pixels[1], 9);
+        assert_eq!(
+            destination
+                .pixels
+                .iter()
+                .filter(|pixel| **pixel == 9)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn intro_rect_dissolve_order_satisfies_the_published_visit_contract() {
         // `systems/display-driver-abi.md §9.6` publishes four visible
         // bullets for dispatch `0x66`. The original drives the order
@@ -15915,9 +17245,24 @@ mod tests {
     }
 
     #[test]
-    fn intro_title_dismiss_runs_startsc_clear_carry_tick() {
-        // Dismissing the title runs the start/menu loader, and an
-        // unskipped run takes its animated path, which loads `WD.BIT`.
+    fn subtitle_ignition_wait_units_preserve_published_speaker_pacing_ratio() {
+        let silent =
+            subtitle_ignition_publish_interval(u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS);
+        assert!(
+            (silent - INTRO_SUBTITLE_IGNITION_SILENT_PUBLISH_INTERVAL_SECS).abs()
+                < f32::EPSILON * 8.0
+        );
+        let burst =
+            subtitle_ignition_publish_interval(u5_runtime::SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS);
+        assert!((burst - 0.0126).abs() < f32::EPSILON * 8.0);
+    }
+
+    #[test]
+    fn intro_first_reveal_abort_consumes_key_downgrades_loader_and_keeps_preview() {
+        // `cleak/u5-spec#122`: a key first discovered by the logo dissolve
+        // is consumed by the loader's immediate read. Only the loader's local
+        // animated flag is downgraded: ignition is skipped, the rectangle is
+        // completed plainly, and the caller still arms automatic RTV.
         let dir = debug_game_dir();
         install_intro_assets(&dir);
         let mut intro = VisualIntroState {
@@ -15948,11 +17293,101 @@ mod tests {
             title_tick_frames: None,
         };
 
-        assert!(step_visual_intro(&mut intro, 'x'));
+        let outcome = finish_visual_intro_title_to_menu(&mut intro, true);
 
-        assert_eq!(intro.title_tick_visible_frame, 0);
-        assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
+        assert_eq!(
+            outcome,
+            StartMenuLoaderOutcome {
+                animated_after_reveal: false,
+                reveal_abort_key_consumed: true,
+            }
+        );
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(!intro.title_sequence_skipped);
+        assert!(intro.pending_auto_return_to_view);
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
+        );
+        let mut expected = new_intro_display_buffer();
+        draw_visual_intro_start_menu_art_to_buffer(
+            &mut expected,
+            &intro.game_dir,
+            intro.raster_depth,
+        );
+        for y in 0..=100usize {
+            let start = y * intro.surface.width;
+            let end = start + 320;
+            assert_eq!(
+                intro.surface.pixels[start..end],
+                expected.pixels[start..end]
+            );
+        }
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn completed_title_key_is_spent_by_first_reveal_not_menu_dispatch() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+
+        assert!(step_visual_intro(
+            &mut intro,
+            char::from(u5_runtime::INPUT_CODE_SOUTH)
+        ));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
+        );
+        assert!(!intro.title_sequence_skipped);
+        assert!(intro.pending_auto_return_to_view);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn intro_subtitle_ignition_preserves_its_abort_key_for_menu() {
+        // Subtitle ignition has the distinct non-consuming contract from
+        // `#118`: after an uninterrupted logo reveal enters ignition, its
+        // abort key is handed to the freshly built menu.
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+
+        let outcome = finish_visual_intro_title_to_menu(&mut intro, false);
+        assert!(outcome.animated_after_reveal);
+        assert!(!outcome.reveal_abort_key_consumed);
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::SubtitleIgnition { .. }
+        ));
+
+        // This key is the ignition's interruptible-driver poll. The first
+        // partial band was already published draw-before-advance, so the
+        // final clean tick draws frame 1 and leaves the counter at frame 2.
+        // The driver does not consume the pending key: after loader cleanup,
+        // that same Down key reaches the menu and moves its highlight.
+        assert!(step_visual_intro(
+            &mut intro,
+            char::from(u5_runtime::INPUT_CODE_SOUTH)
+        ));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert_eq!(intro.title_tick_visible_frame, 1);
+        assert_eq!(intro.title_tick_frame, 2);
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::CharacterCreation
+        );
+        assert!(!intro.pending_auto_return_to_view);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -16074,8 +17509,10 @@ mod tests {
 
     #[test]
     fn intro_signature_phase_key_abandons_strokes_but_still_draws_the_card() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
         let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
+            game_dir: dir.clone(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
             title_flourish_step: intro_title_flourish_total_steps(),
@@ -16127,7 +17564,7 @@ mod tests {
         assert!(!intro.pending_auto_return_to_view);
         assert_eq!(intro.menu_idle_ticks, 0);
         assert!(intro.message.is_empty());
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -16228,14 +17665,42 @@ mod tests {
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
 
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        let (publish_count, final_counter) = match &intro.panel {
+            VisualIntroPanel::SubtitleIgnition { playback, .. } => {
+                (playback.publishes.len(), playback.final_frame)
+            }
+            _ => panic!("animated start/menu path must enter subtitle ignition"),
+        };
+        assert!(publish_count > 1);
+        let ignition_rgba = render_intro_frame(&mut intro);
+        assert!(
+            ignition_rgba
+                .chunks_exact(4)
+                .any(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+        );
+
+        for _ in 1..publish_count {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+        }
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::SubtitleIgnition { .. }
+        ));
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+
         assert!(!matches!(
             intro.dispatch.tick_title(),
             UnifiedMenuStep::PresentTitle
         ));
-        assert_eq!(intro.title_tick_visible_frame, 0);
-        assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
+        assert_eq!(intro.title_tick_visible_frame, final_counter);
+        assert_eq!(intro.title_tick_frame, title_tick_next_frame(final_counter));
         assert_eq!(intro.menu_idle_ticks, 0);
         assert!(intro.message.is_empty());
+        assert!(intro.pending_auto_return_to_view);
         // After the signature path completes and the menu phase
         // begins, the renderer runs the menu path which routes
         // through `draw_visual_intro_start_menu_to_buffer` plus
@@ -16478,11 +17943,23 @@ mod tests {
         intro.title_sequence_skipped = false;
         intro.pending_auto_return_to_view = false;
 
-        finish_visual_intro_title_to_menu(&mut intro);
+        finish_visual_intro_title_to_menu(&mut intro, false);
 
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::SubtitleIgnition { .. }
+        ));
+        assert!(!intro.pending_auto_return_to_view);
+        let publish_count = match &intro.panel {
+            VisualIntroPanel::SubtitleIgnition { playback, .. } => playback.publishes.len(),
+            _ => unreachable!(),
+        };
+        for _ in 0..publish_count {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+        }
         assert!(
             intro.pending_auto_return_to_view,
-            "an unskipped run arms the automatic preview"
+            "an unskipped run arms the automatic preview after ignition returns"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -16504,7 +17981,7 @@ mod tests {
         intro.title_signature_complete = true;
         intro.title_sequence_skipped = true;
 
-        finish_visual_intro_title_to_menu(&mut intro);
+        finish_visual_intro_title_to_menu(&mut intro, false);
 
         assert!(
             !intro.pending_auto_return_to_view,
@@ -17531,6 +19008,44 @@ mod tests {
     }
 
     #[test]
+    fn visual_play_frame_acknowledges_completed_map_viewport_dissolves() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        state
+            .pending_map_viewport_dissolves
+            .push(u5_runtime::run_map_viewport_dissolve(
+                u5_runtime::MapViewportDissolveSource::BlackthornRescueBlack,
+            ));
+
+        let _ = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+
+        assert!(state.pending_map_viewport_dissolves.is_empty());
+    }
+
+    #[test]
+    fn white_potion_animation_interval_reads_typed_playback_cadence() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let ordinary_interval = 0.25;
+        assert_eq!(
+            visual_animation_pump_interval(&state, ordinary_interval),
+            (false, ordinary_interval)
+        );
+        state.white_potion_sweep = Some(u5_runtime::WhitePotionSweep {
+            frames_remaining: 20,
+            pause_bios_ticks_per_frame: 3,
+            center_x: 10,
+            center_y: 20,
+            visible_cells: [true; u5_runtime::VIEWPORT_SIDE * u5_runtime::VIEWPORT_SIDE],
+        });
+
+        let (active, interval) = visual_animation_pump_interval(&state, ordinary_interval);
+
+        assert!(active);
+        assert_eq!(interval, 3.0 * BIOS_USER_TICK_INTERVAL_SECS);
+    }
+
+    #[test]
     fn visual_play_frame_paints_border_chrome_before_the_viewport_and_text() {
         // The measured 320x200 chrome: blue ribbon bands, white 1px
         // rules, the viewport at (8, 8), and a black text row 24. See
@@ -17667,13 +19182,15 @@ mod tests {
     }
 
     #[test]
-    fn visual_play_frame_blits_view_overlay_into_side_panel_over_base_viewport() {
+    fn visual_play_frame_blits_local_view_overlay_at_published_viewport_origin() {
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
         let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let base_rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         state.gems = 1;
         state.view_gem();
+        assert!(state.message.is_empty());
         assert!(state.active_view_overlay.is_some());
-        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
         let overlay = state
             .render_active_view_overlay(TileGraphicsDepth::Ega16)
             .unwrap();
@@ -17691,21 +19208,96 @@ mod tests {
 
         let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
-        let base_pixel = rgba_pixel(
-            &rgba,
-            width,
-            VIEWPORT_SIZE_PX as usize / 2,
-            VIEWPORT_SIZE_PX as usize / 2,
-        );
+        let (margin_x, margin_y) = (VIEWPORT_ORIGIN_Y
+            ..VIEWPORT_ORIGIN_Y + VIEWPORT_SIZE_PX as usize)
+            .flat_map(|y| {
+                (VIEWPORT_ORIGIN_X..VIEWPORT_ORIGIN_X + VIEWPORT_SIZE_PX as usize)
+                    .map(move |x| (x, y))
+            })
+            .find(|&(x, y)| {
+                (!(LOCAL_VIEW_OVERLAY_ORIGIN_X..LOCAL_VIEW_OVERLAY_ORIGIN_X + overlay.width)
+                    .contains(&x)
+                    || !(LOCAL_VIEW_OVERLAY_ORIGIN_Y..LOCAL_VIEW_OVERLAY_ORIGIN_Y + overlay.height)
+                        .contains(&y))
+                    && rgba_pixel(&base_rgba, width, x, y) != [0, 0, 0, 255]
+            })
+            .expect("base viewport should contain a nonblack pixel in the modal margin");
         let overlay_pixel = rgba_pixel(
             &rgba,
             width,
-            VISUAL_OVERLAY_SIDE_PANEL_X + overlay_sample_x,
-            VISUAL_OVERLAY_SIDE_PANEL_Y + overlay_sample_y,
+            LOCAL_VIEW_OVERLAY_ORIGIN_X + overlay_sample_x,
+            LOCAL_VIEW_OVERLAY_ORIGIN_Y + overlay_sample_y,
+        );
+        let former_side_panel_x = usize::from(STATS_PANEL_TEXT_LEFT) * CH_CELL_SIDE;
+        let former_side_panel_pixel = rgba_pixel(
+            &rgba,
+            width,
+            former_side_panel_x + overlay_sample_x,
+            overlay_sample_y,
+        );
+        let base_side_panel_pixel = rgba_pixel(
+            &base_rgba,
+            width,
+            former_side_panel_x + overlay_sample_x,
+            overlay_sample_y,
         );
 
-        assert_ne!(base_pixel, [0x00, 0x00, 0x00, 0xff]);
         assert_eq!(overlay_pixel, expected_overlay_pixel);
+        assert_eq!(rgba_pixel(&rgba, width, margin_x, margin_y), [0, 0, 0, 255]);
+        assert_eq!(former_side_panel_pixel, base_side_panel_pixel);
+        for y in usize::from(u5_runtime::MESSAGE_WINDOW_TOP) * CH_CELL_SIDE
+            ..=usize::from(u5_runtime::MESSAGE_WINDOW_BOTTOM) * CH_CELL_SIDE + (CH_CELL_SIDE - 1)
+        {
+            for x in usize::from(u5_runtime::MESSAGE_WINDOW_LEFT) * CH_CELL_SIDE
+                ..=usize::from(u5_runtime::MESSAGE_WINDOW_RIGHT) * CH_CELL_SIDE + (CH_CELL_SIDE - 1)
+            {
+                assert_eq!(
+                    rgba_pixel(&rgba, width, x, y),
+                    rgba_pixel(&base_rgba, width, x, y),
+                    "local View must not duplicate its diagnostic map into the message window at ({x}, {y})"
+                );
+            }
+        }
+        assert_eq!(LOCAL_VIEW_OVERLAY_ORIGIN_X, 32);
+        assert_eq!(LOCAL_VIEW_OVERLAY_ORIGIN_Y, 32);
+
+        state.clear_active_view_overlay();
+        let closed_rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        assert_eq!(closed_rgba, base_rgba);
+    }
+
+    #[test]
+    fn visual_play_frame_blits_night_sky_into_main_viewport() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.clock = GameClock::new(20, 0).unwrap();
+        state.activate_night_sky_overlay(None);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let overlay = state
+            .render_active_view_overlay(TileGraphicsDepth::Ega16)
+            .unwrap();
+        let overlay_rgba = overlay.to_rgba();
+        let (overlay_index, expected_overlay_pixel) = overlay_rgba
+            .chunks_exact(4)
+            .enumerate()
+            .find_map(|(index, pixel)| {
+                (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+                    .then_some((index, [pixel[0], pixel[1], pixel[2], pixel[3]]))
+            })
+            .expect("sky should contain nonblack pixels");
+
+        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        let overlay_x = overlay_index % overlay.width;
+        let overlay_y = overlay_index / overlay.width;
+        assert_eq!(
+            rgba_pixel(
+                &rgba,
+                VISUAL_PLAY_FRAME_WIDTH as usize,
+                VIEWPORT_ORIGIN_X + overlay_x,
+                VIEWPORT_ORIGIN_Y + overlay_y,
+            ),
+            expected_overlay_pixel
+        );
     }
 
     #[test]
@@ -17903,7 +19495,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 519);
+        assert_eq!(cases.len(), 534);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -17954,7 +19546,7 @@ mod tests {
         assert!(
             cases
                 .iter()
-                .any(|case| case.label == "route-britannia-spyglass-chunk-map")
+                .any(|case| case.label == "route-britannia-spyglass-night-sky")
         );
         for label in [
             "route-britannia-move-pass-idle",
@@ -18014,6 +19606,10 @@ mod tests {
             "route-castle-native-stair-up-route",
             "route-castle-native-stair-down-route",
             "route-castle-native-stair-cross-route",
+            "route-castle-jimmy-magic-lock-no-picker",
+            "route-castle-jimmy-empty-restraint-no-picker",
+            "route-castle-jimmy-prisoner-release",
+            "route-reload-castle-jimmy-prisoner-release",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -18059,6 +19655,11 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-ship-xit-no-skiffs-refusal")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-reload-ship-xit-skiff-pass")
         );
         assert!(
@@ -18066,6 +19667,12 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-ship-hoist-and-sail-east")
         );
+        for label in [
+            "route-ship-yell-toggles-town-band",
+            "route-ship-yell-toggles-dungeon-band",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -18265,9 +19872,9 @@ mod tests {
             "route-combat-summon-daemon-ring",
             "route-combat-kill-gazer-eye-burst",
             "route-combat-kill-gargoyle-lava-marker",
-            "route-combat-kill-shadowlord-vanish-marker",
+            "route-combat-kill-shadowlord-protected-rejection",
             "route-terrain-combat-party-entry",
-            "route-terrain-combat-xit-no-foes-clean-exit",
+            "route-terrain-combat-escape-announced-cleanup",
             "route-terrain-combat-out-of-arena-leave",
             "route-dungeon-room-party-entry",
             "route-dungeon-level-up-down-spells",
@@ -18375,14 +19982,18 @@ mod tests {
             "route-blackthorn-audience-correct",
             "route-blackthorn-audience-wrong",
             "route-blackthorn-rescue-refuge",
+            "route-world-defeat-persists-ool-before-rescue",
             "route-virtue-town-shadowlord-entry",
             "route-virtue-town-shadowlord-yell",
             "route-lycaeum-shard-falsehood-vanquish",
             "route-empath-shard-hatred-vanquish",
             "route-serpents-hold-shard-cowardice-vanquish",
             "route-stonegate-shadowlord-entry",
+            "route-stonegate-trapdoor-rescue",
             "route-britannia-word-of-power-seal-opens",
             "route-underworld-doom-word-of-power-seal-opens",
+            "route-britannia-ruined-honesty-shrine-restoration",
+            "route-britannia-empty-yell-is-acted",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -18548,6 +20159,53 @@ mod tests {
     }
 
     #[test]
+    fn visual_route_stonegate_trapdoor_runs_rescue_at_next_command_boundary_when_present() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join("TOWNE.DAT").exists()
+            || !game_dir.join(TILES_EGA_FILE).exists()
+            || !game_dir.join(IBM_CH_FILE).exists()
+        {
+            return;
+        }
+
+        let stonegate = Scene::new(SCENE_STONEGATE).unwrap();
+        let mut state = PlayState::load_scene(
+            game_dir,
+            PlayOptions {
+                target: PlayTarget::Town(stonegate),
+                ..PlayOptions::default()
+            },
+        )
+        .unwrap();
+        let atlas = load_tile_atlas(game_dir, TileGraphicsDepth::Ega16).unwrap();
+        let ibm = load_ibm_ch_font(game_dir).unwrap();
+        let runes = load_runes_ch_font(game_dir).unwrap();
+        let ctx = PlayFrameContext {
+            ibm: &ibm,
+            runes: &runes,
+            game_dir,
+            cursor_frame: 0,
+        };
+
+        apply_visual_route_command(&mut state, "setup:stonegate-trapdoor", game_dir).unwrap();
+        let _ = render_visual_play_frame(&mut state, &atlas, ctx);
+        apply_visual_route_command(&mut state, "empty", game_dir).unwrap();
+        let _ = render_visual_play_frame(&mut state, &atlas, ctx);
+        assert_eq!(state.party_capability(), PartyCapability::Defeated);
+        assert!(
+            !visual_modal_prompt_active(&state),
+            "completed Stonegate trapdoor playback must return ownership to the exploration loop"
+        );
+
+        assert_eq!(
+            apply_visual_route_command(&mut state, "q", game_dir).unwrap(),
+            PlayInputDisposition::Quit
+        );
+        validate_visual_route_final_state(&state, "route-stonegate-trapdoor-rescue", game_dir)
+            .unwrap();
+    }
+
+    #[test]
     fn visual_route_suite_scripts_cover_every_published_spell_code() {
         let cases = visual_route_suite_cases();
         let mut covered = [false; u5_runtime::SPELL_COUNT];
@@ -18695,7 +20353,7 @@ mod tests {
 
         // route-endgame-tableau-walk-in adds 24 (endgame.md §4 walk-in);
         // the full-victory cinematic now runs to the §9.5 terminal hold.
-        assert_eq!(reports.len(), 1814);
+        assert_eq!(reports.len(), 1871);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -18710,7 +20368,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1814"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1871"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -18724,9 +20382,9 @@ mod tests {
         assert!(manifest.contains("route-key-prompt-escape-cancel-04-escape"));
         assert!(manifest.contains("route-key-world-direction-prompts-12-key_d"));
         assert!(manifest.contains("route-key-yell-buffer-09-enter"));
-        assert!(manifest.contains("route-key-ready-picker-04-space"));
+        assert!(manifest.contains("route-key-ready-picker-04-escape"));
         assert!(manifest.contains("route-key-z-stats-picker-02-space"));
-        assert!(manifest.contains("route-key-use-picker-02-enter"));
+        assert!(manifest.contains("route-key-use-picker-02-space"));
         assert!(manifest.contains("route-key-mix-prompt-02-escape"));
         assert!(manifest.contains("route-key-rest-watch-prompt-04-digit_2"));
         assert!(manifest.contains("route-key-new-order-picker-03-digit_3"));
@@ -18739,6 +20397,10 @@ mod tests {
         assert!(manifest.contains("route-world-movement-01-d"));
         assert!(manifest.contains("route-britannia-move-pass-idle-02-idle"));
         assert!(manifest.contains("route-castle-pass-and-idle-01-empty"));
+        assert!(manifest.contains("route-castle-jimmy-magic-lock-no-picker-01-j"));
+        assert!(manifest.contains("route-castle-jimmy-empty-restraint-no-picker-01-j"));
+        assert!(manifest.contains("route-castle-jimmy-prisoner-release-02-1"));
+        assert!(manifest.contains("route-reload-castle-jimmy-prisoner-release-03-empty"));
         assert!(manifest.contains("route-town-status-modal-01-z"));
         assert!(manifest.contains("route-castle-z-stats-modal-01-z"));
         assert!(manifest.contains("route-town-view-overlay-01-v"));
@@ -18756,7 +20418,7 @@ mod tests {
         assert!(manifest.contains("route-britannia-look-01-l6"));
         assert!(manifest.contains("route-britannia-look-pass-01-l6"));
         assert!(manifest.contains("route-castle-look-pass-01-l6"));
-        assert!(manifest.contains("route-britannia-spyglass-chunk-map-01-usp"));
+        assert!(manifest.contains("route-britannia-spyglass-night-sky-01-usp"));
         assert!(manifest.contains("route-britannia-utility-use-items-03-uc"));
         assert!(manifest.contains("route-ship-hms-cape-plans-use-01-up"));
         assert!(manifest.contains("route-britannia-create-food-cast-01-c1imx"));
@@ -18821,14 +20483,17 @@ mod tests {
         assert!(manifest.contains("route-castle-native-stair-down-route-01-d"));
         assert!(manifest.contains("route-castle-native-stair-cross-route-01-w"));
         assert!(manifest.contains("route-debug-enter-castle-03-idle_1"));
-        assert!(manifest.contains("route-debug-enter-castle-return-world-02-w"));
+        assert!(manifest.contains("route-debug-enter-castle-return-world-04-y"));
         assert!(manifest.contains("route-debug-enter-castle-from-underworld-02-empty"));
         assert!(manifest.contains("route-world-board-horse-01-b"));
         assert!(manifest.contains("route-britannia-board-horse-route-01-b"));
         assert!(manifest.contains("route-reload-boarded-horse-pass-02-empty"));
         assert!(manifest.contains("route-ship-xit-launches-skiff-01-x"));
+        assert!(manifest.contains("route-ship-xit-no-skiffs-refusal-01-x"));
         assert!(manifest.contains("route-reload-ship-xit-skiff-pass-02-empty"));
         assert!(manifest.contains("route-ship-hoist-and-sail-east-02-d"));
+        assert!(manifest.contains("route-ship-yell-toggles-town-band-01-y"));
+        assert!(manifest.contains("route-ship-yell-toggles-dungeon-band-01-y"));
         assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
         assert!(manifest.contains("route-ship-broadside-fire-route-01-f6"));
         assert!(manifest.contains("route-dungeon-movement-search-03-s6"));
@@ -18879,17 +20544,17 @@ mod tests {
         assert!(manifest.contains("route-shop-inn-rest-decline-route-03-p"));
         assert!(manifest.contains("route-shop-reagent-buy-03-n"));
         assert!(manifest.contains("route-shop-reagent-buy-route-03-n"));
-        assert!(manifest.contains("route-shop-tavern-drink-and-food-05-n"));
-        assert!(manifest.contains("route-shop-tavern-drink-and-food-route-05-n"));
-        assert!(manifest.contains("route-shop-tavern-honest-meal-lore-05-y"));
-        assert!(manifest.contains("route-shop-tavern-wayfarer-lore-05-y"));
-        assert!(manifest.contains("route-shop-tavern-sword-and-keg-lore-05-y"));
-        assert!(manifest.contains("route-shop-tavern-slaughtered-lamb-lore-05-y"));
-        assert!(manifest.contains("route-shop-tavern-humble-palate-lore-05-y"));
-        assert!(manifest.contains("route-shop-tavern-blue-boar-lore-05-y"));
-        assert!(manifest.contains("route-shop-tavern-cats-lair-lore-05-y"));
-        assert!(manifest.contains("route-shop-tavern-fallen-virgin-lore-05-y"));
-        assert!(manifest.contains("route-shop-tavern-folley-tap-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-drink-and-food-06-n"));
+        assert!(manifest.contains("route-shop-tavern-drink-and-food-route-06-n"));
+        assert!(manifest.contains("route-shop-tavern-honest-meal-lore-06-y"));
+        assert!(manifest.contains("route-shop-tavern-wayfarer-lore-06-y"));
+        assert!(manifest.contains("route-shop-tavern-sword-and-keg-lore-06-y"));
+        assert!(manifest.contains("route-shop-tavern-slaughtered-lamb-lore-06-y"));
+        assert!(manifest.contains("route-shop-tavern-humble-palate-lore-06-y"));
+        assert!(manifest.contains("route-shop-tavern-blue-boar-lore-06-y"));
+        assert!(manifest.contains("route-shop-tavern-cats-lair-lore-06-y"));
+        assert!(manifest.contains("route-shop-tavern-fallen-virgin-lore-06-y"));
+        assert!(manifest.contains("route-shop-tavern-folley-tap-lore-06-y"));
         assert!(manifest.contains("route-shop-horse-trader-decline-02-n"));
         assert!(manifest.contains("route-shop-horse-trader-decline-route-02-n"));
         assert!(manifest.contains("route-shop-horse-trader-no-marker-refusal-02-y"));
@@ -18948,12 +20613,12 @@ mod tests {
         assert!(manifest.contains("route-combat-summon-daemon-ring-01-c1ckx6"));
         assert!(manifest.contains("route-combat-kill-gazer-eye-burst-01-c1cx7"));
         assert!(manifest.contains("route-combat-kill-gargoyle-lava-marker-01-c1cx7"));
-        assert!(manifest.contains("route-combat-kill-shadowlord-vanish-marker-01-c1cx7"));
+        assert!(manifest.contains("route-combat-kill-shadowlord-protected-rejection-01-c1cx7"));
         assert!(
             manifest
                 .contains("route-terrain-combat-party-entry-01-setup_terrain-combat-party-entry")
         );
-        assert!(manifest.contains("route-terrain-combat-xit-no-foes-clean-exit-02-x"));
+        assert!(manifest.contains("route-terrain-combat-escape-announced-cleanup-02-_"));
         assert!(manifest.contains("route-terrain-combat-out-of-arena-leave-02-d"));
         assert!(
             manifest.contains("route-dungeon-room-party-entry-01-setup_dungeon-room-party-entry")
@@ -18989,14 +20654,18 @@ mod tests {
         assert!(manifest.contains("route-blackthorn-audience-correct-02-ahm"));
         assert!(manifest.contains("route-blackthorn-audience-wrong-02-wrong"));
         assert!(manifest.contains("route-blackthorn-rescue-refuge-02-empty"));
+        assert!(manifest.contains("route-world-defeat-persists-ool-before-rescue-02-q"));
         assert!(manifest.contains("route-virtue-town-shadowlord-entry-00-initial"));
         assert!(manifest.contains("route-virtue-town-shadowlord-yell-01-yfaulinei"));
         assert!(manifest.contains("route-lycaeum-shard-falsehood-vanquish-01-uf"));
         assert!(manifest.contains("route-empath-shard-hatred-vanquish-01-uh"));
         assert!(manifest.contains("route-serpents-hold-shard-cowardice-vanquish-01-ucw"));
         assert!(manifest.contains("route-stonegate-shadowlord-entry-00-initial"));
+        assert!(manifest.contains("route-stonegate-trapdoor-rescue-03-q"));
         assert!(manifest.contains("route-britannia-word-of-power-seal-opens-01-yfallax"));
         assert!(manifest.contains("route-underworld-doom-word-of-power-seal-opens-01-yveramocor"));
+        assert!(manifest.contains("route-britannia-ruined-honesty-shrine-restoration-05-ahm"));
+        assert!(manifest.contains("route-britannia-empty-yell-is-acted-02-empty"));
         assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-empty"));
         assert!(manifest.contains("route-endgame-missing-box-confirmation-02-y"));
         assert!(manifest.contains("route-endgame-box-victory-confirmation-02-y"));
@@ -19014,7 +20683,7 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-select-player-clear-02-0"));
         assert!(manifest.contains("route-doom-combat-select-player-one-02-1"));
         assert!(manifest.contains("route-doom-combat-select-player-six-02-6"));
-        assert!(manifest.contains("route-doom-combat-escape-abort-02-_"));
+        assert!(manifest.contains("route-doom-combat-escape-not-yet-02-_"));
         assert!(manifest.contains("route-doom-combat-music-toggle-02-_"));
         assert!(manifest.contains("route-doom-combat-step-east-02-d"));
         assert!(manifest.contains("route-doom-combat-direct-step-east-02-d"));
@@ -19027,8 +20696,8 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-push-direction-02-p6"));
         assert!(manifest.contains("route-doom-combat-ready-prompt-02-r"));
         assert!(manifest.contains("route-doom-combat-yell-word-02-yfallax"));
-        assert!(manifest.contains("route-doom-combat-xit-foes-remain-02-x"));
-        assert!(manifest.contains("route-doom-combat-quit-defeat-02-q"));
+        assert!(manifest.contains("route-doom-combat-xit-refusal-02-x"));
+        assert!(manifest.contains("route-doom-combat-quit-refusal-02-q"));
         assert!(manifest.contains("route-endgame-class-tableau-restoration-01-y"));
         assert!(manifest.contains("route-britannia-extended-exploration-12-1"));
         assert!(manifest.contains("route-castle-extended-walk-and-save-09-z"));
@@ -20601,6 +22270,29 @@ mod tests {
     }
 
     #[test]
+    fn return_to_view_abort_key_is_consumed_before_fresh_menu_poll() {
+        // `cleak/u5-spec#122`: the per-preview reader consumes the key and
+        // discards its identity. A `C` used to abort cannot immediately enter
+        // character creation after the saved menu page is restored.
+        let dir = debug_game_dir();
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
+        intro.dispatch.submit_menu_key(b'R');
+
+        assert!(step_visual_intro(&mut intro, 'C'));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert_eq!(
+            intro.dispatch.intro.cached_selection,
+            Some(IntroSubflow::ReturnToView)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn return_to_view_intro_escape_is_an_ordinary_aborting_key() {
         // `#54` retraction 3: there is no ESC special case.
         let dir = debug_game_dir();
@@ -20879,10 +22571,19 @@ mod tests {
                 ..
             }
         ));
-        // The last frame does not advance further.
-        assert!(!advance_visual_intro_panel_animation(
+        // `0x09` restarts the stream, so the first frame of the expanded
+        // cycle follows the last one instead of leaving the preview frozen.
+        assert!(advance_visual_intro_panel_animation(
             &mut panel,
             &mut title_tick_frame
+        ));
+        assert_eq!(title_tick_frame, 2);
+        assert!(matches!(
+            panel,
+            VisualIntroPanel::ReturnToView {
+                preview_frame_index: 0,
+                ..
+            }
         ));
     }
 

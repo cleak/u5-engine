@@ -60,38 +60,18 @@ use crate::clock::{SKY_STRIP_CELL_COUNT, SkyStripMarker, sky_strip_composed_cell
 use crate::constants::CH_CELL_SIDE;
 use crate::graphics::{EGA_PALETTE_RGB, FixedCellFont};
 
-// # Colour provenance - PROVISIONAL
-//
-// The published contract names these as user-interface colour-table
-// *slots*, not raw indices, and the per-family values it quotes are
-// under a re-grounding audit on the decomp side: any colour claim in
-// the spec that traces only to a screen capture is being re-derived
-// from the binaries or reworded as an unconfirmed observation. Treat
-// every index below as provisional and change it here, in one place,
-// when that audit reports.
-//
-// What these particular values do *not* come from is a photographed or
-// re-encoded capture. They were read as palette **indices** out of
-// `u5-spec/capture/ultima_000.png`, which is an indexed 320x200 file
-// whose palette is bit-exact standard EGA, so no RGB sampling and no
-// display pipeline sits between the file and the number. That is a
-// stronger provenance than a colour sampled from a scaled RGB capture,
-// but it is still a capture rather than the code, which is why it stays
-// marked provisional. The painters take these as parameters (see
-// [`ChromePalette`]) rather than reading the constants directly, so a
-// correction needs no call-site changes.
+// `display-driver.md §2` publishes the driver-family UI colour table.
+// The v1 EGA baseline and Tandy both use its high-colour values; CGA and
+// Hercules use the separately published low-colour values and remain outside
+// the v1 alternate-hardware parity boundary.
 
-/// Provisional EGA index of the border ribbon fill ("chrome").
+/// High-colour UI-table slot 2: border ribbon fill ("chrome").
 pub const CHROME_RIBBON_INDEX: u8 = 1;
-/// Provisional EGA index of the 1px rules and chrome label text
-/// ("accent").
+/// High-colour UI-table slot 1: rules and chrome label text ("accent").
 pub const CHROME_RULE_INDEX: u8 = 15;
-/// Provisional EGA index the sky strip draws moon-phase glyphs in.
-/// `moons.md` publishes this as colour-table slot 6; the lead's note
-/// flags the moons.md colours specifically as capture-derived.
+/// High-colour UI-table slot 6 used for sky-strip moon-phase glyphs.
 pub const SKY_STRIP_MOON_INDEX: u8 = 7;
-/// Provisional EGA index the sky strip draws the fixed hour marker in.
-/// `moons.md` publishes this as colour-table slot 5; same caveat.
+/// High-colour UI-table slot 5 used for the fixed hour marker.
 pub const SKY_STRIP_HOUR_MARKER_INDEX: u8 = 14;
 
 /// The two colour-table slots the chrome paint uses, plus the
@@ -114,7 +94,7 @@ pub struct ChromePalette {
 }
 
 impl ChromePalette {
-    /// Provisional EGA-family values. See the colour-provenance note.
+    /// Published EGA/Tandy high-colour-family values.
     pub const EGA: Self = Self {
         chrome: CHROME_RIBBON_INDEX,
         accent: CHROME_RULE_INDEX,
@@ -184,7 +164,7 @@ pub const SKY_STRIP_FIRST_COLUMN: u8 = 6;
 /// animates rather than blinking: three captures of the gameplay input
 /// line show frame `0x06` and a fourth shows `0x07`. The intro menu's
 /// `Select:` caption cursor is the same set (`intro` pins frame index
-/// 3). See the module header for the pending spec question.
+/// 3). This is published in `text-output.md §10.6`.
 pub const PROMPT_CURSOR_FRAME_GLYPHS: [u8; 4] = [0x05, 0x06, 0x07, 0x08];
 
 /// Barber-pole cursor glyph for an animation frame counter.
@@ -282,8 +262,7 @@ const CHROME_CORNER_GLYPHS: [(u8, u8, u8); 3] = [(0x7b, 0, 0), (0x7c, 39, 0), (0
 
 /// Inclusive pixel rectangles of the 1px white rules that are never
 /// interrupted by a ribbon gap.
-const FIXED_RULES: [(usize, usize, usize, usize); 9] = [
-    (191, 7, 312, 7),   // top of the roster box
+const FIXED_RULES: [(usize, usize, usize, usize); 8] = [
     (191, 87, 319, 87), // top of the message box
     (7, 7, 7, 184),     // viewport left edge
     (184, 7, 184, 184), // viewport right edge
@@ -359,8 +338,13 @@ pub struct GameplayChromeContent {
     /// Row 23 gap: wind banner on the surface/town family, dungeon
     /// facing label in dungeon-class scenes.
     pub bottom: ChromeGap,
+    /// Optional label punched through the top rule of the stats/roster
+    /// box. Modal selectors use `Select:` or `Items:`; the arms sell
+    /// browser temporarily replaces them with `Arms`.
+    pub stats_label: Option<String>,
     /// Timing/status tag byte. `None` (or zero) leaves divider row 7 a
-    /// plain ribbon band with no caps and no placeholder.
+    /// plain ribbon band with no caps and no placeholder. While the arms
+    /// sell browser is open, its page-status glyph owns this slot instead.
     pub timing_glyph: Option<u8>,
 }
 
@@ -646,6 +630,21 @@ pub fn timing_glyph_gap(timing_glyph: Option<u8>) -> Option<ResolvedGap> {
         .map(|_| resolve_gap(TIMING_GAP, 1))
 }
 
+/// Resolve the modal label punched through the stats/roster box's top
+/// ribbon. Unlike the viewport labels, this uses the published cap-anchor
+/// formula rather than centring within a nominal fixed-width field.
+pub fn stats_label_gap(label: Option<&str>) -> Option<ResolvedGap> {
+    let label = label.filter(|label| !label.is_empty())?;
+    let cells = label.chars().count();
+    let (left_cap_column, content_first_column, right_cap_column) = stats_label_strip_span(cells);
+    Some(ResolvedGap {
+        left_cap_column,
+        right_cap_column,
+        content_first_column,
+        content_cells: cells,
+    })
+}
+
 fn gap_for(span: GapSpan, content: &ChromeGap) -> Option<ResolvedGap> {
     match content {
         ChromeGap::Unbroken => None,
@@ -676,6 +675,7 @@ pub fn paint_gameplay_frame_chrome(
 ) {
     let top = top_gap(&content.top);
     let bottom = bottom_gap(&content.bottom);
+    let stats_label = stats_label_gap(content.stats_label.as_deref());
     let timing = timing_glyph_gap(content.timing_glyph);
 
     for (x0, y0, x1, y1) in RIBBON_BANDS {
@@ -686,6 +686,7 @@ pub fn paint_gameplay_frame_chrome(
     for (gap, band_row) in [
         (top, SKY_STRIP_ROW),
         (bottom, WIND_BANNER_ROW),
+        (stats_label, STATS_LABEL_STRIP_ROW),
         (timing, TIMING_GLYPH_ROW),
     ] {
         let Some(gap) = gap else { continue };
@@ -707,6 +708,7 @@ pub fn paint_gameplay_frame_chrome(
     }
     paint_interrupted_rule(rgba, width, height, 7, 7, 184, top, palette);
     paint_interrupted_rule(rgba, width, height, 184, 7, 184, bottom, palette);
+    paint_interrupted_rule(rgba, width, height, 7, 191, 312, stats_label, palette);
     for row_y in DIVIDER_RULE_ROWS {
         let gap = if row_y == 56 || row_y == 63 {
             timing
@@ -738,6 +740,26 @@ pub fn paint_gameplay_frame_chrome(
             gap,
             WIND_BANNER_ROW,
             &content.bottom,
+        );
+    }
+    if let (Some(gap), Some(label)) = (stats_label, content.stats_label.as_deref()) {
+        paint_gap_caps(
+            rgba,
+            width,
+            height,
+            fonts.ibm,
+            gap,
+            STATS_LABEL_STRIP_ROW,
+            palette,
+        );
+        paint_label_content(
+            rgba,
+            width,
+            height,
+            fonts.ibm,
+            gap,
+            STATS_LABEL_STRIP_ROW,
+            label,
         );
     }
     if let (Some(gap), Some(byte)) = (timing, content.timing_glyph) {
@@ -973,19 +995,31 @@ fn paint_gap_content(
             }
         }
         ChromeGap::Label(label) => {
-            for (index, ch) in label.chars().take(gap.content_cells).enumerate() {
-                draw_glyph(
-                    rgba,
-                    width,
-                    height,
-                    fonts.ibm,
-                    (ch as u32 as u8) & 0x7f,
-                    gap.content_first_column + index as u8,
-                    row,
-                    CHROME_RULE_INDEX,
-                );
-            }
+            paint_label_content(rgba, width, height, fonts.ibm, gap, row, label);
         }
+    }
+}
+
+fn paint_label_content(
+    rgba: &mut [u8],
+    width: usize,
+    height: usize,
+    font: &FixedCellFont,
+    gap: ResolvedGap,
+    row: u8,
+    label: &str,
+) {
+    for (index, ch) in label.chars().take(gap.content_cells).enumerate() {
+        draw_glyph(
+            rgba,
+            width,
+            height,
+            font,
+            (ch as u32 as u8) & 0x7f,
+            gap.content_first_column + index as u8,
+            row,
+            CHROME_RULE_INDEX,
+        );
     }
 }
 
@@ -1102,18 +1136,38 @@ fn fill_rect(
 /// Underworld has no published chrome content for either gap, so both
 /// ribbons stay unbroken there rather than inventing one.
 pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeContent {
-    let timing = state.timing_status.save_byte();
-    let timing_glyph = (timing != 0).then_some(timing);
+    let browser = crate::stats_panel::active_arms_sell_browser(state);
+    let stats_label = browser
+        .map(|_| crate::stats_panel::ARMS_SELL_BROWSER_STATS_LABEL.to_string())
+        .or_else(|| state.roster_box_label().map(str::to_string));
+    let timing_glyph = if let Some(browser) = browser {
+        use crate::shop_runtime::ArmsSellPageIndicator;
+
+        match browser.page_indicator(&state.equipment_stock) {
+            ArmsSellPageIndicator::None => None,
+            ArmsSellPageIndicator::Down => {
+                Some(crate::stats_panel::ARMS_SELL_BROWSER_PAGE_GLYPH_DOWN)
+            }
+            ArmsSellPageIndicator::Up => Some(crate::stats_panel::ARMS_SELL_BROWSER_PAGE_GLYPH_UP),
+            ArmsSellPageIndicator::Both => {
+                Some(crate::stats_panel::ARMS_SELL_BROWSER_PAGE_GLYPH_BOTH)
+            }
+        }
+    } else {
+        state.active_effect_tag.filter(|tag| *tag != 0)
+    };
     match state.area {
         crate::Area::Dungeon { level, .. } => GameplayChromeContent {
             top: ChromeGap::Label(dungeon_level_label(level)),
             bottom: ChromeGap::Label(dungeon_direction_label(state.player.facing.name())),
+            stats_label,
             timing_glyph,
         },
         crate::Area::World { plane } if plane == crate::WorldPlane::Underworld => {
             GameplayChromeContent {
                 top: ChromeGap::Unbroken,
                 bottom: ChromeGap::Unbroken,
+                stats_label,
                 timing_glyph,
             }
         }
@@ -1123,6 +1177,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
                 state.cached_moon_glyph_bytes,
             ))),
             bottom: ChromeGap::Label(wind_banner_text(wind_banner_direction_name(state))),
+            stats_label,
             timing_glyph,
         },
     }

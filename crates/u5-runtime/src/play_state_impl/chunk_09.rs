@@ -10,6 +10,13 @@ struct PreparedTopDownCell {
     grid: u8,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutdoorActiveObjectStepAttempt {
+    CandidateBlocked,
+    ChanceRefused,
+    Committed,
+}
+
 impl PreparedTopDownCell {
     fn tile(self) -> u8 {
         match visibility_marker(self.grid) {
@@ -292,6 +299,11 @@ impl PlayState {
             self.force_foot_transport();
         }
         self.grid = load_world_map(game_dir, entry.to_plane)?;
+        apply_world_quest_tile_substitutions(
+            &mut self.grid,
+            &self.word_of_power_seal_flags,
+            &self.shrine_ruin_flags,
+        );
         self.rebuild_world_live_chunks_from_grid(entry.to_plane)?;
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
@@ -453,15 +465,24 @@ impl PlayState {
 
         let Some(area) = self.top_down_render_area() else {
             return self
-                .render_dungeon_viewport(radius, atlas.depth, atlas.dungeon_billboards.as_ref())
+                .render_dungeon_viewport(
+                    radius,
+                    atlas.depth,
+                    atlas.dungeon_billboards.as_ref(),
+                    atlas.dungeon_sprites.as_ref(),
+                )
                 .map(Some);
         };
         let _ = isize::try_from(radius).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, "viewport radius is too large")
         })?;
         let prepared = if radius == VIEWPORT_PLAYER_ROW {
-            self.refresh_top_down_visibility_buffers(area, radius);
-            self.prepared_top_down_grid_from_visibility_buffers()
+            if let Some(sweep) = self.white_potion_sweep {
+                self.prepare_white_potion_render_grid(area, radius, sweep)
+            } else {
+                self.refresh_top_down_visibility_buffers(area, radius);
+                self.prepared_top_down_grid_from_visibility_buffers()
+            }
         } else {
             self.prepare_top_down_render_grid(area, radius)
         };
@@ -505,7 +526,6 @@ impl PlayState {
                 blit_tile_id_to_viewport(&mut viewport, atlas, tile_id, cell_x, cell_y)?;
             }
         }
-        self.draw_white_potion_sweep_overlay(area, radius, &prepared, &mut viewport);
         Ok(Some(viewport))
     }
 
@@ -622,93 +642,97 @@ impl PlayState {
                 if let Some(sprite) = self.combat_render_sprite_at(arena_x, arena_y) {
                     blit_tile_id_to_viewport(viewport, atlas, sprite, cell_x, cell_y)?;
                 }
-                if let Some(kind) = self.combat_potion_presentation_at(arena_x, arena_y) {
-                    draw_combat_potion_presentation_cell(viewport, cell_x, cell_y, kind);
-                }
-                if self.combat_secondary_marker_cell() == Some((arena_x as u8, arena_y as u8)) {
-                    draw_combat_secondary_marker_cell(viewport, cell_x, cell_y);
-                }
-                if self.combat_cursor_blink
-                    && self.combat_cursor_actor_cell() == Some((arena_x as u8, arena_y as u8))
-                {
-                    draw_combat_cursor_marker_cell(viewport, cell_x, cell_y);
+            }
+        }
+
+        // `combat.md §7`: repaint the complete base viewport first. On a lit,
+        // eligible player pass, draw the cursor and only then the secondary
+        // marker so the latter wins at overlapping pixels. The secondary
+        // coordinate has no arena-range precheck; ordinary pixel clipping is
+        // the entire bounds policy.
+        if self.combat_cursor_blink {
+            if let Some((cursor_x, cursor_y)) = self.combat_cursor_actor_cell() {
+                draw_combat_cursor_marker_cell(
+                    viewport,
+                    isize::from(cursor_x) + x_offset,
+                    isize::from(cursor_y) + y_offset,
+                );
+                if let Some((marker_x, marker_y)) = self.combat_secondary_marker {
+                    draw_combat_secondary_marker_cell(
+                        viewport,
+                        isize::from(marker_x) + x_offset,
+                        isize::from(marker_y) + y_offset,
+                    );
                 }
             }
         }
         Ok(())
     }
 
-    fn draw_white_potion_sweep_overlay(
+    /// `catalogs/item-list.md §7.2`: White runs the ordinary visibility
+    /// producer once, then holds that completed field unchanged through all
+    /// twenty repaints. Terrain, ordinary objects, and animation are freshly
+    /// composited through the frozen field; White contributes no raster of its
+    /// own.
+    fn prepare_white_potion_render_grid(
         &self,
         area: TopDownRenderArea,
         radius: usize,
-        prepared: &[Option<PreparedTopDownCell>],
-        viewport: &mut TileViewport,
-    ) {
-        let Some(sweep) = self.white_potion_sweep else {
-            return;
-        };
-        if sweep.frames_remaining == 0 {
-            return;
-        }
+        sweep: WhitePotionSweep,
+    ) -> Vec<Option<PreparedTopDownCell>> {
         let cells = radius.saturating_mul(2).saturating_add(1);
-        let px = self.player.x as isize;
-        let py = self.player.y as isize;
+        let px = sweep.center_x as isize;
+        let py = sweep.center_y as isize;
         let r = radius as isize;
-        let radius_sq = u32::from(sweep.radius).saturating_mul(u32::from(sweep.radius));
+        let mut prepared = vec![None; cells.saturating_mul(cells)];
         for cell_y in 0..cells {
             for cell_x in 0..cells {
-                if prepared
-                    .get(cell_y * cells + cell_x)
-                    .and_then(|cell| *cell)
-                    .is_none()
-                {
+                let index = cell_y * cells + cell_x;
+                if !sweep.visible_cells.get(index).copied().unwrap_or(false) {
                     continue;
                 }
                 let world_x = px + cell_x as isize - r;
                 let world_y = py + cell_y as isize - r;
-                let (dx, dy) = match area {
-                    TopDownRenderArea::Town => (
-                        world_x - sweep.center_x as isize,
-                        world_y - sweep.center_y as isize,
-                    ),
-                    TopDownRenderArea::World(_) => {
-                        let wx = world_x.rem_euclid(WORLD_SIDE as isize) as usize;
-                        let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
-                        (
-                            isize::from(wrapped_world_axis_delta(sweep.center_x, wx)),
-                            isize::from(wrapped_world_axis_delta(sweep.center_y, wy)),
-                        )
+                let terrain = match area {
+                    TopDownRenderArea::Town => {
+                        if !(0..32).contains(&world_x) || !(0..32).contains(&world_y) {
+                            continue;
+                        }
+                        self.grid[world_y as usize * 32 + world_x as usize]
                     }
+                    TopDownRenderArea::World(_) => self.world_live_tile_at(
+                        world_x.rem_euclid(WORLD_SIDE as isize) as usize,
+                        world_y.rem_euclid(WORLD_SIDE as isize) as usize,
+                    ),
                 };
-                let dx = dx.unsigned_abs() as u32;
-                let dy = dy.unsigned_abs() as u32;
-                let distance_sq = dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy));
-                if distance_sq <= radius_sq {
-                    draw_white_potion_sweep_cell(viewport, cell_x, cell_y);
-                }
+                let terrain = self.animation.resolve_static_tile(terrain);
+                prepared[index] = Some(PreparedTopDownCell {
+                    terrain,
+                    grid: terrain,
+                });
             }
         }
-    }
-
-    fn combat_potion_presentation_at(
-        &self,
-        x: usize,
-        y: usize,
-    ) -> Option<CombatPotionPresentationKind> {
-        let presentation = self.combat_potion_presentation?;
-        let object = self.active_objects.get(presentation.active_object_slot)?;
-        if object.is_empty() || object.x != x || object.y != y {
-            return None;
+        for slot in (1..self.active_objects.len()).rev() {
+            self.composite_top_down_object(area, radius, self.active_objects[slot], &mut prepared);
         }
-        Some(presentation.kind)
-    }
-
-    fn combat_secondary_marker_cell(&self) -> Option<(u8, u8)> {
-        self.combat_secondary_marker.and_then(|(x, y)| {
-            (usize::from(x) < COMBAT_ARENA_SIDE && usize::from(y) < COMBAT_ARENA_SIDE)
-                .then_some((x, y))
-        })
+        if let Some(z) = self.current_floor() {
+            self.composite_top_down_object(
+                area,
+                radius,
+                ActiveObject {
+                    type_byte: PLAYER_TILE,
+                    tile: PLAYER_TILE,
+                    x: sweep.center_x,
+                    y: sweep.center_y,
+                    z,
+                    phase: STEADY_PHASE,
+                    aux1: 0,
+                    aux3: 0,
+                },
+                &mut prepared,
+            );
+        }
+        prepared
     }
 
     pub fn combat_render_sprite_at(&self, x: usize, y: usize) -> Option<usize> {
@@ -734,10 +758,11 @@ impl PlayState {
     }
 
     pub fn render_dungeon_viewport(
-        &self,
+        &mut self,
         radius: usize,
         depth: TileGraphicsDepth,
         billboards: Option<&DungeonBillboardBanks>,
+        sprites: Option<&DungeonSpriteBanks>,
     ) -> io::Result<TileViewport> {
         // First-person corridor for the current dungeon view, drawn from
         // the flavour's billboard bank per `dungeon-mode.md` sections
@@ -776,7 +801,7 @@ impl PlayState {
             return Ok(viewport);
         }
 
-        self.draw_dungeon_corridor(level, &mut viewport, billboards);
+        self.draw_dungeon_corridor(level, &mut viewport, billboards, sprites);
         Ok(viewport)
     }
 
@@ -791,23 +816,17 @@ impl PlayState {
     /// the two halves of a forward billboard meet exactly on the centre
     /// line. There is no projection arithmetic and no depth buffer.
     ///
-    /// Object sprites, fountain water and energy-field strobes - the
-    /// backward sweep of section 6.5 and sections 6.6-6.8 - are not
-    /// drawn yet: they come from a separate art file this engine does
-    /// not load. Nothing invented stands in for them.
     fn draw_dungeon_corridor(
-        &self,
+        &mut self,
         level: u8,
         viewport: &mut TileViewport,
         billboards: Option<&DungeonBillboardBanks>,
+        sprites: Option<&DungeonSpriteBanks>,
     ) {
         let Area::Dungeon { scene, .. } = self.area else {
             return;
         };
-        let Some(banks) = billboards else {
-            return;
-        };
-        let bank = banks.bank(scene.presentation_flavour());
+        let bank = billboards.map(|banks| banks.bank(scene.presentation_flavour()));
 
         let (fdx, fdy) = self.player.facing.delta();
         let Some(left_facing) = self.player.facing.turn_left_cardinal() else {
@@ -820,7 +839,10 @@ impl PlayState {
         let (rdx, rdy) = right_facing.delta();
 
         let mut point_blank = false;
+        let mut last_visible_band = 0;
+        let mut decorations = Vec::new();
         for band in 0..DUNGEON_BANDS {
+            last_visible_band = band;
             let step = band as isize;
             let ahead_dx = fdx * step;
             let ahead_dy = fdy * step;
@@ -831,7 +853,18 @@ impl PlayState {
             }
 
             if let Some(role) = outcome.blocker {
-                self.draw_dungeon_billboard(viewport, bank, role, band);
+                if let Some(bank) = bank {
+                    self.draw_dungeon_billboard(viewport, bank, role, band);
+                }
+                if role == DungeonBillboardRole::ForwardFlavourWall
+                    && scene.presentation_flavour() == DungeonPresentationFlavour::Normal
+                {
+                    let x =
+                        dungeon_floor_wrap_coord(self.player.x as i16 + ahead_dx as i16) as usize;
+                    let y =
+                        dungeon_floor_wrap_coord(self.player.y as i16 + ahead_dy as i16) as usize;
+                    decorations.push((x, y, band, DungeonDecorationPlacement::Forward));
+                }
             }
 
             // A point-blank door suppresses the band-0 side cells so the
@@ -841,13 +874,53 @@ impl PlayState {
                     self.dungeon_renderer_offset_cell(level, ahead_dx + ldx, ahead_dy + ldy);
                 let right_cell =
                     self.dungeon_renderer_offset_cell(level, ahead_dx + rdx, ahead_dy + rdy);
-                self.draw_dungeon_billboard(viewport, bank, dungeon_side_role(left_cell), band);
-                self.draw_dungeon_billboard(viewport, bank, dungeon_side_role(right_cell), band);
+                let left_role = dungeon_side_role(left_cell);
+                let right_role = dungeon_side_role(right_cell);
+                if let Some(bank) = bank {
+                    self.draw_dungeon_billboard(viewport, bank, left_role, band);
+                    self.draw_dungeon_billboard(viewport, bank, right_role, band);
+                }
+                if scene.presentation_flavour() == DungeonPresentationFlavour::Normal {
+                    if left_role == DungeonBillboardRole::SideFlavourWall {
+                        let x = dungeon_floor_wrap_coord(
+                            self.player.x as i16 + (ahead_dx + ldx) as i16,
+                        ) as usize;
+                        let y = dungeon_floor_wrap_coord(
+                            self.player.y as i16 + (ahead_dy + ldy) as i16,
+                        ) as usize;
+                        decorations.push((x, y, band, DungeonDecorationPlacement::SideLeft));
+                    }
+                    if right_role == DungeonBillboardRole::SideFlavourWall {
+                        let x = dungeon_floor_wrap_coord(
+                            self.player.x as i16 + (ahead_dx + rdx) as i16,
+                        ) as usize;
+                        let y = dungeon_floor_wrap_coord(
+                            self.player.y as i16 + (ahead_dy + rdy) as i16,
+                        ) as usize;
+                        decorations.push((x, y, band, DungeonDecorationPlacement::SideRight));
+                    }
+                }
             }
 
             if !outcome.see_through {
                 break;
             }
+        }
+
+        for (x, y, band, placement) in decorations.into_iter().rev() {
+            self.draw_dungeon_wall_decoration(level, x, y, band, placement, viewport);
+        }
+
+        if let Some(sprites) = sprites {
+            for band in (0..=last_visible_band).rev() {
+                let step = band as isize;
+                let x =
+                    dungeon_floor_wrap_coord(self.player.x as i16 + (fdx * step) as i16) as usize;
+                let y =
+                    dungeon_floor_wrap_coord(self.player.y as i16 + (fdy * step) as i16) as usize;
+                self.draw_dungeon_cell_contents(level, x, y, band, viewport, sprites);
+            }
+            self.dungeon_fountain_frame = (self.dungeon_fountain_frame + 1) % 3;
         }
     }
 
@@ -874,6 +947,260 @@ impl PlayState {
         let right_x = dungeon_billboard_right_x(left_x, width);
         blit_dungeon_billboard(viewport, image, left_x, false);
         blit_dungeon_billboard(viewport, image, right_x, true);
+    }
+
+    /// `dungeon-mode.md §§6.6-6.9`: the far-to-near object/field pass.
+    fn draw_dungeon_cell_contents(
+        &mut self,
+        level: u8,
+        x: usize,
+        y: usize,
+        band: usize,
+        viewport: &mut TileViewport,
+        banks: &DungeonSpriteBanks,
+    ) {
+        let raw = self.dungeon_cell(level, x, y);
+        let cell = dungeon_renderer_cell_byte(raw);
+        let (rising, floor) = dungeon_object_family_slots(cell);
+        if let Some(objects) = banks.objects() {
+            if let Some(base) = rising {
+                self.draw_dungeon_object_sprite(viewport, objects, base + band, band, true);
+            }
+            if let Some(base) = floor {
+                self.draw_dungeon_object_sprite(viewport, objects, base + band, band, false);
+            }
+        }
+
+        if cell >> 4 == 0x5 {
+            let pen = if band == 0 { 9 } else { 1 };
+            for &(px, py) in dungeon_fountain_points(band, self.dungeon_fountain_frame as usize) {
+                Self::plot_dungeon_screen_pixel(viewport, px, py, pen);
+                Self::plot_dungeon_screen_pixel(viewport, 190 - px, py, pen);
+            }
+        }
+
+        if let Some(spec) = dungeon_field_paint_spec(cell, band) {
+            for _ in 0..spec.strokes {
+                let px = u5_prng_range_u16(
+                    &mut self.prng_state,
+                    spec.minimum,
+                    spec.maximum - spec.endpoint_delta,
+                ) as i32;
+                let py = u5_prng_range_u16(&mut self.prng_state, spec.minimum, spec.maximum) as i32;
+                for offset in 0..=i32::from(spec.endpoint_delta) {
+                    Self::plot_dungeon_screen_pixel(viewport, px + offset, py, spec.pen);
+                }
+            }
+        }
+
+        self.draw_dungeon_active_monster(level, x, y, band, viewport, banks);
+
+        // The raw 0x08 bit is a separate static rising-pit overlay after
+        // ordinary object and field painting. It is not a visit marker.
+        if cell >> 4 < 9 && raw & 0x08 != 0 {
+            if let Some(objects) = banks.objects() {
+                self.draw_dungeon_object_sprite(viewport, objects, 8 + band, band, true);
+            }
+        }
+    }
+
+    /// `dungeon-mode.md §4.1`: replace the one resident wandering
+    /// dungeon-monster record. Family, placement attempts, and the
+    /// Spider/Slime upper-placement check all consume the shared PRNG.
+    pub fn setup_dungeon_active_monster_fresh(&mut self) -> bool {
+        let Area::Dungeon { level, .. } = self.area else {
+            return false;
+        };
+        let family = self.random_range_u8(0, 7);
+        let family_index = usize::from(family);
+        let mut object = ActiveObject {
+            type_byte: family,
+            tile: family,
+            x: 0,
+            y: 0,
+            z: level as i8,
+            phase: DUNGEON_MONSTER_INITIAL_STATES[family_index],
+            aux1: DUNGEON_MONSTER_COMBAT_CLASSES[family_index],
+            aux3: DUNGEON_MONSTER_FLOOR_DEP3,
+        };
+        let mut placed = false;
+        for _ in 0..DUNGEON_ACTIVE_OBJECT_PLACEMENT_ATTEMPTS {
+            let x = usize::from(self.random_range_u8(0, (DUNGEON_SIDE - 1) as u8));
+            let y = usize::from(self.random_range_u8(0, (DUNGEON_SIDE - 1) as u8));
+            if (x, y) == (self.player.x, self.player.y)
+                || !dungeon_active_object_spawn_accepts(self.dungeon_cell(level, x, y))
+            {
+                continue;
+            }
+            object.x = x;
+            object.y = y;
+            placed = true;
+            break;
+        }
+        if placed && matches!(family, 2 | 4) && self.random_range_u8(0, 99) > 48 {
+            object.aux3 = DUNGEON_MONSTER_UPPER_DEP3;
+        }
+        if !placed {
+            object.type_byte = 0;
+            object.tile = 0;
+            object.x = 0;
+            object.y = 0;
+            object.aux1 = DUNGEON_MONSTER_INACTIVE_DEP1;
+        }
+
+        if self.active_objects.len() <= DUNGEON_ACTIVE_MONSTER_SLOT {
+            self.active_objects
+                .resize(DUNGEON_ACTIVE_MONSTER_SLOT + 1, ActiveObject::empty());
+        }
+        self.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT] = object;
+        self.mark_visibility_dirty();
+        placed
+    }
+
+    fn draw_dungeon_active_monster(
+        &mut self,
+        level: u8,
+        x: usize,
+        y: usize,
+        band: usize,
+        viewport: &mut TileViewport,
+        banks: &DungeonSpriteBanks,
+    ) {
+        if band == 0 {
+            return;
+        }
+        let slot = DUNGEON_ACTIVE_MONSTER_SLOT;
+        let Some(object) = self.active_objects.get(slot).copied().filter(|object| {
+            dungeon_monster_record_active(*object)
+                && object.z == level as i8
+                && object.x == x
+                && object.y == y
+        }) else {
+            return;
+        };
+        let family = usize::from(object.type_byte);
+        if family >= DUNGEON_MONSTER_INITIAL_STATES.len() {
+            return;
+        }
+        let Some(sheet) = banks.monster(family) else {
+            return;
+        };
+
+        let (left_pose, right_pose) = if self.negate_time_active() {
+            self.active_objects[slot].phase = DUNGEON_MONSTER_INITIAL_STATES[family];
+            dungeon_monster_negate_poses(family)
+        } else {
+            let left = u5_prng_range_u16(&mut self.prng_state, 0, 100) < 50;
+            let right = u5_prng_range_u16(&mut self.prng_state, 0, 100) < 50;
+            let (new_state, left_pose, right_pose) =
+                dungeon_monster_pose_step(object.phase, left, right);
+            self.active_objects[slot].phase = new_state;
+            (left_pose, right_pose)
+        };
+
+        let depth = band - 1;
+        let y = if object.aux3 == DUNGEON_MONSTER_UPPER_DEP3 {
+            DUNGEON_MONSTER_UPPER_Y[depth]
+        } else {
+            DUNGEON_MONSTER_NORMAL_Y[depth]
+        };
+        let Some(Some(left_sprite)) = sheet.sprites.get(left_pose * 3 + depth) else {
+            return;
+        };
+        let Some(Some(right_sprite)) = sheet.sprites.get(right_pose * 3 + depth) else {
+            return;
+        };
+        blit_dungeon_sprite(
+            viewport,
+            left_sprite,
+            DUNGEON_MONSTER_LEFT_X[depth],
+            y,
+            false,
+        );
+        blit_dungeon_sprite(viewport, right_sprite, DUNGEON_VANISHING_X, y, true);
+    }
+
+    fn draw_dungeon_wall_decoration(
+        &mut self,
+        level: u8,
+        x: usize,
+        y: usize,
+        band: usize,
+        placement: DungeonDecorationPlacement,
+        viewport: &mut TileViewport,
+    ) {
+        let index = dungeon_cell_index(level, x, y);
+        let Some(cell) = self.grid.get(index).copied() else {
+            return;
+        };
+        if cell >> 4 != 0x0c {
+            return;
+        }
+        let stage = cell & 0x07;
+        if stage == 5 {
+            // The modern renderer has no PC-speaker backend, but the exact
+            // sweep/delay contract is retained as a typed presentation value.
+            let _tone = dungeon_decoration_tone_sweep(band);
+            self.grid[index] = cell & 0xf8;
+            return;
+        }
+        let Some((center_x, center_y)) = dungeon_decoration_position(placement, band, stage) else {
+            return;
+        };
+        let pen = if stage == 4 { 11 } else { 1 };
+        for offset in -1..=1 {
+            Self::plot_dungeon_screen_pixel(viewport, center_x + offset, center_y, pen);
+            Self::plot_dungeon_screen_pixel(viewport, center_x, center_y + offset, pen);
+        }
+        if stage < 4 {
+            Self::plot_dungeon_screen_pixel(viewport, center_x, center_y, 9);
+        }
+
+        let advance = if stage == 0 {
+            u5_prng_range_u16(&mut self.prng_state, 0, 64) <= 3
+        } else {
+            true
+        };
+        if advance {
+            self.grid[index] = (cell & 0xf8) | (stage + 1);
+        }
+    }
+
+    fn draw_dungeon_object_sprite(
+        &self,
+        viewport: &mut TileViewport,
+        sheet: &GraphicSpriteSheet,
+        slot: usize,
+        band: usize,
+        rising: bool,
+    ) {
+        let Some(Some(sprite)) = sheet.sprites.get(slot) else {
+            return;
+        };
+        let y = if rising {
+            95 - sprite.image.height as i32
+        } else if slot / DUNGEON_BANDS == 0 || slot / DUNGEON_BANDS == 1 {
+            96
+        } else {
+            DUNGEON_OBJECT_FLOOR_Y[band] - sprite.image.height as i32
+        };
+        blit_dungeon_sprite(viewport, sprite, DUNGEON_OBJECT_LEFT_X[band], y, false);
+        blit_dungeon_sprite(viewport, sprite, DUNGEON_VANISHING_X, y, true);
+    }
+
+    fn plot_dungeon_screen_pixel(
+        viewport: &mut TileViewport,
+        screen_x: i32,
+        screen_y: i32,
+        pen: u8,
+    ) {
+        let x = screen_x - VIEWPORT_ORIGIN_X as i32;
+        let y = screen_y - VIEWPORT_ORIGIN_Y as i32;
+        if x < 0 || y < 0 || x >= viewport.width as i32 || y >= viewport.height as i32 {
+            return;
+        }
+        viewport.pixels[y as usize * viewport.width + x as usize] =
+            pen % viewport.depth.pixel_limit();
     }
 
     fn dungeon_renderer_offset_cell(&self, level: u8, dx: isize, dy: isize) -> u8 {
@@ -1024,7 +1351,7 @@ impl PlayState {
         radius: usize,
         object: ActiveObject,
     ) {
-        if object.is_empty() || object.is_player_phantom() {
+        if object.is_empty() {
             return;
         }
         let Some((col, row)) = self.top_down_object_viewport_cell(area, radius, object) else {
@@ -1191,7 +1518,7 @@ impl PlayState {
         object: ActiveObject,
         prepared: &mut [Option<PreparedTopDownCell>],
     ) {
-        if object.is_empty() || object.is_player_phantom() {
+        if object.is_empty() {
             return;
         }
         let Some((cell_x, cell_y)) = self.top_down_object_viewport_cell(area, radius, object)
@@ -1334,12 +1661,7 @@ impl PlayState {
     }
 
     pub fn viewport_has_animated_tiles(&self, radius: usize) -> bool {
-        if self.visibility_dirty
-            || self.white_potion_sweep.is_some()
-            || self
-                .combat_potion_presentation
-                .is_some_and(|presentation| presentation.kind == CombatPotionPresentationKind::Poof)
-        {
+        if self.visibility_dirty || self.white_potion_sweep.is_some() {
             return true;
         }
         if self.combat_active {
@@ -1524,7 +1846,7 @@ impl PlayState {
             return false;
         }
         let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
-        overworld_underfoot_forces_dark(tile, self.timing_status.save_byte())
+        overworld_underfoot_forces_dark(tile, self.active_effect_tag.unwrap_or(0))
     }
 
     pub fn refresh_world_underfoot_blackout_latch(&mut self) -> bool {
@@ -1655,8 +1977,12 @@ impl PlayState {
             return visible;
         }
 
-        let mask = self.surface_local_light_mask(px, py, wrap_world);
+        // `visibility.md §12.4`: the disc-shaped source mask persists
+        // between its three refresh triggers. The beacon is the one other
+        // writer, stamped after that cached refresh and before this carve.
+        let mut mask = self.local_light_mask.to_vec();
         let (mask_origin_x, mask_origin_y) = surface_local_light_mask_origin(px, py, wrap_world);
+        self.stamp_light_beacon(&mut mask, mask_origin_x, mask_origin_y, wrap_world);
         let lit = |x: isize, y: isize| {
             Self::surface_local_light_mask_is_lit(
                 &mask,
@@ -1805,7 +2131,13 @@ impl PlayState {
         }
     }
 
-    fn surface_local_light_mask(&self, px: isize, py: isize, wrap_world: bool) -> Vec<bool> {
+    /// `visibility.md §12.4`: rebuild the persistent local-light resource.
+    /// Callers are restricted to the published Moonstone live-gate refresh,
+    /// combat entry, and combat exit trigger points.
+    pub(crate) fn rebuild_surface_local_light_mask(&mut self) {
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        let wrap_world = matches!(self.area, Area::World { .. });
         let mut mask = vec![false; TOWN_GRID_BYTES];
         let (origin_x, origin_y) = surface_local_light_mask_origin(px, py, wrap_world);
 
@@ -1824,28 +2156,27 @@ impl PlayState {
             }
         }
 
-        let Some(floor) = self.current_floor() else {
-            return mask;
-        };
-        for object in &self.active_objects {
-            if object.is_empty() || object.z != floor || !is_local_light_source_tile(object.tile) {
-                continue;
-            }
-            let x = object.x as isize;
-            let y = object.y as isize;
-            if surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world).is_some() {
-                self.carve_surface_local_light_source(
-                    x, y, origin_x, origin_y, wrap_world, &mut mask,
-                );
+        if let Some(floor) = self.current_floor() {
+            for object in &self.active_objects {
+                if object.is_empty()
+                    || object.z != floor
+                    || !is_local_light_source_tile(object.tile)
+                {
+                    continue;
+                }
+                let x = object.x as isize;
+                let y = object.y as isize;
+                if surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world).is_some() {
+                    self.carve_surface_local_light_source(
+                        x, y, origin_x, origin_y, wrap_world, &mut mask,
+                    );
+                }
             }
         }
-
-        // `visibility.md §12.4`: "local-light refresh first, beacon stamps
-        // second, visibility carve third". The rotating beacon of `§12.6` is
-        // the mask's one other non-combat writer.
-        self.stamp_light_beacon(&mut mask, origin_x, origin_y, wrap_world);
-
-        mask
+        if self.local_light_mask.as_slice() != mask.as_slice() {
+            self.local_light_mask.copy_from_slice(&mask);
+            self.mark_visibility_dirty();
+        }
     }
 
     /// `visibility.md §12`/`§12.2`: one local-light source's contribution
@@ -1869,13 +2200,6 @@ impl PlayState {
     /// per-source visited set is local to the helper, so overlapping
     /// sources union into the shared mask without shadowing each other.
     ///
-    /// KNOWN GAP (`cleak/u5-spec#42`, cadence): the original rebuilds this
-    /// mask on exactly three triggers — the Moonstone live-gate terrain
-    /// refresh, combat entry, and combat exit — and the mask *persists*
-    /// between them while the producer keeps reading it. This engine
-    /// instead rebuilds it on demand during each carve, which is always
-    /// at least as fresh but will not reproduce a stale-mask frame. Making
-    /// that exact needs mask caching plus the three invalidation hooks.
     fn carve_surface_local_light_source(
         &self,
         source_x: isize,
@@ -1926,7 +2250,7 @@ impl PlayState {
             let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
             Some(self.world_live_tile_at(wx, wy))
         } else if (0..32).contains(&x) && (0..32).contains(&y) {
-            Some(self.grid[y as usize * 32 + x as usize])
+            self.grid.get(y as usize * 32 + x as usize).copied()
         } else {
             None
         }
@@ -1968,14 +2292,50 @@ impl PlayState {
         tick_doors: bool,
         advance_active_objects: bool,
     ) {
+        self.advance_turn_with_minutes_policy(
+            minutes,
+            tick_doors,
+            advance_active_objects,
+            true,
+            true,
+        );
+    }
+
+    /// `rest-and-camp.md §5`: wilderness camp advances the ordinary clock and
+    /// world epilogue without entering the hourly poison/provision/starvation
+    /// pass. Ring regeneration is invoked once for this five-minute camp step.
+    pub fn advance_wilderness_camp_tick(&mut self, minutes: u8) {
+        self.advance_turn_with_minutes_policy(minutes, true, true, false, true);
+        self.apply_hourly_ring_regeneration_tick();
+    }
+
+    pub(crate) fn advance_turn_with_minutes_policy(
+        &mut self,
+        minutes: u8,
+        tick_doors: bool,
+        advance_active_objects: bool,
+        apply_hourly_party_status: bool,
+        age_payment_cooldown: bool,
+    ) {
+        let defer_stonegate_epilogue = self.stonegate_trapdoor_underfoot_is_armed();
+        self.pending_stonegate_status_provision_pass = false;
+        self.pending_stonegate_object_epilogue = false;
         let negate_time_active = self.negate_time_active();
         let turn_before = self.turn;
         let effective_minutes = if negate_time_active {
             0
         } else {
-            self.timing_status.effective_minutes(minutes)
+            TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
+                .effective_minutes(minutes)
         };
         self.turn += 1;
+        // `karma.md §4.1`: this saved byte is a turn-aged cooldown, not a
+        // payment count. Combat owns a separate actor-turn loop. Town-bed
+        // setup ticks opt out below; each real ten-minute rest tick enters
+        // through the ordinary wrapper and ages once.
+        if age_payment_cooldown && !self.combat_active {
+            self.toll_progress = self.toll_progress.saturating_add(1);
+        }
         let previous_day = self.clock.day;
         let previous_hour = self.clock.hour;
         self.clock.advance_minutes(effective_minutes);
@@ -1989,7 +2349,13 @@ impl PlayState {
         }
         if self.clock.hour != previous_hour {
             self.refresh_cached_moon_glyphs();
-            self.apply_hourly_status_provision_pass();
+            if apply_hourly_party_status {
+                if defer_stonegate_epilogue {
+                    self.pending_stonegate_status_provision_pass = true;
+                } else {
+                    self.apply_hourly_status_provision_pass();
+                }
+            }
             // `rest-and-camp.md §5`: the camp cooldown counter is
             // "reduced by one, floored at zero, at every hour rollover".
             self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
@@ -2012,11 +2378,16 @@ impl PlayState {
         if self.time_stop_counter != 0 {
             self.time_stop_counter = self.time_stop_counter.saturating_sub(1);
         } else if !negate_time_active && !self.combat_active {
-            self.advance_npc_schedules();
             let world_object_epilogue_runs = !matches!(self.area, Area::World { .. })
-                || self.timing_status.world_object_epilogue_runs(turn_before);
-            if advance_active_objects && world_object_epilogue_runs {
-                self.advance_active_objects();
+                || TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
+                    .world_object_epilogue_runs(turn_before);
+            if defer_stonegate_epilogue {
+                self.pending_stonegate_object_epilogue = true;
+            } else {
+                self.advance_npc_schedules();
+                if advance_active_objects && world_object_epilogue_runs {
+                    self.advance_active_objects();
+                }
             }
         }
         self.age_active_effect();
@@ -2031,32 +2402,34 @@ impl PlayState {
         self.flush_message_slot();
     }
 
+    fn stonegate_trapdoor_underfoot_is_armed(&self) -> bool {
+        let Area::Town { scene, .. } = self.area else {
+            return false;
+        };
+        scene.byte == STONEGATE_SCENE_BYTE
+            && !matches!(self.player.transport, TransportState::Carpet { .. })
+            && self
+                .grid
+                .get(self.player.y * TOWN_GRID_SIDE + self.player.x)
+                .copied()
+                .is_some_and(is_town_trapdoor_live_tile)
+    }
+
     pub fn advance_presentation_frame(&mut self) {
-        let mut needs_redraw = false;
         if let Some(mut sweep) = self.white_potion_sweep {
+            // The blocking White loop advances only ordinary presentation
+            // state. It neither calls the gameplay clock nor spends another
+            // action, and Negate Time suppresses both object and tile animation.
+            if !self.negate_time_active() {
+                self.animate_active_objects();
+                self.advance_animation_clock();
+            }
             if sweep.frames_remaining <= 1 {
                 self.white_potion_sweep = None;
             } else {
                 sweep.frames_remaining -= 1;
                 self.white_potion_sweep = Some(sweep);
             }
-            needs_redraw = true;
-        }
-        if let Some(mut presentation) = self.combat_potion_presentation {
-            if presentation.kind != CombatPotionPresentationKind::Sleep
-                && presentation.frames_remaining != u8::MAX
-            {
-                if presentation.frames_remaining <= 1 {
-                    self.combat_potion_presentation = None;
-                } else {
-                    presentation.frames_remaining -= 1;
-                    self.combat_potion_presentation = Some(presentation);
-                }
-                needs_redraw = true;
-            }
-        }
-        if needs_redraw {
-            self.mark_visibility_dirty();
         }
     }
 
@@ -2173,8 +2546,13 @@ impl PlayState {
     }
 
     pub fn refresh_natural_moongates_for_current_counter(&mut self) -> bool {
+        // `visibility.md §12.4`: the Moonstone live-gate terrain refresh is
+        // one of exactly three local-light rebuild triggers, and the rebuild
+        // follows the terrain rewrite stage. This helper is also the mode-zero
+        // initial refresh, establishing the first cached mask.
         let Some(indices) = self.natural_moongate_slot_indices_for_current_scene() else {
             self.natural_moongate_live_cells.clear();
+            self.rebuild_surface_local_light_mask();
             return false;
         };
         let present = self.natural_moongate_counter != 0;
@@ -2213,6 +2591,7 @@ impl PlayState {
             self.mark_visibility_dirty();
             self.recompute_daylight();
         }
+        self.rebuild_surface_local_light_mask();
         changed
     }
 
@@ -2347,6 +2726,12 @@ impl PlayState {
     }
 
     pub fn advance_visual_tick(&mut self) {
+        // A White-potion repaint advances this same presentation state from
+        // `advance_presentation_frame`. Suppress the ordinary frontend tick so
+        // one displayed White frame cannot advance objects or tiles twice.
+        if self.white_potion_sweep.is_some() {
+            return;
+        }
         self.sync_player_object();
         if self.time_stop_counter == 0
             && !self.negate_time_active()
@@ -2370,6 +2755,24 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
         outcome
+    }
+
+    /// Timing is a projection of the shared active-effect slot, never an
+    /// independently mutable state value.
+    pub const fn active_effect_timing_status(&self) -> TimingStatusTag {
+        TimingStatusTag::from_save_byte(match self.active_effect_tag {
+            Some(tag) if self.active_effect_counter != 0 => tag,
+            _ => 0,
+        })
+    }
+
+    pub fn clear_active_effect_slot(&mut self) {
+        let changed = self.active_effect_tag.is_some() || self.active_effect_counter != 0;
+        self.active_effect_tag = None;
+        self.active_effect_counter = 0;
+        if changed {
+            self.mark_visibility_dirty();
+        }
     }
 
     pub fn negate_time_active(&self) -> bool {
@@ -2437,7 +2840,6 @@ impl PlayState {
         for slot in 1..self.active_objects.len() {
             if self.active_objects[slot].is_empty()
                 || self.active_objects[slot].is_player()
-                || self.active_objects[slot].is_player_phantom()
                 || (matches!(self.area, Area::Town { .. })
                     && town_free_roaming_object_eligible(self.active_objects[slot]))
             {
@@ -2476,39 +2878,33 @@ impl PlayState {
 
     pub fn advance_outdoor_active_objects(&mut self) {
         let mut last_vacated = None;
+        self.pending_outdoor_reaction_slots.clear();
+        // `active-objects.md §8` correction: this is a running total for the
+        // whole high-to-low walk, not a per-slot flag. Once any reaction has
+        // fired, movement dispatch stays disabled for every remaining slot.
+        let mut reaction_count = 0usize;
         for slot in (1..self.active_objects.len()).rev() {
-            if self.active_objects[slot].is_empty()
-                || self.active_objects[slot].is_player()
-                || self.active_objects[slot].is_player_phantom()
-            {
+            if self.active_objects[slot].is_empty() || self.active_objects[slot].is_player() {
                 continue;
             }
             let tick = self.active_objects[slot].tick_phase();
-            // `active-objects.md §8`: the walker's **first phase** "handles
-            // immediate hostile reactions", and only "[i]f none of those
-            // immediate reactions fires" does "the cleanup phase decide
-            // ordinary movement". A slot claimed by the first phase
-            // therefore takes no wind drift and no directed/random step
-            // this turn.
-            //
-            // Two of §8's four immediate reactions already run in
-            // production, from the world post-turn epilogue rather than
-            // from here: orthogonally adjacent hostile engagement
-            // ([`Self::apply_world_active_object_engagement`]) and adjacent
-            // whirlpool plane transition
-            // ([`Self::apply_world_whirlpool_engagement`]). They are not
-            // duplicated here. What this adds is the ranged half — the
-            // breath attack and the broadside — which had no
-            // implementation at all.
-            let claimed_by_first_phase = self.outdoor_first_phase_ranged_attack(slot);
-            let ship_wind =
-                if !claimed_by_first_phase && (self.active_objects[slot].phase & 0x0f) == 0 {
-                    self.try_drift_active_ship(slot, tick)
-                } else {
-                    ActiveShipWind::None
-                };
+            // Orthogonal adjacency is consumed before any ranged class test.
+            // Its I/O-bearing combat/transition effect is completed by the
+            // post-turn handler, but it claims the walker slot here so neither
+            // it nor any lower slot can move out from under that handler.
+            let claimed_by_first_phase = self.outdoor_first_phase_reaction_fires(slot);
+            if claimed_by_first_phase {
+                self.pending_outdoor_reaction_slots.push(slot);
+            }
+            reaction_count += usize::from(claimed_by_first_phase);
+            let movement_allowed = reaction_count == 0;
+            let ship_wind = if movement_allowed && (self.active_objects[slot].phase & 0x0f) == 0 {
+                self.try_drift_active_ship(slot, tick)
+            } else {
+                ActiveShipWind::None
+            };
             let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
-            let wandered = !claimed_by_first_phase
+            let wandered = movement_allowed
                 && !ship_wind_changed
                 && (self.active_objects[slot].phase & 0x0f) == 0
                 && self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated);
@@ -2555,6 +2951,38 @@ impl PlayState {
             .is_some()
     }
 
+    /// Pure first-phase claim test used by the I/O-free walker. Reaction
+    /// effects are staged until the post-turn pass, which can load combat
+    /// resources and can pause/resume the remaining lower slots around a
+    /// terrain-combat frame.
+    pub fn outdoor_first_phase_reaction_fires(&self, slot: usize) -> bool {
+        if self.outdoor_active_object_is_adjacent(slot) {
+            return true;
+        }
+        let Area::World { plane } = self.area else {
+            return false;
+        };
+        let Some(object) = self.active_objects.get(slot).copied() else {
+            return false;
+        };
+        if object.z != plane.save_floor() || !is_outdoor_active_object_walker(object) {
+            return false;
+        }
+        let (dx, dy) = wrapped_deltas_to_player(
+            object.x as u8,
+            object.y as u8,
+            self.player.x as u8,
+            self.player.y as u8,
+        );
+        match outdoor_ranged_attacker_figure(object.type_byte, dx, dy) {
+            Some(OutdoorRangedAttackFigure::SparkCloud) => {
+                outdoor_serpent_dragon_triggers(self.outdoor_serpent_dragon_breath_roll(slot))
+            }
+            Some(OutdoorRangedAttackFigure::SolidBurst) => true,
+            None => false,
+        }
+    }
+
     /// [`Self::outdoor_first_phase_ranged_attack`], reporting what the
     /// shot did rather than only that it fired.
     pub fn outdoor_first_phase_ranged_attack_detail(
@@ -2574,6 +3002,12 @@ impl PlayState {
             self.player.x as u8,
             self.player.y as u8,
         );
+        // §8 / overworld.md §6.2.1: adjacency is tested before the class
+        // test, so even a ranged family takes the adjacent-engagement arm at
+        // an effective distance of one.
+        if outdoor_offsets_are_orthogonally_adjacent(dx, dy) {
+            return None;
+        }
 
         // `overworld.md §6.2.1` is the closed recognition table for both
         // outdoor attackers. The breath row is exact equality against the
@@ -2600,6 +3034,25 @@ impl PlayState {
         };
 
         Some(self.resolve_outdoor_ranged_attack(dx, dy, figure, announcement))
+    }
+
+    pub fn outdoor_active_object_is_adjacent(&self, slot: usize) -> bool {
+        let Area::World { plane } = self.area else {
+            return false;
+        };
+        let Some(object) = self.active_objects.get(slot).copied() else {
+            return false;
+        };
+        if object.z != plane.save_floor() || !is_outdoor_active_object_walker(object) {
+            return false;
+        }
+        let (dx, dy) = wrapped_deltas_to_player(
+            object.x as u8,
+            object.y as u8,
+            self.player.x as u8,
+            self.player.y as u8,
+        );
+        outdoor_offsets_are_orthogonally_adjacent(dx, dy)
     }
 
     /// `overworld.md §6.2.1` one-in-eight breath-attack gate roll, reduced
@@ -2864,7 +3317,6 @@ impl PlayState {
             }
         }
 
-        self.timing_status = TimingStatusTag::for_transport(self.player.transport);
         self.sync_player_object();
         self.mark_visibility_dirty();
         (fallback, drowning)
@@ -2999,10 +3451,23 @@ impl PlayState {
             return false;
         }
 
-        if let Some(direction) = self.outdoor_directed_step_direction(slot, object) {
+        for direction in self
+            .outdoor_directed_step_directions(slot, object)
+            .into_iter()
+            .flatten()
+        {
             let (dx, dy) = direction.delta();
-            if self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated) {
-                return true;
+            match self.try_step_outdoor_active_object_detail(
+                slot,
+                object,
+                dx,
+                dy,
+                direction,
+                last_vacated,
+            ) {
+                OutdoorActiveObjectStepAttempt::Committed => return true,
+                OutdoorActiveObjectStepAttempt::ChanceRefused => return false,
+                OutdoorActiveObjectStepAttempt::CandidateBlocked => {}
             }
         }
 
@@ -3020,6 +3485,17 @@ impl PlayState {
         slot: usize,
         object: ActiveObject,
     ) -> Option<Direction> {
+        self.outdoor_directed_step_directions(slot, object)
+            .into_iter()
+            .flatten()
+            .next()
+    }
+
+    pub fn outdoor_directed_step_directions(
+        &self,
+        slot: usize,
+        object: ActiveObject,
+    ) -> [Option<Direction>; 2] {
         let (dx, dy) = directed_step_offsets(
             object.x as u8,
             object.y as u8,
@@ -3030,10 +3506,7 @@ impl PlayState {
             Axis::X => [(dx, 0), (0, dy)],
             Axis::Y => [(0, dy), (dx, 0)],
         };
-        candidates
-            .into_iter()
-            .filter(|(sx, sy)| *sx != 0 || *sy != 0)
-            .find_map(|(sx, sy)| cardinal_direction_from_delta(sx, sy))
+        candidates.map(|(sx, sy)| cardinal_direction_from_delta(sx, sy))
     }
 
     pub fn try_step_outdoor_active_object(
@@ -3045,10 +3518,32 @@ impl PlayState {
         direction: Direction,
         last_vacated: &mut Option<(usize, usize)>,
     ) -> bool {
+        matches!(
+            self.try_step_outdoor_active_object_detail(
+                slot,
+                object,
+                dx,
+                dy,
+                direction,
+                last_vacated,
+            ),
+            OutdoorActiveObjectStepAttempt::Committed
+        )
+    }
+
+    fn try_step_outdoor_active_object_detail(
+        &mut self,
+        slot: usize,
+        object: ActiveObject,
+        dx: isize,
+        dy: isize,
+        direction: Direction,
+        last_vacated: &mut Option<(usize, usize)>,
+    ) -> OutdoorActiveObjectStepAttempt {
         let nx = (object.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ny = (object.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
         if (nx, ny) == (self.player.x, self.player.y) || *last_vacated == Some((nx, ny)) {
-            return false;
+            return OutdoorActiveObjectStepAttempt::CandidateBlocked;
         }
         if self
             .active_objects
@@ -3058,7 +3553,7 @@ impl PlayState {
                 other_slot != slot && !other.is_player() && self.object_occupies(*other, nx, ny)
             })
         {
-            return false;
+            return OutdoorActiveObjectStepAttempt::CandidateBlocked;
         }
         let tile = self.grid[world_cell_index(nx, ny)];
         if !outdoor_active_object_step_accepts_tile(
@@ -3066,12 +3561,12 @@ impl PlayState {
             tile,
             self.passability.as_ref(),
         ) {
-            return false;
+            return OutdoorActiveObjectStepAttempt::CandidateBlocked;
         }
         if !type_bypasses_terrain_chance_gate(object.type_byte) {
             if let Some(denominator) = terrain_chance_gate_denominator(tile) {
                 if self.outdoor_active_object_step_seed(slot, tile) % denominator != 0 {
-                    return false;
+                    return OutdoorActiveObjectStepAttempt::ChanceRefused;
                 }
             }
         }
@@ -3080,7 +3575,7 @@ impl PlayState {
         if outdoor_step_clears_on_destination(tile) {
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
-            return true;
+            return OutdoorActiveObjectStepAttempt::Committed;
         }
         if sea_creature_spawn_seeds_aux(object.type_byte) {
             let facing = match direction {
@@ -3098,7 +3593,7 @@ impl PlayState {
         self.active_objects[slot].x = nx;
         self.active_objects[slot].y = ny;
         self.mark_visibility_dirty();
-        true
+        OutdoorActiveObjectStepAttempt::Committed
     }
 
     pub fn outdoor_active_object_step_seed(&self, slot: usize, salt: u8) -> u8 {
@@ -3146,7 +3641,12 @@ impl PlayState {
             let nx = x as isize + dx;
             let ny = y as isize + dy;
             if nx < 0 || ny < 0 || nx >= TOWN_GRID_SIDE as isize || ny >= TOWN_GRID_SIDE as isize {
-                return false;
+                // `town-mode.md §16` gives the pen gate exactly two live
+                // blocker bytes. Map bounds are tested only after the two
+                // direction draws select a destination, so an edge object can
+                // still choose an inward step and an outward choice consumes
+                // the same draws before failing.
+                continue;
             }
             let tile = self.grid[ny as usize * TOWN_GRID_SIDE + nx as usize];
             if town_free_roaming_pen_tile_blocks(tile) {
@@ -3207,47 +3707,64 @@ impl PlayState {
         if self.combat_active {
             return Ok(None);
         }
-        for direction in [
-            Direction::North,
-            Direction::East,
-            Direction::South,
-            Direction::West,
-        ] {
-            let (dx, dy) = direction.delta();
-            let x = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
-            let y = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-            let Some((object_slot, object)) = self
-                .world_object_slot_at(x, y)
-                .map(|(slot, object)| (slot, *object))
-            else {
-                continue;
-            };
-            if is_whirlpool_object(object) {
+        let mut reacted = false;
+        for object_slot in (1..self.active_objects.len()).rev() {
+            if !self.outdoor_active_object_is_adjacent(object_slot) {
                 continue;
             }
-            if game_dir.join(BRIT_CBT_FILE).exists()
-                && outdoor_combat_arena_index_for_object(object).is_some()
-                && terrain_combat_base_class(object).is_some()
-            {
-                let note = self.enter_terrain_combat_from_world_object(
-                    game_dir,
-                    plane,
-                    object_slot,
-                    object,
-                )?;
-                self.message = format!(
-                    "World object tile {} engaged from the {}; {note}.",
-                    object.tile,
-                    direction.name()
-                );
-                return Ok(Some(MoveOutcome::Used));
+            let object = self.active_objects[object_slot];
+            if is_whirlpool_object(object) || outdoor_sand_trap_class(object.type_byte) {
+                continue;
+            }
+            if let Some(outcome) = self.apply_world_generic_adjacent_slot_engagement(
+                game_dir,
+                plane,
+                object_slot,
+                object,
+            )? {
+                reacted = true;
+                if self.combat_active {
+                    return Ok(Some(outcome));
+                }
             }
         }
-        Ok(None)
+        Ok(reacted.then_some(MoveOutcome::Used))
+    }
+
+    pub(crate) fn apply_world_generic_adjacent_slot_engagement(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+        object_slot: usize,
+        object: ActiveObject,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if terrain_combat_base_class(object).is_none() {
+            return Ok(None);
+        }
+
+        // The generic arm rebuilds first and emits its fixed line before
+        // either the shared impact payload or terrain combat.
+        self.mark_visibility_dirty();
+        self.push_impact_line("Attacked!");
+        let party_terrain = self.grid[world_cell_index(self.player.x, self.player.y)];
+        if generic_adjacent_hostile_uses_impact(party_terrain, self.player.transport.save_marker())
+        {
+            self.apply_outdoor_impact();
+            return Ok(Some(MoveOutcome::Used));
+        }
+
+        let note =
+            self.enter_terrain_combat_from_world_object(game_dir, plane, object_slot, object)?;
+        self.message = format!(
+            "Attacked by world object tile {} in slot {object_slot}; {note}.",
+            object.tile
+        );
+        Ok(Some(MoveOutcome::Used))
     }
 
     pub fn world_object_epilogue_runs_for_turn(&self, turn_before: u64) -> bool {
-        self.timing_status.world_object_epilogue_runs(turn_before)
+        TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
+            .world_object_epilogue_runs(turn_before)
     }
 
     /// `active-objects.md §8.1` overworld off-screen prune pass. Invoked by
@@ -3263,20 +3780,15 @@ impl PlayState {
     ///
     /// The position test is [`active_object_should_prune`] — a square window
     /// measured from the **scroll base** in unsigned eight-bit arithmetic, not
-    /// a radius from the player. Releasing uses the ordinary §4 one-byte
-    /// slot-freeing rule, so freed slots are immediately available to
-    /// allocation.
+    /// a radius from the player. Releasing uses §8.1's shared record-writer
+    /// behavior: encoded fields 0..=5 are cleared while phase/DEP3 survive.
+    /// This is intentionally not the ordinary §4 one-byte free.
     ///
-    /// `0xB5` protection deliberately does **not** apply here: §4 scopes that
-    /// byte as "the only universally protected byte-0 value **in this
-    /// allocator**", and this sweep frees by position rather than by eviction
-    /// priority.
-    ///
-    /// Spec gap: §8.1 requires that only slots of a "prunable kind" be
-    /// considered but does not enumerate the classes. The pre-existing
-    /// classification here — anything that is not empty and not vehicle-like —
-    /// is kept unchanged rather than invented afresh; see the report on
-    /// `active-objects.md §8.1` for the open question.
+    /// Classification is the exact byte-0 range table in
+    /// [`active_object_type_is_prunable`]. Byte 1 (`tile`) does not
+    /// participate even when it no longer mirrors byte 0. In particular,
+    /// parked vehicles and pickups survive, `0x2C..=0x2F` is prunable, and
+    /// the entire `0xB4..=0xB7` band (including protected `0xB5`) survives.
     ///
     /// The pass returns nothing: §8.1 forbids building a pruning event other
     /// systems can observe. The visibility-dirty mark is internal redraw
@@ -3298,10 +3810,7 @@ impl PlayState {
             // test runs, so an out-of-window slot of an unclassified kind
             // survives." The `||` chain is ordered so classification precedes
             // `active_object_should_prune`.
-            if object.is_empty()
-                || is_vehicle_object_tile(object.type_byte)
-                || is_vehicle_object_tile(object.tile)
-            {
+            if !active_object_type_is_prunable(object.type_byte) {
                 continue;
             }
             if !active_object_should_prune(
@@ -3312,7 +3821,9 @@ impl PlayState {
             ) {
                 continue;
             }
-            self.free_active_object_slot(slot);
+            if let Some(object) = self.active_objects.get_mut(slot) {
+                object.clear_record_prefix();
+            }
             pruned = true;
         }
         if pruned {
@@ -3345,121 +3856,61 @@ fn presentation_palette_index(depth: TileGraphicsDepth, ega_index: u8) -> u8 {
     }
 }
 
-fn draw_white_potion_sweep_cell(viewport: &mut TileViewport, cell_x: usize, cell_y: usize) {
+fn draw_combat_cursor_marker_cell(viewport: &mut TileViewport, cell_x: isize, cell_y: isize) {
     let colour = presentation_palette_index(viewport.depth, 15);
-    draw_presentation_cross(viewport, cell_x, cell_y, colour);
-    draw_presentation_cell_corners(viewport, cell_x, cell_y, colour);
-}
-
-fn draw_combat_potion_presentation_cell(
-    viewport: &mut TileViewport,
-    cell_x: usize,
-    cell_y: usize,
-    kind: CombatPotionPresentationKind,
-) {
-    let ega_colour = match kind {
-        CombatPotionPresentationKind::Sleep => 11,
-        CombatPotionPresentationKind::Poof => 13,
-    };
-    let colour = presentation_palette_index(viewport.depth, ega_colour);
-    match kind {
-        CombatPotionPresentationKind::Sleep => {
-            draw_presentation_sleep_mark(viewport, cell_x, cell_y, colour)
-        }
-        CombatPotionPresentationKind::Poof => {
-            draw_presentation_star(viewport, cell_x, cell_y, colour)
-        }
+    let left = (cell_x * TILE_ATLAS_SIDE as isize) as i32;
+    let top = (cell_y * TILE_ATLAS_SIDE as isize) as i32;
+    for offset in [0, 1, 14, 15] {
+        draw_line(
+            viewport,
+            left,
+            top + offset,
+            left + 15,
+            top + offset,
+            colour,
+        );
+        draw_line(
+            viewport,
+            left + offset,
+            top,
+            left + offset,
+            top + 15,
+            colour,
+        );
     }
 }
 
-fn draw_combat_cursor_marker_cell(viewport: &mut TileViewport, cell_x: usize, cell_y: usize) {
-    let colour = presentation_palette_index(viewport.depth, 14);
-    draw_presentation_cell_corners(viewport, cell_x, cell_y, colour);
-}
+fn draw_combat_secondary_marker_cell(viewport: &mut TileViewport, cell_x: isize, cell_y: isize) {
+    let white = presentation_palette_index(viewport.depth, 15);
+    let black = presentation_palette_index(viewport.depth, 0);
+    let left = (cell_x * TILE_ATLAS_SIDE as isize) as i32;
+    let top = (cell_y * TILE_ATLAS_SIDE as isize) as i32;
 
-fn draw_combat_secondary_marker_cell(viewport: &mut TileViewport, cell_x: usize, cell_y: usize) {
-    let colour = presentation_palette_index(viewport.depth, 11);
-    draw_presentation_cross(viewport, cell_x, cell_y, colour);
-}
+    // Upper white group.
+    draw_line(viewport, left + 2, top + 6, left + 6, top + 6, white);
+    draw_line(viewport, left + 6, top + 2, left + 6, top + 6, white);
+    // Upper black group: narrow left, wide left, narrow right, wide right.
+    draw_line(viewport, left + 2, top + 5, left + 5, top + 5, black);
+    draw_line(viewport, left + 5, top + 2, left + 5, top + 5, black);
+    draw_line(viewport, left + 2, top + 7, left + 6, top + 7, black);
+    draw_line(viewport, left + 7, top + 2, left + 7, top + 6, black);
+    draw_line(viewport, left + 10, top + 5, left + 13, top + 5, black);
+    draw_line(viewport, left + 10, top + 2, left + 10, top + 5, black);
+    draw_line(viewport, left + 9, top + 7, left + 13, top + 7, black);
+    draw_line(viewport, left + 8, top + 2, left + 8, top + 6, black);
 
-fn draw_presentation_cross(viewport: &mut TileViewport, cell_x: usize, cell_y: usize, colour: u8) {
-    let left = (cell_x * TILE_ATLAS_SIDE) as i32;
-    let top = (cell_y * TILE_ATLAS_SIDE) as i32;
-    let mid_x = left + (TILE_ATLAS_SIDE / 2) as i32;
-    let mid_y = top + (TILE_ATLAS_SIDE / 2) as i32;
-    draw_line(
-        viewport,
-        left + 2,
-        mid_y,
-        left + TILE_ATLAS_SIDE as i32 - 3,
-        mid_y,
-        colour,
-    );
-    draw_line(
-        viewport,
-        mid_x,
-        top + 2,
-        mid_x,
-        top + TILE_ATLAS_SIDE as i32 - 3,
-        colour,
-    );
-}
-
-fn draw_presentation_cell_corners(
-    viewport: &mut TileViewport,
-    cell_x: usize,
-    cell_y: usize,
-    colour: u8,
-) {
-    let left = (cell_x * TILE_ATLAS_SIDE) as i32;
-    let top = (cell_y * TILE_ATLAS_SIDE) as i32;
-    let right = left + TILE_ATLAS_SIDE as i32 - 1;
-    let bottom = top + TILE_ATLAS_SIDE as i32 - 1;
-    for offset in 0..3 {
-        put_viewport_pixel(viewport, left + offset, top, colour);
-        put_viewport_pixel(viewport, left, top + offset, colour);
-        put_viewport_pixel(viewport, right - offset, top, colour);
-        put_viewport_pixel(viewport, right, top + offset, colour);
-        put_viewport_pixel(viewport, left + offset, bottom, colour);
-        put_viewport_pixel(viewport, left, bottom - offset, colour);
-        put_viewport_pixel(viewport, right - offset, bottom, colour);
-        put_viewport_pixel(viewport, right, bottom - offset, colour);
-    }
-}
-
-fn draw_presentation_star(viewport: &mut TileViewport, cell_x: usize, cell_y: usize, colour: u8) {
-    draw_presentation_cross(viewport, cell_x, cell_y, colour);
-    let left = (cell_x * TILE_ATLAS_SIDE) as i32;
-    let top = (cell_y * TILE_ATLAS_SIDE) as i32;
-    draw_line(
-        viewport,
-        left + 3,
-        top + 3,
-        left + TILE_ATLAS_SIDE as i32 - 4,
-        top + TILE_ATLAS_SIDE as i32 - 4,
-        colour,
-    );
-    draw_line(
-        viewport,
-        left + TILE_ATLAS_SIDE as i32 - 4,
-        top + 3,
-        left + 3,
-        top + TILE_ATLAS_SIDE as i32 - 4,
-        colour,
-    );
-}
-
-fn draw_presentation_sleep_mark(
-    viewport: &mut TileViewport,
-    cell_x: usize,
-    cell_y: usize,
-    colour: u8,
-) {
-    let left = (cell_x * TILE_ATLAS_SIDE) as i32;
-    let top = (cell_y * TILE_ATLAS_SIDE) as i32;
-    draw_line(viewport, left + 4, top + 4, left + 11, top + 4, colour);
-    draw_line(viewport, left + 11, top + 4, left + 4, top + 11, colour);
-    draw_line(viewport, left + 4, top + 11, left + 11, top + 11, colour);
+    // Lower white group.
+    draw_line(viewport, left + 2, top + 9, left + 6, top + 9, white);
+    draw_line(viewport, left + 6, top + 9, left + 6, top + 13, white);
+    // Lower black group: narrow left, wide left, narrow right, wide right.
+    draw_line(viewport, left + 2, top + 10, left + 5, top + 10, black);
+    draw_line(viewport, left + 5, top + 10, left + 5, top + 13, black);
+    draw_line(viewport, left + 2, top + 8, left + 6, top + 8, black);
+    draw_line(viewport, left + 7, top + 9, left + 7, top + 13, black);
+    draw_line(viewport, left + 10, top + 10, left + 13, top + 10, black);
+    draw_line(viewport, left + 10, top + 10, left + 10, top + 13, black);
+    draw_line(viewport, left + 9, top + 8, left + 13, top + 8, black);
+    draw_line(viewport, left + 8, top + 9, left + 8, top + 13, black);
 }
 
 fn draw_line(viewport: &mut TileViewport, x0: i32, y0: i32, x1: i32, y1: i32, colour: u8) {

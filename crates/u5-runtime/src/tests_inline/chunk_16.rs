@@ -696,13 +696,14 @@ BRITANNIA 11 21
     }
 
     #[test]
-    fn cast_vanish_removes_facing_indoor_object_without_map_rewrite() {
-        let mut state = test_state(open_grid(), 1, 1);
+    fn cast_vanish_rewrites_exact_live_tile_without_removing_dynamic_object() {
+        let mut grid = open_grid();
+        grid[1 * 32 + 2] = 0x90;
+        let mut state = test_state(grid, 1, 1);
         let spell_index = spell_index_from_code("AY").unwrap();
         state.spell_charges[spell_index] = 1;
         state.party[0].mana = 1;
         state.party[0].level = 1;
-        let map_tile_before = state.grid[1 * 32 + 2];
         state.active_objects.push(ActiveObject {
             type_byte: 0x40,
             tile: 0x40,
@@ -719,16 +720,16 @@ BRITANNIA 11 21
             PlayInputDisposition::Continue
         );
 
-        assert!(state.active_objects[1].is_empty());
-        assert_eq!(state.grid[1 * 32 + 2], map_tile_before);
+        assert_eq!(state.active_objects[1].tile, 0x40);
+        assert_eq!(state.grid[1 * 32 + 2], VANISH_CLEARED_TILE);
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Vanished object tile 64 at (2, 1).");
+        assert_eq!(state.message, "POOF!");
     }
 
     #[test]
-    fn cast_vanish_prompts_or_fails_without_spending_resources_before_target() {
+    fn cast_vanish_spends_before_direction_prompt_and_fails_after_target_miss() {
         let mut missing_direction = test_state(open_grid(), 1, 1);
         let spell_index = spell_index_from_code("AY").unwrap();
         missing_direction.spell_charges[spell_index] = 1;
@@ -740,8 +741,8 @@ BRITANNIA 11 21
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_direction.spell_charges[spell_index], 1);
-        assert_eq!(missing_direction.party[0].mana, 1);
+        assert_eq!(missing_direction.spell_charges[spell_index], 0);
+        assert_eq!(missing_direction.party[0].mana, 0);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(
             missing_direction.message,
@@ -966,9 +967,7 @@ BRITANNIA 11 21
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert!(state.message.contains("Peer view of CASTLE:0 floor 0"));
-        assert!(state.message.contains("spell; 32x32 class map"));
-        assert!(state.message.contains('@'));
+        assert!(state.message.is_empty());
         let overlay = state.active_view_overlay.as_ref().unwrap();
         assert_eq!(
             overlay.title,
@@ -1020,9 +1019,7 @@ BRITANNIA 11 21
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert!(state.message.contains("X-Ray view of CASTLE:0 floor 0"));
-        assert!(state.message.contains("spell; 32x32 class map"));
-        assert!(state.message.contains('@'));
+        assert!(state.message.is_empty());
         let overlay = state.active_view_overlay.as_ref().unwrap();
         assert_eq!(
             overlay.title,

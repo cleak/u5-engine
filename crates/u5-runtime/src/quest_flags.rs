@@ -89,20 +89,11 @@ pub const fn tlk_scene_branch_set(slot: u32, bit_index: u8) -> u32 {
     slot | tlk_scene_branch_mask(bit_index)
 }
 
-/// `quest-flags.md §5` shared town/conversation sentinel value that
-/// allows the post-conversation stolen-action warning + signal
-/// reconciliation pass to run. Town setup writes `0` (the traced
-/// town-produced state) for scenes whose Shadowlord-location slot
-/// matches index 0; slot indices `1` and `2`, plus the no-slot
-/// marker, suppress the cleanup pass.
+/// `quest-flags.md §5` resident selector for the Shadowlord of Falsehood.
+/// Only this selector allows the post-conversation theft pass to run.
 pub const CONVERSATION_CLEANUP_SENTINEL_ALLOW: u8 = 0;
 
-/// `quest-flags.md §5`: returns `true` when the sentinel allows
-/// the post-conversation stolen-action warning + reconciliation
-/// pass to run (sentinel byte equals zero). Nonzero values
-/// suppress the pass entirely. The shop surcharge helper uses the
-/// same sentinel: nonzero also suppresses the post-transaction
-/// gold debit there.
+/// `quest-flags.md §5`: returns `true` only for Falsehood's resident selector.
 pub const fn conversation_cleanup_runs_warning(sentinel: u8) -> bool {
     sentinel == CONVERSATION_CLEANUP_SENTINEL_ALLOW
 }
@@ -128,52 +119,6 @@ pub const CONVERSATION_CLEANUP_GOLD_DEBIT_MIN: u8 = 1;
 /// computing the amount.
 pub const fn conversation_cleanup_gold_debit_amount(roll_seed: u8) -> u8 {
     (roll_seed % CONVERSATION_CLEANUP_GOLD_DEBIT_MAX) + CONVERSATION_CLEANUP_GOLD_DEBIT_MIN
-}
-
-/// `quest-flags.md §5` reconciliation branch taken by the zero-sentinel
-/// post-conversation cleanup pass, in the published priority order.
-/// The cleanup decrements at most one byte-sized signal per call; if
-/// every signal array is empty, it falls back to the random gold debit.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ConversationCleanupReconciliation {
-    /// At least one of the three resource/special band slots is
-    /// nonzero. The cleanup re-rolls one of three slot indices until
-    /// it lands on a nonzero entry and decrements that slot.
-    ResourceBand,
-    /// All three resource-band slots are zero but the generic
-    /// conversation signal array has at least one nonzero entry. The
-    /// cleanup scans high-to-low and decrements the first nonzero entry.
-    GenericSignalArray,
-    /// The resource band and generic signal array are empty but at
-    /// least one of the two eight-slot conversation signal arrays has
-    /// a nonzero entry. The cleanup scans both arrays high-to-low and
-    /// decrements the first nonzero entry.
-    EightSlotSignalArrays,
-    /// No byte-sized signal remained anywhere; the cleanup falls back
-    /// to subtracting a random `1..=15` gold from party gold,
-    /// floored at zero.
-    GoldDebitFallback,
-}
-
-/// `quest-flags.md §5`: choose the reconciliation branch the
-/// zero-sentinel cleanup pass should take, in the published priority
-/// order. Caller passes per-array "any nonzero" predicates rather
-/// than the array contents, which keeps the helper independent of
-/// the storage representation.
-pub const fn conversation_cleanup_reconciliation(
-    resource_band_any_nonzero: bool,
-    generic_signal_any_nonzero: bool,
-    eight_slot_signals_any_nonzero: bool,
-) -> ConversationCleanupReconciliation {
-    if resource_band_any_nonzero {
-        ConversationCleanupReconciliation::ResourceBand
-    } else if generic_signal_any_nonzero {
-        ConversationCleanupReconciliation::GenericSignalArray
-    } else if eight_slot_signals_any_nonzero {
-        ConversationCleanupReconciliation::EightSlotSignalArrays
-    } else {
-        ConversationCleanupReconciliation::GoldDebitFallback
-    }
 }
 
 /// `quest-flags.md §4`: confirmed letter effects for the `0x86`

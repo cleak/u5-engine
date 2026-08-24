@@ -36,22 +36,6 @@ pub const fn monster_kill_xp_reward(class_max_hp: u16) -> u16 {
     (class_max_hp / 4).saturating_add(1)
 }
 
-/// `combat.md §11` Fire Field per-contact raw-damage roll. The
-/// post-step contact hook rolls a uniform `[1, 21]` value before the
-/// normal random defense subtraction. Caller passes the raw `0..=20`
-/// PRNG seed.
-pub const FIRE_FIELD_DAMAGE_MIN: u8 = 1;
-pub const FIRE_FIELD_DAMAGE_MAX: u8 = 21;
-pub const fn fire_field_raw_damage(roll_seed_0_to_20: u8) -> u8 {
-    FIRE_FIELD_DAMAGE_MIN
-        + (roll_seed_0_to_20 % (FIRE_FIELD_DAMAGE_MAX - FIRE_FIELD_DAMAGE_MIN + 1))
-}
-
-/// `combat.md §11` Energy Field raw damage. Energy contact supplies
-/// raw zero to the same damage/value path; the final hit value is
-/// produced by the random defense subtraction alone.
-pub const ENERGY_FIELD_RAW_DAMAGE: u8 = 0;
-
 /// `combat.md §9` four-bucket wound classification produced by the
 /// monster wound-score classifier. The classifier consumes the acting
 /// monster's current HP against its class maximum and feeds AI
@@ -165,9 +149,9 @@ pub const MONSTER_ABILITY_SUMMON_DAEMON: u16 = 0x0400;
 pub enum MonsterAbility {
     /// `0x0040` — possess/charm-on-turn.
     Possess,
-    /// `0x0800` — blink/phase (~1-in-8 toggle).
+    /// `0x0800` — blink/phase (an exact 32/256 gate).
     Blink,
-    /// `0x0400` — summon-daemon (~1-in-8 placement attempt).
+    /// `0x0400` — summon-daemon (an exact 32/256 gate).
     SummonDaemon,
 }
 
@@ -203,8 +187,6 @@ pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
 pub const COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED: u8 = 0x04;
-pub const COMBAT_SWARM_JITTER_ROLL_MAX: u8 = 4;
-pub const COMBAT_SWARM_JITTER_CENTER_ROLL: u8 = 2;
 pub const COMBAT_NO_TARGET_FLEE_MIN_SLOT: usize = 5;
 pub const COMBAT_NO_TARGET_FLEE_MAX_SLOT: usize = 25;
 pub const COMBAT_NO_TARGET_FLEE_STEP_QUEUE: u8 = 1;
@@ -241,11 +223,6 @@ pub const COMBAT_MAGIC_MISSILE_DAMAGE_ROLL_MAX: u8 = crate::MAGIC_MISSILE_RAW_DA
 pub const COMBAT_FIREBALL_DAMAGE_ROLL_MAX: u8 = crate::FIREBALL_RAW_DAMAGE_MAX;
 pub const COMBAT_TREMOR_DAMAGE_ROLL_MAX: u8 = 20;
 pub const COMBAT_FLAME_WIND_DAMAGE_ROLL_MAX: u8 = 30;
-/// `magic.md §8`: Protection's `P` active-effect tag adds this many
-/// points to the resident party-member defense helper after equipment
-/// defense is summed. The bonus is applied through saturating_add so
-/// a defense byte already near `0xFF` does not wrap.
-pub const PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS: u8 = 3;
 /// `combat.md §5` per-attacker experience cap. Each monster-kill
 /// or spell-cast experience credit clamps at this word-sized
 /// counter cap, identical to the gold-counter convention.
@@ -263,6 +240,7 @@ pub const COMBAT_CLASS_BLACKTHORN: u8 = COMBAT_CLASS_WANDERER + 1;
 pub const COMBAT_CLASS_LORD_BRITISH: u8 = COMBAT_CLASS_BLACKTHORN + 1;
 pub const COMBAT_CLASS_GIANT_RAT: u8 = 20;
 pub const COMBAT_CLASS_GIANT_RAT_SPRITE_BASE: u8 = 0x90;
+pub const COMBAT_CLASS_MIMIC: u8 = 26;
 /// `catalogs/monster-bestiary.md §2` consecutive small-monster
 /// combat class ids (Giant Rat 20 / Bat 21 / Giant Spider 22).
 /// Anchor each successor to the chain.
@@ -277,7 +255,7 @@ pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;
 pub const COMBAT_CLASS_SHADOW_LORD: u8 = 47;
 pub const COMBAT_SUMMONED_ACTOR_FLAGS: u8 =
     COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
-/// `magic.md §8` Conjure spell outcome bound — fifteen weighted
+/// `magic.md §8` Conjure spell outcome bound — sixteen weighted
 /// outcomes. Same fundamental count as
 /// [`crate::CONJURE_OUTCOME_COUNT`] in magic.rs; anchored
 /// through to that constant so the per-conjure handler and the
@@ -290,6 +268,9 @@ pub const COMBAT_FIELD_KIND_POISON: u8 = 0x33;
 pub const COMBAT_FIELD_KIND_SLEEP: u8 = COMBAT_FIELD_KIND_POISON + 1;
 pub const COMBAT_FIELD_KIND_FIRE: u8 = COMBAT_FIELD_KIND_SLEEP + 1;
 pub const COMBAT_FIELD_KIND_ENERGY: u8 = COMBAT_FIELD_KIND_FIRE + 1;
+pub const COMBAT_CONTACT_TERRAIN_SWAMP: u8 = 0x04;
+pub const COMBAT_CONTACT_TERRAIN_MOLTEN_LAVA: u8 = 0x8f;
+pub const COMBAT_CONTACT_TERRAIN_FIREPLACE: u8 = 0xbc;
 pub const COMBAT_FIELD_CURSOR_RANGE: u8 = (COMBAT_ARENA_SIDE - 1) as u8;
 pub const COMBAT_ROUND_RESULT_DEFEAT: u8 = 0;
 pub const COMBAT_ROUND_RESULT_SUCCESS: u8 = COMBAT_ROUND_RESULT_DEFEAT + 1;
@@ -444,6 +425,7 @@ pub enum CombatAiTargetResolution {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CombatRoundLoopExit {
     Defeat,
+    Victory,
     LeaveCombat,
 }
 
@@ -451,7 +433,7 @@ impl CombatRoundLoopExit {
     pub const fn result_code(self) -> u8 {
         match self {
             Self::Defeat => COMBAT_ROUND_RESULT_DEFEAT,
-            Self::LeaveCombat => COMBAT_ROUND_RESULT_SUCCESS,
+            Self::Victory | Self::LeaveCombat => COMBAT_ROUND_RESULT_SUCCESS,
         }
     }
 }
@@ -530,9 +512,10 @@ pub enum CombatSceneAbortVerb {
     Look,
     Mix,
     NewOrder,
+    Quit,
     Talk,
-    UseItem,
     View,
+    Xit,
 }
 
 pub const fn combat_scene_abort_verb_prefix(verb: CombatSceneAbortVerb) -> &'static str {
@@ -545,9 +528,35 @@ pub const fn combat_scene_abort_verb_prefix(verb: CombatSceneAbortVerb) -> &'sta
         CombatSceneAbortVerb::Look => "Look",
         CombatSceneAbortVerb::Mix => "Mix",
         CombatSceneAbortVerb::NewOrder => "New order",
+        CombatSceneAbortVerb::Quit => "Quit",
         CombatSceneAbortVerb::Talk => "Talk",
-        CombatSceneAbortVerb::UseItem => "Use",
         CombatSceneAbortVerb::View => "View",
+        CombatSceneAbortVerb::Xit => "X-it",
+    }
+}
+
+/// `combat.md §8` Shape B's three fixed refusal tails. These are selected by
+/// the combat parser, not by the corresponding world-mode command handlers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatSceneAbortTail {
+    What,
+    NotHere,
+    FunnyNoResponse,
+}
+
+pub const fn combat_scene_abort_tail(verb: CombatSceneAbortVerb) -> CombatSceneAbortTail {
+    match verb {
+        CombatSceneAbortVerb::Board | CombatSceneAbortVerb::Xit => CombatSceneAbortTail::What,
+        CombatSceneAbortVerb::Talk => CombatSceneAbortTail::FunnyNoResponse,
+        CombatSceneAbortVerb::Enter
+        | CombatSceneAbortVerb::Fire
+        | CombatSceneAbortVerb::HoleUp
+        | CombatSceneAbortVerb::IgniteTorch
+        | CombatSceneAbortVerb::Look
+        | CombatSceneAbortVerb::Mix
+        | CombatSceneAbortVerb::NewOrder
+        | CombatSceneAbortVerb::Quit
+        | CombatSceneAbortVerb::View => CombatSceneAbortTail::NotHere,
     }
 }
 
@@ -562,15 +571,14 @@ pub enum CombatCommandBranch {
     Klimb,
     Open,
     Push,
-    QuitDefeat,
     Ready,
     Search,
+    UseItem,
     WWhatRefusal,
-    XitCleanup,
     Yell,
     ZStats,
     Pass,
-    AbortPrompt,
+    EscapeCleanup,
     ToggleMusic,
     Invalid,
 }
@@ -580,6 +588,15 @@ pub enum CombatCommandLiveActorGate {
     NotRequired,
     Accepted,
     RejectedDeadOrMissing,
+}
+
+/// `combat.md §14` Escape-key cleanup decision. Escape is independent of the
+/// X-it letter and scans party-side descriptor bits rather than hostile slots.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatEscapeCleanupDecision {
+    RefusedNotHere,
+    RefusedNotYet,
+    Accepted,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -844,9 +861,18 @@ impl CombatArenaFieldKind {
     }
 }
 
+pub const fn combat_arena_terrain_contact_kind(tile: u8) -> Option<CombatArenaFieldKind> {
+    match tile {
+        COMBAT_CONTACT_TERRAIN_SWAMP => Some(CombatArenaFieldKind::Poison),
+        COMBAT_CONTACT_TERRAIN_MOLTEN_LAVA | COMBAT_CONTACT_TERRAIN_FIREPLACE => {
+            Some(CombatArenaFieldKind::Fire)
+        }
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CombatArenaFieldContactOutcome {
-    SkippedCurrentActor,
     PoisonSkippedByLinkedTileClass,
     PoisonedPartyMember { status_before: u8, status_after: u8 },
     PoisonFallbackDamage { raw_damage: u8 },
@@ -854,7 +880,6 @@ pub enum CombatArenaFieldContactOutcome {
     SleptPartyMember { status_before: u8, status_after: u8 },
     SleepDisabledNonParty,
     FireDamage { raw_damage: u8 },
-    EnergyDamage { raw_damage: u8 },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1741,10 +1766,19 @@ pub const fn cause_fear_actor_is_live(actor: CombatActorDescriptor) -> bool {
     !actor.is_empty() && !actor.is_marked_dead()
 }
 
+/// `magic.md §8`: Blackthorn, Lord British, and the Shadow Lord are excluded
+/// from Kill/Slay Living and both table-wide fear sweeps.
+pub const fn combat_class_is_protected_special(class: u8) -> bool {
+    matches!(
+        class,
+        COMBAT_CLASS_BLACKTHORN | COMBAT_CLASS_LORD_BRITISH | COMBAT_CLASS_SHADOW_LORD
+    )
+}
+
 pub fn collect_cause_fear_actor_slots(
     actors: &[CombatActorDescriptor],
-    groups: &[u8],
-    caster_group: u8,
+    _groups: &[u8],
+    _caster_group: u8,
     protected_or_immune: &[bool],
 ) -> Vec<usize> {
     let mut slots = Vec::new();
@@ -1752,7 +1786,9 @@ pub fn collect_cause_fear_actor_slots(
         if !cause_fear_actor_is_live(actor) {
             continue;
         }
-        if groups.get(slot).copied() == Some(caster_group) {
+        if slot < COMBAT_PARTY_ACTOR_SLOTS
+            || combat_class_is_protected_special(actor.owner_target_class)
+        {
             continue;
         }
         if protected_or_immune.get(slot).copied().unwrap_or(false) {
@@ -1773,8 +1809,25 @@ pub fn resolve_combat_victory(actors: &[CombatActorDescriptor]) -> bool {
     !combat_has_active_not_dead_non_party_actor(actors)
 }
 
-pub fn resolve_combat_xit_cleanup_allowed(actors: &[CombatActorDescriptor]) -> bool {
-    resolve_combat_victory(actors)
+pub fn combat_escape_has_unmarked_party_side_actor(actors: &[CombatActorDescriptor]) -> bool {
+    actors
+        .iter()
+        .copied()
+        .any(|actor| actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0 && !actor.is_marked_dead())
+}
+
+pub fn resolve_combat_escape_cleanup(
+    actors: &[CombatActorDescriptor],
+    encounter_mode_high_bit: bool,
+    exit_announced: bool,
+) -> CombatEscapeCleanupDecision {
+    if !combat_escape_has_unmarked_party_side_actor(actors) || exit_announced {
+        CombatEscapeCleanupDecision::Accepted
+    } else if encounter_mode_high_bit {
+        CombatEscapeCleanupDecision::RefusedNotHere
+    } else {
+        CombatEscapeCleanupDecision::RefusedNotYet
+    }
 }
 
 pub fn combat_party_slot_can_continue(
@@ -1893,10 +1946,6 @@ pub const fn is_combat_magic_ring_id(ring_item_id: u8) -> bool {
     )
 }
 
-pub const fn resolve_combat_quit_command() -> CombatRoundLoopControl {
-    CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
-}
-
 pub const fn resolve_combat_active_player_digit(key: char) -> CombatActivePlayerSelectionOutcome {
     match key {
         '0' => CombatActivePlayerSelectionOutcome::Clear,
@@ -1938,18 +1987,18 @@ pub fn resolve_combat_command_branch(key: char) -> CombatCommandBranch {
         'N' => CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::NewOrder),
         'O' => CombatCommandBranch::Open,
         'P' => CombatCommandBranch::Push,
-        'Q' => CombatCommandBranch::QuitDefeat,
+        'Q' => CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Quit),
         'R' => CombatCommandBranch::Ready,
         'S' => CombatCommandBranch::Search,
         'T' => CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Talk),
-        'U' => CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::UseItem),
+        'U' => CombatCommandBranch::UseItem,
         'V' => CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::View),
         'W' => CombatCommandBranch::WWhatRefusal,
-        'X' => CombatCommandBranch::XitCleanup,
+        'X' => CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Xit),
         'Y' => CombatCommandBranch::Yell,
         'Z' => CombatCommandBranch::ZStats,
         ' ' => CombatCommandBranch::Pass,
-        '\u{1b}' => CombatCommandBranch::AbortPrompt,
+        '\u{1b}' => CombatCommandBranch::EscapeCleanup,
         '\u{13}' => CombatCommandBranch::ToggleMusic,
         _ => CombatCommandBranch::Invalid,
     }
@@ -1961,20 +2010,19 @@ pub const fn combat_command_branch_requires_live_active_actor(branch: CombatComm
         | CombatCommandBranch::Jimmy
         | CombatCommandBranch::Open
         | CombatCommandBranch::Ready
-        | CombatCommandBranch::Search => true,
+        | CombatCommandBranch::Search
+        | CombatCommandBranch::UseItem => true,
         CombatCommandBranch::Attack
         | CombatCommandBranch::CastSpell
         | CombatCommandBranch::SceneMessageAbort(_)
         | CombatCommandBranch::DWhatRefusal
         | CombatCommandBranch::Klimb
         | CombatCommandBranch::Push
-        | CombatCommandBranch::QuitDefeat
         | CombatCommandBranch::WWhatRefusal
-        | CombatCommandBranch::XitCleanup
         | CombatCommandBranch::Yell
         | CombatCommandBranch::ZStats
         | CombatCommandBranch::Pass
-        | CombatCommandBranch::AbortPrompt
+        | CombatCommandBranch::EscapeCleanup
         | CombatCommandBranch::ToggleMusic
         | CombatCommandBranch::Invalid => false,
     }
@@ -2011,13 +2059,12 @@ pub const fn combat_command_branch_published_label(
         CombatCommandBranch::Attack
         | CombatCommandBranch::CastSpell
         | CombatCommandBranch::Klimb
-        | CombatCommandBranch::QuitDefeat
         | CombatCommandBranch::Ready
-        | CombatCommandBranch::XitCleanup
+        | CombatCommandBranch::UseItem
         | CombatCommandBranch::Yell
         | CombatCommandBranch::ZStats
         | CombatCommandBranch::Pass
-        | CombatCommandBranch::AbortPrompt
+        | CombatCommandBranch::EscapeCleanup
         | CombatCommandBranch::ToggleMusic
         | CombatCommandBranch::Invalid => None,
     }
@@ -2033,16 +2080,15 @@ pub const fn combat_command_branch_is_named_multistage(branch: CombatCommandBran
         | CombatCommandBranch::Open
         | CombatCommandBranch::Ready
         | CombatCommandBranch::Search
+        | CombatCommandBranch::UseItem
         | CombatCommandBranch::Yell => true,
         CombatCommandBranch::SceneMessageAbort(_)
         | CombatCommandBranch::DWhatRefusal
         | CombatCommandBranch::Push
-        | CombatCommandBranch::QuitDefeat
         | CombatCommandBranch::WWhatRefusal
-        | CombatCommandBranch::XitCleanup
         | CombatCommandBranch::ZStats
         | CombatCommandBranch::Pass
-        | CombatCommandBranch::AbortPrompt
+        | CombatCommandBranch::EscapeCleanup
         | CombatCommandBranch::ToggleMusic
         | CombatCommandBranch::Invalid => false,
     }
@@ -2069,7 +2115,7 @@ pub const fn combat_cast_interference_target_is_live_visible(
 pub fn resolve_combat_cast_interference(
     caster: CombatActorDescriptor,
     target: Option<CombatActorDescriptor>,
-    target_awake: bool,
+    target_is_hostile: bool,
     negate_time_active: bool,
 ) -> CombatCastInterferenceOutcome {
     let Some(target) = target else {
@@ -2077,7 +2123,7 @@ pub fn resolve_combat_cast_interference(
     };
 
     if negate_time_active
-        || !target_awake
+        || !target_is_hostile
         || !combat_cast_interference_target_is_live_visible(target)
         || caster.range_to(target) != 1
     {
@@ -2147,8 +2193,8 @@ pub const fn apply_combat_spell_experience_reward(current_experience: u16, rewar
     apply_combat_experience_reward(current_experience, reward)
 }
 
-pub const fn cause_fear_forced_current_hp(max_hp: u8) -> u8 {
-    if max_hp == 0 { 0 } else { (max_hp - 1) / 4 }
+pub const fn cause_fear_forced_current_hp(_max_hp: u8) -> u8 {
+    1
 }
 
 pub const fn resolve_conjure_spell_class(selector: u8) -> u8 {
@@ -2390,21 +2436,6 @@ pub fn combat_neighbor_candidate_coordinates(
         .collect()
 }
 
-pub fn combat_swarm_jitter_candidate_coordinate(
-    center_x: u8,
-    center_y: u8,
-    roll_x: u8,
-    roll_y: u8,
-) -> Option<(u8, u8)> {
-    let dx = i16::from(roll_x % (COMBAT_SWARM_JITTER_ROLL_MAX + 1))
-        - i16::from(COMBAT_SWARM_JITTER_CENTER_ROLL);
-    let dy = i16::from(roll_y % (COMBAT_SWARM_JITTER_ROLL_MAX + 1))
-        - i16::from(COMBAT_SWARM_JITTER_CENTER_ROLL);
-    let x = i16::from(center_x) + dx;
-    let y = i16::from(center_y) + dy;
-    combat_arena_coordinate_in_bounds(x, y).then_some((x as u8, y as u8))
-}
-
 pub fn combat_ring_candidate_coordinates_around(center_x: i16, center_y: i16) -> Vec<(u8, u8)> {
     const OFFSETS: [(i16, i16); 8] = [
         (0, -1),
@@ -2545,7 +2576,9 @@ pub fn resolve_combat_ai_attack_route(class: u8, target_range: u8) -> Option<Com
 }
 
 pub const fn combat_ai_special_one_in_eight_gate(roll: u8) -> bool {
-    roll & 0x07 == 0
+    // `combat.md §9`: the inclusive 0..255 draw accepts the contiguous
+    // range 0..31, not every eighth value.
+    roll <= 31
 }
 
 pub const fn resolve_combat_ai_special_hook_for_traits(
@@ -2650,6 +2683,57 @@ pub const fn resolve_combat_possess_resistance_outcome(
     }
 }
 
+/// `combat.md §9.1` shared combat roll. One inclusive `0..=60` raw
+/// draw is halved, with results zero and one both promoted to one.
+pub const fn combat_skewed_roll_1_to_30(raw_roll_0_to_60: u8) -> u8 {
+    let halved = raw_roll_0_to_60 / 2;
+    if halved == 0 { 1 } else { halved }
+}
+
+/// `combat.md §9.1` signed, unclamped resistance score. Rust's signed
+/// integer division truncates toward zero, matching the published rule.
+pub const fn combat_resistance_score(caster_rating: u8, target_rating: u8) -> i16 {
+    (target_rating as i16 - caster_rating as i16 + 30) / 2
+}
+
+/// The target blocks only when the score is strictly greater than the
+/// skewed roll; equality therefore lands.
+pub const fn combat_resistance_blocks_from_raw_roll(
+    caster_rating: u8,
+    target_rating: u8,
+    raw_roll_0_to_60: u8,
+) -> bool {
+    combat_resistance_score(caster_rating, target_rating)
+        > combat_skewed_roll_1_to_30(raw_roll_0_to_60) as i16
+}
+
+/// Tremor and Poison Wind use the same skewed roll but compare it directly
+/// with the target's combat weight, without a caster rating.
+pub const fn combat_target_weight_gate_accepts_from_raw_roll(
+    target_weight: u8,
+    raw_roll_0_to_60: u8,
+) -> bool {
+    combat_skewed_roll_1_to_30(raw_roll_0_to_60) >= target_weight
+}
+
+/// `combat.md §9.1` target-only combat weight. The ordinary value is the
+/// actor descriptor's base-step byte. Disabled actors and Mimics always use
+/// one; Negate Time forces one only for monster-side actors.
+pub const fn combat_actor_weight(
+    slot: usize,
+    actor: CombatActorDescriptor,
+    negate_time_active: bool,
+) -> u8 {
+    if actor.is_status_disabled()
+        || actor.owner_target_class == COMBAT_CLASS_MIMIC
+        || (slot >= COMBAT_PARTY_ACTOR_SLOTS && negate_time_active)
+    {
+        1
+    } else {
+        actor.base_step
+    }
+}
+
 pub fn resolve_poison_status_attack_for_party_target(
     attacker_class: u8,
     target: &mut PartyMember,
@@ -2688,38 +2772,36 @@ pub const fn combat_field_poison_fallback_damage(roll: u8) -> u8 {
     1 + (roll % 20)
 }
 
+pub const fn combat_arena_field_poison_fallback_damage(roll: u8) -> u8 {
+    roll % 21
+}
+
 pub const fn combat_field_fire_raw_damage(roll: u8) -> u8 {
-    1 + (roll % 21)
+    roll % 11
 }
 
 pub fn resolve_combat_arena_field_contact_for_party_target(
     field: CombatArenaFieldKind,
-    current_active_slot: usize,
-    target_slot: usize,
     linked_active_object_tile: u8,
     target: &mut PartyMember,
     poison_damage_roll: u8,
     fire_damage_roll: u8,
-) -> CombatArenaFieldContactOutcome {
-    if current_active_slot == target_slot {
-        return CombatArenaFieldContactOutcome::SkippedCurrentActor;
-    }
-
-    match field {
+) -> Option<CombatArenaFieldContactOutcome> {
+    Some(match field {
         CombatArenaFieldKind::Poison => {
             if linked_active_object_tile >= 0x80 {
-                return CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass;
+                return Some(CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass);
             }
-            match apply_combat_poison_to_party_target(target, poison_damage_roll) {
-                CombatPartyPoisonOutcome::PoisonedPartyMember {
+            if target.status == b'G' {
+                let status_before = target.status;
+                target.status = b'P';
+                CombatArenaFieldContactOutcome::PoisonedPartyMember {
                     status_before,
-                    status_after,
-                } => CombatArenaFieldContactOutcome::PoisonedPartyMember {
-                    status_before,
-                    status_after,
-                },
-                CombatPartyPoisonOutcome::FallbackDamage { raw_damage } => {
-                    CombatArenaFieldContactOutcome::PoisonFallbackDamage { raw_damage }
+                    status_after: target.status,
+                }
+            } else {
+                CombatArenaFieldContactOutcome::PoisonFallbackDamage {
+                    raw_damage: combat_arena_field_poison_fallback_damage(poison_damage_roll),
                 }
             }
         }
@@ -2738,31 +2820,23 @@ pub fn resolve_combat_arena_field_contact_for_party_target(
         CombatArenaFieldKind::Fire => CombatArenaFieldContactOutcome::FireDamage {
             raw_damage: combat_field_fire_raw_damage(fire_damage_roll),
         },
-        CombatArenaFieldKind::Energy => {
-            CombatArenaFieldContactOutcome::EnergyDamage { raw_damage: 0 }
-        }
-    }
+        CombatArenaFieldKind::Energy => return None,
+    })
 }
 
 pub fn resolve_combat_arena_field_contact_for_non_party_target(
     field: CombatArenaFieldKind,
-    current_active_slot: usize,
-    target_slot: usize,
     linked_active_object_tile: u8,
     poison_damage_roll: u8,
     fire_damage_roll: u8,
-) -> CombatArenaFieldContactOutcome {
-    if current_active_slot == target_slot {
-        return CombatArenaFieldContactOutcome::SkippedCurrentActor;
-    }
-
-    match field {
+) -> Option<CombatArenaFieldContactOutcome> {
+    Some(match field {
         CombatArenaFieldKind::Poison => {
             if linked_active_object_tile >= 0x80 {
                 CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass
             } else {
                 CombatArenaFieldContactOutcome::PoisonFallbackDamage {
-                    raw_damage: combat_field_poison_fallback_damage(poison_damage_roll),
+                    raw_damage: combat_arena_field_poison_fallback_damage(poison_damage_roll),
                 }
             }
         }
@@ -2770,10 +2844,8 @@ pub fn resolve_combat_arena_field_contact_for_non_party_target(
         CombatArenaFieldKind::Fire => CombatArenaFieldContactOutcome::FireDamage {
             raw_damage: combat_field_fire_raw_damage(fire_damage_roll),
         },
-        CombatArenaFieldKind::Energy => {
-            CombatArenaFieldContactOutcome::EnergyDamage { raw_damage: 0 }
-        }
-    }
+        CombatArenaFieldKind::Energy => return None,
+    })
 }
 
 /// `combat.md §11` Amulet/Turning scatter-mode roll threshold. The
@@ -2963,18 +3035,6 @@ pub const fn active_effect_is_active(tag: Option<u8>, counter: u8, expected_tag:
     match tag {
         Some(tag) => tag == expected_tag && counter != 0,
         None => false,
-    }
-}
-
-pub const fn resolve_protection_defense_bonus(
-    base_defense: u8,
-    tag: Option<u8>,
-    counter: u8,
-) -> u8 {
-    if active_effect_is_active(tag, counter, PROTECTION_ACTIVE_EFFECT_TAG) {
-        base_defense.saturating_add(PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS)
-    } else {
-        base_defense
     }
 }
 

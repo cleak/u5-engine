@@ -37,6 +37,84 @@ fn raster_diagnostic_line_reports_hash_without_pixels() {
     assert!(!state.visibility_dirty);
 }
 
+#[test]
+fn terminal_frame_acknowledges_completed_map_viewport_dissolves() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state
+        .pending_map_viewport_dissolves
+        .push(run_map_viewport_dissolve(
+            MapViewportDissolveSource::BlackthornRescueBlack,
+        ));
+
+    print_play_frame(&mut state, None).unwrap();
+
+    assert!(state.pending_map_viewport_dissolves.is_empty());
+}
+
+#[test]
+fn text_only_terminal_frame_completes_blocking_potion_presentations() {
+    let mut state = test_state(open_grid(), 10, 10);
+    let turn = state.turn;
+    let clock = state.clock;
+    state.pending_potion_flash = potion_flash_playback(POTION_WHITE_INDEX);
+    state.start_white_potion_sweep();
+
+    print_play_frame(&mut state, None).unwrap();
+
+    assert_eq!(state.pending_potion_flash, None);
+    assert_eq!(state.white_potion_sweep, None);
+    assert_eq!(
+        state.animation.frame,
+        POTION_WHITE_SWEEP_FRAMES % STATIC_TILE_ANIMATION_PERIOD_TICKS
+    );
+    assert_eq!(state.turn, turn);
+    assert_eq!(state.clock, clock);
+}
+
+#[test]
+fn raster_terminal_frame_runs_every_white_repaint_through_the_compositor() {
+    let mut state = test_state(open_grid(), 10, 10);
+    let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    state.pending_potion_flash = potion_flash_playback(POTION_WHITE_INDEX);
+    state.start_white_potion_sweep();
+    state.visibility_dirty = true;
+
+    complete_headless_blocking_presentations(&mut state, Some(&atlas)).unwrap();
+
+    assert_eq!(state.pending_potion_flash, None);
+    assert_eq!(state.white_potion_sweep, None);
+    assert!(!state.visibility_dirty);
+    assert_eq!(
+        state.animation.frame,
+        POTION_WHITE_SWEEP_FRAMES % STATIC_TILE_ANIMATION_PERIOD_TICKS
+    );
+}
+
+#[test]
+fn empty_play_script_input_selects_arms_sell_browser_item() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 999;
+    state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+    state.active_shop = Some(ActiveShopSession::ArmsLocal(
+        u5_runtime::shop_runtime::ArmsShopState::Greeting,
+        ArmsShop::IolosBows,
+    ));
+
+    handle_play_script_command(&mut state, "S", Path::new("")).unwrap();
+    handle_play_script_command(&mut state, "empty", Path::new("")).unwrap();
+
+    let Some(ActiveShopSession::ArmsLocal(
+        u5_runtime::shop_runtime::ArmsShopState::SellConfirm { item, .. },
+        ArmsShop::IolosBows,
+    )) = state.active_shop
+    else {
+        panic!("empty terminal input did not select the seeded bow");
+    };
+    assert_eq!(usize::from(item), EQUIPMENT_ID_BOW);
+    assert_eq!(state.gold, 999);
+    assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
+}
+
 // from chunk_14
 #[test]
 fn raster_diagnostic_line_reports_selected_cga_depth() {
@@ -454,7 +532,7 @@ fn empty_play_input_repeats_pending_prompt_without_turn() {
 }
 
 #[test]
-fn empty_play_input_submits_modal_prompt_enter_without_passing_turn() {
+fn empty_play_input_submits_modal_prompt_enter_instead_of_a_pass() {
     let mut prompted = test_state(open_grid(), 1, 1);
     assert_eq!(prompted.start_yell_prompt(), MoveOutcome::Observed);
     assert!(prompted.active_yell.is_some());
@@ -462,7 +540,7 @@ fn empty_play_input_submits_modal_prompt_enter_without_passing_turn() {
 
     handle_empty_play_input(&mut prompted, Path::new("")).unwrap();
 
-    assert_eq!(prompted.turn, 0);
+    assert_eq!(prompted.turn, 1);
     assert!(prompted.active_yell.is_none());
     assert_eq!(prompted.message, YELL_NOTHING_SAID_MESSAGE);
 }
@@ -687,11 +765,15 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
 fn route_smoke_cases_cover_representative_modes() {
     let cases = route_smoke_cases();
 
-    // 495 at `intro-preflourish-phase`, plus two added with this change:
+    // 495 at `intro-preflourish-phase`, plus the two pre-existing additions:
     // `town-spyglass-night-window-edge` (`catalogs/item-list.md` Spyglass
     // row) and `dungeon-camp-inside-cooldown-window`
-    // (`rest-and-camp.md` §5).
-    assert_eq!(cases.len(), 497);
+    // (`rest-and-camp.md` §5), plus Stonegate trapdoor rescue, Britannia
+    // defeat persistence, four native Jimmy/restraint production routes, and
+    // four dungeon Jimmy committed-exit/rewrite routes, and the ruined-shrine
+    // Word-of-Power restoration route from public issue #135, and the corrected
+    // empty-Yell acted-result route from the public #134 return contract.
+    assert_eq!(cases.len(), 513);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
@@ -740,7 +822,7 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "britannia-spyglass-chunk-map")
+            .any(|case| case.name == "britannia-spyglass-night-sky")
     );
     assert!(
         cases
@@ -900,12 +982,27 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "stonegate-trapdoor-rescue")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "britannia-word-of-power-seal-opens")
     );
     assert!(
         cases
             .iter()
             .any(|case| case.name == "underworld-doom-word-of-power-seal-opens")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| { case.name == "britannia-ruined-honesty-shrine-restoration" })
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| { case.name == "britannia-empty-yell-is-acted" })
     );
     assert!(cases.iter().any(|case| case.name == "castle-view-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-peer-overlay"));
@@ -1166,7 +1263,7 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "doom-combat-escape-abort")
+            .any(|case| case.name == "doom-combat-escape-not-yet")
     );
     assert!(
         cases
@@ -1181,7 +1278,7 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "doom-combat-use-refusal")
+            .any(|case| case.name == "doom-combat-use-picker")
     );
     assert!(
         cases
@@ -1304,7 +1401,7 @@ fn route_smoke_cases_cover_representative_modes() {
         "combat-summon-daemon-ring",
         "combat-kill-gazer-eye-burst",
         "combat-kill-gargoyle-lava-marker",
-        "combat-kill-shadowlord-vanish-marker",
+        "combat-kill-shadowlord-protected-rejection",
         "terrain-combat-party-entry",
         "dungeon-room-party-entry",
     ] {
@@ -1349,22 +1446,27 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "doom-combat-xit-foes-remain")
+            .any(|case| case.name == "doom-combat-xit-refusal")
     );
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "doom-combat-quit-defeat")
+            .any(|case| case.name == "doom-combat-quit-refusal")
     );
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "terrain-combat-xit-no-foes-clean-exit")
+            .any(|case| case.name == "terrain-combat-escape-announced-cleanup")
     );
     assert!(
         cases
             .iter()
             .any(|case| case.name == "terrain-combat-out-of-arena-leave")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-defeat-persists-ool-before-rescue")
     );
     assert!(
         cases

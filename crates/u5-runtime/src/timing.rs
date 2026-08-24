@@ -1,6 +1,4 @@
-//! Timing status tag, save-template source, dungeon field effect.
-
-use crate::*;
+//! Active-effect timing projection, save-template source, dungeon field effect.
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TimingStatusTag {
@@ -12,20 +10,12 @@ pub enum TimingStatusTag {
 }
 
 impl TimingStatusTag {
-    pub fn from_save_byte(byte: u8) -> Self {
+    pub const fn from_save_byte(byte: u8) -> Self {
         match byte {
             0 => Self::Normal,
             b'Q' => Self::HalfTime,
             b'T' => Self::NoMinuteLight,
             other => Self::Opaque(other),
-        }
-    }
-
-    pub fn for_transport(transport: TransportState) -> Self {
-        if matches!(transport, TransportState::Skiff { .. }) {
-            Self::HalfTime
-        } else {
-            Self::Normal
         }
     }
 
@@ -57,7 +47,7 @@ impl TimingStatusTag {
         }
     }
 
-    /// `time.md §4` / `overworld.md §6`: the saved `Q` tag lets the
+    /// `time.md §4` / `overworld.md §6`: active effect `Q` lets the
     /// overworld active-object and encounter epilogue run on alternate
     /// turns, while `T` returns before that epilogue.
     pub const fn world_object_epilogue_runs(self, turn_before: u64) -> bool {

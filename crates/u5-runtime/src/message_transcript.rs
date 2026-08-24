@@ -29,9 +29,15 @@ impl PlayState {
 
     /// Append one entry and honour the transcript's capacity. Shared by
     /// the revision-bumping public push and the epilogue push below.
-    fn append_transcript_entry(&mut self, text: String, is_command_echo: bool) {
+    fn append_transcript_entry(
+        &mut self,
+        text: String,
+        glyphs: Vec<TlkRenderedGlyph>,
+        is_command_echo: bool,
+    ) {
         self.message_transcript.push(MessageEntry {
             text,
+            glyphs,
             is_command_echo,
         });
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
@@ -42,7 +48,19 @@ impl PlayState {
 
     /// Append one already-classified transcript line.
     pub fn push_message_entry(&mut self, text: impl Into<String>, is_command_echo: bool) {
-        self.append_transcript_entry(text.into(), is_command_echo);
+        let text = text.into();
+        let glyphs = text.bytes().map(TlkRenderedGlyph::ordinary).collect();
+        self.append_transcript_entry(text, glyphs, is_command_echo);
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
+    fn push_tlk_message_entry(
+        &mut self,
+        text: String,
+        glyphs: Vec<TlkRenderedGlyph>,
+        is_command_echo: bool,
+    ) {
+        self.append_transcript_entry(text, glyphs, is_command_echo);
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
@@ -52,6 +70,23 @@ impl PlayState {
     pub fn push_message_transcript_lines(&mut self, text: &str) {
         for line in text.split('\n') {
             self.push_message_entry(line, false);
+        }
+    }
+
+    /// Append a TLK response without flattening its ordinary/runic font mask.
+    pub fn push_tlk_message_transcript_lines(&mut self, rendered: &TlkRenderedText) {
+        let mut text_lines = rendered.text.split('\n');
+        let mut glyph_lines = rendered.rendered_lines();
+        loop {
+            let text = text_lines.next();
+            let glyphs = glyph_lines.next();
+            match (text, glyphs) {
+                (Some(text), Some(glyphs)) => {
+                    self.push_tlk_message_entry(text.to_string(), glyphs.to_vec(), false);
+                }
+                (None, None) => break,
+                _ => panic!("TLK rendered text and glyph line counts diverged"),
+            }
         }
     }
 
@@ -70,6 +105,13 @@ impl PlayState {
         self.push_message_transcript_lines(&text);
         self.message = text.clone();
         self.message_flushed = text;
+    }
+
+    /// Emit one font-preserving TLK response immediately.
+    pub fn emit_tlk_message(&mut self, rendered: TlkRenderedText) {
+        self.push_tlk_message_transcript_lines(&rendered);
+        self.message = rendered.text.clone();
+        self.message_flushed = rendered.text;
     }
 
     /// `text-output.md §11`: append whatever the slot is holding, if the
@@ -182,10 +224,13 @@ impl PlayState {
             // then appends the direction, so keep its fuller line.
             if let Some(last) = self.message_transcript.last_mut() {
                 last.text = first.to_string();
+                last.glyphs = first.bytes().map(TlkRenderedGlyph::ordinary).collect();
             }
         } else if echo_is_last && pending.echo.join.continues_line() {
             if let Some(last) = self.message_transcript.last_mut() {
                 last.text.push_str(first);
+                last.glyphs
+                    .extend(first.bytes().map(TlkRenderedGlyph::ordinary));
             }
         } else {
             self.push_message_entry(first, false);

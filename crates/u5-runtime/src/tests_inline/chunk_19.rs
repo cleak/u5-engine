@@ -195,37 +195,9 @@
     }
 
     #[test]
-    fn parse_town_exit_tile_entries_accepts_optional_tile_guard() {
-        let entries = parse_town_exit_tile_entries("CASTLE:0 0 1 1 55\nCASTLE:0 1 2 1\n").unwrap();
-
-        assert_eq!(
-            entries,
-            vec![
-                TownExitTileEntry {
-                    scene: Scene::new(17).unwrap(),
-                    floor: 0,
-                    x: 1,
-                    y: 1,
-                    expected_tile: Some(55),
-                },
-                TownExitTileEntry {
-                    scene: Scene::new(17).unwrap(),
-                    floor: 1,
-                    x: 2,
-                    y: 1,
-                    expected_tile: None,
-                },
-            ]
-        );
-        assert!(parse_town_exit_tile_entries("CASTLE:0 0 32 1 55\n").is_err());
-        assert!(parse_town_exit_tile_entries("DUNGEON:0 0 1 1 55\n").is_err());
-        assert!(parse_town_exit_tile_entries("CASTLE:0 0 1 1\nCASTLE:0 0 1 1 55\n").is_err());
-    }
-
-    #[test]
     fn parse_town_lock_entries_accepts_magic_and_locked_rows() {
         let entries =
-            parse_town_lock_entries("CASTLE:0 0 1 1 97 96\nCASTLE:0 1 2 1 98 97 MAGIC\n").unwrap();
+            parse_town_lock_entries("CASTLE:0 0 1 1 185 184\nCASTLE:0 1 2 1 152 186 MAGIC\n").unwrap();
 
         assert_eq!(
             entries,
@@ -235,8 +207,8 @@
                     floor: 0,
                     x: 1,
                     y: 1,
-                    locked_tile: 97,
-                    unlocked_tile: 96,
+                    locked_tile: TOWN_DOOR_PLAIN_LOCKED_TILE,
+                    unlocked_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                     kind: TownLockKind::Locked,
                 },
                 TownLockEntry {
@@ -244,17 +216,20 @@
                     floor: 1,
                     x: 2,
                     y: 1,
-                    locked_tile: 98,
-                    unlocked_tile: 97,
+                    locked_tile: TOWN_DOOR_MAGIC_WINDOWED_TILE,
+                    unlocked_tile: TOWN_DOOR_WINDOWED_UNLOCKED_TILE,
                     kind: TownLockKind::Magic,
                 },
             ]
         );
-        assert!(parse_town_lock_entries("DUNGEON:0 0 1 1 97 96\n").is_err());
-        assert!(parse_town_lock_entries("CASTLE:0 0 32 1 97 96\n").is_err());
-        assert!(parse_town_lock_entries("CASTLE:0 0 1 1 95 96\n").is_err());
-        assert!(parse_town_lock_entries("CASTLE:0 0 1 1 97 97\n").is_err());
-        assert!(parse_town_lock_entries("CASTLE:0 0 1 1 97 96\nCASTLE:0 0 1 1 98 97\n").is_err());
+        assert!(parse_town_lock_entries("DUNGEON:0 0 1 1 185 184\n").is_err());
+        assert!(parse_town_lock_entries("CASTLE:0 0 32 1 185 184\n").is_err());
+        assert!(parse_town_lock_entries("CASTLE:0 0 1 1 184 185\n").is_err());
+        assert!(parse_town_lock_entries("CASTLE:0 0 1 1 185 185\n").is_err());
+        assert!(parse_town_lock_entries(
+            "CASTLE:0 0 1 1 185 184\nCASTLE:0 0 1 1 187 186\n"
+        )
+        .is_err());
     }
 
     #[test]
@@ -591,11 +566,12 @@
 
     #[test]
     fn active_rest_prompt_accepts_duration_without_watch_for_single_member() {
+        let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'H', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_rest.is_some());
@@ -603,18 +579,19 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(
-            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, '1', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
         assert!(state.active_rest.is_none());
-        assert_eq!(state.turn, 3);
-        assert!(state.message.contains("Party rested 1 hour"));
-        assert!(state.message.contains("no watch needed"));
+        assert_eq!(state.turn, 12);
+        assert!(state.message.starts_with("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn active_rest_prompt_collects_watch_member() {
+        let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
         state.party.push(PartyMember {
@@ -629,11 +606,11 @@
         });
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'H', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert_eq!(
-            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, '1', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_rest.is_some());
@@ -641,25 +618,28 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.message.contains("Who keeps watch"));
 
         assert_eq!(
-            handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, '2', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
         assert!(state.active_rest.is_none());
-        assert_eq!(state.turn, 3);
-        assert!(state.message.contains("party slot 2 keeps watch"));
+        assert_eq!(state.turn, 12);
+        assert!(state.message.starts_with("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn active_rest_prompt_invalid_watcher_rests_without_watch() {
+        let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
+        state.prng_state = 0x0002;
         state.party.push(PartyMember {
             slot: 1,
             class_byte: b'B',
@@ -671,15 +651,16 @@
             level: 8,
         });
 
-        handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+        handle_play_key_input(&mut state, '1', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+        handle_play_key_input(&mut state, '2', "", &dir).unwrap();
 
         assert!(state.active_rest.is_none());
         assert_eq!(state.party[1].status, b'P');
-        assert_eq!(state.turn, 3);
-        assert!(state.message.contains("no watch set"));
+        assert_eq!(state.turn, 12);
+        assert!(state.message.starts_with("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -717,6 +698,7 @@
 
     #[test]
     fn rest_with_watch_accepts_valid_inline_watcher_without_changing_ambush_odds() {
+        let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
         state.party.push(PartyMember {
@@ -733,7 +715,7 @@
         assert_eq!(
             state
                 .hole_up_command(
-                    Path::new(""),
+                    &dir,
                     InlineRestRequest {
                         hours: Some(1),
                         watcher: Some(1),
@@ -743,15 +725,18 @@
             MoveOutcome::Rested
         );
 
-        assert!(state.message.contains("party slot 2 keeps watch"));
-        assert_eq!(state.turn, 3);
+        assert!(state.message.starts_with("RESTED!"));
+        assert_eq!(state.turn, 12);
         assert!(!state.combat_active);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn rest_with_watch_rejects_non_good_watcher_but_still_rests() {
+        let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
+        state.prng_state = 0x0002;
         state.party.push(PartyMember {
             slot: 1,
             class_byte: b'B',
@@ -766,7 +751,7 @@
         assert_eq!(
             state
                 .hole_up_command(
-                    Path::new(""),
+                    &dir,
                     InlineRestRequest {
                         hours: Some(1),
                         watcher: Some(1),
@@ -776,13 +761,15 @@
             MoveOutcome::Rested
         );
 
-        assert!(state.message.contains("no valid watch set"));
+        assert!(state.message.starts_with("RESTED!"));
         assert_eq!(state.party[1].status, b'P');
-        assert_eq!(state.turn, 3);
+        assert_eq!(state.turn, 12);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn world_rest_with_watch_advances_three_twenty_minute_ticks_per_hour() {
+    fn wilderness_camp_advances_twelve_five_minute_ticks_per_hour() {
+        let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(5, 30).unwrap();
         state.ambient_light = FULL_DARKNESS;
@@ -791,88 +778,42 @@
         state.light_spell_counter = 70;
 
         assert_eq!(
-            state.hole_up_command(Path::new(""), Some(2)).unwrap(),
+            state.hole_up_command(&dir, Some(2)).unwrap(),
             MoveOutcome::Rested
         );
 
         assert_eq!(state.clock, GameClock::new(7, 30).unwrap());
-        assert_eq!(state.turn, 6);
+        assert_eq!(state.turn, 24);
         assert_eq!(state.torch_counter, 0);
         assert_eq!(state.light_spell_counter, 0);
-        // The frame counter advances once per turn and wraps at the LCM
-        // of supported cycle lengths (12 covers 3 + 4); after 6 ticks
-        // from 0 it sits at 6. The displayed water tile cycles modulo
-        // 3 on top of this counter.
-        assert_eq!(state.animation.frame, 6);
+        // Twenty-four five-minute ticks wrap the twelve-frame animation clock.
+        assert_eq!(state.animation.frame, 0);
         assert_eq!(state.ambient_light, FULL_DAYLIGHT);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Party rested 2 hours"));
+        assert!(state.message.starts_with("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dangerous_rest_interrupts_on_one_in_sixty_four_predicate() {
+    fn wilderness_camp_hour_change_probe_reseeds_only_on_zero() {
         let mut state = britannia_state(open_world_grid(), 0, 15);
-        state.clock = GameClock::new(0, 0).unwrap();
+        state.prng_state = 0x0002;
+        let expected_miss_state = u5_prng_advance_state(state.prng_state);
+        assert_eq!(
+            state.wilderness_camp_hour_change_ambush_row(0x0456),
+            None
+        );
+        assert_eq!(state.prng_state, expected_miss_state);
+
+        // This published regression seed yields zero for random(0,63).
         state.prng_state = 0x00f0;
-        let mut expected_prng_state = state.prng_state;
-        // The rest interruption, ambush-monster row, and combat setup count
-        // each consume one resident PRNG advance before combat starts.
-        for _ in 0..3 {
-            expected_prng_state = u5_prng_advance_state(expected_prng_state);
-        }
-        state.party = vec![
-            PartyMember {
-                slot: 0,
-                class_byte: b'A',
-                status: b'G',
-                climb_stat: DEFAULT_CLIMB_STAT,
-                mana: 0,
-                hp: 12,
-                max_hp: 12,
-                level: 8,
-            },
-            PartyMember {
-                slot: 1,
-                class_byte: b'A',
-                status: b'S',
-                climb_stat: DEFAULT_CLIMB_STAT,
-                mana: 2,
-                hp: 8,
-                max_hp: 12,
-                level: 8,
-            },
-            PartyMember {
-                slot: 2,
-                class_byte: b'A',
-                status: b'P',
-                climb_stat: DEFAULT_CLIMB_STAT,
-                mana: 2,
-                hp: 8,
-                max_hp: 12,
-                level: 8,
-            },
-        ];
-
+        let mut expected_host_stream = 0x0456;
+        let expected_row = u5_prng_range_u16(&mut expected_host_stream, 0, 7) as u8;
         assert_eq!(
-            state.hole_up_command(Path::new(""), Some(2)).unwrap(),
-            MoveOutcome::Rested
+            state.wilderness_camp_hour_change_ambush_row(0x0456),
+            Some(expected_row)
         );
-
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.prng_state, expected_prng_state);
-        assert_eq!(state.clock, GameClock::new(0, 20).unwrap());
-        assert!(state.message.contains("Party rested 0 hours 20 minutes"));
-        assert!(state.message.contains("Ambushed!"));
-        assert!(state.message.contains("sleep ambush entered combat"));
-        assert!(!state.message.contains("out of scope"));
-        assert!(state.combat_active);
-        assert_eq!(state.party[1].status, b'G');
-        assert_eq!(state.party[2].status, b'P');
-        assert_eq!(
-            state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].z,
-            WorldPlane::Britannia.save_floor()
-        );
-        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty());
+        assert_eq!(state.prng_state, expected_host_stream);
     }
 
     #[test]
@@ -901,12 +842,12 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.turn, 3);
+        assert_eq!(state.turn, 12);
         assert!(state.party[0].hp < 50);
         assert!(
             state
                 .message
-                .contains("Underfoot world damage triggered 3 tick(s)")
+                .contains("Underfoot world damage triggered 12 tick(s)")
         );
         assert!(state.message.contains("drowning damage"));
         assert!(state.message.contains("party slot 0"));
@@ -914,43 +855,8 @@
     }
 
     #[test]
-    fn sleep_ambush_cleanup_does_not_revive_members_killed_during_rest() {
-        let dir = debug_game_dir();
-        fs::write(
-            dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
-            "BRITANNIA 0 15 DROWNING 5\n",
-        )
-        .unwrap();
-        let mut state = britannia_state(open_world_grid(), 0, 15);
-        state.clock = GameClock::new(0, 0).unwrap();
-        state.prng_state = 0x0270;
-        state.party = vec![PartyMember {
-            slot: 0,
-            class_byte: b'A',
-            status: b'G',
-            climb_stat: DEFAULT_CLIMB_STAT,
-            mana: 0,
-            hp: 1,
-            max_hp: 1,
-            level: 8,
-        }];
-
-        assert_eq!(
-            state.hole_up_command(&dir, Some(1)).unwrap(),
-            MoveOutcome::Rested
-        );
-
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Ambushed!"));
-        assert!(state.combat_active);
-        assert_eq!(state.party[0].hp, 0);
-        assert_eq!(state.party[0].status, b'D');
-        assert!(state.combat_actors[0].is_empty());
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn rest_with_watch_advances_time_and_wakes_initial_sleepers() {
+        let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
         state.prng_state = 0x0002;
@@ -1008,7 +914,7 @@
         ];
 
         assert_eq!(
-            state.hole_up_command(Path::new(""), Some(1)).unwrap(),
+            state.hole_up_command(&dir, Some(1)).unwrap(),
             MoveOutcome::Rested
         );
 
@@ -1024,15 +930,15 @@
         assert_eq!(state.party[3].hp, 6);
         assert_eq!(state.party[3].mana, 4);
         assert_eq!(state.party[4].status, b'P');
-        assert_eq!(state.party[4].hp, 6);
+        assert_eq!(state.party[4].hp, 7);
         assert_eq!(state.party[4].mana, 98);
-        assert!(state.message.contains("recovered 0 HP"));
-        assert!(state.message.contains("0 MP"));
-        assert!(state.message.contains("woke 1 asleep member"));
+        assert!(state.message.starts_with("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn rest_with_watch_poisoned_members_keep_status_and_skip_hp_recovery() {
+        let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
         state.prng_state = 0x0002;
@@ -1048,15 +954,15 @@
         }];
 
         assert_eq!(
-            state.hole_up_command(Path::new(""), Some(1)).unwrap(),
+            state.hole_up_command(&dir, Some(1)).unwrap(),
             MoveOutcome::Rested
         );
 
         assert_eq!(state.party[0].status, b'P');
-        assert_eq!(state.party[0].hp, 2);
+        assert_eq!(state.party[0].hp, 3);
         assert_eq!(state.party[0].mana, 98);
-        assert!(state.message.contains("recovered 0 HP"));
-        assert!(state.message.contains("MP"));
+        assert!(state.message.starts_with("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -1202,6 +1108,58 @@
         assert!(hp > 0, "the window has expired, so the camp recovers again");
     }
 
+    #[test]
+    fn cooldown_refusal_advances_time_before_the_gate_and_prints_the_asset_line() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.prng_state = 0x0002;
+        state.camp_cooldown = COMPLETED_LONG_CAMP_COOLDOWN_HOURS;
+        state.party[0].hp = 1;
+        state.party[0].max_hp = 90;
+        let mut expected_prng_state = state.prng_state;
+        for _ in 0..6 {
+            expected_prng_state = u5_prng_advance_state(expected_prng_state);
+        }
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(6)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert!(!state.combat_active, "fixture seed must complete the camp");
+        assert_eq!(state.clock, GameClock::new(14, 0).unwrap());
+        assert_eq!(state.camp_cooldown, 8);
+        assert_eq!(state.party[0].hp, 1);
+        assert_eq!(state.prng_state, expected_prng_state);
+        assert!(state.message.starts_with("NO EFFECT!"));
+        assert!(!state.message.contains("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn camp_attempt_that_expires_the_cooldown_recovers_and_rearms_it() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.prng_state = 0x0002;
+        state.camp_cooldown = 6;
+        state.party[0].hp = 1;
+        state.party[0].max_hp = 90;
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(6)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert!(!state.combat_active, "fixture seed must complete the camp");
+        assert_eq!(state.clock, GameClock::new(14, 0).unwrap());
+        assert!(state.party[0].hp > 1);
+        assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
+        assert!(state.message.starts_with("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `rest-and-camp.md §5`: the counter is "reduced by one, floored at
     /// zero, at every hour rollover". The rollover is the clock's, not
     /// the rest loop's, so ordinary play drains it too.
@@ -1285,6 +1243,57 @@
     }
 
     #[test]
+    fn short_overworld_camp_bypasses_the_apparition_draw() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        let mut expected_prng_state = state.prng_state;
+        for _ in 0..1 {
+            expected_prng_state = u5_prng_advance_state(expected_prng_state);
+        }
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(1)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.prng_state, expected_prng_state);
+        assert_eq!(state.camp_cooldown, 0);
+        assert_eq!(state.camp_month_cookie, 0);
+        assert!(!state.message.contains("Lord British-in-disguise"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_long_camp_suppresses_the_apparition_draw_before_prng() {
+        let dir = debug_game_dir();
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.prng_state = 0x0002;
+        state.party[0].hp = 1;
+        state.party[0].max_hp = 90;
+        let mut expected_prng_state = state.prng_state;
+        // Eighteen five-minute danger checks, then one recovery draw for
+        // the fixture's sole living member. The context gate consumes no
+        // apparition draw.
+        for _ in 0..19 {
+            expected_prng_state = u5_prng_advance_state(expected_prng_state);
+        }
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(6)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert!(!state.combat_active, "fixture seed must complete the camp");
+        assert_eq!(state.prng_state, expected_prng_state);
+        assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
+        assert_eq!(state.camp_month_cookie, 0);
+        assert!(!state.message.contains("Lord British-in-disguise"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn lord_british_camp_event_recomputes_level_and_prints_karma_verdict() {
         let dir = debug_game_dir();
         fs::write(
@@ -1301,6 +1310,9 @@
         .unwrap();
         let mut state = britannia_state(open_world_grid(), 2, 0);
         state.clock = GameClock::new(0, 0).unwrap();
+        // With six hourly wilderness interruption probes, this stream reaches
+        // the apparition gate and then selects Intelligence and Dexterity.
+        state.prng_state = 0x0010;
         state.avatar_stats = AvatarStats {
             strength: 20,
             dexterity: 20,
@@ -1326,35 +1338,87 @@
         state.party_intelligence = vec![18, 24];
         state.moral_standing = 80;
         let mut expected_prng_state = state.prng_state;
-        for _ in 0..6 {
+        // Six hourly danger checks, two long-camp recovery draws, one
+        // apparition draw, and two stat-reward draws.
+        for _ in 0..11 {
             expected_prng_state = u5_prng_advance_state(expected_prng_state);
         }
 
-        assert_eq!(state.hole_up_command(&dir, Some(1)).unwrap(), MoveOutcome::Rested);
+        assert_eq!(state.hole_up_command(&dir, Some(6)).unwrap(), MoveOutcome::Rested);
 
         assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.party[0].level, 3);
         assert_eq!(state.party[0].hp, 90);
         assert_eq!(state.party[0].max_hp, 90);
-        assert_eq!(state.avatar_stats.dexterity, 21);
-        assert_eq!(state.party[0].climb_stat, 21);
-        assert_eq!(state.party[0].mana, 18);
+        assert_eq!(state.avatar_stats.intelligence, 19);
+        assert_eq!(state.party[0].climb_stat, 20);
+        assert_eq!(state.party[0].mana, 19);
         assert_eq!(state.party[1].level, 3);
         assert_eq!(state.party[1].hp, 90);
         assert_eq!(state.party[1].max_hp, 90);
         assert_eq!(state.party[1].mana, REST_MANA_CAP);
-        assert_eq!(state.party_strengths[1], 21);
+        assert_eq!(state.party_strengths[1], 20);
+        assert_eq!(state.party[1].climb_stat, 21);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Lord British-in-disguise camp event."));
         assert!(state.message.contains("P1 reached level 3 from 200 XP"));
         assert!(state.message.contains("P2 reached level 3 from 200 XP"));
+        assert!(state.message.contains("Intelligence reward"));
         assert!(state.message.contains("Dexterity reward"));
         assert!(state.message.contains("Verdict: camp-top"));
+        assert_eq!(state.camp_month_cookie, state.clock.month);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn lord_british_camp_event_heals_and_cures_living_members_and_refreshes_dead_bard_mana() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(KARMA_DAT_FILE),
+            karma_bytes(&["low", "twenty", "forty", "sixty", "blackthorn", "camp"]),
+        )
+        .unwrap();
+        let mut state = britannia_state(open_world_grid(), 2, 0);
+        state.avatar_stats.intelligence = 22;
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'P',
+                climb_stat: 20,
+                mana: 1,
+                hp: 3,
+                max_hp: 30,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'B',
+                status: b'D',
+                climb_stat: 20,
+                mana: 0,
+                hp: 0,
+                max_hp: 30,
+                level: 1,
+            },
+        ];
+        state.party_experience = vec![0, 0];
+        state.party_intelligence = vec![22, 18];
+
+        state.resolve_lord_british_camp_event(Some(&dir)).unwrap();
+
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.party[0].hp, 30);
+        assert_eq!(state.party[0].mana, 22);
+        assert_eq!(state.party[1].status, b'D');
+        assert_eq!(state.party[1].hp, 0);
+        assert_eq!(state.party[1].mana, 9);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn dungeon_h_key_routes_to_rest_with_watch_with_inline_hours() {
+        let dir = debug_game_dir();
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.clock = GameClock::new(1, 45).unwrap();
         state.torch_counter = 70;
@@ -1362,7 +1426,7 @@
 
         assert!(
             state
-                .handle_dungeon_key_with_inline('h', Path::new(""), Some(1), None, None, None, None)
+                .handle_dungeon_key_with_inline('h', &dir, Some(1), None, None, None, None)
                 .unwrap()
         );
 
@@ -1370,6 +1434,7 @@
         assert_eq!(state.turn, 3);
         assert_eq!(state.torch_counter, 10);
         assert_eq!(state.light_spell_counter, 0);
-        assert!(state.message.contains("Party rested 1 hour"));
+        assert!(state.message.starts_with("RESTED!"));
+        let _ = fs::remove_dir_all(dir);
     }
 

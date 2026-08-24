@@ -11,8 +11,8 @@ use u5_runtime::{
     CHARGEN_QUESTION_COUNT, ChargenAvatar, ChargenSession, ChargenSessionStep, ChargenStats,
     DEFAULT_GAME_DIR, FIRST_PLAYABLE_BALLOON_TILE, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE, GameClock, PendingVehicleAcquisition,
-    PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth, TimingStatusTag, TransportState,
-    WindState, chargen_stats_from_winners, commit_chargen_save, load_play_options_from_init,
+    PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth, TransportState, WindState,
+    chargen_stats_from_winners, commit_chargen_save, load_play_options_from_init,
     load_play_options_from_save, load_question_records, parse_u8_literal, run_chargen_tournament,
 };
 
@@ -669,7 +669,6 @@ where
     }
     if let Some(transport) = transport_override {
         options.transport = transport;
-        options.timing_status = TimingStatusTag::for_transport(transport);
     }
 
     Ok(CliArgs {
@@ -1008,6 +1007,7 @@ pub fn parse_pending_vehicle_arg(value: &str) -> io::Result<PendingVehicleAcquis
             Ok(PendingVehicleAcquisition::Skiff {
                 x: parse_coord(parts[0], "x")?,
                 y: parse_coord(parts[1], "y")?,
+                aux3: 0,
             })
         }
         _ => Err(io::Error::new(

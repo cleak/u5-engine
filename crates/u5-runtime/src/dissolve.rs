@@ -231,10 +231,11 @@ impl RectangleDissolve {
 /// The gate is enabled when the driver image is first loaded and is cleared
 /// permanently the first time any character is drawn through the driver's
 /// fixed-cell glyph entry; nothing ever re-enables it. While enabled, the
-/// dissolve emits a speaker click and samples keyboard status on every
-/// **second** visited pixel, and a pending keystroke aborts the call, leaving
-/// the rectangle partly transferred. The abort only tests for a pending key
-/// and does not consume it.
+/// dissolve copies the current pixel, then emits a speaker click and samples
+/// keyboard status on alternating visits. The zero-initialized phase makes
+/// visits **1, 3, 5, ...** the sampled visits. A pending keystroke aborts the
+/// call after that visit, leaving the rectangle partly transferred. The abort
+/// only tests for a pending key and does not consume it.
 ///
 /// In a normal session that makes exactly one dissolve interruptible - the
 /// first start/menu reveal, before any menu text has been drawn. Model the
@@ -268,9 +269,10 @@ impl DissolveAbortGate {
         self.armed = false;
     }
 
-    /// `§9.6`: the click and the keyboard poll sit behind the same alternating
-    /// flag, so both happen on every second visited pixel and only there.
-    pub const fn samples_input_at(self, visited_pixels: u32) -> bool {
-        self.armed && visited_pixels % 2 == 0
+    /// `§9.6`: `copied_pixels` is the one-based number of pixels already
+    /// transferred. The click and keyboard poll occur after copies 1, 3, 5,
+    /// ... and only there.
+    pub const fn samples_input_after_copy(self, copied_pixels: u32) -> bool {
+        self.armed && copied_pixels % 2 == 1
     }
 }

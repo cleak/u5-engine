@@ -7,10 +7,10 @@
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 3] = 16;
+        grid[32 + 3] = TOWN_DOOR_CLEARED_TILE;
         let mut state = test_state(grid, 0, 1);
         state.door_tracker = Some(DoorTracker {
-            previous_tile: 96,
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
             x: 3,
             y: 1,
             turns_remaining: 1,
@@ -19,11 +19,11 @@
 
         assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
 
-        assert_eq!(state.grid[32 + 3], 16);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.door_tracker, None);
         assert!(state.is_recorded_open_town_door(Scene::new(17).unwrap(), 0, 3, 1));
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("destroyed door tile 96"));
+        assert!(state.message.contains("destroyed door tile 184"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -36,10 +36,10 @@
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 5] = 16;
+        grid[32 + 5] = TOWN_DOOR_CLEARED_TILE;
         let mut state = test_state(grid, 0, 1);
         state.door_tracker = Some(DoorTracker {
-            previous_tile: 96,
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
             x: 5,
             y: 1,
             turns_remaining: 4,
@@ -60,7 +60,7 @@
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 96,
+                previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                 x: 5,
                 y: 1,
                 turns_remaining: 3,
@@ -80,12 +80,12 @@
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 3] = 96;
-        grid[32 + 5] = 16;
+        grid[32 + 3] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
+        grid[32 + 5] = TOWN_DOOR_CLEARED_TILE;
         let scene = Scene::new(17).unwrap();
         let mut state = test_state(grid, 0, 1);
         state.door_tracker = Some(DoorTracker {
-            previous_tile: 97,
+            previous_tile: TOWN_DOOR_WINDOWED_UNLOCKED_TILE,
             x: 5,
             y: 1,
             turns_remaining: 4,
@@ -94,13 +94,13 @@
 
         assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
 
-        assert_eq!(state.grid[32 + 3], 16);
-        assert_eq!(state.grid[32 + 5], 16);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_CLEARED_TILE);
+        assert_eq!(state.grid[32 + 5], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.door_tracker, None);
         assert!(state.is_recorded_open_town_door(scene, 0, 3, 1));
         assert!(state.is_recorded_open_town_door(scene, 0, 5, 1));
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("destroyed door tile 96"));
+        assert!(state.message.contains("destroyed door tile 184"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -230,6 +230,7 @@
             skiffs: 2,
         };
         state.sync_player_object();
+        let prng_before = state.prng_state;
         state.active_objects.push(ActiveObject {
             type_byte: 0xec,
             tile: 0xec,
@@ -247,10 +248,12 @@
 
         assert_eq!(
             outcome,
-            Some(AreaTransition::ChangedWorldPlane {
+            Some(MoveOutcome::Transition(
+                AreaTransition::ChangedWorldPlane {
                 from: WorldPlane::Britannia,
                 to: WorldPlane::Underworld,
-            })
+                },
+            ))
         );
         assert_eq!(
             state.area,
@@ -261,19 +264,21 @@
         assert_eq!(state.player.transport, TransportState::Foot);
         assert_eq!((state.player.x, state.player.y), (34, 18));
         assert!(state.message.contains("Whirlpool!"));
+        assert_ne!(state.prng_state, prng_before);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn whirlpool_engagement_no_op_for_on_foot_party() {
-        // active-objects.md §8: no-op when the party marker is the ordinary
-        // on-foot avatar.
+    fn whirlpool_engagement_damages_on_foot_party_without_transition() {
+        // The old on-foot no-op is withdrawn. Foot reaches the whole-party
+        // impact pass, but skips the transition and keeps the whirlpool slot.
         let dir = debug_game_dir();
         let mut state = world_state(open_world_grid(), 5, 5);
         state.area = Area::World {
             plane: WorldPlane::Britannia,
         };
         state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+        state.party = six_member_party(40);
         // Player is on foot by default in world_state.
         state.active_objects.push(ActiveObject {
             type_byte: 0xec,
@@ -290,7 +295,7 @@
             .apply_world_whirlpool_engagement(&dir, WorldPlane::Britannia)
             .expect("whirlpool engagement should not error");
 
-        assert_eq!(outcome, None);
+        assert_eq!(outcome, Some(MoveOutcome::Used));
         assert_eq!(
             state.area,
             Area::World {
@@ -298,6 +303,45 @@
             }
         );
         assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert!(state.party.iter().all(|member| member.hp < 40));
+        assert_eq!(state.active_objects[1].type_byte, 0xec);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn post_turn_adjacent_sand_trap_runs_silent_shared_impact_payload() {
+        // `active-objects.md §8`: `0xE0..=0xE3` is the Sand Trap run. Its
+        // adjacent arm is not combat, prints no narration, keeps the slot,
+        // and reaches the same transport-dependent payload as ranged attacks.
+        let dir = debug_game_dir();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+        state.party = six_member_party(40);
+        state.message = "Passed.".to_string();
+        state.turn = 1;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xe0,
+            tile: 0xe0,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.pending_outdoor_reaction_slots.push(1);
+
+        let outcome = state
+            .apply_world_post_turn_effects_after_turn(0, &dir)
+            .expect("sand-trap reaction should not require optional data");
+
+        assert_eq!(outcome, Some(MoveOutcome::Used));
+        assert_eq!(state.message, "Passed.");
+        assert!(state.party.iter().all(|member| member.hp < 40));
+        assert_eq!(state.active_objects[1].type_byte, 0xe0);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1254,7 +1298,7 @@
     }
 
     #[test]
-    fn town_search_surface_object_trap_narrates_without_clearing_or_revealing() {
+    fn town_search_surface_object_trap_preserves_unsigned_threshold_wraparound() {
         let mut grid = open_grid();
         grid[32 + 2] = 0x4e;
         let mut state = test_state(grid, 1, 1);
@@ -1282,7 +1326,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
-            "Searched active-object tile 64 at (2, 1); simple trap."
+            "Searched active-object tile 64 at (2, 1); no trap."
         );
     }
 
@@ -1804,7 +1848,6 @@
             move_queue_pos: 0,
             stuck_counter: 0,
             active_object: Some(1),
-            player_phantom: false,
         });
         state.active_objects.push(npc_active_object(1, 6, 8, 0xff));
 
@@ -2363,7 +2406,7 @@
     }
 
     #[test]
-    fn use_moonstone_rejects_missing_phase_bad_tile_and_dungeon_without_turn() {
+    fn use_moonstone_rejections_charge_the_normal_use_turn() {
         let dir = debug_game_dir();
         let mut grid = open_world_grid();
         grid[world_cell_index(4, 5)] = 16;
@@ -2377,19 +2420,19 @@
             handle_play_key_input(&mut state, 'U', "1", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.moonstone_slots[0], MoonstoneGateSlot::invalid());
         assert_eq!(state.message, "Cannot bury Moonstone on tile 16.");
 
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
         assert!(dungeon.handle_dungeon_key('U', &dir).unwrap());
-        assert_eq!(dungeon.turn, 0);
+        assert_eq!(dungeon.turn, 1);
         assert_eq!(dungeon.message, "No usable items.");
         assert_eq!(
             handle_play_key_input(&mut dungeon, 'U', "1", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(dungeon.turn, 0);
+        assert_eq!(dungeon.turn, 2);
         assert_eq!(dungeon.message, "Not here!");
         let _ = fs::remove_dir_all(dir);
     }
@@ -2548,9 +2591,251 @@
         let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
         block_projectile_at(&mut state, 7, 5);
         state.advance_outdoor_active_objects();
+        state
+            .apply_pending_outdoor_reactions(Path::new(""), WorldPlane::Underworld)
+            .unwrap();
 
         assert!(state.message.contains("BOOOM"), "message: {}", state.message);
         assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (8, 5));
+    }
+
+    #[test]
+    fn outdoor_walker_adjacency_preempts_the_ranged_class_test() {
+        // A `0x2C` broadside family one cell away takes the adjacency arm.
+        // It neither fires nor moves before the post-turn engagement handler.
+        let mut state = world_state_with_walker(5, 5, 0x2c, 6, 5);
+        assert!(!state.outdoor_first_phase_ranged_attack(1));
+
+        state.advance_outdoor_active_objects();
+
+        assert!(!state.message.contains("BOOOM"), "message: {}", state.message);
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (6, 5));
+    }
+
+    #[test]
+    fn generic_adjacent_hostile_uses_shared_impact_on_exact_carpet_water_gate() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(5, 5)] = 0x03;
+        let mut state = world_state(grid, 5, 5);
+        state.party = six_member_party(40);
+        state.player.transport = TransportState::Carpet {
+            type_byte: 0x14,
+            tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+        };
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_outdoor_active_objects();
+        assert_eq!(state.pending_outdoor_reaction_slots, vec![1]);
+        assert_eq!(
+            state
+                .apply_pending_outdoor_reactions(Path::new(""), WorldPlane::Underworld)
+                .unwrap(),
+            Some(MoveOutcome::Used)
+        );
+
+        assert!(!state.combat_active);
+        assert!(!state.active_objects[1].is_empty());
+        assert!(state.party.iter().all(|member| member.hp < 40));
+        assert!(state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text == "Attacked!"));
+    }
+
+    #[test]
+    fn generic_adjacent_ordinary_type_uses_full_aquatic_arena_selector() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_outdoor_active_objects();
+        state
+            .apply_pending_outdoor_reactions(&dir, WorldPlane::Underworld)
+            .unwrap();
+
+        assert!(state.combat_active);
+        assert!(state.message.contains("BRIT.CBT arena 15"), "{}", state.message);
+        assert_eq!(
+            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class,
+            16
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn lower_adjacent_reaction_resumes_after_generic_combat_returns() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(40);
+        // Lower slot: silent returning reaction.
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xe0,
+            tile: 0xe0,
+            x: 4,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+        // Higher slot: generic combat pauses the walk before slot 1.
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_outdoor_active_objects();
+        assert_eq!(state.pending_outdoor_reaction_slots, vec![2, 1]);
+        state
+            .apply_pending_outdoor_reactions(&dir, WorldPlane::Underworld)
+            .unwrap();
+        assert!(state.combat_active);
+        assert_eq!(state.pending_outdoor_reaction_slots, vec![1]);
+        assert!(state.party.iter().all(|member| member.hp == 40));
+
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        state
+            .apply_pending_outdoor_reactions(&dir, WorldPlane::Underworld)
+            .unwrap();
+        assert!(!state.combat_active);
+        assert!(state.pending_outdoor_reaction_slots.is_empty());
+        assert!(state.party.iter().all(|member| member.hp < 40));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn outdoor_walker_reaction_suppresses_every_lower_slots_movement() {
+        // The walk is high-to-low. Slot 2 fires first; the running reaction
+        // total then suppresses slot 1's otherwise legal directed step.
+        let mut state = world_state_with_walker(5, 5, 0x80, 10, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x2c,
+            tile: 0x2c,
+            x: 8,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+        block_projectile_at(&mut state, 7, 5);
+
+        state.advance_outdoor_active_objects();
+        state
+            .apply_pending_outdoor_reactions(Path::new(""), WorldPlane::Underworld)
+            .unwrap();
+
+        assert!(state.message.contains("BOOOM"), "message: {}", state.message);
+        assert_eq!((state.active_objects[2].x, state.active_objects[2].y), (8, 5));
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (10, 5));
+    }
+
+    #[test]
+    fn outdoor_walker_tries_the_other_directed_axis_before_random_fallback() {
+        // active-objects.md §8: the fair coin chooses only which directed
+        // axis is attempted first. A blocked first axis must not skip the
+        // other directed candidate and jump straight to random movement.
+        let mut state = world_state_with_walker(12, 12, 0x98, 10, 10);
+        let object = state.active_objects[1];
+        let [Some(first), Some(second)] = state.outdoor_directed_step_directions(1, object) else {
+            panic!("a diagonal offset must produce two directed candidates");
+        };
+        state.active_objects[1].phase = active_object_phase_from_direction(first, 0);
+        let (first_dx, first_dy) = first.delta();
+        let first_target = (
+            (object.x as isize + first_dx) as usize,
+            (object.y as isize + first_dy) as usize,
+        );
+        let (second_dx, second_dy) = second.delta();
+        let second_target = (
+            (object.x as isize + second_dx) as usize,
+            (object.y as isize + second_dy) as usize,
+        );
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x05,
+            tile: 0x05,
+            x: first_target.0,
+            y: first_target.1,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert!(state.try_wander_active_object(1));
+        assert_eq!(
+            (state.active_objects[1].x, state.active_objects[1].y),
+            second_target
+        );
+    }
+
+    #[test]
+    fn outdoor_walker_chance_refusal_does_not_try_the_other_axis() {
+        // The terrain chance gate is after validation. Once that gate refuses
+        // the first valid directed candidate, the slot's attempt ends; only a
+        // genuinely blocked candidate falls through to the second axis.
+        let mut state = world_state_with_walker(12, 12, 0x98, 10, 10);
+        let object = state.active_objects[1];
+        let [Some(first), Some(_second)] = state.outdoor_directed_step_directions(1, object) else {
+            panic!("a diagonal offset must produce two directed candidates");
+        };
+        let gate_tile = [0x04, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
+            .into_iter()
+            .find(|tile| {
+                outdoor_active_object_step_accepts_tile(
+                    object.type_byte,
+                    *tile,
+                    state.passability.as_ref(),
+                ) && terrain_chance_gate_denominator(*tile).is_some_and(|denominator| {
+                    !state
+                        .outdoor_active_object_step_seed(1, *tile)
+                        .is_multiple_of(denominator)
+                })
+            })
+            .expect("at least one accepted gated tile refuses this deterministic seed");
+        let (dx, dy) = first.delta();
+        let first_target = (
+            (object.x as isize + dx) as usize,
+            (object.y as isize + dy) as usize,
+        );
+        state.grid[world_cell_index(first_target.0, first_target.1)] = gate_tile;
+
+        assert!(!state.try_wander_active_object(1));
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (10, 10));
     }
 
     #[test]
@@ -2612,6 +2897,9 @@
         let mut state = world_state_with_walker(1, 7, 0x2D, 254, 7);
         block_projectile_at(&mut state, 0, 7);
         state.advance_outdoor_active_objects();
+        state
+            .apply_pending_outdoor_reactions(Path::new(""), WorldPlane::Underworld)
+            .unwrap();
 
         assert!(state.message.contains("BOOOM"), "message: {}", state.message);
         assert_eq!(

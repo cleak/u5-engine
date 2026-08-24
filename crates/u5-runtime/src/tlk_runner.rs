@@ -27,7 +27,7 @@ pub struct TlkRunInputs<'a> {
     pub branch_flags: u32,
     /// Moral-standing byte consulted by `0xFE` IF-ELSE-ALT.
     pub moral_standing: u8,
-    /// Common-word dictionary (128 slots; index by token byte `0x01..=0x7F`).
+    /// Common-word dictionary (128 slots; index by token byte `0x01..=0x80`).
     /// `None` is acceptable — token bytes then expand to `"[w<n>]"`.
     pub dictionary: Option<&'a [&'a str; COMMON_WORD_DICTIONARY_ENTRIES]>,
     /// `0x8B` curse-check result. `true` means the player typed something
@@ -35,17 +35,11 @@ pub struct TlkRunInputs<'a> {
     /// runner uses it to gate the immediately following control byte the
     /// same way the original does (per `conversation.md` §7.5).
     pub curse_seen: bool,
-    /// `0x85` GOLD-PAYMENT prompt result. `true` means the player accepted
-    /// the gold deduction; `false` means they declined or had insufficient
-    /// gold. The runner records the amount regardless and uses this flag
-    /// to choose between the [`TLK_GOLD_PAYMENT_PAID_LABEL`] and
-    /// [`TLK_GOLD_PAYMENT_REFUSED_LABEL`] follow-ups. Those two label
-    /// values are an engine convention, not published by the spec — see
-    /// their doc comments.
-    pub gold_payment_accepted: bool,
-    /// Optional party gold available to the payment prompt. When supplied,
-    /// the runner treats an otherwise accepted payment as refused if the
-    /// requested amount exceeds this value.
+    /// Optional party gold available to `0x85` GOLD-PAYMENT. The authored
+    /// surrounding record already represents the player's yes answer; the
+    /// control byte reads no additional confirmation. When supplied, a
+    /// demand above this value takes the refusal stop. `None` is useful for
+    /// structural tools and treats the demand as affordable.
     pub gold_available: Option<u16>,
     /// `0x84` ASK-PARTY-NAME response: 1-based party-slot index that
     /// matched, or `0` for no match. The runner stores it for the caller
@@ -66,11 +60,6 @@ pub struct TlkRunInputs<'a> {
     /// interactive conversation wrapper can collect a free-text answer
     /// and resume the same stream with the matched party slot.
     pub yield_on_ask: bool,
-    /// `0x85` GOLD-PAYMENT behaviour. When `true`, the runner stops
-    /// before applying the payment branch so the interactive wrapper
-    /// can ask the player whether to pay and then resume from the
-    /// payment opcode with the selected answer.
-    pub yield_on_gold_payment: bool,
 }
 
 /// Reason the runner stopped processing the current stream.
@@ -93,11 +82,11 @@ pub enum TlkRunStop {
     AskingPartyName(usize),
     /// Stopped at `0x88` ASK-WHO (only when `yield_on_ask` is set).
     AskingWho(usize),
-    /// Stopped at `0x85` GOLD-PAYMENT (only when
-    /// `yield_on_gold_payment` is set). `cursor` points back to the
-    /// payment opcode so a caller can resume from the branch point
-    /// after the player answers.
-    AskingGoldPayment { cursor: usize, amount: u16 },
+    /// `conversation.md §7.6`: an unaffordable `0x85` demand stops the
+    /// current response before the byte after its third digit. The
+    /// runner emits the exact refusal line; the conversation wrapper owns
+    /// the nested ordinary keyword loop and stop propagation.
+    GoldPaymentRefused { amount: u16 },
     /// Encountered a malformed multi-byte introducer (short arg span).
     MalformedIntroducer(usize),
     /// Encountered an unresolved GOTO-LABEL target (label byte not found
@@ -174,6 +163,90 @@ pub enum TlkRunEvent {
     MoralStandingWrite { raise: bool, from: u8, to: u8 },
 }
 
+/// Fixed-cell font selected for one glyph emitted by the TLK byte runner.
+///
+/// `conversation.md §7.1`: ordinary queued bytes retain bit seven and render
+/// through the resident text font; bytes queued while the `0x8E` mask is
+/// flipped have bit seven clear and render through the alternate runic font.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TlkGlyphFont {
+    #[default]
+    Ordinary,
+    Runic,
+}
+
+/// One display cell emitted by a TLK response, after dictionary expansion and
+/// printable-byte decoding but before fixed-font rasterisation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TlkRenderedGlyph {
+    pub byte: u8,
+    pub font: TlkGlyphFont,
+}
+
+impl TlkRenderedGlyph {
+    pub const fn ordinary(byte: u8) -> Self {
+        Self {
+            byte,
+            font: TlkGlyphFont::Ordinary,
+        }
+    }
+
+    pub const fn runic(byte: u8) -> Self {
+        Self {
+            byte,
+            font: TlkGlyphFont::Runic,
+        }
+    }
+}
+
+/// Text plus its per-cell font selection. `text` remains the terminal and
+/// diagnostics view; `glyphs` is the authoritative graphical presentation.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TlkRenderedText {
+    pub text: String,
+    pub glyphs: Vec<TlkRenderedGlyph>,
+}
+
+impl TlkRenderedText {
+    pub fn plain(text: impl Into<String>) -> Self {
+        let text = text.into();
+        let glyphs = text.bytes().map(TlkRenderedGlyph::ordinary).collect();
+        Self { text, glyphs }
+    }
+
+    pub fn push_plain(&mut self, text: &str) {
+        self.text.push_str(text);
+        self.glyphs
+            .extend(text.bytes().map(TlkRenderedGlyph::ordinary));
+    }
+
+    pub fn push_rendered(&mut self, rendered: &Self) {
+        self.text.push_str(&rendered.text);
+        self.glyphs.extend_from_slice(&rendered.glyphs);
+    }
+
+    pub fn trimmed(&self) -> Self {
+        let first = self
+            .glyphs
+            .iter()
+            .position(|glyph| !glyph.byte.is_ascii_whitespace())
+            .unwrap_or(self.glyphs.len());
+        let last = self
+            .glyphs
+            .iter()
+            .rposition(|glyph| !glyph.byte.is_ascii_whitespace())
+            .map(|index| index + 1)
+            .unwrap_or(first);
+        let glyphs = self.glyphs[first..last].to_vec();
+        let text = glyphs.iter().map(|glyph| char::from(glyph.byte)).collect();
+        Self { text, glyphs }
+    }
+
+    pub fn rendered_lines(&self) -> impl Iterator<Item = &[TlkRenderedGlyph]> {
+        self.glyphs.split(|glyph| glyph.byte == b'\n')
+    }
+}
+
 impl Default for TlkRunStop {
     fn default() -> Self {
         TlkRunStop::Exhausted
@@ -187,6 +260,10 @@ pub struct TlkRunOutput {
     /// bytes (`0xA0..=0xFD`) and expands dictionary tokens through the
     /// supplied dictionary (or `[w<n>]` placeholders).
     pub text: String,
+    /// Per-cell font-preserving form of [`Self::text`]. This is what a
+    /// graphical message-window renderer consumes so matched `0x8E` spans and
+    /// empty dictionary entries reach `RUNES.CH` rather than the IBM font.
+    pub rendered_glyphs: Vec<TlkRenderedGlyph>,
     /// Mask of branch-flag bits the stream set.
     ///
     /// Kept for conversation-session compatibility with callers that
@@ -211,6 +288,51 @@ pub struct TlkRunOutput {
     pub stop: TlkRunStop,
     /// Byte index just past the last byte consumed.
     pub consumed: usize,
+}
+
+impl TlkRunOutput {
+    pub fn rendered_text(&self) -> TlkRenderedText {
+        TlkRenderedText {
+            text: self.text.clone(),
+            glyphs: self.rendered_glyphs.clone(),
+        }
+    }
+}
+
+fn emit_rendered_glyph(out: &mut TlkRunOutput, glyph: TlkRenderedGlyph) {
+    out.text.push(char::from(glyph.byte));
+    out.rendered_glyphs.push(glyph);
+}
+
+fn emit_rendered_text(out: &mut TlkRunOutput, text: &str, font: TlkGlyphFont) {
+    for byte in text.bytes() {
+        emit_rendered_glyph(out, TlkRenderedGlyph { byte, font });
+    }
+}
+
+/// `conversation.md §7.6`: the refusal arm clears the resident pending-word
+/// count before printing its fixed line. The clean runner emits cells eagerly,
+/// so reproduce that observable result by dropping the unflushed trailing word
+/// from both aligned output views.
+fn discard_pending_word(out: &mut TlkRunOutput) {
+    let keep = out
+        .rendered_glyphs
+        .iter()
+        .rposition(|glyph| glyph.byte.is_ascii_whitespace())
+        .map_or(0, |index| index + 1);
+    out.rendered_glyphs.truncate(keep);
+    out.text = out
+        .rendered_glyphs
+        .iter()
+        .map(|glyph| char::from(glyph.byte))
+        .collect();
+}
+
+const fn glyph_font_for_print_mask(mask: TlkPrintMaskState) -> TlkGlyphFont {
+    match mask {
+        TlkPrintMaskState::NormalBreaks => TlkGlyphFont::Ordinary,
+        TlkPrintMaskState::ProtectedRun => TlkGlyphFont::Runic,
+    }
 }
 
 /// Execute the byte runner over `bytes` until an explicit terminator,
@@ -238,6 +360,10 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
     // in-stream, so a later `0xFE` threshold test in the same stream must
     // read the updated value rather than the caller's entry snapshot.
     let mut moral_standing = inputs.moral_standing;
+    // A response can contain more than one payment control. Debit the local
+    // affordability view as each one succeeds so later controls cannot spend
+    // the same gold twice before the caller applies the emitted events.
+    let mut gold_available = inputs.gold_available;
 
     while pos < bytes.len() {
         let byte = bytes[pos];
@@ -260,11 +386,10 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 return out;
             }
             TLK_CODE_PRINT_AVATAR_NAME => {
-                if leading_space_pending {
-                    out.text.push(' ');
-                    leading_space_pending = false;
-                }
-                out.text.push_str(inputs.avatar_name);
+                // `conversation.md §8.1`: only the printable-text path
+                // consumes the dictionary pending-space flag. Substitutions
+                // and every other control leave it armed.
+                emit_rendered_text(&mut out, inputs.avatar_name, TlkGlyphFont::Ordinary);
                 last_emitted = inputs.avatar_name.bytes().last();
             }
             TLK_CODE_STANDING_UP | TLK_CODE_STANDING_DOWN => {
@@ -290,7 +415,7 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 });
             }
             TLK_CODE_LITERAL_NEWLINE => {
-                out.text.push('\n');
+                emit_rendered_glyph(&mut out, TlkRenderedGlyph::ordinary(b'\n'));
                 last_emitted = Some(b'\n');
             }
             TLK_CODE_PAUSE => {
@@ -307,7 +432,7 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     out.consumed = pos;
                     return out;
                 }
-                out.text.push('\n');
+                emit_rendered_glyph(&mut out, TlkRenderedGlyph::ordinary(b'\n'));
                 out.events.push(TlkRunEvent::WaitKeyTreatedAsNewline);
                 last_emitted = Some(b'\n');
             }
@@ -347,8 +472,6 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 out.events.push(TlkRunEvent::AskedWho(slot));
             }
             TLK_CODE_GOLD_PAYMENT => {
-                let code_start = pos - 1;
-                let arg_start = pos;
                 let span = bytes.get(pos..pos + 3);
                 let Some(span) = span else {
                     out.stop = TlkRunStop::MalformedIntroducer(pos);
@@ -356,35 +479,23 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     return out;
                 };
                 pos += 3;
-                let arg_end = pos;
                 if let Some(amount) = tlk_gold_payment_amount(span[0], span[1], span[2]) {
-                    if inputs.yield_on_gold_payment {
-                        out.stop = TlkRunStop::AskingGoldPayment {
-                            cursor: code_start,
-                            amount,
-                        };
+                    let accepted = gold_available.is_none_or(|available| available >= amount);
+                    out.events
+                        .push(TlkRunEvent::GoldPayment { amount, accepted });
+                    if !accepted {
+                        discard_pending_word(&mut out);
+                        emit_rendered_text(
+                            &mut out,
+                            TLK_GOLD_PAYMENT_REFUSAL_MESSAGE,
+                            TlkGlyphFont::Ordinary,
+                        );
+                        out.stop = TlkRunStop::GoldPaymentRefused { amount };
                         out.consumed = pos;
                         return out;
                     }
-                    let accepted = inputs.gold_payment_accepted
-                        && inputs
-                            .gold_available
-                            .map_or(true, |available| available >= amount);
-                    out.events
-                        .push(TlkRunEvent::GoldPayment { amount, accepted });
-                    let target_label = if accepted {
-                        TLK_GOLD_PAYMENT_PAID_LABEL
-                    } else {
-                        TLK_GOLD_PAYMENT_REFUSED_LABEL
-                    };
-                    if let Some(target_pos) =
-                        find_label_position_excluding(bytes, target_label, arg_start, arg_end)
-                    {
-                        out.events.push(TlkRunEvent::GotoLabel {
-                            from: TLK_CODE_GOLD_PAYMENT,
-                            to: target_label,
-                        });
-                        pos = target_pos;
+                    if let Some(available) = gold_available.as_mut() {
+                        *available -= amount;
                     }
                 }
             }
@@ -498,27 +609,37 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 if (TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST).contains(&byte) {
                     let idx = tlk_dictionary_index(byte)
                         .expect("byte is inside the TLK dictionary-token range");
+                    // `conversation.md §8.1`: every token emits one leading
+                    // space, even when a previous token left the
+                    // pending-space flag armed.
+                    emit_rendered_glyph(&mut out, TlkRenderedGlyph::ordinary(b' '));
                     if let Some(dict) = inputs.dictionary {
                         let expansion = dict.get(idx).copied().unwrap_or("");
                         if expansion.is_empty() {
-                            leading_space_pending = true;
+                            // §8.2: an empty pointer queues the raw token byte
+                            // with bit seven clear, selecting the alternate
+                            // font, and does not arm pending spacing.
+                            emit_rendered_glyph(&mut out, TlkRenderedGlyph::runic(byte));
+                            last_emitted = Some(byte);
                         } else {
-                            if leading_space_pending {
-                                out.text.push(' ');
-                                leading_space_pending = false;
-                            }
-                            out.text.push_str(expansion);
+                            emit_rendered_text(
+                                &mut out,
+                                expansion,
+                                glyph_font_for_print_mask(print_mask),
+                            );
                             last_emitted = expansion.bytes().last();
+                            leading_space_pending = true;
                         }
                     } else {
                         // Fallback placeholder keeps the runner
                         // deterministic even without dictionary bytes.
-                        if leading_space_pending {
-                            out.text.push(' ');
-                            leading_space_pending = false;
-                        }
-                        out.text.push_str(&format!("[w{byte:02X}]"));
+                        emit_rendered_text(
+                            &mut out,
+                            &format!("[w{byte:02X}]"),
+                            glyph_font_for_print_mask(print_mask),
+                        );
                         last_emitted = Some(b']');
+                        leading_space_pending = true;
                     }
                 } else if (TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST).contains(&byte) {
                     let glyph = byte ^ TLK_TEXT_XOR_MASK;
@@ -528,17 +649,17 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                         last_emitted = None;
                         continue;
                     }
-                    if matches!(print_mask, TlkPrintMaskState::ProtectedRun) {
-                        // Protected runs keep spaces from triggering a
-                        // soft flush — the rendered text is identical in
-                        // our single-pass model, but we record the state
-                        // for completeness.
-                    }
                     if leading_space_pending {
-                        out.text.push(' ');
+                        emit_rendered_glyph(&mut out, TlkRenderedGlyph::ordinary(b' '));
                         leading_space_pending = false;
                     }
-                    out.text.push(glyph as char);
+                    emit_rendered_glyph(
+                        &mut out,
+                        TlkRenderedGlyph {
+                            byte: glyph,
+                            font: glyph_font_for_print_mask(print_mask),
+                        },
+                    );
                     last_emitted = Some(glyph);
                 } else {
                     // No published classification claims this byte.
@@ -950,7 +1071,7 @@ mod tests {
         let out = run_tlk_stream(
             &bytes,
             &TlkRunInputs {
-                gold_payment_accepted: true,
+                gold_available: Some(50),
                 ..Default::default()
             },
         );
@@ -966,19 +1087,14 @@ mod tests {
     }
 
     #[test]
-    fn gold_payment_branches_to_paid_or_refused_label_by_affordability() {
+    fn gold_payment_continues_in_place_or_stops_for_refusal() {
         let mut bytes = vec![TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5'];
-        bytes.push(TLK_GOLD_PAYMENT_PAID_LABEL);
         bytes.extend_from_slice(&enc("paid"));
-        bytes.push(TLK_CODE_END_OF_RESPONSE);
-        bytes.push(TLK_GOLD_PAYMENT_REFUSED_LABEL);
-        bytes.extend_from_slice(&enc("refused"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
 
         let paid = run_tlk_stream(
             &bytes,
             &TlkRunInputs {
-                gold_payment_accepted: true,
                 gold_available: Some(30),
                 ..Default::default()
             },
@@ -997,12 +1113,13 @@ mod tests {
         let refused = run_tlk_stream(
             &bytes,
             &TlkRunInputs {
-                gold_payment_accepted: true,
                 gold_available: Some(10),
                 ..Default::default()
             },
         );
-        assert_eq!(refused.text, "refused");
+        assert_eq!(refused.text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
+        assert_eq!(refused.stop, TlkRunStop::GoldPaymentRefused { amount: 25 });
+        assert_eq!(refused.consumed, 4);
         assert!(refused.events.iter().any(|event| {
             matches!(
                 event,
@@ -1012,6 +1129,64 @@ mod tests {
                 }
             )
         }));
+        assert!(!refused.events.iter().any(|event| {
+            matches!(
+                event,
+                TlkRunEvent::GotoLabel {
+                    from: TLK_CODE_GOLD_PAYMENT,
+                    ..
+                }
+            )
+        }));
+    }
+
+    #[test]
+    fn multiple_gold_payments_share_one_decreasing_affordability_view() {
+        let bytes = [
+            TLK_CODE_GOLD_PAYMENT,
+            b'0',
+            b'2',
+            b'0',
+            TLK_CODE_GOLD_PAYMENT,
+            b'0',
+            b'2',
+            b'0',
+            TLK_CODE_END_OF_RESPONSE,
+        ];
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                gold_available: Some(30),
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.stop, TlkRunStop::GoldPaymentRefused { amount: 20 });
+        assert_eq!(
+            out.events
+                .iter()
+                .filter_map(|event| match event {
+                    TlkRunEvent::GoldPayment { accepted, .. } => Some(*accepted),
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+            vec![true, false]
+        );
+        assert_eq!(out.text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
+    }
+
+    #[test]
+    fn gold_refusal_discards_only_the_pending_trailing_word() {
+        let mut bytes = enc("kept partial");
+        bytes.extend_from_slice(&[TLK_CODE_GOLD_PAYMENT, b'0', b'0', b'5']);
+        bytes.extend_from_slice(&enc("unreachable"));
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                gold_available: Some(4),
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, format!("kept {TLK_GOLD_PAYMENT_REFUSAL_MESSAGE}"));
     }
 
     #[test]
@@ -1149,7 +1324,14 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(out.text, "Britannia");
+        assert_eq!(out.text, " Britannia");
+        assert_eq!(
+            out.rendered_glyphs,
+            " Britannia"
+                .bytes()
+                .map(TlkRenderedGlyph::ordinary)
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -1163,13 +1345,13 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(out.text, "the");
+        assert_eq!(out.text, " the");
     }
 
     #[test]
-    fn empty_dictionary_entry_adds_space_before_next_text() {
+    fn empty_dictionary_entry_emits_raw_runic_token_without_pending_space() {
         let dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
-        let mut bytes = vec![0x01u8];
+        let mut bytes = vec![0x08u8];
         bytes.extend_from_slice(&enc("word"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = run_tlk_stream(
@@ -1179,7 +1361,53 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(out.text, " word");
+        assert_eq!(out.text.as_bytes(), b" \x08word");
+        assert_eq!(out.rendered_glyphs[0], TlkRenderedGlyph::ordinary(b' '));
+        assert_eq!(out.rendered_glyphs[1], TlkRenderedGlyph::runic(0x08));
+        assert!(
+            out.rendered_glyphs[2..]
+                .iter()
+                .all(|glyph| glyph.font == TlkGlyphFont::Ordinary)
+        );
+    }
+
+    #[test]
+    fn populated_dictionary_tokens_follow_exact_leading_and_pending_space_order() {
+        let mut dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
+        dict[0] = "the";
+        dict[1] = "thou";
+        let mut bytes = vec![0x01, 0x02];
+        bytes.extend_from_slice(&enc("letter"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                dictionary: Some(&dict),
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, " the thou letter");
+    }
+
+    #[test]
+    fn protect_run_preserves_runic_font_selection_per_glyph() {
+        let mut bytes = vec![TLK_CODE_PROTECT_RUN];
+        bytes.extend_from_slice(&enc("INOP"));
+        bytes.push(TLK_CODE_PROTECT_RUN);
+        bytes.extend_from_slice(&enc(" done"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = render(&bytes);
+        assert_eq!(out.text, "INOP done");
+        assert!(
+            out.rendered_glyphs[..4]
+                .iter()
+                .all(|glyph| glyph.font == TlkGlyphFont::Runic)
+        );
+        assert!(
+            out.rendered_glyphs[4..]
+                .iter()
+                .all(|glyph| glyph.font == TlkGlyphFont::Ordinary)
+        );
     }
 
     #[test]

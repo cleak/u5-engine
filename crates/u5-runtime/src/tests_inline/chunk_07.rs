@@ -10,7 +10,7 @@ fn use_command_rejects_inline_torch_and_gem_aliases() {
 
     assert_eq!(dungeon.torches, 1);
     assert_eq!(dungeon.torch_counter, 0);
-    assert_eq!(dungeon.turn, 0);
+    assert_eq!(dungeon.turn, 1);
     assert_eq!(dungeon.message, use_prompt_message());
 
     let mut world = britannia_state(open_world_grid(), 1, 1);
@@ -22,7 +22,7 @@ fn use_command_rejects_inline_torch_and_gem_aliases() {
     );
 
     assert_eq!(world.gems, 1);
-    assert_eq!(world.turn, 0);
+    assert_eq!(world.turn, 1);
     assert_eq!(world.message, use_prompt_message());
 }
 
@@ -52,7 +52,7 @@ fn use_command_routes_inline_sextant_request_at_night() {
     );
 
     assert_eq!(world.turn, 1);
-    assert_eq!(world.message, "Sextant: K'P,C'D\"");
+    assert_eq!(world.message, "Sextant:\nK'P\", C'D\"");
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn sextant_refuses_in_the_underworld_with_the_indoor_refusal() {
     under.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
 
     assert_eq!(under.use_sextant(), MoveOutcome::Blocked);
-    assert_eq!(under.message, "Not here!");
+    assert_eq!(under.message, "Sextant:\nNot here!");
     assert_eq!(under.turn, 0);
 
     // The same square on the surface plane does read.
@@ -79,7 +79,7 @@ fn sextant_refuses_in_the_underworld_with_the_indoor_refusal() {
     surface.clock = GameClock::new(20, 0).unwrap();
     surface.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
     assert_eq!(surface.use_sextant(), MoveOutcome::Used);
-    assert_eq!(surface.message, "Sextant: K'P,C'D\"");
+    assert_eq!(surface.message, "Sextant:\nK'P\", C'D\"");
 }
 
 #[test]
@@ -96,7 +96,11 @@ fn sextant_night_window_includes_hours_five_and_nineteen() {
             assert_eq!(outcome, MoveOutcome::Used, "hour {hour}");
         } else {
             assert_eq!(outcome, MoveOutcome::Blocked, "hour {hour}");
-            assert_eq!(world.message, "Cannot see the stars!", "hour {hour}");
+            assert_eq!(
+                world.message,
+                "Sextant:\nCannot see the stars!",
+                "hour {hour}"
+            );
         }
     }
 }
@@ -110,13 +114,41 @@ fn sextant_requires_item_world_scene_and_night() {
     world.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
     world.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(world.use_sextant(), MoveOutcome::Blocked);
-    assert_eq!(world.message, "Cannot see the stars!");
+    assert_eq!(world.message, "Sextant:\nCannot see the stars!");
 
     let mut town = test_state(open_grid(), 1, 1);
     town.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
     town.clock = GameClock::new(20, 0).unwrap();
     assert_eq!(town.use_sextant(), MoveOutcome::Blocked);
-    assert_eq!(town.message, "Not here!");
+    assert_eq!(town.message, "Sextant:\nNot here!");
+}
+
+#[test]
+fn use_command_charges_a_normal_turn_for_every_sextant_result() {
+    let cases = [
+        (
+            surface_world_state(open_world_grid(), 1, 1),
+            "Sextant:\nCannot see the stars!",
+        ),
+        (
+            world_state(open_world_grid(), 1, 1),
+            "Sextant:\nNot here!",
+        ),
+        (test_state(open_grid(), 1, 1), "Sextant:\nNot here!"),
+    ];
+
+    for (mut state, expected_message) in cases {
+        state.clock = GameClock::new(12, 0).unwrap();
+        state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+        handle_play_key_input(&mut state, 'U', "S", Path::new("")).unwrap();
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, expected_message);
+    }
+
+    let mut missing = surface_world_state(open_world_grid(), 1, 1);
+    handle_play_key_input(&mut missing, 'U', "S", Path::new("")).unwrap();
+    assert_eq!(missing.turn, 1);
+    assert_eq!(missing.message, "No Sextant!");
 }
 
 #[test]
@@ -131,11 +163,11 @@ fn use_command_routes_inline_pocket_watch_request() {
     );
 
     assert_eq!(town.turn, 1);
-    assert_eq!(town.message, "Pocket Watch: 12 A.M.");
+    assert_eq!(town.message, "Pocket Watch: 12:45 A.M.");
 
     town.clock = GameClock::new(13, 20).unwrap();
     assert_eq!(town.use_pocket_watch(), MoveOutcome::Used);
-    assert_eq!(town.message, "Pocket Watch: 1 P.M.");
+    assert_eq!(town.message, "Pocket Watch: 1:20 P.M.");
 }
 
 #[test]
@@ -149,7 +181,7 @@ fn pocket_watch_requires_item_without_turn() {
 }
 
 #[test]
-fn use_command_routes_inline_spyglass_request_to_britannia_overview() {
+fn use_command_routes_inline_spyglass_request_to_night_sky() {
     let mut world = britannia_state(open_world_grid(), 0x23, 0xaf);
     world.clock = GameClock::new(20, 0).unwrap();
     world.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
@@ -160,34 +192,37 @@ fn use_command_routes_inline_spyglass_request_to_britannia_overview() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(world.turn, 0);
+    assert_eq!(world.turn, 1);
     assert_eq!(world.gems, 3);
     assert_eq!(
         world.special_items[SPECIAL_ITEM_SPYGLASS_INDEX],
         SPECIAL_ITEM_OWNED_VALUE
     );
-    assert!(world.message.starts_with("Spyglass: Looking at the stars"));
-    assert!(world.message.contains('+'));
     assert_eq!(
-        world.active_view_overlay.as_ref().map(|overlay| overlay.kind),
-        Some(ViewOverlayKind::BritanniaChunkMap)
+        world.message,
+        "Spyglass: Looking at the stars\nthe night sky! "
     );
+    assert!(world
+        .active_view_overlay
+        .as_ref()
+        .is_some_and(|overlay| matches!(overlay.kind, ViewOverlayKind::Sky(_))));
     let viewport = world
         .render_active_view_overlay(TileGraphicsDepth::Ega16)
         .expect("spyglass should install a renderable modal overlay");
-    assert_eq!(viewport.cells_wide, 22);
-    assert_eq!(viewport.cells_high, 8);
+    assert_eq!(viewport.cells_wide, SKY_VIEW_COLUMNS);
+    assert_eq!(viewport.cells_high, SKY_VIEW_ROWS);
+    assert_eq!(viewport.width, SKY_VIEW_PIXEL_SIDE);
+    assert_eq!(viewport.height, SKY_VIEW_PIXEL_SIDE);
     assert!(viewport.pixels.iter().any(|pixel| *pixel != 0));
-    assert_eq!(world.britannia_chunk_overview_map().lines().count(), 8);
 
     assert_eq!(
         handle_play_key_input(&mut world, ' ', "", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(world.active_view_overlay.is_none());
-    assert_eq!(world.turn, 0);
+    assert_eq!(world.turn, 1);
     assert_eq!(world.gems, 3);
-    assert_eq!(world.message, "View closed.");
+    assert!(world.message.is_empty());
 }
 
 /// `catalogs/item-list.md` Spyglass row: the plane/scene pair prints the
@@ -238,7 +273,10 @@ fn spyglass_admits_a_town_scene_and_the_published_night_window() {
             MoveOutcome::Observed,
             "a town at hour {hour} is inside the published night window"
         );
-        assert!(town.message.starts_with("Spyglass: Looking at the stars"));
+        assert_eq!(
+            town.message,
+            "Spyglass: Looking at the stars\nthe night sky! "
+        );
     }
 
     // Hours 5 and 19 on the outdoor scene too — the same two hours.
@@ -255,6 +293,84 @@ fn spyglass_admits_a_town_scene_and_the_published_night_window() {
     noon.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(noon.use_spyglass(), MoveOutcome::Blocked);
     assert_eq!(noon.message, "Cannot see the stars!");
+}
+
+#[test]
+fn sky_body_columns_step_backwards_from_the_campaign_epoch() {
+    let epoch = GameClock::with_date(139, 4, 5, 20, 0).unwrap();
+    assert_eq!(sky_elapsed_days(epoch), 0);
+    assert_eq!(sky_body_columns(epoch), [18, 2, 8, 15, 11, 6, 4, 2]);
+
+    let next_day = GameClock::with_date(139, 4, 6, 20, 0).unwrap();
+    assert_eq!(sky_elapsed_days(next_day), 1);
+    assert_eq!(sky_body_columns(next_day), [11, 20, 5, 13, 9, 5, 3, 1]);
+
+    for (row, period) in [3u8, 5, 7, 11, 13, 17, 19, 22].into_iter().enumerate() {
+        let date = GameClock::with_date(139, 4, 5 + period, 20, 0).unwrap();
+        assert_eq!(sky_body_columns(date)[row], SKY_ROW_SPECS[row].start_column);
+    }
+}
+
+#[test]
+fn night_sky_capture_consumes_exactly_eighty_xy_prng_pairs() {
+    let mut state = britannia_state(open_world_grid(), 1, 1);
+    state.clock = GameClock::new(20, 0).unwrap();
+    let mut expected_prng = state.prng_state;
+    let expected_stars: [(u8, u8); SKY_VIEW_STARS] = std::array::from_fn(|_| {
+        (
+            u5_prng_range_u16(&mut expected_prng, 9, 182) as u8,
+            u5_prng_range_u16(&mut expected_prng, 9, 172) as u8,
+        )
+    });
+
+    state.activate_night_sky_overlay(None);
+
+    assert_eq!(state.prng_state, expected_prng);
+    let overlay = state.active_view_overlay.as_ref().unwrap();
+    let ViewOverlayKind::Sky(sky) = overlay.kind else {
+        panic!("night capture should install a sky overlay");
+    };
+    assert_eq!(sky.stars, expected_stars);
+    assert_eq!(state.message, "the night sky! ");
+    assert!(state.visibility_dirty);
+    for row in 0..VIEWPORT_SIDE {
+        for col in 0..VIEWPORT_SIDE {
+            assert_eq!(
+                state.visibility_grid[visibility_grid_active_index(row, col).unwrap()],
+                VISIBILITY_HIDDEN
+            );
+        }
+    }
+}
+
+#[test]
+fn sky_renderer_uses_published_colours_and_shadowlord_geometry() {
+    let state = SkyOverlayState {
+        stars: [(9, 172); SKY_VIEW_STARS],
+        body_columns: [18, 2, 8, 15, 11, 6, 4, 2],
+    };
+    let viewport = render_sky_overlay(TileGraphicsDepth::Ega16, &state, [1, 0, 0]);
+
+    assert_eq!(viewport.pixel(1, 164), Some(ui_colour_slot_bright(2, true)));
+    // Row 0, column 18: marker begins at screen (149,154), body at (158,152).
+    assert_eq!(viewport.pixel(141, 146), Some(ui_colour_slot(0, true)));
+    assert_eq!(viewport.pixel(150, 144), Some(ui_colour_slot(1, true)));
+}
+
+#[test]
+fn daylight_telescope_selects_and_damages_the_first_eligible_member() {
+    let mut state = britannia_state(open_world_grid(), 1, 1);
+    state.clock = GameClock::new(12, 0).unwrap();
+    state.active_player = None;
+    state.party[0].status = b'P';
+    let hp_before = state.party[0].hp;
+
+    state.look_through_telescope();
+
+    assert_eq!(state.active_player, Some(0));
+    assert_eq!(state.party[0].hp, hp_before - 1);
+    assert_eq!(state.message, "the sun!");
+    assert!(state.active_view_overlay.is_none());
 }
 
 #[test]
@@ -299,8 +415,10 @@ fn use_command_routes_scrolls_to_item_effects_without_spell_resources() {
     );
     assert_eq!(town.scroll_stock[SCROLL_VIEW_INDEX], 0);
     assert_eq!(town.turn, 4);
-    assert!(town.message.starts_with("View!\nPeer view of CASTLE:0"));
-    assert!(town.active_view_overlay.is_some());
+    assert_eq!(town.message, "View!");
+    let overlay = town.active_view_overlay.as_ref().unwrap();
+    assert!(overlay.title.starts_with("Peer view of CASTLE:0"));
+    assert_eq!(overlay.text_map.lines().count(), 32);
 
     assert_eq!(
         handle_play_key_input(&mut town, ' ', "", Path::new("")).unwrap(),
@@ -308,7 +426,7 @@ fn use_command_routes_scrolls_to_item_effects_without_spell_resources() {
     );
     assert!(town.active_view_overlay.is_none());
     assert_eq!(town.turn, 4);
-    assert_eq!(town.message, "View closed.");
+    assert!(town.message.is_empty());
 
     assert_eq!(
         handle_play_key_input(&mut town, 'U', "AT", Path::new("")).unwrap(),
@@ -342,7 +460,7 @@ fn scroll_wind_and_resurrection_debit_before_branch_gates() {
         PlayInputDisposition::Continue
     );
     assert_eq!(dungeon.scroll_stock[SCROLL_WIND_CHANGE_INDEX], 0);
-    assert_eq!(dungeon.turn, 0);
+    assert_eq!(dungeon.turn, 1);
     assert_eq!(dungeon.message, "Not here!");
 
     let mut town = test_state(open_grid(), 1, 1);
@@ -467,7 +585,7 @@ fn potions_debit_before_target_and_effect_variation_gates() {
         PlayInputDisposition::Continue
     );
     assert_eq!(missing_target.potion_stock[POTION_RED_INDEX], 0);
-    assert_eq!(missing_target.turn, 0);
+    assert_eq!(missing_target.turn, 1);
     assert!(missing_target.message.starts_with("Who?"));
 
     let mut missing_stock = test_state(open_grid(), 1, 1);
@@ -502,15 +620,14 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
         MoveOutcome::Observed
     );
     assert_eq!(world.potion_stock[POTION_WHITE_INDEX], 0);
-    assert!(world.visibility_dirty);
+    assert!(!world.visibility_dirty);
+    let sweep = world.white_potion_sweep.expect("White sweep should start");
+    assert_eq!(sweep.frames_remaining, POTION_WHITE_SWEEP_FRAMES);
+    assert_eq!(sweep.pause_bios_ticks_per_frame, 1);
+    assert_eq!((sweep.center_x, sweep.center_y), (2, 1));
     assert_eq!(
-        world.white_potion_sweep,
-        Some(WhitePotionSweep {
-            frames_remaining: POTION_WHITE_SWEEP_FRAMES,
-            radius: POTION_WHITE_SWEEP_RADIUS,
-            center_x: 2,
-            center_y: 1,
-        })
+        world.pending_potion_flash,
+        potion_flash_playback(POTION_WHITE_INDEX)
     );
     assert_eq!(world.turn, 1);
     assert_eq!(world.message, "white potion: Visibility sweep.");
@@ -569,14 +686,12 @@ fn combat_potions_mark_and_clear_linked_presentation_state() {
         MoveOutcome::Used
     );
     assert_eq!(combat.party[0].status, b'S');
+    assert!(combat.combat_actors[0].is_status_disabled());
+    assert_eq!(combat.active_objects[1].type_byte, 0x81);
+    assert_eq!(combat.active_objects[1].tile, COMBAT_POTION_SLEEP_DISPLAY_TILE);
     assert_eq!(
-        combat.combat_potion_presentation,
-        Some(CombatPotionPresentation {
-            kind: CombatPotionPresentationKind::Sleep,
-            actor_slot: 0,
-            active_object_slot: 1,
-            frames_remaining: COMBAT_POTION_SLEEP_PRESENTATION_FRAMES,
-        })
+        combat.pending_potion_flash,
+        potion_flash_playback(POTION_ORANGE_INDEX)
     );
     assert!(combat.visibility_dirty);
 
@@ -586,7 +701,8 @@ fn combat_potions_mark_and_clear_linked_presentation_state() {
         MoveOutcome::Used
     );
     assert_eq!(combat.party[0].status, b'G');
-    assert_eq!(combat.combat_potion_presentation, None);
+    assert!(!combat.combat_actors[0].is_status_disabled());
+    assert_eq!(combat.active_objects[1].tile, 0x81);
     assert!(combat.visibility_dirty);
 
     combat.visibility_dirty = false;
@@ -594,17 +710,56 @@ fn combat_potions_mark_and_clear_linked_presentation_state() {
         combat.use_potion_with_effect(POTION_PURPLE_INDEX, 0, POTION_PURPLE_INDEX),
         MoveOutcome::Used
     );
+    assert_eq!(combat.active_objects[1].type_byte, COMBAT_POTION_POOF_TILE);
+    assert_eq!(combat.active_objects[1].tile, COMBAT_POTION_POOF_TILE);
     assert_eq!(
-        combat.combat_potion_presentation,
-        Some(CombatPotionPresentation {
-            kind: CombatPotionPresentationKind::Poof,
-            actor_slot: 0,
-            active_object_slot: 1,
-            frames_remaining: COMBAT_POTION_POOF_PRESENTATION_FRAMES,
-        })
+        combat.pending_potion_flash,
+        potion_flash_playback(POTION_PURPLE_INDEX)
     );
     assert!(combat.visibility_dirty);
     assert_eq!(combat.message, "purple potion: Poof!");
+}
+
+#[test]
+fn combat_orange_wake_dispatch_restores_status_and_retained_display_tile() {
+    let mut combat = test_state(open_grid(), 1, 1);
+    combat.combat_active = true;
+    combat.active_objects.push(ActiveObject {
+        type_byte: 0x81,
+        tile: 0x81,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    });
+    combat.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 0, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 1, 5, 5]);
+
+    assert_eq!(
+        combat.use_potion_with_effect(POTION_ORANGE_INDEX, 0, POTION_ORANGE_INDEX),
+        MoveOutcome::Used
+    );
+    assert_eq!(
+        combat.apply_combat_sleep_wake_dispatch(0, COMBAT_SLEEP_WAKE_SUCCESS_ROLL),
+        Some(CombatSleepWakeApplication {
+            slot: 0,
+            roll: COMBAT_SLEEP_WAKE_SUCCESS_ROLL,
+            woke: true,
+        })
+    );
+    assert_eq!(combat.party[0].status, b'G');
+    assert!(!combat.combat_actors[0].is_status_disabled());
+    assert_eq!(combat.active_objects[1].type_byte, 0x81);
+    assert_eq!(combat.active_objects[1].tile, 0x81);
+
+    combat.party[0].status = b'S';
+    assert!(combat.apply_combat_party_sleep_presentation(0));
+    combat.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    combat.apply_combat_sleep_wake_dispatch(0, COMBAT_SLEEP_WAKE_SUCCESS_ROLL);
+    assert_eq!(combat.party[0].status, b'G');
+    assert_eq!(
+        combat.active_objects[1].tile,
+        COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE
+    );
 }
 
 #[test]
@@ -617,7 +772,7 @@ fn wooden_box_use_prompts_without_endgame_handoff() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(town.turn, 0);
+    assert_eq!(town.turn, 1);
     assert_eq!(town.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX], 1);
     assert_eq!(town.message, "Wooden Box: How use it?");
 
@@ -693,10 +848,7 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(
-        town.special_items[SPECIAL_ITEM_CROWN_LB_INDEX],
-        SPECIAL_ITEM_WORN_VALUE
-    );
+    assert_eq!(town.special_items[SPECIAL_ITEM_CROWN_LB_INDEX], SPECIAL_ITEM_OWNED_VALUE);
     assert_eq!(
         town.special_items[SPECIAL_ITEM_AMULET_LB_INDEX],
         SPECIAL_ITEM_OWNED_VALUE
@@ -706,6 +858,8 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
         SPECIAL_ITEM_OWNED_VALUE
     );
     assert_eq!(town.turn, 1);
+    assert_eq!(town.active_effect_tag, Some(CROWN_LB_ACTIVE_EFFECT_TAG));
+    assert_eq!(town.active_effect_counter, PERMANENT_ACTIVE_EFFECT_DURATION);
     assert!(town.visibility_dirty);
     assert_eq!(town.message, "Wearing Crown.");
 
@@ -719,15 +873,14 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
         town.special_items[SPECIAL_ITEM_CROWN_LB_INDEX],
         SPECIAL_ITEM_OWNED_VALUE
     );
-    assert_eq!(
-        town.special_items[SPECIAL_ITEM_AMULET_LB_INDEX],
-        SPECIAL_ITEM_WORN_VALUE
-    );
+    assert_eq!(town.special_items[SPECIAL_ITEM_AMULET_LB_INDEX], SPECIAL_ITEM_OWNED_VALUE);
     assert_eq!(
         town.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX],
         SPECIAL_ITEM_OWNED_VALUE
     );
     assert_eq!(town.turn, 2);
+    assert_eq!(town.active_effect_tag, Some(AMULET_LB_ACTIVE_EFFECT_TAG));
+    assert_eq!(town.active_effect_counter, PERMANENT_ACTIVE_EFFECT_DURATION);
     assert!(town.visibility_dirty);
     assert_eq!(town.message, "Wearing Amulet.");
 
@@ -740,17 +893,18 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
         SPECIAL_ITEM_OWNED_VALUE
     );
     assert_eq!(town.turn, 3);
+    assert_eq!(town.active_effect_tag, None);
+    assert_eq!(town.active_effect_counter, 0);
     assert_eq!(town.message, "Removed Amulet.");
 
     assert_eq!(
         handle_play_key_input(&mut town, 'U', "BB", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(
-        town.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX],
-        SPECIAL_ITEM_WORN_VALUE
-    );
+    assert_eq!(town.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX], SPECIAL_ITEM_OWNED_VALUE);
     assert_eq!(town.turn, 4);
+    assert_eq!(town.active_effect_tag, Some(BLACK_BADGE_ACTIVE_EFFECT_TAG));
+    assert_eq!(town.active_effect_counter, PERMANENT_ACTIVE_EFFECT_DURATION);
     assert_eq!(town.message, "Wearing Black Badge.");
 }
 
@@ -762,6 +916,7 @@ fn worn_regalia_requires_owned_item_without_turn() {
     assert_eq!(
         town.use_worn_regalia(
             SPECIAL_ITEM_CROWN_LB_INDEX,
+            CROWN_LB_ACTIVE_EFFECT_TAG,
             "Crown",
             "Wearing Crown.",
             "Removed Crown.",
@@ -772,6 +927,28 @@ fn worn_regalia_requires_owned_item_without_turn() {
     assert_eq!(town.turn, 0);
     assert!(!town.visibility_dirty);
     assert_eq!(town.message, "No Crown!");
+}
+
+#[test]
+fn hole_up_command_clears_the_shared_effect_before_prompting() {
+    let mut town = test_state(open_grid(), 1, 1);
+    town.active_effect_tag = Some(BLACK_BADGE_ACTIVE_EFFECT_TAG);
+    town.active_effect_counter = PERMANENT_ACTIVE_EFFECT_DURATION;
+
+    assert_eq!(
+        town.hole_up_command(
+            Path::new(""),
+            InlineRestRequest {
+                hours: None,
+                watcher: None,
+            },
+        )
+        .unwrap(),
+        MoveOutcome::Observed
+    );
+    assert_eq!(town.active_effect_tag, None);
+    assert_eq!(town.active_effect_counter, 0);
+    assert!(town.active_rest.is_some());
 }
 
 #[test]
@@ -877,10 +1054,10 @@ fn magic_carpet_use_requires_stock_footing_and_accepted_tile() {
 #[test]
 fn use_command_routes_inline_skull_key_requests_to_town_lock_handler() {
     let dir = debug_game_dir();
-    fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+    fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
 
     let mut town_grid = open_grid();
-    town_grid[32 + 2] = 97;
+    town_grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
     let mut town = test_state(town_grid, 1, 1);
     town.player.facing = Direction::East;
     town.visibility_dirty = false;
@@ -892,7 +1069,7 @@ fn use_command_routes_inline_skull_key_requests_to_town_lock_handler() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(town.grid[32 + 2], 96);
+    assert_eq!(town.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
     assert_eq!(town.turn, 1);
     assert_eq!(town.keys, 7);
     assert_eq!(town.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 1);
@@ -902,7 +1079,7 @@ fn use_command_routes_inline_skull_key_requests_to_town_lock_handler() {
 }
 
 #[test]
-fn skull_key_refuses_dungeon_without_consuming_special_key() {
+fn skull_key_dungeon_refusal_keeps_stock_and_runs_the_normal_turn() {
     let dir = debug_game_dir();
     let mut dungeon_grid = open_dungeon_record();
     dungeon_grid[dungeon_cell_index(0, 1, 1)] = 0x00;
@@ -916,9 +1093,9 @@ fn skull_key_refuses_dungeon_without_consuming_special_key() {
     );
 
     assert_eq!(dungeon.grid[dungeon_cell_index(0, 1, 1)], 0x00);
-    assert_eq!(dungeon.turn, 0);
+    assert_eq!(dungeon.turn, 1);
     assert_eq!(dungeon.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 1);
-    assert!(!dungeon.visibility_dirty);
+    assert!(dungeon.visibility_dirty);
     assert_eq!(dungeon.message, "Not here!");
     let _ = fs::remove_dir_all(dir);
 }
@@ -1018,11 +1195,11 @@ fn town_push_ticks_unrelated_open_door_once_on_consumed_turn() {
     let mut grid = open_grid();
     grid[32 + 2] = 0x90;
     grid[32 + 3] = PUSHABLE_GENERIC_FLOOR_STAMP;
-    grid[32 + 5] = 16;
+    grid[32 + 5] = TOWN_DOOR_CLEARED_TILE;
     let mut state = test_state(grid, 1, 1);
     state.player.facing = Direction::East;
     state.door_tracker = Some(DoorTracker {
-        previous_tile: 96,
+        previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
         x: 5,
         y: 1,
         turns_remaining: 4,
@@ -1036,13 +1213,13 @@ fn town_push_ticks_unrelated_open_door_once_on_consumed_turn() {
     assert_eq!(
         state.door_tracker,
         Some(DoorTracker {
-            previous_tile: 96,
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
             x: 5,
             y: 1,
             turns_remaining: 3,
         })
     );
-    assert_eq!(state.grid[32 + 5], 16);
+    assert_eq!(state.grid[32 + 5], TOWN_DOOR_CLEARED_TILE);
     assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
@@ -1626,7 +1803,8 @@ fn overworld_special_underfoot_exempt_tag_skips_latch() {
     grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
     let mut state = britannia_state(grid, 5, 5);
     state.ambient_light = FULL_DAYLIGHT;
-    state.timing_status = TimingStatusTag::Opaque(OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG);
+    state.active_effect_tag = Some(AMULET_LB_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = PERMANENT_ACTIVE_EFFECT_DURATION;
 
     assert!(!state.refresh_world_underfoot_blackout_latch());
     assert_eq!(
@@ -1921,7 +2099,8 @@ fn half_time_world_epilogue_alternates_encounter_probe() {
     )
     .unwrap();
     let mut state = britannia_state(vec![5; WORLD_CELLS], 10, 10);
-    state.timing_status = TimingStatusTag::HalfTime;
+    state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
 
     assert_eq!(
         state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
@@ -1949,7 +2128,8 @@ fn no_minute_light_world_epilogue_suppresses_encounter_probe() {
     )
     .unwrap();
     let mut state = britannia_state(vec![5; WORLD_CELLS], 10, 10);
-    state.timing_status = TimingStatusTag::NoMinuteLight;
+    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 10;
 
     assert_eq!(
         state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
@@ -2333,9 +2513,10 @@ fn world_swamp_poison_ticks_after_movement_landing() {
 }
 
 #[test]
-fn world_encounter_spawn_is_included_in_saved_overworld_overlay() {
+fn world_encounter_spawn_is_written_to_the_live_saved_gam_table() {
     let dir = debug_game_dir();
     fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0, 10, 10)).unwrap();
+    write_empty_ool_mirrors(&dir);
     fs::write(
         dir.join(WORLD_ENCOUNTER_TABLE_FILE),
         "BRITANNIA 5 30 192 2 0\n",
@@ -2356,7 +2537,7 @@ fn world_encounter_spawn_is_included_in_saved_overworld_overlay() {
 
     let saved_ool = fs::read(dir.join("SAVED.OOL")).unwrap();
     let britannia = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
-    assert_eq!(britannia[0], state.active_objects[1]);
+    assert!(britannia[0].is_empty());
 
     let saved_gam = fs::read(dir.join("SAVED.GAM")).unwrap();
     let saved_active = decode_active_object_table(

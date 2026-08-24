@@ -254,10 +254,13 @@ fn from_init_town_bootstrap_caches_init_ool_for_surface_return() {
     let cached_overlay = state.world_overlays.get(WorldPlane::Britannia).unwrap();
 
     assert_eq!(cached_overlay[0], init_object);
+    // `active-objects.md §5` retracts the former player-as-NPC reading:
+    // town entry keeps the player solely in active-object slot zero.
     assert!(state
         .npcs
         .iter()
-        .any(|npc| npc.is_player_phantom() && (npc.x, npc.y) == (15, 15)));
+        .all(|npc| npc.type_byte != SHADOWLORD_ACTOR_TILE));
+    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (15, 15));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -284,6 +287,7 @@ fn from_init_save_uses_init_gam_template_even_when_saved_exists() {
     stale_saved[SAVE_AVATAR_NAME_OFFSET] = b'S';
     fs::write(dir.join("SAVED.GAM"), stale_saved).unwrap();
     fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
 
     let options = load_play_options_from_init(&dir).unwrap();
     assert_eq!(options.save_template_source, SaveTemplateSource::InitGame);
@@ -1043,10 +1047,14 @@ fn from_save_town_load_preserves_embedded_active_object_table() {
     let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
     assert_eq!(state.active_objects[1], object);
-    assert!(state.active_objects.iter().any(|object| {
-        object.type_byte == PLAYER_NPC_SENTINEL_TYPE
-            && (object.x, object.y, object.z) == (15, 15, 0)
-    }));
+    assert!(state
+        .npcs
+        .iter()
+        .all(|npc| npc.type_byte != SHADOWLORD_ACTOR_TILE));
+    assert_eq!(
+        (state.active_objects[0].x, state.active_objects[0].y, state.active_objects[0].z),
+        (15, 15, 0)
+    );
 
     assert_eq!(
         state.save_game_command(&dir, Some(true)).unwrap(),

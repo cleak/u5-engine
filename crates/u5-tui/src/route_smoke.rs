@@ -35,16 +35,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
-    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, CODEX_URN_TABLE_FILE,
-    COMBAT_ACTOR_FLAG_FLEEING, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
-    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
+    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, BRIT_DAT_FILENAME,
+    BRIT_OOL_FILENAME, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_FLEEING,
+    COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
+    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_CLASS_SHADOW_LORD,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
-    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_VANISH_DEATH_MARKER_TILE,
-    COMPLETED_LONG_CAMP_COOLDOWN_HOURS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT,
-    CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor,
-    CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
-    DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
-    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene,
+    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMPLETED_LONG_CAMP_COOLDOWN_HOURS,
+    CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
+    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST,
+    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX,
+    DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
+    DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES, Direction, DungeonScene,
     ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
     EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
@@ -52,20 +53,23 @@ use u5_runtime::{
     FLAME_WIND_SPELL_INDEX, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST,
     GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST,
     HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist, IN_LOR_COST,
-    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, MAGIC_LOCK_COST,
-    MAGIC_LOCK_SPELL_INDEX, MASS_CHARM_ACTIVE_EFFECT_DURATION, MASS_CHARM_ACTIVE_EFFECT_TAG,
+    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, JIMMY_MANACLES_TILE,
+    JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX,
+    MASS_CHARM_ACTIVE_EFFECT_DURATION, MASS_CHARM_ACTIVE_EFFECT_TAG, MORAL_STANDING_MAX,
     MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE,
     NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
-    NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    OUTDOOR_BROADSIDE_BOOM_MESSAGE, OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST, PEER_SPELL_INDEX,
-    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST,
-    PROTECTION_SPELL_INDEX, PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState,
-    PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST,
-    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, SAVED_GAM_FILENAME,
-    SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
-    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
-    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
+    NEGATE_TIME_ACTIVE_EFFECT_TAG, NPC_DIALOG_ID_NONE, NPC_SCHEDULE_AI_OFFSET,
+    NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST,
+    OPEN_SPELL_INDEX, OUTDOOR_BROADSIDE_BOOM_MESSAGE, OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST,
+    PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
+    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PendingVehicleAcquisition, PlayOptions,
+    PlayState, PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST,
+    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, SAVE_QUEST_TILE_FLAG_HIGH_BIT,
+    SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
+    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
+    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
+    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
+    SHRINE_ALTAR_TILE_FIRST, SHRINE_RESTORATION_SUCCESS_BANNER, SLEEP_COST,
     SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
     SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
     SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
@@ -75,30 +79,33 @@ use u5_runtime::{
     TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
     TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
     TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_ARREST_JAIL_FLOOR, TOWN_ARREST_JAIL_SCENE,
-    TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, TRANSPORT_MARKER_SHIP_FURLED_FIRST, Tavern, TileGraphicsDepth,
-    TownNpcAlarmState, TransportState, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
-    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
-    WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState,
-    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats,
+    TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y, TOWN_DOOR_MAGIC_PLAIN_TILE, TOWN_GAS_DOORWAY_RANGE_MAX,
+    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, TOWN_TRAPDOOR_LIVE_TILE,
+    TRANSPORT_MARKER_SHIP_FURLED_FIRST, Tavern, TileGraphicsDepth, TransportState,
+    UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_CLEARED_TILE,
+    VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X,
+    WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEALED_TILE, WORD_OF_POWER_SEALS,
+    WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WORLD_SIDE, WindState,
+    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, combat_class_stats,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters,
     default_party_strengths, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
-    hash_palette_indices, inn_base_room_rate, load_play_options_from_save, load_tile_atlas,
-    published_world_location_entries, shipwright_delivery_coordinate, shipwright_price,
-    shop_intelligence_adjusted_price,
+    hash_palette_indices, inn_base_room_rate, load_camp_result_messages,
+    load_play_options_from_save, load_tile_atlas, published_world_location_entries,
+    shipwright_delivery_coordinate, shipwright_price, shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
     spell_index_from_code, spell_mp_cost, stable_horse_price, summoned_active_object_record,
-    u5_prng_range_u16, word_of_power_seal_for_word, world_cell_index,
+    u5_prng_advance_state, u5_prng_range_u16, word_of_power_seal_for_word, world_cell_index,
 };
 
 use crate::{
-    play_script_command_label, play_script_state_line, raster_diagnostic_line, raster_frame_kind,
-    replay_play_script_commands,
+    complete_headless_blocking_presentations, play_script_command_label, play_script_state_line,
+    raster_diagnostic_line, raster_frame_kind, replay_play_script_commands,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -267,11 +274,31 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         transport: ship_transport,
         ..PlayOptions::default()
     };
+    let ship_xit_no_skiffs = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: TransportState::Ship {
+            type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+            skiffs: 0,
+        },
+        ..PlayOptions::default()
+    };
     let ship_sail = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         transport: ship_transport,
         wind: WindState::East,
         wind_save_byte: WindState::East.save_byte(),
+        ..PlayOptions::default()
+    };
+    let ship_yell_town = PlayOptions {
+        target: PlayTarget::Town(castle),
+        ..PlayOptions::default()
+    };
+    let ship_yell_dungeon = PlayOptions {
+        target: PlayTarget::Dungeon(dungeon),
+        torch_counter: 9,
         ..PlayOptions::default()
     };
 
@@ -477,6 +504,24 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             route_party_member(1, b'F', b'G', 10, 20),
             route_party_member(2, b'M', b'P', 10, 20),
         ],
+        ..PlayOptions::default()
+    };
+
+    let town_jimmy_no_roll = PlayOptions {
+        target: PlayTarget::Town(castle),
+        start: Some((1, 1)),
+        facing: Some(Direction::East),
+        keys: DEFAULT_KEY_STOCK,
+        party: vec![route_party_member(0, b'A', b'G', 20, 20)],
+        ..PlayOptions::default()
+    };
+    let town_jimmy_release = PlayOptions {
+        target: PlayTarget::Town(castle),
+        start: Some((1, 1)),
+        facing: Some(Direction::East),
+        keys: DEFAULT_KEY_STOCK,
+        moral_standing: 98,
+        party: vec![route_party_member(0, b'A', b'G', 20, 20)],
         ..PlayOptions::default()
     };
 
@@ -749,7 +794,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "view overlay",
         },
         RouteSmokeCase {
-            name: "britannia-spyglass-chunk-map",
+            name: "britannia-spyglass-night-sky",
             options: britannia_spyglass,
             script: &["USP"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
@@ -871,6 +916,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
+            name: "dungeon-open-chest-command",
+            options: dungeon_options.clone(),
+            script: &["O"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
             name: "castle-hourly-provision-poison-pass",
             options: hourly_provision_poison,
             script: &["empty"],
@@ -898,6 +951,38 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "castle-poison-gas-step",
             options: town_poison_gas,
             script: &["d"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-jimmy-magic-lock-no-picker",
+            options: town_jimmy_no_roll.clone(),
+            script: &["J"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-jimmy-empty-restraint-no-picker",
+            options: town_jimmy_no_roll,
+            script: &["J"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-jimmy-prisoner-release",
+            options: town_jimmy_release.clone(),
+            script: &["J", "1"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "reload-castle-jimmy-prisoner-release",
+            options: town_jimmy_release,
+            script: &["J", "1", "empty"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1182,6 +1267,17 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "britannia-defeat-persists-ool-before-rescue",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["q"],
+            expected: RouteSmokeExpectation::Town(blackthorn_rescue_scene),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "virtue-town-shadowlord-entry",
             options: shadowlord_town_entry,
             script: &[],
@@ -1236,9 +1332,31 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "stonegate-trapdoor-rescue",
+            options: PlayOptions {
+                target: PlayTarget::Town(stonegate),
+                ..PlayOptions::default()
+            },
+            script: &["empty", "q"],
+            expected: RouteSmokeExpectation::Town(blackthorn_rescue_scene),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "britannia-word-of-power-seal-opens",
             options: britannia_word_of_power,
             script: &["YFALLAX"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-empty-yell-is-acted",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1248,6 +1366,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_word_of_power,
             script: &["YVERAMOCOR"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-ruined-honesty-shrine-restoration",
+            options: world.clone(),
+            script: &["YFALLAX", "Honesty", "Ahm", "Ahm", "Ahm"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
@@ -1465,7 +1591,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-arms-local-buy-sell-route",
             options: PlayOptions::default(),
-            script: &["B", "A", "N", "S", "1", "N"],
+            script: &["B", "A", "N", "S", "empty", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1649,7 +1775,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-drink-and-food-route",
             options: PlayOptions::default(),
-            script: &["Y", "M", "R", "1", "N"],
+            script: &["Y", "M", "Y", "R", "1", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1657,7 +1783,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-honest-meal-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1665,7 +1791,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-wayfarer-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1673,7 +1799,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-sword-and-keg-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1681,7 +1807,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-slaughtered-lamb-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "R", "H", "HONE", "Y"],
+            script: &["Y", "R", "Y", "H", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1689,7 +1815,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-humble-palate-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "S", "A", "HONE", "Y"],
+            script: &["Y", "S", "Y", "A", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1697,7 +1823,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-blue-boar-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "C", "T", "HONE", "Y"],
+            script: &["Y", "C", "Y", "T", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1705,7 +1831,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-cats-lair-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1713,7 +1839,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-fallen-virgin-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "R", "H", "HONE", "Y"],
+            script: &["Y", "R", "Y", "H", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1721,7 +1847,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-folley-tap-lore-route",
             options: PlayOptions::default(),
-            script: &["Y", "A", "C", "HONE", "Y"],
+            script: &["Y", "A", "Y", "C", "HONE", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1849,7 +1975,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "debug-enter-castle-return-world",
             options: world_to_castle,
-            script: &["e", "w", "idle:1"],
+            // Public #94 enters every town-family scene at (15, 30).
+            // Cross the south edge from that fixed cell.
+            script: &["e", "s", "s", "Y"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1871,6 +1999,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "ship-xit-no-skiffs-refusal",
+            options: ship_xit_no_skiffs,
+            script: &["X"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "reload-ship-xit-skiff-pass",
             options: ship_xit,
             script: &["X", "empty"],
@@ -1885,6 +2021,22 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 3,
             expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "ship-yell-toggles-town-band",
+            options: ship_yell_town,
+            script: &["Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "ship-yell-toggles-dungeon-band",
+            options: ship_yell_dungeon,
+            script: &["Y"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
             name: "debug-enter-dungeon",
@@ -2039,6 +2191,38 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
+            name: "dungeon-jimmy-no-keys-commits-action",
+            options: dungeon_options.clone(),
+            script: &["J", "1"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-jimmy-no-lock-commits-action",
+            options: dungeon_options.clone(),
+            script: &["J", "1"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-jimmy-cancel-commits-action",
+            options: dungeon_options.clone(),
+            script: &["J", "\x1b"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-jimmy-success-clears-trap-subtype",
+            options: dungeon_options.clone(),
+            script: &["J", "1"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
             name: "dungeon-refusal-letter-routes",
             options: dungeon_options.clone(),
             script: &["B", "E", "F", "P", "X", "T"],
@@ -2111,7 +2295,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "doom-combat-escape-abort",
+            name: "doom-combat-escape-not-yet",
             options: doom_options.clone(),
             script: &["empty", "\x1b"],
             expected: RouteSmokeExpectation::Dungeon(doom),
@@ -2135,7 +2319,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "doom-combat-use-refusal",
+            name: "doom-combat-use-picker",
             options: doom_options.clone(),
             script: &["empty", "U"],
             expected: RouteSmokeExpectation::Dungeon(doom),
@@ -2303,33 +2487,33 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "combat-utility-vanish-failure",
+            name: "combat-utility-vanish-tile",
             options: world.clone(),
-            script: &["C1AY"],
+            script: &["C1AY6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "combat-utility-open-failure",
+            name: "combat-utility-open-tile",
             options: world.clone(),
-            script: &["C1AS"],
+            script: &["C1AS6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "combat-utility-magic-lock-failure",
+            name: "combat-utility-magic-lock-tile",
             options: world.clone(),
-            script: &["C1AEP"],
+            script: &["C1AEP6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "combat-utility-unlock-magic-failure",
+            name: "combat-utility-unlock-magic-tile",
             options: world.clone(),
-            script: &["C1EIP"],
+            script: &["C1EIP6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
@@ -2463,7 +2647,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "combat-kill-shadowlord-vanish-marker",
+            name: "combat-kill-shadowlord-protected-rejection",
             options: world.clone(),
             script: &["C1CX7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
@@ -2535,7 +2719,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "doom-combat-xit-foes-remain",
+            name: "doom-combat-xit-refusal",
             options: doom_options.clone(),
             script: &["empty", "X"],
             expected: RouteSmokeExpectation::Dungeon(doom),
@@ -2543,17 +2727,17 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "doom-combat-quit-defeat",
+            name: "doom-combat-quit-refusal",
             options: doom_options.clone(),
             script: &["q"],
             expected: RouteSmokeExpectation::Dungeon(doom),
             min_turn: 0,
-            expected_frame_kind: "dungeon first-person viewport",
+            expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "terrain-combat-xit-no-foes-clean-exit",
+            name: "terrain-combat-escape-announced-cleanup",
             options: world.clone(),
-            script: &["X"],
+            script: &["\x1b"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -2591,7 +2775,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-extended-walk-and-rest",
             options: PlayOptions::default(),
-            script: &["s", "s", "a", "a", "w", "d", "Z", "empty", "l6", "empty"],
+            script: &["w", "w", "a", "a", "s", "d", "Z", "empty", "l6", "empty"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -2692,6 +2876,7 @@ fn append_asset_backed_conversation_route_smoke_cases(cases: &mut Vec<RouteSmoke
                     name,
                     options: PlayOptions {
                         target: PlayTarget::Town(scene),
+                        shadowlord_hideouts: [SHADOWLORD_VANQUISHED; 3],
                         ..PlayOptions::default()
                     },
                     script,
@@ -2832,7 +3017,7 @@ pub fn run_route_smoke_case(
     atlas: &u5_runtime::TileAtlas,
     case: &RouteSmokeCase,
 ) -> io::Result<RouteSmokeReport> {
-    let route_game_dir = prepare_route_smoke_case_game_dir(case.name)?;
+    let route_game_dir = prepare_route_smoke_case_game_dir(game_dir, case.name)?;
     let reload_save_dir = prepare_route_smoke_reload_save_dir(game_dir, case.name)?;
     let command_game_dir = route_game_dir.as_deref().unwrap_or(game_dir);
     let mut state = PlayState::load_scene(game_dir, case.options.clone())?;
@@ -2896,12 +3081,6 @@ pub fn run_route_smoke_case(
             Ok(())
         },
     );
-    if let Some(dir) = &route_game_dir {
-        let _ = fs::remove_dir_all(dir);
-    }
-    if let Some(dir) = &reload_save_dir {
-        let _ = fs::remove_dir_all(dir);
-    }
     result?;
 
     if !case.expected.matches(&state) {
@@ -2927,7 +3106,7 @@ pub fn run_route_smoke_case(
             case.name, final_frame_kind, case.expected_frame_kind
         )));
     }
-    validate_route_smoke_case_state(&state, case.name, game_dir)?;
+    validate_route_smoke_case_state(&state, case.name, command_game_dir)?;
 
     let final_raster_line = raster_diagnostic_line(&mut state, VIEWPORT_RADIUS, atlas)?;
     require_raster_hash(case, &final_raster_line)?;
@@ -2954,7 +3133,7 @@ pub fn run_route_smoke_case(
             play_script_state_line(&state),
         ],
     });
-    Ok(RouteSmokeReport {
+    let report = RouteSmokeReport {
         name: case.name.to_string(),
         commands_run,
         final_state_line: play_script_state_line(&state),
@@ -2965,7 +3144,14 @@ pub fn run_route_smoke_case(
         final_hash: hash_palette_indices(&final_viewport.pixels),
         final_nonblack_pixels,
         frames,
-    })
+    };
+    if let Some(dir) = &route_game_dir {
+        let _ = fs::remove_dir_all(dir);
+    }
+    if let Some(dir) = &reload_save_dir {
+        let _ = fs::remove_dir_all(dir);
+    }
+    Ok(report)
 }
 
 pub fn write_route_smoke_manifest(path: &Path, reports: &[RouteSmokeReport]) -> io::Result<()> {
@@ -3035,6 +3221,7 @@ fn capture_route_smoke_frame(
     label: &str,
     metadata: Vec<String>,
 ) -> io::Result<RouteSmokeFrameReport> {
+    complete_headless_blocking_presentations(state, Some(atlas))?;
     let frame_kind = raster_frame_kind(state).to_string();
     let viewport = state
         .render_top_down_frame(VIEWPORT_RADIUS, atlas)?
@@ -3044,7 +3231,7 @@ fn capture_route_smoke_frame(
             ))
         })?;
     let nonblack_pixels = viewport.pixels.iter().filter(|pixel| **pixel != 0).count();
-    Ok(RouteSmokeFrameReport {
+    let report = RouteSmokeFrameReport {
         label: label.to_string(),
         frame_kind,
         width: viewport.width,
@@ -3052,11 +3239,22 @@ fn capture_route_smoke_frame(
         hash: hash_palette_indices(&viewport.pixels),
         nonblack_pixels,
         metadata,
-    })
+    };
+    // Dissolve records describe blocking calls that have already finished.
+    // The captured caller-composed frame is this frontend's acknowledgement.
+    let _ = state.take_pending_map_viewport_dissolves();
+    let _ = state.take_pending_stonegate_trapdoor_playback();
+    Ok(report)
 }
 
-fn prepare_route_smoke_case_game_dir(case_name: &str) -> io::Result<Option<PathBuf>> {
-    if case_name != "castle-poison-gas-step" && case_name != "codex-urn-honesty-read" {
+fn prepare_route_smoke_case_game_dir(
+    game_dir: &Path,
+    case_name: &str,
+) -> io::Result<Option<PathBuf>> {
+    if case_name != "castle-poison-gas-step"
+        && case_name != "codex-urn-honesty-read"
+        && case_name != "britannia-defeat-persists-ool-before-rescue"
+    {
         return Ok(None);
     }
     let nonce = SystemTime::now()
@@ -3068,6 +3266,18 @@ fn prepare_route_smoke_case_game_dir(case_name: &str) -> io::Result<Option<PathB
         std::process::id()
     ));
     fs::create_dir_all(&dir)?;
+    if case_name == "britannia-defeat-persists-ool-before-rescue" {
+        for file_name in [BRIT_DAT_FILENAME, "CASTLE.DAT", "CASTLE.NPC", "CASTLE.TLK"] {
+            u5_runtime::test_fixtures::copy_asset_writable(
+                &game_dir.join(file_name),
+                &dir.join(file_name),
+            )?;
+        }
+        let karma = game_dir.join("KARMA.DAT");
+        if karma.exists() {
+            u5_runtime::test_fixtures::copy_asset_writable(&karma, &dir.join("KARMA.DAT"))?;
+        }
+    }
     if case_name == "codex-urn-honesty-read" {
         fs::write(
             dir.join(CODEX_URN_TABLE_FILE),
@@ -3108,16 +3318,23 @@ fn seed_route_smoke_save_files(game_dir: &Path, save_dir: &Path) -> io::Result<(
     {
         copy_route_smoke_save_file(game_dir, save_dir, "INIT.GAM", SAVED_GAM_FILENAME)?;
     }
-    if let Err(saved_err) =
-        copy_route_smoke_save_file(game_dir, save_dir, SAVED_OOL_FILENAME, SAVED_OOL_FILENAME)
+    if copy_route_smoke_save_file(game_dir, save_dir, SAVED_OOL_FILENAME, SAVED_OOL_FILENAME)
+        .is_err()
     {
         if game_dir.join("INIT.OOL").exists() {
-            copy_route_smoke_save_file(game_dir, save_dir, "INIT.OOL", SAVED_OOL_FILENAME)?;
+            let init_ool = fs::read(game_dir.join("INIT.OOL"))?;
+            let mut saved_ool = vec![0; SAVED_OOL_LEN];
+            let copied_len = init_ool.len().min(saved_ool.len() / 2);
+            saved_ool[..copied_len].copy_from_slice(&init_ool[..copied_len]);
+            fs::write(save_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
         } else {
             fs::write(save_dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN])?;
-            let _ = saved_err;
         }
     }
+    // Reload cases exercise the real save handler, whose published staging
+    // input is the two per-plane mirrors rather than the combined save file.
+    let saved_ool = fs::read(save_dir.join(SAVED_OOL_FILENAME))?;
+    u5_runtime::write_saved_ool_mirrors(save_dir, &saved_ool)?;
     Ok(())
 }
 
@@ -3145,7 +3362,8 @@ fn route_reload_checkpoints(case_name: &str) -> &'static [usize] {
         | "reload-dungeon-surface-exit-return-world" => &[1],
         "reload-underworld-fixed-hidden-stack-search-get-search"
         | "reload-minoc-fixed-hidden-daily-search-get-repeat"
-        | "reload-horse-trader-horse-and-rider-buy-pass" => &[2],
+        | "reload-horse-trader-horse-and-rider-buy-pass"
+        | "reload-castle-jimmy-prisoner-release" => &[2],
         _ => &[],
     }
 }
@@ -3171,6 +3389,17 @@ fn apply_route_smoke_case_setup(
     }
 
     match case_name {
+        "ship-yell-toggles-town-band" | "ship-yell-toggles-dungeon-band" => {
+            state.player.transport = TransportState::Ship {
+                type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE,
+                sails_hoisted: false,
+                hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+                skiffs: 2,
+            };
+            state.sync_player_object();
+            state.mark_visibility_dirty();
+        }
         "endgame-missing-box-confirmation" | "endgame-missing-box-terminal-jitter" => {
             state.enter_endgame_from_game_dir(Some(game_dir))?;
         }
@@ -3184,13 +3413,48 @@ fn apply_route_smoke_case_setup(
         "blackthorn-rescue-refuge" => {
             state.apply_blackthorn_rescue_refuge(game_dir)?;
         }
+        "britannia-defeat-persists-ool-before-rescue" => {
+            state
+                .active_objects
+                .resize(OOL_SLOTS, ActiveObject::empty());
+            state.active_objects[31] = ActiveObject {
+                type_byte: 0x71,
+                tile: 0x72,
+                x: 73,
+                y: 74,
+                z: WorldPlane::Britannia.save_floor(),
+                phase: 0x76,
+                aux1: 0x75,
+                aux3: 0x77,
+            };
+            for member in &mut state.party {
+                member.status = b'D';
+                member.hp = 0;
+            }
+        }
+        "stonegate-trapdoor-rescue" => {
+            let index = state
+                .grid
+                .iter()
+                .position(|tile| *tile == TOWN_TRAPDOOR_LIVE_TILE)
+                .ok_or_else(|| {
+                    io::Error::other(
+                        "Stonegate runtime floor contains no live trapdoor tile for route smoke",
+                    )
+                })?;
+            state.player.x = index % TOWN_GRID_SIDE;
+            state.player.y = index / TOWN_GRID_SIDE;
+            state.force_foot_transport();
+            state.sync_player_object();
+            state.mark_visibility_dirty();
+        }
         "castle-light-open-spell-route" => {
             state.player.x = 1;
             state.player.y = 1;
             state.player.facing = Direction::East;
             let target = state.player.y * TOWN_GRID_SIDE + state.player.x + 1;
             if let Some(cell) = state.grid.get_mut(target) {
-                *cell = 0x97;
+                *cell = 0xB9;
             }
             state.sync_player_object();
             state.mark_visibility_dirty();
@@ -3215,6 +3479,11 @@ fn apply_route_smoke_case_setup(
             )?;
             if spell_index == POISON_WIND_SPELL_INDEX {
                 state.prng_state = poison_wind_first_accept_seed();
+            } else if spell_index == FLAME_WIND_SPELL_INDEX {
+                // Keep the reserve monster's automatic post-cast turn
+                // deterministic. A host-clock seed can otherwise make it
+                // leave combat before the route captures its combat raster.
+                state.prng_state = 0;
             }
         }
         "combat-field-fire-marker-placement"
@@ -3230,12 +3499,12 @@ fn apply_route_smoke_case_setup(
         "combat-field-dispel-empty-refusal" => {
             seed_combat_field_dispel_route(state, None)?;
         }
-        "combat-utility-vanish-failure"
-        | "combat-utility-open-failure"
-        | "combat-utility-magic-lock-failure"
-        | "combat-utility-unlock-magic-failure" => {
-            let (spell_index, cost) = combat_utility_route_spell(case_name);
-            seed_combat_utility_failure_route(state, spell_index, cost)?;
+        "combat-utility-vanish-tile"
+        | "combat-utility-open-tile"
+        | "combat-utility-magic-lock-tile"
+        | "combat-utility-unlock-magic-tile" => {
+            let (spell_index, cost, source_tile, _, _) = combat_utility_route_spell(case_name);
+            seed_combat_utility_tile_route(state, spell_index, cost, source_tile)?;
         }
         "combat-kill-gazer-eye-burst" => {
             seed_combat_special_death_route(state, 28)?;
@@ -3243,20 +3512,24 @@ fn apply_route_smoke_case_setup(
         "combat-kill-gargoyle-lava-marker" => {
             seed_combat_special_death_route(state, 30)?;
         }
-        "combat-kill-shadowlord-vanish-marker" => {
+        "combat-kill-shadowlord-protected-rejection" => {
             seed_combat_special_death_route(state, 47)?;
+            seed_route_combat_pending_party_actor(state);
         }
         "terrain-combat-party-entry" => {
             seed_terrain_combat_party_entry_route(state, game_dir)?;
         }
-        "doom-combat-quit-defeat" => {
+        "doom-combat-quit-refusal" => {
             seed_dungeon_room_party_entry_route(state, game_dir)?;
             seed_route_combat_pending_party_actor(state);
         }
-        "terrain-combat-xit-no-foes-clean-exit" => {
+        "terrain-combat-escape-announced-cleanup" => {
             seed_terrain_combat_party_entry_route(state, game_dir)?;
             clear_route_combat_non_party_actors(state);
             seed_route_combat_pending_party_actor(state);
+            if let Some(snapshot) = state.combat_frame_snapshot.as_mut() {
+                snapshot.exit_announced = true;
+            }
         }
         "terrain-combat-out-of-arena-leave" => {
             seed_terrain_combat_party_entry_route(state, game_dir)?;
@@ -3351,6 +3624,19 @@ fn apply_route_smoke_case_setup(
         "castle-poison-gas-step" => {
             seed_town_poison_gas_route(state);
         }
+        "castle-jimmy-magic-lock-no-picker" => {
+            seed_town_jimmy_unoccupied_target(state, TOWN_DOOR_MAGIC_PLAIN_TILE);
+            state.party[0].climb_stat = 0;
+            state.prng_state = 0x3456;
+        }
+        "castle-jimmy-empty-restraint-no-picker" => {
+            seed_town_jimmy_unoccupied_target(state, JIMMY_STOCKS_TILE);
+            state.party[0].climb_stat = 0;
+            state.prng_state = 0x3456;
+        }
+        "castle-jimmy-prisoner-release" | "reload-castle-jimmy-prisoner-release" => {
+            seed_town_jimmy_prisoner_route(state);
+        }
         "britannia-board-horse-route" | "reload-boarded-horse-pass" => {
             seed_world_board_horse_route(state);
         }
@@ -3434,6 +3720,9 @@ fn apply_route_smoke_case_setup(
         "britannia-word-of-power-seal-opens" | "underworld-doom-word-of-power-seal-opens" => {
             stamp_word_of_power_seal_route(state, case_name);
         }
+        "britannia-ruined-honesty-shrine-restoration" => {
+            stamp_ruined_honesty_shrine_route(state);
+        }
         "dungeon-ladder-down-up-route" | "reload-dungeon-ladder-down-up-route" => {
             let current = dungeon_cell_index(0, state.player.x, state.player.y);
             let below = dungeon_cell_index(1, state.player.x, state.player.y);
@@ -3459,6 +3748,12 @@ fn apply_route_smoke_case_setup(
         "dungeon-long-camp-recovery" | "dungeon-camp-inside-cooldown-window" => {
             seed_long_camp_recovery_route(state);
         }
+        "dungeon-hole-up-rest" | "dungeon-hole-up-no-direct-recovery" => {
+            // These routes assert the completed-rest branch, so they must not
+            // inherit the host-clock PRNG seed and intermittently enter the
+            // separately covered sleep-ambush branch.
+            state.prng_state = long_camp_no_ambush_seed();
+        }
         "dungeon-field-cycle-spells" => {
             state.player.x = 1;
             state.player.y = 1;
@@ -3470,12 +3765,12 @@ fn apply_route_smoke_case_setup(
             state.sync_player_object();
             state.mark_visibility_dirty();
         }
-        "dungeon-open-chest-spell" => {
+        "dungeon-open-chest-spell" | "dungeon-open-chest-command" => {
             state.player.x = 1;
             state.player.y = 1;
             let current = dungeon_cell_index(0, state.player.x, state.player.y);
             if let Some(cell) = state.grid.get_mut(current) {
-                *cell = 0x40;
+                *cell = 0x4b;
             }
             state.sync_player_object();
             state.mark_visibility_dirty();
@@ -3494,7 +3789,6 @@ fn apply_route_smoke_case_setup(
                 x: 62,
                 y: 124,
                 transport: TransportState::Foot,
-                timing_status: state.timing_status,
                 sail_cadence: state.sail_cadence,
                 sail_stall_pending: state.sail_stall_pending,
                 grid: vec![0; WORLD_SIDE * WORLD_SIDE],
@@ -3509,8 +3803,31 @@ fn apply_route_smoke_case_setup(
         "dungeon-active-monster-contact-ambush" => {
             seed_dungeon_active_monster_route(state, 0x20);
         }
+        "dungeon-jimmy-no-keys-commits-action"
+        | "dungeon-jimmy-no-lock-commits-action"
+        | "dungeon-jimmy-cancel-commits-action"
+        | "dungeon-jimmy-success-clears-trap-subtype" => {
+            let index = dungeon_cell_index(
+                state.current_floor().unwrap_or(0) as u8,
+                state.player.x,
+                state.player.y,
+            );
+            state.grid[index] = match case_name {
+                "dungeon-jimmy-no-lock-commits-action" => 0x00,
+                _ => 0x4b,
+            };
+            state.keys = if case_name == "dungeon-jimmy-no-keys-commits-action" {
+                0
+            } else {
+                2
+            };
+            state.party[0].climb_stat = 30;
+            state.prng_state = 0x1234;
+            state.mark_visibility_dirty();
+        }
         "shop-arms-local-buy-sell-route" => {
             seed_route_arms_shop(state, ArmsShop::IolosBows, 999);
+            state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
         }
         _ if arms_route_shop(case_name).is_some() => {
             let shop = arms_route_shop(case_name).expect("arms route shop is known");
@@ -3598,7 +3915,6 @@ fn apply_route_smoke_case_setup(
                 x: 1,
                 y: 2,
                 transport: state.player.transport,
-                timing_status: state.timing_status,
                 sail_cadence: state.sail_cadence,
                 sail_stall_pending: state.sail_stall_pending,
                 grid: state.grid.clone(),
@@ -3637,18 +3953,17 @@ fn seed_shadowlord_shard_route(state: &mut PlayState, index: usize, x: usize, y:
     state.player.y = y;
     state.player.facing = Direction::South;
     state.sync_player_object();
-    let tile = SHADOWLORD_OBJECT_TILE_BASE + index as u8;
-    let floor = state.current_floor().unwrap_or(0);
-    state.active_objects.push(ActiveObject {
-        type_byte: tile,
-        tile,
-        x,
-        y: y.saturating_sub(1),
-        z: floor,
-        phase: STEADY_PHASE,
-        aux1: index as u8,
-        aux3: state.shadowlord_hideouts.get(index).copied().unwrap_or(0),
-    });
+    // This route starts at the public destruction instant, with the named
+    // encounter on the Eternal Flame one cell north. The separate Yell route
+    // pins the initial two-cells-north placement.
+    let z = state.current_floor().expect("shard route is in a keep");
+    let object = state
+        .shadowlord_name_encounter_object(index, x, y.saturating_sub(1), z)
+        .expect("shard route uses a valid Shadowlord index");
+    state
+        .allocate_highest_empty_active_object_slot(object)
+        .expect("shard route has room for the summoned Shadowlord");
+    state.summoned_shadowlord = Some(index);
     state.mark_visibility_dirty();
 }
 
@@ -3673,13 +3988,13 @@ fn seed_dungeon_active_monster_route(state: &mut PlayState, phase: u8) {
     state.player.facing = Direction::East;
     state.sync_player_object();
     state.active_objects.push(ActiveObject {
-        type_byte: 0xC0,
-        tile: 0xC0,
+        type_byte: 0,
+        tile: 0,
         x: 2,
         y: 1,
         z: state.current_floor().unwrap_or(0),
         phase,
-        aux1: 0,
+        aux1: DUNGEON_MONSTER_COMBAT_CLASSES[0],
         aux3: 0,
     });
     state.mark_visibility_dirty();
@@ -3697,17 +4012,31 @@ fn stamp_word_of_power_seal_route(state: &mut PlayState, case_name: &str) {
     if let Some(seal) = word_of_power_seal_for_case(case_name) {
         if let Area::World { plane } = state.area {
             if plane == seal.plane {
-                state.player.x = seal.x;
+                state.player.x = (seal.x + 1) % WORLD_SIDE;
                 state.player.y = seal.y;
                 state.sync_player_object();
                 let idx = world_cell_index(seal.x, seal.y);
                 if let Some(cell) = state.grid.get_mut(idx) {
-                    *cell = seal.closed_tile;
+                    *cell = WORD_OF_POWER_SEALED_TILE;
                 }
+                state.word_of_power_seal_flags.fill(0);
+                let _ = state.refresh_world_live_chunks_for_current_area();
                 state.mark_visibility_dirty();
             }
         }
     }
+}
+
+fn stamp_ruined_honesty_shrine_route(state: &mut PlayState) {
+    let (x, y) = WORLD_SHRINE_COORDINATES[0];
+    state.player.x = (x + 1) % WORLD_SIDE;
+    state.player.y = y;
+    state.sync_player_object();
+    state.grid[world_cell_index(x, y)] = WORLD_RUINED_SHRINE_TILE;
+    state.shrine_ruin_flags[0] = 0x85;
+    state.word_of_power_seal_flags[0] = 0x27;
+    let _ = state.refresh_world_live_chunks_for_current_area();
+    state.mark_visibility_dirty();
 }
 
 fn seed_route_arms_shop(state: &mut PlayState, shop: ArmsShop, gold: u16) {
@@ -4032,6 +4361,32 @@ fn seed_town_guard_arrest_route(state: &mut PlayState) {
     seed_town_route_scheduled_npc(state, 2, 0x70, 6, 5, 6);
 }
 
+fn seed_town_jimmy_unoccupied_target(state: &mut PlayState, tile: u8) {
+    state.player.x = 1;
+    state.player.y = 1;
+    state.player.facing = Direction::East;
+    let floor = state.current_floor().unwrap_or(0);
+    let target_x = 2;
+    let target_y = 1;
+    state.npcs.clear();
+    for object in &mut state.active_objects {
+        if !object.is_empty() && object.x == target_x && object.y == target_y && object.z == floor {
+            *object = ActiveObject::empty();
+        }
+    }
+    state.grid[target_y * TOWN_GRID_SIDE + target_x] = tile;
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_town_jimmy_prisoner_route(state: &mut PlayState) {
+    seed_town_jimmy_unoccupied_target(state, JIMMY_MANACLES_TILE);
+    seed_town_route_scheduled_npc(state, 1, 0x0E, 2, 1, 0);
+    if let Some(npc) = state.npcs.iter_mut().find(|npc| npc.slot == 1) {
+        npc.dialog_id = 2;
+    }
+}
+
 fn seed_town_poison_gas_route(state: &mut PlayState) {
     state.player.x = 15;
     state.player.y = 15;
@@ -4290,6 +4645,14 @@ fn seed_directed_wind_combat_route(
     state.party_stay_counters = default_party_stay_counters(party_count);
     state.party_strengths = vec![30; party_count];
     state.party_intelligence = default_party_intelligence(party_count);
+    if let Some(caster_rating) = state.party_intelligence.first_mut() {
+        // Shared-resistance wind routes deterministically exercise their
+        // accepted branch; runtime unit tests cover resisted boundaries.
+        *caster_rating = u8::MAX;
+    }
+    for target_rating in state.party_intelligence.iter_mut().skip(1) {
+        *target_rating = 0;
+    }
     state.party_equipment = default_party_equipment(party_count);
     if let Some(caster) = state.party.first_mut() {
         caster.mana = cost;
@@ -4307,7 +4670,7 @@ fn seed_directed_wind_combat_route(
             12,
             1,
             COMBAT_ACTOR_FLAG_SELECTABLE_80,
-            0,
+            target_slot as u8,
             target_slot as u8,
             0,
             target_x,
@@ -4452,19 +4815,38 @@ fn seed_combat_field_dispel_route(
     Ok(())
 }
 
-fn combat_utility_route_spell(case_name: &str) -> (usize, u8) {
+fn combat_utility_route_spell(case_name: &str) -> (usize, u8, u8, u8, &'static str) {
     match case_name {
-        "combat-utility-vanish-failure" => (VANISH_SPELL_INDEX, VANISH_COST),
-        "combat-utility-magic-lock-failure" => (MAGIC_LOCK_SPELL_INDEX, MAGIC_LOCK_COST),
-        "combat-utility-unlock-magic-failure" => (UNLOCK_MAGIC_SPELL_INDEX, UNLOCK_MAGIC_COST),
-        _ => (OPEN_SPELL_INDEX, OPEN_SPELL_COST),
+        "combat-utility-vanish-tile" => (
+            VANISH_SPELL_INDEX,
+            VANISH_COST,
+            0x90,
+            VANISH_CLEARED_TILE,
+            "POOF!",
+        ),
+        "combat-utility-magic-lock-tile" => (
+            MAGIC_LOCK_SPELL_INDEX,
+            MAGIC_LOCK_COST,
+            0xB8,
+            0x97,
+            "Success!",
+        ),
+        "combat-utility-unlock-magic-tile" => (
+            UNLOCK_MAGIC_SPELL_INDEX,
+            UNLOCK_MAGIC_COST,
+            0x97,
+            0xB8,
+            "Success!",
+        ),
+        _ => (OPEN_SPELL_INDEX, OPEN_SPELL_COST, 0xB9, 0xB8, "Success!"),
     }
 }
 
-fn seed_combat_utility_failure_route(
+fn seed_combat_utility_tile_route(
     state: &mut PlayState,
     spell_index: usize,
     cost: u8,
+    source_tile: u8,
 ) -> io::Result<()> {
     state.party = vec![route_party_member(0, b'A', b'G', 20, 20)];
     state.party_names = default_party_names(1);
@@ -4488,7 +4870,7 @@ fn seed_combat_utility_failure_route(
     active_objects[0] = route_combat_active_object(0x4c, 5, 5, 0);
     active_objects[1] = route_combat_active_object(0x50, 6, 5, 0);
     state.enter_combat_frame(active_objects, actors)?;
-    state.combat_terrain[5][6] = 0x97;
+    state.combat_terrain[5][6] = source_tile;
     Ok(())
 }
 
@@ -4509,7 +4891,7 @@ fn combat_spell_route_code(case_name: &str) -> &'static str {
         "combat-summon-daemon-ring" => "CKX",
         "combat-kill-gazer-eye-burst"
         | "combat-kill-gargoyle-lava-marker"
-        | "combat-kill-shadowlord-vanish-marker" => "CX",
+        | "combat-kill-shadowlord-protected-rejection" => "CX",
         _ => "GP",
     }
 }
@@ -4526,6 +4908,11 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
     state.party_stay_counters = default_party_stay_counters(1);
     state.party_strengths = vec![30];
     state.party_intelligence = default_party_intelligence(1);
+    if matches!(code, "ACX" | "AEX" | "CIQ" | "CKX") {
+        // Shared-resistance route cases exercise the accepted branch
+        // deterministically; the formula itself is pinned in runtime tests.
+        state.party_intelligence[0] = u8::MAX;
+    }
     state.party_equipment = default_party_equipment(1);
     if let Some(caster) = state.party.first_mut() {
         caster.mana = cost;
@@ -4533,8 +4920,14 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
     }
     state.active_player = Some(0);
     state.spell_charges[spell_index] = 1;
-    let mut combat_terrain = if matches!(code, "IQX" | "KX" | "BIX" | "CKX") {
+    let mut combat_terrain = if code == "ACX" {
+        // Grass keeps the 1-HP post-Repel checkpoint free of the combat
+        // swamp-contact damage associated with tile 0x04.
+        [[0x05; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
+    } else if code == "IQX" {
         [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
+    } else if matches!(code, "KX" | "BIX" | "CKX") {
+        [[0x05; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
     } else {
         [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
     };
@@ -4544,25 +4937,13 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
             combat_terrain[5][5] = 0x04;
             combat_terrain[5][6] = 0x04;
         }
-        "KX" => {
-            combat_terrain[0][7] = 0x04;
-            combat_terrain[5][5] = 0x04;
-        }
-        "BIX" => {
-            combat_terrain[5][5] = 0x04;
-            combat_terrain[4][5] = 0x04;
-            combat_terrain[4][6] = 0x04;
-        }
-        "CKX" => {
-            combat_terrain[5][5] = 0x04;
-            combat_terrain[4][6] = 0x04;
-        }
         _ => {}
     }
     state.prng_state = match code {
         "GP" => first_nonzero_prng_roll_seed(15),
         "FV" => first_nonzero_prng_roll_seed(29),
         "IPVY" => first_nonzero_prng_roll_seed(19),
+        "ACX" => 0x1234,
         _ => 0,
     };
 
@@ -4578,6 +4959,11 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
             seed_combat_route_monster(&mut actors, &mut active_objects, 23, 6, 4, 5)?;
             seed_combat_route_monster(&mut actors, &mut active_objects, 33, 7, 5, 4)?;
             seed_combat_route_monster(&mut actors, &mut active_objects, 32, 8, 6, 5)?;
+            // Keep the post-cast route checkpoint ahead of later flee/attack
+            // turns so it validates Repel's immediate state transition.
+            for actor in &mut actors[COMBAT_PARTY_ACTOR_SLOTS..=COMBAT_PARTY_ACTOR_SLOTS + 2] {
+                actor.base_step = 1;
+            }
         }
         "KX" | "BIX" | "CKX" => {}
         _ => {
@@ -4587,6 +4973,11 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
                 COMBAT_CLASS_GIANT_RAT
             };
             seed_combat_route_monster(&mut actors, &mut active_objects, class, 6, 6, 5)?;
+            if code == "IPVY" {
+                // Tremor's skewed roll is always at least one, so weight one
+                // deterministically exercises both target applications.
+                actors[6].base_step = 1;
+            }
             if code == "QW" {
                 actors[6].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
             }
@@ -4638,6 +5029,7 @@ fn seed_combat_special_death_route(state: &mut PlayState, class: u8) -> io::Resu
     state.party_stay_counters = default_party_stay_counters(1);
     state.party_strengths = vec![30];
     state.party_intelligence = default_party_intelligence(1);
+    state.party_intelligence[0] = u8::MAX;
     state.party_equipment = default_party_equipment(1);
     if let Some(caster) = state.party.first_mut() {
         caster.mana = cost;
@@ -4736,6 +5128,23 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
     let code = combat_spell_route_code(case_name);
     let spell_index = spell_index_from_code(code)
         .ok_or_else(|| io::Error::other(format!("unknown combat spell code `{code}`")))?;
+    if case_name == "combat-kill-shadowlord-protected-rejection" {
+        let target = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS];
+        if !state.combat_active
+            || state.spell_charges[spell_index] != 0
+            || state.party.first().is_none_or(|member| member.mana != 0)
+            || state.turn < 1
+            || target.owner_target_class != COMBAT_CLASS_SHADOW_LORD
+            || target.is_marked_dead()
+            || state.active_cast_followup.is_some()
+            || !state.message.contains("Failed!")
+        {
+            return Err(io::Error::other(format!(
+                "route smoke `{case_name}` did not commit the protected Shadow Lord rejection after spending cast resources"
+            )));
+        }
+        return Ok(());
+    }
     if !state.combat_active
         || state.spell_charges[spell_index] != 0
         || state.party.first().is_none_or(|member| member.mana != 0)
@@ -4804,11 +5213,12 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
         "combat-mass-charm-effect" => {
             if !state.message.starts_with("Mass charm!")
                 || state.active_effect_tag != Some(MASS_CHARM_ACTIVE_EFFECT_TAG)
-                || state.active_effect_counter != MASS_CHARM_ACTIVE_EFFECT_DURATION
+                || state.active_effect_counter
+                    != MASS_CHARM_ACTIVE_EFFECT_DURATION.saturating_sub(1)
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not install the Mass Charm active effect; message `{}`",
-                    state.message
+                    "route smoke `{case_name}` did not retain the post-action Mass Charm effect; tag {:?}, counter {}, message `{}`",
+                    state.active_effect_tag, state.active_effect_counter, state.message
                 )));
             }
         }
@@ -4832,12 +5242,19 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             if !state
                 .message
                 .starts_with("Repel Undead! 2 undead repelled.")
-                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
-                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_marked_dead()
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound != 1
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_fleeing()
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].hp_or_wound != 1
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_fleeing()
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_marked_dead()
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not repel only undead combat actors"
+                    "route smoke `{case_name}` did not repel only undead combat actors: message={:?}, ghost={:?}, skeleton={:?}, orc={:?}, xp={:?}",
+                    state.message,
+                    state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
+                    state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1],
+                    state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2],
+                    state.party_experience,
                 )));
             }
         }
@@ -4913,17 +5330,6 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
                 )));
             }
         }
-        "combat-kill-shadowlord-vanish-marker" => {
-            if !state.message.starts_with("Kill!")
-                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
-                || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
-                    != COMBAT_VANISH_DEATH_MARKER_TILE
-            {
-                return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not clear the vanish-on-death actor and marker"
-                )));
-            }
-        }
         _ => {}
     }
     Ok(())
@@ -4978,6 +5384,44 @@ fn validate_route_smoke_case_state(
     }
 
     match case_name {
+        "britannia-defeat-persists-ool-before-rescue" => {
+            let rescue_scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
+            let bytes = fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
+            let offset = 31 * OOL_RECORD_LEN;
+            let expected = [0x71, 0x72, 73, 74, 0, 0x75, 0x76, 0x77];
+            if state.area
+                != (Area::Town {
+                    scene: rescue_scene,
+                    floor: 0,
+                })
+                || state.turn != 0
+                || state.party.is_empty()
+                || state
+                    .party
+                    .iter()
+                    .any(|member| member.status != b'G' || member.hp != member.max_hp.max(1))
+                || state.player.transport != TransportState::Foot
+                || bytes.get(offset..offset + OOL_RECORD_LEN) != Some(expected.as_slice())
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not persist the complete live Britannia OOL table before the shared rescue"
+                )));
+            }
+        }
+        "stonegate-trapdoor-rescue" => {
+            if state.turn != 1
+                || state.party.is_empty()
+                || state
+                    .party
+                    .iter()
+                    .any(|member| member.status != b'G' || member.hp != member.max_hp.max(1))
+                || state.player.transport != TransportState::Foot
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete one trapdoor turn followed by the shared rescue"
+                )));
+            }
+        }
         "endgame-missing-box-confirmation" | "endgame-missing-box-terminal-jitter" => {
             let outcome = state.endgame.as_ref().and_then(|endgame| endgame.outcome);
             if outcome != Some(EndgameOutcome::MissingBoxOrRefused)
@@ -5099,7 +5543,7 @@ fn validate_route_smoke_case_state(
                 || state.spell_charges[OPEN_SPELL_INDEX] != 0
                 || state.light_spell_counter == 0
                 || state.grid.get(target).copied() != Some(0xb8)
-                || state.message != "Opened!"
+                || state.message != "Success!"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not light the scene and open the stamped door"
@@ -5260,23 +5704,24 @@ fn validate_route_smoke_case_state(
                 )));
             }
         }
-        "combat-utility-vanish-failure"
-        | "combat-utility-open-failure"
-        | "combat-utility-magic-lock-failure"
-        | "combat-utility-unlock-magic-failure" => {
-            let (spell_index, _) = combat_utility_route_spell(case_name);
+        "combat-utility-vanish-tile"
+        | "combat-utility-open-tile"
+        | "combat-utility-magic-lock-tile"
+        | "combat-utility-unlock-magic-tile" => {
+            let (spell_index, _, _, expected_tile, expected_message) =
+                combat_utility_route_spell(case_name);
             if !state.combat_active
                 || state.spell_charges[spell_index] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state.message != "Failed!"
+                || state.message != expected_message
                 || state
                     .active_objects
                     .get(1)
                     .is_none_or(|object| object.tile != 0x50 || object.x != 6 || object.y != 5)
-                || state.combat_terrain[5][6] != 0x97
+                || state.combat_terrain[5][6] != expected_tile
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the combat utility failure fallback without arena mutation"
+                    "route smoke `{case_name}` did not apply the published combat utility live-tile rewrite"
                 )));
             }
         }
@@ -5296,7 +5741,7 @@ fn validate_route_smoke_case_state(
         | "combat-summon-daemon-ring"
         | "combat-kill-gazer-eye-burst"
         | "combat-kill-gargoyle-lava-marker"
-        | "combat-kill-shadowlord-vanish-marker" => {
+        | "combat-kill-shadowlord-protected-rejection" => {
             validate_combat_spell_route_state(state, case_name)?;
         }
         "dungeon-level-up-down-spells" => {
@@ -5333,13 +5778,23 @@ fn validate_route_smoke_case_state(
         }
         "dungeon-open-chest-spell" => {
             let current = dungeon_cell_index(0, state.player.x, state.player.y);
-            if state.grid.get(current).copied() != Some(0x70)
+            if state.grid.get(current).copied() != Some(0x78)
                 || state.spell_charges[OPEN_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
                 || !state.message.contains("Safely opened dungeon chest")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not open the dungeon chest by spell"
+                )));
+            }
+        }
+        "dungeon-open-chest-command" => {
+            let current = dungeon_cell_index(0, state.player.x, state.player.y);
+            if state.grid.get(current).copied() != Some(0x78)
+                || !state.message.contains("Opened dungeon chest")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not clear dungeon chest trap/subtype bits while preserving the visit marker"
                 )));
             }
         }
@@ -5444,6 +5899,80 @@ fn validate_route_smoke_case_state(
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public #51 poison-gas roll semantics"
+                )));
+            }
+        }
+        "castle-jimmy-magic-lock-no-picker" => {
+            if state.turn != 1
+                || state.keys != DEFAULT_KEY_STOCK - 1
+                || state.prng_state != 0x3456
+                || state.active_jimmy.is_some()
+                || state.grid[TOWN_GRID_SIDE + 2] != TOWN_DOOR_MAGIC_PLAIN_TILE
+                || state.message != "Key broke!"
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not take the promptless magic-lock key-break path"
+                )));
+            }
+        }
+        "castle-jimmy-empty-restraint-no-picker" => {
+            if state.turn != 1
+                || state.keys != DEFAULT_KEY_STOCK
+                || state.prng_state != 0x3456
+                || state.active_jimmy.is_some()
+                || state.grid[TOWN_GRID_SIDE + 2] != JIMMY_STOCKS_TILE
+                || state.message != "No one is there!"
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not reject the empty restraint before picker and PRNG"
+                )));
+            }
+        }
+        "castle-jimmy-prisoner-release" => {
+            let released = state.npcs.iter().find(|npc| npc.slot == 1);
+            let released_snapshot = released.map(|npc| {
+                (
+                    npc.dialog_id,
+                    npc.schedule[NPC_SCHEDULE_AI_OFFSET
+                        ..NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT]
+                        .to_vec(),
+                )
+            });
+            if state.turn != 1
+                || state.keys != DEFAULT_KEY_STOCK
+                || state.moral_standing != MORAL_STANDING_MAX
+                || state.removed_town_npc_flags.get(&17).copied().unwrap_or(0) & 0b10 == 0
+                || state.grid[TOWN_GRID_SIDE + 2] != JIMMY_MANACLES_TILE
+                || released.is_none_or(|npc| {
+                    npc.dialog_id != NPC_DIALOG_ID_NONE
+                        || npc.schedule[NPC_SCHEDULE_AI_OFFSET
+                            ..NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT]
+                            .iter()
+                            .any(|mode| *mode != JIMMY_RELEASE_AI_MODE)
+                })
+                || state.active_jimmy.is_some()
+                || state.message != "I thank thee!"
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the live prisoner release mutation and reward: turn={}, keys={}, moral={}, mask={:#010x}, tile={:#04x}, npc={released_snapshot:?}, active_jimmy={}, message={:?}",
+                    state.turn,
+                    state.keys,
+                    state.moral_standing,
+                    state.removed_town_npc_flags.get(&17).copied().unwrap_or(0),
+                    state.grid[TOWN_GRID_SIDE + 2],
+                    state.active_jimmy.is_some(),
+                    state.message,
+                )));
+            }
+        }
+        "reload-castle-jimmy-prisoner-release" => {
+            if state.turn != 1
+                || state.keys != DEFAULT_KEY_STOCK
+                || state.moral_standing != MORAL_STANDING_MAX
+                || state.removed_town_npc_flags.get(&17).copied().unwrap_or(0) & 0b10 == 0
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not preserve the native prisoner removal mask and reward across save/reload"
                 )));
             }
         }
@@ -5685,7 +6214,7 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-town-attack-death-mask-npc" => {
-            if !state.removed_town_npcs.contains(&(17, 0, 1))
+            if state.removed_town_npc_flags.get(&17).copied().unwrap_or(0) & 0b10 == 0
                 || state.combat_active
                 || !state.message.contains("target removed")
                 || !state.npcs.is_empty()
@@ -5696,10 +6225,12 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-town-attack-guard-alarm" => {
-            let castle_scene = Scene::new(17).expect("castle scene is valid");
             if state.combat_active
-                || state.town_npc_alarm_state(castle_scene, 0, 1)
-                    != Some(TownNpcAlarmState::Fortified)
+                || state
+                    .npcs
+                    .iter()
+                    .find(|npc| npc.slot == 1)
+                    .is_none_or(|npc| npc.schedule[..3] != [7, 7, 7])
                 || !state.message.contains("alarm raised")
             {
                 return Err(io::Error::other(format!(
@@ -5708,10 +6239,7 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-town-hostile-adjacent-alarm" => {
-            let castle_scene = Scene::new(17).expect("castle scene is valid");
             if state.combat_active
-                || state.town_npc_alarm_state(castle_scene, 0, 1)
-                    != Some(TownNpcAlarmState::Fortified)
                 || !state.message.contains("Hostile NPC slot 1")
                 || !state.message.contains("alarm raised")
             {
@@ -5721,10 +6249,12 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-town-guard-arrest-refusal" => {
-            let castle_scene = Scene::new(17).expect("castle scene is valid");
             if state.pending_town_arrest.is_some()
-                || state.town_npc_alarm_state(castle_scene, 0, 2)
-                    != Some(TownNpcAlarmState::Fortified)
+                || state
+                    .npcs
+                    .iter()
+                    .find(|npc| npc.slot == 2)
+                    .is_none_or(|npc| npc.schedule[..3] != [7, 7, 7])
                 || !state.message.contains("Refused surrender")
             {
                 return Err(io::Error::other(format!(
@@ -5775,9 +6305,11 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-death-vision-look" => {
-            if !state.message.contains("Strange vision") {
+            if !state.message.contains("Strange vision") && !state.message.contains("Death vision")
+            {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not complete the death-vision Look flow"
+                    "route smoke `{case_name}` did not complete the death-vision Look flow; message `{}`",
+                    state.message
                 )));
             }
         }
@@ -5871,7 +6403,7 @@ fn validate_route_smoke_case_state(
             if state.current_floor() != Some(1)
                 || state.player.x != 16
                 || state.player.y != 15
-                || !state.message.contains("floor 1")
+                || state.message != "Up!"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the native walk-on stair up transition"
@@ -5882,7 +6414,7 @@ fn validate_route_smoke_case_state(
             if state.current_floor() != Some(0)
                 || state.player.x != 16
                 || state.player.y != 15
-                || !state.message.contains("floor 0")
+                || state.message != "Down!"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the native walk-on stair down transition"
@@ -5907,13 +6439,41 @@ fn validate_route_smoke_case_state(
                 )));
             };
             let idx = world_cell_index(seal.x, seal.y);
-            if state.grid.get(idx).copied() != Some(seal.closed_tile ^ WORD_OF_POWER_SEAL_XOR)
-                || state.player.x != seal.x
+            let word_index = WORD_OF_POWER_SEALS
+                .iter()
+                .position(|candidate| candidate.word == seal.word)
+                .expect("route seal belongs to fixed word table");
+            if state.grid.get(idx).copied() != Some(seal.unsealed_tile)
+                || state.player.x != (seal.x + 1) % WORLD_SIDE
                 || state.player.y != seal.y
+                || state.word_of_power_seal_flags[word_index] & SAVE_QUEST_TILE_FLAG_HIGH_BIT == 0
                 || !state.message.contains("The seal opens.")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not open the public Word-of-Power seal"
+                )));
+            }
+        }
+        "britannia-empty-yell-is-acted" => {
+            if state.turn != 1
+                || state.active_yell.is_some()
+                || state.message != YELL_NOTHING_SAID_MESSAGE
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not commit the empty prompted Yell"
+                )));
+            }
+        }
+        "britannia-ruined-honesty-shrine-restoration" => {
+            let (x, y) = WORLD_SHRINE_COORDINATES[0];
+            if state.grid[world_cell_index(x, y)] != WORLD_SHRINE_TILE
+                || state.shrine_ruin_flags[0] != 0x05
+                || state.word_of_power_seal_flags[0] != 0x27
+                || state.active_shrine_restoration.is_some()
+                || !state.message.contains(SHRINE_RESTORATION_SUCCESS_BANNER)
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete the ruined-shrine restoration"
                 )));
             }
         }
@@ -5946,12 +6506,18 @@ fn validate_route_smoke_case_state(
         }
         "shop-arms-local-buy-sell-route" => {
             if state.gold != 999
-                || state.active_shop.is_some()
-                || state.equipment_stock[EQUIPMENT_ID_BOW] != 0
-                || !state.message.contains("Farewell")
+                || !matches!(
+                    state.active_shop,
+                    Some(ActiveShopSession::ArmsLocal(
+                        ArmsShopState::SellPickItem(_),
+                        ArmsShop::IolosBows
+                    ))
+                )
+                || state.equipment_stock[EQUIPMENT_ID_BOW] != 1
+                || !state.message.starts_with("No\n")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not exercise arms buy/sell decline without mutation"
+                    "route smoke `{case_name}` did not exercise arms buy/sell browser declines without mutation"
                 )));
             }
         }
@@ -6143,7 +6709,10 @@ fn validate_route_smoke_case_state(
                 || !state.message.contains("Pass")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not preserve horse-trader delivery across save/reload"
+                    "route smoke `{case_name}` did not preserve horse-trader delivery across save/reload: gold={}/{expected_gold}, shop={}, horse={horse:?}, boardable={boardable}, message={:?}",
+                    state.gold,
+                    state.active_shop.is_some(),
+                    state.message
                 )));
             }
         }
@@ -6168,7 +6737,7 @@ fn validate_route_smoke_case_state(
             let shipwright = shipwright_route_shop(case_name);
             let (x, y) = shipwright_delivery_coordinate(shipwright);
             let expected_pending = if case_name.contains("skiff") {
-                PendingVehicleAcquisition::Skiff { x, y }
+                PendingVehicleAcquisition::Skiff { x, y, aux3: 0 }
             } else {
                 PendingVehicleAcquisition::Frigate { x, y, skiffs: 2 }
             };
@@ -6208,6 +6777,7 @@ fn validate_route_smoke_case_state(
             }
         }
         "dungeon-hole-up-no-direct-recovery" => {
+            let camp_messages = load_camp_result_messages(game_dir)?;
             if state.clock.hour != 9
                 || state.party.get(0).is_none_or(|member| {
                     member.status != b'G' || member.hp != 5 || member.mana != 8
@@ -6219,7 +6789,7 @@ fn validate_route_smoke_case_state(
                     .party
                     .get(2)
                     .is_none_or(|member| member.status != b'D' || member.hp != 0)
-                || !state.message.contains("recovered 0 HP and 0 MP")
+                || state.message != camp_messages.success
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve no-direct-recovery rest behavior"
@@ -6227,6 +6797,7 @@ fn validate_route_smoke_case_state(
             }
         }
         "dungeon-long-camp-recovery" => {
+            let camp_messages = load_camp_result_messages(game_dir)?;
             if state.clock.hour != 14
                 || state.active_rest.is_some()
                 || state.party.get(0).is_none_or(|member| {
@@ -6249,11 +6820,7 @@ fn validate_route_smoke_case_state(
                 || state.party.get(5).is_none_or(|member| {
                     member.status != b'D' || member.hp != 0 || member.mana != 5
                 })
-                || !state
-                    .message
-                    .contains("Party rested 6 hours; party slot 4 keeps watch")
-                || !state.message.contains("recovered")
-                || !state.message.contains("MP")
+                || state.message != camp_messages.success
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public #47 completed long-camp recovery"
@@ -6266,6 +6833,7 @@ fn validate_route_smoke_case_state(
         // assigns (22 / 24 / 10) and the Avatar's hit points, which the
         // walk caps at a maximum of two.
         "dungeon-camp-inside-cooldown-window" => {
+            let camp_messages = load_camp_result_messages(game_dir)?;
             if state.clock.hour != 14
                 || state.active_rest.is_some()
                 || state.party.first().is_none_or(|member| {
@@ -6280,7 +6848,7 @@ fn validate_route_smoke_case_state(
                 || state.party.get(3).is_none_or(|member| {
                     member.status != b'G' || member.hp != 5 || member.mana != 3
                 })
-                || !state.message.contains("recovered 0 HP and 0 MP")
+                || state.message != camp_messages.no_effect
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` recovered inside the published camp cooldown window"
@@ -6329,6 +6897,58 @@ fn validate_route_smoke_case_state(
                 )));
             }
         }
+        "ship-xit-launches-skiff" => {
+            let parked_ship = state.active_objects.iter().skip(1).find(|object| {
+                object.type_byte == FIRST_PLAYABLE_FRIGATE_TILE
+                    && object.x == state.player.x
+                    && object.y == state.player.y
+                    && object.z == WorldPlane::Britannia.save_floor()
+            });
+            if state.turn != 2
+                || !matches!(state.player.transport, TransportState::Skiff { .. })
+                || parked_ship.is_none_or(|object| {
+                    object.aux1 != FIRST_PLAYABLE_FULL_SHIP_HULL || object.aux3 != 1
+                })
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not launch a skiff while parking the decremented ship hull"
+                )));
+            }
+        }
+        "ship-xit-no-skiffs-refusal" => {
+            if state.turn != 0
+                || !matches!(
+                    state.player.transport,
+                    TransportState::Ship {
+                        sails_hoisted: false,
+                        hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+                        skiffs: 0,
+                        ..
+                    }
+                )
+                || state.message != SHIP_NO_SKIFFS_WARNING
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not preserve the furled ship on the published no-skiffs refusal"
+                )));
+            }
+        }
+        "ship-yell-toggles-town-band" | "ship-yell-toggles-dungeon-band" => {
+            let expected_scene = if case_name == "ship-yell-toggles-town-band" {
+                0x11
+            } else {
+                0x21
+            };
+            if state.current_scene_byte() != expected_scene
+                || state.turn != 1
+                || !state.player.transport.is_ship_under_sail()
+                || state.message != YELL_SAILS_HOISTED_MESSAGE
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not take the published low-scene-byte sail shortcut"
+                )));
+            }
+        }
         "reload-ship-xit-skiff-pass" => {
             if !matches!(state.player.transport, TransportState::Skiff { .. })
                 || state.active_objects.first().is_none_or(|object| {
@@ -6346,7 +6966,8 @@ fn validate_route_smoke_case_state(
         "dungeon-active-monster-attack-ambush" | "dungeon-active-monster-contact-ambush" => {
             if !state.combat_active
                 || !state.message.contains("entered dungeon combat")
-                || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile != 0xC0
+                || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].aux1
+                    != DUNGEON_MONSTER_COMBAT_CLASSES[0]
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].x != 6
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].y != 5
                 || !state.combat_terrain.iter().all(|row| {
@@ -6356,6 +6977,54 @@ fn validate_route_smoke_case_state(
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not enter the public #21 dungeon ambush frame"
+                )));
+            }
+        }
+        "dungeon-jimmy-no-keys-commits-action"
+        | "dungeon-jimmy-no-lock-commits-action"
+        | "dungeon-jimmy-cancel-commits-action"
+        | "dungeon-jimmy-success-clears-trap-subtype" => {
+            let index = dungeon_cell_index(
+                state.current_floor().unwrap_or(0) as u8,
+                state.player.x,
+                state.player.y,
+            );
+            let expected = match case_name {
+                "dungeon-jimmy-no-keys-commits-action" => {
+                    state.keys == 0
+                        && state.grid[index] == 0x4b
+                        && state.prng_state == 0x1234
+                        && state.message == "No keys!"
+                }
+                "dungeon-jimmy-no-lock-commits-action" => {
+                    state.keys == 2
+                        && state.grid[index] == 0x00
+                        && state.prng_state == 0x1234
+                        && state.message == "No lock!"
+                }
+                "dungeon-jimmy-cancel-commits-action" => {
+                    state.keys == 2
+                        && state.grid[index] == 0x4b
+                        && state.prng_state == 0x1234
+                        && state.message == "None!"
+                }
+                "dungeon-jimmy-success-clears-trap-subtype" => {
+                    state.keys == 2
+                        && state.grid[index] == 0x78
+                        && state.prng_state == u5_prng_advance_state(0x1234)
+                        && state.message == "Unlocked!"
+                }
+                _ => unreachable!("grouped Jimmy route names are exhaustive"),
+            };
+            if state.turn != 1 || state.active_jimmy.is_some() || !expected {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` missed the committed dungeon Jimmy outcome (turn {}, keys {}, cell {:#04x}, prng {:#06x}, prompt {}, message `{}`)",
+                    state.turn,
+                    state.keys,
+                    state.grid[index],
+                    state.prng_state,
+                    state.active_jimmy.is_some(),
+                    state.message
                 )));
             }
         }
@@ -6414,23 +7083,24 @@ fn validate_route_smoke_case_state(
                 )));
             }
         }
-        "doom-combat-quit-defeat" => {
-            if state.combat_active
-                || !state.message.contains("Combat abandoned")
-                || state.combat_frame_snapshot.is_some()
+        "doom-combat-quit-refusal" => {
+            if !state.combat_active
+                || !state.message.contains("Quit-Not here")
+                || state.combat_frame_snapshot.is_none()
+                || state.pending_combat_actor_slot.is_none()
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not abandon combat and restore the dungeon frame"
+                    "route smoke `{case_name}` did not refuse Quit and re-prompt the same combat actor"
                 )));
             }
         }
-        "terrain-combat-xit-no-foes-clean-exit" => {
+        "terrain-combat-escape-announced-cleanup" => {
             if state.combat_active
-                || !state.message.contains("Exit combat")
+                || state.message != "Escape!"
                 || state.combat_frame_snapshot.is_some()
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not exit no-foe combat through X-it cleanup (combat_active={}, snapshot={}, message `{}`)",
+                    "route smoke `{case_name}` did not run announced Escape cleanup (combat_active={}, snapshot={}, message `{}`)",
                     state.combat_active,
                     state.combat_frame_snapshot.is_some(),
                     state.message
@@ -6548,17 +7218,35 @@ fn validate_shadowlord_shard_route(
     item_index: usize,
     message_fragment: &str,
 ) -> io::Result<()> {
-    let shadowlord_tile = SHADOWLORD_OBJECT_TILE_BASE + shadowlord_index as u8;
     if state.shadowlord_hideouts.get(shadowlord_index).copied() != Some(SHADOWLORD_VANQUISHED)
         || state.special_items.get(item_index).copied() != Some(0)
         || state
             .active_objects
             .iter()
-            .any(|object| object.type_byte == shadowlord_tile && object.tile == shadowlord_tile)
+            .copied()
+            .skip(1)
+            .any(PlayState::is_shadowlord_actor)
+        || state.summoned_shadowlord.is_some()
         || !state.message.contains(message_fragment)
     {
         return Err(io::Error::other(format!(
-            "route smoke `{case_name}` did not complete native shard destruction"
+            "route smoke `{case_name}` did not complete native shard destruction: \
+             hideout={:?}, item={:?}, player=({}, {}, {:?}), actors={:?}, summoned={:?}, message={:?}",
+            state.shadowlord_hideouts.get(shadowlord_index),
+            state.special_items.get(item_index),
+            state.player.x,
+            state.player.y,
+            state.current_floor(),
+            state
+                .active_objects
+                .iter()
+                .copied()
+                .skip(1)
+                .filter(|object| PlayState::is_shadowlord_actor(*object))
+                .map(|object| (object.x, object.y, object.z))
+                .collect::<Vec<_>>(),
+            state.summoned_shadowlord,
+            state.message,
         )));
     }
     Ok(())

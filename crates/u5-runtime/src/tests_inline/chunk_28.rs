@@ -571,13 +571,14 @@
         // fixed-cell glyph entry, and never re-enabled.
         let mut gate = DissolveAbortGate::on_driver_load();
         assert!(gate.is_armed());
-        assert!(gate.samples_input_at(0), "every second visited pixel");
-        assert!(!gate.samples_input_at(1));
+        assert!(gate.samples_input_after_copy(1), "the first visit polls");
+        assert!(!gate.samples_input_after_copy(2));
+        assert!(gate.samples_input_after_copy(3));
         gate.note_fixed_cell_glyph_drawn();
         assert!(!gate.is_armed());
         gate.note_fixed_cell_glyph_drawn();
         assert!(!gate.is_armed());
-        assert!(!gate.samples_input_at(0), "a cleared gate never polls");
+        assert!(!gate.samples_input_after_copy(1), "a cleared gate never polls");
     }
 
     #[test]

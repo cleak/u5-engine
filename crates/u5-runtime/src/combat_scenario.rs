@@ -23,12 +23,14 @@ pub enum CombatScenarioInput {
     Move(u8),
     /// Pass / wait one phase.
     Pass,
-    /// Print combat status (no-op turn for the round walker).
+    /// `Z` — open combat status; the action ends after the modal closes.
     StatsPanel,
-    /// `Q` — combat Quit / abandon party (defeat exit).
+    /// `Q` — free combat-scene refusal.
     Quit,
-    /// `X` — combat X-it cleanup (only succeeds when no foes remain).
+    /// `X` — free combat-scene refusal.
     Xit,
+    /// Escape — request cleanup; succeeds only when no active foes remain.
+    Escape,
 }
 
 /// What happened on one scripted step.
@@ -104,6 +106,10 @@ pub fn run_combat_scenario(
         result
             .steps
             .push(CombatScenarioStep::AppliedToSlot(actor_slot));
+        if application.reprompt {
+            state.pending_combat_actor_slot = Some(actor_slot);
+            continue;
+        }
         if matches!(
             application.action,
             CombatPlayerCommandAction::PromptForAttackDirection
@@ -128,11 +134,11 @@ fn scenario_command_input(input: &CombatScenarioInput) -> CombatPlayerCommandInp
             CombatPlayerCommandInput::AttackDirection(*direction)
         }
         CombatScenarioInput::Move(direction) => CombatPlayerCommandInput::Direction(*direction),
-        CombatScenarioInput::Pass | CombatScenarioInput::StatsPanel => {
-            CombatPlayerCommandInput::Key(' ')
-        }
+        CombatScenarioInput::Pass => CombatPlayerCommandInput::Key(' '),
+        CombatScenarioInput::StatsPanel => CombatPlayerCommandInput::Key('Z'),
         CombatScenarioInput::Quit => CombatPlayerCommandInput::Key('Q'),
         CombatScenarioInput::Xit => CombatPlayerCommandInput::Key('X'),
+        CombatScenarioInput::Escape => CombatPlayerCommandInput::Key('\u{1b}'),
     }
 }
 
@@ -263,26 +269,14 @@ mod tests {
     }
 
     #[test]
-    fn quit_input_marks_defeat_exit() {
-        let mut state = crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5);
-        // Pretend combat is active with one fake actor in the player
-        // slot. We exercise only the Quit branch since it does not
-        // need full combat actor setup to verify the exit path.
-        state.combat_active = true;
-        state.combat_actors[0] = crate::CombatActorDescriptor::from_row([
-            20,
-            1,
-            crate::COMBAT_ACTOR_FLAG_SELECTABLE_80,
-            0,
-            0,
-            0,
-            5,
-            5,
-        ]);
-        state.pending_combat_actor_slot = Some(0);
+    fn quit_input_is_a_free_refusal_for_the_same_actor() {
+        let mut state = adjacent_skeleton_combat_state();
         let result = run_combat_scenario(&mut state, &[CombatScenarioInput::Quit]);
-        assert_eq!(result.final_exit, Some(CombatRoundLoopExit::Defeat));
-        assert!(!state.combat_active);
+        assert_eq!(result.steps, vec![CombatScenarioStep::AppliedToSlot(0)]);
+        assert_eq!(result.final_exit, None);
+        assert!(state.combat_active);
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
     }
 
     #[test]

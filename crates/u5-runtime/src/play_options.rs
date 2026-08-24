@@ -37,9 +37,12 @@ pub struct PlayOptions {
     pub saved_dungeon_working_buffer: Option<Vec<u8>>,
     pub moonstone_slots: [MoonstoneGateSlot; MOONSTONE_SLOT_COUNT],
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
-    pub quest_progress_word: u16,
+    pub removed_town_npc_flags: HashMap<u8, u32>,
+    pub talk_branch_flags: HashMap<u8, u32>,
     pub shrine_ordained_mask: u8,
     pub shrine_codex_mask: u8,
+    pub word_of_power_seal_flags: [u8; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+    pub shrine_ruin_flags: [u8; SAVE_SHRINE_RUIN_FLAG_COUNT],
     pub moral_standing: u8,
     pub toll_progress: u8,
     /// `overworld.md §9.1` (spec HEAD c00bf63): the shared
@@ -53,29 +56,30 @@ pub struct PlayOptions {
     pub light_spell_counter: u8,
     pub wind: WindState,
     pub wind_save_byte: u8,
-    pub timing_status: TimingStatusTag,
     pub time_stop_counter: u8,
     pub active_effect_tag: Option<u8>,
     pub active_effect_counter: u8,
     pub fortunes_of_war: u8,
-    /// `rest-and-camp.md §5` camp cooldown counter seed. The counter is
-    /// engine-only state (`PlayState::camp_cooldown` explains why it is
-    /// not save-backed), so a route or debug session that needs to start
-    /// inside the fourteen-hour window has to seed it here — the only
-    /// other way to reach that state is to complete a camp, and the
-    /// wilderness rest loop's sleep-ambush roll interrupts long before a
-    /// second six-hour camp can complete.
+    /// `rest-and-camp.md §5` persisted camp cooldown counter, restored
+    /// from `SAVED.GAM` offset `0x02E6`.
     pub camp_cooldown: u8,
+    /// `rest-and-camp.md §5` / `formats/saved-gam.md §10` persisted
+    /// month cookie at `0x02E7`. The apparition draw writes it; no
+    /// shipped consumer reads it.
+    pub camp_month_cookie: u8,
     pub active_player: Option<usize>,
     pub combat_round_counter: u8,
+    pub combat_interference_sources: [u8; COMBAT_ACTOR_SLOTS],
     pub transport: TransportState,
     pub facing: Option<Direction>,
     pub pending_vehicle: Option<PendingVehicleAcquisition>,
+    pub pending_vehicle_save: PendingVehicleSaveState,
     pub inn_registry: Vec<InnGuestRecord>,
     pub blackthorn_story: BlackthornStoryState,
     pub initial_britannia_overlay: Option<Vec<ActiveObject>>,
     pub debug_enter: Option<PlayTarget>,
     pub saved_active_objects: Option<Vec<ActiveObject>>,
+    pub town_npc_mutations: Vec<TownNpcMutation>,
     pub save_template_source: SaveTemplateSource,
 }
 
@@ -116,9 +120,12 @@ impl Default for PlayOptions {
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-            quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+            removed_town_npc_flags: HashMap::new(),
+            talk_branch_flags: HashMap::new(),
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
+            word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+            shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
             moral_standing: 0,
             toll_progress: 0,
             natural_moongate_counter: 0,
@@ -128,24 +135,37 @@ impl Default for PlayOptions {
             light_spell_counter: 0,
             wind: WindState::default(),
             wind_save_byte: 0,
-            timing_status: TimingStatusTag::default(),
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
             fortunes_of_war: 0,
             camp_cooldown: 0,
+            camp_month_cookie: 0,
             active_player: None,
             combat_round_counter: 0,
+            combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
             transport: TransportState::Foot,
             facing: None,
             pending_vehicle: None,
+            pending_vehicle_save: PendingVehicleSaveState::default(),
             inn_registry: Vec::new(),
             blackthorn_story: BlackthornStoryState::default(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: None,
+            town_npc_mutations: Vec::new(),
             save_template_source: SaveTemplateSource::PreferSavedGame,
         }
+    }
+}
+
+impl PlayOptions {
+    /// Derive timing from the one authoritative shared effect slot.
+    pub const fn active_effect_timing_status(&self) -> TimingStatusTag {
+        TimingStatusTag::from_save_byte(match self.active_effect_tag {
+            Some(tag) if self.active_effect_counter != 0 => tag,
+            _ => 0,
+        })
     }
 }
 

@@ -285,19 +285,25 @@ pub enum PartyTargetSelectorAction {
     Confirm,
     /// Escape — cancel the prompt.
     Cancel,
+    /// North or West — cycle to the previous highlighted party slot.
+    PreviousSlot,
+    /// South or East — cycle to the next highlighted party slot.
+    NextSlot,
     /// Any other byte — silently discarded; prompt re-reads input.
     Discard,
 }
 
 /// `input.md §9`: classify one keystroke for the shared
-/// party-member selector. Caller has already applied the case fold
-/// from [`input_case_fold`]; this helper does no further
-/// translation.
+/// party-member selector, including cardinal highlight navigation. Caller has
+/// already applied the case fold from [`input_case_fold`]; this helper does no
+/// further translation.
 pub const fn party_target_selector_action(byte: u8) -> PartyTargetSelectorAction {
     match byte {
         b'1'..=b'6' => PartyTargetSelectorAction::SelectSlot(byte - b'1'),
         b'0' | b' ' | 0x0D | 0x0A => PartyTargetSelectorAction::Confirm,
         0x1B => PartyTargetSelectorAction::Cancel,
+        INPUT_CODE_NORTH | INPUT_CODE_WEST => PartyTargetSelectorAction::PreviousSlot,
+        INPUT_CODE_SOUTH | INPUT_CODE_EAST => PartyTargetSelectorAction::NextSlot,
         _ => PartyTargetSelectorAction::Discard,
     }
 }

@@ -2,3 +2,6 @@
 name = "u5-runtime"
 version.workspace = true
 edition.workspace = true
+
+[dependencies]
+chrono = { workspace = true }

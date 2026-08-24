@@ -13,7 +13,7 @@
         pages[floor1 + 3] = 0xc8;
         fs::write(dir.join("CASTLE.DAT"), pages).unwrap();
         let mut grid = open_grid();
-        grid[0] = 80;
+        grid[0] = TOWN_KLIMB_ASCEND_TILE;
         let mut state = test_state(grid, 0, 0);
 
         assert_eq!(
@@ -30,17 +30,21 @@
             [Some((0, 0)), None],
             "the floor reached by stairs harvests its beacon source"
         );
-        assert!(harvest_location_markers(&state.grid).npc_markers.is_empty());
+        assert!(
+            harvest_location_npc_start_markers(&state.grid)
+                .npc_markers
+                .is_empty()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn town_k_climbs_when_only_one_connected_floor_exists() {
+    fn town_k_ascend_link_climbs_up() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         let mut grid = open_grid();
-        grid[0] = 80;
+        grid[0] = TOWN_KLIMB_ASCEND_TILE;
         let mut state = test_state(grid, 0, 0);
 
         assert_eq!(
@@ -52,6 +56,7 @@
         assert_eq!(state.grid[0], 1);
         assert_eq!(state.active_objects[0].z, 1);
         assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Up!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -170,11 +175,19 @@
         let mut state = test_state(grid, 0, 0);
         state.visibility_dirty = false;
 
+        let turn_before = state.turn;
+        let step = state
+            .step_with_game_dir(Direction::East, Some(&dir))
+            .unwrap();
+        assert_eq!(step, MoveOutcome::Moved);
         assert_eq!(
             state
-                .step_with_game_dir(Direction::East, Some(&dir))
+                .apply_post_turn_effects_after_outcome(turn_before, &dir, step)
                 .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: -1 })
+            Some(MoveOutcome::Transition(AreaTransition::ChangedFloor {
+                scene,
+                floor: -1
+            }))
         );
 
         assert_eq!(state.area, Area::Town { scene, floor: -1 });
@@ -183,7 +196,7 @@
         assert_eq!(state.active_objects[0].z, -1);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("trap door"));
+        assert!(state.message.contains("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -204,7 +217,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.active_objects[0].z, -1);
         assert!(state.message.contains("Ignited a torch"));
-        assert!(state.message.contains("trap door"));
+        assert!(state.message.contains("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -234,7 +247,7 @@
         assert_eq!(state.turn, 0);
         assert_eq!(state.grid[32 + 1], 55);
         assert!(state.message.contains("Player:"));
-        assert!(!state.message.contains("trap door"));
+        assert!(!state.message.contains("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -254,7 +267,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.grid[32 + 1], 4);
         assert!(state.message.starts_with("Passed."));
-        assert!(state.message.contains("trap door"));
+        assert!(state.message.contains("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -278,7 +291,7 @@
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert!(state.message.contains("Light!"));
-        assert!(state.message.contains("trap door"));
+        assert!(state.message.contains("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -303,11 +316,19 @@
         grid[1] = 55;
         let mut state = test_state(grid, 0, 0);
 
+        let turn_before = state.turn;
+        let step = state
+            .step_with_game_dir(Direction::East, Some(&dir))
+            .unwrap();
+        assert_eq!(step, MoveOutcome::Moved);
         assert_eq!(
             state
-                .step_with_game_dir(Direction::East, Some(&dir))
+                .apply_post_turn_effects_after_outcome(turn_before, &dir, step)
                 .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: -1 })
+            Some(MoveOutcome::Transition(AreaTransition::ChangedFloor {
+                scene,
+                floor: -1
+            }))
         );
 
         assert_eq!(state.grid[0], BEACON_BRIGHT_LIGHT_TILE);
@@ -319,19 +340,20 @@
             [Some((0, 0)), None],
             "the floor reached by trapdoor harvests its beacon source"
         );
-        assert!(harvest_location_markers(&state.grid).npc_markers.is_empty());
+        assert!(
+            harvest_location_npc_start_markers(&state.grid)
+                .npc_markers
+                .is_empty()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn town_step_onto_clean_exit_tile_restores_return_world_transport() {
+    fn town_boundary_exit_restores_return_world_transport() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         write_save_template_and_empty_overlays(&dir, 0, 0xff, 10, 20);
-        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 0 55\n").unwrap();
-        let mut grid = open_grid();
-        grid[1] = 55;
-        let mut state = test_state(grid, 0, 0);
+        let mut state = test_state(open_grid(), 0, 0);
         let mut world_grid = open_world_grid();
         world_grid[world_cell_index(10, 20)] = 7;
         let world_object = ActiveObject {
@@ -353,7 +375,6 @@
             x: 10,
             y: 20,
             transport,
-            timing_status: TimingStatusTag::HalfTime,
             sail_cadence: 1,
             sail_stall_pending: true,
             grid: world_grid,
@@ -376,21 +397,18 @@
 
         assert_eq!(
             state
-                .step_with_game_dir(Direction::East, Some(&dir))
+                .step_with_game_dir(Direction::North, Some(&dir))
                 .unwrap(),
             MoveOutcome::Observed
         );
-
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.turn, 0);
+        assert_eq!((state.player.x, state.player.y), (0, 0));
         assert_eq!(state.message, "Leave CASTLE:0?");
 
         assert_eq!(
             handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-
         assert_eq!(
             state.area,
             Area::World {
@@ -399,16 +417,16 @@
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.player.transport, transport);
-        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
         assert_eq!(state.sail_cadence, 1);
         assert!(state.sail_stall_pending);
-        assert_eq!(state.active_objects[0].tile, 184);
         assert_eq!(state.grid[world_cell_index(10, 20)], 7);
         assert_eq!(state.world_object_at(11, 20), Some(&world_object));
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("town exit tile"));
-        assert!(state.message.contains("debug return point"));
+        assert_eq!(
+            state.message,
+            "Yes. Left CASTLE:0 for UNDERWORLD via the saved return point."
+        );
 
         assert_eq!(
             state.save_game_command(&dir, Some(true)).unwrap(),
@@ -428,28 +446,11 @@
             options.saved_active_objects.as_ref().unwrap()[0],
             world_object
         );
-        let reloaded = PlayState::load_scene(&dir, options).unwrap();
-        assert_eq!(
-            reloaded.area,
-            Area::World {
-                plane: WorldPlane::Underworld
-            }
-        );
-        assert_eq!((reloaded.player.x, reloaded.player.y), (10, 20));
-        assert_eq!(
-            reloaded.player.transport,
-            TransportState::Carpet {
-                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
-                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
-            }
-        );
-        assert_eq!(reloaded.active_objects[1], world_object);
-        assert!(reloaded.return_world.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn town_exit_tile_uses_clean_location_table_when_no_return_snapshot() {
+    fn town_boundary_exit_uses_clean_location_table_without_return_snapshot() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         fs::write(
@@ -457,10 +458,7 @@
             "BRITANNIA 10 20 CASTLE:0\n",
         )
         .unwrap();
-        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 0 55\n").unwrap();
-        let mut grid = open_grid();
-        grid[1] = 55;
-        let mut state = test_state(grid, 0, 0);
+        let mut state = test_state(open_grid(), 31, 0);
 
         assert_eq!(
             state
@@ -468,17 +466,14 @@
                 .unwrap(),
             MoveOutcome::Observed
         );
-
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.turn, 0);
+        assert_eq!((state.player.x, state.player.y), (31, 0));
         assert_eq!(state.message, "Leave CASTLE:0?");
 
         assert_eq!(
             handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-
         assert_eq!(
             state.area,
             Area::World {
@@ -486,282 +481,174 @@
             }
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.active_objects[0].z, 0);
-        assert_eq!(state.grid[world_cell_index(10, 20)], 5);
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("town exit tile"));
-        assert!(state.message.contains("world-location table point"));
+        assert_eq!(state.turn, 0);
+        assert_eq!(
+            state.message,
+            "Yes. Left CASTLE:0 for BRITANNIA via the world-location table point."
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn rejecting_town_exit_tile_prompt_stays_in_location_without_turn() {
+    fn town_boundary_exit_prompts_from_each_edge_without_committing_the_step() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
-        fs::write(
-            dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA 10 20 CASTLE:0\n",
-        )
-        .unwrap();
-        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 0 55\n").unwrap();
-        let mut grid = open_grid();
-        grid[1] = 55;
-        let mut state = test_state(grid, 0, 0);
+        for ((x, y), direction) in [
+            ((5, 0), Direction::North),
+            ((31, 5), Direction::East),
+            ((5, 31), Direction::South),
+            ((0, 5), Direction::West),
+        ] {
+            let mut state = test_state(open_grid(), x, y);
+            assert_eq!(
+                state
+                    .step_with_game_dir(direction, Some(&dir))
+                    .unwrap(),
+                MoveOutcome::Observed
+            );
+            assert_eq!(state.area, Area::Town { scene, floor: 0 });
+            assert_eq!((state.player.x, state.player.y), (x, y));
+            assert!(matches!(
+                state.active_yes_no_prompt,
+                Some(YesNoPromptSession {
+                    kind: YesNoPromptKind::TownExit {
+                        scene: prompt_scene,
+                        floor: 0,
+                    }
+                }) if prompt_scene == scene
+            ));
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn refusing_or_cancelling_town_boundary_exit_discards_the_step() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        for answer in ['N', '\u{1b}'] {
+            let mut state = test_state(open_grid(), 0, 9);
+            assert_eq!(
+                state
+                    .step_with_game_dir(Direction::West, Some(&dir))
+                    .unwrap(),
+                MoveOutcome::Observed
+            );
+            assert_eq!(
+                handle_play_key_input(&mut state, answer, "", &dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert_eq!(state.area, Area::Town { scene, floor: 0 });
+            assert_eq!((state.player.x, state.player.y), (0, 9));
+            assert_eq!(state.active_yes_no_prompt, None);
+            assert_eq!(state.turn, 1);
+            assert_eq!(state.message, "No.");
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_boundary_exit_uses_southeast_corner_terrain_for_every_edge() {
+        let dir = debug_game_dir();
+        for ((x, y), key) in [((5, 0), '8'), ((31, 5), '6'), ((5, 31), '2'), ((0, 5), '4')]
+        {
+            let mut grid = open_grid();
+            grid[31 * 32 + 31] = BRIT_DEEP_WATER_TILE;
+            let mut state = test_state(grid, x, y);
+
+            assert_eq!(
+                handle_play_key_input(&mut state, key, "", &dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert_eq!((state.player.x, state.player.y), (x, y));
+            assert_eq!(state.active_yes_no_prompt, None);
+            assert_eq!(state.turn, 1);
+            assert!(state.message.contains("Blocked by"));
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_boundary_exit_occupancy_uses_the_true_out_of_grid_candidate() {
+        let mut state = test_state(open_grid(), 0, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 31,
+            y: 31,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert!(state.blocking_town_object_at_candidate(-1, 5).is_none());
+        assert!(state.blocking_town_object_at_candidate(32, 5).is_none());
+        assert_eq!(state.step(Direction::West), MoveOutcome::Observed);
+        assert!(state.active_yes_no_prompt.is_some());
+    }
+
+    #[test]
+    fn unrelated_town_exit_prompt_key_waits_without_spending_a_turn() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 0, 5);
+        assert_eq!(state.step(Direction::West), MoveOutcome::Observed);
 
         assert_eq!(
-            state
-                .step_with_game_dir(Direction::East, Some(&dir))
-                .unwrap(),
-            MoveOutcome::Observed
-        );
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'Q', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-
-        assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.active_yes_no_prompt, None);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "No.");
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn town_native_exit_threshold_tile_uses_location_table_without_sidecar() {
-        let dir = debug_game_dir();
-        let scene = Scene::new(17).unwrap();
-        fs::write(
-            dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA 10 20 CASTLE:0\n",
-        )
-        .unwrap();
-        let mut grid = open_grid();
-        grid[1] = TOWN_EXIT_THRESHOLD_TILE;
-        let mut state = test_state(grid, 0, 0);
-
-        assert_eq!(
-            state
-                .step_with_game_dir(Direction::East, Some(&dir))
-                .unwrap(),
-            MoveOutcome::Observed
-        );
-        assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.turn, 0);
-        assert!(matches!(
-            state.active_yes_no_prompt,
-            Some(YesNoPromptSession {
-                kind: YesNoPromptKind::TownExit {
-                    entry,
-                    advance_turn: true
-                }
-            }) if entry.scene == scene && entry.floor == 0 && entry.x == 1 && entry.y == 0
-        ));
+        assert!(state.active_yes_no_prompt.is_some());
         assert_eq!(state.message, "Leave CASTLE:0?");
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(
-            state.area,
-            Area::World {
-                plane: WorldPlane::Britannia
-            }
-        );
-        assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("town exit tile"));
-        assert!(state.message.contains("world-location table point"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn consumed_top_down_action_on_clean_town_exit_tile_prompts_then_exits_on_accept() {
+    fn telescope_tile_and_retired_exit_sidecar_never_raise_leave_prompt() {
         let dir = debug_game_dir();
-        let scene = Scene::new(17).unwrap();
-        write_castle_exit_tile_fixture(&dir);
-        let mut state = town_exit_tile_origin_state();
-
-        assert!(
-            state
-                .handle_top_down_key_with_inline('I', &dir, None, None, None, None)
-                .unwrap()
-        );
-
-        assert_eq!(
-            state.area,
-            Area::Town { scene, floor: 0 }
-        );
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Ignited a torch"));
-        assert!(state.message.contains("Leave CASTLE:0?"));
-        assert!(matches!(
-            state.active_yes_no_prompt,
-            Some(YesNoPromptSession {
-                kind: YesNoPromptKind::TownExit {
-                    entry,
-                    advance_turn: false
-                }
-            }) if entry.scene == scene && entry.floor == 0 && entry.x == 1 && entry.y == 1
-        ));
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(
-            state.area,
-            Area::World {
-                plane: WorldPlane::Britannia
-            }
-        );
-        assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.active_objects[0].z, 0);
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("town exit tile"));
-        assert!(state.message.contains("world-location table point"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn no_turn_top_down_action_on_clean_town_exit_tile_skips_underfoot_exit() {
-        let dir = debug_game_dir();
-        write_castle_exit_tile_fixture(&dir);
-        let mut state = town_exit_tile_origin_state();
-
-        assert!(
-            state
-                .handle_top_down_key_with_inline('Z', &dir, None, None, None, None)
-                .unwrap()
-        );
-
-        assert_eq!(
-            state.area,
-            Area::Town {
-                scene: Scene::new(17).unwrap(),
-                floor: 0
-            }
-        );
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.grid[32 + 1], 55);
-        assert!(state.message.contains("Player:"));
-        assert!(!state.message.contains("town exit tile"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn pass_turn_on_clean_town_exit_tile_prompt_can_be_refused() {
-        let dir = debug_game_dir();
-        let scene = Scene::new(17).unwrap();
-        write_castle_exit_tile_fixture(&dir);
-        let mut state = town_exit_tile_origin_state();
-
-        assert_eq!(
-            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::Observed
-        );
-
-        assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.active_objects[0].z, 0);
-        assert_eq!(state.turn, 1);
-        assert!(state.message.starts_with("Passed."));
-        assert!(state.message.contains("Leave CASTLE:0?"));
-        assert!(matches!(
-            state.active_yes_no_prompt,
-            Some(YesNoPromptSession {
-                kind: YesNoPromptKind::TownExit {
-                    entry,
-                    advance_turn: false
-                }
-            }) if entry.scene == scene && entry.floor == 0 && entry.x == 1 && entry.y == 1
-        ));
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.active_yes_no_prompt, None);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "No.");
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn pass_turn_on_native_town_exit_threshold_tile_prompts_then_exits_on_accept() {
-        let dir = debug_game_dir();
-        let scene = Scene::new(17).unwrap();
         fs::write(
-            dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA 10 20 CASTLE:0\n",
+            dir.join("town_exit_tiles.tsv"),
+            "CASTLE:0 0 1 0 16\n",
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 1] = TOWN_EXIT_THRESHOLD_TILE;
-        let mut state = test_state(grid, 1, 1);
-
-        assert_eq!(
-            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::Observed
-        );
-
-        assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.turn, 1);
-        assert!(state.message.starts_with("Passed."));
-        assert!(state.message.contains("Leave CASTLE:0?"));
-        assert!(matches!(
-            state.active_yes_no_prompt,
-            Some(YesNoPromptSession {
-                kind: YesNoPromptKind::TownExit {
-                    entry,
-                    advance_turn: false
-                }
-            }) if entry.scene == scene && entry.floor == 0 && entry.x == 1 && entry.y == 1
-        ));
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(
-            state.area,
-            Area::World {
-                plane: WorldPlane::Britannia
-            }
-        );
-        assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("town exit tile"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn town_exit_tile_clears_visit_local_door_state() {
-        let dir = debug_game_dir();
-        let scene = Scene::new(17).unwrap();
-        fs::write(
-            dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA 10 20 CASTLE:0\n",
-        )
-        .unwrap();
-        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 0 55\n").unwrap();
-        let mut grid = open_grid();
-        grid[1] = 55;
+        grid[1] = 16;
+        grid[32 + 1] = TELESCOPE_LOOK_TRIGGER_TILE;
         let mut state = test_state(grid, 0, 0);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.active_yes_no_prompt, None);
+
+        state.player.x = 1;
+        state.player.y = 1;
+        state.sync_player_object();
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Passed
+        );
+        assert_eq!(state.active_yes_no_prompt, None);
+        assert!(state.message.starts_with("Passed."));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_boundary_exit_clears_visit_local_door_state() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 0, 0);
         state.door_tracker = Some(DoorTracker {
-            previous_tile: 96,
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
             x: 3,
             y: 1,
             turns_remaining: 4,
@@ -769,20 +656,17 @@
         state.record_open_town_door(scene, 0, 3, 1);
         state.record_revealed_town_secret_door(scene, 0, 4, 1);
         state.record_open_town_door(scene, 0, 4, 1);
-        state.set_town_npc_alarm_state(scene, 0, 2, TownNpcAlarmState::Fleeing);
 
         assert_eq!(
             state
-                .step_with_game_dir(Direction::East, Some(&dir))
+                .step_with_game_dir(Direction::North, Some(&dir))
                 .unwrap(),
             MoveOutcome::Observed
         );
-
         assert_eq!(
             handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-
         assert_eq!(
             state.area,
             Area::World {
@@ -792,73 +676,8 @@
         assert_eq!(state.door_tracker, None);
         assert!(state.opened_town_doors.is_empty());
         assert!(state.revealed_town_secret_doors.is_empty());
-        assert!(state.town_npc_alarm_states.is_empty());
-        assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
     }
-
-    #[test]
-    fn town_exit_tile_uses_published_location_table_without_sidecar() {
-        let dir = debug_game_dir();
-        let scene = Scene::new(17).unwrap();
-        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 0 55\n").unwrap();
-        let mut grid = open_grid();
-        grid[1] = 55;
-        let mut state = test_state(grid, 0, 0);
-
-        assert_eq!(
-            state
-                .step_with_game_dir(Direction::East, Some(&dir))
-                .unwrap(),
-            MoveOutcome::Observed
-        );
-        assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.turn, 0);
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(
-            state.area,
-            Area::World {
-                plane: WorldPlane::Britannia
-            }
-        );
-        assert_eq!((state.player.x, state.player.y), (86, 107));
-        assert_eq!(state.active_objects[0].z, 0);
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("town exit tile"));
-        assert!(state.message.contains("world-location table point"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn town_exit_tile_guard_mismatch_keeps_normal_movement() {
-        let dir = debug_game_dir();
-        let scene = Scene::new(17).unwrap();
-        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 0 56\n").unwrap();
-        let mut grid = open_grid();
-        grid[1] = 16;
-        let mut state = test_state(grid, 0, 0);
-
-        assert_eq!(
-            state
-                .step_with_game_dir(Direction::East, Some(&dir))
-                .unwrap(),
-            MoveOutcome::Moved
-        );
-
-        assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.grid[1], 16);
-        assert_eq!(state.turn, 1);
-        assert!(!state.message.contains("town exit tile"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
     #[test]
     fn town_trap_door_tile_guard_mismatch_keeps_normal_movement() {
         let dir = debug_game_dir();
@@ -1121,12 +940,12 @@
     }
 
     #[test]
-    fn town_k_prompts_when_both_floor_directions_are_connected() {
+    fn town_k_on_non_link_prompts_for_adjacent_climb_over() {
         let dir = debug_game_dir();
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
         let mut grid = open_grid();
-        grid[0] = 80;
+        grid[1] = TOWN_KLIMB_FENCE_FIRST;
         let mut state = test_state(grid, 0, 0);
 
         assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Observed);
@@ -1146,20 +965,228 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(
-            handle_play_key_input(&mut state, '>', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(
-            state.area,
-            Area::Town {
-                scene: Scene::new(17).unwrap(),
-                floor: -1
-            }
-        );
+        assert_eq!(state.area, Area::Town { scene: Scene::new(17).unwrap(), floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
         assert_eq!(state.turn, 1);
         assert!(state.active_direction_prompt.is_none());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_k_directional_descend_links_go_down_without_prompt() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
+        for tile in [TOWN_KLIMB_DESCEND_TILE, TOWN_KLIMB_DESCEND_GRATE_TILE] {
+            let mut grid = open_grid();
+            grid[0] = tile;
+            let mut state = test_state(grid, 0, 0);
+            state.area = Area::Town { scene, floor: 1 };
+            state.active_objects[0].z = 1;
+
+            assert_eq!(
+                state.klimb_command(&dir).unwrap(),
+                MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: 0 })
+            );
+            assert_eq!(state.area, Area::Town { scene, floor: 0 });
+            assert_eq!(state.turn, 1);
+            assert_eq!(state.message, "Down!");
+            assert!(state.active_direction_prompt.is_none());
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_k_on_horse_refuses_for_free_even_on_floor_link() {
+        let mut grid = open_grid();
+        grid[0] = TOWN_KLIMB_ASCEND_TILE;
+        let mut state = test_state(grid, 0, 0);
+        mount_horse(&mut state);
+
+        assert_eq!(
+            state.klimb_command(Path::new("")).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "-On foot!");
+        assert_eq!(state.turn, 0);
+        assert_eq!((state.player.x, state.player.y), (0, 0));
+    }
+
+    #[test]
+    fn town_k_adjacent_invalid_target_is_free_and_cancel_costs_action() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 1);
+
+        assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Observed);
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, "What?");
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Observed);
+        assert_eq!(
+            handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn native_town_trapdoor_is_post_turn_damaging_floor_transition() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
+        fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
+        let mut grid = open_grid();
+        grid[1] = TOWN_TRAPDOOR_LIVE_TILE;
+        let mut state = test_state(grid, 0, 0);
+        state.party[0].hp = 20;
+        state.party[0].max_hp = 20;
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: CharacterStatus::Dead.save_byte(),
+            climb_stat: 0,
+            mana: 0,
+            hp: 7,
+            max_hp: 7,
+            level: 1,
+        });
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: -1 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.turn, 1);
+        assert!((12..=19).contains(&state.party[0].hp));
+        assert_eq!(state.party[1].hp, 7, "Dead slots are not rolled or damaged");
+        assert_eq!(state.party[1].status, CharacterStatus::Dead.save_byte());
+        assert!(state.message.contains("A TRAPDOOR!"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stonegate_trapdoor_applies_exact_scripted_defeat_without_transition() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = TOWN_TRAPDOOR_LIVE_TILE;
+        let mut state = test_state(grid, 1, 1);
+        state.area = Area::Town { scene, floor: 0 };
+        state.player.transport = TransportState::Horse {
+            type_byte: HORSE_MOUNTED_FIRST,
+            tile: HORSE_MOUNTED_FIRST,
+        };
+        state.sync_player_object();
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0x40,
+            tile: 0x40,
+            x: 2,
+            y: 3,
+            z: 0,
+            aux1: 4,
+            phase: 5,
+            aux3: 6,
+        };
+        state.party[0].hp = 20;
+        state.party[0].max_hp = 31;
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: CharacterStatus::Dead.save_byte(),
+            climb_stat: 0,
+            mana: 0,
+            hp: 7,
+            max_hp: 42,
+            level: 1,
+        });
+        state.clock = GameClock::new(5, 59).unwrap();
+        state.food = 50;
+        state.active_player = Some(0);
+        let transport_before = state.player.transport;
+        let max_hp_before = state.party.iter().map(|member| member.max_hp).collect::<Vec<_>>();
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Used
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.player.transport, transport_before);
+        assert_eq!(state.turn, 1);
+        assert_eq!((state.clock.hour, state.clock.minute), (6, 0));
+        assert_eq!(state.food, 50, "the post-death status tail sees zero eaters");
+        assert_eq!(state.active_player, None);
+        assert!(state.grid.iter().all(|tile| *tile == STONEGATE_TRAPDOOR_GRID_TILE));
+        assert!(state.visibility_dirty);
+
+        assert_eq!(state.active_objects.len(), OOL_SLOTS);
+        assert_eq!(
+            state.active_objects[0],
+            ActiveObject {
+                x: 1,
+                y: 1,
+                z: 0,
+                ..ActiveObject::empty()
+            }
+        );
+        assert!(state.active_objects[1..].iter().all(|object| object.is_empty()));
+
+        assert!(state.party.iter().all(|member| member.hp == 0));
+        assert!(
+            state
+                .party
+                .iter()
+                .all(|member| member.status == CharacterStatus::Dead.save_byte())
+        );
+        assert_eq!(
+            state.party.iter().map(|member| member.max_hp).collect::<Vec<_>>(),
+            max_hp_before
+        );
+        assert_eq!(state.message, "Passed. A TRAPDOOR!");
+        assert_eq!(
+            state.take_pending_stonegate_trapdoor_playback(),
+            Some(StonegateTrapdoorPlayback::complete(2))
+        );
+        assert_eq!(state.take_pending_stonegate_trapdoor_playback(), None);
+    }
+
+    #[test]
+    fn magic_carpet_suppresses_native_stonegate_trapdoor() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = TOWN_TRAPDOOR_LIVE_TILE;
+        let mut state = test_state(grid, 1, 1);
+        state.area = Area::Town { scene, floor: 0 };
+        state.player.transport = TransportState::Carpet {
+            type_byte: CARPET_MOUNTED,
+            tile: CARPET_MOUNTED,
+        };
+        state.sync_player_object();
+        let hp = state.party[0].hp;
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Passed
+        );
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!(state.party[0].hp, hp);
+        assert_eq!(state.grid[32 + 1], TOWN_TRAPDOOR_LIVE_TILE);
+        assert_eq!(state.message, "Passed.");
+        assert_eq!(state.pending_stonegate_trapdoor_playback, None);
     }
 
     #[test]
@@ -1180,7 +1207,7 @@
 
         assert_eq!(state.area, Area::Town { scene, floor: 1 });
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Changed to CASTLE:0 floor 1"));
+        assert_eq!(state.message, "Up!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1207,15 +1234,19 @@
     }
 
     #[test]
-    fn town_k_non_ladder_reports_public_refusal_without_turn() {
+    fn town_k_non_ladder_starts_direction_prompt_without_turn() {
         let mut state = test_state(open_grid(), 1, 1);
 
         assert_eq!(
             state.klimb_command(Path::new("")).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Observed
         );
 
-        assert_eq!(state.message, "Not climbable!");
+        assert_eq!(state.message, "Klimb-");
+        assert_eq!(
+            state.active_direction_prompt.map(|session| session.kind),
+            Some(DirectionPromptKind::Klimb)
+        );
         assert_eq!(state.turn, 0);
     }
 
@@ -1271,7 +1302,7 @@
     }
 
     #[test]
-    fn town_step_onto_stair_prompts_when_both_floor_directions_are_connected() {
+    fn town_k_on_walk_on_stair_does_not_offer_vertical_climb() {
         let dir = debug_game_dir();
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
@@ -1314,21 +1345,12 @@
         assert_eq!(state.active_objects[0].x, 1);
         assert_eq!(state.turn, 1);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, '>', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        assert_eq!(handle_play_key_input(&mut state, '6', "", &dir).unwrap(), PlayInputDisposition::Continue);
 
-        assert_eq!(
-            state.area,
-            Area::Town {
-                scene: Scene::new(17).unwrap(),
-                floor: -1
-            }
-        );
+        assert_eq!(state.area, Area::Town { scene: Scene::new(17).unwrap(), floor: 0 });
         assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.turn, 2);
-        assert!(state.message.contains("Changed to CASTLE:0 floor -1"));
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "What?");
         let _ = fs::remove_dir_all(dir);
     }
 

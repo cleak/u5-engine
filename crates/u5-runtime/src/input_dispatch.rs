@@ -23,7 +23,19 @@ pub fn handle_play_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
-    let result = handle_play_key_input_inner(state, key, suffix, game_dir);
+    let mut result = handle_play_key_input_inner(state, key, suffix, game_dir);
+    // A generic adjacent terrain combat suspends the high-to-low outdoor
+    // reaction walk. As soon as the combat frame returns, continue the
+    // remaining lower slots before accepting another world command.
+    if result.is_ok() && !state.combat_active && !state.pending_outdoor_reaction_slots.is_empty() {
+        if let Area::World { plane } = state.area {
+            if let Err(error) = state.apply_pending_outdoor_reactions(game_dir, plane) {
+                result = Err(error);
+            }
+        } else {
+            state.pending_outdoor_reaction_slots.clear();
+        }
+    }
     state.commit_command_echo();
     // `text-output.md §11`: whatever is still only in the slot is a line
     // the original would already have printed, so record it before the
@@ -74,6 +86,9 @@ fn handle_play_key_input_inner(
     if state.active_shrine.is_some() {
         return handle_active_shrine_key_input(state, key, suffix, game_dir);
     }
+    if state.active_shrine_restoration.is_some() {
+        return handle_active_shrine_restoration_key_input(state, key, suffix, game_dir);
+    }
     if state.active_mix.is_some() {
         return Ok(handle_active_mix_key_input(state, key, suffix));
     }
@@ -108,6 +123,12 @@ fn handle_play_key_input_inner(
     }
     if state.active_conversation.is_some() {
         return Ok(handle_active_conversation_key_input(state, key, suffix));
+    }
+    if state
+        .resolve_blackthorn_guard_demand_input(key, suffix)
+        .is_some()
+    {
+        return Ok(PlayInputDisposition::Continue);
     }
     if state.resolve_town_arrest_prompt(key, game_dir)?.is_some() {
         return Ok(PlayInputDisposition::Continue);
@@ -201,7 +222,15 @@ fn handle_play_key_input_inner(
     if key == 'q' {
         return Ok(PlayInputDisposition::Quit);
     }
-    if matches!(state.area, Area::Dungeon { .. }) && key == 'Q' {
+    // `main-loop.md §4`: the event-driven engine fuses the outer mode
+    // loop with one inner-loop input iteration. Every non-modal input is
+    // routed from the resident scene byte here; a transition replaces the
+    // active `PlayState`, and the next input dispatches through the new
+    // scene class. The historical exit-pending flag collapses into this
+    // call boundary, as §14 permits, and the single-directory runtime's
+    // between-mode disk-prompt presentation pass is a no-op.
+    let active_route = scene_route(state.current_scene_byte());
+    if active_route == SceneRoute::Dungeon && key == 'Q' {
         state.begin_command_echo_for(Command::Quit);
         if let Some(confirm) = parse_inline_yes_no(suffix) {
             return Ok(state.exit_to_dos_prompt(Some(confirm)));
@@ -216,15 +245,17 @@ fn handle_play_key_input_inner(
     let inline_use_request = parse_inline_use_request(suffix);
     let inline_look_focus = suffix.chars().find_map(dungeon_look_focus_from_key);
     let inline_talk_keyword = non_empty_talk_keyword(suffix);
-    if state.handle_dungeon_key_with_inline(
-        key,
-        game_dir,
-        inline_rest,
-        inline_drink,
-        inline_party_index,
-        inline_use_request,
-        inline_look_focus,
-    )? {
+    if active_route == SceneRoute::Dungeon
+        && state.handle_dungeon_key_with_inline(
+            key,
+            game_dir,
+            inline_rest,
+            inline_drink,
+            inline_party_index,
+            inline_use_request,
+            inline_look_focus,
+        )?
+    {
         return Ok(PlayInputDisposition::Continue);
     }
     if matches!(key, 'T' | 't') && inline_talk_keyword.is_some() {
@@ -233,20 +264,29 @@ fn handle_play_key_input_inner(
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         return Ok(PlayInputDisposition::Continue);
     }
-    if state.handle_top_down_key_with_inline(
-        key,
-        game_dir,
-        inline_direction,
-        inline_rest,
-        inline_drink,
-        inline_use_request,
-    )? {
-        return Ok(PlayInputDisposition::Continue);
-    }
-    if matches!(state.area, Area::Dungeon { .. }) {
-        state.advance_visual_tick();
-        state.message = "Zzzzzz...".to_string();
-        return Ok(PlayInputDisposition::Continue);
+    match active_route {
+        SceneRoute::Overworld | SceneRoute::TownFamily => {
+            if state.handle_top_down_key_with_inline(
+                key,
+                game_dir,
+                inline_direction,
+                inline_rest,
+                inline_drink,
+                inline_use_request,
+            )? {
+                return Ok(PlayInputDisposition::Continue);
+            }
+        }
+        SceneRoute::Dungeon => {
+            state.advance_visual_tick();
+            state.message = "Zzzzzz...".to_string();
+            return Ok(PlayInputDisposition::Continue);
+        }
+        SceneRoute::IntroOrPreview | SceneRoute::CombatTemporary => {
+            // Intro values are consumed before gameplay and combat returns
+            // through its framer, so neither can reach this non-modal path.
+            debug_assert!(false, "non-playable scene reached world input dispatch");
+        }
     }
     state.message = format!("Unhandled command `{key}`.");
     Ok(PlayInputDisposition::Continue)
@@ -266,7 +306,14 @@ fn handle_active_z_stats_key_input(
     key: char,
     suffix: &str,
 ) -> PlayInputDisposition {
+    let combat_actor = state
+        .combat_active
+        .then_some(state.pending_combat_actor_slot)
+        .flatten();
     state.step_active_z_stats(key, suffix);
+    if state.active_z_stats.is_none() {
+        finish_combat_modal_actor_action(state, combat_actor);
+    }
     PlayInputDisposition::Continue
 }
 
@@ -275,7 +322,14 @@ fn handle_active_ready_key_input(
     key: char,
     suffix: &str,
 ) -> PlayInputDisposition {
+    let combat_actor = state
+        .combat_active
+        .then_some(state.pending_combat_actor_slot)
+        .flatten();
     state.step_active_ready(key, suffix);
+    if state.active_ready.is_none() {
+        finish_combat_modal_actor_action(state, combat_actor);
+    }
     PlayInputDisposition::Continue
 }
 
@@ -285,21 +339,29 @@ fn handle_active_cast_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    let pending_combat = state.active_cast.as_ref().and_then(|session| {
+        session
+            .combat_actor_slot
+            .map(|slot| (slot, session.combat_had_foe))
+    });
     let turn_before = state.turn;
     let Some((outcome, combat)) = state.step_active_cast(key, suffix, game_dir)? else {
+        // `combat.md §8`: accepting C commits the actor's action unless the
+        // caster itself is rejected as dead. Escape or a blank spell-name
+        // response closes the modal without a spell outcome, so detect that
+        // closed session here and still run the combat action tail. Starting
+        // a spell-specific follow-up is not a close and retains the actor.
+        if state.active_cast.is_none()
+            && state.active_cast_followup.is_none()
+            && let Some((actor_slot, had_foe)) = pending_combat
+        {
+            finish_combat_cast_actor_action(state, actor_slot, had_foe);
+        }
         return Ok(PlayInputDisposition::Continue);
     };
     state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     if let Some((actor_slot, had_foe)) = combat {
-        state.pending_combat_actor_slot = None;
-        let cast_message = state.message.clone();
-        let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-        state.message = combat_magic_ring_pass_message(ring_pass).unwrap_or(cast_message);
-        if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
-            state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
-        } else if state.combat_active {
-            advance_combat_round_after_actor_and_append_message(state, actor_slot);
-        }
+        finish_combat_cast_actor_action(state, actor_slot, had_foe);
     }
     Ok(PlayInputDisposition::Continue)
 }
@@ -310,21 +372,26 @@ fn handle_active_cast_followup_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    let pending_combat = state.active_cast_followup.as_ref().and_then(|session| {
+        session
+            .combat_actor_slot
+            .map(|slot| (slot, session.combat_had_foe))
+    });
     let turn_before = state.turn;
     let Some((outcome, combat)) = state.step_active_cast_followup(key, suffix, game_dir)? else {
+        // A canceled combat target/cursor prompt is still the completion of
+        // the already accepted C action. Some field spells have also spent
+        // charge and mana before this prompt, as required by `magic.md §8`.
+        if state.active_cast_followup.is_none()
+            && let Some((actor_slot, had_foe)) = pending_combat
+        {
+            finish_combat_cast_actor_action(state, actor_slot, had_foe);
+        }
         return Ok(PlayInputDisposition::Continue);
     };
     state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     if let Some((actor_slot, had_foe)) = combat {
-        state.pending_combat_actor_slot = None;
-        let cast_message = state.message.clone();
-        let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-        state.message = combat_magic_ring_pass_message(ring_pass).unwrap_or(cast_message);
-        if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
-            state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
-        } else if state.combat_active {
-            advance_combat_round_after_actor_and_append_message(state, actor_slot);
-        }
+        finish_combat_cast_actor_action(state, actor_slot, had_foe);
     }
     Ok(PlayInputDisposition::Continue)
 }
@@ -390,6 +457,19 @@ fn handle_active_shrine_key_input(
     Ok(PlayInputDisposition::Continue)
 }
 
+fn handle_active_shrine_restoration_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let turn_before = state.turn;
+    if let Some(outcome) = state.step_active_shrine_restoration(key, suffix) {
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    }
+    Ok(PlayInputDisposition::Continue)
+}
+
 fn handle_active_new_order_key_input(
     state: &mut PlayState,
     key: char,
@@ -405,6 +485,32 @@ fn handle_active_yell_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    if state.combat_active {
+        let Some(actor_slot) = state.pending_combat_actor_slot else {
+            state.active_yell = None;
+            return Ok(PlayInputDisposition::Continue);
+        };
+        let Some(mut session) = state.active_yell.take() else {
+            return Ok(PlayInputDisposition::Continue);
+        };
+        let mut line = String::new();
+        if !matches!(key, '\r' | '\n' | '\u{1b}') {
+            line.push(key);
+        }
+        line.push_str(suffix);
+        session.buffer.push_str(&line);
+        state.message = if key == '\u{1b}' || session.buffer.trim().is_empty() {
+            YELL_NOTHING_SAID_MESSAGE.to_string()
+        } else {
+            let word = PlayState::normalize_yell_word(&session.buffer);
+            format!("Yelled {word}. Nothing happens.")
+        };
+        state.pending_combat_actor_slot = None;
+        let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+        advance_combat_round_after_actor_and_append_message(state, actor_slot);
+        return Ok(PlayInputDisposition::Continue);
+    }
+
     let turn_before = state.turn;
     if let Some(outcome) = state.step_active_yell(key, suffix) {
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
@@ -442,11 +548,22 @@ fn handle_active_direction_prompt_key_input(
                 DirectionPromptKind::CombatSjog { actor_slot, .. } => Some(actor_slot),
                 _ => None,
             });
+    let combat_klimb = state
+        .active_direction_prompt
+        .as_ref()
+        .is_some_and(|session| matches!(session.kind, DirectionPromptKind::CombatKlimb { .. }));
     if let Some(outcome) = state.step_active_direction_prompt(key, suffix, game_dir)? {
         if let Some(actor_slot) = combat_push_actor {
-            if matches!(outcome, MoveOutcome::PromptDeclined) {
+            if combat_klimb && matches!(outcome, MoveOutcome::Blocked) {
+                // `combat.md §8`: blocked Klimb is one of the parser's
+                // exhaustive free re-prompt cases.
                 state.pending_combat_actor_slot = Some(actor_slot);
             } else if state.combat_active {
+                // Push and the live-actor-gated SJOG verbs commit once their
+                // letter has been accepted, including a canceled shared
+                // direction prompt. Klimb cancellation is likewise distinct
+                // from its explicitly free blocked-result branch.
+                let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
             }
         } else {
@@ -473,8 +590,32 @@ fn handle_active_use_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    let combat_actor = state
+        .combat_active
+        .then_some(state.pending_combat_actor_slot)
+        .flatten();
     state.step_active_use(key, suffix, game_dir)?;
+    if state.active_use.is_none() {
+        finish_combat_modal_actor_action(state, combat_actor);
+    }
     Ok(PlayInputDisposition::Continue)
+}
+
+/// `combat.md §8`: Ready, Z-stats, and Use return through their shared modal
+/// handlers before the combat parser ends the acting combatant's action. Keep
+/// the actor bound while the modal is open, then resume the round walker once.
+fn finish_combat_modal_actor_action(state: &mut PlayState, actor_slot: Option<usize>) {
+    let Some(actor_slot) = actor_slot else {
+        return;
+    };
+    if state.pending_combat_actor_slot != Some(actor_slot) {
+        return;
+    }
+    state.pending_combat_actor_slot = None;
+    if state.combat_active {
+        let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+        advance_combat_round_after_actor_and_append_message(state, actor_slot);
+    }
 }
 
 fn handle_active_shop_key_input(
@@ -918,15 +1059,20 @@ fn handle_active_shop_key_input(
                     &mut state.gold,
                     &mut food,
                 ),
-                (TavernState::Menu { .. } | TavernState::BlueBoarDrinkList { .. }, _, _, _) => {
-                    step_tavern(
-                        s,
-                        TavernInput::Key(key_byte),
-                        ctx,
-                        &mut state.gold,
-                        &mut food,
-                    )
-                }
+                (
+                    TavernState::Menu { .. }
+                    | TavernState::BlueBoarDrinkList { .. }
+                    | TavernState::AnythingElse { .. },
+                    _,
+                    _,
+                    _,
+                ) => step_tavern(
+                    s,
+                    TavernInput::Key(key_byte),
+                    ctx,
+                    &mut state.gold,
+                    &mut food,
+                ),
                 (TavernState::PickProvisionQuantity { .. }, _, true, _) => {
                     *s = TavernState::Exited;
                     TavernOutcome::Exited
@@ -947,12 +1093,17 @@ fn handle_active_shop_key_input(
                 _ => TavernOutcome::InvalidInput,
             };
             state.food = food;
-            let surcharge = if matches!(
-                outcome,
+            let surcharge_applies = match outcome {
                 TavernOutcome::RoundDrinkServed { .. }
-                    | TavernOutcome::BlueBoarDrinkServed { .. }
-                    | TavernOutcome::ProvisionsPurchased { paid: 1.., .. }
-            ) {
+                | TavernOutcome::BlueBoarDrinkServed { .. } => true,
+                TavernOutcome::ProvisionsPurchased {
+                    paid: 1..,
+                    completion,
+                    ..
+                } => completion.surcharge_applies(),
+                _ => false,
+            };
+            let surcharge = if surcharge_applies {
                 apply_active_shop_surcharge(state)
             } else {
                 None
@@ -960,7 +1111,17 @@ fn handle_active_shop_key_input(
             if matches!(outcome, TavernOutcome::EnteredSagePrompt) {
                 replacement_session = Some(ActiveShopSession::Sage(SageState::default()));
             }
-            append_active_shop_surcharge(format_tavern_outcome(outcome), surcharge)
+            let provision_quote_record_id =
+                matches!(outcome, TavernOutcome::PickProvisionQuantity { .. }).then(|| {
+                    usize::from(state.random_range_u8(
+                        TAVERN_PROVISION_QUOTE_RECORD_FIRST as u8,
+                        TAVERN_PROVISION_QUOTE_RECORD_LAST as u8,
+                    ))
+                });
+            append_active_shop_surcharge(
+                format_tavern_outcome_with_shoppe(outcome, provision_quote_record_id, game_dir),
+                surcharge,
+            )
         }
         ActiveShopSession::Sage(s) => {
             let outcome = match *s {
@@ -1111,6 +1272,9 @@ fn handle_active_shop_key_input(
             } else {
                 ShipBrokerOutcome::InvalidInput
             };
+            if let ShipBrokerOutcome::PurchaseApplied { outcome: purchase } = outcome {
+                state.sync_pending_vehicle_purchase_state(purchase);
+            }
             let surcharge = if matches!(
                 &outcome,
                 ShipBrokerOutcome::PurchaseApplied { outcome }
@@ -1276,7 +1440,9 @@ fn handle_arms_shop_key_input(
     no: bool,
     game_dir: &Path,
 ) -> String {
-    use crate::shop_runtime::{ArmsShopInput, ArmsShopOutcome, ArmsShopState, step_arms_shop};
+    use crate::shop_runtime::{
+        ArmsSellBrowserCommand, ArmsShopInput, ArmsShopOutcome, ArmsShopState, step_arms_shop,
+    };
 
     let mut prices = [0u16; crate::EQUIPMENT_COUNT];
     prices.copy_from_slice(&crate::EQUIPMENT_BASE_PRICES);
@@ -1291,9 +1457,7 @@ fn handle_arms_shop_key_input(
             &mut stock,
             &prices,
         ),
-        (ArmsShopState::BuyPickItem | ArmsShopState::SellPickItem, _, _, _)
-            if matches!(key_byte, b' ' | 0x1b) =>
-        {
+        (ArmsShopState::BuyPickItem, _, _, _) if matches!(key_byte, b' ' | 0x1b) => {
             *shop_state = ArmsShopState::Exited;
             ArmsShopOutcome::Exited
         }
@@ -1323,14 +1487,33 @@ fn handle_arms_shop_key_input(
                 ArmsShopOutcome::InvalidInput
             }
         }
-        (ArmsShopState::SellPickItem, _, _, Some(d)) => step_arms_shop(
-            shop_state,
-            ArmsShopInput::Item(d),
-            ctx,
-            &mut state.gold,
-            &mut stock,
-            &prices,
-        ),
+        (ArmsShopState::SellPickItem(_), _, _, _) => {
+            let command = match key_byte {
+                b'\r' | b'\n' | b' ' => Some(ArmsSellBrowserCommand::Select),
+                0x1b => Some(ArmsSellBrowserCommand::Exit),
+                crate::INPUT_CODE_WEST | crate::INPUT_CODE_NORTH => {
+                    Some(ArmsSellBrowserCommand::Previous)
+                }
+                crate::INPUT_CODE_EAST | crate::INPUT_CODE_SOUTH => {
+                    Some(ArmsSellBrowserCommand::Next)
+                }
+                crate::INPUT_CODE_NORTHWEST => Some(ArmsSellBrowserCommand::First),
+                crate::INPUT_CODE_SOUTHWEST => Some(ArmsSellBrowserCommand::Last),
+                crate::INPUT_CODE_NORTHEAST => Some(ArmsSellBrowserCommand::PageUp),
+                crate::INPUT_CODE_SOUTHEAST => Some(ArmsSellBrowserCommand::PageDown),
+                _ => None,
+            };
+            command.map_or(ArmsShopOutcome::InvalidInput, |command| {
+                step_arms_shop(
+                    shop_state,
+                    ArmsShopInput::SellBrowser(command),
+                    ctx,
+                    &mut state.gold,
+                    &mut stock,
+                    &prices,
+                )
+            })
+        }
         (ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. }, true, _, _) => {
             step_arms_shop(
                 shop_state,
@@ -1371,6 +1554,14 @@ fn handle_arms_shop_key_input(
         (ArmsShopOutcome::InvalidInput, Some(table)) if was_invalid_stock_pick => {
             format_arms_stock_buy_menu(table)
         }
+        (ArmsShopOutcome::InvalidInput, _)
+            if matches!(
+                prior_state,
+                ArmsShopState::SellPickItem(_) | ArmsShopState::SellConfirm { .. }
+            ) =>
+        {
+            state.message.clone()
+        }
         (ArmsShopOutcome::InvalidInput, _) => match prior_state {
             ArmsShopState::BuyConfirm {
                 item,
@@ -1386,11 +1577,50 @@ fn handle_arms_shop_key_input(
                 None,
                 None,
             ),
-            ArmsShopState::SellConfirm { item, offer } => {
-                format_arms_outcome(ArmsShopOutcome::OfferedSellPrice { item, offer }, game_dir)
-            }
             _ => format_arms_outcome(ArmsShopOutcome::InvalidInput, game_dir),
         },
+        (ArmsShopOutcome::EnteredSell, _) => arms_sell_entry_prompt(state.random_range_u8(0, 3)),
+        (ArmsShopOutcome::SellBrowserMoved, _) => state.message.clone(),
+        (ArmsShopOutcome::OfferedSellPrice { item, offer }, _) => {
+            let record_id = crate::shops::SHOPPE_RECORDS_ARMS_SELL_FIRST
+                + usize::from(state.random_range_u8(0, 7));
+            let quote = render_shoppe_record_for_arms_quote(game_dir, record_id, item, offer);
+            format!("{quote}\nDeal? (Y/N)")
+        }
+        (ArmsShopOutcome::SellRefusedZeroPrice { .. }, _)
+            if matches!(shop_state, ArmsShopState::SellPickItem(_)) =>
+        {
+            format!(
+                "I cannot buy that.\n{}",
+                arms_sell_continuation_prompt(state.random_range_u8(0, 3))
+            )
+        }
+        (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
+            format!(
+                "No\n{}",
+                arms_sell_continuation_prompt(state.random_range_u8(0, 3))
+            )
+        }
+        (
+            ArmsShopOutcome::Sold {
+                browser_continues: true,
+                ..
+            },
+            _,
+        ) => format!(
+            "Sold!\n{}",
+            arms_sell_continuation_prompt(state.random_range_u8(0, 3))
+        ),
+        (
+            ArmsShopOutcome::Sold {
+                browser_continues: false,
+                ..
+            },
+            _,
+        ) => format!("Sold!\n{}", arms_sell_goodbye(state.random_range_u8(0, 3))),
+        (ArmsShopOutcome::Exited, _) if matches!(prior_state, ArmsShopState::SellPickItem(_)) => {
+            arms_sell_goodbye(state.random_range_u8(0, 3))
+        }
         (outcome, _) => format_arms_outcome_with_rolls(
             outcome,
             game_dir,
@@ -1399,6 +1629,36 @@ fn handle_arms_shop_key_input(
         ),
     };
     append_active_shop_surcharge(message, surcharge)
+}
+
+fn arms_sell_entry_prompt(roll: u8) -> String {
+    [
+        "Which item wouldst thou like to sell?",
+        "What dost thou wish to sell?",
+        "Show me what ye got...",
+        "What dost thou have for me to buy?",
+    ][usize::from(roll) % 4]
+        .to_string()
+}
+
+fn arms_sell_continuation_prompt(roll: u8) -> String {
+    [
+        "What else can ye offer me?",
+        "What else hath ye to sell?",
+        "What else doth thou wish to sell?",
+        "What other arms wilt thou sell?",
+    ][usize::from(roll) % 4]
+        .to_string()
+}
+
+fn arms_sell_goodbye(roll: u8) -> String {
+    [
+        "Good-bye...",
+        "Mayhap another time...",
+        "Godspeed...",
+        "Fare thee well...",
+    ][usize::from(roll) % 4]
+        .to_string()
 }
 
 fn format_arms_stock_buy_menu(table: crate::shops::ArmsStockTable) -> String {
@@ -1447,6 +1707,8 @@ fn format_arms_outcome_with_rolls(
     match outcome {
         EnteredBuy => "Buy: pick an item number.".to_string(),
         EnteredSell => "Sell: pick an item number.".to_string(),
+        SellRefusedEmpty => "Thou hast nothing to sell.".to_string(),
+        SellBrowserMoved => String::new(),
         Exited => "Farewell.".to_string(),
         QuotedBuyPrice {
             item,
@@ -1464,8 +1726,10 @@ fn format_arms_outcome_with_rolls(
         OfferedSellPrice { item, offer } => {
             format!("I will pay {offer} gold for item {item}. (Y/N)")
         }
+        SellRefusedZeroPrice { .. } => "I cannot buy that.".to_string(),
+        SellRefusedAmmunition { .. } => "I buy no used ammunition.".to_string(),
         Bought { .. } => "Sold!".to_string(),
-        Sold { item, received } => format!("Sold item {item} for {received} gold."),
+        Sold { item, received, .. } => format!("Sold item {item} for {received} gold."),
         Declined => "As you wish.".to_string(),
         BuyRefusedShortFunds { item, .. } => no_credit_roll
             .map(crate::shops::arms_no_credit_bark_for_roll)
@@ -1570,14 +1834,23 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
         }
         EnteredSagePrompt => "Of what wouldst thou hear my lore?".to_string(),
         RoundDrinkServed { tavern, cost } => {
-            format!("{} served a round for {cost} gold.", tavern.display_name())
+            format!(
+                "{} served a round for {cost} gold. Anything else? (Y/N)",
+                tavern.display_name()
+            )
         }
         SecondaryTavernSelected { tavern, letter } => {
-            format!("{} tavern branch {letter}.", tavern.display_name())
+            format!(
+                "{} tavern branch {letter}. Anything else? (Y/N)",
+                tavern.display_name()
+            )
         }
         PickBlueBoarDrink => "Choose Blue Boar drink A-F.".to_string(),
         BlueBoarDrinkServed { choice, cost } => {
-            format!("Blue Boar drink {:?} served for {cost} gold.", choice)
+            format!(
+                "Blue Boar drink {:?} served for {cost} gold. Anything else? (Y/N)",
+                choice
+            )
         }
         PickProvisionQuantity { tavern, unit_price } => format!(
             "{} provisions cost {unit_price} gold each. Quantity?",
@@ -1589,17 +1862,85 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
             purchased_quantity,
             paid,
             food_added,
+            completion: _,
         } => format!(
-            "{} sold {purchased_quantity}/{requested_quantity} provisions for {paid} gold; food +{food_added}.",
+            "{} sold {purchased_quantity}/{requested_quantity} provision packs for {paid} gold; food +{food_added}. Anything else? (Y/N)",
             tavern.display_name()
         ),
-        Declined => "No provisions purchased.".to_string(),
+        CharityProvisions {
+            tavern,
+            food_added,
+            record_id: _,
+        } => format!(
+            "{} offered table scraps; food +{food_added}. Farewell.",
+            tavern.display_name()
+        ),
+        Continued {
+            tavern,
+            follow_up_record_id,
+        } => format!(
+            "{} continues with SHOPPE.DAT record {follow_up_record_id}.",
+            tavern.display_name()
+        ),
+        DeclinedContinuation => "As you wish. Farewell.".to_string(),
+        Declined => "No provisions purchased. Anything else? (Y/N)".to_string(),
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         RefusedNoLivingParty => "No one can drink right now.".to_string(),
         RefusedNoNeed => "Thou needest no provisions.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }
+}
+
+fn format_tavern_outcome_with_shoppe(
+    outcome: crate::shop_runtime::TavernOutcome,
+    provision_quote_record_id: Option<usize>,
+    game_dir: &Path,
+) -> String {
+    use crate::shop_runtime::TavernOutcome::*;
+
+    let renderer = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir).ok();
+    let rendered = renderer.as_ref().and_then(|renderer| match outcome {
+        EnteredMenu { tavern, .. } => renderer
+            .render_record(
+                tavern_menu_record_id(tavern),
+                &crate::shoppe_bark::ShoppeBarkContext {
+                    shop_name: tavern.display_name(),
+                    ..Default::default()
+                },
+            )
+            .ok(),
+        PickProvisionQuantity { tavern, unit_price } => {
+            provision_quote_record_id.and_then(|record_id| {
+                renderer
+                    .render_record(
+                        record_id,
+                        &crate::shoppe_bark::ShoppeBarkContext {
+                            gold: unit_price,
+                            shop_name: tavern.display_name(),
+                            ..Default::default()
+                        },
+                    )
+                    .ok()
+            })
+        }
+        Continued {
+            tavern,
+            follow_up_record_id,
+        } => renderer
+            .render_record(
+                follow_up_record_id,
+                &crate::shoppe_bark::ShoppeBarkContext {
+                    shop_name: tavern.display_name(),
+                    ..Default::default()
+                },
+            )
+            .ok(),
+        _ => None,
+    });
+    rendered
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| format_tavern_outcome(outcome))
 }
 
 fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
@@ -1912,25 +2253,35 @@ fn handle_combat_cast_key_input(
     let cast_suffix = combat_cast_suffix_for_actor(suffix, actor_slot);
     let outcome = state.cast_spell_from_suffix(&cast_suffix, game_dir)?;
     state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
-    let cast_message = state.message.clone();
-    let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-    state.message = combat_magic_ring_pass_message(ring_pass).unwrap_or(cast_message);
-
-    if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
-        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
-    } else if state.combat_active {
-        advance_combat_round_after_actor_and_append_message(state, actor_slot);
-    }
+    finish_combat_cast_actor_action(state, actor_slot, had_foe);
 
     Ok(PlayInputDisposition::Continue)
 }
 
-fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> PlayInputDisposition {
-    if key == '\u{1b}' && suffix.is_empty() {
-        state.message = "Aborted.".to_string();
-        return PlayInputDisposition::Continue;
-    }
+/// Finish an accepted combat C-Cast action, including cancel/no-spell paths.
+/// The dead-caster refusal never reaches this helper and remains a free
+/// re-prompt under `combat.md §8`.
+fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had_foe: bool) {
+    state.pending_combat_actor_slot = None;
+    let cast_message = state.message.clone();
+    let ring_pass = apply_combat_committed_action_maintenance(state, actor_slot);
+    state.message = combat_magic_ring_pass_message(ring_pass).unwrap_or(cast_message);
 
+    if state.combat_active
+        && matches!(
+            state.combat_round_loop_control(false, false),
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+        )
+    {
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::Defeat);
+    } else if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
+    } else if state.combat_active {
+        advance_combat_round_after_actor_and_append_message(state, actor_slot);
+    }
+}
+
+fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> PlayInputDisposition {
     state.ensure_pending_combat_player_turn();
     let Some(actor_slot) = state.pending_combat_actor_slot.take() else {
         state.message = "No active combatant.".to_string();
@@ -1947,6 +2298,10 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     };
     state.message = combat_player_command_application_message(&application);
     if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
+        return PlayInputDisposition::Continue;
+    }
+    if application.reprompt {
+        state.pending_combat_actor_slot = Some(actor_slot);
         return PlayInputDisposition::Continue;
     }
     if let CombatRoundLoopControl::Exit(exit) = application.control_after {
@@ -1989,7 +2344,31 @@ fn handle_combat_multistage_command(
             state.pending_combat_actor_slot = Some(actor_slot);
             true
         }
+        CombatCommandBranch::UseItem => {
+            // `combat.md §8` / `inventory.md §7`: combat U is Shape A, not
+            // the withdrawn scene-refusal branch. It prints the normal verb
+            // echo, passes the live-actor gate above, and enters the same item
+            // picker used by world modes.
+            state.begin_command_echo_for(Command::Use);
+            state.start_use_item();
+            if state.active_use.is_some() {
+                state.pending_combat_actor_slot = Some(actor_slot);
+            } else {
+                state.pending_combat_actor_slot = None;
+                let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+                advance_combat_round_after_actor_and_append_message(state, actor_slot);
+            }
+            true
+        }
         CombatCommandBranch::CastSpell => {
+            if let Some(source_slot) = state.combat_cast_interference_source_for_slot(actor_slot) {
+                state.message = format!(
+                    "\n{} interferes!",
+                    combat_interference_actor_name(state, source_slot)
+                );
+                state.pending_combat_actor_slot = Some(actor_slot);
+                return true;
+            }
             state.start_combat_cast_spell_prompt(
                 actor_slot,
                 combat_has_active_non_party_actor(state),
@@ -2005,16 +2384,19 @@ fn handle_combat_multistage_command(
         CombatCommandBranch::Yell => {
             match combat_yell_word_from_suffix(suffix) {
                 CombatInlineYell::Prompt => {
+                    state.active_yell = Some(YellSession::new());
                     state.message = yell_prompt_message();
                     state.pending_combat_actor_slot = Some(actor_slot);
                 }
                 CombatInlineYell::Empty => {
                     state.message = YELL_NOTHING_SAID_MESSAGE.to_string();
+                    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
                 CombatInlineYell::Word(word) => {
                     let word = PlayState::normalize_yell_word(word);
                     state.message = format!("Yelled {word}. Nothing happens.");
+                    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
             }
@@ -2027,6 +2409,7 @@ fn handle_combat_multistage_command(
                 .filter(|direction| direction.is_cardinal())
             {
                 state.push_combat_actor_direction(actor_slot, direction);
+                let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
             } else {
                 state.active_direction_prompt = Some(DirectionPromptSession::new(
@@ -2038,8 +2421,11 @@ fn handle_combat_multistage_command(
         }
         CombatCommandBranch::Klimb => {
             if let Some(intent) = suffix.chars().find_map(combat_klimb_vertical_intent) {
-                state.klimb_combat_actor_vertical(actor_slot, intent);
-                if state.combat_active {
+                let outcome = state.klimb_combat_actor_vertical(actor_slot, intent);
+                if matches!(outcome, MoveOutcome::Blocked) {
+                    state.pending_combat_actor_slot = Some(actor_slot);
+                } else if state.combat_active {
+                    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
             } else if let Some(direction) = suffix
@@ -2047,8 +2433,11 @@ fn handle_combat_multistage_command(
                 .find_map(Direction::from_play_key)
                 .filter(|direction| direction.is_cardinal())
             {
-                state.klimb_combat_actor_direction(actor_slot, direction);
-                if state.combat_active {
+                let outcome = state.klimb_combat_actor_direction(actor_slot, direction);
+                if matches!(outcome, MoveOutcome::Blocked) {
+                    state.pending_combat_actor_slot = Some(actor_slot);
+                } else if state.combat_active {
+                    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
             } else {
@@ -2070,6 +2459,7 @@ fn handle_combat_multistage_command(
             {
                 state.combat_sjog_actor_direction(actor_slot, *branch, direction);
                 if state.combat_active {
+                    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
             } else {
@@ -2115,6 +2505,22 @@ fn combat_yell_word_from_suffix(suffix: &str) -> CombatInlineYell<'_> {
 fn combat_magic_ring_pass_message(pass: Option<CombatMagicRingPassOutcome>) -> Option<String> {
     pass.and_then(|ring_pass| ring_pass.vanished_ring)
         .map(|ring| format!("{} vanished.", equipment_name(ring as usize)))
+}
+
+/// `combat.md §8`: every committed non-digit player action checks the Doom
+/// companion band, runs common terrain/marker contact, performs visible-ring
+/// maintenance, and then ages the active timed effect. Multi-stage commands
+/// call this only when their final input commits the action.
+fn apply_combat_committed_action_maintenance(
+    state: &mut PlayState,
+    actor_slot: usize,
+) -> Option<CombatMagicRingPassOutcome> {
+    let _ = state.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
+    let _ = state.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
+    state.clear_combat_interference_for_completed_action(actor_slot);
+    let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
+    let _ = state.age_active_effect();
+    ring_pass
 }
 
 fn combat_cast_suffix_for_actor(suffix: &str, actor_slot: usize) -> String {
@@ -2189,10 +2595,12 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
             }
             CombatStepOrAttackPrimitiveOutcome::BlockedWall => "Blocked by wall.".to_string(),
         },
-        CombatPlayerCommandAction::InvalidDirection { .. } => "Direction?".to_string(),
-        CombatPlayerCommandAction::QuitDefeat => "Combat abandoned.".to_string(),
-        CombatPlayerCommandAction::XitCleanup { allowed: true } => "Exit combat.".to_string(),
-        CombatPlayerCommandAction::XitCleanup { allowed: false } => "Foes remain.".to_string(),
+        CombatPlayerCommandAction::InvalidDirection { .. } => "What?".to_string(),
+        CombatPlayerCommandAction::EscapeCleanup { application } => match application.decision {
+            CombatEscapeCleanupDecision::RefusedNotHere => "Escape-Not here!\n".to_string(),
+            CombatEscapeCleanupDecision::RefusedNotYet => "Escape-Not yet!\n".to_string(),
+            CombatEscapeCleanupDecision::Accepted => "Escape!".to_string(),
+        },
         CombatPlayerCommandAction::Branch { branch, .. } => combat_command_branch_message(*branch),
     }
 }
@@ -2203,18 +2611,28 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
     }
 
     match branch {
-        CombatCommandBranch::SceneMessageAbort(verb) => {
-            format!("{}-Not here!", combat_scene_abort_verb_prefix(verb))
-        }
+        CombatCommandBranch::SceneMessageAbort(verb) => match combat_scene_abort_tail(verb) {
+            CombatSceneAbortTail::What => {
+                format!("{} what?", combat_scene_abort_verb_prefix(verb))
+            }
+            CombatSceneAbortTail::NotHere => {
+                format!("{}-Not here", combat_scene_abort_verb_prefix(verb))
+            }
+            CombatSceneAbortTail::FunnyNoResponse => {
+                format!(
+                    "{}-Funny, no response!",
+                    combat_scene_abort_verb_prefix(verb)
+                )
+            }
+        },
         CombatCommandBranch::Klimb => "Klimb-What?".to_string(),
-        CombatCommandBranch::AbortPrompt => "Aborted.".to_string(),
         CombatCommandBranch::ToggleMusic => "Music toggled.".to_string(),
         CombatCommandBranch::Invalid => "What?".to_string(),
         CombatCommandBranch::Attack
         | CombatCommandBranch::CastSpell
-        | CombatCommandBranch::QuitDefeat
         | CombatCommandBranch::Ready
-        | CombatCommandBranch::XitCleanup
+        | CombatCommandBranch::UseItem
+        | CombatCommandBranch::EscapeCleanup
         | CombatCommandBranch::Yell
         | CombatCommandBranch::ZStats
         | CombatCommandBranch::Pass
@@ -2400,6 +2818,10 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
 }
 
 fn advance_combat_round_after_actor_and_append_message(state: &mut PlayState, actor_slot: usize) {
+    // Every call site reaches this boundary only after the actor has committed
+    // its dispatched action. Keep the victim-local interference clear here as
+    // a backstop for modal branches that can close without their normal tail.
+    state.clear_combat_interference_for_completed_action(actor_slot);
     state.next_combat_actor_slot = actor_slot.saturating_add(1).min(COMBAT_ACTOR_SLOTS);
     drive_combat_round_walk_and_append_message(state);
 }
@@ -2626,6 +3048,24 @@ fn combat_ai_movement_message(actor: &str, movement: CombatAiMovementOutcome) ->
 fn combat_actor_slot_label(state: &PlayState, slot: usize) -> String {
     if slot < COMBAT_PARTY_ACTOR_SLOTS {
         return format!("Party member {}", slot + 1);
+    }
+    let class = state
+        .combat_actors
+        .get(slot)
+        .map(|actor| actor.owner_target_class)
+        .unwrap_or_default();
+    combat_class_stats(class)
+        .map(|stats| stats.name.to_string())
+        .unwrap_or_else(|| format!("Combatant {slot}"))
+}
+
+fn combat_interference_actor_name(state: &PlayState, slot: usize) -> String {
+    if slot < COMBAT_PARTY_ACTOR_SLOTS {
+        return state
+            .party_names
+            .get(slot)
+            .and_then(|name| party_name_to_string(name))
+            .unwrap_or_else(|| format!("Party member {}", slot + 1));
     }
     let class = state
         .combat_actors

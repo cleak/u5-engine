@@ -91,7 +91,8 @@
     #[test]
     fn half_time_world_epilogue_alternates_active_object_animation() {
         let mut state = world_state(open_world_grid(), 0, 0);
-        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.active_objects.push(ActiveObject {
             type_byte: 192,
             tile: 192,
@@ -115,7 +116,8 @@
     #[test]
     fn no_minute_light_world_epilogue_skips_active_object_animation() {
         let mut state = world_state(open_world_grid(), 0, 0);
-        state.timing_status = TimingStatusTag::NoMinuteLight;
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 10;
         state.active_objects.push(ActiveObject {
             type_byte: 192,
             tile: 192,
@@ -155,8 +157,8 @@
             .iter()
             .find(|object| object.type_byte == 192)
             .unwrap();
-        assert_eq!((object.x, object.y), (5, 5));
-        assert_eq!(object.phase, 0x60);
+        assert_eq!((object.x, object.y), (5, 4));
+        assert_eq!(object.phase, 0x02);
 
         let mut player_blocked = world_state(open_world_grid(), 4, 5);
         player_blocked.active_objects.push(ActiveObject {
@@ -185,12 +187,12 @@
     // active-objects.md §8.1 -- overworld off-screen prune pass.
     // ---------------------------------------------------------------
 
-    /// Steady, non-vehicle world actor that will not wander during the
+    /// Steady, prunable world actor that will not wander during the
     /// animate pass, so a prune assertion measures pruning alone.
     fn prunable_marker(x: usize, y: usize) -> ActiveObject {
         ActiveObject {
-            type_byte: 0x05,
-            tile: 0x05,
+            type_byte: 0x80,
+            tile: 0x80,
             x,
             y,
             z: WorldPlane::Underworld.save_floor(),
@@ -209,18 +211,49 @@
         // from the original over play.
         //
         // Player (100, 100) -> scroll base (80, 80); the window is the
-        // 33 cells forward of the base on each axis, i.e. 80..=112.
+        // 32 cells forward of the base on each axis, i.e. 80..=111.
         let mut state = world_state(open_world_grid(), 100, 100);
         assert_eq!(world_scroll_base(100, 100), (80, 80));
-        state.active_objects.push(prunable_marker(112, 100)); // offset 32 -> keep
-        state.active_objects.push(prunable_marker(113, 100)); // offset 33 -> prune
-        state.active_objects.push(prunable_marker(100, 113)); // y fails -> prune
+        state.active_objects.push(prunable_marker(111, 100)); // offset 31 -> keep
+        state.active_objects.push(prunable_marker(112, 100)); // offset 32 -> prune
+        state.active_objects.push(prunable_marker(100, 112)); // y fails -> prune
 
         state.advance_turn();
 
-        assert_eq!(state.active_objects[1], prunable_marker(112, 100));
+        assert_eq!(state.active_objects[1], prunable_marker(111, 100));
         assert!(state.active_objects[2].is_empty());
         assert!(state.active_objects[3].is_empty());
+    }
+
+    #[test]
+    fn prune_pass_clears_record_fields_zero_through_five_only() {
+        // active-objects.md §8.1 correction: pruning is not the ordinary
+        // one-byte free. The shared record writer clears TYPE through DEP1
+        // while leaving PHASE and DEP3 byte-identical.
+        let mut state = world_state(open_world_grid(), 100, 100);
+        let mut marker = prunable_marker(112, 100); // offset 32 -> prune
+        marker.tile = 0x06;
+        marker.z = -1;
+        marker.aux1 = 0x66;
+        marker.phase = 0xab;
+        marker.aux3 = 0x77;
+        state.active_objects.push(marker);
+
+        state.prune_far_overworld_objects();
+
+        assert_eq!(
+            state.active_objects[1],
+            ActiveObject {
+                type_byte: 0,
+                tile: 0,
+                x: 0,
+                y: 0,
+                z: 0,
+                aux1: 0,
+                phase: 0xab,
+                aux3: 0x77,
+            }
+        );
     }
 
     #[test]
@@ -243,21 +276,22 @@
     }
 
     #[test]
-    fn prune_pass_skips_unclassified_slots_before_the_position_test() {
-        // active-objects.md §8.1: "A slot whose type byte does not
-        // classify as a prunable kind is skipped before the position
-        // test runs, so an out-of-window slot of an unclassified kind
-        // survives." Ordering is the contract: classification first.
+    fn prune_pass_uses_type_only_classifier_before_the_position_test() {
+        // active-objects.md §8.1: only byte 0 selects a classifier row.
+        // Byte 1 must not veto a prunable type or promote an excluded one.
         let mut state = world_state(open_world_grid(), 100, 100);
-        let mut parked_vehicle = prunable_marker(200, 200);
-        parked_vehicle.type_byte = 160; // vehicle-like: not a prunable kind
-        parked_vehicle.tile = 160;
-        state.active_objects.push(parked_vehicle);
-        state.active_objects.push(prunable_marker(200, 200));
+        let mut excluded_type = prunable_marker(200, 200);
+        excluded_type.type_byte = 0x10; // parked vehicle: excluded
+        excluded_type.tile = 0x80; // prunable-looking tile must not promote it
+        let mut prunable_type = prunable_marker(200, 200);
+        prunable_type.type_byte = 0x2c; // water-creature/pirate: prunable
+        prunable_type.tile = 0x10; // vehicle-looking tile must not veto it
+        state.active_objects.push(excluded_type);
+        state.active_objects.push(prunable_type);
 
         state.prune_far_overworld_objects();
 
-        assert_eq!(state.active_objects[1], parked_vehicle);
+        assert_eq!(state.active_objects[1], excluded_type);
         assert!(state.active_objects[2].is_empty());
     }
 
@@ -269,19 +303,19 @@
         // needing a special case at the map seam."
         //
         // Player (250, 250) -> scroll base (240, 240); the window runs
-        // 240..=255 and then 0..=16. A naive `slot - base` in signed or
+        // 240..=255 and then 0..=15. A naive `slot - base` in signed or
         // wider arithmetic reports ~235 cells for a slot at (5, 5) and
         // frees the entire far side of the seam.
         let mut state = world_state(open_world_grid(), 250, 250);
         assert_eq!(world_scroll_base(250, 250), (240, 240));
         state.active_objects.push(prunable_marker(5, 5)); // wrapped offset 21 -> keep
-        state.active_objects.push(prunable_marker(16, 16)); // wrapped offset 32 -> keep
-        state.active_objects.push(prunable_marker(17, 5)); // wrapped offset 33 -> prune
+        state.active_objects.push(prunable_marker(15, 15)); // wrapped offset 31 -> keep
+        state.active_objects.push(prunable_marker(16, 5)); // wrapped offset 32 -> prune
 
         state.prune_far_overworld_objects();
 
         assert_eq!(state.active_objects[1], prunable_marker(5, 5));
-        assert_eq!(state.active_objects[2], prunable_marker(16, 16));
+        assert_eq!(state.active_objects[2], prunable_marker(15, 15));
         assert!(state.active_objects[3].is_empty());
     }
 
@@ -381,10 +415,8 @@
 
     #[test]
     fn eviction_cascade_off_screen_gate_wraps_across_the_map_seam() {
-        // active-objects.md §4 + §8: the off-screen window is measured on
-        // the wrapped 256-cell torus. A candidate three cells from the
-        // player across the seam is on-screen and must not be taken by
-        // an off-screen phase.
+        // Public #107: a candidate three cells from the player across the seam
+        // is on-screen and must not be taken by an off-screen phase.
         let mut state = world_state(open_world_grid(), 2, 2);
         state.active_objects = table_packed_with(ACTIVE_OBJECT_PROTECTED_TYPE_BYTE, 2, 2);
         // Slot 5: dynamic actor three cells away across the seam.
@@ -396,6 +428,19 @@
 
         // Phase 3 (off-screen dynamic) must reach slot 6, not slot 5.
         assert_eq!(state.active_object_eviction_victim(), Some(6));
+    }
+
+    #[test]
+    fn eviction_off_screen_gate_reads_player_globals_and_ignores_floor() {
+        let mut state = world_state(open_world_grid(), 2, 2);
+        state.active_objects[0].x = 100;
+        state.active_objects[0].y = 100;
+        let mut candidate = ActiveObject::empty();
+        candidate.x = 2;
+        candidate.y = 2;
+        candidate.z = 7;
+
+        assert!(!state.active_object_off_screen(candidate));
     }
 
     fn town_free_roaming_grid() -> Vec<u8> {
@@ -561,6 +606,60 @@
     }
 
     #[test]
+    fn town_free_roaming_edge_actor_can_choose_inward_or_fail_outward_after_all_draws() {
+        let mut inward = test_state(town_free_roaming_grid(), 1, 1);
+        inward.prng_state = 0x0070;
+        inward.active_objects.push(ActiveObject {
+            type_byte: 0x10,
+            tile: 0x10,
+            x: 5,
+            y: 0,
+            z: 0,
+            phase: 0x44,
+            aux1: 7,
+            aux3: 9,
+        });
+
+        inward.advance_active_objects();
+
+        assert_eq!((inward.active_objects[1].x, inward.active_objects[1].y), (5, 1));
+        assert_eq!(inward.active_objects[1].phase, 0x44);
+        let mut expected_inward_prng = 0x0070;
+        for _ in 0..3 {
+            expected_inward_prng = u5_prng_advance_state(expected_inward_prng);
+        }
+        assert_eq!(inward.prng_state, expected_inward_prng);
+        assert!(inward.visibility_dirty);
+
+        let mut outward = test_state(town_free_roaming_grid(), 1, 1);
+        // This stream passes the chance gate and selects north, which is out
+        // of bounds from the top edge. The bounds rejection comes only after
+        // the axis and sign draws.
+        outward.prng_state = 0;
+        outward.active_objects.push(ActiveObject {
+            type_byte: 0x11,
+            tile: 0x11,
+            x: 5,
+            y: 0,
+            z: 0,
+            phase: 0x55,
+            aux1: 3,
+            aux3: 4,
+        });
+
+        outward.advance_active_objects();
+
+        assert_eq!((outward.active_objects[1].x, outward.active_objects[1].y), (5, 0));
+        assert_eq!(outward.active_objects[1].phase, 0x55);
+        let mut expected_outward_prng = 0;
+        for _ in 0..3 {
+            expected_outward_prng = u5_prng_advance_state(expected_outward_prng);
+        }
+        assert_eq!(outward.prng_state, expected_outward_prng);
+        assert!(!outward.visibility_dirty);
+    }
+
+    #[test]
     fn outdoor_water_creature_uses_water_predicate_and_rewrites_facing() {
         let mut grid = open_world_grid();
         grid[world_cell_index(4, 5)] = 1;
@@ -594,7 +693,7 @@
         fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
         let mut state = world_state(open_world_grid(), 5, 5);
         state.active_objects.push(ActiveObject {
-            type_byte: 0x44,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 6,
             y: 5,
@@ -609,7 +708,7 @@
         assert_eq!(outcome, MoveOutcome::Used);
         assert!(state.combat_active);
         assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
-        assert!(state.message.contains("World object tile 192 engaged"));
+        assert!(state.message.contains("Attacked by world object tile 192"));
         assert!(state.message.contains("entered terrain combat"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -619,7 +718,7 @@
         let dir = debug_game_dir();
         let record = synthetic_combat_arena_record();
         fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
-        let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(12).unwrap();
+        let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(2).unwrap();
         let replacement_seed = (0..=u16::MAX)
             .find(|seed| {
                 let mut prng = *seed;
@@ -633,7 +732,7 @@
         let mut state = world_state(open_world_grid(), 5, 5);
         state.prng_state = replacement_seed;
         let object = ActiveObject {
-            type_byte: 0x70,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 6,
             y: 5,
@@ -647,10 +746,78 @@
             .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, object)
             .unwrap();
 
-        assert!(message.contains("BRIT.CBT arena 12"));
+        assert!(message.contains("BRIT.CBT arena 2"));
         assert!(message.contains("requested Orc"));
         assert_eq!(state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile, 0xc0);
-        assert_eq!(replacement_tile, 12);
+        assert_eq!(replacement_tile, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn terrain_combat_pirate_family_uses_class_one_and_fixed_banner() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        let object = ActiveObject {
+            type_byte: 0x2f,
+            tile: 0x2f,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        let message = state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, object)
+            .unwrap();
+
+        assert!(message.contains("BRIT.CBT arena 12"), "{message}");
+        assert!(message.contains("requested Pirates combatant(s)"), "{message}");
+        assert_eq!(
+            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class,
+            1
+        );
+        assert_eq!(combat_class_stats(1).unwrap().default_spawn_count, 9);
+        assert_eq!(combat_class_stats(1).unwrap().max_hp, 15);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn terrain_combat_zero_spawn_identity_gap_creates_only_lead_actor() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        let object = ActiveObject {
+            type_byte: 0xe8,
+            tile: 0xe8,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        let message = state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, object)
+            .unwrap();
+
+        assert!(message.contains("spawned 1 of 1 requested"), "{message}");
+        assert_eq!(
+            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class,
+            42
+        );
+        assert!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -669,7 +836,7 @@
         fs::write(dir.join(BRIT_CBT_FILE), bank).unwrap();
         let mut state = world_state(open_world_grid(), 5, 5);
         let object = ActiveObject {
-            type_byte: 0x70,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 6,
             y: 5,
@@ -683,27 +850,27 @@
             .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, object)
             .unwrap();
 
-        assert!(message.contains("BRIT.CBT arena 12"));
-        assert_eq!(state.combat_terrain[0][0], 0x4c);
+        assert!(message.contains("BRIT.CBT arena 2"));
+        assert_eq!(state.combat_terrain[0][0], 0x42);
         assert_eq!(
             (
                 state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].x,
                 state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].y,
             ),
-            (12, 3)
+            (2, 13)
         );
         assert_eq!(
             (
                 state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].x,
                 state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].y,
             ),
-            (12, 3)
+            (2, 13)
         );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn overworld_prunes_far_non_vehicle_objects_but_keeps_vehicles() {
+    fn overworld_prunes_far_classified_objects_but_keeps_excluded_vehicles() {
         let mut state = world_state(open_world_grid(), 0, 0);
         state.active_objects.push(ActiveObject {
             type_byte: 192,
@@ -716,8 +883,20 @@
             aux3: 0,
         });
         state.active_objects.push(ActiveObject {
-            type_byte: 168,
-            tile: 168,
+            type_byte: 0x10,
+            tile: 0x10,
+            x: 80,
+            y: 0,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.active_objects.push(ActiveObject {
+            // `0xA8` is inside the published `0x80..=0xB3` prunable
+            // range; the old semantic "vehicle-like" shortcut kept it.
+            type_byte: 0xa8,
+            tile: 0xa8,
             x: 80,
             y: 0,
             z: WorldPlane::Underworld.save_floor(),
@@ -728,10 +907,11 @@
 
         state.advance_turn();
 
-        assert_eq!(state.active_objects.len(), 3);
+        assert_eq!(state.active_objects.len(), 4);
         assert!(state.active_objects[1].is_empty());
-        assert_eq!(state.active_objects[2].type_byte, 168);
+        assert_eq!(state.active_objects[2].type_byte, 0x10);
         assert_eq!(state.active_objects[2].x, 80);
+        assert!(state.active_objects[3].is_empty());
     }
 
     #[test]
@@ -740,7 +920,7 @@
         state.active_objects.push(ActiveObject {
             type_byte: 192,
             tile: 192,
-            x: 16,
+            x: 15,
             y: 0,
             z: WorldPlane::Underworld.save_floor(),
             phase: STEADY_PHASE,
@@ -768,7 +948,7 @@
         assert_eq!(state.active_objects[1].type_byte, 192);
         assert_eq!(
             (state.active_objects[1].x, state.active_objects[1].y),
-            (16, 0)
+            (15, 0)
         );
         assert!(state.active_objects[2].is_empty());
     }
@@ -779,7 +959,7 @@
         state.active_objects.push(ActiveObject {
             type_byte: 192,
             tile: 192,
-            x: 17,
+            x: 16,
             y: 0,
             z: WorldPlane::Underworld.save_floor(),
             phase: 0x60,
@@ -794,7 +974,7 @@
             .iter()
             .find(|object| object.type_byte == 192)
             .unwrap();
-        assert_eq!((object.x, object.y), (16, 0));
+        assert_eq!((object.x, object.y), (15, 0));
         assert_eq!(object.phase, 0x62);
     }
 

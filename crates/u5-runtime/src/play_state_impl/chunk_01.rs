@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
@@ -45,32 +44,27 @@ impl PlayState {
             .set(plane, self.current_world_overlay_objects());
     }
 
-    /// `save-load.md §3.2`: the save path "writes the underworld half back
-    /// out to `UNDER.OOL` unless the save handler's entry disk-prompt mode
-    /// was already mode 1". The mode is captured on the way *in*, which is
-    /// why it is threaded rather than read at the write site.
+    /// `save-load.md §5.2`: the save path writes the staged underworld
+    /// mirror back unless its entry required-disk state was already the
+    /// canonical Britannia disk. That session state is captured on the
+    /// way in, so it is threaded rather than read at the write site.
     ///
-    /// We pass `0` deliberately, not as a placeholder. A single-directory
-    /// install has no disk subsystem to derive an entry mode from, so there
-    /// is no honest way to be "in mode 1" here — and inventing a rule for
-    /// when we are would be a fallback. `0 != 1` takes the branch that
-    /// re-writes the mirror, which is the side that keeps `UNDER.OOL`
-    /// consistent with `SAVED.OOL`; skipping the write is the optimisation,
-    /// not the correctness case. `BRIT.OOL` stays read-only to a save
-    /// either way.
+    /// Normal gameplay resources run under canonical Britannia index 1.
+    /// A mounted-directory runtime still follows the same request sequence;
+    /// every role simply resolves to its one virtual fixed drive.
     pub fn save_game_command(
         &mut self,
         game_dir: &Path,
         confirm: Option<bool>,
     ) -> io::Result<MoveOutcome> {
-        self.save_game_command_with_entry_disk_prompt_mode(game_dir, confirm, 0)
+        self.save_game_command_with_entry_required_disk(game_dir, confirm, RequiredDisk::Britannia)
     }
 
-    pub fn save_game_command_with_entry_disk_prompt_mode(
+    pub fn save_game_command_with_entry_required_disk(
         &mut self,
         game_dir: &Path,
         confirm: Option<bool>,
-        entry_disk_prompt_mode: u8,
+        entry_required_disk: RequiredDisk,
     ) -> io::Result<MoveOutcome> {
         match confirm {
             None => {
@@ -82,10 +76,7 @@ impl PlayState {
                 Ok(MoveOutcome::PromptDeclined)
             }
             Some(true) => {
-                self.write_save_files_with_entry_disk_prompt_mode(
-                    game_dir,
-                    entry_disk_prompt_mode,
-                )?;
+                self.write_save_files_with_entry_required_disk(game_dir, entry_required_disk)?;
                 self.message = "Yes. Saving... Done.".to_string();
                 Ok(MoveOutcome::Saved)
             }
@@ -93,13 +84,40 @@ impl PlayState {
     }
 
     pub fn write_save_files(&mut self, game_dir: &Path) -> io::Result<()> {
-        self.write_save_files_with_entry_disk_prompt_mode(game_dir, 0)
+        self.write_save_files_with_entry_required_disk(game_dir, RequiredDisk::Britannia)
     }
 
-    pub fn write_save_files_with_entry_disk_prompt_mode(
+    pub fn write_save_files_with_entry_required_disk(
         &mut self,
         game_dir: &Path,
-        entry_disk_prompt_mode: u8,
+        entry_required_disk: RequiredDisk,
+    ) -> io::Result<()> {
+        let mut disk_session = DiskPromptSession::single_directory();
+        disk_session
+            .request_disk(entry_required_disk.index())
+            .expect("entry required-disk roles are canonical");
+        self.write_save_files_with_disk_session(game_dir, &mut disk_session)
+    }
+
+    pub fn write_save_files_with_disk_session(
+        &mut self,
+        game_dir: &Path,
+        disk_session: &mut DiskPromptSession,
+    ) -> io::Result<()> {
+        let entry_required_disk = disk_session.required_disk();
+        let result =
+            self.write_save_files_in_disk_session(game_dir, disk_session, entry_required_disk);
+        disk_session
+            .request_disk(entry_required_disk.index())
+            .expect("captured required-disk roles are canonical");
+        result
+    }
+
+    fn write_save_files_in_disk_session(
+        &mut self,
+        game_dir: &Path,
+        disk_session: &mut DiskPromptSession,
+        entry_required_disk: RequiredDisk,
     ) -> io::Result<()> {
         let (scene, z, x, y) = self.current_save_location().ok_or_else(|| {
             io::Error::new(
@@ -108,7 +126,6 @@ impl PlayState {
             )
         })?;
         self.sync_player_object();
-        self.cache_current_world_overlay();
 
         let mut save = load_save_image_template(game_dir, self.save_template_source)?;
         save[SAVE_SCENE_OFFSET] = scene;
@@ -146,15 +163,37 @@ impl PlayState {
         }
         save[SAVE_LIGHT_SPELL_COUNTER_OFFSET] = self.light_spell_counter;
         save[SAVE_TORCH_COUNTER_OFFSET] = self.torch_counter;
+        save[SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET
+            ..SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET + SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN]
+            .copy_from_slice(&self.combat_interference_sources);
         save[SAVE_SHRINE_ORDAINED_MASK_OFFSET] = self.shrine_ordained_mask;
         save[SAVE_SHRINE_CODEX_MASK_OFFSET] = self.shrine_codex_mask;
+        save[SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET
+            ..SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET + SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT]
+            .copy_from_slice(&self.word_of_power_seal_flags);
+        save[SAVE_SHRINE_RUIN_FLAGS_OFFSET
+            ..SAVE_SHRINE_RUIN_FLAGS_OFFSET + SAVE_SHRINE_RUIN_FLAG_COUNT]
+            .copy_from_slice(&self.shrine_ruin_flags);
         save[SAVE_MORAL_STANDING_OFFSET] = self.moral_standing;
         save[SAVE_TOLL_PROGRESS_OFFSET] = self.toll_progress;
         // `overworld.md §9.1` (spec HEAD c00bf63): persist the shared
         // gate-presence counter so a save taken at 20:07 reloads with
         // its gates at the height they had.
         save[SAVE_NATURAL_MOONGATE_COUNTER_OFFSET] = self.natural_moongate_counter;
-        save[SAVE_TIMING_STATUS_TAG_OFFSET] = self.timing_status.save_byte();
+        save[SAVE_CAMP_COOLDOWN_OFFSET] = self.camp_cooldown;
+        save[SAVE_CAMP_MONTH_COOKIE_OFFSET] = self.camp_month_cookie;
+        let pending_vehicle_save = self
+            .return_world
+            .as_ref()
+            .and_then(|world| world.pending_vehicle)
+            .map(PendingVehicleSaveState::from_acquisition)
+            .unwrap_or(self.pending_vehicle_save);
+        self.pending_vehicle_save = pending_vehicle_save;
+        save[SAVE_PENDING_VEHICLE_X_OFFSET] = pending_vehicle_save.x;
+        save[SAVE_PENDING_VEHICLE_Y_OFFSET] = pending_vehicle_save.y;
+        save[SAVE_PENDING_VEHICLE_CLASS_OFFSET] = pending_vehicle_save.class_byte;
+        save[SAVE_ACTIVE_EFFECT_CODE_OFFSET] = self.active_effect_tag.unwrap_or(0);
+        save[SAVE_ACTIVE_EFFECT_DURATION_OFFSET] = self.active_effect_counter;
         save[SAVE_FORTUNES_OF_WAR_OFFSET] = self.fortunes_of_war;
         save[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET
             ..SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES]
@@ -164,10 +203,15 @@ impl PlayState {
             self.fixed_hidden_treasure_single_use_cookie;
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
-        write_u16_at(
+        encode_npc_mask_bank(
             &mut save,
-            SAVE_QUEST_PROGRESS_WORD_OFFSET,
-            self.quest_progress_word,
+            SAVE_NPC_REMOVED_MASKS_OFFSET,
+            &self.removed_town_npc_flags,
+        );
+        encode_npc_mask_bank(
+            &mut save,
+            SAVE_NPC_NAME_KNOWN_MASKS_OFFSET,
+            &self.talk_branch_flags,
         );
         save[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
             ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN]
@@ -238,12 +282,14 @@ impl PlayState {
         save[SAVE_ACTIVE_OBJECTS_OFFSET..SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN]
             .copy_from_slice(&active_table);
 
-        let saved_ool = self.encode_saved_ool(game_dir)?;
-        write_saved_ool_mirrors_for_save(game_dir, &saved_ool, entry_disk_prompt_mode)?;
+        disk_session.request_operation(DiskOperationFamily::GameplayResources);
+        let (saved_ool, _) = stage_saved_ool_for_save(game_dir, entry_required_disk)?;
+        disk_session.request_operation(DiskOperationFamily::UltimaVSaveFiles);
         write_disk_file(&game_dir.join(SAVED_GAM_FILENAME), save)?;
         write_disk_file(&game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
         write_blackthorn_story_state(game_dir, self.blackthorn_story)?;
         write_world_progress_state(game_dir, WorldProgressState::from_play_state(self))?;
+        write_town_npc_mutations(game_dir, &self.town_npc_mutations)?;
         Ok(())
     }
 
@@ -261,49 +307,6 @@ impl PlayState {
                 Some((0, z, x, y))
             }
         }
-    }
-
-    pub fn encode_saved_ool(&self, game_dir: &Path) -> io::Result<Vec<u8>> {
-        let mut bytes = Vec::with_capacity(SAVED_OOL_LEN);
-        for plane in [WorldPlane::Britannia, WorldPlane::Underworld] {
-            let objects = self.save_overlay_objects_for_plane(game_dir, plane)?;
-            bytes.extend(encode_ool_plane_objects(&objects)?);
-        }
-        Ok(bytes)
-    }
-
-    pub fn save_overlay_objects_for_plane(
-        &self,
-        game_dir: &Path,
-        plane: WorldPlane,
-    ) -> io::Result<Vec<ActiveObject>> {
-        if let Some(objects) = self.return_world_overlay_objects_for_plane(plane)? {
-            return Ok(objects);
-        }
-        if let Some(objects) = self.world_overlays.get(plane) {
-            Ok(objects)
-        } else {
-            load_world_overlay_mirror_objects(game_dir, plane)
-        }
-    }
-
-    fn return_world_overlay_objects_for_plane(
-        &self,
-        plane: WorldPlane,
-    ) -> io::Result<Option<Vec<ActiveObject>>> {
-        let Some(return_world) = &self.return_world else {
-            return Ok(None);
-        };
-        if return_world.plane != plane || return_world.pending_vehicle.is_none() {
-            return Ok(None);
-        }
-        let mut active_objects = return_world.active_objects.clone();
-        if let Some(pending) = return_world.pending_vehicle {
-            place_pending_vehicle_acquisition(&mut active_objects, plane, pending)?;
-        }
-        Ok(Some(Self::world_overlay_objects_from_active_objects(
-            &active_objects,
-        )))
     }
 
     pub fn load_world_overlay_for_plane(
@@ -357,16 +360,15 @@ impl PlayState {
         // any cell.
         let beacon_sources = harvest_location_beacon_sources(&grid);
         normalize_town_runtime_floor(&mut grid, options.clock.hour);
-        let table_start = if options.floor == 0 {
-            load_location_entry_y(game_dir, scene)?
-                .map(|entry_y| (LOCATION_DEFAULT_ENTRY_X, entry_y))
+        let default_entry = if options.floor == 0 {
+            Some((LOCATION_DEFAULT_ENTRY_X, LOCATION_DEFAULT_ENTRY_Y))
         } else {
             None
         };
         let saved_active_objects = options.saved_active_objects.clone();
         let has_saved_active_objects = saved_active_objects.is_some();
         let saved_game_reload = options.save_template_source == SaveTemplateSource::SavedGame;
-        let (x, y) = match options.start.or(table_start) {
+        let (x, y) = match options.start.or(default_entry) {
             Some(pos) => {
                 if pos.0 >= 32 || pos.1 >= 32 {
                     return Err(io::Error::new(
@@ -382,19 +384,10 @@ impl PlayState {
                 }
                 pos
             }
-            // KNOWN GAP — the player's location entry cell is unpublished.
-            // This rung used to be a harvested asterisk "spawn marker".
-            // `formats/location-dat.md §6` withdrew that reading of `0x2A`
-            // in full ("it is the night beacon's indoor light source") and
-            // states that the document "does not specify where the player
-            // is placed on entering a location"; `town-mode.md §5` step 6
-            // withdraws its `(15, per-scene row)` wording too and records
-            // the entry cell as "**not currently established** by this
-            // spec ... an open item". The rung is gone rather than
-            // re-sourced: what remains is the caller's explicit start, the
-            // per-scene entry row when a `location_entry_y.tsv` sidecar
-            // supplies one, and otherwise the first walkable cell — a
-            // harness placement, not a claim about the original.
+            // Non-entry callers loading another floor must normally supply
+            // the preserved party coordinate. Keep the first-walkable path
+            // only as a graphics-free harness default; overworld entry on
+            // floor zero has already selected the fixed #94 coordinate.
             None => first_walkable(&grid, passability.as_ref()).ok_or_else(|| {
                 io::Error::new(io::ErrorKind::InvalidData, "no playable start cell")
             })?,
@@ -434,11 +427,17 @@ impl PlayState {
             grid,
             world_live_chunks: None,
             clock: options.clock,
-            prng_state: DEFAULT_PRNG_STATE,
+            prng_state: host_clock_prng_seed_now(),
             animation: AnimationClock::default(),
+            dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
+            pending_map_viewport_dissolves: Vec::new(),
+            pending_potion_flash: None,
+            pending_stonegate_trapdoor_playback: None,
+            pending_stonegate_status_provision_pass: false,
+            pending_stonegate_object_epilogue: false,
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,
             gold: options.gold,
@@ -467,9 +466,13 @@ impl PlayState {
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
-            quest_progress_word: options.quest_progress_word,
+            resident_shadowlord: None,
+            summoned_shadowlord: None,
+            removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
+            word_of_power_seal_flags: options.word_of_power_seal_flags,
+            shrine_ruin_flags: options.shrine_ruin_flags,
             moral_standing: options.moral_standing,
             toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
@@ -482,6 +485,7 @@ impl PlayState {
                 bearing: BEACON_INITIAL_BEARING,
             },
             beacon_bearing_stencils: load_beacon_bearing_stencils(game_dir)?,
+            local_light_mask: [false; TOWN_GRID_BYTES],
             visibility_dirty: false,
             visibility_grid: [0; VISIBILITY_GRID_LEN],
             terrain_band: [0; TERRAIN_BAND_LEN],
@@ -489,18 +493,20 @@ impl PlayState {
             world_underfoot_blackout_latched: false,
             wind: options.wind,
             wind_save_byte: options.wind_save_byte,
-            timing_status: options.timing_status,
             time_stop_counter: options.time_stop_counter,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
             fortunes_of_war: options.fortunes_of_war,
             camp_cooldown: options.camp_cooldown,
+            camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
+            combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
             combat_frame_snapshot: None,
             pending_combat_actor_slot: None,
             pending_combat_terrain_trigger_slot: None,
+            pending_outdoor_reaction_slots: Vec::new(),
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
             combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
@@ -510,6 +516,10 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            pending_vehicle_save: options
+                .pending_vehicle
+                .map(PendingVehicleSaveState::from_acquisition)
+                .unwrap_or(options.pending_vehicle_save),
             turn: 0,
             message: format!("Entered {} at ({x}, {y}).", scene.key()),
             message_transcript: Vec::new(),
@@ -523,6 +533,7 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
+            active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,
@@ -531,6 +542,7 @@ impl PlayState {
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
+            active_conversation_npc_slot: None,
             active_conversation_join_candidate: None,
             active_z_stats: None,
             active_party_selector: None,
@@ -545,20 +557,15 @@ impl PlayState {
             active_mix: None,
             active_new_order: None,
             active_yell: None,
+            active_shrine_restoration: None,
             active_wishing_well: None,
             active_view_overlay: None,
             white_potion_sweep: None,
-            combat_potion_presentation: None,
             active_direction_prompt: None,
             active_yes_no_prompt: None,
-            pickpocketed_npcs: Vec::new(),
-            removed_town_npcs: Vec::new(),
-            town_npc_alarm_states: Vec::new(),
-            talk_branch_flags: HashMap::new(),
-            conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
+            town_npc_mutations: options.town_npc_mutations,
+            talk_branch_flags: options.talk_branch_flags,
             conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
-            conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
-            conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
             inn_registry: options.inn_registry,
         };
         if has_saved_active_objects {
@@ -566,15 +573,17 @@ impl PlayState {
         } else {
             state.load_scheduled_npcs(&npc_slots);
         }
-        state.attach_player_phantom_npc();
-        if !has_saved_active_objects {
-            if let Some((slot, index)) = state.install_shadowlord_entry_encounter() {
-                let shadowlord = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
-                if !state.message.is_empty() {
-                    state.message.push('\n');
-                }
+        if let Some((slot, index)) = state.install_shadowlord_entry_encounter() {
+            let shadowlord = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
+            if !state.message.is_empty() {
+                state.message.push('\n');
+            }
+            state
+                .message
+                .push_str(&format!("An air of {shadowlord} doth surround thee."));
+            if let Some(slot) = slot {
                 state.message.push_str(&format!(
-                    "Shadowlord entry: {shadowlord} appears in active-object slot {slot}."
+                    " Shadowlord actor installed in active-object slot {slot}."
                 ));
             }
         }
@@ -677,11 +686,17 @@ impl PlayState {
             grid,
             world_live_chunks: None,
             clock: options.clock,
-            prng_state: DEFAULT_PRNG_STATE,
+            prng_state: host_clock_prng_seed_now(),
             animation: AnimationClock::default(),
+            dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
+            pending_map_viewport_dissolves: Vec::new(),
+            pending_potion_flash: None,
+            pending_stonegate_trapdoor_playback: None,
+            pending_stonegate_status_provision_pass: false,
+            pending_stonegate_object_epilogue: false,
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,
             gold: options.gold,
@@ -710,9 +725,13 @@ impl PlayState {
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
-            quest_progress_word: options.quest_progress_word,
+            resident_shadowlord: None,
+            summoned_shadowlord: None,
+            removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
+            word_of_power_seal_flags: options.word_of_power_seal_flags,
+            shrine_ruin_flags: options.shrine_ruin_flags,
             moral_standing: options.moral_standing,
             toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
@@ -725,6 +744,7 @@ impl PlayState {
                 bearing: BEACON_INITIAL_BEARING,
             },
             beacon_bearing_stencils: load_beacon_bearing_stencils(game_dir)?,
+            local_light_mask: [false; TOWN_GRID_BYTES],
             visibility_dirty: false,
             visibility_grid: [0; VISIBILITY_GRID_LEN],
             terrain_band: [0; TERRAIN_BAND_LEN],
@@ -732,18 +752,20 @@ impl PlayState {
             world_underfoot_blackout_latched: false,
             wind: options.wind,
             wind_save_byte: options.wind_save_byte,
-            timing_status: options.timing_status,
             time_stop_counter: options.time_stop_counter,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
             fortunes_of_war: options.fortunes_of_war,
             camp_cooldown: options.camp_cooldown,
+            camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
+            combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
             combat_frame_snapshot: None,
             pending_combat_actor_slot: None,
             pending_combat_terrain_trigger_slot: None,
+            pending_outdoor_reaction_slots: Vec::new(),
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
             combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
@@ -753,6 +775,10 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            pending_vehicle_save: options
+                .pending_vehicle
+                .map(PendingVehicleSaveState::from_acquisition)
+                .unwrap_or(options.pending_vehicle_save),
             turn: 0,
             // cleak/u5-spec#81: dungeon-mode.md publishes no dungeon-entry
             // narration, so nothing player-facing is printed here. The old
@@ -773,6 +799,7 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
+            active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,
@@ -781,6 +808,7 @@ impl PlayState {
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
+            active_conversation_npc_slot: None,
             active_conversation_join_candidate: None,
             active_z_stats: None,
             active_party_selector: None,
@@ -795,20 +823,15 @@ impl PlayState {
             active_mix: None,
             active_new_order: None,
             active_yell: None,
+            active_shrine_restoration: None,
             active_wishing_well: None,
             active_view_overlay: None,
             white_potion_sweep: None,
-            combat_potion_presentation: None,
             active_direction_prompt: None,
             active_yes_no_prompt: None,
-            pickpocketed_npcs: Vec::new(),
-            removed_town_npcs: Vec::new(),
-            town_npc_alarm_states: Vec::new(),
-            talk_branch_flags: HashMap::new(),
-            conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
+            town_npc_mutations: options.town_npc_mutations,
+            talk_branch_flags: options.talk_branch_flags,
             conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
-            conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
-            conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
             inn_registry: options.inn_registry,
         };
         state.mode_zero_cleanup();
@@ -821,7 +844,12 @@ impl PlayState {
         plane: WorldPlane,
         options: PlayOptions,
     ) -> io::Result<Self> {
-        let grid = load_world_map(game_dir, plane)?;
+        let mut grid = load_world_map(game_dir, plane)?;
+        apply_world_quest_tile_substitutions(
+            &mut grid,
+            &options.word_of_power_seal_flags,
+            &options.shrine_ruin_flags,
+        );
         let passability = load_tile_passability(game_dir)?;
         let damage_tiles = load_world_damage_tile_entries(game_dir)?.unwrap_or_default();
         // Canonical Ultima V starting position: Iolo's Hut on the surface
@@ -907,15 +935,20 @@ impl PlayState {
                 }
             }
         }
+        let mut pending_vehicle_save = options
+            .pending_vehicle
+            .map(PendingVehicleSaveState::from_acquisition)
+            .unwrap_or(options.pending_vehicle_save);
         if let Some(pending) = options.pending_vehicle {
             place_pending_vehicle_acquisition(&mut active_objects, plane, pending)?;
+            pending_vehicle_save = pending_vehicle_save.clear_class();
         }
         let world_live_chunks = Some(WorldLiveChunkBuffer::from_full_grid(
             plane,
             &grid,
             x,
             y,
-            |_| false,
+            |_| LiveChunkSubstitutionPolicy::NONE,
         )?);
         // `visibility.md §12.6`: the chunk loader scans each freshly loaded
         // 32x32 window for the lighthouse tile and records the first hit, or
@@ -944,11 +977,17 @@ impl PlayState {
             grid,
             world_live_chunks,
             clock: options.clock,
-            prng_state: DEFAULT_PRNG_STATE,
+            prng_state: host_clock_prng_seed_now(),
             animation: AnimationClock::default(),
+            dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
+            pending_map_viewport_dissolves: Vec::new(),
+            pending_potion_flash: None,
+            pending_stonegate_trapdoor_playback: None,
+            pending_stonegate_status_provision_pass: false,
+            pending_stonegate_object_epilogue: false,
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,
             gold: options.gold,
@@ -977,9 +1016,13 @@ impl PlayState {
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
-            quest_progress_word: options.quest_progress_word,
+            resident_shadowlord: None,
+            summoned_shadowlord: None,
+            removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
+            word_of_power_seal_flags: options.word_of_power_seal_flags,
+            shrine_ruin_flags: options.shrine_ruin_flags,
             moral_standing: options.moral_standing,
             toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
@@ -992,6 +1035,7 @@ impl PlayState {
                 bearing: BEACON_INITIAL_BEARING,
             },
             beacon_bearing_stencils: load_beacon_bearing_stencils(game_dir)?,
+            local_light_mask: [false; TOWN_GRID_BYTES],
             visibility_dirty: false,
             visibility_grid: [0; VISIBILITY_GRID_LEN],
             terrain_band: [0; TERRAIN_BAND_LEN],
@@ -999,18 +1043,20 @@ impl PlayState {
             world_underfoot_blackout_latched: false,
             wind: options.wind,
             wind_save_byte: options.wind_save_byte,
-            timing_status: options.timing_status,
             time_stop_counter: options.time_stop_counter,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
             fortunes_of_war: options.fortunes_of_war,
             camp_cooldown: options.camp_cooldown,
+            camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
+            combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
             combat_frame_snapshot: None,
             pending_combat_actor_slot: None,
             pending_combat_terrain_trigger_slot: None,
+            pending_outdoor_reaction_slots: Vec::new(),
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
             combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
@@ -1020,6 +1066,7 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            pending_vehicle_save,
             turn: 0,
             message: format!(
                 "Entered {} at ({x}, {y}). {}.",
@@ -1037,6 +1084,7 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
+            active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,
@@ -1045,6 +1093,7 @@ impl PlayState {
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
+            active_conversation_npc_slot: None,
             active_conversation_join_candidate: None,
             active_z_stats: None,
             active_party_selector: None,
@@ -1059,20 +1108,15 @@ impl PlayState {
             active_mix: None,
             active_new_order: None,
             active_yell: None,
+            active_shrine_restoration: None,
             active_wishing_well: None,
             active_view_overlay: None,
             white_potion_sweep: None,
-            combat_potion_presentation: None,
             active_direction_prompt: None,
             active_yes_no_prompt: None,
-            pickpocketed_npcs: Vec::new(),
-            removed_town_npcs: Vec::new(),
-            town_npc_alarm_states: Vec::new(),
-            talk_branch_flags: HashMap::new(),
-            conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
+            town_npc_mutations: options.town_npc_mutations,
+            talk_branch_flags: options.talk_branch_flags,
             conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
-            conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
-            conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
             inn_registry: options.inn_registry,
         };
         state.sync_player_object();
@@ -1108,30 +1152,18 @@ impl PlayState {
         };
 
         if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
-            self.advance_turn();
-            if self.restore_return_world() {
-                self.message = format!("Exited {} to overworld debug return point.", scene.key());
-                self.mark_visibility_dirty();
-                return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
-                    scene,
-                )));
-            } else if let Some(game_dir) = game_dir {
-                if self.restore_world_for_target(game_dir, PlayTarget::Town(scene))? {
-                    self.message = format!(
-                        "Exited {} to world-location table return point.",
-                        scene.key()
-                    );
-                    self.mark_visibility_dirty();
-                    return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
-                        scene,
-                    )));
-                }
+            let corner_tile = self.grid[31 * 32 + 31];
+            if !self.tile_walkable(corner_tile) {
+                self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(corner_tile));
+                self.advance_turn();
+                return Ok(MoveOutcome::Blocked);
             }
-            return Ok(self.block_missing_town_return(
-                scene,
-                floor,
-                format!("Exited {}", scene.key()),
-            ));
+            if self.blocking_town_object_at_candidate(nx, ny).is_some() {
+                self.message = format!("Blocked by actor at ({nx}, {ny}).");
+                self.advance_turn();
+                return Ok(MoveOutcome::Blocked);
+            }
+            return Ok(self.start_town_exit_prompt(scene, floor));
         }
 
         let nx = nx as usize;
@@ -1141,15 +1173,6 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
         let tile = self.grid[ny * 32 + nx];
-        if let Some(game_dir) = game_dir {
-            if let Some(entry) = self.town_exit_tile_at(game_dir, scene, floor, nx, ny, tile)? {
-                self.player.x = nx;
-                self.player.y = ny;
-                self.sync_player_object();
-                self.mark_visibility_dirty();
-                return Ok(self.start_town_exit_prompt(entry, true));
-            }
-        }
         if let Some(game_dir) = game_dir {
             if let Some(delta) = town_walk_on_stair_delta(tile, direction) {
                 self.player.x = nx;
@@ -1163,21 +1186,17 @@ impl PlayState {
             if self
                 .town_stair_at(game_dir, scene, floor, nx, ny, tile)?
                 .is_some()
-                || (self.tile_walkable(tile) && (80..=87).contains(&tile))
             {
                 return self.step_town_stair(game_dir, scene, floor, nx, ny, tile);
             }
         }
-        if let Some(game_dir) = game_dir {
-            if let Some(entry) = self.town_trap_door_at(game_dir, scene, floor, nx, ny, tile)? {
-                self.player.x = nx;
-                self.player.y = ny;
-                self.sync_player_object();
-                self.mark_visibility_dirty();
-                return self.apply_town_trap_door(game_dir, scene, entry);
-            }
-        }
-        if self.tile_walkable(tile) {
+        let trapdoor_walkable = if let Some(game_dir) = game_dir {
+            self.town_trap_door_at(game_dir, scene, floor, nx, ny, tile)?
+                .is_some()
+        } else {
+            is_town_trapdoor_live_tile(tile)
+        };
+        if self.tile_walkable(tile) || trapdoor_walkable {
             self.player.x = nx;
             self.player.y = ny;
             self.sync_player_object();
@@ -1192,33 +1211,6 @@ impl PlayState {
             self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));
             Ok(MoveOutcome::Blocked)
         }
-    }
-
-    pub fn town_exit_tile_at(
-        &self,
-        game_dir: &Path,
-        scene: Scene,
-        floor: i8,
-        x: usize,
-        y: usize,
-        tile: u8,
-    ) -> io::Result<Option<TownExitTileEntry>> {
-        if let Some(entry) = load_town_exit_tile_entries(game_dir)?.and_then(|entries| {
-            entries
-                .into_iter()
-                .find(|entry| town_exit_tile_matches(*entry, scene, floor, x, y, tile))
-        }) {
-            return Ok(Some(entry));
-        }
-        Ok(
-            (tile == TOWN_EXIT_THRESHOLD_TILE).then_some(TownExitTileEntry {
-                scene,
-                floor,
-                x,
-                y,
-                expected_tile: Some(TOWN_EXIT_THRESHOLD_TILE),
-            }),
-        )
     }
 
     pub fn town_lock_at(
@@ -1277,54 +1269,39 @@ impl PlayState {
         }))
     }
 
-    pub fn resolve_town_exit_tile(
-        &mut self,
-        game_dir: &Path,
-        scene: Scene,
-        floor: i8,
-        entry: TownExitTileEntry,
-    ) -> io::Result<MoveOutcome> {
-        self.resolve_town_exit_tile_transition(game_dir, scene, floor, entry, true)
+    pub fn blocking_town_object_at_candidate(&self, x: isize, y: isize) -> Option<&ActiveObject> {
+        ((0..32).contains(&x) && (0..32).contains(&y))
+            .then(|| self.blocking_object_at(x as usize, y as usize))
+            .flatten()
     }
 
-    pub fn resolve_town_exit_tile_after_turn(
+    pub fn resolve_town_boundary_exit_transition(
         &mut self,
         game_dir: &Path,
         scene: Scene,
         floor: i8,
-        entry: TownExitTileEntry,
     ) -> io::Result<MoveOutcome> {
-        self.resolve_town_exit_tile_transition(game_dir, scene, floor, entry, false)
-    }
-
-    pub fn resolve_town_exit_tile_transition(
-        &mut self,
-        game_dir: &Path,
-        scene: Scene,
-        floor: i8,
-        entry: TownExitTileEntry,
-        advance_turn: bool,
-    ) -> io::Result<MoveOutcome> {
-        if advance_turn {
-            self.advance_turn();
-        }
         if self.restore_return_world() {
+            let Area::World { plane } = self.area else {
+                unreachable!("restoring a town return snapshot enters world mode")
+            };
             self.message = format!(
-                "Stepped onto town exit tile at ({}, {}) in {}; returned to overworld debug return point.",
-                entry.x,
-                entry.y,
-                scene.key()
+                "Yes. Left {} for {} via the saved return point.",
+                scene.key(),
+                plane.key()
             );
             self.mark_visibility_dirty();
             return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
                 scene,
             )));
         } else if self.restore_world_for_target(game_dir, PlayTarget::Town(scene))? {
+            let Area::World { plane } = self.area else {
+                unreachable!("restoring a published town return enters world mode")
+            };
             self.message = format!(
-                "Stepped onto town exit tile at ({}, {}) in {}; returned to world-location table point.",
-                entry.x,
-                entry.y,
-                scene.key()
+                "Yes. Left {} for {} via the world-location table point.",
+                scene.key(),
+                plane.key()
             );
             self.mark_visibility_dirty();
             return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
@@ -1334,12 +1311,7 @@ impl PlayState {
         Ok(self.block_missing_town_return(
             scene,
             floor,
-            format!(
-                "Stepped onto town exit tile at ({}, {}) in {}",
-                entry.x,
-                entry.y,
-                scene.key()
-            ),
+            format!("Accepted the boundary exit from {}", scene.key()),
         ))
     }
 
@@ -1366,10 +1338,20 @@ impl PlayState {
         y: usize,
         tile: u8,
     ) -> io::Result<Option<TownTrapDoorEntry>> {
-        Ok(load_town_trap_door_entries(game_dir)?.and_then(|entries| {
+        let sidecar = load_town_trap_door_entries(game_dir)?.and_then(|entries| {
             entries
                 .into_iter()
                 .find(|entry| town_trap_door_matches(*entry, scene, floor, x, y, tile))
+        });
+        Ok(sidecar.or_else(|| {
+            is_town_trapdoor_live_tile(tile).then_some(TownTrapDoorEntry {
+                scene,
+                floor,
+                x,
+                y,
+                to_floor: floor.saturating_sub(1),
+                expected_tile: Some(tile),
+            })
         }))
     }
 
@@ -1389,37 +1371,11 @@ impl PlayState {
         entry: TownTrapDoorEntry,
         advance_turn: bool,
     ) -> io::Result<MoveOutcome> {
-        let (grid, beacon_sources) = load_town_runtime_floor_with_beacon_sources(
-            game_dir,
-            scene,
-            entry.to_floor,
-            self.clock.hour,
-        )?;
-        self.grid = grid;
-        // `visibility.md §12.6`: a new location floor is fresh map setup —
-        // clear both beacon positions and re-record up to two bright-light
-        // hits. Harvested from the RAW floor above, because the runtime
-        // normalisation pass scrubs the marker byte the beacon looks for.
-        self.light_beacon.sources = beacon_sources;
-        self.natural_moongate_live_cells.clear();
-        self.area = Area::Town {
-            scene,
-            floor: entry.to_floor,
-        };
-        self.clear_town_floor_reload_door_state();
-        self.restore_revealed_town_secret_doors_for_floor(game_dir, scene, entry.to_floor)?;
-        self.relink_npc_objects();
-        self.mark_visibility_dirty();
+        self.message = "A TRAPDOOR!".to_string();
+        self.reload_town_floor(game_dir, scene, entry.to_floor)?;
         if advance_turn {
             self.advance_turn();
         }
-        self.message = format!(
-            "Fell through trap door at ({}, {}) to {} floor {}.",
-            entry.x,
-            entry.y,
-            scene.key(),
-            entry.to_floor
-        );
         Ok(MoveOutcome::Transition(AreaTransition::ChangedFloor {
             scene,
             floor: entry.to_floor,

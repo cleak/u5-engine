@@ -331,10 +331,10 @@ pub fn tlk_ask_party_name_match(typed: &[u8], party_member_names: &[&[u8]]) -> u
     0
 }
 
-/// `shops.md §4.2` shared common-word NUL-sentinel count, including
-/// token `0x00` plus the published empty dictionary rows. Text consumers
-/// treat these as word-boundary sentinels rather than as word substitutions.
-pub const COMMON_WORD_DICTIONARY_NUL_SENTINELS: usize = 11;
+/// `common-word-dictionary.md §3` null-reference count in the resident
+/// pointer run: the unreachable index-zero entry plus ten addressable empty
+/// slots. These are not word-boundary sentinels.
+pub const COMMON_WORD_DICTIONARY_NULL_REFERENCES: usize = 11;
 
 /// `shops.md §4.2` SHOPPE.DAT phrase-token byte range. Bytes
 /// `0x80..=0xFF` in a record payload index the 128-entry pointer
@@ -500,27 +500,6 @@ pub const TLK_LABEL_FIRST: u8 = 0x91;
 /// content `0x9F` is conventionally the blob's final record marker,
 /// which is why it is the second-most common label byte.
 pub const TLK_LABEL_LAST: u8 = 0x9F;
-/// Label byte the runner transfers to after an **accepted** `0x85`
-/// GOLD-PAYMENT, and its refused counterpart.
-///
-/// These are two *particular* label values inside
-/// [`TLK_LABEL_FIRST`]`..=`[`TLK_LABEL_LAST`], not band boundaries.
-/// They previously borrowed the GOTO band's boundary constants, which
-/// is how a two-value band and a two-arm convention came to look like
-/// the same fact; splitting them out is what lets the band widen to
-/// its published fifteen values without silently re-routing every
-/// paid arm to `0x91`, the most common label in shipped content.
-///
-/// **Not published by the spec.** `conversation.md` §7.6 says only
-/// that an unaffordable demand "prints the refusal line, clears its
-/// multi-byte state, and re-enters the keyword prompt rather than
-/// continuing the response" — it names no paid/refused label pair.
-/// The values here preserve this engine's existing behaviour
-/// unchanged; they are an engine convention awaiting a clean-room
-/// answer, not a decoded fact. Do not treat them as spec-backed.
-pub const TLK_GOLD_PAYMENT_PAID_LABEL: u8 = 0x9E;
-/// See [`TLK_GOLD_PAYMENT_PAID_LABEL`]; equally unpublished.
-pub const TLK_GOLD_PAYMENT_REFUSED_LABEL: u8 = 0x9F;
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
 /// `conversation.md §6` keyword-input loop prompt. The conversation
@@ -539,6 +518,10 @@ pub const TLK_OPENING_DESCRIPTION_PREFIX: &str = "Thou seest ";
 /// empty line prints this line and runs the NPC's `Bye` entry; it
 /// is the most common way conversations end.
 pub const TLK_EMPTY_INPUT_BYE_MESSAGE: &str = "BYE\n\n";
+
+/// `conversation.md §7.6`: exact fixed output for an unaffordable
+/// `0x85` demand. Quotes and both trailing line feeds are visible.
+pub const TLK_GOLD_PAYMENT_REFUSAL_MESSAGE: &str = "\"Thou hast not enough gold!\"\n\n";
 
 /// `conversation.md §6` no-match response. When both the reserved
 /// keyword scan and the ordinary keyword scan fail, the keyword
@@ -727,23 +710,9 @@ pub const TLK_GENERIC_SIGNAL_COUNT: usize = b'A' as usize;
 /// slots increment through the shared capped byte helper.
 pub const TLK_GENERIC_SIGNAL_CAP: u8 = 99;
 
-/// `quest-flags.md §5`: final conversation cleanup first checks a
-/// three-slot resource/special transient band before scanning generic
-/// signal flags.
-pub const CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT: usize = 3;
-
-/// `quest-flags.md §5`: after generic signals, cleanup scans two
-/// eight-slot transient signal arrays from high to low.
-pub const CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT: usize = 8;
-
 /// `quest-flags.md §5` / `shops.md §6.2`: the shared town/conversation
 /// sentinel uses a no-slot marker distinct from tracked slot indices.
 pub const CONVERSATION_SHARED_NO_SLOT_SENTINEL: u8 = 0xFF;
-
-/// `quest-flags.md §5`: random gold fallback subtracts `1..=15`.
-pub const fn conversation_cleanup_gold_debit_from_seed(seed: u8) -> u16 {
-    (seed as u16 % 15) + 1
-}
 
 /// `conversation.md §7.6`: decode the `0x85` GOLD-PAYMENT introducer's
 /// three argument bytes. Each byte is masked to seven bits and

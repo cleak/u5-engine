@@ -1,10 +1,10 @@
 //! Lockpicking helpers per `doors-and-z-transitions.md` §3. Jimmy uses
-//! three different roll formulas:
-//!   - Doors, visible chests, and NPC pockets: roll `1..=29` strictly
-//!     less than the picker's class byte.
-//!   - Per-map object chests: `(object_difficulty - member_class + 30)/2`
-//!     threshold against a `1..=30` roll, requiring the stat high bit.
-//!   - Dungeon chests: `(2*depth - member_class + 30)/2` threshold
+//! two different roll formulas:
+//!   - Locked doors and restraints: roll `0..=29` strictly less than
+//!     the picker's Dexterity.
+//!   - Per-map object chests: `(object_difficulty - Dexterity + 30)/2`
+//!     threshold against a `1..=30` roll, requiring the lock/trap high bit.
+//!   - Dungeon chests: `(2*depth - Dexterity + 30)/2` threshold
 //!     against a `1..=30` roll.
 //! These helpers implement only the success/failure decision; key counter
 //! mutation, narration, and tile rewrites are caller responsibilities.
@@ -59,54 +59,106 @@ pub const fn outdoor_klimb_member_falls(dexterity: u8, roll_1_to_30: u8) -> bool
 pub const OUTDOOR_KLIMB_FALL_DAMAGE_MIN: u8 = 1;
 pub const OUTDOOR_KLIMB_FALL_DAMAGE_MAX: u8 = 5;
 
-/// `doors-and-z-transitions.md §3`: door / visible-chest / NPC pickpocket
-/// success predicate. Roll is uniform `[1, 29]`; success when the
-/// picker's class byte is strictly greater than the roll.
-pub const JIMMY_DOOR_DIE_LOW: u8 = 1;
+/// `doors-and-z-transitions.md §3`: locked-door/restraint success
+/// predicate. Roll is uniform `[0, 29]`; success when the picker's
+/// Dexterity is strictly greater than the roll.
+pub const JIMMY_DOOR_DIE_LOW: u8 = 0;
 pub const JIMMY_DOOR_DIE_HIGH: u8 = 29;
-pub const fn jimmy_door_succeeds(member_class: u8, roll_1_to_29: u8) -> bool {
-    member_class > roll_1_to_29
+pub const fn jimmy_door_succeeds(dexterity: u8, roll_0_to_29: u8) -> bool {
+    dexterity > roll_0_to_29
 }
 
 /// `doors-and-z-transitions.md §3` shared moral-standing reward for
-/// a successful NPC pickpocket. The shared selector is raised by
+/// a successful prisoner release. The shared selector is raised by
 /// this many units on success, then clamped at the published
-/// 99 cap. Failure does not advance the picked/thanked state and
+/// 99 cap. Failure does not advance the freed/thanked state and
 /// does not apply this increase.
-pub const JIMMY_NPC_PICKPOCKET_KARMA_REWARD: u8 = 2;
+pub const JIMMY_PRISONER_RELEASE_KARMA_REWARD: u8 = 2;
+
+/// Native top-down door/restraint bytes used by Open and Jimmy.
+pub const TOWN_DOOR_PLAIN_UNLOCKED_TILE: u8 = 0xB8;
+pub const TOWN_DOOR_PLAIN_LOCKED_TILE: u8 = 0xB9;
+pub const TOWN_DOOR_WINDOWED_UNLOCKED_TILE: u8 = 0xBA;
+pub const TOWN_DOOR_WINDOWED_LOCKED_TILE: u8 = 0xBB;
+pub const TOWN_DOOR_MAGIC_PLAIN_TILE: u8 = 0x97;
+pub const TOWN_DOOR_MAGIC_WINDOWED_TILE: u8 = 0x98;
+pub const TOWN_OPEN_ALREADY_OPEN_TILE: u8 = 0xAF;
+pub const TOWN_DOOR_CLEARED_TILE: u8 = 0x44;
+pub const JIMMY_STOCKS_TILE: u8 = 0x84;
+pub const JIMMY_MANACLES_TILE: u8 = 0x85;
+pub const JIMMY_RELEASE_AI_MODE: u8 = 5;
+
+/// `dungeon-mode.md` / `containers.md`: opening a dungeon chest replaces
+/// its class nibble, clears the mutable subtype/trap bits, and preserves only
+/// the visit-local marker bit.
+pub const DUNGEON_OPEN_CHEST_CLASS: u8 = 0x70;
+pub const DUNGEON_VISIT_MARKER_BIT: u8 = 0x08;
+pub const fn dungeon_open_chest_rewrite(tile: u8) -> u8 {
+    DUNGEON_OPEN_CHEST_CLASS | (tile & DUNGEON_VISIT_MARKER_BIT)
+}
+
+pub const fn jimmy_locked_door_rewrite(tile: u8) -> Option<u8> {
+    match tile {
+        TOWN_DOOR_PLAIN_LOCKED_TILE => Some(TOWN_DOOR_PLAIN_UNLOCKED_TILE),
+        TOWN_DOOR_WINDOWED_LOCKED_TILE => Some(TOWN_DOOR_WINDOWED_UNLOCKED_TILE),
+        _ => None,
+    }
+}
+
+pub const fn jimmy_magic_locked_door(tile: u8) -> bool {
+    matches!(
+        tile,
+        TOWN_DOOR_MAGIC_PLAIN_TILE | TOWN_DOOR_MAGIC_WINDOWED_TILE
+    )
+}
+
+pub const fn jimmy_restraint_tile(tile: u8) -> bool {
+    matches!(tile, JIMMY_STOCKS_TILE | JIMMY_MANACLES_TILE)
+}
+
+pub const fn openable_town_door(tile: u8) -> bool {
+    matches!(
+        tile,
+        TOWN_DOOR_PLAIN_UNLOCKED_TILE | TOWN_DOOR_WINDOWED_UNLOCKED_TILE
+    )
+}
+
+pub const fn town_command_door_tile(tile: u8) -> bool {
+    openable_town_door(tile)
+        || jimmy_locked_door_rewrite(tile).is_some()
+        || jimmy_magic_locked_door(tile)
+}
 
 /// `doors-and-z-transitions.md §3` shared `+30` bias applied to the
 /// object-chest and dungeon-chest pick thresholds before halving.
-/// Both formulas are `(difficulty - member_class + JIMMY_CHEST_THRESHOLD_BIAS) / 2`,
+/// Both formulas are `(difficulty - Dexterity + JIMMY_CHEST_THRESHOLD_BIAS) / 2`,
 /// so the bias is shared spec data rather than a per-formula constant.
 pub const JIMMY_CHEST_THRESHOLD_BIAS: i16 = 30;
 
 /// `doors-and-z-transitions.md §3`: per-map object chest pick. Returns
-/// `None` when the high bit of the object stat is clear (the chest is in
-/// the broken-lock state and no real pick can occur). Otherwise computes
-/// the threshold using the original unsigned word halving and tests the
-/// `1..=30` roll.
+/// `None` when the high bit of the object stat is clear (the container is
+/// already unlocked/disarmed and takes the wasteful broken-key short circuit).
+/// Otherwise computes the threshold with the original wrapping unsigned-word
+/// arithmetic and tests the `1..=30` roll.
 pub const JIMMY_OBJECT_DIE_LOW: u8 = 1;
 pub const JIMMY_OBJECT_DIE_HIGH: u8 = 30;
-pub const fn object_chest_jimmy_threshold(object_stat: u8, member_class: u8) -> Option<u8> {
+pub const fn object_chest_jimmy_threshold(object_stat: u8, dexterity: u8) -> Option<u16> {
     if object_stat & 0x80 == 0 {
         return None;
     }
-    let difficulty = (object_stat & 0x7f) as i16;
-    let raw = difficulty - member_class as i16 + JIMMY_CHEST_THRESHOLD_BIAS;
-    if raw < 0 {
-        Some(0)
-    } else {
-        Some((raw as u16 / JIMMY_CHEST_THRESHOLD_DIVISOR) as u8)
-    }
+    let difficulty = (object_stat & 0x7f) as u16;
+    let raw = difficulty
+        .wrapping_sub(dexterity as u16)
+        .wrapping_add(JIMMY_CHEST_THRESHOLD_BIAS as u16);
+    Some(raw / JIMMY_CHEST_THRESHOLD_DIVISOR)
 }
-pub const fn object_chest_jimmy_succeeds(threshold: u8, roll_1_to_30: u8) -> bool {
-    roll_1_to_30 <= threshold
+pub const fn object_chest_jimmy_succeeds(threshold: u16, roll_1_to_30: u8) -> bool {
+    (roll_1_to_30 as u16) > threshold
 }
 
 /// `doors-and-z-transitions.md §3` dungeon-chest pick depth
 /// multiplier. The threshold formula
-/// `(2 * dungeon_depth - member_class + 30) / 2` uses this factor on
+/// `(2 * dungeon_depth - Dexterity + 30) / 2` uses this factor on
 /// the depth term; promoting it lets the helper name the depth
 /// weight rather than encoding `2` as a bare literal.
 pub const JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER: i16 = 2;
@@ -117,19 +169,17 @@ pub const JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER: i16 = 2;
 pub const JIMMY_CHEST_THRESHOLD_DIVISOR: u16 = 2;
 
 /// `doors-and-z-transitions.md §3`: dungeon chest pick. Threshold is
-/// `(2*depth - member_class + JIMMY_CHEST_THRESHOLD_BIAS) / 2`; roll
-/// is `1..=30` and success occurs when `roll <= threshold`.
-pub const fn dungeon_chest_jimmy_threshold(depth: u8, member_class: u8) -> u8 {
-    let raw = JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER * (depth as i16) - member_class as i16
-        + JIMMY_CHEST_THRESHOLD_BIAS;
-    if raw < 0 {
-        0
-    } else {
-        (raw as u16 / JIMMY_CHEST_THRESHOLD_DIVISOR) as u8
-    }
+/// `(2*depth - Dexterity + JIMMY_CHEST_THRESHOLD_BIAS) / 2`; roll
+/// is `1..=30` and success occurs when the roll is strictly greater.
+pub const fn dungeon_chest_jimmy_threshold(depth: u8, dexterity: u8) -> u16 {
+    let weighted_depth = depth as u16 * JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER as u16;
+    weighted_depth
+        .wrapping_sub(dexterity as u16)
+        .wrapping_add(JIMMY_CHEST_THRESHOLD_BIAS as u16)
+        / JIMMY_CHEST_THRESHOLD_DIVISOR
 }
-pub const fn dungeon_chest_jimmy_succeeds(threshold: u8, roll_1_to_30: u8) -> bool {
-    roll_1_to_30 <= threshold
+pub const fn dungeon_chest_jimmy_succeeds(threshold: u16, roll_1_to_30: u8) -> bool {
+    (roll_1_to_30 as u16) > threshold
 }
 
 /// `doors-and-z-transitions.md §5`: O-Open initialises the door
@@ -179,10 +229,10 @@ pub const fn door_auto_close_tick(slot_countdown: Option<u8>) -> DoorAutoCloseTi
 /// helper opens only ordinary closed wooden-door variants and uses
 /// fixed per-variant rewrites. Returns `None` for any other tile —
 /// non-wooden doors, magic-locked variants, chests, NPCs, walls.
-pub const MAGIC_UNLOCK_CLOSED_WOODEN_A: u8 = 0x97;
-pub const MAGIC_UNLOCK_OPEN_WOODEN_A: u8 = 0xB8;
-pub const MAGIC_UNLOCK_CLOSED_WOODEN_B: u8 = 0x98;
-pub const MAGIC_UNLOCK_OPEN_WOODEN_B: u8 = 0xBA;
+pub const MAGIC_UNLOCK_CLOSED_WOODEN_A: u8 = TOWN_DOOR_MAGIC_PLAIN_TILE;
+pub const MAGIC_UNLOCK_OPEN_WOODEN_A: u8 = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
+pub const MAGIC_UNLOCK_CLOSED_WOODEN_B: u8 = TOWN_DOOR_MAGIC_WINDOWED_TILE;
+pub const MAGIC_UNLOCK_OPEN_WOODEN_B: u8 = TOWN_DOOR_WINDOWED_UNLOCKED_TILE;
 pub const fn magic_unlock_door_rewrite(tile: u8) -> Option<u8> {
     match tile {
         MAGIC_UNLOCK_CLOSED_WOODEN_A => Some(MAGIC_UNLOCK_OPEN_WOODEN_A),

@@ -80,6 +80,8 @@ pub struct TileAtlas {
     /// process global made rendering depend on whether some earlier
     /// caller happened to load a real game directory.
     pub dungeon_billboards: Option<crate::dungeon_view::DungeonBillboardBanks>,
+    /// Masked first-person object and wandering-monster sprite banks.
+    pub dungeon_sprites: Option<crate::dungeon_view::DungeonSpriteBanks>,
 }
 
 impl TileAtlas {

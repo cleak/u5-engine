@@ -72,7 +72,8 @@ impl ActiveShopSession {
             Self::Tavern(TavernState::Greeting { tavern })
             | Self::Tavern(TavernState::Menu { tavern, .. })
             | Self::Tavern(TavernState::PickProvisionQuantity { tavern, .. })
-            | Self::Tavern(TavernState::BlueBoarDrinkList { tavern, .. }) => tavern.display_name(),
+            | Self::Tavern(TavernState::BlueBoarDrinkList { tavern, .. })
+            | Self::Tavern(TavernState::AnythingElse { tavern, .. }) => tavern.display_name(),
             Self::Tavern(TavernState::Exited) => "Tavern",
             Self::HorseTrader(HorseTraderState::Greeting { stable })
             | Self::HorseTrader(HorseTraderState::ConfirmPurchase { stable, .. }) => {
@@ -121,10 +122,10 @@ impl ActiveShopSession {
                     ArmsShopState::BuyConfirm {
                         item, quoted_price, ..
                     } => lines.push(format!("Item {item} costs {quoted_price} gold. Buy? (Y/N)")),
-                    ArmsShopState::SellPickItem => {
+                    ArmsShopState::SellPickItem(_) => {
                         lines.push("Sell: choose an item to sell.".into())
                     }
-                    ArmsShopState::SellConfirm { item, offer } => {
+                    ArmsShopState::SellConfirm { item, offer, .. } => {
                         lines.push(format!("Sell item {item} for {offer} gold? (Y/N)"));
                     }
                     ArmsShopState::Exited => lines.push("Closed.".into()),
@@ -232,6 +233,9 @@ impl ActiveShopSession {
                 }
                 TavernState::BlueBoarDrinkList { .. } => {
                     lines.push("Choose Blue Boar drink A-F, or Space.".into());
+                }
+                TavernState::AnythingElse { .. } => {
+                    lines.push("Anything else? (Y/N)".into());
                 }
                 TavernState::Exited => lines.push("Closed.".into()),
             },

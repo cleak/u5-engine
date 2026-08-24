@@ -121,7 +121,7 @@
         assert_eq!((state.player.x, state.player.y), (30, 40));
         assert_eq!(state.active_objects[0].z, -1);
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::Normal);
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
         assert_eq!(state.grid[world_cell_index(30, 40)], 5);
@@ -424,7 +424,7 @@
     }
 
     #[test]
-    fn world_plane_transition_save_load_round_trips_both_plane_overlays() {
+    fn world_plane_transition_save_load_uses_live_table_and_staged_disk_mirrors() {
         let dir = debug_game_dir();
         write_save_template_and_empty_overlays(&dir, 0, 0, 10, 20);
         let britannia_object = ActiveObject {
@@ -498,8 +498,8 @@
         let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
         let britannia_overlay = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
         let underworld_overlay = decode_ool_plane_objects(&saved_ool[OOL_PLANE_LEN..]).unwrap();
-        assert_eq!(britannia_overlay[0], britannia_object);
-        assert_eq!(underworld_overlay[0], updated_underworld_object);
+        assert!(britannia_overlay[0].is_empty());
+        assert!(underworld_overlay[0].is_empty());
         assert_eq!(
             fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
             saved_ool[..OOL_PLANE_LEN].to_vec()
@@ -698,9 +698,12 @@
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-            quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+            removed_town_npc_flags: HashMap::new(),
+            talk_branch_flags: HashMap::new(),
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
+            word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+            shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
             moral_standing: 0,
             toll_progress: 0,
             natural_moongate_counter: 0,
@@ -710,17 +713,19 @@
             light_spell_counter: 0,
             wind: WindState::default(),
             wind_save_byte: 0,
-            timing_status: TimingStatusTag::default(),
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
             fortunes_of_war: 0,
             camp_cooldown: 0,
+            camp_month_cookie: 0,
             active_player: None,
             combat_round_counter: 0,
+            combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
             transport: TransportState::Foot,
             facing: None,
             pending_vehicle: None,
+            pending_vehicle_save: PendingVehicleSaveState::default(),
             inn_registry: Vec::new(),
             blackthorn_story: BlackthornStoryState::default(),
             initial_britannia_overlay: None,
@@ -735,6 +740,7 @@
                 aux1: 0,
                 aux3: 0,
             }]),
+            town_npc_mutations: Vec::new(),
             save_template_source: SaveTemplateSource::PreferSavedGame,
         };
 
@@ -804,9 +810,12 @@
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-            quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
+            removed_town_npc_flags: HashMap::new(),
+            talk_branch_flags: HashMap::new(),
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
+            word_of_power_seal_flags: [0; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
+            shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
             moral_standing: 0,
             toll_progress: 0,
             natural_moongate_counter: 0,
@@ -816,22 +825,25 @@
             light_spell_counter: 0,
             wind: WindState::West,
             wind_save_byte: 0,
-            timing_status: TimingStatusTag::default(),
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
             fortunes_of_war: 0,
             camp_cooldown: 0,
+            camp_month_cookie: 0,
             active_player: None,
             combat_round_counter: 0,
+            combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
             transport: TransportState::Foot,
             facing: None,
             pending_vehicle: None,
+            pending_vehicle_save: PendingVehicleSaveState::default(),
             inn_registry: Vec::new(),
             blackthorn_story: BlackthornStoryState::default(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: Some(Vec::new()),
+            town_npc_mutations: Vec::new(),
             save_template_source: SaveTemplateSource::PreferSavedGame,
         };
 

@@ -303,7 +303,13 @@ impl ActiveObject {
         self.type_byte = 0;
     }
 
-    pub fn clear_consumed_record_fields(&mut self) {
+    /// Clear encoded record bytes `0..=5` while preserving the caller-owned
+    /// phase and DEP3 bytes at `6..=7`.
+    ///
+    /// Both consumed-object cleanup and the overworld prune pass use the
+    /// public shared six-field record writer, so this is deliberately broader
+    /// than an ordinary one-byte [`Self::free`].
+    pub fn clear_record_prefix(&mut self) {
         self.type_byte = 0;
         self.tile = 0;
         self.x = 0;
@@ -326,10 +332,6 @@ impl ActiveObject {
 
     pub fn is_player(self) -> bool {
         self.type_byte == PLAYER_TILE
-    }
-
-    pub fn is_player_phantom(self) -> bool {
-        self.type_byte == PLAYER_NPC_SENTINEL_TYPE
     }
 
     pub fn is_empty(self) -> bool {

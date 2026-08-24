@@ -146,20 +146,16 @@
     }
 
     #[test]
-    fn movement_out_of_bounds_missing_return_metadata_stays_in_location() {
+    fn movement_out_of_bounds_starts_prompt_before_return_resolution() {
         let scene = Scene::new(0x11).unwrap();
         let mut state = test_state(open_grid(), 0, 3);
 
-        assert_eq!(state.step(Direction::West), MoveOutcome::Blocked);
+        assert_eq!(state.step(Direction::West), MoveOutcome::Observed);
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
         assert_eq!((state.player.x, state.player.y), (0, 3));
         assert_eq!(state.active_objects[0].z, 0);
-        assert_eq!(state.turn, 1);
-        assert!(
-            state
-                .message
-                .contains("missing clean return-coordinate metadata")
-        );
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Leave CASTLE:0?");
     }
 
     #[test]
@@ -177,27 +173,27 @@
     }
 
     #[test]
-    fn skiff_world_movement_uses_half_time_with_one_minute_floor() {
+    fn skiff_world_movement_uses_normal_time_without_a_quickness_effect() {
         let mut state = world_state(vec![1; WORLD_CELLS], 0, 0);
         state.player.transport = TransportState::Skiff {
             type_byte: 176,
             tile: 176,
         };
-        state.timing_status = TimingStatusTag::for_transport(state.player.transport);
         state.sync_player_object();
         state.clock = GameClock::new(12, 58).unwrap();
 
         assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
 
         assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.clock, GameClock::new(12, 59).unwrap());
+        assert_eq!(state.clock, GameClock::new(13, 0).unwrap());
         assert_eq!(state.turn, 1);
     }
 
     #[test]
-    fn timing_status_q_halves_world_time_without_skiff() {
+    fn quickness_effect_halves_world_time_without_skiff() {
         let mut state = world_state(open_world_grid(), 0, 0);
-        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.clock = GameClock::new(12, 58).unwrap();
         state.torch_counter = 3;
         state.light_spell_counter = 2;
@@ -212,9 +208,10 @@
     }
 
     #[test]
-    fn timing_status_t_skips_minutes_and_light_but_runs_cleanup() {
+    fn negate_time_effect_skips_minutes_and_light_but_runs_cleanup() {
         let mut state = world_state(open_world_grid(), 0, 0);
-        state.timing_status = TimingStatusTag::NoMinuteLight;
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 10;
         state.clock = GameClock::new(12, 58).unwrap();
         state.torch_counter = 5;
         state.light_spell_counter = 4;
@@ -267,7 +264,8 @@
         assert_eq!(state.turn, 0);
         assert!(state.message.contains("world object tile 170"));
         assert!(state.message.contains("slot 1"));
-        assert!(state.message.contains("no terrain-combat arena selected"));
+        assert!(state.message.contains("selected BRIT.CBT arena 2"));
+        assert!(state.message.contains("base class Mimic (26)"));
         assert!(!state.message.contains("out of scope"));
     }
 
@@ -278,7 +276,7 @@
         fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
         let mut state = world_state(open_world_grid(), 0, 0);
         state.active_objects.push(ActiveObject {
-            type_byte: 0x50,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 1,
             y: 0,
@@ -301,7 +299,7 @@
         assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
         assert!(state.message.contains("slot 1"));
         assert!(state.message.contains("entered terrain combat"));
-        assert!(state.message.contains("BRIT.CBT arena 4"));
+        assert!(state.message.contains("BRIT.CBT arena 2"));
         assert!(state.message.contains("Orc"));
         assert_eq!(state.active_objects[6].tile, 0xc0);
         assert_eq!(
@@ -356,9 +354,10 @@
     }
 
     #[test]
-    fn board_vehicle_removed_parked_object_is_included_in_saved_overworld_overlay() {
+    fn board_vehicle_removal_is_written_to_the_live_saved_gam_table() {
         let dir = debug_game_dir();
         fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0xff, 0, 0)).unwrap();
+        write_empty_ool_mirrors(&dir);
         fs::write(
             dir.join(UNDER_DAT_FILENAME),
             vec![BRIT_DEEP_WATER_TILE; UNDER_DAT_LEN],
@@ -433,8 +432,10 @@
     }
 
     #[test]
-    fn board_skiff_sets_half_time_timing_status_and_exit_clears_it() {
+    fn board_and_exit_skiff_do_not_change_shared_magic_effect() {
         let mut state = world_state(open_world_grid(), 0, 0);
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 20;
         state.player.facing = Direction::East;
         state.active_objects.push(ActiveObject {
             type_byte: 176,
@@ -456,12 +457,14 @@
                 tile: 176,
             }
         );
-        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(state.active_effect_tag, Some(PROTECTION_ACTIVE_EFFECT_TAG));
+        assert_eq!(state.active_effect_counter, 19);
 
         assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
 
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.active_effect_tag, Some(PROTECTION_ACTIVE_EFFECT_TAG));
+        assert_eq!(state.active_effect_counter, 18);
     }
 
     #[test]
@@ -471,7 +474,8 @@
             type_byte: 176,
             tile: 176,
         };
-        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.player.facing = Direction::East;
         state.sync_player_object();
         state.active_objects.push(ActiveObject {
@@ -500,7 +504,11 @@
         assert_eq!(state.active_objects.len(), 2);
         assert_eq!(state.active_objects[0].tile, 168);
         assert!(state.active_objects[1].is_empty());
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
+        assert_eq!(
+            state.active_effect_counter,
+            QUICKNESS_ACTIVE_EFFECT_DURATION - 1
+        );
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,

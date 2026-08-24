@@ -39,10 +39,10 @@ impl WorldLiveChunkBuffer {
         grid: &[u8],
         player_x: usize,
         player_y: usize,
-        mut chunk_classifier_accepts: F,
+        mut substitution_policy: F,
     ) -> io::Result<Self>
     where
-        F: FnMut(WorldChunkDescriptor) -> bool,
+        F: FnMut(WorldChunkDescriptor) -> LiveChunkSubstitutionPolicy,
     {
         if grid.len() != WORLD_CELLS {
             return Err(io::Error::new(
@@ -54,15 +54,9 @@ impl WorldLiveChunkBuffer {
         let mut buffer = Self::blank(plane, scroll_base);
         for quadrant in 0..OVERWORLD_CHUNK_BUFFER_CHUNKS {
             let descriptor = live_quadrant_descriptor(plane, scroll_base, quadrant, None, false);
-            let substitute_19 = chunk_classifier_accepts(descriptor);
+            let policy = substitution_policy(descriptor);
             buffer.descriptors[quadrant] = descriptor;
-            copy_live_chunk_from_full_grid(
-                grid,
-                &mut buffer.chunks,
-                scroll_base,
-                quadrant,
-                substitute_19,
-            );
+            copy_live_chunk_from_full_grid(grid, &mut buffer.chunks, scroll_base, quadrant, policy);
         }
         Ok(buffer)
     }
@@ -71,10 +65,10 @@ impl WorldLiveChunkBuffer {
         bytes: &[u8],
         player_x: usize,
         player_y: usize,
-        mut chunk_classifier_accepts: F,
+        mut substitution_policy: F,
     ) -> io::Result<Self>
     where
-        F: FnMut(WorldChunkDescriptor) -> bool,
+        F: FnMut(WorldChunkDescriptor) -> LiveChunkSubstitutionPolicy,
     {
         if bytes.len() != UNDER_DAT_LEN {
             return Err(io::Error::new(
@@ -95,15 +89,9 @@ impl WorldLiveChunkBuffer {
                 None,
                 false,
             );
-            let substitute_19 = chunk_classifier_accepts(descriptor);
+            let policy = substitution_policy(descriptor);
             buffer.descriptors[quadrant] = descriptor;
-            copy_underworld_live_chunk(
-                bytes,
-                &mut buffer.chunks,
-                scroll_base,
-                quadrant,
-                substitute_19,
-            );
+            copy_underworld_live_chunk(bytes, &mut buffer.chunks, scroll_base, quadrant, policy);
         }
         Ok(buffer)
     }
@@ -113,10 +101,10 @@ impl WorldLiveChunkBuffer {
         chunk_index: &[u8],
         player_x: usize,
         player_y: usize,
-        mut chunk_classifier_accepts: F,
+        mut substitution_policy: F,
     ) -> io::Result<Self>
     where
-        F: FnMut(WorldChunkDescriptor) -> bool,
+        F: FnMut(WorldChunkDescriptor) -> LiveChunkSubstitutionPolicy,
     {
         if brit_bytes.len() != BRIT_DAT_LEN {
             return Err(io::Error::new(
@@ -142,15 +130,9 @@ impl WorldLiveChunkBuffer {
                 file_index,
                 all_water,
             );
-            let substitute_19 = chunk_classifier_accepts(descriptor);
+            let policy = substitution_policy(descriptor);
             buffer.descriptors[quadrant] = descriptor;
-            copy_britannia_live_chunk(
-                brit_bytes,
-                &mut buffer.chunks,
-                quadrant,
-                file_index,
-                substitute_19,
-            );
+            copy_britannia_live_chunk(brit_bytes, &mut buffer.chunks, quadrant, file_index, policy);
         }
         Ok(buffer)
     }
@@ -220,10 +202,10 @@ pub fn load_world_live_chunk_buffer<F>(
     plane: WorldPlane,
     player_x: usize,
     player_y: usize,
-    chunk_classifier_accepts: F,
+    substitution_policy: F,
 ) -> io::Result<WorldLiveChunkBuffer>
 where
-    F: FnMut(WorldChunkDescriptor) -> bool,
+    F: FnMut(WorldChunkDescriptor) -> LiveChunkSubstitutionPolicy,
 {
     let bytes = read(&game_dir.join(plane.file_name()))?;
     match plane {
@@ -231,7 +213,7 @@ where
             &bytes,
             player_x,
             player_y,
-            chunk_classifier_accepts,
+            substitution_policy,
         ),
         WorldPlane::Britannia => {
             let data = read(&game_dir.join(DATA_OVL_FILENAME))?;
@@ -241,7 +223,7 @@ where
                 &chunk_index,
                 player_x,
                 player_y,
-                chunk_classifier_accepts,
+                substitution_policy,
             )
         }
     }
@@ -294,7 +276,7 @@ fn copy_live_chunk_from_full_grid(
     out: &mut [u8; OVERWORLD_CHUNK_BUFFER_BYTES],
     scroll_base: (usize, usize),
     quadrant: usize,
-    substitute_19: bool,
+    policy: LiveChunkSubstitutionPolicy,
 ) {
     let (origin_x, origin_y) = live_quadrant_chunk_origin(scroll_base, quadrant);
     let dst_start = quadrant * CHUNK_BYTES;
@@ -304,7 +286,7 @@ fn copy_live_chunk_from_full_grid(
             let wy = (origin_y + local_y) % WORLD_SIDE;
             let tile = grid[world_cell_index(wx, wy)];
             out[dst_start + local_y * CHUNK_SIDE + local_x] =
-                live_chunk_substituted_tile(tile, substitute_19);
+                live_chunk_substituted_tile(tile, policy);
         }
     }
 }
@@ -314,7 +296,7 @@ fn copy_underworld_live_chunk(
     out: &mut [u8; OVERWORLD_CHUNK_BUFFER_BYTES],
     scroll_base: (usize, usize),
     quadrant: usize,
-    substitute_19: bool,
+    policy: LiveChunkSubstitutionPolicy,
 ) {
     let (origin_x, origin_y) = live_quadrant_chunk_origin(scroll_base, quadrant);
     let dst_start = quadrant * CHUNK_BYTES;
@@ -324,7 +306,7 @@ fn copy_underworld_live_chunk(
             let wy = (origin_y + local_y) % WORLD_SIDE;
             let src = under_file_offset(wx as u8, wy as u8);
             out[dst_start + local_y * CHUNK_SIDE + local_x] =
-                live_chunk_substituted_tile(bytes[src], substitute_19);
+                live_chunk_substituted_tile(bytes[src], policy);
         }
     }
 }
@@ -334,14 +316,14 @@ fn copy_britannia_live_chunk(
     out: &mut [u8; OVERWORLD_CHUNK_BUFFER_BYTES],
     quadrant: usize,
     file_index: Option<u8>,
-    substitute_19: bool,
+    policy: LiveChunkSubstitutionPolicy,
 ) {
     let dst_start = quadrant * CHUNK_BYTES;
     if let Some(file_index) = file_index {
         let src_start = file_index as usize * CHUNK_BYTES;
         for offset in 0..CHUNK_BYTES {
             out[dst_start + offset] =
-                live_chunk_substituted_tile(brit_bytes[src_start + offset], substitute_19);
+                live_chunk_substituted_tile(brit_bytes[src_start + offset], policy);
         }
     } else {
         out[dst_start..dst_start + CHUNK_BYTES].fill(BRIT_DEEP_WATER_TILE);

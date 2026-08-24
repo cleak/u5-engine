@@ -14,18 +14,20 @@ use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
 use crate::shops::{
     ArmsShopAction, ArmsStockTable, BlueBoarDrinkChoice, GuildCommodity, GuildPurchaseError,
     GuildShop, GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction,
-    ProvisionPurchaseError, Reagent, ReagentPurchaseError, SAGE_RUMOUR_TABLE, SageRumourError,
-    SageRumourOutcome, SageRumourQuote, SageRumourTable, Shipwright, ShipwrightMenuAction,
-    ShipwrightPurchaseError, ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Stable, Tavern,
-    TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase,
-    apply_provision_purchase, apply_reagent_purchase, apply_shipwright_purchase,
+    ProvisionPurchaseCompletion, ProvisionPurchaseError, Reagent, ReagentPurchaseError,
+    SAGE_RUMOUR_TABLE, SageRumourError, SageRumourOutcome, SageRumourQuote, SageRumourTable,
+    Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError, ShipwrightPurchaseOutcome,
+    ShipwrightPurchaseQuote, Stable, TAVERN_TABLE_SCRAPS_RECORD_ID, Tavern, TavernDrinkError,
+    TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase,
+    apply_provision_purchase_at_unit_price, apply_reagent_purchase, apply_shipwright_purchase,
     apply_tavern_round_drink, arms_buy_quote_record_id_for_item, arms_shop_action,
     arms_shop_buy_quote, arms_shop_sell_offer, arms_shop_stock_item_for_letter, guild_shop_action,
     guild_unit_price, herbalist_menu_entries, inn_base_room_rate,
     inn_leave_companion_deposit_for_speaker, inn_main_action, inn_pickup_bill_for_speaker,
     quote_horse_purchase_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
     quote_shipwright_purchase, shipwright_delivery_coordinate, shipwright_menu_action,
-    tavern_drink_prompt, tavern_lore_menu_letter, tavern_menu_letters, tavern_provision_unit_price,
+    shop_intelligence_adjusted_price, tavern_drink_prompt, tavern_follow_up_record_id,
+    tavern_lore_menu_letter, tavern_menu_letters, tavern_provision_unit_price,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -63,10 +65,15 @@ pub enum ArmsShopState {
         quoted_price: u16,
         quote_record_id: usize,
     },
-    /// Sell menu open. Player picks an inventory slot to sell.
-    SellPickItem,
+    /// Sell browser open. The selected id and first visible id survive
+    /// redraws and quote/refusal continuations.
+    SellPickItem(ArmsSellBrowser),
     /// Shop has offered a sell price and awaits Yes/No confirmation.
-    SellConfirm { item: u8, offer: u16 },
+    SellConfirm {
+        browser: ArmsSellBrowser,
+        item: u8,
+        offer: u16,
+    },
     /// The shop is closed for this turn — no further input is accepted.
     Exited,
 }
@@ -83,6 +90,202 @@ pub enum ArmsShopInput {
     StockLetter { letter: u8, table: ArmsStockTable },
     /// Yes/No confirmation answer.
     Confirm(bool),
+    /// Normalized command accepted by the carried-equipment browser.
+    SellBrowser(ArmsSellBrowserCommand),
+}
+
+/// `shops.md §8.1` normalized arms sell-browser commands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArmsSellBrowserCommand {
+    Select,
+    Exit,
+    Previous,
+    Next,
+    First,
+    Last,
+    PageUp,
+    PageDown,
+}
+
+/// Four-row view state for the arms sell browser.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArmsSellBrowser {
+    pub selected: u8,
+    pub page_start: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArmsSellPageIndicator {
+    None,
+    Down,
+    Up,
+    Both,
+}
+
+impl ArmsSellBrowser {
+    pub fn new(stock: &EquipmentStock) -> Option<Self> {
+        let selected = first_nonzero_equipment(stock)?;
+        Some(Self {
+            selected,
+            page_start: selected,
+        })
+    }
+
+    pub fn visible_items(self, stock: &EquipmentStock) -> [Option<u8>; 4] {
+        let mut rows = [None; 4];
+        let mut row = 0;
+        for item in usize::from(self.page_start)..EQUIPMENT_COUNT {
+            if stock[item] == 0 {
+                continue;
+            }
+            rows[row] = Some(item as u8);
+            row += 1;
+            if row == rows.len() {
+                break;
+            }
+        }
+        rows
+    }
+
+    pub fn selected_row(self, stock: &EquipmentStock) -> Option<usize> {
+        self.visible_items(stock)
+            .iter()
+            .position(|item| *item == Some(self.selected))
+    }
+
+    pub fn page_indicator(self, stock: &EquipmentStock) -> ArmsSellPageIndicator {
+        let visible = self.visible_items(stock);
+        let last = visible.iter().flatten().last().copied();
+        let up = previous_nonzero_equipment(stock, self.page_start).is_some();
+        let down = last
+            .and_then(|item| next_nonzero_equipment(stock, item))
+            .is_some();
+        match (up, down) {
+            (false, false) => ArmsSellPageIndicator::None,
+            (false, true) => ArmsSellPageIndicator::Down,
+            (true, false) => ArmsSellPageIndicator::Up,
+            (true, true) => ArmsSellPageIndicator::Both,
+        }
+    }
+
+    pub fn apply(self, command: ArmsSellBrowserCommand, stock: &EquipmentStock) -> Self {
+        match command {
+            ArmsSellBrowserCommand::Previous => self.step_previous(stock),
+            ArmsSellBrowserCommand::Next => self.step_next(stock),
+            ArmsSellBrowserCommand::First => Self::new(stock).unwrap_or(self),
+            ArmsSellBrowserCommand::Last => self.jump_last(stock),
+            ArmsSellBrowserCommand::PageUp => {
+                (0..4).fold(self, |browser, _| browser.step_previous(stock))
+            }
+            ArmsSellBrowserCommand::PageDown => {
+                (0..4).fold(self, |browser, _| browser.step_next(stock))
+            }
+            ArmsSellBrowserCommand::Select | ArmsSellBrowserCommand::Exit => self,
+        }
+    }
+
+    fn step_previous(self, stock: &EquipmentStock) -> Self {
+        let Some(selected) = previous_nonzero_equipment(stock, self.selected) else {
+            // Safe compatibility mode clamps at the first real row. The
+            // optional post-Wooden-Box invalid pseudo-selection is not
+            // reproduced.
+            return self;
+        };
+        let page_start = if selected < self.page_start {
+            selected
+        } else {
+            self.page_start
+        };
+        Self {
+            selected,
+            page_start,
+        }
+    }
+
+    fn step_next(self, stock: &EquipmentStock) -> Self {
+        let Some(selected) = next_nonzero_equipment(stock, self.selected) else {
+            return self;
+        };
+        let mut page_start = self.page_start;
+        let visible = self.visible_items(stock);
+        if visible[3].is_some_and(|last| selected > last) {
+            page_start = next_nonzero_equipment(stock, page_start).unwrap_or(page_start);
+        }
+        Self {
+            selected,
+            page_start,
+        }
+    }
+
+    fn jump_last(self, stock: &EquipmentStock) -> Self {
+        let Some(selected) = last_nonzero_equipment(stock) else {
+            return self;
+        };
+        let mut page_start = selected;
+        for _ in 0..3 {
+            page_start = previous_nonzero_equipment(stock, page_start).unwrap_or(page_start);
+        }
+        Self {
+            selected,
+            page_start,
+        }
+    }
+
+    fn after_sale(self, sold_item: u8, stock: &EquipmentStock) -> Option<Self> {
+        if first_nonzero_equipment(stock).is_none() {
+            return None;
+        }
+        let sold_page_start = sold_item == self.page_start;
+        let selected = if sold_page_start {
+            previous_nonzero_equipment(stock, sold_item)
+                .or_else(|| first_nonzero_equipment(stock))?
+        } else {
+            next_nonzero_equipment(stock, sold_item).or_else(|| last_nonzero_equipment(stock))?
+        };
+        let mut page_start = self.page_start;
+        if stock[usize::from(page_start)] == 0 || selected < page_start {
+            page_start = selected;
+        }
+        let browser = Self {
+            selected,
+            page_start,
+        };
+        if browser.selected_row(stock).is_some() {
+            Some(browser)
+        } else {
+            Some(browser.jump_last(stock))
+        }
+    }
+}
+
+fn first_nonzero_equipment(stock: &EquipmentStock) -> Option<u8> {
+    stock
+        .iter()
+        .position(|count| *count != 0)
+        .map(|id| id as u8)
+}
+
+fn last_nonzero_equipment(stock: &EquipmentStock) -> Option<u8> {
+    stock
+        .iter()
+        .rposition(|count| *count != 0)
+        .map(|id| id as u8)
+}
+
+fn previous_nonzero_equipment(stock: &EquipmentStock, before: u8) -> Option<u8> {
+    stock[..usize::from(before)]
+        .iter()
+        .rposition(|count| *count != 0)
+        .map(|id| id as u8)
+}
+
+fn next_nonzero_equipment(stock: &EquipmentStock, after: u8) -> Option<u8> {
+    let start = usize::from(after).saturating_add(1);
+    stock
+        .get(start..)?
+        .iter()
+        .position(|count| *count != 0)
+        .map(|offset| (start + offset) as u8)
 }
 
 /// Outcome of one arms-shop transition.
@@ -92,6 +295,10 @@ pub enum ArmsShopOutcome {
     EnteredBuy,
     /// Greeting → entered Sell browser.
     EnteredSell,
+    /// Sell was requested with no nonzero equipment counters.
+    SellRefusedEmpty,
+    /// An accepted movement changed (or clamped) the browser view.
+    SellBrowserMoved,
     /// Player aborted at any prompt.
     Exited,
     /// Player picked an item to buy; shop quoted a price.
@@ -102,10 +309,18 @@ pub enum ArmsShopOutcome {
     },
     /// Player picked an item to sell; shop offered a price.
     OfferedSellPrice { item: u8, offer: u16 },
+    /// Selected equipment has a zero base price and cannot be sold.
+    SellRefusedZeroPrice { item: u8 },
+    /// Selected ammunition is visible but terminates the browser on refusal.
+    SellRefusedAmmunition { item: u8 },
     /// Buy completed: gold debited, item stock incremented.
     Bought { item: u8, paid: u16 },
     /// Sell completed: gold credited, item stock decremented.
-    Sold { item: u8, received: u16 },
+    Sold {
+        item: u8,
+        received: u16,
+        browser_continues: bool,
+    },
     /// Buy/Sell declined: state returns to greeting.
     Declined,
     /// Insufficient gold or zero stock to buy — refused without
@@ -140,8 +355,13 @@ pub fn step_arms_shop(
                 ArmsShopOutcome::EnteredBuy
             }
             ArmsShopAction::Sell => {
-                *state = ArmsShopState::SellPickItem;
-                ArmsShopOutcome::EnteredSell
+                if let Some(browser) = ArmsSellBrowser::new(stock) {
+                    *state = ArmsShopState::SellPickItem(browser);
+                    ArmsShopOutcome::EnteredSell
+                } else {
+                    *state = ArmsShopState::Exited;
+                    ArmsShopOutcome::SellRefusedEmpty
+                }
             }
             ArmsShopAction::Exit => {
                 *state = ArmsShopState::Exited;
@@ -184,36 +404,80 @@ pub fn step_arms_shop(
             *state = ArmsShopState::Greeting;
             ArmsShopOutcome::Declined
         }
-        (ArmsShopState::SellPickItem, ArmsShopInput::Item(item)) => {
+        (ArmsShopState::SellPickItem(browser), ArmsShopInput::Item(item)) => {
             let item_idx = item as usize;
             if item_idx >= EQUIPMENT_COUNT {
                 return ArmsShopOutcome::InvalidInput;
             }
             if stock[item_idx] == 0 {
-                *state = ArmsShopState::Greeting;
                 return ArmsShopOutcome::SellRefusedNoStock { item };
             }
             let base = base_price_table[item_idx];
+            if matches!(
+                item_idx,
+                crate::EQUIPMENT_ID_ARROWS | crate::EQUIPMENT_ID_QUARRELS
+            ) {
+                *state = ArmsShopState::Exited;
+                return ArmsShopOutcome::SellRefusedAmmunition { item };
+            }
+            if base == 0 {
+                return ArmsShopOutcome::SellRefusedZeroPrice { item };
+            }
             let offer = arms_shop_sell_offer(base, ctx.speaker_intelligence);
-            *state = ArmsShopState::SellConfirm { item, offer };
+            *state = ArmsShopState::SellConfirm {
+                browser,
+                item,
+                offer,
+            };
             ArmsShopOutcome::OfferedSellPrice { item, offer }
         }
-        (ArmsShopState::SellConfirm { item, offer }, ArmsShopInput::Confirm(true)) => {
+        (ArmsShopState::SellPickItem(browser), ArmsShopInput::SellBrowser(command)) => {
+            match command {
+                ArmsSellBrowserCommand::Exit => {
+                    *state = ArmsShopState::Exited;
+                    ArmsShopOutcome::Exited
+                }
+                ArmsSellBrowserCommand::Select => step_arms_shop(
+                    state,
+                    ArmsShopInput::Item(browser.selected),
+                    ctx,
+                    gold,
+                    stock,
+                    base_price_table,
+                ),
+                _ => {
+                    *state = ArmsShopState::SellPickItem(browser.apply(command, stock));
+                    ArmsShopOutcome::SellBrowserMoved
+                }
+            }
+        }
+        (
+            ArmsShopState::SellConfirm {
+                browser,
+                item,
+                offer,
+            },
+            ArmsShopInput::Confirm(true),
+        ) => {
             let item_idx = item as usize;
             if stock[item_idx] == 0 {
-                *state = ArmsShopState::Greeting;
+                *state = ArmsShopState::SellPickItem(browser);
                 return ArmsShopOutcome::SellRefusedNoStock { item };
             }
-            *gold = gold.saturating_add(offer);
+            *gold = gold.saturating_add(offer).min(crate::shops::SHOP_GOLD_CAP);
             stock[item_idx] -= 1;
-            *state = ArmsShopState::Greeting;
+            let next_browser = browser.after_sale(item, stock);
+            *state = next_browser
+                .map(ArmsShopState::SellPickItem)
+                .unwrap_or(ArmsShopState::Exited);
             ArmsShopOutcome::Sold {
                 item,
                 received: offer,
+                browser_continues: next_browser.is_some(),
             }
         }
-        (ArmsShopState::SellConfirm { .. }, ArmsShopInput::Confirm(false)) => {
-            *state = ArmsShopState::Greeting;
+        (ArmsShopState::SellConfirm { browser, .. }, ArmsShopInput::Confirm(false)) => {
+            *state = ArmsShopState::SellPickItem(browser);
             ArmsShopOutcome::Declined
         }
         (ArmsShopState::Exited, _) => ArmsShopOutcome::Exited,
@@ -889,6 +1153,10 @@ pub enum TavernState {
         tavern: Tavern,
         continuation_ready: bool,
     },
+    AnythingElse {
+        tavern: Tavern,
+        continuation_ready: bool,
+    },
     Exited,
 }
 
@@ -945,7 +1213,18 @@ pub enum TavernOutcome {
         purchased_quantity: u16,
         paid: u16,
         food_added: u16,
+        completion: ProvisionPurchaseCompletion,
     },
+    CharityProvisions {
+        tavern: Tavern,
+        food_added: u16,
+        record_id: usize,
+    },
+    Continued {
+        tavern: Tavern,
+        follow_up_record_id: usize,
+    },
+    DeclinedContinuation,
     Declined,
     RefusedShortFunds {
         cost: u16,
@@ -997,7 +1276,7 @@ pub fn step_tavern(
             TavernInput::Key(b),
         ) => {
             let upper = b.to_ascii_uppercase();
-            if upper == b' ' || upper == 0x1B || upper == b'N' {
+            if upper == b' ' || upper == 0x1B || upper == b'\r' || upper == b'\n' {
                 *state = TavernState::Exited;
                 return TavernOutcome::Exited;
             }
@@ -1006,7 +1285,7 @@ pub fn step_tavern(
                 let outcome = apply_tavern_round_drink(gold, tavern, ctx.living_party_members);
                 return match outcome {
                     Ok(outcome) => {
-                        *state = TavernState::Menu {
+                        *state = TavernState::AnythingElse {
                             tavern,
                             continuation_ready: true,
                         };
@@ -1029,7 +1308,7 @@ pub fn step_tavern(
                     };
                     return TavernOutcome::PickBlueBoarDrink;
                 }
-                *state = TavernState::Menu {
+                *state = TavernState::AnythingElse {
                     tavern,
                     continuation_ready: true,
                 };
@@ -1042,7 +1321,10 @@ pub fn step_tavern(
                 .provisions
                 .is_some_and(|letter| upper == letter as u8)
             {
-                let unit_price = tavern_provision_unit_price(tavern);
+                let unit_price = shop_intelligence_adjusted_price(
+                    tavern_provision_unit_price(tavern),
+                    ctx.speaker_intelligence,
+                );
                 *state = TavernState::PickProvisionQuantity {
                     tavern,
                     unit_price,
@@ -1062,50 +1344,47 @@ pub fn step_tavern(
         (
             TavernState::PickProvisionQuantity {
                 tavern,
+                unit_price,
                 continuation_ready,
-                ..
             },
             TavernInput::Quantity(quantity),
         ) => {
-            let outcome = apply_provision_purchase(gold, food, tavern, quantity);
+            let outcome =
+                apply_provision_purchase_at_unit_price(gold, food, tavern, quantity, unit_price);
             match outcome {
                 Ok(outcome) => {
-                    *state = TavernState::Menu {
-                        tavern,
-                        continuation_ready: outcome.purchased_quantity > 0,
-                    };
-                    TavernOutcome::ProvisionsPurchased {
-                        tavern,
-                        requested_quantity: outcome.requested_quantity,
-                        purchased_quantity: outcome.purchased_quantity,
-                        paid: outcome.total_price,
-                        food_added: outcome.food_after.saturating_sub(outcome.food_before),
+                    if outcome.completion == ProvisionPurchaseCompletion::Charity {
+                        *state = TavernState::Exited;
+                        TavernOutcome::CharityProvisions {
+                            tavern,
+                            food_added: outcome.food_after.saturating_sub(outcome.food_before),
+                            record_id: TAVERN_TABLE_SCRAPS_RECORD_ID,
+                        }
+                    } else {
+                        *state = TavernState::AnythingElse {
+                            tavern,
+                            continuation_ready: true,
+                        };
+                        TavernOutcome::ProvisionsPurchased {
+                            tavern,
+                            requested_quantity: outcome.requested_quantity,
+                            purchased_quantity: outcome.purchased_quantity,
+                            paid: outcome.total_price,
+                            food_added: outcome.food_after.saturating_sub(outcome.food_before),
+                            completion: outcome.completion,
+                        }
                     }
                 }
                 Err(ProvisionPurchaseError::ZeroQuantity) => {
-                    *state = TavernState::Menu {
+                    *state = TavernState::AnythingElse {
                         tavern,
                         continuation_ready,
                     };
                     TavernOutcome::Declined
                 }
                 Err(ProvisionPurchaseError::NoNeed) => {
-                    *state = TavernState::Menu {
-                        tavern,
-                        continuation_ready,
-                    };
+                    *state = TavernState::Exited;
                     TavernOutcome::RefusedNoNeed
-                }
-                Err(ProvisionPurchaseError::InsufficientGold {
-                    required_per_unit, ..
-                }) => {
-                    *state = TavernState::Menu {
-                        tavern,
-                        continuation_ready,
-                    };
-                    TavernOutcome::RefusedShortFunds {
-                        cost: required_per_unit,
-                    }
                 }
             }
         }
@@ -1122,7 +1401,7 @@ pub fn step_tavern(
             let outcome = apply_blue_boar_drink(gold, choice);
             match outcome {
                 Ok(outcome) => {
-                    *state = TavernState::Menu {
+                    *state = TavernState::AnythingElse {
                         tavern,
                         continuation_ready: true,
                     };
@@ -1141,6 +1420,29 @@ pub fn step_tavern(
                 }
             }
         }
+        (
+            TavernState::AnythingElse {
+                tavern,
+                continuation_ready,
+            },
+            TavernInput::Key(b),
+        ) => match b.to_ascii_uppercase() {
+            b'Y' => {
+                *state = TavernState::Menu {
+                    tavern,
+                    continuation_ready,
+                };
+                TavernOutcome::Continued {
+                    tavern,
+                    follow_up_record_id: tavern_follow_up_record_id(tavern),
+                }
+            }
+            b'N' => {
+                *state = TavernState::Exited;
+                TavernOutcome::DeclinedContinuation
+            }
+            _ => TavernOutcome::InvalidInput,
+        },
         (TavernState::Exited, _) => TavernOutcome::Exited,
         _ => TavernOutcome::InvalidInput,
     }
@@ -1851,6 +2153,133 @@ mod tests {
         assert!(matches!(outcome, ArmsShopOutcome::Sold { item: 5, .. }));
         assert_eq!(stock[5], 1);
         assert!(gold > 0);
+        assert!(matches!(state, ArmsShopState::SellPickItem(_)));
+    }
+
+    #[test]
+    fn arms_sell_browser_pages_over_nonzero_ids_and_clamps_boundaries() {
+        let mut stock = make_stock();
+        for item in [1usize, 4, 7, 10, 20, 30] {
+            stock[item] = 1;
+        }
+        let browser = ArmsSellBrowser::new(&stock).unwrap();
+        assert_eq!(browser.selected, 1);
+        assert_eq!(
+            browser.visible_items(&stock),
+            [Some(1), Some(4), Some(7), Some(10)]
+        );
+        assert_eq!(browser.page_indicator(&stock), ArmsSellPageIndicator::Down);
+        assert_eq!(
+            browser.apply(ArmsSellBrowserCommand::Previous, &stock),
+            browser
+        );
+
+        let page_down = browser.apply(ArmsSellBrowserCommand::PageDown, &stock);
+        assert_eq!(page_down.selected, 20);
+        assert_eq!(
+            page_down.visible_items(&stock),
+            [Some(4), Some(7), Some(10), Some(20)]
+        );
+        assert_eq!(
+            page_down.page_indicator(&stock),
+            ArmsSellPageIndicator::Both
+        );
+
+        let end = page_down.apply(ArmsSellBrowserCommand::Last, &stock);
+        assert_eq!(end.selected, 30);
+        assert_eq!(
+            end.visible_items(&stock),
+            [Some(7), Some(10), Some(20), Some(30)]
+        );
+        assert_eq!(end.page_indicator(&stock), ArmsSellPageIndicator::Up);
+        assert_eq!(end.apply(ArmsSellBrowserCommand::Next, &stock), end);
+        assert_eq!(end.apply(ArmsSellBrowserCommand::First, &stock), browser);
+    }
+
+    #[test]
+    fn arms_sell_browser_keeps_zero_price_and_ammunition_rows_visible() {
+        let mut state = ArmsShopState::Greeting;
+        let mut prices = make_price_table();
+        prices[8] = 0;
+        let mut stock = make_stock();
+        stock[8] = 1;
+        stock[crate::EQUIPMENT_ID_ARROWS] = 5;
+        let mut gold = 0;
+        let ctx = ShopTransactionContext::default();
+
+        assert_eq!(
+            step_arms_shop(
+                &mut state,
+                ArmsShopInput::Key(b'S'),
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            ),
+            ArmsShopOutcome::EnteredSell
+        );
+        assert!(matches!(state, ArmsShopState::SellPickItem(_)));
+        assert_eq!(
+            step_arms_shop(
+                &mut state,
+                ArmsShopInput::SellBrowser(ArmsSellBrowserCommand::Select),
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            ),
+            ArmsShopOutcome::SellRefusedZeroPrice { item: 8 }
+        );
+        assert!(matches!(state, ArmsShopState::SellPickItem(_)));
+
+        step_arms_shop(
+            &mut state,
+            ArmsShopInput::SellBrowser(ArmsSellBrowserCommand::Next),
+            ctx,
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
+        assert_eq!(
+            step_arms_shop(
+                &mut state,
+                ArmsShopInput::SellBrowser(ArmsSellBrowserCommand::Select),
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            ),
+            ArmsShopOutcome::SellRefusedAmmunition {
+                item: crate::EQUIPMENT_ID_ARROWS as u8
+            }
+        );
+        assert_eq!(state, ArmsShopState::Exited);
+        assert_eq!(gold, 0);
+    }
+
+    #[test]
+    fn arms_sell_browser_sale_reselects_around_removed_item_and_depletes() {
+        let mut stock = make_stock();
+        stock[2] = 1;
+        stock[5] = 1;
+        stock[9] = 1;
+        let browser = ArmsSellBrowser::new(&stock)
+            .unwrap()
+            .apply(ArmsSellBrowserCommand::Next, &stock);
+        stock[5] = 0;
+        let continued = browser.after_sale(5, &stock).unwrap();
+        assert_eq!(continued.selected, 9);
+
+        stock[9] = 0;
+        let browser = ArmsSellBrowser {
+            selected: 9,
+            page_start: 2,
+        };
+        let continued = browser.after_sale(9, &stock).unwrap();
+        assert_eq!(continued.selected, 2);
+
+        stock[2] = 0;
+        assert_eq!(continued.after_sale(2, &stock), None);
     }
 
     #[test]
@@ -1905,7 +2334,7 @@ mod tests {
         let mut stock = make_stock();
         let mut gold = 0u16;
         let ctx = ShopTransactionContext::default();
-        step_arms_shop(
+        let outcome = step_arms_shop(
             &mut state,
             ArmsShopInput::Key(b'S'),
             ctx,
@@ -1913,18 +2342,8 @@ mod tests {
             &mut stock,
             &prices,
         );
-        let outcome = step_arms_shop(
-            &mut state,
-            ArmsShopInput::Item(5),
-            ctx,
-            &mut gold,
-            &mut stock,
-            &prices,
-        );
-        assert!(matches!(
-            outcome,
-            ArmsShopOutcome::SellRefusedNoStock { item: 5 }
-        ));
+        assert_eq!(outcome, ArmsShopOutcome::SellRefusedEmpty);
+        assert_eq!(state, ArmsShopState::Exited);
     }
 
     #[test]
@@ -2366,7 +2785,7 @@ mod tests {
             ),
             TavernOutcome::PickProvisionQuantity {
                 tavern: Tavern::TheWayfarerTavern,
-                unit_price: 15,
+                unit_price: 30,
             }
         );
     }
@@ -2403,6 +2822,19 @@ mod tests {
             TavernOutcome::SecondaryTavernSelected {
                 tavern: Tavern::TheWayfarerTavern,
                 letter: 'A',
+            }
+        );
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'Y'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::Continued {
+                tavern: Tavern::TheWayfarerTavern,
+                follow_up_record_id: 73,
             }
         );
         assert_eq!(
@@ -2698,7 +3130,7 @@ mod tests {
             prompt,
             TavernOutcome::PickProvisionQuantity {
                 tavern: Tavern::TheWayfarerTavern,
-                unit_price: 15,
+                unit_price: 30,
             }
         );
         let outcome = step_tavern(
@@ -2713,16 +3145,17 @@ mod tests {
             TavernOutcome::ProvisionsPurchased {
                 tavern: Tavern::TheWayfarerTavern,
                 requested_quantity: 5,
-                purchased_quantity: 2,
+                purchased_quantity: 1,
                 paid: 30,
                 food_added: 2,
+                completion: ProvisionPurchaseCompletion::Completed,
             }
         );
         assert_eq!(gold, 70);
         assert_eq!(food, crate::SHOP_FOOD_STOCK_CAP);
         assert_eq!(
             state,
-            TavernState::Menu {
+            TavernState::AnythingElse {
                 tavern: Tavern::TheWayfarerTavern,
                 continuation_ready: true,
             }
@@ -2769,11 +3202,123 @@ mod tests {
         assert_eq!(food, 30);
         assert_eq!(
             state,
-            TavernState::Menu {
+            TavernState::AnythingElse {
                 tavern: Tavern::TheHonestMeal,
                 continuation_ready: false,
             }
         );
+    }
+
+    #[test]
+    fn tavern_anything_else_requires_yes_before_returning_to_the_menu() {
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+        let mut gold = 100;
+        let mut food = 0;
+        let mut state = TavernState::AnythingElse {
+            tavern: Tavern::TheHumblePalate,
+            continuation_ready: true,
+        };
+
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'A'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::InvalidInput
+        );
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'Y'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::Continued {
+                tavern: Tavern::TheHumblePalate,
+                follow_up_record_id: 75,
+            }
+        );
+        assert_eq!(
+            state,
+            TavernState::Menu {
+                tavern: Tavern::TheHumblePalate,
+                continuation_ready: true,
+            }
+        );
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'N'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::InvalidInput,
+            "N is not a post-list exit"
+        );
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'\r'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::Exited
+        );
+    }
+
+    #[test]
+    fn tavern_unaffordable_provisions_end_with_refusal_or_charity() {
+        let ctx = ShopTransactionContext {
+            party_gold: 0,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+
+        for (starting_food, expected) in [
+            (3, TavernOutcome::RefusedNoNeed),
+            (
+                2,
+                TavernOutcome::CharityProvisions {
+                    tavern: Tavern::TheHonestMeal,
+                    food_added: 1,
+                    record_id: TAVERN_TABLE_SCRAPS_RECORD_ID,
+                },
+            ),
+        ] {
+            let mut gold = 0;
+            let mut food = starting_food;
+            let mut state = TavernState::PickProvisionQuantity {
+                tavern: Tavern::TheHonestMeal,
+                unit_price: 20,
+                continuation_ready: false,
+            };
+            assert_eq!(
+                step_tavern(
+                    &mut state,
+                    TavernInput::Quantity(1),
+                    ctx,
+                    &mut gold,
+                    &mut food,
+                ),
+                expected
+            );
+            assert_eq!(state, TavernState::Exited);
+            assert_eq!(food, starting_food.max(3));
+        }
     }
 
     #[test]

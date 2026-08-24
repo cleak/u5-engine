@@ -173,18 +173,18 @@ pub const fn npc_state_off_floor_or_empty(state: u8) -> bool {
     matches!(state, NPC_STATE_EMPTY | NPC_STATE_PARKED_OFF_FLOOR)
 }
 
-/// `formats/npc.md §6` published type-byte sentinels. The type byte
+/// `formats/npc.md §6` published type-byte classes. The type byte
 /// at `+0x200..+0x21F` doubles as the slot's occupancy flag and the
 /// NPC's sprite/tile class. Three values are special-cased by the
 /// engine; every other non-zero byte is an ordinary sprite-class
 /// value derived by adding the byte to the NPC sprite page.
 pub const NPC_TYPE_EMPTY: u8 = 0x00;
 pub const NPC_TYPE_DEFAULT_HUMAN_SPRITE: u8 = 0x01;
-pub const NPC_TYPE_RUNTIME_PLAYER_MIRROR: u8 = 0xFC;
+pub const NPC_TYPE_SHADOWLORD_ACTOR: u8 = SHADOWLORD_ACTOR_TILE;
 
 /// `formats/npc.md §6`: classify a roster type byte. Combines the
 /// occupancy flag (zero = empty) and the three published sprite-class
-/// special cases (`0x01` default human, `0xFC` runtime player mirror)
+/// special cases (`0x01` default human, `0xFC` Shadow Lord actor)
 /// with the catch-all "ordinary derived sprite" path used for every
 /// other non-zero value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,9 +194,8 @@ pub enum NpcTypeByteClass {
     /// `1` — occupied slot rendered with the default human/person
     /// sprite instead of the ordinary derived-sprite path.
     DefaultHumanSprite,
-    /// `0xFC` — runtime player-mirror marker written when the
-    /// town-mode player is attached to an NPC slot.
-    RuntimePlayerMirror,
+    /// `0xFC` — resident or summoned Shadow Lord actor.
+    ShadowlordActor,
     /// Any other non-zero value — ordinary derived sprite class.
     OrdinarySpriteClass,
 }
@@ -207,7 +206,7 @@ pub const fn npc_type_byte_class(byte: u8) -> NpcTypeByteClass {
     match byte {
         NPC_TYPE_EMPTY => NpcTypeByteClass::Empty,
         NPC_TYPE_DEFAULT_HUMAN_SPRITE => NpcTypeByteClass::DefaultHumanSprite,
-        NPC_TYPE_RUNTIME_PLAYER_MIRROR => NpcTypeByteClass::RuntimePlayerMirror,
+        NPC_TYPE_SHADOWLORD_ACTOR => NpcTypeByteClass::ShadowlordActor,
         _ => NpcTypeByteClass::OrdinarySpriteClass,
     }
 }
@@ -376,12 +375,12 @@ pub enum NpcAiBehavior {
     BoundedWander,
     /// `2` — random wander without the radius bound.
     UnboundedWander,
-    /// `3` — follow or shadow the player while maintaining distance.
-    FollowAtDistance,
+    /// `3` — retreat from the player.
+    Retreating,
     /// `4` — approach and attack when close enough.
     ApproachAndAttack,
-    /// `5` — reserved engage/chase path; present in the dispatcher but
-    /// not used by shipped roster data.
+    /// `5` — randomized unconditional chase with an attack event; not used
+    /// by shipped roster data.
     ReservedEngage,
     /// `6` — guard or blocking event path.
     GuardOrBlock,
@@ -426,7 +425,7 @@ pub const fn npc_ai_behavior(byte: u8) -> Option<NpcAiBehavior> {
         0 => NpcAiBehavior::Stationary,
         1 => NpcAiBehavior::BoundedWander,
         2 => NpcAiBehavior::UnboundedWander,
-        3 => NpcAiBehavior::FollowAtDistance,
+        3 => NpcAiBehavior::Retreating,
         4 => NpcAiBehavior::ApproachAndAttack,
         5 => NpcAiBehavior::ReservedEngage,
         6 => NpcAiBehavior::GuardOrBlock,
@@ -620,7 +619,6 @@ pub struct RuntimeNpc {
     pub move_queue_pos: usize,
     pub stuck_counter: u16,
     pub active_object: Option<usize>,
-    pub player_phantom: bool,
 }
 
 impl RuntimeNpc {
@@ -640,48 +638,34 @@ impl RuntimeNpc {
             move_queue_pos: 0,
             stuck_counter: 0,
             active_object: None,
-            player_phantom: false,
         }
     }
 
-    pub fn from_player_phantom(x: usize, y: usize, z: u8, hour: u8) -> Self {
+    /// `town-mode.md §13`: build the resident Shadowlord's stationary
+    /// three-waypoint schedule at its fixed town coordinate on floor zero.
+    pub fn from_resident_shadowlord(slot: usize, x: usize, y: usize, hour: u8) -> Self {
         let mut schedule = [0u8; NPC_SCHEDULE_RECORD_LEN];
         for wp in 0..NPC_SCHEDULE_WAYPOINT_COUNT {
             schedule[NPC_SCHEDULE_X_OFFSET + wp] = x as u8;
             schedule[NPC_SCHEDULE_Y_OFFSET + wp] = y as u8;
-            schedule[NPC_SCHEDULE_Z_OFFSET + wp] = z;
+            schedule[NPC_SCHEDULE_Z_OFFSET + wp] = 0;
         }
         let cached_wp = waypoint_for_hour(&schedule, hour);
         Self {
-            slot: PLAYER_NPC_SLOT,
-            type_byte: PLAYER_NPC_SENTINEL_TYPE,
-            dialog_id: PLAYER_NPC_DIALOG_ID,
+            slot,
+            type_byte: SHADOWLORD_ACTOR_TILE,
+            dialog_id: NPC_DIALOG_ID_NONE,
             schedule,
             state: NPC_STATE_IDLE,
             x,
             y,
-            z,
+            z: 0,
             cached_wp,
             move_queue: Vec::new(),
             move_queue_pos: 0,
             stuck_counter: 0,
             active_object: None,
-            player_phantom: true,
         }
-    }
-
-    pub fn is_player_phantom(&self) -> bool {
-        self.player_phantom
-    }
-
-    pub fn sync_player_phantom_floor(&mut self, floor: u8, hour: u8) {
-        self.z = floor;
-        for wp in 0..NPC_SCHEDULE_WAYPOINT_COUNT {
-            self.schedule[NPC_SCHEDULE_Z_OFFSET + wp] = floor;
-        }
-        self.cached_wp = waypoint_for_hour(&self.schedule, hour);
-        self.state = NPC_STATE_IDLE;
-        self.reset_move_queue();
     }
 
     pub fn waypoint_position(&self, wp: usize) -> (usize, usize, u8) {
@@ -699,6 +683,46 @@ impl RuntimeNpc {
             self.schedule[NPC_SCHEDULE_TIME_OFFSET + 2],
             self.schedule[NPC_SCHEDULE_TIME_OFFSET + 3],
         ]
+    }
+
+    /// `town-mode.md §§13-14`: whether any of the four schedule
+    /// boundaries participates in the forced-flight/entry predicates.
+    pub fn has_nonzero_schedule_time_boundary(&self) -> bool {
+        self.schedule_time_boundaries()
+            .into_iter()
+            .any(|time| time != 0)
+    }
+
+    /// Destructively install the published pursuit schedule while preserving
+    /// all waypoint coordinates and the dialogue index.
+    pub fn force_town_pursuit(&mut self) {
+        let ai = if self.type_byte < TOWN_NPC_FORCED_PURSUIT_NEAR_TYPE_CUTOFF {
+            TOWN_NPC_FORCED_PURSUIT_NEAR_AI
+        } else {
+            TOWN_NPC_FORCED_PURSUIT_RANDOM_AI
+        };
+        self.schedule[NPC_SCHEDULE_AI_OFFSET..NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT]
+            .fill(ai);
+        self.schedule
+            [NPC_SCHEDULE_TIME_OFFSET..NPC_SCHEDULE_TIME_OFFSET + NPC_SCHEDULE_TIME_BOUNDARY_COUNT]
+            .fill(0);
+        self.reset_move_queue();
+    }
+
+    /// Attempt the destructive forced-flight rewrite. Rejection leaves every
+    /// byte untouched; acceptance preserves time boundaries and waypoints.
+    pub fn force_town_flight(&mut self) -> bool {
+        if !(TOWN_NPC_ORDINARY_TYPE_FIRST..=TOWN_NPC_ORDINARY_TYPE_LAST).contains(&self.type_byte)
+            || (self.dialog_id != TOWN_NPC_BRUSHOFF_DIALOG_ID
+                && !self.has_nonzero_schedule_time_boundary())
+        {
+            return false;
+        }
+        self.schedule[NPC_SCHEDULE_AI_OFFSET..NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT]
+            .fill(TOWN_NPC_FORCED_FLIGHT_AI);
+        self.dialog_id = TOWN_NPC_COWERING_DIALOG_ID;
+        self.reset_move_queue();
+        true
     }
 
     pub fn reset_move_queue(&mut self) {
@@ -767,6 +791,6 @@ pub struct DoorTracker {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LocationMarkers {
+pub struct LocationNpcStartMarkers {
     pub npc_markers: Vec<(usize, usize)>,
 }

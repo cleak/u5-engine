@@ -19,22 +19,7 @@
         .unwrap();
     }
 
-    fn write_castle_exit_tile_fixture(dir: &Path) {
-        fs::write(
-            dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA 10 20 CASTLE:0\n",
-        )
-        .unwrap();
-        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
-    }
-
     fn town_trap_door_origin_state() -> PlayState {
-        let mut grid = open_grid();
-        grid[32 + 1] = 55;
-        test_state(grid, 1, 1)
-    }
-
-    fn town_exit_tile_origin_state() -> PlayState {
         let mut grid = open_grid();
         grid[32 + 1] = 55;
         test_state(grid, 1, 1)
@@ -341,7 +326,7 @@
         let image_block = [3, 0, 1, 0, 0b0001_1000];
         let mask_offset = image_offset + image_block.len() as u16;
         let mut body = Vec::new();
-        body.extend_from_slice(&2u16.to_le_bytes());
+        body.extend_from_slice(&1u16.to_le_bytes());
         body.extend_from_slice(&image_offset.to_le_bytes());
         body.extend_from_slice(&mask_offset.to_le_bytes());
         body.extend_from_slice(&image_block);
@@ -366,7 +351,7 @@
         let image_block = [3, 0, 1, 0, 0b0001_1000];
         let mask_offset = image_offset + image_block.len() as u16;
         let mut body = Vec::new();
-        body.extend_from_slice(&2u16.to_le_bytes());
+        body.extend_from_slice(&1u16.to_le_bytes());
         body.extend_from_slice(&image_offset.to_le_bytes());
         body.extend_from_slice(&mask_offset.to_le_bytes());
         body.extend_from_slice(&image_block);
@@ -389,7 +374,7 @@
                 .exists()
             {
                 let sheet = load_graphic_sprite_sheet(game_dir, "ITEMS", depth).unwrap();
-                assert_sprite_sheet_shape(&sheet, 10);
+                assert_sprite_sheet_shape(&sheet, 20);
             }
             for monster_sheet in 0..=7 {
                 let stem = format!("MON{monster_sheet}");
@@ -400,7 +385,7 @@
                     continue;
                 }
                 let sheet = load_graphic_sprite_sheet(game_dir, &stem, depth).unwrap();
-                assert_sprite_sheet_shape(&sheet, 3);
+                assert_sprite_sheet_shape(&sheet, 6);
             }
         }
     }

@@ -1,6 +1,7 @@
 //! Town-family scene classification per `town-mode.md` §2.
 
 use crate::npc_runtime::{NPC_FLOOR_LINK_TILE_C8, NPC_FLOOR_LINK_TILE_C9};
+use crate::prng::u5_prng_range_u16;
 
 /// `town-mode.md §2` four classes the eight-per-class scene-byte band
 /// `1..=32` divides into.
@@ -204,14 +205,15 @@ pub const fn world_location_table_scene_for_row(row: usize) -> Option<u8> {
 /// `overworld.md §2` town-mover scene byte that lands the party on
 /// the underworld plane after an interior exit. Ordinary town
 /// exits restore the surface plane; this is the one traced
-/// exception (Stonegate's interior egress, scene `0x19`).
+/// exception (Ararat's interior egress, scene `0x19`).
 pub const TOWN_EXIT_UNDERWORLD_SCENE: u8 = 0x19;
 
 /// `town-mode.md §5` Yew-jail surrender destination. The arrest
 /// path sends the party to scene Yew (`TOWNE:3`, scene byte 4 =
 /// SCENE_YEW) at floor 0 cell `(25, 4)`. The town setup pass
-/// recognises this local `Y == 4` as a special case that skips the
-/// permanent-location queue lookup before allocating a phantom NPC.
+/// recognises this local `Y == 4` as a special entry guard. Public
+/// `town-mode.md §5` now assigns the guarded install to the resident
+/// Shadowlord helper; it does not allocate a player-side NPC mirror.
 pub const TOWN_ARREST_JAIL_SCENE: u8 = SCENE_YEW;
 pub const TOWN_ARREST_JAIL_FLOOR: u8 = 0;
 pub const TOWN_ARREST_JAIL_X: u8 = 25;
@@ -222,21 +224,6 @@ pub struct TownArrestPrompt {
     pub scene_byte: u8,
     pub floor: i8,
     pub npc_slot: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TownNpcAlarmState {
-    Fortified,
-    Fleeing,
-    Pacified,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TownNpcAlarmMarker {
-    pub scene_byte: u8,
-    pub floor: i8,
-    pub npc_slot: usize,
-    pub state: TownNpcAlarmState,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -271,8 +258,8 @@ pub const fn town_npc_attack_resolution(type_byte: u8) -> TownNpcAttackResolutio
 
 /// `town-mode.md §5`: returns `true` when town entry hit the
 /// jail-wakeup branch — local floor 0 cell with `Y == TOWN_ARREST_JAIL_Y`
-/// in the Yew scene. The phantom-attach helper skips the queue
-/// lookup on this path.
+/// in the Yew scene. The resident-Shadowlord install is skipped on
+/// this path.
 pub const fn town_entry_is_jail_wakeup(scene_byte: u8, floor: u8, y: u8) -> bool {
     scene_byte == TOWN_ARREST_JAIL_SCENE
         && floor == TOWN_ARREST_JAIL_FLOOR
@@ -285,12 +272,6 @@ pub const fn town_entry_is_jail_wakeup(scene_byte: u8, floor: u8, y: u8) -> bool
 pub const fn town_exit_lands_underworld(scene_byte: u8) -> bool {
     scene_byte == TOWN_EXIT_UNDERWORLD_SCENE
 }
-
-/// `town-mode.md §7` town-family exit-threshold tile id. Stepping
-/// onto a `0x59` cell prompts the player; accepting clears the
-/// scene byte and maps the interior exit back to the location's
-/// overworld coordinate.
-pub const TOWN_EXIT_THRESHOLD_TILE: u8 = 0x59;
 
 /// `town-mode.md §7` stair tile family (`0xC4..=0xC7`). The low two
 /// bits encode the matching facing direction: matching the
@@ -432,6 +413,19 @@ pub const NPC_SCHEDULE_X_OFFSET: usize = NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_W
 pub const NPC_SCHEDULE_Y_OFFSET: usize = NPC_SCHEDULE_X_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
 pub const NPC_SCHEDULE_Z_OFFSET: usize = NPC_SCHEDULE_Y_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
 pub const NPC_SCHEDULE_TIME_OFFSET: usize = NPC_SCHEDULE_Z_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
+/// `town-mode.md §§13-14`: destructive alarm/Shadowlord schedule rewrites.
+pub const TOWN_NPC_ORDINARY_TYPE_FIRST: u8 = 0x40;
+pub const TOWN_NPC_ORDINARY_TYPE_LAST: u8 = 0x73;
+pub const TOWN_NPC_ALARM_GUARD_TYPE: u8 = 0x70;
+pub const TOWN_NPC_ALARM_LICH_TYPE: u8 = 0xD8;
+pub const TOWN_NPC_FORCED_FLIGHT_AI: u8 = 3;
+pub const TOWN_NPC_FORCED_PURSUIT_NEAR_AI: u8 = 6;
+pub const TOWN_NPC_FORCED_PURSUIT_RANDOM_AI: u8 = 7;
+pub const TOWN_NPC_FORCED_PURSUIT_NEAR_TYPE_CUTOFF: u8 = 0x2F;
+pub const TOWN_NPC_COWERING_DIALOG_ID: u8 = 0xFD;
+pub const TOWN_NPC_BRUSHOFF_DIALOG_ID: u8 = 0xFE;
+pub const TOWN_NPC_COWERING_RESPONSE: &str = "They cower in fear.";
+pub const TOWN_NPC_BRUSHOFF_RESPONSE: &str = "Begone, vermin!";
 /// Slot zero of every sub-map is the unused-sentinel slot the schedule
 /// processor skips; effective capacity per sub-map is therefore 31.
 pub const NPC_SENTINEL_SLOT: usize = 0;
@@ -524,6 +518,55 @@ pub const SCENE_THE_LYCAEUM: u8 = SCENE_STONEGATE + 1;
 pub const SCENE_EMPATH_ABBEY: u8 = SCENE_THE_LYCAEUM + 1;
 pub const SCENE_SERPENTS_HOLD: u8 = SCENE_EMPATH_ABBEY + 1;
 
+/// `town-mode.md §13` resident-Shadowlord installation column.
+pub const SHADOWLORD_TOWN_INSTALL_X: usize = 15;
+/// `town-mode.md §5,§13` entry-coordinate guard that suppresses host
+/// selection, blight, actor installation, and the associated NPC sweep.
+pub const SHADOWLORD_TOWN_ENTRY_SKIP_Y: usize = 4;
+/// `town-mode.md §13` fixed resident-Shadowlord row for town scene bytes
+/// one through eight (Moonglow through New Magincia).
+pub const SHADOWLORD_TOWN_INSTALL_ROWS: [usize; 8] = [4, 9, 15, 8, 17, 10, 11, 10];
+/// `town-mode.md §3` Shadowlord blight tile rewrites.
+pub const SHADOWLORD_BLIGHT_STANDING_CROP_TILE: u8 = TOWN_TILE_STANDING_CROP;
+pub const SHADOWLORD_BLIGHT_PLOWED_PATCH_TILE: u8 = 0x2C;
+pub const SHADOWLORD_BLIGHT_FRUIT_TREE_TILE: u8 = TOWN_TILE_FRUIT_TREE;
+pub const SHADOWLORD_BLIGHT_HOLLOW_STUMP_TILE: u8 = 0x2B;
+pub const SHADOWLORD_BLIGHT_ROLL_HIGH: u16 = 7;
+
+pub const fn shadowlord_town_install_row(scene_byte: u8) -> Option<usize> {
+    if scene_byte < SCENE_MOONGLOW || scene_byte > SCENE_NEW_MAGINCIA {
+        return None;
+    }
+    Some(SHADOWLORD_TOWN_INSTALL_ROWS[(scene_byte - SCENE_MOONGLOW) as usize])
+}
+
+/// Apply the resident-Shadowlord farmland/orchard walk with an explicit
+/// trailing seed. The day replaces the prior PRNG state; each eligible cell
+/// consumes one inclusive `0..7` draw and nonzero rewrites it. The supplied
+/// host-clock seed replaces the deterministic stream after the walk.
+pub fn apply_shadowlord_blight(
+    grid: &mut [u8],
+    day: u8,
+    prng_state: &mut u16,
+    trailing_host_seed: u16,
+) -> usize {
+    *prng_state = u16::from(day);
+    let mut rewritten = 0;
+    for cell in grid {
+        let replacement = match *cell {
+            SHADOWLORD_BLIGHT_STANDING_CROP_TILE => SHADOWLORD_BLIGHT_PLOWED_PATCH_TILE,
+            SHADOWLORD_BLIGHT_FRUIT_TREE_TILE => SHADOWLORD_BLIGHT_HOLLOW_STUMP_TILE,
+            _ => continue,
+        };
+        if u5_prng_range_u16(prng_state, 0, SHADOWLORD_BLIGHT_ROLL_HIGH) != 0 {
+            *cell = replacement;
+            rewritten += 1;
+        }
+    }
+    *prng_state = trailing_host_seed;
+    rewritten
+}
+
 /// `town-mode.md §3` per-cell tile-buffer markers the location-load
 /// pipeline harvests, rewrites, or consumes. These bytes appear in
 /// the on-disk `.DAT` floor and are interpreted at marker-harvest
@@ -534,15 +577,10 @@ pub enum TownTileMarker {
     NpcStartA,
     /// `0x49` — NPC start marker (variant B).
     NpcStartB,
-    /// `0x2A` (`*`) — spawn marker. The first asterisk is the primary
-    /// spawn (overworld entrance); the second is the secondary spawn
-    /// (alternate exit or stairway-up landing).
-    SpawnAsterisk,
-    /// `0x2D` (`-`) — dash marker, processed by the cosmetic variation
-    /// pass after the player has been placed.
-    DashCosmetic,
-    /// `0x2E` (`.`) — period marker, same processing as the dash.
-    PeriodCosmetic,
+    /// `0x2A` (`*`) — the night beacon's indoor light source. The
+    /// location loader harvests up to two coordinates for the beacon;
+    /// this byte never supplies player placement.
+    BeaconLightSource,
     /// `0xC8` — NPC floor-link marker (variant A) consumed by the
     /// schedule processor's tile-id pathfinder.
     FloorLinkC8,
@@ -552,9 +590,9 @@ pub enum TownTileMarker {
 
 pub const TOWN_TILE_NPC_START_A: u8 = 0x48;
 pub const TOWN_TILE_NPC_START_B: u8 = 0x49;
-pub const TOWN_TILE_SPAWN_ASTERISK: u8 = b'*';
-pub const TOWN_TILE_DASH_MARKER: u8 = b'-';
-pub const TOWN_TILE_PERIOD_MARKER: u8 = b'.';
+pub const TOWN_TILE_BEACON_LIGHT_SOURCE: u8 = b'*';
+pub const TOWN_TILE_STANDING_CROP: u8 = 0x2D;
+pub const TOWN_TILE_FRUIT_TREE: u8 = 0x2E;
 
 /// `town-mode.md §3`: classify a tile byte as one of the harvest
 /// markers, or `None` for ordinary terrain bytes the renderer paints
@@ -563,9 +601,7 @@ pub const fn town_tile_marker(byte: u8) -> Option<TownTileMarker> {
     Some(match byte {
         TOWN_TILE_NPC_START_A => TownTileMarker::NpcStartA,
         TOWN_TILE_NPC_START_B => TownTileMarker::NpcStartB,
-        TOWN_TILE_SPAWN_ASTERISK => TownTileMarker::SpawnAsterisk,
-        TOWN_TILE_DASH_MARKER => TownTileMarker::DashCosmetic,
-        TOWN_TILE_PERIOD_MARKER => TownTileMarker::PeriodCosmetic,
+        TOWN_TILE_BEACON_LIGHT_SOURCE => TownTileMarker::BeaconLightSource,
         NPC_FLOOR_LINK_TILE_C8 => TownTileMarker::FloorLinkC8,
         NPC_FLOOR_LINK_TILE_C9 => TownTileMarker::FloorLinkC9,
         _ => return None,

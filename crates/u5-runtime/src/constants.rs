@@ -35,34 +35,18 @@ pub const TOWN_GET_TILE_TABLE_FILE: &str = "town_get_tiles.tsv";
 pub const TOWN_REST_BED_TABLE_FILE: &str = "town_rest_beds.tsv";
 pub const TOWN_STAIR_TABLE_FILE: &str = "town_stairs.tsv";
 pub const TOWN_TRAP_DOOR_TABLE_FILE: &str = "town_trap_doors.tsv";
-pub const TOWN_EXIT_TILE_TABLE_FILE: &str = "town_exit_tiles.tsv";
 pub const TOWN_LOCK_TABLE_FILE: &str = "town_locks.tsv";
 pub const ETERNAL_FLAME_TABLE_FILE: &str = "eternal_flames.tsv";
 pub const LOCATION_FLOOR_TABLE_FILE: &str = "location_floor_pages.tsv";
+/// Retired compatibility artifact name. Public issue #94 established that
+/// overworld entry never performs a per-scene row lookup.
 pub const LOCATION_ENTRY_Y_TABLE_FILE: &str = "location_entry_y.tsv";
 
-/// KNOWN GAP — the harness's town-entry X column, **no longer backed by
-/// published text**.
-///
-/// This used to cite `formats/location-dat.md §6` as fixing the entry
-/// column at fifteen, with the entry Y from the per-scene
-/// `LocationEntryYTable` (`location_entry_y.tsv`) and the entry floor at
-/// zero. Both halves of that citation are now withdrawn at the source:
-/// `§6` says "there is no asterisk-based spawn marker", that the two slots
-/// it described are the beacon's, and that the document "does not specify
-/// where the player is placed on entering a location ... an implementation
-/// should not infer it from this file"; and `systems/town-mode.md §5`
-/// step 6 withdraws the `(15, per-scene row, 0)` wording in full, because
-/// those coordinates belong to the resident-Shadowlord install helper, not
-/// to player placement — it records the player's own default town-entry
-/// cell as "**not currently established** by this spec ... an open item".
-///
-/// The value is kept because it is what the harness and chargen already
-/// seed with and changing it would substitute one unsourced number for
-/// another. It is a harness placement, not a claim about the original, and
-/// the shipped install carries no `location_entry_y.tsv`, so nothing reads
-/// the pair from data today.
+/// `town-mode.md §5` / public issue #94: overworld entry writes the same
+/// column, row and floor for every town, castle, keep and dwelling. This is
+/// unrelated to the resident-Shadowlord helper's per-scene row table.
 pub const LOCATION_DEFAULT_ENTRY_X: usize = 15;
+pub const LOCATION_DEFAULT_ENTRY_Y: usize = 30;
 pub const TILE_PASSABILITY_FILE: &str = "tile_passability.bin";
 pub const LOOK2_DAT_FILE: &str = "LOOK2.DAT";
 
@@ -380,11 +364,16 @@ pub const SAVE_MOONSTONE_Z_OFFSET: usize = SAVE_MOONSTONE_SCENE_OFFSET + MOONSTO
 pub const SAVE_REAGENTS_OFFSET: usize = SAVE_MOONSTONE_Z_OFFSET + MOONSTONE_SLOT_COUNT;
 pub const SAVE_YEAR_OFFSET: usize = 0x02ce;
 /// `formats/saved-gam.md §5`: bytes 0x02d4..=0x02d6 are three
-/// adjacent state bytes — timing/status tag, active player slot,
+/// adjacent state bytes — active-effect code, active player slot,
 /// transport marker — preceding the calendar/clock chain at
 /// SAVE_MONTH_OFFSET. Anchor each offset to the per-byte chain
 /// so resizing any of these bytes only happens in one place.
-pub const SAVE_TIMING_STATUS_TAG_OFFSET: usize = 0x02d4;
+/// `formats/saved-gam.md §4`: the one shared timed-magic-effect code.
+/// Zero means no effect; this is unrelated to the transport marker at 0x02D6.
+pub const SAVE_ACTIVE_EFFECT_CODE_OFFSET: usize = 0x02d4;
+/// Compatibility alias retained for callers compiled against the earlier,
+/// withdrawn transport/timing interpretation of this byte.
+pub const SAVE_TIMING_STATUS_TAG_OFFSET: usize = SAVE_ACTIVE_EFFECT_CODE_OFFSET;
 pub const SAVE_ACTIVE_PLAYER_OFFSET: usize = SAVE_TIMING_STATUS_TAG_OFFSET + 1;
 pub const SAVE_TRANSPORT_MARKER_OFFSET: usize = SAVE_ACTIVE_PLAYER_OFFSET + 1;
 /// `formats/saved-gam.md §5`: calendar/clock bytes at
@@ -433,6 +422,18 @@ pub const SAVE_MORAL_STANDING_OFFSET: usize = 0x02e2;
 /// `0x85` conversation gold payment; resets to zero and bumps the
 /// selector on the [`TOLL_PROGRESS_MILESTONE`] roll-over.
 pub const SAVE_TOLL_PROGRESS_OFFSET: usize = 0x02e5;
+/// `formats/saved-gam.md §10` / `rest-and-camp.md §5`: persisted
+/// completed-camp recovery cooldown. The counter is armed at fourteen
+/// and loses one at each hour rollover, floored at zero.
+pub const SAVE_CAMP_COOLDOWN_OFFSET: usize = 0x02e6;
+/// `formats/saved-gam.md §10` / `rest-and-camp.md §5`: current
+/// calendar month copied by the successful camp-apparition draw. The
+/// shipped program never reads it, but the write and save preservation
+/// are part of the published byte contract.
+pub const SAVE_CAMP_MONTH_COOKIE_OFFSET: usize = 0x02e7;
+/// `formats/saved-gam.md §4`: remaining duration paired with the shared
+/// effect code at [`SAVE_ACTIVE_EFFECT_CODE_OFFSET`]. `0xFF` is permanent.
+pub const SAVE_ACTIVE_EFFECT_DURATION_OFFSET: usize = 0x02e8;
 pub const SAVE_WIND_OFFSET: usize = 0x02ec;
 /// `formats/saved-gam.md §5`: "The five bytes after wind form the
 /// persisted location cluster" — scene byte sits immediately
@@ -455,6 +456,13 @@ pub const SAVE_LIGHT_SPELL_COUNTER_OFFSET: usize = 0x0300;
 /// SAVE_LIGHT_SPELL_COUNTER_OFFSET + 1 so the two adjacent
 /// lighting counters share one source of truth.
 pub const SAVE_TORCH_COUNTER_OFFSET: usize = SAVE_LIGHT_SPELL_COUNTER_OFFSET + 1;
+/// `formats/saved-gam.md §6.1`: one interference-source byte per combat
+/// victim slot. Values `0..=31` name the most recent qualifying adjacent
+/// attacker; `0xFF` means no source. The factory image deliberately seeds
+/// this band with zeroes, which must be preserved as valid slot references.
+pub const SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET: usize = 0x0302;
+pub const SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN: usize = OOL_SLOTS;
+pub const COMBAT_INTERFERENCE_NO_SOURCE: u8 = u8::MAX;
 /// `formats/saved-gam.md §9`: the two shrine progress masks sit
 /// at file offsets 0x0326 and 0x0328 with an unnamed opaque byte
 /// between them. Anchor the codex mask to the ordained mask + 2
@@ -462,6 +470,19 @@ pub const SAVE_TORCH_COUNTER_OFFSET: usize = SAVE_LIGHT_SPELL_COUNTER_OFFSET + 1
 /// has one source of truth.
 pub const SAVE_SHRINE_ORDAINED_MASK_OFFSET: usize = 0x0326;
 pub const SAVE_SHRINE_CODEX_MASK_OFFSET: usize = SAVE_SHRINE_ORDAINED_MASK_OFFSET + 2;
+/// `formats/saved-gam.md §9.1`: eight durable Word-of-Power seal
+/// bytes in the fixed dungeon-word order. The high bit is the live gate.
+pub const SAVE_WORD_OF_POWER_SEAL_FLAGS_OFFSET: usize = 0x032A;
+pub const SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT: usize = 8;
+/// `formats/saved-gam.md §9.1`: eight durable shrine-ruin bytes in
+/// standard virtue order. A set high bit selects the ruined live tile.
+pub const SAVE_SHRINE_RUIN_FLAGS_OFFSET: usize = 0x0332;
+pub const SAVE_SHRINE_RUIN_FLAG_COUNT: usize = 8;
+pub const SAVE_QUEST_TILE_FLAG_HIGH_BIT: u8 = 0x80;
+/// `formats/saved-gam.md §10`: queued shipwright-delivery X coordinate.
+pub const SAVE_PENDING_VEHICLE_X_OFFSET: usize = 0x03AD;
+/// `formats/saved-gam.md §10`: queued shipwright-delivery Y coordinate.
+pub const SAVE_PENDING_VEHICLE_Y_OFFSET: usize = 0x03AE;
 pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;
 /// `formats/saved-gam.md §10`: durable dungeon room-clear bitmap. The
 /// 16-byte block at `0x033A..0x0349` records which dungeon room
@@ -479,12 +500,11 @@ pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN: usize =
 /// `formats/saved-gam.md §8.1`: the live active-object table snapshot
 /// occupies 256 bytes at file offset `0x06B4..=0x07B3`. Layout matches
 /// the in-memory table (32 records × 8 bytes). The table starts
-/// immediately after the 512-byte dungeon working buffer and the
-/// 256-byte mixed-state band; anchor the offset to that sum so the
-/// active-object-table position derives from the upstream block
-/// layout.
+/// immediately after the NPC name-known mask bank.
 pub const SAVE_ACTIVE_OBJECT_TABLE_OFFSET: usize =
-    SAVE_DUNGEON_WORKING_BUFFER_OFFSET + SAVE_DUNGEON_WORKING_BUFFER_LEN + OOL_PLANE_LEN;
+    SAVE_NPC_NAME_KNOWN_MASKS_OFFSET + SAVE_NPC_MASK_BANK_LEN;
+/// `formats/saved-gam.md §10`: packed queued-delivery family/payload byte.
+pub const SAVE_PENDING_VEHICLE_CLASS_OFFSET: usize = 0x105F;
 /// `formats/saved-gam.md §8.2`: the dungeon/map-cell working buffer
 /// occupies 512 bytes at file offset `0x03B4..=0x05B3` and matches the
 /// 512-byte dungeon-record stride. The buffer begins immediately
@@ -517,8 +537,14 @@ pub const SAVE_POTION_COUNTERS_OFFSET: usize = 0x0282;
 pub const SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET: usize = 0x020C;
 pub const SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET: usize = 0x0241;
 pub const SAVE_SHADOWLORD_HIDEOUTS_OFFSET: usize = 0x0322;
-pub const SAVE_QUEST_PROGRESS_WORD_OFFSET: usize = 0x0624;
-pub const SAVE_QUEST_PROGRESS_WORD_LEN: usize = 2;
+/// `formats/saved-gam.md §9.2`: two back-to-back banks of 32
+/// little-endian `u32` masks. Scene ids are one-based; bit `n` is
+/// NPC roster slot `n` in that scene.
+pub const SAVE_NPC_REMOVED_MASKS_OFFSET: usize = 0x05B4;
+pub const SAVE_NPC_NAME_KNOWN_MASKS_OFFSET: usize = 0x0634;
+pub const SAVE_NPC_MASK_SCENE_COUNT: usize = 32;
+pub const SAVE_NPC_MASK_BYTES_PER_SCENE: usize = 4;
+pub const SAVE_NPC_MASK_BANK_LEN: usize = SAVE_NPC_MASK_SCENE_COUNT * SAVE_NPC_MASK_BYTES_PER_SCENE;
 pub const SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET: usize = 0x02B6;
 /// `formats/saved-gam.md §6` location-cluster scratch offsets.
 pub const SAVE_SAVED_SCENE_SCRATCH_OFFSET: usize = 0x02EE;
@@ -719,22 +745,39 @@ pub const SCEPTRE_BARRIER_TILE_LAST: u8 = crate::TILE_BARRIER_LAST;
 pub const SCEPTRE_BARRIER_DISSOLVED_TILE: u8 = 0x44;
 
 /// `catalogs/item-list.md §7.2` White-potion surface visibility-sweep
-/// frame count. In overworld and named interior scenes the white
-/// potion runs a twenty-frame visibility/animation sweep centred on
-/// the party with radius [`POTION_WHITE_SWEEP_RADIUS`] before
-/// finishing with a normal world redraw. Dungeon and combat scenes
-/// take the no-noticeable-effect branch instead.
+/// frame count and per-frame pause request. In overworld and named
+/// interior scenes the white potion computes one visibility field,
+/// repaints it twenty times, requests one BIOS tick after each repaint,
+/// and then performs one ordinary idle redraw. Dungeon and combat
+/// scenes take the no-noticeable-effect branch instead.
 pub const POTION_WHITE_SWEEP_FRAMES: u8 = 20;
-pub const POTION_WHITE_SWEEP_RADIUS: u8 = 32;
-/// `catalogs/item-list.md §7.2` combat Orange potion sleep presentation is
-/// persistent presentation state tied to the selected combat party actor until
-/// a matching wake effect clears it.
-pub const COMBAT_POTION_SLEEP_PRESENTATION_FRAMES: u8 = u8::MAX;
-/// `catalogs/item-list.md §7.2` Purple potion "Poof" is a temporary combat
-/// presentation mark on the selected combat party actor's linked display
-/// record. Keep the gameplay model transient: one frontend frame is enough for
-/// tests and renderers to observe the effect without altering save state.
-pub const COMBAT_POTION_POOF_PRESENTATION_FRAMES: u8 = 1;
+pub const POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME: u8 = 1;
+/// White passes this value directly to the ordinary visibility producer. It is
+/// an inclusive squared-distance threshold, not a linear radius.
+pub const POTION_WHITE_VISIBILITY_THRESHOLD: u8 = 32;
+
+/// `catalogs/item-list.md §7.2` shared EGA/Tandy potion flash geometry. The
+/// rectangle is inclusive and covers the complete 176-by-176 playfield.
+pub const POTION_FLASH_PLAYFIELD_LEFT: usize = 8;
+pub const POTION_FLASH_PLAYFIELD_TOP: usize = 8;
+pub const POTION_FLASH_PLAYFIELD_RIGHT: usize = 183;
+pub const POTION_FLASH_PLAYFIELD_BOTTOM: usize = 183;
+pub const POTION_FLASH_PALETTE_XOR_MASK: u8 = 15;
+pub const POTION_FLASH_ENVELOPE_SWEEP_COUNT: u8 = 2;
+/// Public issue `cleak/u5-spec#116`: for selected potion id `i`, every row's
+/// leading rumble target is `8_000 + 1_600 * i` and each of its two envelope
+/// sweeps runs `10_000 + 4_000 * i` iterations.
+pub const POTION_FLASH_RUMBLE_TARGET_BASE: u32 = 8_000;
+pub const POTION_FLASH_RUMBLE_TARGET_STEP: u32 = 1_600;
+pub const POTION_FLASH_SWEEP_ITERATIONS_BASE: u32 = 10_000;
+pub const POTION_FLASH_SWEEP_ITERATIONS_STEP: u32 = 4_000;
+
+/// `catalogs/item-list.md §7.2` combat-potion active-object tile rewrites.
+/// Orange retains the object's base/type byte and changes only its displayed
+/// tile. Purple replaces both fields permanently for the combat instance.
+pub const COMBAT_POTION_SLEEP_DISPLAY_TILE: u8 = 0x1E;
+pub const COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE: u8 = 0x1D;
+pub const COMBAT_POTION_POOF_TILE: u8 = 0x90;
 /// `endgame.md §2` total Shadow Lord count. The three named
 /// indices span FALSEHOOD (0) through COWARDICE (2); anchor the
 /// count to [`SHADOWLORD_COWARDICE_INDEX`] + 1 so adding or
@@ -750,11 +793,19 @@ pub const SHADOWLORD_HIDEOUT_MIN: u8 = 1;
 pub const SHADOWLORD_HIDEOUT_MAX: u8 = 8;
 pub const SHADOWLORD_VANQUISHED: u8 = 0xff;
 pub const DEFAULT_SHADOWLORD_HIDEOUTS: [u8; SHADOWLORD_COUNT] = [4, 7, 8];
-pub const DEFAULT_QUEST_PROGRESS_WORD: u16 = 0;
-pub const SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT: u16 = 0x0002;
-pub const SHADOWLORD_HATRED_QUEST_PROGRESS_BIT: u16 = 0x0004;
-pub const SHADOWLORD_COWARDICE_QUEST_PROGRESS_BIT: u16 = 0x0008;
-pub const SHADOWLORD_OBJECT_TILE_BASE: u8 = 0xfd;
+/// `formats/saved-gam.md §9.1`: successful destruction suppresses
+/// the corresponding Stonegate NPC roster slot through the ordinary
+/// per-scene removal-mask bank.
+pub const SHADOWLORD_FALSEHOOD_STONEGATE_NPC_SLOT: usize = 1;
+pub const SHADOWLORD_HATRED_STONEGATE_NPC_SLOT: usize = 2;
+pub const SHADOWLORD_COWARDICE_STONEGATE_NPC_SLOT: usize = 3;
+/// `town-mode.md §13` / `commands.md §11`: shared Shadow Lord actor
+/// class used by both resident-town installation and name/Yell summons.
+pub const SHADOWLORD_ACTOR_TILE: u8 = 0xfc;
+/// Backward-compatible public name retained for callers that previously
+/// treated the three Shadowlords as consecutive tile ids. Identity is
+/// carried separately; every Shadowlord actor uses [`SHADOWLORD_ACTOR_TILE`].
+pub const SHADOWLORD_OBJECT_TILE_BASE: u8 = SHADOWLORD_ACTOR_TILE;
 /// `inventory.md §7` U-Use scroll dispatch order. The eight scroll
 /// indices occupy 0..=7 in sequence. Anchor each successor to
 /// the chain so adding or reordering a scroll only happens in
@@ -890,13 +941,16 @@ pub const VIRTUE_COUNT: usize = 8;
 /// across all add paths (NPC thank-you, toll milestone, etc.).
 pub const MORAL_STANDING_MAX: u8 = 99;
 
-/// `karma.md §4` and `formats/saved-gam.md §10`: every successful
-/// three-digit `0x85` conversation gold payment bumps the saved
-/// toll-progress counter by one. When the counter reaches this
-/// milestone value, the gold-payment helper resets the counter to
-/// zero and applies the [`crate::KarmaAction::TollMilestone`] bump
-/// to the moral-standing selector.
+/// `karma.md §4.1` and `formats/saved-gam.md §10`: ordinary
+/// turn-consuming world/town/dungeon actions age the saved payment
+/// cooldown toward this threshold. A qualifying `0x85` payment tests
+/// the threshold; it does not increment the counter itself.
 pub const TOLL_PROGRESS_MILESTONE: u8 = 100;
+
+/// `karma.md §4.1`: only the speaking actor class whose four-tile run
+/// begins at decimal 108 can consume the payment cooldown and award the
+/// moral-standing milestone.
+pub const TLK_GOLD_PAYMENT_KARMA_SPEAKER_CLASS: u8 = 108;
 
 /// `formats/saved-gam.md §10`: durable byte offset of the
 /// toll-progress counter inside the `SAVED.GAM` per-turn cluster.
@@ -1089,6 +1143,10 @@ pub const TIME_STOP_SPELL_INDEX: usize = 47;
 pub const TIME_STOP_COST: u8 = (TIME_STOP_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const TIME_STOP_DURATION: u8 = 10;
 pub const NEGATE_TIME_ACTIVE_EFFECT_TAG: u8 = b'T';
+pub const AMULET_LB_ACTIVE_EFFECT_TAG: u8 = 0x0e;
+pub const CROWN_LB_ACTIVE_EFFECT_TAG: u8 = 0x1c;
+pub const BLACK_BADGE_ACTIVE_EFFECT_TAG: u8 = 0x1d;
+pub const PERMANENT_ACTIVE_EFFECT_DURATION: u8 = 0xff;
 
 // Combat-side raw damage caps for single-target damage spells per
 // `catalogs/spell-list.md` §5. The instant-kill sentinel itself lives in
@@ -1098,9 +1156,6 @@ pub const MAGIC_MISSILE_RAW_DAMAGE_MAX: u8 = 16;
 pub const FIREBALL_SPELL_INDEX: usize = 13;
 pub const FIREBALL_RAW_DAMAGE_MAX: u8 = 30;
 pub const KILL_SPELL_INDEX: usize = 37;
-/// Fire-Field per-actor raw damage roll cap per `combat.md` §11. Energy
-/// Field supplies raw zero to the same damage path; that case has no cap.
-pub const FIRE_FIELD_RAW_DAMAGE_MAX: u8 = 21;
 
 /// Inclusive town/world door tile-id range per
 /// `catalogs/tile-catalog.md §6`: indices `0x60..=0x67` are the
@@ -1317,14 +1372,14 @@ pub const FIRST_PLAYABLE_MAGIC_CARPET_TILE: u8 = FIRST_PLAYABLE_SKIFF_TILE + 8;
 pub const FIRST_PLAYABLE_BALLOON_TILE: u8 = FIRST_PLAYABLE_MAGIC_CARPET_TILE + 4;
 pub const DEFAULT_PARTY_HP: u16 = 60;
 pub const DEFAULT_PARTY_MAX_HP: u16 = 150;
-/// `rest-and-camp.md §3,§4`: rest tick cadences derive from
-/// MINUTES_PER_HOUR. Watch-mode rest ticks at MINUTES_PER_HOUR /
-/// REST_WATCH_TICKS_PER_HOUR = 60/3 = 20 minutes each; town
-/// rest ticks at MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR =
-/// 60/6 = 10 minutes each. Anchor the per-tick minute lengths so
-/// the cadence/tick-count partition has one source of truth.
+/// `rest-and-camp.md §5`: dungeon watch-rest retains its three passes per
+/// hour, while the distinct wilderness camp loop advances in five-minute
+/// steps. Town bed rest uses ten-minute steps.
 pub const REST_WATCH_TICKS_PER_HOUR: u8 = 3;
 pub const REST_WATCH_MINUTES_PER_TICK: u8 = crate::MINUTES_PER_HOUR / REST_WATCH_TICKS_PER_HOUR;
+pub const WILDERNESS_CAMP_TICKS_PER_HOUR: u8 = 12;
+pub const WILDERNESS_CAMP_MINUTES_PER_TICK: u8 =
+    crate::MINUTES_PER_HOUR / WILDERNESS_CAMP_TICKS_PER_HOUR;
 pub const TOWN_REST_TICKS_PER_HOUR: u8 = 6;
 pub const TOWN_REST_MINUTES_PER_TICK: u8 = crate::MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR;
 pub const TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS: u8 = 16;
@@ -1548,8 +1603,9 @@ pub const NPC_PATH_QUEUE_LIMIT: usize = crate::NPC_PATHFIND_QUEUE_CAPACITY;
 /// largest unsigned eight-bit **per-axis** difference from the scroll
 /// base (the loaded window's top-left corner) that an outdoor
 /// active-object slot may have and still survive the prune pass. The
-/// pass "keeps the slot only when both differences fall within
-/// thirty-two."
+/// pass keeps the slot only when both differences are in `0..=31`,
+/// the thirty-two positions of the loaded window. Admitting difference
+/// `32` retains one extra row and column.
 ///
 /// This is a **square window bound, not a radius**: the two axes are
 /// tested separately and independently, with no distance computation.
@@ -1562,16 +1618,13 @@ pub const NPC_PATH_QUEUE_LIMIT: usize = crate::NPC_PATHFIND_QUEUE_CAPACITY;
 /// different mechanism with a different trigger and a different
 /// origin, and §8.1 warns that sharing one distance constant across
 /// the two is a sign they have been conflated.
-pub const ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT: u8 = 32;
+pub const ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT: u8 = 31;
 
 /// `encounters.md §4`: the terrain spawner rolls a candidate
 /// coordinate "inside the current 32-by-32 scroll window", so an
-/// encounter-table row's DX/DY offset may not exceed this many cells
-/// on either axis. A separate quantity from the §8.1 prune window
-/// that happens to share its value -- the spawner picks *where* a new
-/// slot goes, the prune pass decides *when* an existing slot dies.
+/// encounter-table row's compatibility DX/DY offset may not exceed this
+/// many cells on either axis. This is separate from §8.1's `0..=31`
+/// forward prune interval: the sidecar parser accepts signed offsets,
+/// while the native prune pass compares unsigned positions from a corner.
 pub const WORLD_ENCOUNTER_SPAWN_OFFSET_MAX_AXIS: u8 = 32;
-pub const PLAYER_NPC_SLOT: usize = OOL_SLOTS - 1;
-pub const PLAYER_NPC_SENTINEL_TYPE: u8 = 0x7f;
-pub const PLAYER_NPC_DIALOG_ID: u8 = 0;
 pub const LOCATION_MARKER_CLEANUP_TILE: u8 = 16;

@@ -9,16 +9,16 @@ fn location_cell_owner_classifies_authored_markers_before_visual_classes() {
         LocationCellOwner::NpcStartMarker
     );
     assert_eq!(
-        classify_location_cell_owner(TOWN_TILE_SPAWN_ASTERISK),
-        LocationCellOwner::SpawnMarker
+        classify_location_cell_owner(TOWN_TILE_BEACON_LIGHT_SOURCE),
+        LocationCellOwner::BeaconLightSource
     );
     assert_eq!(
-        classify_location_cell_owner(TOWN_TILE_DASH_MARKER),
-        LocationCellOwner::CosmeticDashMarker
+        classify_location_cell_owner(TOWN_TILE_STANDING_CROP),
+        LocationCellOwner::StandingCropTerrain
     );
     assert_eq!(
-        classify_location_cell_owner(TOWN_TILE_PERIOD_MARKER),
-        LocationCellOwner::CosmeticPeriodMarker
+        classify_location_cell_owner(TOWN_TILE_FRUIT_TREE),
+        LocationCellOwner::FruitTreeTerrain
     );
     assert_eq!(
         classify_location_cell_owner(NPC_FLOOR_LINK_TILE_C8),
@@ -33,15 +33,15 @@ fn location_cell_owner_classifies_authored_markers_before_visual_classes() {
         LocationCellOwner::DawnDuskGateMarker
     );
     assert_eq!(
-        classify_location_cell_owner(TOWN_EXIT_THRESHOLD_TILE),
-        LocationCellOwner::TownExit
+        classify_location_cell_owner(TELESCOPE_LOOK_TRIGGER_TILE),
+        LocationCellOwner::TelescopeLook
     );
     assert_eq!(
         classify_location_cell_owner(TOWN_STAIR_TILE_FIRST),
         LocationCellOwner::WalkOnStair
     );
     assert_eq!(
-        classify_location_cell_owner(0x50),
+        classify_location_cell_owner(TOWN_KLIMB_DESCEND_GRATE_TILE),
         LocationCellOwner::ClimbTransition
     );
     assert_eq!(
@@ -107,13 +107,13 @@ fn synthetic_location_dat_audit_reads_all_four_families_without_raw_report_rows(
 
     let mut bytes = vec![0u8; LOCATION_DAT_FILE_LEN];
     bytes[0] = TOWN_TILE_NPC_START_A;
-    bytes[1] = TOWN_TILE_SPAWN_ASTERISK;
+    bytes[1] = TOWN_TILE_BEACON_LIGHT_SOURCE;
     bytes[2] = NPC_FLOOR_LINK_TILE_C8;
     bytes[3] = TOWN_DAWN_DUSK_GATE_MARKER_TILE;
     bytes[TOWN_GRID_SIDE + 3] = TOWN_DAWN_DUSK_GATE_OPEN_TILE;
-    bytes[4] = TOWN_EXIT_THRESHOLD_TILE;
+    bytes[4] = TELESCOPE_LOOK_TRIGGER_TILE;
     bytes[5] = TOWN_STAIR_TILE_FIRST;
-    bytes[6] = 0x50;
+    bytes[6] = TOWN_KLIMB_DESCEND_GRATE_TILE;
     bytes[7] = TOWN_CHAIR_TILE;
     bytes[8] = TOWN_POISON_GAS_LIVE_TILE;
     bytes[9] = 0xAB;
@@ -139,6 +139,7 @@ fn synthetic_location_dat_audit_reads_all_four_families_without_raw_report_rows(
     assert_eq!(report.dawn_dusk_bottom_row_count, 0);
     assert_eq!(report.dawn_dusk_unexpected_pair_count, 0);
     assert!(report.owner_counts[LocationCellOwner::NpcStartMarker.index()] > 0);
+    assert!(report.owner_counts[LocationCellOwner::BeaconLightSource.index()] > 0);
     assert!(report.owner_counts[LocationCellOwner::FloorLinkMarker.index()] > 0);
     assert!(report.owner_counts[LocationCellOwner::DawnDuskGateMarker.index()] > 0);
 
@@ -149,6 +150,8 @@ fn synthetic_location_dat_audit_reads_all_four_families_without_raw_report_rows(
     assert!(text.contains("tile_class_counts:"));
     assert!(text.contains("view_class_counts:"));
     assert!(text.contains("movement_counts"));
+    assert!(text.contains("beacon-light-source="));
+    assert!(!text.contains("spawn-marker"));
     assert!(!text.contains("TOWNE.DAT row"));
     assert!(!text.contains("[["));
 
@@ -201,10 +204,10 @@ fn shipped_location_dat_audit_covers_authored_cell_facets_when_assets_present() 
 
     for owner in [
         LocationCellOwner::NpcStartMarker,
-        LocationCellOwner::SpawnMarker,
+        LocationCellOwner::BeaconLightSource,
         LocationCellOwner::FloorLinkMarker,
         LocationCellOwner::DawnDuskGateMarker,
-        LocationCellOwner::TownExit,
+        LocationCellOwner::TelescopeLook,
         LocationCellOwner::WalkOnStair,
         LocationCellOwner::ClimbTransition,
         LocationCellOwner::Door,

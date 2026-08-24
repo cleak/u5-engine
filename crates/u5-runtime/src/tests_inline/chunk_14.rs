@@ -14,7 +14,6 @@
             aux1: 0,
             aux3: 0,
         });
-
         assert_eq!(
             handle_play_key_input(&mut state, '?', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
@@ -48,7 +47,7 @@
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
         assert_eq!(state.message, "Unlocked!");
         assert!(!state.message.contains("Dungeon movement"));
     }
@@ -98,7 +97,7 @@
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.keys = 2;
         state.visibility_dirty = false;
-        state.party[0].class_byte = 0;
+        state.party[0].climb_stat = 30;
         state.prng_state = 0x1234;
         let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
@@ -108,7 +107,7 @@
         );
 
         assert_eq!(state.prng_state, expected_prng_state);
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
         assert_eq!(state.keys, 2);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
@@ -121,7 +120,7 @@
         grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.keys = 2;
-        state.party[0].class_byte = 30;
+        state.party[0].climb_stat = u8::MAX;
         state.prng_state = 0x1234;
         let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
@@ -138,6 +137,69 @@
     }
 
     #[test]
+    fn dungeon_jimmy_no_keys_commits_one_action_without_a_roll() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.keys = 0;
+        state.prng_state = 0x1234;
+
+        assert_eq!(
+            state
+                .jimmy_facing_with_game_dir_and_member(None, Some(0))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x4b);
+        assert_eq!(state.message, "No keys!");
+    }
+
+    #[test]
+    fn dungeon_jimmy_no_lock_commits_one_action_without_spending_a_key() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.keys = 2;
+        state.prng_state = 0x1234;
+
+        assert_eq!(
+            state
+                .jimmy_facing_with_game_dir_and_member(None, Some(0))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.keys, 2);
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!(state.message, "No lock!");
+    }
+
+    #[test]
+    fn dungeon_jimmy_unavailable_member_commits_one_action_before_tile_probe() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party[0].status = b'D';
+        state.keys = 2;
+        state.prng_state = 0x1234;
+
+        assert_eq!(
+            state
+                .jimmy_facing_with_game_dir_and_member(None, Some(0))
+                .unwrap(),
+            MoveOutcome::PromptDeclined
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.keys, 2);
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x4b);
+        assert_eq!(state.message, party_member_unavailable_message(0));
+    }
+
+    #[test]
     fn jimmy_requires_keys_before_tile_probe() {
         let mut grid = open_grid();
         grid[32 + 2] = 96;
@@ -150,7 +212,7 @@
 
         assert_eq!(state.prng_state, 0x1234);
         assert_eq!(state.message, "No keys!");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.grid[32 + 2], 96);
     }
 
@@ -605,7 +667,7 @@
     }
 
     #[test]
-    fn dungeon_view_decrements_gem_and_reports_22x22_flood_map_without_light() {
+    fn dungeon_view_decrements_gem_and_retains_22x22_diagnostic_map_without_light() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 7, 1)] = 0x20;
         grid[dungeon_cell_index(0, 2, 1)] = 0x40;
@@ -617,12 +679,13 @@
 
         assert_eq!(state.gems, 1);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Dungeon view"));
-        assert!(state.message.contains("22x22 flood map"));
-        assert!(!state.message.contains("out of scope"));
+        assert!(state.message.is_empty());
+        let overlay = state.active_view_overlay.as_ref().unwrap();
+        assert!(overlay.title.contains("Dungeon view"));
+        assert!(overlay.title.contains("22x22 flood map"));
         // `dungeon-mode.md §12.1`: 22 rows of 22 cells, party at
         // grid cell (11,11) — eleven cells left/above, ten right/below.
-        let rows: Vec<_> = state.message.lines().skip(1).collect();
+        let rows: Vec<_> = overlay.text_map.lines().collect();
         assert_eq!(rows.len(), DUNGEON_GEM_VIEW_GRID_SIDE);
         assert!(
             rows.iter()
@@ -642,7 +705,13 @@
 
         assert_eq!(state.view_gem(), MoveOutcome::Observed);
 
-        let rows: Vec<_> = state.message.lines().skip(1).collect();
+        let rows: Vec<_> = state
+            .active_view_overlay
+            .as_ref()
+            .unwrap()
+            .text_map
+            .lines()
+            .collect();
         assert_eq!(rows.len(), DUNGEON_GEM_VIEW_GRID_SIDE);
         let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
         assert_eq!(rows[party_y].chars().nth(party_x), Some('@'));
@@ -664,7 +733,13 @@
 
             assert_eq!(state.view_gem(), MoveOutcome::Observed);
 
-            let rows: Vec<_> = state.message.lines().skip(1).collect();
+            let rows: Vec<_> = state
+                .active_view_overlay
+                .as_ref()
+                .unwrap()
+                .text_map
+                .lines()
+                .collect();
             let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
             assert_eq!(rows[party_y].chars().nth(party_x + 1), Some('+'));
             assert_eq!(rows[party_y].chars().nth(party_x + 2), Some('>'));
@@ -683,7 +758,13 @@
 
             assert_eq!(state.view_gem(), MoveOutcome::Observed);
 
-            let rows: Vec<_> = state.message.lines().skip(1).collect();
+            let rows: Vec<_> = state
+                .active_view_overlay
+                .as_ref()
+                .unwrap()
+                .text_map
+                .lines()
+                .collect();
             let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
             assert_eq!(rows[party_y].chars().nth(party_x + 1), Some('#'));
             assert_eq!(rows[party_y].chars().nth(party_x + 2), Some(' '));
@@ -709,18 +790,20 @@
 
         assert_eq!(state.gems, 0);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Gem view of CASTLE:0"));
-        assert!(state.message.contains("32x32 class map"));
-        let rows: Vec<_> = state.message.lines().skip(1).collect();
+        assert!(state.message.is_empty());
+        let overlay = state.active_view_overlay.as_ref().unwrap();
+        assert!(overlay.title.contains("Gem view of CASTLE:0"));
+        assert!(overlay.title.contains("32x32 class map"));
+        let rows: Vec<_> = overlay.text_map.lines().collect();
         assert_eq!(rows.len(), 32);
         assert!(rows.iter().all(|row| row.chars().count() == 32));
         assert_eq!(rows[16].chars().nth(16), Some('@'));
         assert_eq!(rows[16].chars().nth(17), Some('3'));
-        assert!(state.active_view_overlay.is_some());
         let atlas = TileAtlas {
             depth: TileGraphicsDepth::Ega16,
             pixels: Vec::new(),
             dungeon_billboards: None,
+            dungeon_sprites: None,
         };
         let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
         assert_eq!(viewport.cells_wide, LOCAL_VIEW_OVERLAY_SIDE);
@@ -751,9 +834,11 @@
 
         assert_eq!(state.gems, 1);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Gem view of UNDERWORLD"));
-        assert!(state.message.contains("32x32 class map"));
-        let rows: Vec<_> = state.message.lines().skip(1).collect();
+        assert!(state.message.is_empty());
+        let overlay = state.active_view_overlay.as_ref().unwrap();
+        assert!(overlay.title.contains("Gem view of UNDERWORLD"));
+        assert!(overlay.title.contains("32x32 class map"));
+        let rows: Vec<_> = overlay.text_map.lines().collect();
         assert_eq!(rows.len(), 32);
         assert!(rows.iter().all(|row| row.chars().count() == 32));
         assert_eq!(rows[16].chars().nth(15), Some('3'));
@@ -776,7 +861,7 @@
         );
 
         assert!(state.active_view_overlay.is_none());
-        assert_eq!(state.message, "View closed.");
+        assert!(state.message.is_empty());
         assert_eq!(state.gems, 1);
         assert_eq!(state.turn, 0);
     }
@@ -793,6 +878,7 @@
             depth: TileGraphicsDepth::Ega16,
             pixels: vec![2; 512 * TILE_ATLAS_SIDE * TILE_ATLAS_SIDE],
             dungeon_billboards: None,
+            dungeon_sprites: None,
         };
         let replacement = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
         let base = state
@@ -943,14 +1029,14 @@
         assert_eq!(sample(2, 0, 0), Some(14));
         assert_eq!(sample(2, 0, scale - 1), Some(14));
         assert_eq!(sample(2, 0, scale / 2), Some(0));
-        assert_eq!(sample(3, 0, 2), Some(12));
+        assert_eq!(sample(3, 0, 2), Some(3));
         assert_eq!(sample(3, 1, 1), Some(0));
     }
 
     #[test]
     fn surface_view_overlay_modes_apply_peer_gem_alternate_bank() {
         let mut grid = open_grid();
-        grid[5 * 32 + 6] = 0xDC;
+        grid[5 * 32 + 6] = 0xD4;
         let state = test_state(grid, 5, 5);
 
         let gem = state.render_surface_view_overlay_for_mode(
@@ -966,8 +1052,8 @@
         let px = cell_x * LOCAL_VIEW_CELL_PIXEL_SCALE;
         let py = cell_y * LOCAL_VIEW_CELL_PIXEL_SCALE;
 
-        assert_eq!(x_ray.pixel(px, py), Some(4));
-        assert_eq!(gem.pixel(px, py), Some(14));
+        assert_eq!(x_ray.pixel(px, py), Some(13));
+        assert_eq!(gem.pixel(px, py), Some(11));
     }
 
     fn surface_view_class_gallery_state() -> PlayState {
@@ -989,7 +1075,7 @@
         (0x0C, 0x07),
         (0x0B, 0x08),
         (0x06, 0x09),
-        (0x60, 0x0A),
+        (0x03, 0x0A),
         (0xD4, 0x0B),
         (0x01, 0x0C),
         (0x04, 0x0D),
@@ -1024,7 +1110,7 @@
                 });
                 assert_eq!(
                     has_colored_pixel,
-                    !matches!(class, 0x00 | 0x0C),
+                    !matches!(class, 0x00),
                     "class {class:#04x} mode {mode:?}"
                 );
             }
@@ -1059,8 +1145,8 @@
         assert_eq!(sample(&peer, 11, 0, 0), Some(11));
         assert_eq!(sample(&x_ray, 11, 0, 0), Some(13));
 
-        assert_eq!(sample(&gem, 15, 0, 0), Some(14));
-        assert_eq!(sample(&peer, 15, 0, 0), Some(14));
+        assert_eq!(sample(&gem, 15, 0, 0), Some(4));
+        assert_eq!(sample(&peer, 15, 0, 0), Some(4));
         assert_eq!(sample(&x_ray, 15, 0, 0), Some(4));
     }
 
@@ -1122,56 +1208,94 @@
             [[10, 10, 10, 10], [0, 0, 0, 0], [10, 10, 10, 10], [10, 0, 0, 0]]
         );
         assert_eq!(
-            surface_view_audit_mask(0x0A, 0x60, gem),
+            surface_view_audit_mask(0x0A, 0x03, gem),
             [[0, 3, 0, 0], [0, 0, 0, 3], [0, 3, 0, 0], [0, 0, 0, 3]]
         );
         assert_eq!(
             surface_view_audit_mask(0x0B, 0xD4, gem),
             [[11, 0, 0, 0], [0, 0, 0, 0], [0, 0, 11, 0], [0, 0, 0, 0]]
         );
-        assert_eq!(surface_view_audit_mask(0x0C, 0x01, gem), [[0; 4]; 4]);
+        assert_eq!(
+            surface_view_audit_mask(0x0C, 0x01, gem),
+            [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 11, 0], [0, 0, 0, 0]]
+        );
         assert_eq!(
             surface_view_audit_mask(0x0D, 0x04, gem),
-            [[0, 2, 0, 0], [0, 0, 0, 2], [12, 0, 0, 0], [0, 0, 12, 0]]
+            [[0, 2, 0, 0], [0, 0, 0, 2], [3, 0, 0, 0], [0, 0, 3, 0]]
         );
         assert_eq!(
             surface_view_audit_mask(0x0E, 0xE0, gem),
             [[0, 9, 9, 0], [0, 9, 9, 0], [0, 9, 9, 0], [0, 9, 9, 0]]
         );
-        assert_eq!(surface_view_audit_mask(0x0F, 0xD8, gem), [[14, 14, 14, 14]; 4]);
+        assert_eq!(surface_view_audit_mask(0x0F, 0xD8, gem), [[4, 4, 4, 4]; 4]);
         assert_eq!(
             surface_view_audit_mask(0x10, 0x20, gem),
-            [[0, 0, 0, 0], [0, 3, 3, 0], [0, 3, 3, 0], [0, 0, 0, 0]]
+            [[0, 1, 1, 0], [0, 3, 3, 7], [0, 3, 3, 0], [0, 1, 1, 7]]
         );
     }
 
     #[test]
-    fn surface_view_overlay_audit_covers_fence_bits_and_direct_wall_bank_handler() {
+    fn surface_view_water_corners_use_each_river_mask_bit_and_modal_bank() {
+        let gem = ViewOverlayMode::GemView;
+        let x_ray = ViewOverlayMode::XRaySpell;
+
+        // `view.md §4`: non-river class-A members take the modal source at
+        // every corner. Gem/Peer selects the blue bank; X-Ray selects normal.
+        assert_eq!(
+            surface_view_audit_mask(0x0A, 0x03, gem),
+            [[0, 3, 0, 0], [0, 0, 0, 3], [0, 3, 0, 0], [0, 0, 0, 3]]
+        );
+        assert_eq!(
+            surface_view_audit_mask(0x0A, 0x03, x_ray),
+            [[0, 11, 0, 0], [0, 0, 0, 11], [0, 11, 0, 0], [0, 0, 0, 11]]
+        );
+
+        // River `0x60` has no shoreline bits: all four corners use the fixed
+        // secondary source. `0x69` selects modal corners for bits 0 and 3.
+        assert_eq!(
+            surface_view_audit_mask(0x0A, 0x60, gem),
+            [[0, 2, 0, 0], [0, 0, 0, 2], [0, 2, 0, 0], [0, 0, 0, 2]]
+        );
+        assert_eq!(
+            surface_view_audit_mask(0x0A, 0x69, gem),
+            [[0, 3, 0, 0], [0, 0, 0, 2], [0, 2, 0, 0], [0, 0, 0, 3]]
+        );
+    }
+
+    #[test]
+    fn production_surface_view_classifier_is_the_canonical_public_table() {
+        for tile in u8::MIN..=u8::MAX {
+            assert_eq!(surface_view_class(tile), tile_view_class(tile), "tile {tile:#04x}");
+        }
+    }
+
+    #[test]
+    fn surface_view_overlay_audit_covers_road_connections_notches_and_direct_frame_handler() {
         let gem = ViewOverlayMode::GemView;
 
         assert_eq!(
             surface_view_audit_mask(0x10, 0x21, gem),
-            [[0, 1, 1, 0], [0, 3, 3, 0], [0, 3, 3, 0], [0, 0, 0, 0]]
+            [[0, 7, 0, 0], [1, 3, 3, 1], [1, 3, 3, 1], [0, 0, 0, 7]]
         );
         assert_eq!(
             surface_view_audit_mask(0x10, 0x22, gem),
-            [[0, 0, 0, 0], [0, 3, 3, 1], [0, 1, 3, 1], [0, 0, 0, 0]]
+            [[0, 1, 1, 0], [0, 3, 3, 1], [0, 0, 3, 1], [0, 0, 0, 7]]
         );
         assert_eq!(
             surface_view_audit_mask(0x10, 0x23, gem),
-            [[0, 1, 1, 0], [0, 1, 3, 1], [0, 3, 3, 1], [0, 0, 0, 0]]
+            [[0, 7, 0, 0], [0, 0, 3, 1], [0, 3, 3, 1], [0, 1, 1, 7]]
         );
         assert_eq!(
             surface_view_audit_mask(0x10, 0x24, gem),
-            [[0, 0, 0, 0], [0, 3, 1, 0], [0, 3, 3, 0], [0, 1, 1, 0]]
+            [[0, 7, 0, 0], [1, 3, 0, 7], [1, 3, 3, 0], [0, 1, 1, 7]]
         );
         assert_eq!(
             surface_view_audit_mask(0x10, 0x25, gem),
-            [[0, 1, 1, 0], [0, 3, 3, 0], [0, 3, 1, 0], [0, 1, 1, 0]]
+            [[0, 1, 1, 0], [1, 3, 3, 7], [1, 3, 0, 0], [0, 0, 0, 7]]
         );
         assert_eq!(
             surface_view_audit_mask(0x10, 0x26, gem),
-            [[0, 0, 0, 0], [0, 3, 3, 1], [0, 3, 3, 1], [0, 1, 1, 0]]
+            [[0, 1, 1, 0], [1, 3, 3, 1], [1, 3, 3, 1], [0, 1, 1, 7]]
         );
         assert_eq!(
             surface_view_audit_mask(0x5A, 0x5A, gem),
@@ -1766,8 +1890,6 @@
         assert_eq!(carve.iter().filter(|lit| **lit).count(), 81);
     }
 
-    /// INTERIM — spec gap `cleak/u5-spec#80`.
-    ///
     /// A directory with game data but deliberately no
     /// `location_floor_pages.tsv`, so the published
     /// `formats/location-dat.md` §4.1 table is what answers.
@@ -2232,6 +2354,27 @@
         }
     }
 
+    /// `visibility.md §12.4`: the source mask persists between refresh
+    /// triggers. A map edit alone therefore does not change the influence
+    /// seen by the visibility producer; the Moonstone refresh does.
+    #[test]
+    fn local_light_mask_persists_until_the_published_refresh_trigger() {
+        let mut grid = open_grid();
+        grid[8 * TOWN_GRID_SIDE + 8] = 0xDC;
+        let mut state = test_state(grid, 8, 3);
+
+        assert!(state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
+
+        state.grid[8 * TOWN_GRID_SIDE + 8] = 16;
+        assert!(
+            state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0),
+            "ordinary map mutation must not rebuild the persistent mask"
+        );
+
+        state.refresh_natural_moongates_for_current_counter();
+        assert!(!state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
+    }
+
     #[test]
     fn active_object_local_light_sources_contribute_to_surface_visibility() {
         let mut state = test_state(open_grid(), 10, 10);
@@ -2246,6 +2389,7 @@
             aux1: 0,
             aux3: 0,
         });
+        state.rebuild_surface_local_light_mask();
 
         assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 18, 10, 1));
         assert_eq!(
@@ -2273,6 +2417,7 @@
             aux1: 0,
             aux3: 0,
         });
+        state.rebuild_surface_local_light_mask();
 
         assert!(state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
     }
@@ -2446,6 +2591,50 @@
     }
 
     #[test]
+    fn gameplay_window_configuration_matches_the_published_three_descriptors() {
+        let mut system = TextWindowSystem::new();
+
+        configure_play_text_windows(&mut system);
+
+        assert_eq!(
+            system.window(FULL_SCREEN_TEXT_WINDOW_INDEX).unwrap(),
+            TextWindowDescriptor::default()
+        );
+        assert_eq!(
+            system.window(STATS_PANEL_TEXT_WINDOW_INDEX).unwrap(),
+            TextWindowDescriptor {
+                top_left_x: 24,
+                top_left_y: 1,
+                bottom_right_x: 39,
+                bottom_right_y: 9,
+                cursor_x: 0,
+                cursor_y: 0,
+                color: text_window_default_color_byte(),
+                flags: 0,
+            }
+        );
+        assert_eq!(
+            system.window(MESSAGE_TEXT_WINDOW_INDEX).unwrap(),
+            TextWindowDescriptor {
+                top_left_x: 24,
+                top_left_y: 11,
+                bottom_right_x: 39,
+                bottom_right_y: 23,
+                cursor_x: 0,
+                cursor_y: 12,
+                color: text_window_default_color_byte(),
+                flags: 0,
+            }
+        );
+        assert_eq!(
+            system.window(UNUSED_TEXT_WINDOW_INDEX).unwrap(),
+            TextWindowDescriptor::default(),
+            "window 3 keeps its boot-time full-screen descriptor"
+        );
+        assert_eq!(system.active_window_index(), MESSAGE_TEXT_WINDOW_INDEX);
+    }
+
+    #[test]
     fn play_text_window_system_paints_active_shop_modal_summary() {
         let mut state = test_state(open_grid(), 1, 1);
         state.message = "Mace costs 42 gold.".to_string();
@@ -2566,6 +2755,133 @@
         assert!(register.contains("Pick up"), "{register}");
         assert!(register.contains("Companion"), "{register}");
         assert!(register.contains("1 IOLO"), "{register}");
+        assert_eq!(
+            active_shop_side_panel_border_rows(&state),
+            Some((
+                INN_PICKUP_REGISTER_BORDER_FIRST_ROW,
+                INN_PICKUP_REGISTER_BORDER_LAST_ROW
+            ))
+        );
+    }
+
+    #[test]
+    fn arms_sell_browser_clears_and_widens_window_one_then_restores_window_two() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.equipment_stock[0] = 2;
+        state.equipment_stock[5] = 1;
+        let browser = crate::shop_runtime::ArmsSellBrowser::new(&state.equipment_stock).unwrap();
+        state.active_shop = Some(crate::shop_session::ActiveShopSession::ArmsStocked(
+            crate::shop_runtime::ArmsShopState::SellPickItem(browser),
+            ArmsShop::IolosBows.stock_table(),
+        ));
+
+        let mut system = TextWindowSystem::new();
+        configure_play_text_windows(&mut system);
+        paint_stats_panel_text_window(&mut system, &state, state.active_player);
+        assert!(
+            system.cell(ARMS_SELL_BROWSER_LEFT + 1, ARMS_SELL_BROWSER_TOP).is_some(),
+            "the standing stats panel must occupy the region before the browser clears it"
+        );
+        let before = system
+            .window(ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX)
+            .unwrap();
+
+        paint_arms_sell_browser_text_window(&mut system, &state);
+
+        assert_eq!(system.active_window_index(), TALK_SHOP_TEXT_WINDOW_INDEX);
+        let browser = system
+            .window(ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX)
+            .unwrap();
+        assert_eq!(browser.top_left_x, ARMS_SELL_BROWSER_LEFT);
+        assert_eq!(browser.top_left_y, ARMS_SELL_BROWSER_TOP);
+        assert_eq!(browser.bottom_right_x, ARMS_SELL_BROWSER_FRAME_RIGHT);
+        assert_eq!(browser.bottom_right_y, ARMS_SELL_BROWSER_FRAME_BOTTOM);
+        assert_ne!((browser.cursor_x, browser.cursor_y), (before.cursor_x, before.cursor_y));
+        assert_eq!((browser.cursor_x, browser.cursor_y), (14, 4));
+        assert_eq!(browser.color, text_window_default_color_byte());
+        assert_eq!(browser.flags, 0);
+        assert_eq!(
+            system.region_rows(25, 2, 37, 5, b' '),
+            [
+                " 2-Leath Helm".to_string(),
+                " 1-Lg. Shield".to_string(),
+                "             ".to_string(),
+                "             ".to_string(),
+            ]
+        );
+        for column in 25..=37 {
+            assert!(system.cell(column, 2).unwrap().inverse);
+            assert!(!system.cell(column, 3).unwrap().inverse);
+        }
+        assert_eq!(
+            active_shop_side_panel_border_rows(&state),
+            Some((
+                ARMS_SELL_BROWSER_BORDER_FIRST_ROW,
+                ARMS_SELL_BROWSER_BORDER_LAST_ROW
+            ))
+        );
+    }
+
+    #[test]
+    fn shop_side_panel_border_rows_are_absent_outside_the_two_panel_states() {
+        let mut state = test_state(open_grid(), 1, 1);
+        assert_eq!(active_shop_side_panel_border_rows(&state), None);
+        state.active_shop = Some(crate::shop_session::ActiveShopSession::ArmsStocked(
+            crate::shop_runtime::ArmsShopState::Greeting,
+            ArmsShop::IolosBows.stock_table(),
+        ));
+        assert_eq!(active_shop_side_panel_border_rows(&state), None);
+    }
+
+    #[test]
+    fn arms_sell_browser_rows_use_fixed_short_labels_and_count_255_edge() {
+        assert_eq!(arms_sell_browser_row(0, 1), " 1-Leath Helm");
+        assert_eq!(arms_sell_browser_row(46, 99), "99-Sp. Collar");
+        assert_eq!(arms_sell_browser_row(25, u8::MAX), "Morn. Star   ");
+        assert!(EQUIPMENT_SHORT_LABELS.iter().all(|label| label.len() <= 10));
+    }
+
+    #[test]
+    fn arms_sell_page_badge_uses_published_three_cell_fixed_font_codes() {
+        use crate::shop_runtime::ArmsSellPageIndicator;
+
+        assert_eq!(
+            arms_sell_page_indicator_bytes(ArmsSellPageIndicator::None),
+            None
+        );
+        assert_eq!(
+            arms_sell_page_indicator_bytes(ArmsSellPageIndicator::Down),
+            Some([0x02, 0x19, 0x01])
+        );
+        assert_eq!(
+            arms_sell_page_indicator_bytes(ArmsSellPageIndicator::Up),
+            Some([0x02, 0x18, 0x01])
+        );
+        assert_eq!(
+            arms_sell_page_indicator_bytes(ArmsSellPageIndicator::Both),
+            Some([0x02, 0x12, 0x01])
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        for item in 0..5 {
+            state.equipment_stock[item] = 1;
+        }
+        let browser = crate::shop_runtime::ArmsSellBrowser::new(&state.equipment_stock).unwrap();
+        state.active_shop = Some(crate::shop_session::ActiveShopSession::ArmsStocked(
+            crate::shop_runtime::ArmsShopState::SellPickItem(browser),
+            ArmsShop::IolosBows.stock_table(),
+        ));
+        let mut system = TextWindowSystem::new();
+        configure_play_text_windows(&mut system);
+        paint_arms_sell_browser_text_window(&mut system, &state);
+        let absolute_column = ARMS_SELL_BROWSER_LEFT + ARMS_SELL_BROWSER_PAGE_BADGE_LOCAL_COLUMN;
+        let absolute_row = ARMS_SELL_BROWSER_TOP + ARMS_SELL_BROWSER_PAGE_BADGE_LOCAL_ROW;
+        assert!([0u8, 1, 2]
+            .into_iter()
+            .all(|offset| system.cell(absolute_column + offset, absolute_row).is_none()));
+        // The text surface deliberately leaves these cells blank: the
+        // gameplay-chrome pass paints the exact sequence so the two caps
+        // retain their shared two-colour sprite treatment.
     }
 
     #[test]
@@ -2593,7 +2909,7 @@
                 .byte,
             4
         );
-        assert_eq!(system.active_cursor(), (4, 0));
+        assert_eq!(system.active_cursor(), (4, 12));
 
         paint_prompt_text_window_with_cursor(&mut system, "job", None);
 
@@ -2602,7 +2918,7 @@
                 .cell(MESSAGE_WINDOW_LEFT + 4, MESSAGE_WINDOW_BOTTOM)
                 .is_none()
         );
-        assert_eq!(system.active_cursor(), (4, 0));
+        assert_eq!(system.active_cursor(), (4, 12));
     }
 
     #[test]
@@ -2922,7 +3238,7 @@
     }
 
     #[test]
-    fn top_down_viewport_samples_world_live_chunk_buffer() {
+    fn top_down_viewport_samples_already_substituted_world_live_chunk_buffer() {
         let mut grid = open_world_grid();
         grid[world_cell_index(9, 8)] = 0x16;
         let mut state = britannia_state(grid, 8, 8);
@@ -2933,7 +3249,7 @@
 
         assert_eq!(
             viewport.pixel(2 * 16, 16),
-            Some(LIVE_CHUNK_SUBSTITUTION_TARGET_DF % atlas.depth.pixel_limit())
+            Some(0x16 % atlas.depth.pixel_limit())
         );
         assert_eq!(state.grid[world_cell_index(9, 8)], 0x16);
     }
@@ -2993,40 +3309,73 @@
     }
 
     #[test]
-    fn white_potion_sweep_renders_for_counted_frames_then_clears() {
-        let mut state = test_state(open_grid(), 1, 1);
+    fn white_potion_sweep_freezes_visibility_without_drawing_an_overlay() {
+        let mut state = test_state(open_grid(), 10, 10);
         state.visibility_dirty = false;
-        state.white_potion_sweep = Some(WhitePotionSweep {
-            frames_remaining: 2,
-            radius: 0,
-            center_x: 1,
-            center_y: 1,
-        });
+        state.start_white_potion_sweep();
+        let initial = state.white_potion_sweep.unwrap();
+        assert_eq!(
+            initial.visible_cells.iter().filter(|visible| **visible).count(),
+            101,
+            "threshold 32 admits exactly 101 cells before blockers/local light"
+        );
+        let animation_before_idle_tick = state.animation;
+        state.advance_visual_tick();
+        assert_eq!(
+            state.animation, animation_before_idle_tick,
+            "the ordinary visual pump must not double-advance a White repaint"
+        );
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
         let first = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
 
-        assert_eq!(first.pixel(24, 24), Some(15));
+        assert_ne!(first.pixel(24, 24), Some(15));
         assert_eq!(
             state.white_potion_sweep.map(|sweep| sweep.frames_remaining),
-            Some(1)
+            Some(POTION_WHITE_SWEEP_FRAMES - 1)
         );
-        assert!(state.visibility_dirty);
+        assert!(!state.visibility_dirty);
 
-        let second = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
+        // Rendering at the normal 11-by-11 radius uses the frozen field.
+        // Distance squared 32 is included; a corner at 50 is excluded.
+        let full = state
+            .render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            full.pixel(5 * 16 + 8, 5 * 16 + 8),
+            Some((PLAYER_SPRITE_TILE as u8) % 16)
+        );
+        assert_eq!(full.pixel(8, 8), Some(0));
 
-        assert_eq!(second.pixel(24, 24), Some(15));
-        assert_eq!(state.white_potion_sweep, None);
-        assert!(state.visibility_dirty);
+        // Ambient changes cannot recompute the field during the blocking loop.
+        state.ambient_light = 0;
+        let frozen = state.white_potion_sweep.unwrap().visible_cells;
+        while state.white_potion_sweep.is_some() {
+            state
+                .render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas)
+                .unwrap()
+                .unwrap();
+            if let Some(sweep) = state.white_potion_sweep {
+                assert_eq!(sweep.visible_cells, frozen);
+            }
+        }
+        assert!(
+            !state.visibility_dirty,
+            "White does not itself dirty the visibility field"
+        );
 
-        let third = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
+        let idle = state
+            .render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas)
+            .unwrap()
+            .unwrap();
 
-        assert_ne!(third.pixel(24, 24), Some(15));
+        assert_eq!(idle.pixel(9 * 16 + 8, 9 * 16 + 8), Some(0));
         assert!(!state.visibility_dirty);
     }
 
     #[test]
-    fn combat_potion_presentation_renders_sleep_and_one_frame_poof_marks() {
+    fn combat_potions_rewrite_ordinary_object_tiles_without_overlay_marks() {
         let mut combat = test_state(open_grid(), 1, 1);
         combat.combat_active = true;
         combat.active_objects.push(ActiveObject {
@@ -3048,43 +3397,45 @@
         ]);
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
-        combat.combat_potion_presentation = Some(CombatPotionPresentation {
-            kind: CombatPotionPresentationKind::Sleep,
-            actor_slot: 0,
-            active_object_slot: 1,
-            frames_remaining: COMBAT_POTION_SLEEP_PRESENTATION_FRAMES,
-        });
+        assert!(combat.apply_combat_party_sleep_presentation(0));
         let sleep = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
 
-        assert_eq!(sleep.pixel(84, 84), Some(11));
-        assert_eq!(
-            combat.combat_potion_presentation
-                .map(|presentation| presentation.kind),
-            Some(CombatPotionPresentationKind::Sleep)
-        );
+        assert_eq!(sleep.pixel(84, 84), Some(COMBAT_POTION_SLEEP_DISPLAY_TILE % 16));
+        assert_eq!(sleep.pixel(88, 88), Some(COMBAT_POTION_SLEEP_DISPLAY_TILE % 16));
+        assert_eq!(combat.active_objects[1].type_byte, 0x81);
+        assert_eq!(combat.active_objects[1].tile, COMBAT_POTION_SLEEP_DISPLAY_TILE);
         assert!(!combat.visibility_dirty);
 
         combat.visibility_dirty = false;
-        combat.combat_potion_presentation = Some(CombatPotionPresentation {
-            kind: CombatPotionPresentationKind::Poof,
-            actor_slot: 0,
-            active_object_slot: 1,
-            frames_remaining: COMBAT_POTION_POOF_PRESENTATION_FRAMES,
-        });
+        assert!(combat.apply_combat_potion_poof_presentation(0));
         let poof = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
 
-        assert_eq!(poof.pixel(88, 88), Some(13));
-        assert_eq!(combat.combat_potion_presentation, None);
-        assert!(combat.visibility_dirty);
-
-        let cleared = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
-
-        assert_ne!(cleared.pixel(88, 88), Some(13));
+        assert_eq!(combat.combat_render_sprite_at(5, 5), Some(COMBAT_POTION_POOF_TILE as usize));
+        assert_eq!(combat.active_objects[1].type_byte, COMBAT_POTION_POOF_TILE);
+        assert_eq!(combat.active_objects[1].tile, COMBAT_POTION_POOF_TILE);
+        assert_eq!(
+            poof.pixel(88, 88),
+            Some(COMBAT_POTION_POOF_TILE % 16)
+        );
+        let retained = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        assert_eq!(retained.pixel(88, 88), poof.pixel(88, 88));
         assert!(!combat.visibility_dirty);
     }
 
     #[test]
     fn combat_viewport_renders_cursor_and_secondary_marker_hooks() {
+        fn horizontal(pixels: &mut [u8; 256], row: usize, first: usize, last: usize, colour: u8) {
+            for x in first..=last {
+                pixels[row * 16 + x] = colour;
+            }
+        }
+
+        fn vertical(pixels: &mut [u8; 256], column: usize, first: usize, last: usize, colour: u8) {
+            for y in first..=last {
+                pixels[y * 16 + column] = colour;
+            }
+        }
+
         let mut combat = test_state(open_grid(), 1, 1);
         combat.combat_active = true;
         combat.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
@@ -3105,15 +3456,74 @@
 
         let marked = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
 
-        assert_eq!(marked.pixel(56, 72), Some(11));
-        assert_eq!(marked.pixel(80, 96), Some(14));
+        assert_eq!(marked.pixel(54, 70), Some(15));
+        assert_eq!(marked.pixel(53, 69), Some(0));
+        assert_eq!(marked.pixel(80, 96), Some(15));
+
+        let mut expected_marker = [5; 256];
+        horizontal(&mut expected_marker, 6, 2, 6, 15);
+        vertical(&mut expected_marker, 6, 2, 6, 15);
+        horizontal(&mut expected_marker, 5, 2, 5, 0);
+        vertical(&mut expected_marker, 5, 2, 5, 0);
+        horizontal(&mut expected_marker, 7, 2, 6, 0);
+        vertical(&mut expected_marker, 7, 2, 6, 0);
+        horizontal(&mut expected_marker, 5, 10, 13, 0);
+        vertical(&mut expected_marker, 10, 2, 5, 0);
+        horizontal(&mut expected_marker, 7, 9, 13, 0);
+        vertical(&mut expected_marker, 8, 2, 6, 0);
+        horizontal(&mut expected_marker, 9, 2, 6, 15);
+        vertical(&mut expected_marker, 6, 9, 13, 15);
+        horizontal(&mut expected_marker, 10, 2, 5, 0);
+        vertical(&mut expected_marker, 5, 10, 13, 0);
+        horizontal(&mut expected_marker, 8, 2, 6, 0);
+        vertical(&mut expected_marker, 7, 9, 13, 0);
+        horizontal(&mut expected_marker, 10, 10, 13, 0);
+        vertical(&mut expected_marker, 10, 10, 13, 0);
+        horizontal(&mut expected_marker, 8, 9, 13, 0);
+        vertical(&mut expected_marker, 8, 9, 13, 0);
+        for y in 0..16 {
+            for x in 0..16 {
+                assert_eq!(
+                    marked.pixel(3 * 16 + x, 4 * 16 + y),
+                    Some(expected_marker[y * 16 + x]),
+                    "secondary marker relative pixel ({x},{y})"
+                );
+            }
+        }
+
+        for y in 0..16 {
+            for x in 0..16 {
+                let expected = if x < 2 || x >= 14 || y < 2 || y >= 14 {
+                    15
+                } else {
+                    5
+                };
+                assert_eq!(
+                    marked.pixel(5 * 16 + x, 6 * 16 + y),
+                    Some(expected),
+                    "cursor relative pixel ({x},{y})"
+                );
+            }
+        }
+
+        combat.combat_secondary_marker = Some((5, 6));
+        let overlapped = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        assert_eq!(overlapped.pixel(5 * 16 + 5, 6 * 16 + 5), Some(0));
+        assert_eq!(overlapped.pixel(5 * 16, 6 * 16), Some(15));
 
         combat.combat_cursor_blink = false;
-        combat.combat_secondary_marker = Some((99, 99));
+        combat.combat_secondary_marker = Some((3, 4));
         let cleared = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
 
-        assert_ne!(cleared.pixel(56, 72), Some(11));
-        assert_ne!(cleared.pixel(80, 96), Some(14));
+        assert_ne!(cleared.pixel(54, 70), Some(15));
+        assert_ne!(cleared.pixel(53, 69), Some(0));
+        assert_ne!(cleared.pixel(80, 96), Some(15));
+
+        combat.combat_cursor_blink = true;
+        combat.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
+        let non_player = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        assert_ne!(non_player.pixel(54, 70), Some(15));
+        assert_ne!(non_player.pixel(80, 96), Some(15));
     }
 
     #[test]

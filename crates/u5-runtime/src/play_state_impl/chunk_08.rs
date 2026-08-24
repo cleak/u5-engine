@@ -160,7 +160,7 @@ impl PlayState {
     pub fn rest_with_watch(
         &mut self,
         request: InlineRestRequest,
-        game_dir: Option<&Path>,
+        game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         let Some(hours) = request.hours else {
             return Ok(self.start_rest_prompt());
@@ -169,7 +169,7 @@ impl PlayState {
             self.message = "Rest hours must be in 1..9.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        let watch_note = self.rest_watch_note(request.watcher);
+        let camp_messages = load_camp_result_messages(game_dir)?;
         let rest_entry_statuses = self
             .party
             .iter()
@@ -181,73 +181,83 @@ impl PlayState {
             .filter(|member| member.status == b'S')
             .map(|member| member.slot)
             .collect::<Vec<_>>();
-        let mut recovered_hp = 0;
-        let mut recovered_mana = 0;
         let mut world_damage_ticks = 0;
         let mut last_world_damage = None;
-        let mut world_status_ticks = 0;
-        let mut last_world_status = None;
         let mut interrupted = false;
         let mut ambush_monster = None;
-        let mut rest_ticks = 0u64;
+        let wilderness_camp = matches!(self.area, Area::World { .. });
+        let ticks_per_hour = if wilderness_camp {
+            WILDERNESS_CAMP_TICKS_PER_HOUR
+        } else {
+            REST_WATCH_TICKS_PER_HOUR
+        };
+        let minutes_per_tick = if wilderness_camp {
+            WILDERNESS_CAMP_MINUTES_PER_TICK
+        } else {
+            REST_WATCH_MINUTES_PER_TICK
+        };
         'resting: for _ in 0..hours {
-            for _ in 0..REST_WATCH_TICKS_PER_HOUR {
-                self.advance_turn_with_minutes(REST_WATCH_MINUTES_PER_TICK);
-                rest_ticks += 1;
-                let (hp, mana) = self.apply_rest_with_watch_recovery_tick();
-                recovered_hp += hp;
-                recovered_mana += mana;
-                if let (Some(game_dir), Area::World { plane }) = (game_dir, self.area) {
+            for _ in 0..ticks_per_hour {
+                let hour_before_tick = self.clock.hour;
+                if wilderness_camp {
+                    self.advance_wilderness_camp_tick(minutes_per_tick);
+                } else {
+                    self.advance_turn_with_minutes(minutes_per_tick);
+                }
+                let _ = self.apply_rest_with_watch_recovery_tick();
+                if let Area::World { plane } = self.area {
                     if let Some(report) =
                         self.apply_world_underfoot_damage(Some(game_dir), plane)?
                     {
                         world_damage_ticks += 1;
                         last_world_damage = Some(report);
                     }
-                    if let Some(report) = self.apply_world_underfoot_status_tick(plane) {
-                        world_status_ticks += 1;
-                        last_world_status = Some(report);
-                    }
                 }
-                if self.dangerous_rest_interrupted() {
+                let interruption_probe_due = match self.area {
+                    Area::World { .. } => self.clock.hour != hour_before_tick,
+                    Area::Dungeon { .. } => true,
+                    Area::Town { .. } => false,
+                };
+                let ambush_row =
+                    if matches!(self.area, Area::World { .. }) && interruption_probe_due {
+                        self.wilderness_camp_hour_change_ambush_row(host_clock_prng_seed_now())
+                    } else if matches!(self.area, Area::Dungeon { .. })
+                        && self.dangerous_rest_interrupted()
+                    {
+                        Some(self.sleep_ambush_monster_row())
+                    } else {
+                        None
+                    };
+                if let Some(row) = ambush_row {
                     interrupted = true;
-                    ambush_monster = sleep_ambush_monster(self.sleep_ambush_monster_row());
+                    ambush_monster = sleep_ambush_monster(row);
                     break 'resting;
                 }
             }
         }
-        let woke = if interrupted {
+        if interrupted {
             self.restore_sleep_ambush_party_statuses(&rest_entry_statuses)
         } else {
             self.wake_initial_rest_sleepers(&asleep_at_start)
         };
+        // `rest-and-camp.md §5` (answer to cleak/u5-spec#95): the
+        // cooldown gate is read only after the camp's time has elapsed,
+        // so rollovers during this attempt can make recovery eligible.
+        let long_camp = hours >= COMPLETED_LONG_CAMP_MIN_HOURS;
+        let cooldown_blocked =
+            !interrupted && long_camp && camp_cooldown_blocks_recovery(self.camp_cooldown);
         if !interrupted {
-            let (hp, mana) = self.apply_completed_long_camp_recovery(
+            let _ = self.apply_completed_long_camp_recovery(
                 hours,
                 request.watcher,
                 &rest_entry_statuses,
             );
-            recovered_hp += hp;
-            recovered_mana += mana;
         }
-        let completed_hours = rest_ticks / u64::from(REST_WATCH_TICKS_PER_HOUR);
-        let completed_minutes = (rest_ticks % u64::from(REST_WATCH_TICKS_PER_HOUR))
-            * u64::from(REST_WATCH_MINUTES_PER_TICK);
-        let duration = if completed_minutes == 0 {
-            format!(
-                "{completed_hours} hour{}",
-                if completed_hours == 1 { "" } else { "s" }
-            )
+        self.message = if cooldown_blocked {
+            camp_messages.no_effect
         } else {
-            format!(
-                "{completed_hours} hour{} {completed_minutes} minute{}",
-                if completed_hours == 1 { "" } else { "s" },
-                if completed_minutes == 1 { "" } else { "s" }
-            )
+            camp_messages.success
         };
-        self.message = format!(
-            "Party rested {duration}; {watch_note}; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s).",
-        );
         if let Some(monster) = ambush_monster {
             let z = match self.area {
                 Area::World { plane } => plane.save_floor(),
@@ -262,17 +272,24 @@ impl PlayState {
                 " Underfoot world damage triggered {world_damage_ticks} tick(s); last {report}."
             ));
         }
-        if let Some(report) = last_world_status {
-            self.message.push_str(&format!(
-                " Underfoot world status triggered {world_status_ticks} tick(s); last {report}."
-            ));
-        }
         self.append_pending_hourly_status_message();
         if !interrupted
+            && !cooldown_blocked
+            && long_camp
             && matches!(self.area, Area::World { .. })
             && lord_british_camp_event_triggered(self.lord_british_camp_event_roll())
         {
-            let event_message = self.resolve_lord_british_camp_event(game_dir)?;
+            // `rest-and-camp.md §5`: this is the same single draw an
+            // earlier spec revision misidentified as a marker-stamp
+            // branch. Nothing is stamped. The successful draw copies
+            // the current month into the persisted, write-only cookie.
+            self.camp_month_cookie = self.clock.month;
+            // `rest-and-camp.md §5` (cleak/u5-spec#96): the live caller
+            // condition is the dungeon-rest selector. The Area gate
+            // above implements its suppression before the PRNG draw.
+            // The second condition is reserved and no shipped public
+            // caller sets it; town-bed rest uses a separate handler.
+            let event_message = self.resolve_lord_british_camp_event(Some(game_dir))?;
             self.message.push(' ');
             self.message.push_str(&event_message);
         }
@@ -317,24 +334,34 @@ impl PlayState {
         let mut level_changes = 0;
         for index in 0..self.party.len() {
             if !self.party[index].living() {
+                // `rest-and-camp.md §7`: dead members skip healing,
+                // narration, level recomputation and rewards, but still
+                // reach the class-keyed MP refresh branch.
+                self.refresh_party_member_class_mana(index);
                 continue;
             }
+            // Every living member is silently full-healed and cured
+            // before the level check, even when the stored level already
+            // agrees with experience and no reward follows.
+            self.party[index].hp = self.party[index].max_hp;
+            self.party[index].status = b'G';
             let experience = self.party_experience[index];
             let level = level_for_experience(u32::from(experience));
-            if self.party[index].level == level {
-                continue;
+            if self.party[index].level != level {
+                self.party[index].level = level;
+                let hp = lord_british_camp_event_hp_for_level(level);
+                self.party[index].hp = hp;
+                self.party[index].max_hp = hp;
+                let reward = self.apply_lord_british_camp_stat_reward(index);
+                level_changes += 1;
+                notes.push(format!(
+                    "P{} reached level {level} from {experience} XP and received {reward}.",
+                    index + 1
+                ));
             }
-            self.party[index].level = level;
-            let hp = lord_british_camp_event_hp_for_level(level);
-            self.party[index].hp = hp;
-            self.party[index].max_hp = hp;
-            let reward = self.apply_lord_british_camp_stat_reward(index);
+            // The class refresh belongs after the level/reward branch,
+            // so an Intelligence reward affects this write immediately.
             self.refresh_party_member_class_mana(index);
-            level_changes += 1;
-            notes.push(format!(
-                "P{} reached level {level} from {experience} XP and received {reward}.",
-                index + 1
-            ));
         }
         if level_changes == 0 {
             notes.push("No living party member was ready for a new level.".to_string());
@@ -451,6 +478,22 @@ impl PlayState {
         self.random_range_u8(0, 7)
     }
 
+    pub fn sleep_ambush_monster_row_after_host_seed(&mut self, host_seed: u16) -> u8 {
+        self.prng_state = host_seed;
+        self.sleep_ambush_monster_row()
+    }
+
+    /// `prng.md §3` / `rest-and-camp.md §5`: a wilderness camp probes
+    /// for interruption only when the game hour changes. The existing stream
+    /// supplies the `0..63` probe; only its zero result installs a fresh host
+    /// seed, immediately followed by the `0..7` encounter-row draw.
+    pub fn wilderness_camp_hour_change_ambush_row(&mut self, host_seed: u16) -> Option<u8> {
+        if !sleep_ambush_rest_interrupted(self.dangerous_rest_interrupt_roll()) {
+            return None;
+        }
+        Some(self.sleep_ambush_monster_row_after_host_seed(host_seed))
+    }
+
     pub fn restore_sleep_ambush_party_statuses(&mut self, entry_statuses: &[u8]) -> usize {
         let mut restored = 0;
         for (index, member) in self.party.iter_mut().enumerate() {
@@ -501,25 +544,11 @@ impl PlayState {
     /// guards pass", then "for each member that passes those guards".
     ///
     /// After the walk the cooldown is armed at
-    /// [`COMPLETED_LONG_CAMP_COOLDOWN_HOURS`] "whether or not the marker
-    /// is stamped, and whether or not any member actually recovered", so
-    /// the arming sits outside every per-member branch. It is *not*
-    /// re-armed when the cooldown gate itself refused: §5 says a camp
-    /// begun inside the window "prints the no-effect line and recovers
-    /// nothing" and says nothing about extending the window, and an
-    /// implementation that re-armed there would let a player lock
-    /// themselves out indefinitely by camping repeatedly.
-    ///
-    /// **Gap — the camp marker is not implemented.** §5 also publishes a
-    /// 25-percent roll that "remembers the tile under the party and
-    /// stamps the camp marker tile". No spec in this workspace publishes
-    /// a camp-marker tile id: `catalogs/tile-catalog.md` names the camp
-    /// and brazier tiles only as H-Hole-up *triggers* and gives no id for
-    /// the stamped marker. Stamping a guessed id would mutate the world
-    /// map, so the roll is not drawn and nothing is stamped. The clause
-    /// that mattered for correctness here — that the cooldown is armed
-    /// independently of the roll — is honoured by construction, because
-    /// the arming below is not inside any roll branch.
+    /// [`COMPLETED_LONG_CAMP_COOLDOWN_HOURS`] whether or not any member
+    /// recovered and whether or not the single apparition draw runs.
+    /// A refused camp does not re-arm it. The earlier spec's separate
+    /// marker-stamp interpretation was withdrawn by cleak/u5-spec#95:
+    /// there is no marker tile and no world-map write.
     pub fn apply_completed_long_camp_recovery(
         &mut self,
         accepted_hours: u8,
@@ -754,6 +783,10 @@ impl PlayState {
     pub fn klimb_command(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         match self.area {
             Area::Town { scene, floor } => {
+                if self.player.transport.is_horse() {
+                    self.message = "-On foot!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
                 let tile = self.grid[self.player.y * 32 + self.player.x];
                 let choices = self.connected_town_climb_choices(
                     game_dir,
@@ -764,10 +797,7 @@ impl PlayState {
                     tile,
                 )?;
                 match choices.as_slice() {
-                    [] => {
-                        self.message = "Not climbable!".to_string();
-                        Ok(MoveOutcome::Blocked)
-                    }
+                    [] => Ok(self.start_klimb_direction_prompt()),
                     [intent] => self.climb(game_dir, *intent),
                     _ => Ok(self.start_klimb_direction_prompt()),
                 }
@@ -804,15 +834,7 @@ impl PlayState {
         if let Some(entry) = self.town_stair_at(game_dir, scene, floor, x, y, tile)? {
             return self.available_town_climb_choices(game_dir, scene, floor, entry.kind.intents());
         }
-        if !is_town_stair_tile(tile) && !(80..=87).contains(&tile) {
-            return Ok(Vec::new());
-        }
-        self.available_town_climb_choices(
-            game_dir,
-            scene,
-            floor,
-            &[ClimbIntent::Up, ClimbIntent::Down],
-        )
+        Ok(town_klimb_underfoot_intent(tile).into_iter().collect())
     }
 
     pub fn available_town_climb_choices(
@@ -847,9 +869,7 @@ impl PlayState {
                 return Ok(MoveOutcome::Blocked);
             }
             town_climb_delta(intent)
-        } else if let Some(delta) = stair_delta(tile, intent) {
-            delta
-        } else if is_town_stair_tile(tile) {
+        } else if town_klimb_underfoot_intent(tile) == Some(intent) {
             town_climb_delta(intent)
         } else {
             self.message = "Not climbable!".to_string();
@@ -859,25 +879,69 @@ impl PlayState {
         self.change_town_floor(game_dir, scene, next_floor)
     }
 
+    pub fn klimb_over_town_target(&mut self, direction: Direction) -> MoveOutcome {
+        let Area::Town { .. } = self.area else {
+            self.message = "What?".to_string();
+            return MoveOutcome::Blocked;
+        };
+        let Some((x, y)) = self.adjacent_position(direction) else {
+            self.message = "What?".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !town_klimb_over_target(self.grid[y * TOWN_GRID_SIDE + x]) {
+            self.message = "What?".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        self.player.facing = direction;
+        self.player.x = x;
+        self.player.y = y;
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message.clear();
+        MoveOutcome::Moved
+    }
+
     pub fn change_town_floor(
         &mut self,
         game_dir: &Path,
         scene: Scene,
         next_floor: i8,
     ) -> io::Result<MoveOutcome> {
-        let (next_grid, beacon_sources) = match load_town_runtime_floor_with_beacon_sources(
-            game_dir,
-            scene,
-            next_floor,
-            self.clock.hour,
-        ) {
-            Ok(loaded) => loaded,
+        let Area::Town { floor, .. } = self.area else {
+            self.message = "Not climbable!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        };
+        let announcement = if next_floor > floor { "Up!" } else { "Down!" };
+        self.message = announcement.to_string();
+        match self.reload_town_floor(game_dir, scene, next_floor) {
+            Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::InvalidInput => {
                 self.message = "No connected floor in this slice.".to_string();
                 return Ok(MoveOutcome::Blocked);
             }
             Err(err) => return Err(err),
-        };
+        }
+        self.advance_turn();
+        Ok(MoveOutcome::Transition(AreaTransition::ChangedFloor {
+            scene,
+            floor: next_floor,
+        }))
+    }
+
+    pub fn reload_town_floor(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        next_floor: i8,
+    ) -> io::Result<()> {
+        let (next_grid, beacon_sources) = load_town_runtime_floor_with_beacon_sources(
+            game_dir,
+            scene,
+            next_floor,
+            self.clock.hour,
+        )?;
         self.grid = next_grid;
         // `visibility.md §12.6`: a new location floor is fresh map setup —
         // clear both beacon positions and re-record up to two bright-light
@@ -889,16 +953,12 @@ impl PlayState {
             scene,
             floor: next_floor,
         };
+        let _ = self.apply_resident_shadowlord_blight_with_seed(host_clock_prng_seed_now());
         self.clear_town_floor_reload_door_state();
         self.restore_revealed_town_secret_doors_for_floor(game_dir, scene, next_floor)?;
         self.relink_npc_objects();
         self.mark_visibility_dirty();
-        self.advance_turn();
-        self.message = format!("Changed to {} floor {}.", scene.key(), next_floor);
-        Ok(MoveOutcome::Transition(AreaTransition::ChangedFloor {
-            scene,
-            floor: next_floor,
-        }))
+        Ok(())
     }
 
     pub fn climb_dungeon(
@@ -971,6 +1031,7 @@ impl PlayState {
             level: next_level,
         };
         self.sync_player_object();
+        self.setup_dungeon_active_monster_fresh();
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = format!(
@@ -1049,6 +1110,11 @@ impl PlayState {
         self.player.y = entry.to_y;
         self.force_foot_transport();
         self.grid = load_world_map(game_dir, entry.to_plane)?;
+        apply_world_quest_tile_substitutions(
+            &mut self.grid,
+            &self.word_of_power_seal_flags,
+            &self.shrine_ruin_flags,
+        );
         self.rebuild_world_live_chunks_from_grid(entry.to_plane)?;
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
@@ -1089,13 +1155,7 @@ impl PlayState {
                     None => true,
                 }
         }) {
-            return self.enter_world_target(
-                game_dir,
-                plane,
-                entry.target,
-                entry.town_entry_y,
-                false,
-            );
+            return self.enter_world_target(game_dir, plane, entry.target, false);
         }
 
         if has_sidecar {
@@ -1117,7 +1177,7 @@ impl PlayState {
             );
             return Ok(MoveOutcome::Blocked);
         };
-        self.enter_world_target(game_dir, plane, target, None, true)
+        self.enter_world_target(game_dir, plane, target, true)
     }
 
     /// `moons.md §3` / `time.md §5`: the hour-change hook that refreshes
@@ -1323,7 +1383,6 @@ impl PlayState {
         game_dir: &Path,
         plane: WorldPlane,
         target: PlayTarget,
-        town_entry_y: Option<usize>,
         debug: bool,
     ) -> io::Result<MoveOutcome> {
         if !debug
@@ -1341,12 +1400,11 @@ impl PlayState {
             x: self.player.x,
             y: self.player.y,
             transport: self.player.transport,
-            timing_status: self.timing_status,
             sail_cadence: self.sail_cadence,
             sail_stall_pending: self.sail_stall_pending,
             grid: self.grid.clone(),
             active_objects: self.active_objects.clone(),
-            pending_vehicle: None,
+            pending_vehicle: self.pending_vehicle_save.acquisition(),
         };
         let mut options = PlayOptions {
             target,
@@ -1380,9 +1438,12 @@ impl PlayState {
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
             shadowlord_hideouts: self.shadowlord_hideouts,
-            quest_progress_word: self.quest_progress_word,
+            removed_town_npc_flags: self.removed_town_npc_flags.clone(),
+            talk_branch_flags: self.talk_branch_flags.clone(),
             shrine_ordained_mask: self.shrine_ordained_mask,
             shrine_codex_mask: self.shrine_codex_mask,
+            word_of_power_seal_flags: self.word_of_power_seal_flags,
+            shrine_ruin_flags: self.shrine_ruin_flags,
             moral_standing: self.moral_standing,
             toll_progress: self.toll_progress,
             // `overworld.md §9.1` (spec HEAD c00bf63): the
@@ -1394,32 +1455,33 @@ impl PlayState {
             light_spell_counter: self.light_spell_counter,
             wind: self.wind,
             wind_save_byte: self.wind_save_byte,
-            timing_status: TimingStatusTag::Normal,
             time_stop_counter: self.time_stop_counter,
             active_effect_tag: self.active_effect_tag,
             active_effect_counter: self.active_effect_counter,
             fortunes_of_war: self.fortunes_of_war,
             camp_cooldown: self.camp_cooldown,
+            camp_month_cookie: self.camp_month_cookie,
             active_player: self.active_player,
             combat_round_counter: self.combat_round_counter,
+            combat_interference_sources: self.combat_interference_sources,
             transport: TransportState::Foot,
             facing: None,
             pending_vehicle: None,
+            pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),
             blackthorn_story: self.blackthorn_story,
             initial_britannia_overlay: None,
             debug_enter: self.debug_enter,
             saved_active_objects: None,
+            town_npc_mutations: self.town_npc_mutations.clone(),
             save_template_source: self.save_template_source,
         };
         let mut next = match target {
             PlayTarget::Town(scene) => {
-                options.start = town_entry_y
-                    .map(|entry_y| Ok(Some((LOCATION_DEFAULT_ENTRY_X, entry_y))))
-                    .unwrap_or_else(|| {
-                        load_location_entry_y(game_dir, scene)
-                            .map(|entry_y| entry_y.map(|y| (LOCATION_DEFAULT_ENTRY_X, y)))
-                    })?;
+                // `town-mode.md §5` / public #94: overworld entry always
+                // writes (15, 30, floor 0). Per-scene entry-row tables were
+                // a withdrawn conflation with the Shadowlord helper.
+                options.start = Some((LOCATION_DEFAULT_ENTRY_X, LOCATION_DEFAULT_ENTRY_Y));
                 Self::load_town_scene(game_dir, scene, options)?
             }
             PlayTarget::Dungeon(scene) => {
@@ -1434,6 +1496,8 @@ impl PlayState {
                     WorldPlane::Underworld => Some((7, 7)),
                 };
                 let mut dungeon = Self::load_dungeon_scene(game_dir, scene, options)?;
+                dungeon.prng_state = self.prng_state;
+                dungeon.setup_dungeon_active_monster_fresh();
                 if matches!(plane, WorldPlane::Underworld) && scene.record != 7 {
                     dungeon.player.facing = Direction::West;
                 }
@@ -1495,7 +1559,6 @@ impl PlayState {
         self.player.x = return_world.x;
         self.player.y = return_world.y;
         self.player.transport = return_world.transport;
-        self.timing_status = return_world.timing_status;
         self.sail_cadence = return_world.sail_cadence;
         self.sail_stall_pending = return_world.sail_stall_pending;
         self.grid = return_world.grid;
@@ -1506,10 +1569,15 @@ impl PlayState {
         self.npcs.clear();
         self.active_objects = return_world.active_objects;
         if let Some(pending) = return_world.pending_vehicle {
-            if let Err(err) =
-                place_pending_vehicle_acquisition(&mut self.active_objects, plane, pending)
-            {
-                self.message = err.to_string();
+            match place_pending_vehicle_acquisition(&mut self.active_objects, plane, pending) {
+                Ok(_) => {
+                    self.pending_vehicle_save =
+                        PendingVehicleSaveState::from_acquisition(pending).clear_class();
+                }
+                Err(err) => {
+                    self.pending_vehicle_save = PendingVehicleSaveState::from_acquisition(pending);
+                    self.message = err.to_string();
+                }
             }
         }
         self.sync_player_object();
@@ -1551,6 +1619,11 @@ impl PlayState {
         self.player.y = entry.y;
         self.force_foot_transport();
         self.grid = load_world_map(game_dir, entry.plane)?;
+        apply_world_quest_tile_substitutions(
+            &mut self.grid,
+            &self.word_of_power_seal_flags,
+            &self.shrine_ruin_flags,
+        );
         self.rebuild_world_live_chunks_from_grid(entry.plane)?;
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();

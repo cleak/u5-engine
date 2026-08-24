@@ -24,7 +24,7 @@ from decompiled code.
 | `town_trap_doors.tsv` | Town trap-door/chute rows. |
 | `town_poison_gas.tsv` | Legacy town poison-gas doorway rows; no longer used by the native #51 tile `0x04` branch. |
 | `town_tile_attributes.tsv` | Legacy clean tile-id attributes; no longer used by the native #51 tile `0x04` branch. |
-| `town_exit_tiles.tsv` | Town exit threshold rows. |
+| `town_exit_tiles.tsv` | Removed. Town-family exit is a grid-boundary event; no tile id or sidecar row participates. |
 | `moongates.tsv` | Removed. Superseded by the published natural-gate system; the runtime no longer reads this file. See below. |
 
 `moongates.tsv` held authored moongate origin/destination rows from the period
@@ -78,6 +78,7 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `end_narrative_windows.tsv` | Optional six-row clean seek-window override for custom final `END.DAT` endgame narrative pages; shipped ranges are built in from the public spec. |
 | `SAVED.WPS` | Clean companion save for durable world-progress state, including compatibility mirrors for public `SAVED.GAM` fields that older clean saves only stored in the sidecar. |
 | `SAVED.BTH` | Clean companion save for Blackthorn capture/rescue story state whose exact original `SAVED.GAM` offsets are not yet public. |
+| `.u5-engine-town-npc-mutations` | Engine-owned companion save for public destructive town-NPC schedule/dialogue rewrites. It stores only scene, roster slot, three AI bytes, four schedule times, and dialogue byte; original `.NPC` assets remain read-only. |
 
 ## General Rules
 

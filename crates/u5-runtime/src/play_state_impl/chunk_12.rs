@@ -11,7 +11,7 @@ impl PlayState {
             &self.grid,
             self.player.x,
             self.player.y,
-            |_| false,
+            |_| LiveChunkSubstitutionPolicy::NONE,
         )?);
         // `visibility.md §12.6`: the beacon's outdoor source is harvested by
         // the chunk loader, not by the light pass — "the chunk loader scans

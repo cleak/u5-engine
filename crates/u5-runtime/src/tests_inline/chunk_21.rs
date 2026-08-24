@@ -77,7 +77,7 @@
     }
 
     #[test]
-    fn dungeon_jimmy_preserves_room_trigger_without_turn() {
+    fn dungeon_jimmy_preserves_room_trigger_and_commits_one_action() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0xf2;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -91,7 +91,7 @@
 
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "No lock!");
     }
 
@@ -116,7 +116,7 @@
             MoveOutcome::Blocked
         );
         assert_eq!(jimmy_state.grid[dungeon_cell_index(0, 1, 1)], 0xe2);
-        assert_eq!(jimmy_state.turn, 0);
+        assert_eq!(jimmy_state.turn, 1);
         assert_eq!(jimmy_state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(jimmy_state.message, "No lock!");
 
@@ -815,38 +815,38 @@
     }
 
     #[test]
-    fn world_look_special_map_tile_routes_to_britannia_overview() {
+    fn world_look_telescope_routes_to_night_sky() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(LOOK2_DAT_FILE),
-            look2_bytes(&[(BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE as usize, "map trigger")]),
+            look2_bytes(&[(TELESCOPE_LOOK_TRIGGER_TILE as usize, "telescope")]),
         )
         .unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(2, 1)] = BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE;
+        grid[world_cell_index(2, 1)] = TELESCOPE_LOOK_TRIGGER_TILE;
         let mut state = britannia_state(grid, 1, 1);
         state.player.facing = Direction::East;
+        state.clock = GameClock::new(20, 0).unwrap();
 
         assert_eq!(
             state.look_facing_with_game_dir(&dir).unwrap(),
             MoveOutcome::Observed
         );
 
-        assert!(state.message.starts_with("Britannia overview from Look"));
-        assert_eq!(state.message.lines().skip(1).count(), BRITANNIA_CHUNK_MAP_ROWS as usize);
-        assert!(!state.message.contains("map trigger"));
-        assert_eq!(
-            state.active_view_overlay.as_ref().map(|overlay| overlay.kind),
-            Some(ViewOverlayKind::BritanniaChunkMap)
-        );
+        assert_eq!(state.message, "the night sky! ");
+        assert!(!state.message.contains("telescope"));
+        assert!(state
+            .active_view_overlay
+            .as_ref()
+            .is_some_and(|overlay| matches!(overlay.kind, ViewOverlayKind::Sky(_))));
         let viewport = state
             .render_active_view_overlay(TileGraphicsDepth::Ega16)
-            .expect("look-triggered Britannia overview should install a renderable overlay");
-        assert_eq!(viewport.cells_wide, BRITANNIA_CHUNK_MAP_COLUMNS as usize);
-        assert_eq!(viewport.cells_high, BRITANNIA_CHUNK_MAP_ROWS as usize);
+            .expect("look-triggered night sky should install a renderable overlay");
+        assert_eq!(viewport.cells_wide, SKY_VIEW_COLUMNS);
+        assert_eq!(viewport.cells_high, SKY_VIEW_ROWS);
         assert!(viewport.pixels.iter().any(|pixel| *pixel != 0));
         assert_eq!(state.turn, 0);
-        assert_eq!(state.clock, GameClock::default());
+        assert_eq!(state.clock, GameClock::new(20, 0).unwrap());
 
         assert_eq!(
             handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
@@ -854,7 +854,36 @@
         );
         assert!(state.active_view_overlay.is_none());
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "View closed.");
+        assert!(state.message.is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_look_telescope_daylight_shows_sun_and_applies_damage() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(LOOK2_DAT_FILE),
+            look2_bytes(&[(TELESCOPE_LOOK_TRIGGER_TILE as usize, "telescope")]),
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = TELESCOPE_LOOK_TRIGGER_TILE;
+        let mut state = britannia_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.clock = GameClock::new(12, 0).unwrap();
+        state.active_player = None;
+        let hp_before = state.party[0].hp;
+
+        assert_eq!(
+            state.look_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(state.message, "the sun!");
+        assert_eq!(state.active_player, Some(0));
+        assert_eq!(state.party[0].hp, hp_before - 1);
+        assert!(state.active_view_overlay.is_none());
+        assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1192,7 +1221,6 @@
             avatar_name: "Avatar",
             moral_standing: 99,
             dictionary: Some(&PUBLISHED_COMMON_WORD_DICTIONARY),
-            gold_payment_accepted: true,
             gold_available: Some(9999),
             ..Default::default()
         };
@@ -1288,7 +1316,6 @@
             avatar_name: "Avatar",
             moral_standing: 99,
             dictionary: Some(&PUBLISHED_COMMON_WORD_DICTIONARY),
-            gold_payment_accepted: true,
             gold_available: Some(9999),
             ..Default::default()
         };
@@ -2206,6 +2233,7 @@
         assert!(state.active_direction_prompt.is_some());
         assert!(state.active_conversation.is_none());
         assert_eq!(state.turn, 0);
+        state.set_active_talk_branch_flag(1);
 
         assert_eq!(
             handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
@@ -2322,7 +2350,7 @@
     }
 
     #[test]
-    fn town_talk_reports_nobody_without_spending_turn() {
+    fn town_talk_reports_nobody_and_still_spends_the_ordinary_turn() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
@@ -2333,8 +2361,8 @@
         );
 
         assert_eq!(state.message, "Nobody's here!");
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.clock, GameClock::default());
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     }
 
     #[test]
@@ -2372,7 +2400,7 @@
         );
 
         assert_eq!(state.message, "previous line");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
@@ -2541,7 +2569,7 @@
             );
             assert_eq!(state.message, expected);
             assert!(state.active_shop.is_none());
-            assert_eq!(state.turn, 0);
+            assert_eq!(state.turn, 1);
         }
     }
 
@@ -2580,11 +2608,11 @@
         assert!(state.message.contains("Herbalist"));
         assert!(state.message.contains("horseback"));
         assert!(state.active_shop.is_none());
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
-    fn town_talk_high_non_shop_dialog_id_uses_funny_look_stub() {
+    fn town_talk_reserved_guard_dialog_opens_default_tribute_demand() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
@@ -2599,17 +2627,28 @@
             },
         ]);
 
-        assert_eq!(
-            state.talk_facing_with_dialogue(&dialogue),
-            MoveOutcome::Blocked
-        );
+        state.gold = 100;
+        assert_eq!(state.talk_facing_with_dialogue(&dialogue), MoveOutcome::Talked);
 
-        assert_eq!(state.message, "They give thee a funny look.");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Pay 10 gold tribute to Blackthorn? (Y/N).");
+        assert_eq!(state.turn, 1);
+        assert!(matches!(
+            state.active_blackthorn_guard_demand,
+            Some(ActiveBlackthornGuardDemand {
+                prompt: BlackthornGuardDemandPrompt::Tribute { amount: 10 },
+                ..
+            })
+        ));
+        assert_eq!(
+            state.resolve_blackthorn_guard_demand_input('Y', ""),
+            Some(MoveOutcome::Talked)
+        );
+        assert_eq!(state.gold, 90);
+        assert!(state.pending_town_arrest.is_none());
     }
 
     #[test]
-    fn town_raw_tlk_high_non_shop_dialog_id_uses_funny_look_stub() {
+    fn town_raw_tlk_reserved_guard_dialog_refusal_requests_arrest_cleanup() {
         let dialogue = HashMap::new();
         let raw = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
@@ -2625,13 +2664,92 @@
             },
         ]);
 
+        state.gold = 5;
         assert_eq!(
             state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
-            MoveOutcome::Blocked
+            MoveOutcome::Talked
         );
 
-        assert_eq!(state.message, "They give thee a funny look.");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Pay 10 gold tribute to Blackthorn? (Y/N).");
+        assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.resolve_blackthorn_guard_demand_input('Y', ""),
+            Some(MoveOutcome::Used)
+        );
+        assert_eq!(state.gold, 5);
+        assert!(state.active_blackthorn_guard_demand.is_none());
+        assert_eq!(state.pending_town_arrest.unwrap().npc_slot, 1);
+    }
+
+    #[test]
+    fn blackthorn_palace_guard_requires_active_badge_code_and_accepts_four_letter_prefix() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_LORD_BLACKTHORNS_CASTLE).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: BLACKTHORN_GUARD_DEMAND_DIALOG_ID,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(state.talk_facing_with_dialogue(&dialogue), MoveOutcome::Used);
+        assert!(state.pending_town_arrest.is_some());
+
+        state.pending_town_arrest = None;
+        state.active_effect_tag = Some(BLACK_BADGE_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = PERMANENT_ACTIVE_EFFECT_DURATION;
+        assert_eq!(state.talk_facing_with_dialogue(&dialogue), MoveOutcome::Talked);
+        assert!(matches!(
+            state.active_blackthorn_guard_demand,
+            Some(ActiveBlackthornGuardDemand {
+                prompt: BlackthornGuardDemandPrompt::PalacePassword,
+                ..
+            })
+        ));
+        assert_eq!(
+            state.resolve_blackthorn_guard_demand_input('i', "mpeachment"),
+            Some(MoveOutcome::Talked)
+        );
+        assert_eq!(state.message, "Pass, friend.");
+        assert!(state.pending_town_arrest.is_none());
+    }
+
+    #[test]
+    fn minoc_guard_charity_halves_gold_on_yes() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_MINOC).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 101;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: BLACKTHORN_GUARD_DEMAND_DIALOG_ID,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(state.talk_facing_with_dialogue(&dialogue), MoveOutcome::Talked);
+        assert_eq!(
+            state.resolve_blackthorn_guard_demand_input('y', ""),
+            Some(MoveOutcome::Talked)
+        );
+        assert_eq!(state.gold, 50);
     }
 
     #[test]
@@ -2669,6 +2787,7 @@
         );
 
         let mut state = test_state(open_grid(), 1, 1);
+        state.set_active_talk_branch_flag(1);
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
             NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
@@ -2734,6 +2853,7 @@
         );
 
         let mut state = test_state(open_grid(), 1, 1);
+        state.set_active_talk_branch_flag(1);
         state.party_names = vec![*b"AVATAR\0\0\0"];
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
@@ -3170,13 +3290,11 @@
         assert_eq!(state.active_player, None);
     }
 
-    /// `conversation.md §7.4` / `karma.md §4`: the `0x8A` STANDING-DOWN
-    /// byte at the head of a declined gold request's refusal record must
-    /// reach the party's shared moral-standing selector. This engine used
-    /// to dispatch `0x8A` as a panel newline, so the byte printed a line
-    /// break and cost nothing — the live karma bug this test pins shut.
+    /// `conversation.md §7.6`: an unaffordable payment stops before its
+    /// in-place success tail; no text or side effect after the third digit
+    /// is executed, and the nested prompt ends the conversation on return.
     #[test]
-    fn town_raw_tlk_declined_gold_request_debits_moral_standing() {
+    fn town_raw_tlk_unaffordable_payment_skips_success_tail_and_unwinds() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
         dialogue.insert(
             0x10,
@@ -3192,81 +3310,9 @@
         );
 
         let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
-        let mut pay_response = vec![0x85, b'0', b'2', b'5'];
-        pay_response.push(0x9E);
-        pay_response.extend(enc("Paid"));
-        pay_response.push(0xFF);
-        pay_response.push(0x9F);
-        // Three stacked STANDING-DOWN bytes, the shipped run that heads a
-        // fifty-gold refusal ahead of its rebuke.
+        let mut pay_response = vec![0x85, b'0', b'5', b'0'];
         pay_response.extend([0x8A, 0x8A, 0x8A]);
-        pay_response.extend(enc("Scoundrel!"));
-        pay_response.push(0xFF);
-
-        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
-        raw.insert(
-            0x10,
-            vec![
-                enc("Maris"),
-                enc("a quiet sage"),
-                enc("Greetings"),
-                enc("I read books"),
-                enc("Farewell"),
-                enc("PAY"),
-                pay_response,
-            ],
-        );
-
-        let mut state = test_state(open_grid(), 1, 1);
-        state.player.facing = Direction::East;
-        state.gold = 30;
-        state.moral_standing = 40;
-        state.load_scheduled_npcs(&[
-            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
-            NpcSlot {
-                slot: 1,
-                type_byte: 1,
-                dialog_id: 0x10,
-                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
-                name: None,
-            },
-        ]);
-        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
-        state.submit_active_conversation_keyword("pay");
-        let (text, ended) = state.submit_active_conversation_keyword("n");
-        assert!(!ended);
-        // The standing bytes emit no text and no newline.
-        assert_eq!(text, "Scoundrel!");
-        assert_eq!(state.gold, 30, "a declined request debits no gold");
-        assert_eq!(
-            state.moral_standing, 37,
-            "three stacked 0x8A bytes each lower the selector by one"
-        );
-    }
-
-    #[test]
-    fn town_raw_tlk_gold_payment_debits_only_affordable_accepted_payment() {
-        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
-        dialogue.insert(
-            0x10,
-            vec![
-                "Maris".to_string(),
-                "a quiet sage".to_string(),
-                "Greetings".to_string(),
-                "I read books".to_string(),
-                "Farewell".to_string(),
-                "PAY".to_string(),
-                "placeholder".to_string(),
-            ],
-        );
-
-        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
-        let mut pay_response = vec![0x85, b'0', b'2', b'5'];
-        pay_response.push(0x9E);
         pay_response.extend(enc("Paid"));
-        pay_response.push(0xFF);
-        pay_response.push(0x9F);
-        pay_response.extend(enc("Too poor"));
         pay_response.push(0xFF);
 
         let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
@@ -3299,17 +3345,74 @@
         ]);
         state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
         let (text, ended) = state.submit_active_conversation_keyword("pay");
-        assert_eq!(text, "");
         assert!(!ended);
+        assert_eq!(text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
         assert_eq!(state.gold, 30);
+        assert_eq!(state.moral_standing, 40);
         assert!(matches!(
-            state
-                .active_conversation
-                .as_ref()
-                .map(|session| session.prompt_message()),
-            Some(prompt) if prompt == "Pay 25 gold? (Y/N)"
+            state.active_conversation.as_ref().map(|session| session.phase),
+            Some(crate::conversation_session::ConversationSessionPhase::AwaitingGoldRefusalKeyword)
         ));
-        let (text, ended) = state.submit_active_conversation_keyword("y");
+
+        let (_, ended) = state.submit_active_conversation_keyword("anything");
+        assert!(!ended, "an unmatched nested keyword reprompts");
+        assert!(state.active_conversation.is_some());
+        let (_, ended) = state.submit_active_conversation_keyword("");
+        assert!(ended, "empty nested input runs Bye once and unwinds");
+        assert!(state.active_conversation.is_none());
+    }
+
+    #[test]
+    fn town_raw_tlk_gold_payment_debits_only_affordable_accepted_payment() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+                "PAY".to_string(),
+                "placeholder".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut pay_response = vec![0x85, b'0', b'2', b'5'];
+        pay_response.extend(enc("Paid"));
+        pay_response.push(0xFF);
+
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+                enc("PAY"),
+                pay_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 30;
+        state.moral_standing = 40;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+        let (text, ended) = state.submit_active_conversation_keyword("pay");
         assert_eq!(text, "Paid");
         assert!(!ended);
         assert_eq!(state.gold, 5);
@@ -3322,14 +3425,13 @@
         poor_state.moral_standing = 40;
         poor_state.open_conversation_session(&dialogue, &raw);
         let (text, ended) = poor_state.submit_active_conversation_keyword("pay");
-        assert_eq!(text, "");
+        assert_eq!(text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
         assert!(!ended);
         assert_eq!(poor_state.gold, 10);
-        let (text, ended) = poor_state.submit_active_conversation_keyword("y");
-        assert_eq!(text, "Too poor");
-        assert!(!ended);
-        assert_eq!(poor_state.gold, 10);
-        assert_eq!(poor_state.moral_standing, 40);
+        assert!(matches!(
+            poor_state.active_conversation.as_ref().map(|session| session.phase),
+            Some(crate::conversation_session::ConversationSessionPhase::AwaitingGoldRefusalKeyword)
+        ));
     }
 
     #[test]
@@ -3403,7 +3505,7 @@
     }
 
     #[test]
-    fn active_conversation_records_numeric_signal_and_cleanup_reconciles_on_bye() {
+    fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
         dialogue.insert(
             0x10,
@@ -3442,6 +3544,7 @@
             scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[0]).unwrap(),
             floor: 0,
         };
+        state.resident_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
             NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
@@ -3463,11 +3566,8 @@
         let (text, ended) = state.submit_active_conversation_keyword("bye");
         assert!(ended);
         assert!(state.active_conversation.is_none());
-        assert_eq!(state.conversation_signal_flags[5], 0);
-        assert_eq!(
-            text,
-            "BYE\n\nFarewell Stolen-action warning. Conversation signal 5 reconciled."
-        );
+        assert_eq!(state.conversation_signal_flags[5], 1);
+        assert_eq!(text, "BYE\n\nFarewell Stolen goods.");
     }
 
     #[test]
@@ -3483,35 +3583,56 @@
     }
 
     #[test]
-    fn final_conversation_cleanup_prioritizes_resource_then_generic_then_gold() {
+    fn final_conversation_cleanup_uses_inventory_cascade_and_fresh_seed() {
         let mut state = test_state(open_grid(), 1, 1);
         state.area = Area::Town {
             scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[0]).unwrap(),
             floor: 0,
         };
-        state.conversation_resource_signals[1] = 2;
-        state.conversation_signal_flags[12] = 1;
-        state.record_tlk_signal_flags(&[3, 12]);
-        let gold_before = state.gold;
-
-        let first = state.run_final_conversation_cleanup().unwrap();
-        assert!(first.contains("resource signal"));
-        assert_eq!(state.conversation_resource_signals[1], 1);
-        assert_eq!(state.conversation_signal_flags[12], 2);
-        assert_eq!(state.gold, gold_before);
-
-        state.conversation_resource_signals = [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT];
-        let second = state.run_final_conversation_cleanup().unwrap();
-        assert!(second.contains("Conversation signal 12"));
-        assert_eq!(state.conversation_signal_flags[12], 1);
-        assert_eq!(state.conversation_signal_flags[3], 1);
-        assert_eq!(state.gold, gold_before);
-
-        state.conversation_signal_flags = [0; TLK_GENERIC_SIGNAL_COUNT];
+        state.resident_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
+        state.keys = 0;
+        state.gems = 2;
+        state.torches = 0;
+        state.equipment_stock = [0; EQUIPMENT_COUNT];
+        state.scroll_stock = [0; SCROLL_COUNT];
+        state.potion_stock = [0; POTION_COUNT];
         state.gold = 10;
-        let third = state.run_final_conversation_cleanup().unwrap();
-        assert!(third.contains("Gold -"));
-        assert!(state.gold < 10);
+
+        assert_eq!(
+            state.run_final_conversation_cleanup_with_seed(0x0123),
+            Some("Stolen goods.".to_string())
+        );
+        assert_eq!(state.gems, 1);
+        assert_eq!(state.gold, 10);
+
+        state.keys = 0;
+        state.gems = 0;
+        state.torches = 0;
+        state.equipment_stock[2] = 1;
+        state.equipment_stock[47] = 2;
+        state.scroll_stock[7] = 1;
+        state.potion_stock[7] = 1;
+        state.run_final_conversation_cleanup_with_seed(0x0456);
+        assert_eq!(state.equipment_stock[47], 1);
+        assert_eq!(state.equipment_stock[2], 1);
+        assert_eq!(state.scroll_stock[7], 1);
+        assert_eq!(state.prng_state, 0x0456);
+
+        state.equipment_stock = [0; EQUIPMENT_COUNT];
+        state.run_final_conversation_cleanup_with_seed(0x0789);
+        assert_eq!(state.scroll_stock[7], 0);
+        assert_eq!(state.potion_stock[7], 1);
+        assert_eq!(state.prng_state, 0x0789);
+
+        state.run_final_conversation_cleanup_with_seed(0x0321);
+        assert_eq!(state.potion_stock[7], 0);
+        assert_eq!(state.prng_state, 0x0321);
+
+        let mut expected_prng = 0x0abc;
+        let debit = u5_prng_range_u16(&mut expected_prng, 1, 15);
+        state.run_final_conversation_cleanup_with_seed(0x0abc);
+        assert_eq!(state.gold, 10u16.saturating_sub(debit));
+        assert_eq!(state.prng_state, expected_prng);
     }
 
     #[test]
@@ -3549,8 +3670,8 @@
 
         assert!(state.message.contains("Herbalist"));
         assert!(state.message.contains("horseback"));
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.clock, GameClock::default());
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     }
 
     #[test]
@@ -3806,6 +3927,8 @@
         };
         state.player.facing = Direction::East;
         state.gold = 100;
+        state.active_effect_tag = Some(CROWN_LB_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = PERMANENT_ACTIVE_EFFECT_DURATION;
         state.reagents = [0; REAGENT_COUNT];
         state.load_scheduled_npcs(&[
             NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
@@ -3923,6 +4046,7 @@
         );
 
         let mut state = test_state(open_grid(), 1, 1);
+        state.set_active_talk_branch_flag(1);
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
             NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
@@ -3939,6 +4063,53 @@
         assert!(greeting.is_some());
         assert!(state.message.contains("Greetings"));
         assert!(state.active_conversation.is_some());
+    }
+
+    #[test]
+    fn conversation_opening_reseeds_only_for_strangers_and_uses_name_coin_flip() {
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let raw = vec![
+            enc("Maris"),
+            enc("a quiet sage"),
+            enc("Greetings"),
+            enc("I read books"),
+            enc("Farewell"),
+        ];
+        let decoded = vec![
+            "Maris".to_string(),
+            "a quiet sage".to_string(),
+            "Greetings".to_string(),
+            "I read books".to_string(),
+            "Farewell".to_string(),
+        ];
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_conversation_npc_slot = Some(1);
+        state.set_active_talk_branch_flag(1);
+        state.active_conversation = Some(Box::new(
+            crate::conversation_session::ConversationSession::new(raw.clone(), decoded.clone()),
+        ));
+        state.prng_state = 0x0aaa;
+
+        let known = state.active_conversation_greeting_rendered_with_host_seed(0x0123);
+        assert_eq!(known.text, "Greetings");
+        assert_eq!(state.prng_state, 0x0aaa);
+
+        state.talk_branch_flags.clear();
+        state.active_conversation = Some(Box::new(
+            crate::conversation_session::ConversationSession::new(raw, decoded),
+        ));
+        let mut expected_stream = 0x0456;
+        let introduces = u5_prng_range_u16(&mut expected_stream, 0, 1) != 0;
+        let stranger = state.active_conversation_greeting_rendered_with_host_seed(0x0456);
+        assert_eq!(
+            stranger.text,
+            if introduces {
+                "I am called Maris"
+            } else {
+                ""
+            }
+        );
+        assert_eq!(state.prng_state, expected_stream);
     }
 
     #[test]
@@ -3971,6 +4142,7 @@
         dictionary[0] = "Greetings".to_string();
 
         let mut state = test_state(open_grid(), 1, 1);
+        state.set_active_talk_branch_flag(1);
         state.common_word_dictionary = Some(dictionary);
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
@@ -4039,6 +4211,7 @@
         let dir = debug_game_dir();
         fs::write(dir.join("CASTLE.TLK"), tokenized_tlk_bytes_for_test()).unwrap();
         let mut state = test_state(open_grid(), 1, 1);
+        state.set_active_talk_branch_flag(1);
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
             NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
@@ -4071,6 +4244,7 @@
         )
         .unwrap();
         let mut state = test_state(open_grid(), 1, 1);
+        state.set_active_talk_branch_flag(1);
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
             NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
@@ -4110,10 +4284,33 @@
                 dictionary: Some(&dict),
                 ..Default::default()
             },
-        );
+        )
+        .unwrap();
 
-        assert_eq!(tlk.text, "the");
-        assert_eq!(shoppe, "the");
+        assert_eq!(tlk.text, " the");
+        assert_eq!(shoppe, " the");
+    }
+
+    #[test]
+    fn active_conversation_preserves_protected_run_font_in_message_transcript() {
+        let mut state = test_state(vec![0; 32 * 32], 1, 1);
+        let mut fields = vec![Vec::new(); 5];
+        fields[2] = vec![TLK_CODE_PROTECT_RUN];
+        fields[2].extend("INOP".bytes().map(|byte| byte ^ TLK_TEXT_XOR_MASK));
+        fields[2].push(TLK_CODE_PROTECT_RUN);
+        fields[2].push(TLK_CODE_END_OF_RESPONSE);
+        state.active_conversation = Some(Box::new(crate::conversation_session::ConversationSession::new(
+            fields,
+            vec![String::new(); 5],
+        )));
+
+        assert_eq!(state.advance_active_conversation_greeting(), "INOP");
+        let entry = state.message_entries().last().unwrap();
+        assert_eq!(entry.text, "INOP");
+        assert!(entry
+            .glyphs
+            .iter()
+            .all(|glyph| glyph.font == TlkGlyphFont::Runic));
     }
 
     #[test]
@@ -4231,6 +4428,8 @@
             MoveOutcome::Talked
         );
         assert!(state.active_shop.is_some());
+        assert_eq!(state.active_effect_tag, None);
+        assert_eq!(state.active_effect_counter, 0);
         // First key 'R' selects inn rest.
         handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
         assert!(state.message.contains("room"));
@@ -4436,10 +4635,10 @@
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
-        assert!(state.message.contains("15 gold each"));
+        assert!(state.message.contains("16 gold each"));
         handle_play_key_input(&mut state, '5', "", Path::new("")).unwrap();
 
-        assert_eq!(state.gold, 35);
+        assert_eq!(state.gold, 34);
         assert_eq!(state.food, SHOP_FOOD_STOCK_CAP);
         assert!(state.message.contains("sold 1/5"));
     }
@@ -4460,8 +4659,8 @@
         handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, '1', "2", Path::new("")).unwrap();
 
-        assert_eq!(state.gold, 820);
-        assert_eq!(state.food, 12);
+        assert_eq!(state.gold, 808);
+        assert_eq!(state.food, 300);
         assert!(state.message.contains("sold 12/12"));
         assert!(state.active_shop.is_some());
     }
@@ -4557,6 +4756,7 @@
             scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[0]).unwrap(),
             floor: 0,
         };
+        state.resident_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
         state.gold = 100;
         state.prng_state = 0;
         let expected_prng_state = u5_prng_advance_state(state.prng_state);
@@ -4684,6 +4884,7 @@
         assert!(state.message.contains("lore"));
         handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
         assert!(state.message.contains("tavern branch A"));
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
 
         assert_eq!(state.message, "Of what wouldst thou hear my lore?");
@@ -4754,6 +4955,171 @@
         assert_eq!(state.message, "Asset says no credit.");
         assert!(state.active_shop.is_none());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cowering_talk_is_canned_without_a_tlk_record() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x50,
+                dialog_id: TOWN_NPC_COWERING_DIALOG_ID,
+                schedule: [3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0, 6, 12, 18, 22],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&HashMap::new()),
+            MoveOutcome::Talked
+        );
+        assert_eq!(state.message, TOWN_NPC_COWERING_RESPONSE);
+        assert_eq!(state.turn, 1);
+        assert!(state.active_conversation.is_none());
+    }
+
+    #[test]
+    fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x50,
+                dialog_id: TOWN_NPC_BRUSHOFF_DIALOG_ID,
+                schedule: [7, 7, 7, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Talked
+        );
+        assert_eq!(state.message, TOWN_NPC_BRUSHOFF_RESPONSE);
+        assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
+        assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
+        use crate::shop_runtime::TavernState;
+        use crate::shop_session::ActiveShopSession;
+
+        let dir = debug_game_dir();
+        let shoppe = shoppe_dat_with_records(&[
+            (69, b"Asset tavern menu.".as_slice()),
+            (73, b"Asset tavern follow-up.".as_slice()),
+            (77, b"Asset pack costs % gold.".as_slice()),
+            (78, b"Asset pack costs % gold.".as_slice()),
+            (79, b"Asset pack costs % gold.".as_slice()),
+            (80, b"Asset pack costs % gold.".as_slice()),
+            (81, b"Asset pack costs % gold.".as_slice()),
+            (82, b"Asset pack costs % gold.".as_slice()),
+        ]);
+        std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.food = 0;
+        state.prng_state = 0x2468;
+        let expected_prng_state = u5_prng_advance_state(state.prng_state);
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+            Tavern::TheWayfarerTavern,
+        )));
+
+        handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+        assert_eq!(state.message, "Asset tavern menu.");
+        handle_play_key_input(&mut state, 'R', "", &dir).unwrap();
+        assert_eq!(state.message, "Asset pack costs 16 gold.");
+        assert_eq!(state.prng_state, expected_prng_state);
+        handle_play_key_input(&mut state, '1', "", &dir).unwrap();
+        assert_eq!(state.food, 25);
+        handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+        assert_eq!(state.message, "Asset tavern follow-up.");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn end_to_end_partial_provision_sale_skips_falsehood_surcharge() {
+        use crate::shop_runtime::TavernState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[0]).unwrap(),
+            floor: 0,
+        };
+        state.gold = 20;
+        state.food = 0;
+        state.prng_state = 0x2468;
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+            Tavern::TheWayfarerTavern,
+        )));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
+        let state_after_quote_draw = state.prng_state;
+        handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 4);
+        assert_eq!(state.food, 25);
+        assert_eq!(state.prng_state, state_after_quote_draw);
+        assert!(!state.message.contains("Surcharge"));
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::Tavern(TavernState::AnythingElse {
+                continuation_ready: true,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn end_to_end_unaffordable_provisions_grant_only_the_published_charity_case() {
+        use crate::shop_runtime::TavernState;
+        use crate::shop_session::ActiveShopSession;
+
+        for (starting_food, expected_food, expects_charity) in
+            [(2, 3, true), (3, 3, false)]
+        {
+            let mut state = test_state(open_grid(), 1, 1);
+            state.gold = 0;
+            state.food = starting_food;
+            state.active_shop = Some(ActiveShopSession::Tavern(
+                TavernState::PickProvisionQuantity {
+                    tavern: Tavern::TheHonestMeal,
+                    unit_price: 10,
+                    continuation_ready: false,
+                },
+            ));
+
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+
+            assert_eq!(state.gold, 0);
+            assert_eq!(state.food, expected_food);
+            assert_eq!(state.message.contains("table scraps"), expects_charity);
+            assert!(state.active_shop.is_none());
+        }
     }
 
     fn shoppe_dat_with_records(records: &[(usize, &[u8])]) -> Vec<u8> {
@@ -5012,17 +5378,85 @@
 
         let mut sell_state = test_state(open_grid(), 1, 1);
         sell_state.gold = 1000;
+        sell_state.equipment_stock[23] = 1;
         sell_state.active_shop = Some(ActiveShopSession::ArmsStocked(
             ArmsShopState::Greeting,
             ArmsStockTable::new([23, 24, 30, 0, 0, 0, 0, 0], 3),
         ));
 
         handle_play_key_input(&mut sell_state, 'S', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut sell_state, ' ', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut sell_state, '\x1b', "", Path::new("")).unwrap();
         assert!(sell_state.active_shop.is_none());
         assert_eq!(sell_state.gold, 1000);
-        assert!(sell_state.equipment_stock.iter().all(|count| *count == 0));
-        assert!(sell_state.message.contains("Farewell"));
+        assert_eq!(sell_state.equipment_stock[23], 1);
+        assert!([
+            "Good-bye...",
+            "Mayhap another time...",
+            "Godspeed...",
+            "Fare thee well...",
+        ]
+        .contains(&sell_state.message.as_str()));
+    }
+
+    #[test]
+    fn end_to_end_arms_sell_browser_moves_selects_with_space_and_draws_only_at_contract_points() {
+        use crate::shop_runtime::ArmsShopState;
+        use crate::shop_session::ActiveShopSession;
+        use crate::shops::ArmsStockTable;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.equipment_stock[2] = 1;
+        state.equipment_stock[5] = 2;
+        state.active_shop = Some(ActiveShopSession::ArmsStocked(
+            ArmsShopState::Greeting,
+            ArmsStockTable::new([2, 5, 0, 0, 0, 0, 0, 0], 2),
+        ));
+
+        handle_play_key_input(&mut state, 'S', "", Path::new("")).unwrap();
+        let after_entry_draw = state.prng_state;
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::ArmsStocked(
+                ArmsShopState::SellPickItem(_),
+                _
+            ))
+        ));
+
+        handle_play_key_input(
+            &mut state,
+            char::from(crate::INPUT_CODE_SOUTH),
+            "",
+            Path::new(""),
+        )
+        .unwrap();
+        assert_eq!(state.prng_state, after_entry_draw, "movement consumes no draw");
+
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        assert_ne!(state.prng_state, after_entry_draw, "ordinary offer draws once");
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::ArmsStocked(
+                ArmsShopState::SellConfirm { item: 5, .. },
+                _
+            ))
+        ));
+
+        let visible_quote = state.message.clone();
+        let after_offer_draw = state.prng_state;
+        handle_play_key_input(&mut state, 'X', "", Path::new("")).unwrap();
+        assert_eq!(state.message, visible_quote);
+        assert_eq!(state.prng_state, after_offer_draw);
+
+        handle_play_key_input(&mut state, 'N', "", Path::new("")).unwrap();
+        assert_ne!(state.prng_state, after_offer_draw, "decline continuation draws once");
+        assert_eq!(state.equipment_stock[5], 2);
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::ArmsStocked(
+                ArmsShopState::SellPickItem(_),
+                _
+            ))
+        ));
     }
 
     #[test]
@@ -5069,7 +5503,6 @@
             x: 12,
             y: 21,
             transport: TransportState::Foot,
-            timing_status: TimingStatusTag::Normal,
             sail_cadence: 0,
             sail_stall_pending: false,
             grid: open_world_grid(),

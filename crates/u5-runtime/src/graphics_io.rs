@@ -9,14 +9,15 @@ pub fn load_tile_atlas(game_dir: &Path, depth: TileGraphicsDepth) -> io::Result<
     // `dungeon-mode.md §6.2`: the corridor billboard banks come from the
     // same directory at the same depth, so they load with the atlas.
     //
-    // A game directory without the corridor art is not an error: the
-    // fixture directories the tests build have no `DNG*` files, and a
-    // missing bank leaves the corridor unpainted rather than
-    // substituting invented geometry for it.
+    // A fixture directory may deliberately omit all three corridor files.
+    // A partial or malformed shipped set is an error rather than a silently
+    // blank first-person view.
     let file_name = depth.file_name();
     let mut atlas = parse_tile_atlas(&read(&game_dir.join(file_name))?, depth, file_name)?;
     atlas.dungeon_billboards =
-        crate::dungeon_view::load_dungeon_billboard_banks(game_dir, depth).ok();
+        crate::dungeon_view::load_optional_dungeon_billboard_banks(game_dir, depth)?;
+    atlas.dungeon_sprites =
+        crate::dungeon_view::load_optional_dungeon_sprite_banks(game_dir, depth)?;
     Ok(atlas)
 }
 
@@ -68,6 +69,7 @@ pub fn unpack_tile_atlas_body(
         depth,
         pixels,
         dungeon_billboards: None,
+        dungeon_sprites: None,
     })
 }
 
@@ -260,18 +262,16 @@ pub fn parse_graphic_sprite_sheet_body(
             format!("{resource_name} sprite sheet is shorter than its slot-count word"),
         ));
     }
-    let slot_count = u16_at(body, 0) as usize;
-    if slot_count % 2 != 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} sprite sheet slot count must be even, got {slot_count}"),
-        ));
-    }
+    // `formats/tiles.md §5.3` (spec `9807eb4`): the leading word is the
+    // sprite count. Each sprite owns two 16-bit offsets, image then mask.
+    // The old parser treated this as an offset count and consequently loaded
+    // only half of every ITEMS/MON sheet.
+    let sprite_count = u16_at(body, 0) as usize;
     let header_len = 2usize
-        .checked_add(slot_count.checked_mul(2).ok_or_else(|| {
+        .checked_add(sprite_count.checked_mul(4).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("{resource_name} sprite sheet slot count overflows"),
+                format!("{resource_name} sprite sheet sprite count overflows"),
             )
         })?)
         .ok_or_else(|| {
@@ -287,8 +287,8 @@ pub fn parse_graphic_sprite_sheet_body(
         ));
     }
 
-    let mut sprites = Vec::with_capacity(slot_count / 2);
-    for sprite_index in 0..slot_count / 2 {
+    let mut sprites = Vec::with_capacity(sprite_count);
+    for sprite_index in 0..sprite_count {
         let image_slot = sprite_index * 2;
         let mask_slot = image_slot + 1;
         let image_offset = u16_at(body, 2 + image_slot * 2) as usize;

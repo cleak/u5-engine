@@ -83,15 +83,16 @@
     }
 
     #[test]
-    fn exit_vehicle_skips_town_exit_tile_landing_cells() {
+    fn exit_vehicle_ignores_retired_town_exit_tile_sidecar() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 2 1 16\n").unwrap();
+        fs::write(dir.join("town_exit_tiles.tsv"), "CASTLE:0 0 2 1 16\n").unwrap();
         let mut state = test_state(open_grid(), 1, 1);
         state.player.transport = TransportState::Carpet {
             type_byte: 184,
             tile: 184,
         };
         state.sync_player_object();
+        assert!(state.player_can_land_on_foot(Some(&dir), 2, 1).unwrap());
 
         assert_eq!(
             state.exit_vehicle_with_game_dir(Some(&dir)).unwrap(),
@@ -280,7 +281,7 @@
         );
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.active_objects.len(), 1);
-        assert_eq!(state.message, "Not here!");
+        assert_eq!(state.message, SHIP_NO_SKIFFS_WARNING);
         assert_eq!(state.turn, 0);
     }
 
@@ -464,7 +465,7 @@
         assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
 
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.active_effect_timing_status(), TimingStatusTag::Normal);
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
         assert_eq!((state.player.x, state.player.y), (5, 5));
@@ -493,9 +494,10 @@
     }
 
     #[test]
-    fn exit_vehicle_parked_object_is_included_in_saved_overworld_overlay() {
+    fn exit_vehicle_parked_object_is_written_to_the_live_saved_gam_table() {
         let dir = debug_game_dir();
         fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0xff, 6, 5)).unwrap();
+        write_empty_ool_mirrors(&dir);
         let mut state = world_state(open_world_grid(), 5, 5);
         state.player.transport = TransportState::Ship {
             type_byte: 168,
@@ -529,7 +531,7 @@
         let saved_ool = fs::read(dir.join("SAVED.OOL")).unwrap();
         let underworld =
             decode_ool_plane_objects(&saved_ool[OOL_PLANE_LEN..SAVED_OOL_LEN]).unwrap();
-        assert_eq!(underworld[0], parked);
+        assert!(underworld[0].is_empty());
 
         let saved_gam = fs::read(dir.join("SAVED.GAM")).unwrap();
         assert_eq!(
@@ -802,7 +804,7 @@
 
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
-        assert_eq!(state.message, "Sails hoisted.");
+        assert_eq!(state.message, "HOIST!");
 
         state.sail_cadence = 1;
         state.sail_stall_pending = true;
@@ -811,7 +813,7 @@
 
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
-        assert_eq!(state.message, "Sails furled.");
+        assert_eq!(state.message, "FURL!");
         assert_eq!(state.turn, 2);
     }
 
@@ -832,7 +834,7 @@
         );
 
         assert!(ship.player.transport.is_ship_under_sail());
-        assert_eq!(ship.message, "Sails hoisted.");
+        assert_eq!(ship.message, "HOIST!");
         assert_eq!(ship.turn, 1);
 
         let mut foot = world_state(open_world_grid(), 5, 5);
@@ -847,7 +849,89 @@
     }
 
     #[test]
-    fn y_yell_words_and_shadowlord_names_consume_turn_without_placeholder() {
+    fn y_yell_shipboard_scene_gate_accepts_town_and_dungeon_bands() {
+        let mut town = test_state(open_grid(), 5, 5);
+        let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        for state in [&mut town, &mut dungeon] {
+            state.player.transport = TransportState::Ship {
+                type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE,
+                sails_hoisted: false,
+                hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+                skiffs: 2,
+            };
+
+            assert_eq!(state.start_yell_prompt(), MoveOutcome::SailToggled);
+            assert!(state.player.transport.is_ship_under_sail());
+            assert_eq!(state.message, YELL_SAILS_HOISTED_MESSAGE);
+            assert_eq!(state.turn, 1);
+            assert!(state.active_yell.is_none());
+        }
+    }
+
+    #[test]
+    fn y_yell_shipboard_high_scene_byte_uses_the_word_prompt() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.player.transport = TransportState::Ship {
+            type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+            skiffs: 2,
+        };
+        state.combat_active = true;
+
+        assert_eq!(state.start_yell_prompt(), MoveOutcome::Observed);
+        assert!(state.active_yell.is_some());
+        assert!(state.message.contains("Yell what?"));
+        assert_eq!(state.turn, 0);
+        assert!(matches!(
+            state.player.transport,
+            TransportState::Ship {
+                sails_hoisted: false,
+                ..
+            }
+        ));
+
+        assert_eq!(state.yell_command(Some("")), MoveOutcome::Used);
+        assert_eq!(state.message, YELL_NOTHING_SAID_MESSAGE);
+        assert_eq!(state.turn, 1);
+        assert!(!state.player.transport.is_ship_under_sail());
+    }
+
+    #[test]
+    fn y_yell_empty_prompt_submission_is_acted_in_every_exploration_mode() {
+        let states = [
+            ("world", world_state(open_world_grid(), 5, 5)),
+            ("town", test_state(open_grid(), 5, 5)),
+            (
+                "dungeon",
+                dungeon_state(open_dungeon_record(), 0, 1, 1),
+            ),
+        ];
+
+        for (mode, mut state) in states {
+            assert_eq!(
+                handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue,
+                "{mode} prompt dispatch"
+            );
+            assert!(state.active_yell.is_some(), "{mode} prompt missing");
+            assert_eq!(state.turn, 0, "{mode} prompt must remain free");
+
+            assert_eq!(
+                handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue,
+                "{mode} empty submission"
+            );
+            assert!(state.active_yell.is_none(), "{mode} prompt remained active");
+            assert_eq!(state.turn, 1, "{mode} empty Yell was not acted");
+            assert_eq!(state.message, YELL_NOTHING_SAID_MESSAGE, "{mode} result");
+        }
+    }
+
+    #[test]
+    fn y_yell_wrong_scene_words_and_names_consume_turn_with_generic_no_effect() {
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
 
         assert_eq!(
@@ -857,10 +941,8 @@
 
         assert_eq!(dungeon.turn, 1);
         assert!(dungeon.message.contains("Yelled FALLAX"));
-        assert!(dungeon.message.contains("Word of Power for Deceit"));
-        assert!(dungeon.message.contains("low rumble"));
-        assert!(dungeon.message.contains("full-viewport flash"));
-        assert!(!dungeon.message.contains("out of scope"));
+        assert!(dungeon.message.contains("Nothing happens."));
+        assert!(!dungeon.message.contains("Word of Power"));
 
         let mut world = world_state(open_world_grid(), 5, 5);
 
@@ -870,86 +952,215 @@
         );
 
         assert_eq!(world.turn, 1);
-        assert!(world.message.contains("name of Falsehood"));
-        assert!(world.message.contains("No Shadowlord answers here."));
+        assert_eq!(world.message, "Yelled FAULINEI. Nothing happens.");
     }
 
     #[test]
     fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
-        let mut world = world_state(open_world_grid(), 240, 73);
+        let seal = word_of_power_seal_for_word("FALLAX").unwrap();
+        let mut world = world_state(open_world_grid(), 241, 73);
         world.area = Area::World {
-            plane: WorldPlane::Britannia,
+            // The horizontal coordinate predicate deliberately ignores plane.
+            plane: WorldPlane::Underworld,
         };
         let idx = world_cell_index(240, 73);
-        world.grid[idx] = 0x16;
+        world.grid[idx] = WORD_OF_POWER_SEALED_TILE;
+        world.refresh_world_live_chunks_for_current_area().unwrap();
 
-        assert_eq!(
-            handle_play_key_input(&mut world, 'Y', "fallax", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        assert_eq!(world.yell_command(Some("fallax")), MoveOutcome::Used);
 
         assert_eq!(world.turn, 1);
-        assert_eq!(world.grid[idx], 0x16 ^ WORD_OF_POWER_SEAL_XOR);
+        assert_eq!(world.grid[idx], seal.unsealed_tile);
+        assert_eq!(
+            world.word_of_power_seal_flags[0] & SAVE_QUEST_TILE_FLAG_HIGH_BIT,
+            SAVE_QUEST_TILE_FLAG_HIGH_BIT
+        );
         assert!(world.visibility_dirty);
         assert!(world.message.contains("A word of power is uttered"));
         assert!(world.message.contains("The seal opens."));
+
+        assert_eq!(world.player.x, 241);
+        assert_eq!(world.current_scene_byte(), SCENE_OVERWORLD);
+        assert_eq!(world.world_live_tile_at(240, 73), seal.unsealed_tile);
+        assert_eq!(world.yell_command(Some("FALLAX")), MoveOutcome::Used);
+        assert_eq!(world.grid[idx], WORD_OF_POWER_SEALED_TILE);
+        assert_eq!(
+            world.word_of_power_seal_flags[0] & SAVE_QUEST_TILE_FLAG_HIGH_BIT,
+            0
+        );
+        assert!(world.message.contains("collapses shut"));
 
         let mut wrong_place = world_state(open_world_grid(), 5, 5);
         wrong_place.area = Area::World {
             plane: WorldPlane::Britannia,
         };
-        wrong_place.grid[idx] = 0x16;
+        let wrong_idx = world_cell_index(4, 5);
+        wrong_place.grid[wrong_idx] = WORD_OF_POWER_SEALED_TILE;
         assert_eq!(
             handle_play_key_input(&mut wrong_place, 'Y', "fallax", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(wrong_place.grid[idx], 0x16);
+        assert_eq!(wrong_place.grid[wrong_idx], WORD_OF_POWER_SEALED_TILE);
+        assert_eq!(wrong_place.word_of_power_seal_flags[0], 0);
         assert!(wrong_place.message.contains("A word of power is uttered"));
-        assert!(wrong_place
-            .message
-            .contains("No matching Word-of-Power seal is present."));
+        assert!(wrong_place.message.contains("Nothing happens."));
     }
 
     #[test]
     fn y_yell_veramocor_opens_underworld_doom_seal() {
-        let mut world = world_state(open_world_grid(), 128, 128);
+        let seal = word_of_power_seal_for_word("VERAMOCOR").unwrap();
+        let mut world = world_state(open_world_grid(), 129, 128);
         world.area = Area::World {
             plane: WorldPlane::Underworld,
         };
         let idx = world_cell_index(128, 128);
-        world.grid[idx] = 0x16;
+        world.grid[idx] = WORD_OF_POWER_SEALED_TILE;
+        world.refresh_world_live_chunks_for_current_area().unwrap();
 
         assert_eq!(
             handle_play_key_input(&mut world, 'Y', "veramocor", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(world.grid[idx], 0x16 ^ WORD_OF_POWER_SEAL_XOR);
+        assert_eq!(world.grid[idx], seal.unsealed_tile);
+        assert_ne!(world.word_of_power_seal_flags[7] & 0x80, 0);
         assert!(world.message.contains("Word of Power for Doom"));
         assert!(world.message.contains("The seal opens."));
     }
 
     #[test]
-    fn y_yell_shadowlord_name_observes_vanquished_state() {
-        let mut world = world_state(open_world_grid(), 5, 5);
-        world.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SHADOWLORD_VANQUISHED;
+    fn y_yell_word_target_scan_prefers_west_and_leaves_ruined_shrine_for_issue_135() {
+        let seal = word_of_power_seal_for_word("FALLAX").unwrap();
+        let mut world = world_state(open_world_grid(), 239, 73);
+        let west = world_cell_index(238, 73);
+        let east = world_cell_index(240, 73);
+        world.grid[west] = WORLD_RUINED_SHRINE_TILE;
+        world.grid[east] = WORD_OF_POWER_SEALED_TILE;
+        world.refresh_world_live_chunks_for_current_area().unwrap();
 
         assert_eq!(
-            handle_play_key_input(&mut world, 'Y', "faulinei", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
+            world.open_word_of_power_seal(0, seal),
+            WordOfPowerTargetOutcome::RuinedShrine { x: 238, y: 73 }
         );
-
-        assert_eq!(world.turn, 1);
-        assert!(world.message.contains("name of Falsehood"));
-        assert!(world.message.contains("Falsehood is vanquished."));
+        assert_eq!(world.grid[west], WORLD_RUINED_SHRINE_TILE);
+        assert_eq!(world.grid[east], WORD_OF_POWER_SEALED_TILE);
+        assert_eq!(world.word_of_power_seal_flags[0], 0);
+        assert!(!world.visibility_dirty);
     }
 
     #[test]
-    fn y_yell_shadowlord_name_spawns_only_in_matching_virtue_town() {
+    fn y_yell_ruined_shrine_four_response_success_restores_only_shrine_state() {
+        let (shrine_x, shrine_y) = WORLD_SHRINE_COORDINATES[0];
+        let mut world = world_state(open_world_grid(), shrine_x + 1, shrine_y);
+        world.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        let shrine_index = world_cell_index(shrine_x, shrine_y);
+        world.grid[shrine_index] = WORLD_RUINED_SHRINE_TILE;
+        world.shrine_ruin_flags[0] = 0x85;
+        world.word_of_power_seal_flags[0] = 0xa7;
+        world.visibility_dirty = false;
+
+        assert_eq!(world.yell_command(Some("FALLAX")), MoveOutcome::Used);
+        assert_eq!(world.turn, 1);
+        assert!(world.active_shrine_restoration.is_some());
+        assert!(world.message.contains(SHRINE_RESTORATION_VIRTUE_PROMPT));
+        assert_eq!(world.grid[shrine_index], WORLD_RUINED_SHRINE_TILE);
+        assert_eq!(world.shrine_ruin_flags[0], 0x85);
+        assert_eq!(world.word_of_power_seal_flags[0], 0xa7);
+
+        assert_eq!(world.step_active_shrine_restoration('H', "onesty"), None);
+        assert_eq!(world.step_active_shrine_restoration('A', "hm"), None);
+        assert_eq!(world.step_active_shrine_restoration('x', "AHM x"), None);
+        assert_eq!(
+            world.step_active_shrine_restoration('a', "hm forever"),
+            Some(MoveOutcome::Used)
+        );
+
+        assert!(world.active_shrine_restoration.is_none());
+        assert_eq!(world.grid[shrine_index], WORLD_SHRINE_TILE);
+        assert_eq!(world.shrine_ruin_flags[0], 0x05);
+        assert_eq!(world.word_of_power_seal_flags[0], 0xa7);
+        assert!(world.visibility_dirty);
+        assert!(world.message.contains(SHRINE_RESTORATION_SUCCESS_BANNER));
+        assert!(world.message.contains(&format!(
+            "ahm forever{SHRINE_RESTORATION_SUCCESS_BANNER}{}",
+            PlayState::word_of_power_presentation_message()
+        )));
+        assert_eq!(
+            world
+                .message
+                .matches(PlayState::word_of_power_presentation_message())
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn y_yell_ruined_shrine_failure_still_asks_all_fields_and_escape_only_clears() {
+        let mut world = world_state(open_world_grid(), 11, 10);
+        let ruined_index = world_cell_index(10, 10);
+        world.grid[ruined_index] = WORLD_RUINED_SHRINE_TILE;
+        world.shrine_ruin_flags[0] = 0x83;
+        world.word_of_power_seal_flags[0] = 0x55;
+        world.refresh_world_live_chunks_for_current_area().unwrap();
+
+        assert_eq!(world.yell_command(Some("FALLAX")), MoveOutcome::Used);
+        world
+            .active_shrine_restoration
+            .as_mut()
+            .unwrap()
+            .buffer
+            .push_str("Honesty");
+        assert_eq!(world.step_active_shrine_restoration('\u{1b}', ""), None);
+        let session = world.active_shrine_restoration.as_ref().unwrap();
+        assert!(session.buffer.is_empty());
+        assert_eq!(session.response_index, 0);
+
+        // Enter now submits the cleared, failing virtue response, but the
+        // three mantra questions still follow.
+        assert_eq!(world.step_active_shrine_restoration('\r', ""), None);
+        assert_eq!(world.step_active_shrine_restoration('A', "hm"), None);
+        assert_eq!(world.step_active_shrine_restoration('A', "hm"), None);
+        assert_eq!(
+            world.step_active_shrine_restoration('A', "hm"),
+            Some(MoveOutcome::Used)
+        );
+
+        assert!(world.active_shrine_restoration.is_none());
+        assert_eq!(world.grid[ruined_index], WORLD_RUINED_SHRINE_TILE);
+        assert_eq!(world.shrine_ruin_flags[0], 0x83);
+        assert_eq!(world.word_of_power_seal_flags[0], 0x55);
+        assert!(!world.message.contains("No effect!"));
+        assert!(!world.message.contains(SHRINE_RESTORATION_SUCCESS_BANNER));
+        assert!(world.message.ends_with("Ahm\n"));
+        assert_eq!(world.message.matches(SHRINE_RESTORATION_MANTRA_PROMPT).count(), 3);
+    }
+
+    #[test]
+    fn y_yell_shadowlord_name_observes_vanquished_state() {
         let mut town = test_state(open_grid(), 5, 5);
         town.area = Area::Town {
-            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
+            scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
+            floor: 0,
+        };
+        town.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SHADOWLORD_VANQUISHED;
+
+        assert_eq!(
+            handle_play_key_input(&mut town, 'Y', "faulinei", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(town.turn, 1);
+        assert_eq!(town.message, "Yelled FAULINEI. Nothing happens.");
+    }
+
+    #[test]
+    fn y_yell_shadowlord_name_spawns_in_any_eternal_flame_keep() {
+        let mut town = test_state(open_grid(), 5, 5);
+        town.area = Area::Town {
+            scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
             floor: 0,
         };
         town.visibility_dirty = false;
@@ -961,20 +1172,21 @@
 
         assert_eq!(town.turn, 1);
         assert!(town.message.contains("Falsehood appears"));
-        assert_eq!(town.active_objects.len(), 2);
+        assert_eq!(town.active_objects.len(), OOL_SLOTS);
         assert_eq!(
-            town.active_objects[1],
+            town.active_objects[OOL_SLOTS - 1],
             ActiveObject {
                 type_byte: SHADOWLORD_OBJECT_TILE_BASE,
                 tile: SHADOWLORD_OBJECT_TILE_BASE,
                 x: 5,
-                y: 6,
+                y: 3,
                 z: 0,
-                phase: active_object_phase_from_direction(Direction::North, 0),
-                aux1: SHADOWLORD_FALSEHOOD_INDEX as u8,
-                aux3: DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX],
+                phase: active_object_phase_toward_player(0, -2),
+                aux1: 0,
+                aux3: 0,
             }
         );
+        assert_eq!(town.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
         assert!(town.visibility_dirty);
 
         let mut wrong_town = test_state(open_grid(), 5, 5);
@@ -989,21 +1201,16 @@
         );
 
         assert_eq!(wrong_town.active_objects.len(), 1);
-        assert!(wrong_town.message.contains("No Shadowlord answers here."));
+        assert_eq!(wrong_town.message, "Yelled FAULINEI. Nothing happens.");
     }
 
     #[test]
-    fn y_yell_shadowlord_name_evicts_rather_than_refusing_on_a_full_table() {
+    fn y_yell_shadowlord_name_refuses_when_no_active_object_slot_is_free() {
         let mut town = test_state(open_grid(), 5, 5);
         town.area = Area::Town {
-            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
+            scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
             floor: 0,
         };
-        // active-objects.md §4: a full ordinary range is no longer a
-        // failed acquisition on its own -- the eviction cascade takes a
-        // lower-priority victim. Pack an *evictable* class here (0x10 is
-        // the phase-4/8 door/fixture class); the genuinely-no-slot case
-        // packs 0xB5 in the second half of this test.
         town.active_objects.resize(
             OOL_SLOTS,
             ActiveObject {
@@ -1017,7 +1224,6 @@
                 aux3: 0,
             },
         );
-        town.recompute_daylight();
         town.visibility_dirty = false;
 
         assert_eq!(
@@ -1025,58 +1231,59 @@
             PlayInputDisposition::Continue
         );
 
-        // `active-objects.md §4`: "if the ordinary range is full,
-        // acquisition can evict a lower-priority object", and
-        // `encounters.md §9` withdraws the earlier "silently fails when
-        // the table is full" reading outright. Byte-0 `0x10` is the
-        // phase-4/8 door/fixture class, so the cascade takes the lowest
-        // ordinary slot rather than refusing. "No Shadowlord answers
-        // here." stays reachable for the wrong-scene case exercised by
-        // the preceding test; a full table is not one of its causes.
         assert_eq!(town.turn, 1);
         assert!(
-            town.message.contains("appears in active-object slot 1"),
+            town.message.contains("Nothing happens."),
             "unexpected message: {}",
             town.message
         );
-        assert!(town.visibility_dirty);
-
-        // `0xB5` is the one universally protected byte-0 value, so a
-        // table made entirely of it is the single case with no victim.
-        let mut protected = test_state(open_grid(), 5, 5);
-        protected.area = Area::Town {
-            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
-            floor: 0,
-        };
-        protected.active_objects.resize(
-            OOL_SLOTS,
-            ActiveObject {
-                type_byte: ACTIVE_OBJECT_PROTECTED_TYPE_BYTE,
-                tile: ACTIVE_OBJECT_PROTECTED_TYPE_BYTE,
-                x: 0,
-                y: 0,
-                z: 1,
-                phase: STEADY_PHASE,
-                aux1: 0,
-                aux3: 0,
-            },
-        );
-        protected.recompute_daylight();
-
-        assert_eq!(
-            handle_play_key_input(&mut protected, 'Y', "faulinei", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
-        assert!(
-            protected.message.contains("No Shadowlord answers here."),
-            "unexpected message: {}",
-            protected.message
-        );
-        assert!(protected
+        assert!(!town.visibility_dirty);
+        assert_eq!(town.summoned_shadowlord, None);
+        assert!(town
             .active_objects
             .iter()
             .skip(1)
-            .all(|object| object.type_byte == ACTIVE_OBJECT_PROTECTED_TYPE_BYTE));
+            .all(|object| object.type_byte == 0x10));
+    }
+
+    #[test]
+    fn shadowlord_name_allocation_detaches_an_empty_descriptor_from_stale_npc_ownership() {
+        let mut town = test_state(open_grid(), 5, 5);
+        town.area = Area::Town {
+            scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
+            floor: 0,
+        };
+        town.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        let acquired_slot = OOL_SLOTS - 1;
+        let mut stale_owner = RuntimeNpc::from_slot(
+            &NpcSlot {
+                slot: 1,
+                type_byte: 0x70,
+                dialog_id: 0,
+                schedule: [0; NPC_SCHEDULE_RECORD_LEN],
+                name: None,
+            },
+            town.clock.hour,
+        );
+        stale_owner.active_object = Some(acquired_slot);
+        town.npcs.push(stale_owner);
+
+        assert_eq!(
+            town.place_shadowlord_name_encounter(SHADOWLORD_FALSEHOOD_INDEX),
+            Some(acquired_slot)
+        );
+        assert_eq!(town.npcs[0].active_object, None);
+        assert!(PlayState::is_shadowlord_actor(
+            town.active_objects[acquired_slot]
+        ));
+        assert_eq!(
+            town.summoned_shadowlord,
+            Some(SHADOWLORD_FALSEHOOD_INDEX)
+        );
+        town.sync_player_object();
+        assert!(PlayState::is_shadowlord_actor(
+            town.active_objects[acquired_slot]
+        ));
     }
 
     #[test]
@@ -1093,16 +1300,15 @@
         assert!(!state.shadowlord_alive(SHADOWLORD_COWARDICE_INDEX));
         assert!(!state.all_shadowlords_vanquished());
 
-        state.quest_progress_word = 0x0100;
         assert!(state.vanquish_shadowlord(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(
-            state.quest_progress_word,
-            0x0100 | SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT
+            state.removed_town_npc_flags.get(&STONEGATE_SCENE_BYTE),
+            Some(&(1 << SHADOWLORD_FALSEHOOD_STONEGATE_NPC_SLOT))
         );
         assert!(!state.vanquish_shadowlord(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(
-            state.quest_progress_word,
-            0x0100 | SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT
+            state.removed_town_npc_flags.get(&STONEGATE_SCENE_BYTE),
+            Some(&(1 << SHADOWLORD_FALSEHOOD_STONEGATE_NPC_SLOT))
         );
         state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX] = SHADOWLORD_VANQUISHED;
 
@@ -1132,6 +1338,36 @@
             floor: 0,
         };
         assert_eq!(state.stonegate_entry_presentation_message(), None);
+    }
+
+    #[test]
+    fn removed_npc_mask_is_scene_wide_and_not_keyed_by_floor() {
+        let scene = Scene::new(17).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        let slots = [
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x0E,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ];
+
+        assert!(state.mark_removed_town_npc_once(scene, 1));
+        assert!(!state.mark_removed_town_npc_once(scene, 1));
+        state.area = Area::Town { scene, floor: 5 };
+        state.load_scheduled_npcs(&slots);
+
+        assert!(state.npcs.is_empty());
+        assert_eq!(state.removed_town_npc_flags.get(&scene.byte), Some(&0b10));
     }
 
     #[test]
@@ -1223,7 +1459,7 @@
         assert_eq!(state.turn, 1);
         assert!(state.npcs.is_empty());
         assert!(state.active_objects[object_slot].is_empty());
-        assert_eq!(state.removed_town_npcs, vec![(17, 0, 1)]);
+        assert_eq!(state.removed_town_npc_flags.get(&17), Some(&0b10));
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Attacked NPC slot 1"));
         assert!(state.message.contains("type 0x0E"));
@@ -1268,7 +1504,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.npcs.len(), 1);
         assert!(!state.active_objects[object_slot].is_empty());
-        assert!(state.removed_town_npcs.is_empty());
+        assert!(state.removed_town_npc_flags.is_empty());
         assert!(!state.combat_active);
         assert!(state.message.contains("type 0x50"));
         assert!(state.message.contains("no attackable town NPC"));
@@ -1307,11 +1543,9 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.npcs.len(), 1);
         assert!(!state.active_objects[object_slot].is_empty());
-        assert!(state.removed_town_npcs.is_empty());
-        assert_eq!(
-            state.town_npc_alarm_state(Scene::new(17).unwrap(), 0, 1),
-            Some(TownNpcAlarmState::Fortified)
-        );
+        assert!(state.removed_town_npc_flags.is_empty());
+        assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
+        assert_eq!(&state.npcs[0].schedule[12..16], &[0, 0, 0, 0]);
         assert!(!state.combat_active);
         assert!(state.message.contains("type 0x70"));
         assert!(state.message.contains("alarm raised"));
@@ -1324,7 +1558,7 @@
         fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
         let mut state = world_state(open_world_grid(), 5, 5);
         state.active_objects.push(ActiveObject {
-            type_byte: 0x44,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 6,
             y: 5,
@@ -1346,7 +1580,7 @@
         assert!(state.message.contains("Attacked object tile 192"));
         assert!(state.message.contains("slot 1"));
         assert!(state.message.contains("entered terrain combat"));
-        assert!(state.message.contains("BRIT.CBT arena 1"));
+        assert!(state.message.contains("BRIT.CBT arena 2"));
         assert!(state.message.contains("Orc"));
         assert_eq!(state.active_objects[6].tile, 0xc0);
         assert_eq!(
@@ -1362,7 +1596,7 @@
     fn world_attack_reports_published_base_combat_class_from_sprite_run() {
         let mut state = world_state(open_world_grid(), 5, 5);
         state.active_objects.push(ActiveObject {
-            type_byte: 0x44,
+            type_byte: 0xc0,
             tile: 0xc0,
             x: 6,
             y: 5,
@@ -1374,7 +1608,7 @@
 
         assert_eq!(state.attack_command(Some(Direction::East)), MoveOutcome::Used);
 
-        assert!(state.message.contains("selected BRIT.CBT arena 1"));
+        assert!(state.message.contains("selected BRIT.CBT arena 2"));
         assert!(state.message.contains("base class Orc (32)"));
     }
 
@@ -1480,9 +1714,10 @@
     }
 
     #[test]
-    fn ship_fire_removed_target_is_included_in_saved_overworld_overlay() {
+    fn ship_fire_removed_target_is_written_to_the_live_saved_gam_table() {
         let dir = debug_game_dir();
         fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0, 10, 10)).unwrap();
+        write_empty_ool_mirrors(&dir);
         let mut state = britannia_state(open_world_grid(), 10, 10);
         state.player.facing = Direction::East;
         state.player.transport = TransportState::Ship {
@@ -1587,7 +1822,7 @@
 
         let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
         let britannia = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
-        assert_eq!(britannia[0], damaged_target);
+        assert!(britannia[0].is_empty());
         assert!(britannia[1].is_empty());
         let saved_gam = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
         let saved_active = decode_saved_active_objects(&saved_gam).unwrap();
@@ -1700,10 +1935,10 @@
         .unwrap();
         let mut grid = open_grid();
         grid[32 + 1] = 0x51;
-        grid[32 + 3] = 96;
+        grid[32 + 3] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         let mut state = test_state(grid, 0, 1);
         state.door_tracker = Some(DoorTracker {
-            previous_tile: 96,
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
             x: 3,
             y: 1,
             turns_remaining: 1,
@@ -1716,7 +1951,7 @@
 
         assert_eq!(state.message, "What?");
         assert_eq!(state.turn, 0);
-        assert_eq!(state.grid[32 + 3], 96);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(state.door_tracker, None);
         let _ = fs::remove_dir_all(dir);
     }
@@ -1726,16 +1961,16 @@
         let dir = debug_game_dir();
         let mut grid = open_grid();
         grid[32 + 1] = TOWN_CANNON_TILE_FIRST + 1;
-        grid[32 + 3] = 96;
+        grid[32 + 3] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         let mut state = test_state(grid, 0, 1);
 
         assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
 
-        assert_eq!(state.grid[32 + 3], 16);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("BOOOM! Door destroyed!"));
         assert!(state.message.contains("fired East"));
-        assert!(state.message.contains("destroyed door tile 96"));
+        assert!(state.message.contains("destroyed door tile 184"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1749,14 +1984,14 @@
         .unwrap();
         let mut grid = open_grid();
         grid[32] = TOWN_CANNON_TILE_FIRST + 1;
-        grid[3] = 96;
-        grid[32 + 3] = 96;
+        grid[3] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
+        grid[32 + 3] = TOWN_DOOR_WINDOWED_UNLOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
 
         assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
 
-        assert_eq!(state.grid[3], 16);
-        assert_eq!(state.grid[32 + 3], 96);
+        assert_eq!(state.grid[3], TOWN_DOOR_CLEARED_TILE);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_WINDOWED_UNLOCKED_TILE);
         assert!(state.message.contains("fired East"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -1770,11 +2005,11 @@
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 3] = 96;
+        grid[32 + 3] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         let mut state = test_state(grid, 0, 1);
         state.visibility_dirty = false;
         state.door_tracker = Some(DoorTracker {
-            previous_tile: 96,
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
             x: 3,
             y: 1,
             turns_remaining: 1,
@@ -1782,12 +2017,12 @@
 
         assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
 
-        assert_eq!(state.grid[32 + 3], 16);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.door_tracker, None);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("BOOOM!"));
-        assert!(state.message.contains("destroyed door tile 96"));
+        assert!(state.message.contains("destroyed door tile 184"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1801,21 +2036,21 @@
         .unwrap();
         fs::write(
             dir.join(TOWN_LOCK_TABLE_FILE),
-            "CASTLE:0 0 3 1 96 97 MAGIC\n",
+            "CASTLE:0 0 3 1 151 184 MAGIC\n",
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 3] = 96;
+        grid[32 + 3] = TOWN_DOOR_MAGIC_PLAIN_TILE;
         let scene = Scene::new(17).unwrap();
         let mut state = test_state(grid, 0, 1);
 
         assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
 
-        assert_eq!(state.grid[32 + 3], 16);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_CLEARED_TILE);
         assert!(state.is_recorded_open_town_door(scene, 0, 3, 1));
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("destroyed door tile 96"));
+        assert!(state.message.contains("destroyed door tile 151"));
         assert!(!state.message.contains("Magic lock"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -1827,9 +2062,9 @@
         let mut pages = vec![16; 16 * 1024];
         let floor_zero = 5 * 1024;
         let floor_one = 6 * 1024;
-        pages[floor_zero] = 80;
-        pages[floor_zero + 32 + 3] = 96;
-        pages[floor_one] = 80;
+        pages[floor_zero] = TOWN_KLIMB_ASCEND_TILE;
+        pages[floor_zero + 32 + 3] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
+        pages[floor_one] = TOWN_KLIMB_DESCEND_TILE;
         fs::write(dir.join("CASTLE.DAT"), pages).unwrap();
         fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
         fs::write(
@@ -1838,12 +2073,12 @@
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[0] = 80;
-        grid[32 + 3] = 96;
+        grid[0] = TOWN_KLIMB_ASCEND_TILE;
+        grid[32 + 3] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         let mut state = test_state(grid, 0, 1);
 
         assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
-        assert_eq!(state.grid[32 + 3], 16);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_CLEARED_TILE);
         assert!(state.is_recorded_open_town_door(scene, 0, 3, 1));
 
         state.player.x = 0;
@@ -1860,7 +2095,7 @@
         );
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!(state.grid[32 + 3], 96);
+        assert_eq!(state.grid[32 + 3], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert!(!state.is_recorded_open_town_door(scene, 0, 3, 1));
         assert_eq!(state.door_tracker, None);
         assert_eq!(state.turn, 3);

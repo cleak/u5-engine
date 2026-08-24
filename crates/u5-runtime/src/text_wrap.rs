@@ -286,6 +286,22 @@ impl TextWindowSystem {
         self.cells[usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x)]
     }
 
+    /// Clear one window-local row in the retained cell surface without
+    /// changing the descriptor or its cursor. This is a modern compositor
+    /// helper used when rebuilding the live prompt line into gameplay window
+    /// 2; it is not a resident text control and does not model a fourth window.
+    pub fn clear_active_row(&mut self, row: u8) {
+        let window = self.active_window();
+        if row >= window.height() {
+            return;
+        }
+        let y = window.top_left_y + row;
+        let start = usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(window.top_left_x);
+        let end =
+            usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(window.bottom_right_x) + 1;
+        self.cells[start..end].fill(None);
+    }
+
     pub fn screen_rows(&self, fill: u8) -> Vec<String> {
         self.region_rows(0, 0, TEXT_SCREEN_COLUMNS - 1, TEXT_SCREEN_ROWS - 1, fill)
     }
@@ -313,6 +329,15 @@ impl TextWindowSystem {
             EmitterByteKind::Control(control) => self.apply_control(control),
             EmitterByteKind::Other => {}
         }
+    }
+
+    /// Emit one fixed-font glyph code without routing it through the text
+    /// stream's printable/control classifier. Display-owned badges use resident
+    /// `IBM.CH` codes below ASCII space (for example the arms page indicator's
+    /// `0x01`/`0x02` caps), which are glyphs in that context rather than text
+    /// controls.
+    pub fn emit_fixed_glyph(&mut self, glyph: u8) {
+        self.emit_glyph(glyph);
     }
 
     pub fn print_wrapped_string(&mut self, source: &str) {
@@ -398,6 +423,8 @@ impl TextWindowSystem {
     fn line_feed(&mut self) {
         let height = self.active_window().height();
         let window = &mut self.windows[self.active_window];
+        // Resident LF is a combined carriage return + line feed.
+        window.cursor_x = 0;
         window.cursor_y = window.cursor_y.saturating_add(1);
         if window.cursor_y >= height {
             window.cursor_y = height.saturating_sub(1);
@@ -432,17 +459,21 @@ impl TextWindowSystem {
 
     fn scroll_active_window(&mut self) {
         let window = self.active_window();
-        for y in window.top_left_y..window.bottom_right_y {
+        // `text-output.md §10.5` / `display-driver-abi.md §9.5`: the
+        // one-row scroll copies from one cell row below the window as well;
+        // it does not blank the vacated bottom row. Subsequent output normally
+        // covers that row immediately. A full-screen window has no source row
+        // below it, so its last row is left as-is until overwritten.
+        for y in window.top_left_y..=window.bottom_right_y {
+            let Some(source_y) = y.checked_add(1).filter(|source| *source < TEXT_SCREEN_ROWS)
+            else {
+                continue;
+            };
             for x in window.top_left_x..=window.bottom_right_x {
                 let dst = usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
-                let src = usize::from(y + 1) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
+                let src = usize::from(source_y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
                 self.cells[dst] = self.cells[src];
             }
-        }
-        for x in window.top_left_x..=window.bottom_right_x {
-            let index =
-                usize::from(window.bottom_right_y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
-            self.cells[index] = None;
         }
     }
 }

@@ -53,6 +53,59 @@ pub const EQUIPMENT_NAMES: [&str; EQUIPMENT_COUNT] = [
     "Ankh",
 ];
 
+/// Fixed narrow-panel equipment labels from `catalogs/item-list.md §5.1.2`.
+/// Unlike the arms buy list, the arms sell browser always uses this row.
+pub const EQUIPMENT_SHORT_LABELS: [&str; EQUIPMENT_COUNT] = [
+    "Leath Helm",
+    "Chain Coif",
+    "Iron Helm",
+    "Spkd. Helm",
+    "Sm. Shield",
+    "Lg. Shield",
+    "Spkd. Shld",
+    "Mag. Shld",
+    "Jewel Shld",
+    "Cloth",
+    "Leather",
+    "Ring Mail",
+    "Scale",
+    "Chain",
+    "Plate",
+    "Myst. Armr",
+    "Dagger",
+    "Sling",
+    "Club",
+    "Flame Oil",
+    "Main Gauch",
+    "Spear",
+    "Thrwng Axe",
+    "Sht. Sword",
+    "Mace",
+    "Morn. Star",
+    "Bow",
+    "Arrows",
+    "Crossbow",
+    "Quarrels",
+    "Long Sword",
+    "2H Hammer",
+    "2H Axe",
+    "2H Sword",
+    "Halberd",
+    "Chaos Swrd",
+    "Magic Bow",
+    "Silver Swd",
+    "Magic Axe",
+    "Glass Swrd",
+    "Jewel Swrd",
+    "Myst. Swrd",
+    "Inv. Ring",
+    "Prot. Ring",
+    "Regen Ring",
+    "Am/Turning",
+    "Sp. Collar",
+    "Ankh",
+];
+
 /// `inventory.md §3` empty-slot sentinel for the six readied
 /// equipment bytes inside a character record.
 pub const EQUIPMENT_EMPTY_SLOT_SENTINEL: u8 = 0xFF;
@@ -193,6 +246,122 @@ pub const fn potion_use_effect(index: usize) -> Option<PotionUseEffect> {
 /// Orange sleep effect and 1-in-16 to replace the effect with a
 /// uniformly random potion row.
 pub const POTION_VARIATION_DENOMINATOR: u8 = 16;
+
+/// `catalogs/item-list.md §7.2` completed blocking EGA/Tandy presentation for
+/// one accepted potion target. The selected bottle owns this presentation even
+/// when the later variation roll substitutes another gameplay effect.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PotionFlashPlayback {
+    pub selected_index: usize,
+    pub playfield_left: usize,
+    pub playfield_top: usize,
+    pub playfield_right: usize,
+    pub playfield_bottom: usize,
+    pub palette_xor_mask: u8,
+    pub envelope_sweep_count: u8,
+    pub rumble_accumulator_target: u32,
+    pub envelope_sweep_iterations: u32,
+}
+
+/// Completed work counts for the sound-disabled potion timing loop.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PotionFlashTimingWork {
+    pub rumble_iterations: u32,
+    pub envelope_sweeps: u8,
+    pub envelope_iterations: u32,
+}
+
+impl PotionFlashPlayback {
+    pub const fn blocks_until_complete(self) -> bool {
+        true
+    }
+
+    pub const fn polls_input(self) -> bool {
+        false
+    }
+
+    pub const fn advances_gameplay_clock(self) -> bool {
+        false
+    }
+
+    pub const fn sound_disabled_still_runs_timing(self) -> bool {
+        true
+    }
+}
+
+/// Build the shared flash playback from the selected potion, before effect
+/// variation. Returns `None` only for an out-of-range potion id.
+pub const fn potion_flash_playback(selected_index: usize) -> Option<PotionFlashPlayback> {
+    if selected_index >= POTION_COUNT {
+        return None;
+    }
+    let selected_index_u32 = selected_index as u32;
+    Some(PotionFlashPlayback {
+        selected_index,
+        playfield_left: POTION_FLASH_PLAYFIELD_LEFT,
+        playfield_top: POTION_FLASH_PLAYFIELD_TOP,
+        playfield_right: POTION_FLASH_PLAYFIELD_RIGHT,
+        playfield_bottom: POTION_FLASH_PLAYFIELD_BOTTOM,
+        palette_xor_mask: POTION_FLASH_PALETTE_XOR_MASK,
+        envelope_sweep_count: POTION_FLASH_ENVELOPE_SWEEP_COUNT,
+        rumble_accumulator_target: POTION_FLASH_RUMBLE_TARGET_BASE
+            + POTION_FLASH_RUMBLE_TARGET_STEP * selected_index_u32,
+        envelope_sweep_iterations: POTION_FLASH_SWEEP_ITERATIONS_BASE
+            + POTION_FLASH_SWEEP_ITERATIONS_STEP * selected_index_u32,
+    })
+}
+
+/// Execute the shared potion timing work when no PC-speaker backend exists.
+///
+/// `catalogs/item-list.md §7.2` requires the leading rumble loop and both
+/// envelope sweeps to run even with sound disabled. Keeping this beside the
+/// typed playback contract prevents graphical and headless frontends from
+/// silently choosing different blocking boundaries.
+pub fn run_potion_flash_soundless_timing(playback: PotionFlashPlayback) -> PotionFlashTimingWork {
+    let mut rumble_iterations = 0u32;
+    while rumble_iterations < playback.rumble_accumulator_target {
+        std::hint::black_box(rumble_iterations);
+        rumble_iterations += 1;
+    }
+
+    let mut envelope_iterations = 0u32;
+    for sweep in 0..playback.envelope_sweep_count {
+        for iteration in 0..playback.envelope_sweep_iterations {
+            std::hint::black_box((sweep, iteration));
+            envelope_iterations += 1;
+        }
+    }
+
+    PotionFlashTimingWork {
+        rumble_iterations,
+        envelope_sweeps: playback.envelope_sweep_count,
+        envelope_iterations,
+    }
+}
+
+/// Apply one of the two lossless indexed-colour XOR passes to a full-screen
+/// framebuffer. A short surface is rejected rather than silently clipping the
+/// normative inclusive playfield rectangle.
+pub fn apply_potion_flash_xor_pass(
+    pixels: &mut [u8],
+    width: usize,
+    height: usize,
+    playback: PotionFlashPlayback,
+) -> bool {
+    if width <= playback.playfield_right
+        || height <= playback.playfield_bottom
+        || pixels.len() < width.saturating_mul(height)
+    {
+        return false;
+    }
+    for y in playback.playfield_top..=playback.playfield_bottom {
+        for x in playback.playfield_left..=playback.playfield_right {
+            let index = y * width + x;
+            pixels[index] ^= playback.palette_xor_mask;
+        }
+    }
+    true
+}
 
 /// `catalogs/item-list.md §7.1` scroll-grant subtype mask. The
 /// scroll-family Search/container grant masks the grant subtype to

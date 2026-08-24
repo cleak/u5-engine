@@ -1,11 +1,11 @@
     #[test]
     fn idle_tick_advances_visuals_without_turn_time_doors_or_schedules() {
         let mut grid = open_grid();
-        grid[32 + 2] = 16;
+        grid[32 + 2] = TOWN_DOOR_CLEARED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.clock = GameClock::new(17, 59).unwrap();
         state.door_tracker = Some(DoorTracker {
-            previous_tile: 96,
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
             x: 2,
             y: 1,
             turns_remaining: 1,
@@ -43,11 +43,11 @@
 
         assert_eq!(state.clock, GameClock::new(17, 59).unwrap());
         assert_eq!(state.turn, 0);
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 96,
+                previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                 x: 2,
                 y: 1,
                 turns_remaining: 1,
@@ -136,7 +136,7 @@
     #[test]
     fn open_facing_rewrites_door_and_auto_closes_after_four_turns() {
         let mut grid = open_grid();
-        grid[32 + 2] = 96;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.ambient_light = FULL_DAYLIGHT;
@@ -144,13 +144,14 @@
 
         assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.message, "Opened!");
         assert!(state.visibility_dirty);
+        assert!(state.pending_map_viewport_dissolves.is_empty());
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 96,
+                previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                 x: 2,
                 y: 1,
                 turns_remaining: 4,
@@ -161,12 +162,12 @@
         state.advance_turn();
         state.advance_turn();
         state.advance_turn();
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert!(state.door_tracker.is_some());
         assert!(!state.visibility_dirty);
 
         state.advance_turn();
-        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(state.door_tracker, None);
         assert!(state.visibility_dirty);
     }
@@ -185,7 +186,7 @@
     #[test]
     fn jimmy_town_locked_door_roll_success_unlocks_visit_local_tile() {
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.prng_state = 0x1234;
@@ -196,7 +197,7 @@
         assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
-        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(state.message, "Unlocked!");
         assert!(state.visibility_dirty);
     }
@@ -204,10 +205,10 @@
     #[test]
     fn jimmy_town_locked_door_roll_failure_breaks_key_without_unlocking() {
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
-        state.party[0].class_byte = 1;
+        state.party[0].climb_stat = 0;
         state.prng_state = 0x1234;
         let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
@@ -216,12 +217,12 @@
         assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
-        assert_eq!(state.grid[32 + 2], 97);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
         assert_eq!(state.message, "Key broke!");
     }
 
     #[test]
-    fn jimmy_wrong_tile_reports_no_lock_without_turn() {
+    fn jimmy_wrong_tile_reports_no_lock_and_commits_turn() {
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
         state.prng_state = 0x1234;
@@ -230,13 +231,13 @@
 
         assert_eq!(state.prng_state, 0x1234);
         assert_eq!(state.message, "No lock!");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
     fn open_facing_tracked_open_door_consumes_turn_without_resetting_timer() {
         let mut grid = open_grid();
-        grid[32 + 2] = 96;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.ambient_light = FULL_DAYLIGHT;
@@ -247,11 +248,11 @@
         assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
 
         assert_eq!(state.turn, 2);
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 96,
+                previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                 x: 2,
                 y: 1,
                 turns_remaining: 3,
@@ -264,7 +265,7 @@
     #[test]
     fn open_facing_runs_auto_close_before_reopening_expiring_door() {
         let mut grid = open_grid();
-        grid[32 + 2] = 96;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
 
@@ -272,11 +273,11 @@
         state.advance_turn();
         state.advance_turn();
         state.advance_turn();
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 96,
+                previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                 x: 2,
                 y: 1,
                 turns_remaining: 1,
@@ -285,12 +286,12 @@
 
         assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
 
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.turn, 5);
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 96,
+                previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                 x: 2,
                 y: 1,
                 turns_remaining: 4,
@@ -302,21 +303,21 @@
     #[test]
     fn open_facing_acknowledges_first_open_door_after_second_door_overwrites_timer() {
         let mut grid = open_grid();
-        grid[32 + 2] = 96;
-        grid[2 * 32 + 1] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
+        grid[2 * 32 + 1] = TOWN_DOOR_WINDOWED_UNLOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
 
         assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
 
         state.player.facing = Direction::South;
         assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
-        assert_eq!(state.grid[2 * 32 + 1], 16);
+        assert_eq!(state.grid[2 * 32 + 1], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 97,
+                previous_tile: TOWN_DOOR_WINDOWED_UNLOCKED_TILE,
                 x: 1,
                 y: 2,
                 turns_remaining: 4,
@@ -327,12 +328,12 @@
         assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
 
         assert_eq!(state.turn, 3);
-        assert_eq!(state.grid[32 + 2], 16);
-        assert_eq!(state.grid[2 * 32 + 1], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
+        assert_eq!(state.grid[2 * 32 + 1], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 97,
+                previous_tile: TOWN_DOOR_WINDOWED_UNLOCKED_TILE,
                 x: 1,
                 y: 2,
                 turns_remaining: 3,
@@ -344,9 +345,9 @@
     #[test]
     fn town_open_locked_sidecar_refuses_without_turn() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
 
@@ -356,7 +357,7 @@
         );
 
         assert_eq!(state.message, "Locked!");
-        assert_eq!(state.grid[32 + 2], 97);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
         assert_eq!(state.turn, 0);
         assert_eq!(state.door_tracker, None);
         let _ = fs::remove_dir_all(dir);
@@ -365,9 +366,9 @@
     #[test]
     fn town_jimmy_locked_sidecar_rewrites_to_unlocked_door() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.visibility_dirty = false;
@@ -381,7 +382,7 @@
 
         assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.message, "Unlocked!");
-        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
@@ -390,12 +391,12 @@
             state.open_facing_with_game_dir(Some(&dir)).unwrap(),
             MoveOutcome::DoorOpened
         );
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.message, "Opened!");
         assert_eq!(
             state.door_tracker,
             Some(DoorTracker {
-                previous_tile: 96,
+                previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                 x: 2,
                 y: 1,
                 turns_remaining: 4,
@@ -408,12 +409,12 @@
     #[test]
     fn town_jimmy_locked_sidecar_roll_failure_breaks_key_without_rewrite() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
-        state.party[0].class_byte = 1;
+        state.party[0].climb_stat = 0;
         state.visibility_dirty = false;
         state.prng_state = 0x1234;
         let expected_prng_state = u5_prng_advance_state(state.prng_state);
@@ -425,18 +426,18 @@
 
         assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.message, "Key broke!");
-        assert_eq!(state.grid[32 + 2], 97);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
         assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn town_jimmy_inline_party_member_uses_selected_class_byte() {
+    fn town_jimmy_inline_party_member_uses_selected_dexterity() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.party = vec![
@@ -444,7 +445,7 @@
                 slot: 0,
                 class_byte: 1,
                 status: b'G',
-                climb_stat: DEFAULT_CLIMB_STAT,
+                climb_stat: 0,
                 mana: 8,
                 hp: DEFAULT_PARTY_HP,
                 max_hp: DEFAULT_PARTY_MAX_HP,
@@ -454,7 +455,7 @@
                 slot: 1,
                 class_byte: b'B',
                 status: b'G',
-                climb_stat: DEFAULT_CLIMB_STAT,
+                climb_stat: 30,
                 mana: 8,
                 hp: DEFAULT_PARTY_HP,
                 max_hp: DEFAULT_PARTY_MAX_HP,
@@ -468,14 +469,14 @@
         );
 
         assert_eq!(state.message, "Unlocked!");
-        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn town_jimmy_pickpocket_success_marks_npc_and_clamps_moral_standing() {
+    fn town_jimmy_ordinary_npc_is_not_a_pickpocket_target() {
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
         state.moral_standing = 98;
@@ -496,27 +497,21 @@
             },
         ]);
 
-        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+        assert_eq!(state.jimmy_facing(), MoveOutcome::Blocked);
 
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
-        assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
-        assert_eq!(state.pickpocketed_npcs, vec![(17, 0, 1)]);
-        assert_eq!(state.message, "Thanks!");
-
-        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
-        assert_eq!(state.turn, 2);
-        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
-        assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
-        assert_eq!(state.pickpocketed_npcs, vec![(17, 0, 1)]);
+        assert_eq!(state.moral_standing, 98);
+        assert_eq!(state.message, "No lock!");
     }
 
     #[test]
-    fn town_jimmy_pickpocket_failure_breaks_key_without_mark_or_moral_reward() {
+    fn town_jimmy_ordinary_npc_does_not_roll_or_break_a_key() {
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
-        state.party[0].class_byte = 1;
+        state.party[0].climb_stat = 0;
         state.moral_standing = 10;
+        state.prng_state = 0x1234;
         state.load_scheduled_npcs(&[
             NpcSlot {
                 slot: 0,
@@ -534,13 +529,13 @@
             },
         ]);
 
-        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+        assert_eq!(state.jimmy_facing(), MoveOutcome::Blocked);
 
         assert_eq!(state.turn, 1);
-        assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.moral_standing, 10);
-        assert!(state.pickpocketed_npcs.is_empty());
-        assert_eq!(state.message, "Key broke!");
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!(state.message, "No lock!");
     }
 
     #[test]
@@ -560,10 +555,144 @@
 
         assert_eq!(state.jimmy_facing(), MoveOutcome::Blocked);
 
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.moral_standing, 0);
+        assert_eq!(state.message, "No lock!");
+    }
+
+    #[test]
+    fn town_jimmy_empty_restraint_skips_picker_and_commits_turn() {
+        let mut grid = open_grid();
+        grid[32 + 2] = JIMMY_STOCKS_TILE;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.prng_state = 0x1234;
+
+        assert_eq!(
+            state
+                .jimmy_facing_with_game_dir_and_member(None, None)
+                .unwrap(),
+            MoveOutcome::LockTried
+        );
+
+        assert!(state.active_jimmy.is_none());
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "No one is there!");
+    }
+
+    #[test]
+    fn town_jimmy_native_magic_lock_skips_picker_roll_and_breaks_key() {
+        let mut grid = open_grid();
+        grid[32 + 2] = TOWN_DOOR_MAGIC_PLAIN_TILE;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.prng_state = 0x1234;
+
+        assert_eq!(
+            state
+                .jimmy_facing_with_game_dir_and_member(None, None)
+                .unwrap(),
+            MoveOutcome::LockTried
+        );
+
+        assert!(state.active_jimmy.is_none());
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_MAGIC_PLAIN_TILE);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Key broke!");
+    }
+
+    #[test]
+    fn town_jimmy_restraint_release_updates_live_npc_and_native_removal_mask() {
+        let mut grid = open_grid();
+        grid[32 + 2] = JIMMY_MANACLES_TILE;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.party[0].climb_stat = 30;
+        state.moral_standing = 98;
+        let slots = [
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x0E,
+                dialog_id: 2,
+                schedule: [1, 2, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ];
+        state.load_scheduled_npcs(&slots);
+
+        assert_eq!(
+            state
+                .jimmy_facing_with_game_dir_and_member(None, None)
+                .unwrap(),
+            MoveOutcome::Observed
+        );
+        assert!(state.active_jimmy.is_some());
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            state.step_active_jimmy('1', "", Path::new("")).unwrap(),
+            Some(MoveOutcome::LockTried)
+        );
+        assert_eq!(state.npcs.len(), 1);
+        assert_eq!(state.npcs[0].dialog_id, NPC_DIALOG_ID_NONE);
+        assert_eq!(&state.npcs[0].schedule[..3], &[JIMMY_RELEASE_AI_MODE; 3]);
+        assert_eq!(state.removed_town_npc_flags.get(&17), Some(&0b10));
+        assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
+        assert_eq!(state.grid[32 + 2], JIMMY_MANACLES_TILE);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "I thank thee!");
+
+        state.load_scheduled_npcs(&slots);
+        assert!(state.npcs.is_empty());
+    }
+
+    #[test]
+    fn town_jimmy_restraint_failure_preserves_actor_and_tile() {
+        let mut grid = open_grid();
+        grid[32 + 2] = JIMMY_STOCKS_TILE;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.party[0].climb_stat = 0;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x0E,
+                dialog_id: 2,
+                schedule: [1, 2, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+
+        assert_eq!(state.npcs.len(), 1);
+        assert_eq!(state.npcs[0].dialog_id, 2);
+        assert_eq!(&state.npcs[0].schedule[..3], &[1, 2, 3]);
+        assert!(state.removed_town_npc_flags.is_empty());
+        assert_eq!(state.grid[32 + 2], JIMMY_STOCKS_TILE);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Key broke!");
     }
 
     #[test]
@@ -582,6 +711,8 @@
             max_hp: DEFAULT_PARTY_MAX_HP,
             level: 8,
         });
+        state.party_names = default_party_names(2);
+        state.party_names[1][..4].copy_from_slice(b"Iolo");
         state.moral_standing = 8;
         state.visibility_dirty = false;
         state.active_objects.push(ActiveObject {
@@ -614,6 +745,14 @@
                 .contains("Acid trap hit party member 2 for 12 HP.")
         );
         assert_eq!(state.party[1].hp, DEFAULT_PARTY_HP - 12);
+        let selected_name = party_name_to_string(&state.party_names[1]).unwrap();
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text == selected_name),
+            "a prompted pick echoes the selected member's name"
+        );
         assert!(state.message.contains("chest grants"));
         assert!(state.food > DEFAULT_FOOD_STOCK || state.gold > DEFAULT_GOLD_STOCK);
     }
@@ -904,10 +1043,10 @@
     }
 
     #[test]
-    fn town_jimmy_object_chest_uses_stat_high_bit_lock_rule() {
+    fn town_jimmy_object_chest_uses_dexterity_strict_compare_and_lock_bit() {
         let mut success = test_state(open_grid(), 1, 1);
         success.player.facing = Direction::East;
-        success.party[0].class_byte = 1;
+        success.party[0].climb_stat = 30;
         success.prng_state = 0x1234;
         let expected_success_prng_state = u5_prng_advance_state(success.prng_state);
         success.active_objects.push(ActiveObject {
@@ -917,20 +1056,20 @@
             y: 1,
             z: 0,
             phase: STEADY_PHASE,
-            aux1: 0x90,
+            aux1: 0x80,
             aux3: 0,
         });
 
         assert_eq!(success.jimmy_facing(), MoveOutcome::LockTried);
         assert_eq!(success.prng_state, expected_success_prng_state);
-        assert_eq!(success.keys, DEFAULT_KEY_STOCK - 1);
-        assert_eq!(success.active_objects[1].aux1, 0x90);
+        assert_eq!(success.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(success.active_objects[1].aux1, 0x00);
         assert_eq!(success.turn, 1);
         assert_eq!(success.message, "Unlocked!");
 
         let mut failure = test_state(open_grid(), 1, 1);
         failure.player.facing = Direction::East;
-        failure.party[0].class_byte = 60;
+        failure.party[0].climb_stat = 0;
         failure.prng_state = 0x1234;
         let expected_failure_prng_state = u5_prng_advance_state(failure.prng_state);
         failure.active_objects.push(ActiveObject {
@@ -940,24 +1079,49 @@
             y: 1,
             z: 0,
             phase: STEADY_PHASE,
-            aux1: 0x81,
+            aux1: 0xff,
             aux3: 0,
         });
 
         assert_eq!(failure.jimmy_facing(), MoveOutcome::LockTried);
         assert_eq!(failure.prng_state, expected_failure_prng_state);
-        assert_eq!(failure.keys, DEFAULT_KEY_STOCK);
-        assert_eq!(failure.active_objects[1].aux1, 0x01);
+        assert_eq!(failure.keys, DEFAULT_KEY_STOCK - 1);
+        assert_eq!(failure.active_objects[1].aux1, 0xff);
         assert_eq!(failure.turn, 1);
         assert_eq!(failure.message, "Key broke!");
     }
 
     #[test]
+    fn town_jimmy_already_unlocked_object_wastes_one_key_without_a_roll() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.keys = 2;
+        state.prng_state = 0x1234;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0x01,
+            aux3: 0,
+        });
+
+        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!(state.keys, 1);
+        assert_eq!(state.active_objects[1].aux1, 0x01);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Key broke!");
+    }
+
+    #[test]
     fn town_jimmy_without_inline_party_prompts_without_turn() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
 
@@ -968,7 +1132,7 @@
 
         assert!(state.message.contains("Who picks?"));
         assert!(state.active_jimmy.is_some());
-        assert_eq!(state.grid[32 + 2], 97);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
@@ -977,9 +1141,9 @@
     #[test]
     fn active_town_jimmy_picker_unlocks_with_selected_member() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 97;
+        grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
 
@@ -993,7 +1157,7 @@
         );
 
         assert!(state.active_jimmy.is_none());
-        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Unlocked!");
         let _ = fs::remove_dir_all(dir);
@@ -1023,41 +1187,69 @@
 
         assert!(state.active_jimmy.is_none());
         assert_eq!(state.message, "No keys!");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.keys, 0);
     }
 
     #[test]
-    fn town_jimmy_magic_lock_sidecar_refuses_without_key_or_turn() {
+    fn active_dungeon_jimmy_cancel_commits_one_action() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.keys = 2;
+        state.prng_state = 0x1234;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'J', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_jimmy.is_some());
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_jimmy.is_none());
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.keys, 2);
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x4b);
+        assert_eq!(state.message, "None!");
+    }
+
+    #[test]
+    fn town_jimmy_magic_lock_sidecar_breaks_one_key_without_a_roll() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_LOCK_TABLE_FILE),
-            "CASTLE:0 0 2 1 96 97 MAGIC\n",
+            "CASTLE:0 0 2 1 151 184 MAGIC\n",
         )
         .unwrap();
         let mut grid = open_grid();
-        grid[32 + 2] = 96;
+        grid[32 + 2] = TOWN_DOOR_MAGIC_PLAIN_TILE;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.prng_state = 0x1234;
 
         assert_eq!(
             state.jimmy_facing_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::LockTried
         );
 
         assert_eq!(state.prng_state, 0x1234);
-        assert_eq!(state.message, "Magic lock!");
-        assert_eq!(state.grid[32 + 2], 96);
-        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Key broke!");
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_MAGIC_PLAIN_TILE);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
+        assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn parse_secret_door_entries_accepts_town_and_dungeon_rows() {
         let entries = parse_secret_door_entries(
-            "TOWN CASTLE:0 0 2 1 96 24\nDUNGEON DUNGEON:0 0 2 1 0xF0 0x30\n",
+            "TOWN CASTLE:0 0 2 1 184 24\nDUNGEON DUNGEON:0 0 2 1 0xF0 0x30\n",
         )
         .unwrap();
 
@@ -1069,7 +1261,7 @@
                     floor: 0,
                     x: 2,
                     y: 1,
-                    reveal_tile: 96,
+                    reveal_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
                     expected_tile: Some(24),
                 },
                 SecretDoorEntry::Dungeon {
@@ -1087,7 +1279,7 @@
     #[test]
     fn town_search_uses_clean_sidecar_to_reveal_secret_door() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SECRET_DOOR_TABLE_FILE), "TOWN CASTLE:0 0 2 1 96\n").unwrap();
+        fs::write(dir.join(SECRET_DOOR_TABLE_FILE), "TOWN CASTLE:0 0 2 1 184\n").unwrap();
         let mut grid = open_grid();
         grid[32 + 2] = 24;
         let mut state = test_state(grid, 1, 1);
@@ -1099,7 +1291,7 @@
             MoveOutcome::Searched
         );
 
-        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
         assert_eq!(state.message, "Revealed secret door at (2, 1).");
@@ -1111,7 +1303,7 @@
         let dir = debug_game_dir();
         fs::write(
             dir.join(SECRET_DOOR_TABLE_FILE),
-            "TOWN CASTLE:0 0 2 1 96 25\n",
+            "TOWN CASTLE:0 0 2 1 184 25\n",
         )
         .unwrap();
         let mut grid = open_grid();
@@ -1135,7 +1327,7 @@
     #[test]
     fn town_open_revealed_secret_door_stays_open_without_auto_close_tracker() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SECRET_DOOR_TABLE_FILE), "TOWN CASTLE:0 0 2 1 96\n").unwrap();
+        fs::write(dir.join(SECRET_DOOR_TABLE_FILE), "TOWN CASTLE:0 0 2 1 184\n").unwrap();
         let scene = Scene::new(17).unwrap();
         let mut grid = open_grid();
         grid[32 + 2] = 24;
@@ -1153,7 +1345,7 @@
             MoveOutcome::DoorOpened
         );
 
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.message, "Opened!");
         assert_eq!(state.turn, 2);
         assert_eq!(state.door_tracker, None);
@@ -1163,7 +1355,7 @@
             state.advance_turn();
         }
 
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert_eq!(state.door_tracker, None);
         assert!(state.is_recorded_open_town_door(scene, 0, 2, 1));
         let _ = fs::remove_dir_all(dir);
@@ -1176,14 +1368,14 @@
         let mut pages = vec![16; 16 * 1024];
         let floor_zero = 5 * 1024;
         let floor_one = 6 * 1024;
-        pages[floor_zero] = 80;
+        pages[floor_zero] = TOWN_KLIMB_ASCEND_TILE;
         pages[floor_zero + 32 + 2] = 24;
-        pages[floor_one] = 80;
+        pages[floor_one] = TOWN_KLIMB_DESCEND_TILE;
         fs::write(dir.join("CASTLE.DAT"), pages).unwrap();
         fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
-        fs::write(dir.join(SECRET_DOOR_TABLE_FILE), "TOWN CASTLE:0 0 2 1 96\n").unwrap();
+        fs::write(dir.join(SECRET_DOOR_TABLE_FILE), "TOWN CASTLE:0 0 2 1 184\n").unwrap();
         let mut grid = open_grid();
-        grid[0] = 80;
+        grid[0] = TOWN_KLIMB_ASCEND_TILE;
         grid[32 + 2] = 24;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
@@ -1196,7 +1388,7 @@
             state.open_facing_with_game_dir(Some(&dir)).unwrap(),
             MoveOutcome::DoorOpened
         );
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
 
         state.player.x = 0;
         state.player.y = 0;
@@ -1212,7 +1404,7 @@
         );
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
         assert!(state.is_revealed_town_secret_door(scene, 0, 2, 1));
         assert!(state.is_recorded_open_town_door(scene, 0, 2, 1));
         assert_eq!(state.door_tracker, None);
@@ -1223,7 +1415,7 @@
     #[test]
     fn town_jimmy_revealed_secret_door_reports_no_lock() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SECRET_DOOR_TABLE_FILE), "TOWN CASTLE:0 0 2 1 96\n").unwrap();
+        fs::write(dir.join(SECRET_DOOR_TABLE_FILE), "TOWN CASTLE:0 0 2 1 184\n").unwrap();
         let mut grid = open_grid();
         grid[32 + 2] = 24;
         let mut state = test_state(grid, 1, 1);
@@ -1236,10 +1428,10 @@
 
         assert_eq!(
             state.jimmy_facing_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::LockTried
+            MoveOutcome::Blocked
         );
 
-        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(state.message, "No lock!");
         assert_eq!(state.turn, 2);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
@@ -1397,6 +1589,7 @@
         assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x00);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
+        assert!(state.pending_map_viewport_dissolves.is_empty());
         assert_eq!(
             state.message,
             "Searched dungeon bomb trap at (2, 1) on DUNGEON:0 level 0; sprung the bomb."
@@ -1422,6 +1615,7 @@
         assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x62);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("nothing found"));
+        assert!(state.pending_map_viewport_dissolves.is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1475,6 +1669,19 @@
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("found a secret door"));
+        assert_eq!(
+            state.take_pending_map_viewport_dissolves(),
+            vec![run_map_viewport_dissolve(
+                MapViewportDissolveSource::DungeonSearchReveal {
+                    scene,
+                    level: 0,
+                    x: 2,
+                    y: 1,
+                    original_cell: 0x61,
+                    revealed_cell: 0x60,
+                }
+            )]
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1497,6 +1704,59 @@
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("revealed a hidden wall"));
+        assert_eq!(
+            state.take_pending_map_viewport_dissolves(),
+            vec![run_map_viewport_dissolve(
+                MapViewportDissolveSource::DungeonSearchReveal {
+                    scene: DungeonScene::new(33).unwrap(),
+                    level: 0,
+                    x: 2,
+                    y: 1,
+                    original_cell: 0xD8,
+                    revealed_cell: 0xE8,
+                }
+            )]
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_search_flavour_rewrite_dissolves_but_narration_only_does_not() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(33).unwrap();
+
+        let mut rewrite_grid = open_dungeon_record();
+        rewrite_grid[dungeon_cell_index(0, 2, 1)] = 0xC0;
+        let mut rewrite = dungeon_state(rewrite_grid, 0, 1, 1);
+        rewrite.player.facing = Direction::East;
+        rewrite.torch_counter = 5;
+        assert_eq!(
+            rewrite.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(rewrite.grid[dungeon_cell_index(0, 2, 1)], 0xB0);
+        assert_eq!(rewrite.pending_map_viewport_dissolves.len(), 1);
+        assert!(matches!(
+            rewrite.pending_map_viewport_dissolves[0].source,
+            MapViewportDissolveSource::DungeonSearchReveal {
+                scene: recorded_scene,
+                original_cell: 0xC0,
+                revealed_cell: 0xB0,
+                ..
+            } if recorded_scene == scene
+        ));
+
+        let mut narration_grid = open_dungeon_record();
+        narration_grid[dungeon_cell_index(0, 2, 1)] = 0xC1;
+        let mut narration = dungeon_state(narration_grid, 0, 1, 1);
+        narration.player.facing = Direction::East;
+        narration.torch_counter = 5;
+        assert_eq!(
+            narration.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(narration.grid[dungeon_cell_index(0, 2, 1)], 0xC1);
+        assert!(narration.pending_map_viewport_dissolves.is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1569,7 +1829,7 @@
         assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 12);
         assert_eq!(state.turn, 1);
         assert_eq!(state.door_tracker, None);
@@ -1581,6 +1841,99 @@
                 .contains("Acid trap hit party member 1 for 12 HP.")
         );
         assert!(state.message.contains("marked visit-local open chest"));
+        assert!(state.pending_map_viewport_dissolves.is_empty());
+    }
+
+    /// `traps.md §2.1`: the dungeon chest site uses the same interactive
+    /// acting-member picker as the surface site when two or more members
+    /// qualify. The command remains suspended until a valid pick, echoes the
+    /// prompted member's name, and applies a single-slot trap to that member.
+    #[test]
+    fn dungeon_open_chest_prompts_and_uses_the_confirmed_member() {
+        let mut grid = open_dungeon_record();
+        let index = dungeon_cell_index(0, 1, 1);
+        grid[index] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+        state.party_names = default_party_names(2);
+        state.party_names[1][..4].copy_from_slice(b"Iolo");
+
+        assert_eq!(state.open_facing(), MoveOutcome::Observed);
+        assert!(state.active_surface_chest.is_some());
+        assert_eq!(state.grid[index], 0x4b);
+        assert_eq!(state.turn, 0);
+
+        let slot_zero_hp = state.party[0].hp;
+        assert_eq!(
+            state.step_active_surface_chest('2', "").unwrap(),
+            Some(MoveOutcome::ContainerOpened)
+        );
+
+        assert!(state.active_surface_chest.is_none());
+        assert_eq!(state.grid[index], 0x78);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].hp, slot_zero_hp);
+        assert!(state.party[1].hp < DEFAULT_PARTY_HP);
+        let selected_name = party_name_to_string(&state.party_names[1]).unwrap();
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text == selected_name)
+        );
+        assert!(state.message.contains("Acid trap hit party member 2"));
+    }
+
+    #[test]
+    fn dungeon_chest_picker_reprompts_disabled_and_cancel_leaves_chest_closed() {
+        let mut grid = open_dungeon_record();
+        let index = dungeon_cell_index(0, 1, 1);
+        grid[index] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+        state.party.push(PartyMember {
+            slot: 2,
+            class_byte: b'C',
+            status: b'S',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+
+        assert_eq!(state.open_facing(), MoveOutcome::Observed);
+        assert_eq!(state.step_active_surface_chest('3', "").unwrap(), None);
+        assert!(state.active_surface_chest.is_some());
+        assert!(state.message.contains("unavailable"));
+        assert_eq!(state.grid[index], 0x4b);
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            state.step_active_surface_chest(' ', "").unwrap(),
+            Some(MoveOutcome::PromptDeclined)
+        );
+        assert!(state.active_surface_chest.is_none());
+        assert_eq!(state.grid[index], 0x4b);
+        assert_eq!(state.turn, 0);
     }
 
     #[test]
@@ -1696,7 +2049,7 @@
         );
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
         assert_eq!(state.keys, 1);
         assert_eq!(state.food, 12);
         assert_eq!(state.turn, 1);
