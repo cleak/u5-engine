@@ -34,7 +34,7 @@ use u5_runtime::{
     DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
     DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
     DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES, Direction,
-    DisplayDriverFamily, DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB,
+    DisplayDriverFamily, DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB, ENDGAME_GATE_CELL,
     ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
     EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, ExplorationTurnGateOutcome, FIELD_SPELL_COST,
@@ -60,7 +60,8 @@ use u5_runtime::{
     JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2,
     LOAD_EMPTY_SAVE_LINE_3, LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y,
     MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MORAL_STANDING_MAX, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
+    MOONGATE_PHASE_ENDGAME_GROUND_TILE, MOONGATE_PHASE_SCRATCH_TILE, MORAL_STANDING_MAX,
+    MonochromeBitmap, MoongatePhaseDraw, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
     NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NPC_DIALOG_ID_NONE,
     NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS,
     OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
@@ -99,8 +100,8 @@ use u5_runtime::{
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE,
     WORLD_SHRINE_COORDINATES, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST,
     X_RAY_SPELL_INDEX, YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE,
-    blit_tile_id_to_viewport, combat_actor_is_active_not_dead, combat_class_stats,
-    commit_chargen_save, configure_talk_shop_text_window,
+    blit_tile_id_to_viewport, blit_tile_pixels_to_viewport, combat_actor_is_active_not_dead,
+    combat_class_stats, commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -118,9 +119,9 @@ use u5_runtime::{
     load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
     load_tile_atlas, load_title_bit, load_ultima_title_tick_frames,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    paint_arms_sell_browser_text_window, paint_inn_pickup_register_text_window,
-    paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
-    paint_talk_shop_text_window, play_options_from_save_bytes_named,
+    moongate_phase_draw, moongate_phase_gate_tile, paint_arms_sell_browser_text_window,
+    paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
+    paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
     published_world_location_entries, read_save_image_file, render_play_text_window_system,
     render_return_to_view_playback_frame_over, render_text_panel_rgba, render_text_window_rgba,
     return_to_view_caption_start_column, return_to_view_fixed_wipe_rectangles,
@@ -137,10 +138,14 @@ use u5_runtime::{
     terrain_combat_setup_from_record_at_arena, terrain_combat_tile_for_spawn_index,
     title_flourish_band, title_flourish_content_row, title_flourish_step_state,
     title_flourish_total_steps, title_flourish_visible_rows, title_tick_next_frame,
-    town_resident_name, u5_prng_advance_state, u5_prng_range_u16, word_of_power_seal_for_word,
+    town_resident_name, u5_prng_advance_state, u5_prng_range_u16, with_moongate_phase_scratch_tile,
+    word_of_power_seal_for_word,
 };
 #[cfg(test)]
-use u5_runtime::{INTRO_DOORWAY_SECOND_LINE_PEN_Y, STATS_PANEL_TEXT_LEFT};
+use u5_runtime::{
+    ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE, ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+    ENDGAME_TABLEAU_WALKABLE_TILE, INTRO_DOORWAY_SECOND_LINE_PEN_Y, STATS_PANEL_TEXT_LEFT,
+};
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
@@ -3717,7 +3722,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         word_of_power_seal_for_word("FALLAX").expect("FALLAX Word-of-Power seal row is public");
     let veramocor_seal = word_of_power_seal_for_word("VERAMOCOR")
         .expect("VERAMOCOR Word-of-Power seal row is public");
-    let mut cases = vec![
+    let mut cases = Vec::with_capacity(534);
+    macro_rules! push_visual_route_cases {
+        ($target:ident; $($case:expr),* $(,)?) => {
+            $($target.push($case);)*
+        };
+    }
+    push_visual_route_cases!(cases;
         VisualRouteSuiteCase {
             label: "route-world-movement",
             frame_kind: "visual route world frame",
@@ -6266,8 +6277,8 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             script: &["setup:dungeon-room-party-entry", "q"],
             configure: None,
         },
-    ];
-    cases.extend([
+    );
+    push_visual_route_cases!(cases;
         VisualRouteSuiteCase {
             label: "route-castle-mix-ready-order-route",
             frame_kind: "visual route town frame",
@@ -6384,7 +6395,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         visual_doom_combat_case("route-doom-combat-ready-prompt", doom, &["", "R"]),
         visual_doom_combat_case("route-doom-combat-yell-word", doom, &["", "YFALLAX"]),
         visual_doom_combat_case("route-doom-combat-xit-refusal", doom, &["", "X"]),
-    ]);
+    );
     append_directed_wind_visual_route_cases(&mut cases);
     append_asset_backed_conversation_visual_route_cases(&mut cases);
     append_shrine_visual_route_cases(&mut cases);
@@ -8368,18 +8379,29 @@ fn seed_visual_route_ruined_honesty_shrine(state: &mut PlayState) {
 /// end: the rite beats, the tableau exit, the `endgame.md §7.1` fade to
 /// black, all six `END.DAT` narrative windows, the certificate and the
 /// elapsed-time report, finishing in the `§9.5` terminal hold.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 29] = {
-    let mut script = [""; 29];
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 59] = {
+    let mut script = [""; 59];
     script[0] = "Y";
     script[1] = "Y";
+    // Seven message-dismissal keys occupy 2..=8. The next display
+    // frame publishes the Orb, index 10 acknowledges it, and the
+    // 40 automatic frames cover the 15-phase rise, four full-height
+    // ticks, one-member/Lord-British exits, 15-phase sink, floor
+    // restore, and fade. The remaining eight keys reach terminal hold.
+    script[9] = "endgame:frame";
+    let mut index = 11;
+    while index < 51 {
+        script[index] = "endgame:frame";
+        index += 1;
+    }
     script
 };
 
-/// One `endgame:frame` per owed entry-presentation frame: one
-/// restoration beat for the seeded dead party member plus the 22
-/// single-cell steps that carry six party actors from (5,9) to the
-/// `endgame.md §4` targets.
-const ENDGAME_TABLEAU_WALK_IN_SCRIPT: [&str; 23] = ["endgame:frame"; 23];
+/// One `endgame:frame` per owed entry-presentation frame: Lord British's
+/// five steps to the throne row, one restoration beat for the seeded dead
+/// party member, plus the 22 single-cell steps that carry six party actors
+/// from (5,9) to the `endgame.md §4` targets.
+const ENDGAME_TABLEAU_WALK_IN_SCRIPT: [&str; 28] = ["endgame:frame"; 28];
 
 fn seed_visual_route_endgame_missing_box(state: &mut PlayState) {
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 0;
@@ -8661,7 +8683,8 @@ fn visual_route_frame_is_intentionally_black(label: &str) -> bool {
 /// Step at which `route-endgame-box-full-victory-cinematic` reaches the
 /// `§7.1` fade. Pinned so a change in the beat ordering fails the suite
 /// rather than silently moving the black frame somewhere else.
-const ENDGAME_FADE_TO_BLACK_FRAME_LABEL: &str = "route-endgame-box-full-victory-cinematic-19-empty";
+const ENDGAME_FADE_TO_BLACK_FRAME_LABEL: &str =
+    "route-endgame-box-full-victory-cinematic-50-endgame_frame";
 
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // `endgame.md §4`: the restoration beat is a held frame - a short
@@ -8671,7 +8694,7 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // is pixel-identical to the tableau's authored floor tile. Those
     // steps therefore produce byte-identical frames today.
     (route_label == "route-endgame-tableau-walk-in")
-        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=29).contains(&step))
+        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=59).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
         || (route_label == "route-castle-light-decay-route" && (1..=2).contains(&step))
         || (route_label.starts_with("route-shop-arms-")
@@ -14423,6 +14446,42 @@ fn render_endgame_tableau_viewport(
     for y in 0..ENDGAME_TABLEAU_HEIGHT {
         for x in 0..ENDGAME_TABLEAU_WIDTH {
             let tile = state.grid.get(y * TOWN_GRID_SIDE + x).copied().unwrap_or(0);
+            if (x, y) == ENDGAME_GATE_CELL && tile == NATURAL_MOONGATE_TERRAIN_TILE {
+                let rows = match moongate_phase_draw(state.natural_moongate_counter) {
+                    MoongatePhaseDraw::WholeGate => None,
+                    MoongatePhaseDraw::Ground => Some(0),
+                    MoongatePhaseDraw::Composed { rows } => Some(rows),
+                };
+                if let Some(rows) = rows {
+                    let missing = |tile: usize| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("endgame gate renderer is missing tile {tile}"),
+                        )
+                    };
+                    let ground = atlas
+                        .tile_pixels(usize::from(MOONGATE_PHASE_ENDGAME_GROUND_TILE))
+                        .ok_or_else(|| missing(usize::from(MOONGATE_PHASE_ENDGAME_GROUND_TILE)))?
+                        .to_vec();
+                    let gate_tile = usize::from(moongate_phase_gate_tile());
+                    let gate = atlas
+                        .tile_pixels(gate_tile)
+                        .ok_or_else(|| missing(gate_tile))?
+                        .to_vec();
+                    let mut scratch = atlas
+                        .tile_pixels(MOONGATE_PHASE_SCRATCH_TILE)
+                        .ok_or_else(|| missing(MOONGATE_PHASE_SCRATCH_TILE))?
+                        .to_vec();
+                    with_moongate_phase_scratch_tile(
+                        &mut scratch,
+                        &ground,
+                        &gate,
+                        rows,
+                        |composed| blit_tile_pixels_to_viewport(&mut viewport, composed, x, y),
+                    )??;
+                    continue;
+                }
+            }
             blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), x, y)?;
         }
     }
@@ -18892,14 +18951,16 @@ mod tests {
         // missing record is now a loud contract failure, so the beat
         // needs real text to walk through.
         state.endgame.as_mut().unwrap().final_narrative = Some(bevy_test_end_narrative());
+        assert!(state.advance_endgame_display_frame());
+        state.resolve_endgame_confirmation(true);
         for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
-            state.resolve_endgame_confirmation(true);
             if matches!(
                 state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
                 Some(u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0))
             ) {
                 break;
             }
+            assert!(state.advance_endgame_display_frame());
         }
         assert!(matches!(
             state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
@@ -18989,6 +19050,68 @@ mod tests {
         assert_eq!(viewport.pixels[0], 0x21 % 16);
         let overlap_pixel = 5 * TILE_ATLAS_SIDE * viewport.width + 5 * TILE_ATLAS_SIDE;
         assert_eq!(viewport.pixels[overlap_pixel], 0x44 % 16);
+    }
+
+    #[test]
+    fn endgame_gate_viewport_uses_exact_floor_gate_row_splice_and_actor_overlay() {
+        let mut atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let floor_start =
+            usize::from(MOONGATE_PHASE_ENDGAME_GROUND_TILE) * u5_runtime::TILE_ATLAS_TILE_PIXELS;
+        let gate_start =
+            usize::from(moongate_phase_gate_tile()) * u5_runtime::TILE_ATLAS_TILE_PIXELS;
+        for row in 0..TILE_ATLAS_SIDE {
+            atlas.pixels
+                [floor_start + row * TILE_ATLAS_SIDE..floor_start + (row + 1) * TILE_ATLAS_SIDE]
+                .fill(1);
+            atlas.pixels
+                [gate_start + row * TILE_ATLAS_SIDE..gate_start + (row + 1) * TILE_ATLAS_SIDE]
+                .fill((row as u8 + 2) % 16);
+        }
+        let scratch_before = atlas
+            .tile_pixels(MOONGATE_PHASE_SCRATCH_TILE)
+            .unwrap()
+            .to_vec();
+
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.grid = vec![ENDGAME_TABLEAU_WALKABLE_TILE; TOWN_GRID_SIDE * TOWN_GRID_SIDE];
+        state.grid[ENDGAME_GATE_CELL.1 * TOWN_GRID_SIDE + ENDGAME_GATE_CELL.0] =
+            NATURAL_MOONGATE_TERRAIN_TILE;
+        state.natural_moongate_counter = 15;
+        state.active_objects = vec![ActiveObject::empty(); u5_runtime::OOL_SLOTS];
+
+        let viewport = render_endgame_tableau_viewport(&state, &atlas).unwrap();
+        let gate_pixel = |row: usize| {
+            viewport.pixels[(ENDGAME_GATE_CELL.1 * TILE_ATLAS_SIDE + row) * viewport.width
+                + ENDGAME_GATE_CELL.0 * TILE_ATLAS_SIDE]
+        };
+        assert_eq!(gate_pixel(0), 1, "phase 15 retains floor row zero");
+        for row in 1..TILE_ATLAS_SIDE {
+            assert_eq!(gate_pixel(row), ((row - 1) as u8 + 2) % 16);
+        }
+        assert_eq!(
+            atlas.tile_pixels(MOONGATE_PHASE_SCRATCH_TILE).unwrap(),
+            scratch_before,
+            "the authored scratch tile survives endgame composition"
+        );
+
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT] = ActiveObject {
+            type_byte: ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE,
+            tile: ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE,
+            x: ENDGAME_GATE_CELL.0,
+            y: ENDGAME_GATE_CELL.1,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        let with_actor = render_endgame_tableau_viewport(&state, &atlas).unwrap();
+        let top_left = ENDGAME_GATE_CELL.1 * TILE_ATLAS_SIDE * with_actor.width
+            + ENDGAME_GATE_CELL.0 * TILE_ATLAS_SIDE;
+        assert_eq!(
+            with_actor.pixels[top_left],
+            ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE % 16,
+            "active-object sprites composite after the gate cell"
+        );
     }
 
     #[test]
@@ -19489,6 +19612,19 @@ mod tests {
             );
         }
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_route_suite_cases_fit_one_megabyte_stack() {
+        let case_count = std::thread::Builder::new()
+            .name("visual-route-case-stack-regression".to_string())
+            .stack_size(1024 * 1024)
+            .spawn(|| visual_route_suite_cases().len())
+            .expect("visual-route case inventory thread starts")
+            .join()
+            .expect("visual-route case inventory fits a one-megabyte stack");
+
+        assert_eq!(case_count, 534);
     }
 
     #[test]
@@ -20351,9 +20487,9 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        // route-endgame-tableau-walk-in adds 24 (endgame.md §4 walk-in);
+        // route-endgame-tableau-walk-in adds 29 (endgame.md §4 walk-in);
         // the full-victory cinematic now runs to the §9.5 terminal hold.
-        assert_eq!(reports.len(), 1871);
+        assert_eq!(reports.len(), 1906);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -20368,7 +20504,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1871"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1906"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -20669,7 +20805,8 @@ mod tests {
         assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-empty"));
         assert!(manifest.contains("route-endgame-missing-box-confirmation-02-y"));
         assert!(manifest.contains("route-endgame-box-victory-confirmation-02-y"));
-        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-18-empty"));
+        assert!(manifest.contains(ENDGAME_FADE_TO_BLACK_FRAME_LABEL));
+        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-59-empty"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-room-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-combat-pass-02-empty"));

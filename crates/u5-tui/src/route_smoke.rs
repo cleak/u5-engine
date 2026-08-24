@@ -110,6 +110,22 @@ use crate::{
 
 const VIEWPORT_RADIUS: usize = 5;
 
+/// Full victory route: seven rite acknowledgements, one Orb presentation,
+/// one Orb acknowledgement, 40 automatic tableau frames, and eight ending
+/// acknowledgements through the terminal hold.
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 59] = {
+    let mut script = ["empty"; 59];
+    script[0] = "Y";
+    script[1] = "Y";
+    script[9] = "endgame:frame";
+    let mut index = 11;
+    while index < 51 {
+        script[index] = "endgame:frame";
+        index += 1;
+    }
+    script
+};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RouteSmokeExpectation {
     World(WorldPlane),
@@ -1232,12 +1248,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "endgame-box-full-victory-cinematic",
             options: PlayOptions::default(),
-            script: &[
-                "Y", "Y", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
-                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
-                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
-                "empty",
-            ],
+            script: &ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT,
             expected: RouteSmokeExpectation::Endgame(EndgameOutcome::Victory),
             min_turn: 0,
             expected_frame_kind: "endgame tableau",

@@ -174,10 +174,10 @@ cargo clippy --workspace --all-targets
 git diff --check
 ```
 
-Measured on 2026-08-24 in the current worktree: **3222** u5-runtime, **181**
+Measured on 2026-08-24 in the current worktree: **3223** u5-runtime, **183**
 u5-bevy, **103** u5-tui (14 + 51 + 38), `cargo fmt --all -- --check` clean, and
 `cargo clippy --workspace --all-targets` with **zero errors**. Clippy still
-emits a broad existing style-warning baseline (333 warnings in the runtime test
+emits a broad existing style-warning baseline (331 warnings in the runtime test
 target in this run, many duplicated); warnings are not gated.
 
 For visual/raster work, also run the asset-backed suites. **Point them at a
@@ -201,8 +201,9 @@ cargo run --features visual -- --visual --scene BRITANNIA <asset-copy>
 
 Measured on 2026-08-24 in the current worktree against the read-only local
 asset directory: `--route-smoke` **all 513 cases passed**, `--visual-frame-suite`
-**193 PNGs**, `--visual-route-suite` **1871 PNGs**, which include the whole
-victory ending through to the certificate.
+**193 PNGs**, `--visual-route-suite` **1906 PNGs**, which include the whole
+victory ending through the shared-moongate rise/hold/sink raster sequence and
+on to the certificate.
 
 ## Remaining Boundaries
 

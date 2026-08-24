@@ -210,17 +210,45 @@ pub struct EndgameState {
     /// emits the exact revival line and is interleaved with that member's
     /// placement and walk-in, in party-slot order.
     pub entry_restoration_beats: u8,
+    /// `endgame.md §4`/`§7`: Lord British enters first, walking from
+    /// `(5,8)` to `(5,3)` before party-slot placement begins.
+    pub entry_lord_british_pending: bool,
     /// `endgame.md §4`: next party slot owned by the entry setup loop.
     /// The loop fully restores (when needed), places, and walks one member
     /// before advancing to the next. [`ENDGAME_ENTRY_COMPLETE_SLOT`] means
     /// the greeting/prompt has been published and no entry work remains.
     pub entry_party_slot: u8,
+    /// `endgame.md §7`: display-owned state for the victory tableau's
+    /// Orb hold, shared-moongate rise/hold/sink sequence, and actor exits.
+    pub victory_tableau_phase: EndgameVictoryTableauPhase,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EndgameOutcome {
     Victory,
     MissingBoxOrRefused,
+}
+
+/// `endgame.md §7`: automatic presentation phases after the seven rite
+/// messages. Only [`Self::OrbAwaitingAcknowledgement`] waits for input;
+/// every later phase is advanced by the display-frame pump.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EndgameVictoryTableauPhase {
+    #[default]
+    Inactive,
+    OrbAwaitingAcknowledgement,
+    GateRise {
+        next_phase: u8,
+    },
+    GateFullHold {
+        ticks_remaining: u8,
+    },
+    ActorExit,
+    GateSink {
+        next_phase: u8,
+    },
+    RestoreFloor,
+    Complete,
 }
 
 pub const ENDGAME_TABLEAU_WIDTH: usize = 11;
@@ -232,6 +260,9 @@ pub const ENDGAME_TABLEAU_BOX_ACTOR_BYTE: u8 = 0x0e;
 pub const ENDGAME_TABLEAU_ORB_ACTOR_BYTE: u8 = 0x08;
 pub const ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE: u8 = 0x7c;
 pub const ENDGAME_TABLEAU_PHASE: u8 = 0;
+pub const ENDGAME_GATE_CELL: (usize, usize) = (5, 4);
+pub const ENDGAME_GATE_FULL_HOLD_TICKS: u8 = 4;
+pub const ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET: (usize, usize) = (5, 3);
 const ENDGAME_ENTRY_COMPLETE_SLOT: u8 = u8::MAX;
 /// `formats/location-dat.md section 11`: endgame loads MISCMAPS cutscene-map
 /// record 3 as the authored 11x11 terminal tableau scene.
@@ -290,7 +321,9 @@ impl EndgameState {
             messages,
             final_narrative: None,
             entry_restoration_beats: 0,
+            entry_lord_british_pending: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
+            victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
         }
     }
 
@@ -312,7 +345,9 @@ impl EndgameState {
             messages,
             final_narrative: None,
             entry_restoration_beats: 0,
+            entry_lord_british_pending: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
+            victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
         }
     }
 
@@ -347,7 +382,9 @@ impl EndgameState {
                 .then_some(final_narrative)
                 .flatten(),
             entry_restoration_beats: 0,
+            entry_lord_british_pending: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
+            victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
         }
     }
 
@@ -1050,7 +1087,7 @@ pub fn endgame_tableau_actor_placements(
         .filter_map(|(slot, member)| endgame_tableau_party_placement(slot, member.class_byte))
         .collect::<Vec<_>>();
     placements.push(endgame_tableau_lord_british_placement(
-        ENDGAME_TABLEAU_LORD_BRITISH_START,
+        ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET,
     ));
     placements
 }
@@ -1180,11 +1217,9 @@ impl PlayState {
             .count()
             .min(u8::MAX as usize) as u8;
         endgame.entry_party_slot = 0;
+        endgame.entry_lord_british_pending = true;
         self.endgame = Some(endgame);
         self.message.clear();
-        if self.party.is_empty() {
-            self.finish_endgame_entry_prompt();
-        }
         MoveOutcome::EndgameEntered
     }
 
@@ -1198,6 +1233,14 @@ impl PlayState {
     /// waiting for the next keystroke - the beat samples no input.
     pub fn advance_endgame_display_frame(&mut self) -> bool {
         if self.advance_endgame_entry_presentation() {
+            return true;
+        }
+        if self.advance_endgame_victory_tableau_frame() {
+            self.message = self
+                .endgame
+                .as_ref()
+                .map(|endgame| endgame.current_cinematic_text())
+                .unwrap_or_default();
             return true;
         }
         let advanced = self
@@ -1237,6 +1280,30 @@ impl PlayState {
     /// actor moves per pumped frame.
     fn advance_endgame_entry_tableau_step(&mut self) -> bool {
         loop {
+            if self
+                .endgame
+                .as_ref()
+                .is_some_and(|endgame| endgame.entry_lord_british_pending)
+            {
+                if self.step_endgame_tableau_slot_once_to_target(
+                    ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+                    ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET,
+                ) {
+                    let arrived = self
+                        .active_objects
+                        .get(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
+                        .is_some_and(|object| {
+                            (object.x, object.y) == ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET
+                        });
+                    if arrived && let Some(endgame) = self.endgame.as_mut() {
+                        endgame.entry_lord_british_pending = false;
+                    }
+                    return true;
+                }
+                if let Some(endgame) = self.endgame.as_mut() {
+                    endgame.entry_lord_british_pending = false;
+                }
+            }
             let Some(slot) = self
                 .endgame
                 .as_ref()
@@ -1359,10 +1426,10 @@ impl PlayState {
         self.endgame
             .as_ref()
             .is_some_and(|endgame| !endgame.is_terminal())
-            && self
-                .endgame
-                .as_ref()
-                .is_some_and(|endgame| endgame.entry_party_slot != ENDGAME_ENTRY_COMPLETE_SLOT)
+            && self.endgame.as_ref().is_some_and(|endgame| {
+                endgame.entry_lord_british_pending
+                    || endgame.entry_party_slot != ENDGAME_ENTRY_COMPLETE_SLOT
+            })
     }
 
     pub fn ensure_endgame_messages_loaded(
@@ -1582,51 +1649,174 @@ impl PlayState {
     }
 
     pub fn complete_endgame_victory_tableau(&mut self) {
-        let mut changed_lord_british_to_orb = false;
-        if let Some(lord_british) = self.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
-            if endgame_tableau_role_for_slot(ENDGAME_TABLEAU_BOX_SLOT, *lord_british)
-                == Some(EndgameTableauActorRole::SandalwoodBox)
-            {
-                lord_british.type_byte = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
-                lord_british.tile = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
-                changed_lord_british_to_orb = true;
+        if matches!(
+            self.endgame
+                .as_ref()
+                .map(|endgame| endgame.victory_tableau_phase),
+            Some(EndgameVictoryTableauPhase::Inactive)
+        ) {
+            self.present_endgame_orb_frame();
+        }
+        if matches!(
+            self.endgame
+                .as_ref()
+                .map(|endgame| endgame.victory_tableau_phase),
+            Some(EndgameVictoryTableauPhase::OrbAwaitingAcknowledgement)
+        ) {
+            self.advance_endgame_victory_tableau_exit_step();
+        }
+        for _ in 0..(ENDGAME_TABLEAU_SETTLE_STEP_CAP * OOL_SLOTS) {
+            if !self.advance_endgame_victory_tableau_frame() {
+                break;
             }
-        }
-        if changed_lord_british_to_orb {
-            self.animation.tick_static_tiles();
-        }
-        self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_BOX_SLOT);
-        self.animation.tick_static_tiles();
-        self.step_endgame_tableau_slot_to_target(
-            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
-            ENDGAME_TABLEAU_VICTORY_EXIT_TARGET,
-        );
-        self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
-        self.animation.tick_static_tiles();
-        for slot in 0..self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) {
-            self.step_endgame_tableau_slot_to_target(slot, ENDGAME_TABLEAU_VICTORY_EXIT_TARGET);
-            self.clear_endgame_tableau_slot_type_tile(slot);
-            self.animation.tick_static_tiles();
         }
     }
 
     pub fn advance_endgame_victory_tableau_exit_step(&mut self) -> bool {
-        if let Some(lord_british) = self.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
-            if endgame_tableau_role_for_slot(ENDGAME_TABLEAU_BOX_SLOT, *lord_british)
-                == Some(EndgameTableauActorRole::SandalwoodBox)
-            {
-                if lord_british.type_byte == ENDGAME_TABLEAU_BOX_ACTOR_BYTE {
-                    lord_british.type_byte = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
-                    lord_british.tile = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
-                    self.animation.tick_static_tiles();
-                    return true;
-                }
+        let phase = self
+            .endgame
+            .as_ref()
+            .map(|endgame| endgame.victory_tableau_phase)
+            .unwrap_or_default();
+        match phase {
+            EndgameVictoryTableauPhase::Inactive => self.present_endgame_orb_frame(),
+            EndgameVictoryTableauPhase::OrbAwaitingAcknowledgement => {
                 self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_BOX_SLOT);
+                let (x, y) = ENDGAME_GATE_CELL;
+                if let Some(cell) = self.grid.get_mut(y * TOWN_GRID_SIDE + x) {
+                    *cell = NATURAL_MOONGATE_TERRAIN_TILE;
+                }
+                self.natural_moongate_counter = 0;
+                if let Some(endgame) = self.endgame.as_mut() {
+                    endgame.victory_tableau_phase =
+                        EndgameVictoryTableauPhase::GateRise { next_phase: 1 };
+                }
                 self.animation.tick_static_tiles();
-                return true;
+                true
             }
+            _ => false,
+        }
+    }
+
+    fn present_endgame_orb_frame(&mut self) -> bool {
+        let Some(box_object) = self.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) else {
+            return false;
+        };
+        if endgame_tableau_role_for_slot(ENDGAME_TABLEAU_BOX_SLOT, *box_object)
+            != Some(EndgameTableauActorRole::SandalwoodBox)
+        {
+            return false;
+        }
+        box_object.type_byte = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
+        box_object.tile = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
+        if let Some(endgame) = self.endgame.as_mut() {
+            endgame.victory_tableau_phase = EndgameVictoryTableauPhase::OrbAwaitingAcknowledgement;
+        }
+        self.animation.tick_static_tiles();
+        true
+    }
+
+    /// `endgame.md §7` + `cleak/u5-spec#136`: pump one automatic frame
+    /// after the Orb acknowledgement. The endgame writes the same
+    /// save-backed phase byte as overworld moongates, so the existing
+    /// `0x44`/`0xDC` row-splice renderer owns every partial raster.
+    fn advance_endgame_victory_tableau_frame(&mut self) -> bool {
+        let is_victory_tableau = self.endgame.as_ref().is_some_and(|endgame| {
+            matches!(endgame.outcome, Some(EndgameOutcome::Victory))
+                && matches!(
+                    endgame.cinematic.step,
+                    crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau
+                )
+        });
+        if !is_victory_tableau {
+            return false;
         }
 
+        loop {
+            let phase = self
+                .endgame
+                .as_ref()
+                .map(|endgame| endgame.victory_tableau_phase)
+                .unwrap_or_default();
+            match phase {
+                EndgameVictoryTableauPhase::Inactive => {
+                    return self.present_endgame_orb_frame();
+                }
+                EndgameVictoryTableauPhase::OrbAwaitingAcknowledgement
+                | EndgameVictoryTableauPhase::Complete => return false,
+                EndgameVictoryTableauPhase::GateRise { next_phase } => {
+                    debug_assert!((1..MOONGATE_PHASE_FULL).contains(&next_phase));
+                    self.natural_moongate_counter = next_phase;
+                    self.animation.tick_static_tiles();
+                    if let Some(endgame) = self.endgame.as_mut() {
+                        endgame.victory_tableau_phase = if next_phase + 1 < MOONGATE_PHASE_FULL {
+                            EndgameVictoryTableauPhase::GateRise {
+                                next_phase: next_phase + 1,
+                            }
+                        } else {
+                            EndgameVictoryTableauPhase::GateFullHold {
+                                ticks_remaining: ENDGAME_GATE_FULL_HOLD_TICKS,
+                            }
+                        };
+                    }
+                    return true;
+                }
+                EndgameVictoryTableauPhase::GateFullHold { ticks_remaining } => {
+                    debug_assert!(ticks_remaining > 0);
+                    self.natural_moongate_counter = MOONGATE_PHASE_FULL;
+                    self.animation.tick_static_tiles();
+                    if let Some(endgame) = self.endgame.as_mut() {
+                        endgame.victory_tableau_phase = if ticks_remaining == 1 {
+                            EndgameVictoryTableauPhase::ActorExit
+                        } else {
+                            EndgameVictoryTableauPhase::GateFullHold {
+                                ticks_remaining: ticks_remaining - 1,
+                            }
+                        };
+                    }
+                    return true;
+                }
+                EndgameVictoryTableauPhase::ActorExit => {
+                    if self.advance_endgame_gate_actor_exit_frame() {
+                        return true;
+                    }
+                    if let Some(endgame) = self.endgame.as_mut() {
+                        endgame.victory_tableau_phase =
+                            EndgameVictoryTableauPhase::GateSink { next_phase: 15 };
+                    }
+                }
+                EndgameVictoryTableauPhase::GateSink { next_phase } => {
+                    debug_assert!((1..MOONGATE_PHASE_FULL).contains(&next_phase));
+                    self.natural_moongate_counter = next_phase;
+                    self.animation.tick_static_tiles();
+                    if let Some(endgame) = self.endgame.as_mut() {
+                        endgame.victory_tableau_phase = if next_phase == 1 {
+                            EndgameVictoryTableauPhase::RestoreFloor
+                        } else {
+                            EndgameVictoryTableauPhase::GateSink {
+                                next_phase: next_phase - 1,
+                            }
+                        };
+                    }
+                    return true;
+                }
+                EndgameVictoryTableauPhase::RestoreFloor => {
+                    self.natural_moongate_counter = 0;
+                    let (x, y) = ENDGAME_GATE_CELL;
+                    if let Some(cell) = self.grid.get_mut(y * TOWN_GRID_SIDE + x) {
+                        *cell = ENDGAME_TABLEAU_WALKABLE_TILE;
+                    }
+                    if let Some(endgame) = self.endgame.as_mut() {
+                        endgame.victory_tableau_phase = EndgameVictoryTableauPhase::Complete;
+                        endgame.advance_cinematic();
+                    }
+                    return true;
+                }
+            }
+        }
+    }
+
+    fn advance_endgame_gate_actor_exit_frame(&mut self) -> bool {
         if self
             .active_objects
             .get(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
@@ -1816,7 +2006,12 @@ impl PlayState {
                         self.message = current.current_cinematic_text();
                         return MoveOutcome::Observed;
                     }
-                    if let Some(state) = self.endgame.as_mut() {
+                    if let Some(state) = self.endgame.as_mut()
+                        && matches!(
+                            state.victory_tableau_phase,
+                            EndgameVictoryTableauPhase::Complete
+                        )
+                    {
                         state.advance_cinematic();
                         self.message = state.current_cinematic_text();
                     }

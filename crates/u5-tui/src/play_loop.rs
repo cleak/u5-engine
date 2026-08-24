@@ -380,6 +380,17 @@ pub fn handle_play_script_command(
     if is_music_toggle_token(command) {
         return handle_play_key_input(state, PLAY_MUSIC_TOGGLE_KEY, "", game_dir);
     }
+    // Endgame tableau movement and the gate presentation are driven by
+    // rendered frames, not keypresses. Scripted acceptance routes use this
+    // command to pump exactly one owed presentation frame.
+    if command.eq_ignore_ascii_case("endgame:frame") {
+        if !state.advance_endgame_display_frame() {
+            return Err(io::Error::other(
+                "play script `endgame:frame` found no pending endgame presentation frame",
+            ));
+        }
+        return Ok(PlayInputDisposition::Continue);
+    }
     if matches!(command.to_ascii_lowercase().as_str(), "empty" | "pass") {
         handle_empty_play_input(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);

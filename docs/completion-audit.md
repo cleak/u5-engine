@@ -141,8 +141,12 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#133` | Native town door/restraint IDs, Jimmy prisoner-release lifecycle, and committed exploration exits | Resolved and implemented: magic locks break a key before any picker/PRNG path, empty restraints refuse before picker/PRNG, successful release clears live dialogue awareness, changes all three schedule modes to 5, grants the first-time reward, suppresses the mode-5 adjacent attack event, and persists the scene/slot removal mask across save/reload. Dungeon no-keys/no-lock/unavailable/cancel exits each commit one action; Jimmy, Open, and An Sanct share the open-chest rewrite that clears trap/subtype bits and preserves only visit marker `0x08` |
 | `cleak/u5-spec#134` | Y-Yell sail-toggle scene gate and clean action result | Resolved in public commit `0b1cfe2` and implemented: a frigate toggles only for unsigned scene bytes `0x00..=0x7f`; `0x80..=0xff` enters the ordinary word prompt. The accepted branch preserves heading, consumes one action, and prints exact `HOIST!`/`FURL!`. Submitting the ordinary prompt empty now also reports acted in world, town, dungeon, and combat instead of retaining the old no-turn placeholder; exhaustive byte, cross-mode input, TUI route, and Bevy visual-route coverage pin the boundary |
 | `cleak/u5-spec#135` | Ruined-shrine Word-of-Power mantra handoff | Resolved in public commit `24f4aa4` and implemented: the word-indexed virtue/mantra session asks all four exact prompts, uses case-insensitive substring matching, keeps Escape local to the current field, silently fails after the fourth response, and on coordinate-valid success restores `0x1A` to `0x19` while clearing only the shrine ruin high bit and preserving the seal flag |
+| `cleak/u5-spec#136` | Endgame gate partial-phase raster | Resolved in public commit `b5d9cde` and implemented: the victory rite now installs live gate terrain at `(5,4)`, drives the shared save-backed moongate counter through rise `1..15`, four full-height phase-16 ticks, actor exits, sink `15..1`, and final phase-0 floor restore. The Bevy tableau renderer reuses the exact opaque `0x44`/`0xDC` row splice through scratch tile `0x116`; phase 15 retains floor row 0, and active-object sprites composite afterward |
+| `cleak/u5-spec#137` | Rectangle-dissolve wall-clock contract | Resolved in public commit `5f1155b`: atomic publication at the blocking-call boundary is normative. The engine's existing completed-call presentation is correct; optional prefix animation has no normative duration and may not add ticks, input consumption, or abort points |
+| `cleak/u5-spec#138` | Alternate-depth cinematic rendering scope | Resolved in public commit `230b024`: EGA is the sole pixel-exact v1 target. CGA, Hercules, and Tandy cinematic presentation is optional and must be labeled a modern approximation, so no alternate-depth conversion remains a v1 completion blocker |
+| `cleak/u5-spec#139` | Title-flourish timing | Resolved in public commit `0ebc456`: 14 ms for each of 85 logical presentations is the normative modern cadence, nominally 1.190 s total, with no catch-up. The existing scheduler uses this exact deadline; captured acceptance allows mean 14 ms ± 1 ms and total 1.190 s ± 0.100 s |
 
-The answered public clean-room issue queue is reconciled through `#135`.
+The answered public clean-room issue queue is reconciled through `#139`.
 The later corrective answer on public `#11` is also reconciled: Kill's
 protected class-id filter is 14/15/47; Cause Fear and Repel Undead directly
 write combat HP 1 and fleeing bit `0x02`; Repel does not enter death or XP
@@ -175,15 +179,15 @@ clears the read-only bit Windows `fs::copy` propagates into scratch copies.
 
 | Command | Result |
 |---|---|
-| `cargo test -p u5-runtime --lib` | 3222 pass |
-| `cargo test -p u5-bevy` | 181 pass |
+| `cargo test -p u5-runtime --lib` | 3223 pass |
+| `cargo test -p u5-bevy` | 183 pass |
 | `cargo test -p u5-tui -- --test-threads=1` | 103 pass (14 + 51 + 38) |
 | `cargo test --workspace` | pass, including all asset-backed suites and doc tests |
 | `cargo fmt --all -- --check` | clean |
 | `cargo clippy --workspace --all-targets` | **zero errors**; style warnings remain and are not gated |
 | `--route-smoke <asset-copy>` | all **513** scripted cases pass |
 | `--visual-frame-suite <asset-copy>` | **193** PNGs plus a sanitized manifest |
-| `--visual-route-suite <asset-copy>` | **1871** PNGs plus a sanitized manifest |
+| `--visual-route-suite <asset-copy>` | **1906** PNGs plus a sanitized manifest |
 
 The route-smoke corpus spans world, town, dungeon, combat, endgame and shop
 play: all 40 published stock world-location entry rows, TLK-backed reserved-word
@@ -207,7 +211,7 @@ synthetic far-slot live object to the plane OOL mirror before the ordinary
 rescue restores the party. Its validator requires
 `cinematic_is_finished()`, so an ending that stops short fails the case.
 
-The visual route suite's 1871 frames are all nonblank except exactly one, which
+The visual route suite's 1906 frames are all nonblank except exactly one, which
 is black by contract: the `endgame.md §7.1` fade between the throne tableau and
 the first `END.DAT` window. The suite also rejects any scripted step that leaves
 the frame unchanged, outside the explicit terminal-endgame and Doom
@@ -398,7 +402,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| `endgame.md` §1–§12 | `endgame.rs`, `endgame_cinematic.rs`, `end_io.rs` (public END.DAT final narrative windows), `endmsg_io.rs`; Bevy endgame modal advances the six fixed END.DAT narrative windows without intro-style page wipes and presents the late full-screen certificate rectangle operation before certificate setup | endgame tests; Bevy endgame certificate-rectangle tests; route-smoke terminal-endgame confirmation/victory cases | Implemented |
+| `endgame.md` §1–§12 | `endgame.rs`, `endgame_cinematic.rs`, `end_io.rs` (public END.DAT final narrative windows), `endmsg_io.rs`; Bevy endgame modal drives Lord British's entrance, the Orb acknowledgement, the shared-moongate `1..15` rise/four-tick full hold/actor exits/`15..1` sink/floor restore, advances the six fixed END.DAT narrative windows without intro-style page wipes, and presents the full-screen fade before the first window | exact shared-counter sequence and row-splice tests; Bevy actor-over-gate raster test; endgame fade tests; route-smoke and 1,906-frame visual-route terminal-victory coverage | Implemented through public issue #136 |
 | `blackthorn.md` §1–§11 | `blackthorn.rs`, `blackthorn_session.rs`, KARMA.DAT verdict mapping | Blackthorn challenge/rescue tests; Blackthorn audience/rescue route-smoke; Shadowlord route-smoke | Implemented |
 
 ### `systems/boot.md`, `systems/launcher.md`, `systems/main-loop.md`, `systems/disk-prompt.md`, `systems/runtime.md`, `systems/input.md`, `systems/commands.md`, `systems/animation.md`, `systems/lighting.md`, `systems/view.md`, `systems/visibility.md`
@@ -588,17 +592,15 @@ The sprite header is now decoded as a sprite count rather than an offset count;
 the former parser silently exposed only 10 of 20 `ITEMS` sprites and 3 of 6
 sprites in every monster bank.
 
-### Details the spec publishes as unpublished
+### Presentation boundaries closed by explicit policy
 
-- The driver's per-step pixel pattern for the brightness entry the endgame gate
-  flare drives (`display-driver-abi.md`).
-- Any wall-clock length for the rectangle dissolve, so the engine completes it
-  as the single blocking call `#53` specifies rather than pacing it. The same
-  treatment applies to the acknowledgements rise and sink phases, which `§11.2`
-  gives no wait at all.
-- The alternate-depth (`.4`) conversion of the archives named in `#82`.
-- The 14 ms flourish step is a derived target inside a 10.5-15.8 ms bracket, not
-  a measured figure.
+Public issues `#136`–`#139` close the four former residuals. The endgame gate
+is the shared deterministic moongate row splice, not a brightness operation.
+Rectangle dissolves publish atomically with no normative wall-clock duration.
+EGA is the sole pixel-exact v1 target, so alternate-depth conversion is not a
+completion requirement. The title flourish uses the final normative modern
+cadence of exactly 14 ms per each of 85 presentations (1.190 s nominal total),
+with the published captured-frontend tolerances.
 
 ### Review heuristics
 
@@ -710,9 +712,9 @@ changed hue once it was corrected. Nothing in the game reprograms the palette
 after mode setup; apparent recolouring is a restricted plane write mask or a
 display effect mutating the loaded asset data, never a palette change.
 
-Verified on 2026-08-24 in the current worktree: 3222 u5-runtime, 181 u5-bevy,
+Verified on 2026-08-24 in the current worktree: 3223 u5-runtime, 183 u5-bevy,
 and 103 u5-tui tests pass, `cargo fmt --all -- --check` is clean, `cargo clippy
 --workspace --all-targets` reports zero errors (its existing style-warning
 baseline is not gated), `--route-smoke` passes all 513 cases,
-`--visual-frame-suite` writes 193 PNGs and `--visual-route-suite` writes 1871.
+`--visual-frame-suite` writes 193 PNGs and `--visual-route-suite` writes 1906.
 Asset-backed verification used the local asset directory read-only.

@@ -17588,6 +17588,7 @@ fn doom_final_room_trigger_enters_endgame_without_room_rewrite() {
     );
     assert_eq!(state.turn, 0);
     let mut expected = EndgameState::awaiting_first_confirmation();
+    expected.entry_lord_british_pending = true;
     expected.entry_party_slot = 0;
     assert_eq!(state.endgame, Some(expected));
     assert!(state.message.is_empty());
@@ -17927,12 +17928,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
         victory.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
         ENDGAME_TABLEAU_BOX_ACTOR_BYTE
     );
-    for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
-        victory.resolve_endgame_confirmation(true);
-        if !victory.message.is_empty() {
-            break;
-        }
-    }
+    run_victory_tableau_to_first_narrative_window(&mut victory);
     assert_eq!(victory.message, "Window one");
 }
 
@@ -17961,44 +17957,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     );
     assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 5));
 
-    // Leaving the throne tableau consumes visible tableau-exit steps before
-    // the first fixed narrative panel appears. The Lord British `0x08` phase
-    // must be observable before the slot clears.
-    state.resolve_endgame_confirmation(true);
-    assert_eq!(state.message, "");
-    assert!(matches!(
-        state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
-        Some(crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau)
-    ));
-    assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
-        ENDGAME_TABLEAU_ORB_ACTOR_BYTE
-    );
-
-    state.resolve_endgame_confirmation(true);
-    assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
-        0
-    );
-
-    let exit_slots = (0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
-        .chain([
-            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
-            ENDGAME_TABLEAU_BOX_SLOT,
-        ])
-        .collect::<Vec<_>>();
-    for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
-        if exit_slots.iter().all(|slot| {
-            state.active_objects[*slot].type_byte == 0 && state.active_objects[*slot].tile == 0
-        }) {
-            break;
-        }
-        state.resolve_endgame_confirmation(true);
-        assert!(matches!(
-            state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
-            Some(crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau)
-        ));
-    }
+    run_victory_tableau_to_first_narrative_window(&mut state);
     assert!((0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
         .chain([
             ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
@@ -18007,15 +17966,8 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         .all(|slot| state.active_objects[slot].type_byte == 0
             && state.active_objects[slot].tile == 0));
 
-    // `§7.1`: leaving the tableau runs the fade to black, which takes
-    // no keystroke and publishes window one when it completes.
-    state.resolve_endgame_confirmation(true);
-    assert_eq!(
-        state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
-        Some(crate::endgame_cinematic::EndgameCinematicStep::FadeToBlack)
-    );
-    assert_eq!(state.message, "");
-    assert!(state.advance_endgame_display_frame());
+    // The automatic tableau sequence includes the one silent fade and
+    // publishes the first narrative window without consuming another key.
     assert_eq!(state.message, "Window one");
 
     for expected in [
@@ -18054,29 +18006,94 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     }
 }
 
-/// `endgame.md §7.1`/`§8`: walk a terminal victory cinematic to the
-/// certificate. The fade to black runs once, leaving the throne
-/// tableau, and consumes no keystroke; the six `END.DAT` windows then
-/// page through to the certificate.
-fn walk_endgame_cinematic_to_certificate(endgame: &mut EndgameState) {
-    endgame.cinematic.advance();
+#[test]
+fn victory_gate_reuses_shared_moongate_phase_for_exact_rise_hold_and_sink() {
+    let mut state = dungeon_state(endgame_tableau_test_grid(), 0, 1, 1);
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    state.enter_endgame();
+    state.resolve_endgame_confirmation(true);
+    state.resolve_endgame_confirmation(true);
+    state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
+
+    // The Orb is the one post-rite frame that waits for a key.
+    assert!(state.advance_endgame_display_frame());
     assert_eq!(
-        endgame.cinematic.step,
-        crate::endgame_cinematic::EndgameCinematicStep::FadeToBlack
+        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
+        ENDGAME_TABLEAU_ORB_ACTOR_BYTE
     );
-    assert!(endgame.advance_cinematic_frame_operation());
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(state.natural_moongate_counter, 0);
     assert_eq!(
-        endgame.cinematic.step,
-        crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0)
+        state.grid[ENDGAME_GATE_CELL.1 * TOWN_GRID_SIDE + ENDGAME_GATE_CELL.0],
+        NATURAL_MOONGATE_TERRAIN_TILE
     );
-    for _ in 1..crate::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT {
-        endgame.cinematic.advance();
+
+    for expected in 1..MOONGATE_PHASE_FULL {
+        assert!(state.advance_endgame_display_frame());
+        assert_eq!(state.natural_moongate_counter, expected);
     }
-    endgame.cinematic.advance();
+    for _ in 0..ENDGAME_GATE_FULL_HOLD_TICKS {
+        assert!(state.advance_endgame_display_frame());
+        assert_eq!(state.natural_moongate_counter, MOONGATE_PHASE_FULL);
+    }
+
     assert_eq!(
-        endgame.cinematic.step,
-        crate::endgame_cinematic::EndgameCinematicStep::Certificate
+        state
+            .endgame
+            .as_ref()
+            .map(|endgame| endgame.victory_tableau_phase),
+        Some(EndgameVictoryTableauPhase::ActorExit)
     );
+    assert!(state.advance_endgame_display_frame());
+    assert_eq!(
+        (
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].x,
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].y
+        ),
+        ENDGAME_GATE_CELL,
+        "Lord British is composited over the full gate for one frame"
+    );
+    assert!(state.advance_endgame_display_frame());
+    assert!(state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].is_empty());
+
+    for slot in 0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize) {
+        while !state.active_objects[slot].is_empty() {
+            assert!(state.advance_endgame_display_frame());
+        }
+    }
+
+    // The next automatic frame begins the no-hold down-ramp at 15.
+    assert!(state.advance_endgame_display_frame());
+    assert_eq!(state.natural_moongate_counter, 15);
+    for expected in (1..15).rev() {
+        assert!(state.advance_endgame_display_frame());
+        assert_eq!(state.natural_moongate_counter, expected);
+    }
+    assert_eq!(
+        state
+            .endgame
+            .as_ref()
+            .map(|endgame| endgame.victory_tableau_phase),
+        Some(EndgameVictoryTableauPhase::RestoreFloor)
+    );
+
+    assert!(state.advance_endgame_display_frame());
+    assert_eq!(state.natural_moongate_counter, 0);
+    assert_eq!(
+        state.grid[ENDGAME_GATE_CELL.1 * TOWN_GRID_SIDE + ENDGAME_GATE_CELL.0],
+        ENDGAME_TABLEAU_WALKABLE_TILE
+    );
+    assert_eq!(
+        state
+            .endgame
+            .as_ref()
+            .map(|endgame| endgame.victory_tableau_phase),
+        Some(EndgameVictoryTableauPhase::Complete)
+    );
+    assert!(matches!(
+        state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+        Some(crate::endgame_cinematic::EndgameCinematicStep::FadeToBlack)
+    ));
 }
 
 #[test]
@@ -18295,6 +18312,14 @@ fn enter_endgame_restores_dead_party_for_tableau() {
 
     assert_eq!(state.party[0].status, b'D');
     assert_eq!(state.party[0].hp, 0);
+    for expected_y in (3..=7).rev() {
+        assert!(state.advance_endgame_entry_presentation());
+        assert_eq!(
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].y,
+            expected_y
+        );
+        assert_eq!(state.party[0].status, b'D');
+    }
     assert!(state.advance_endgame_entry_presentation());
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.party[0].hp, 60);
@@ -22674,6 +22699,45 @@ fn synthetic_end_narrative() -> EndNarrative {
     EndNarrative::new(raw).with_window_ranges(ranges)
 }
 
+fn run_victory_tableau_to_first_narrative_window(state: &mut PlayState) {
+    assert!(matches!(
+        state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+        Some(crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau)
+    ));
+    assert!(state.advance_endgame_display_frame());
+    assert_eq!(
+        state
+            .endgame
+            .as_ref()
+            .map(|endgame| endgame.victory_tableau_phase),
+        Some(EndgameVictoryTableauPhase::OrbAwaitingAcknowledgement)
+    );
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(
+        state.grid[ENDGAME_GATE_CELL.1 * TOWN_GRID_SIDE + ENDGAME_GATE_CELL.0],
+        NATURAL_MOONGATE_TERRAIN_TILE
+    );
+
+    for _ in 0..512 {
+        if matches!(
+            state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+            Some(crate::endgame_cinematic::EndgameCinematicStep::FadeToBlack)
+        ) {
+            break;
+        }
+        assert!(state.advance_endgame_display_frame());
+    }
+    assert!(matches!(
+        state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+        Some(crate::endgame_cinematic::EndgameCinematicStep::FadeToBlack)
+    ));
+    assert!(state.advance_endgame_display_frame());
+    assert!(matches!(
+        state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+        Some(crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0))
+    ));
+}
+
 #[test]
 fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     // endgame.md §3-§4: the endgame clears the live active-object table
@@ -22703,7 +22767,14 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     assert!(!state.endgame_tableau_is_settled());
     assert!(state.active_objects[0].is_empty());
     assert!(state.advance_endgame_entry_presentation());
-    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 8));
+    assert!(state.active_objects[0].is_empty());
+    assert_eq!(
+        (
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].x,
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].y
+        ),
+        (5, 7)
+    );
     assert!(state.finish_endgame_entry_presentation() > 0);
     assert!(!state.endgame_entry_presentation_pending());
     assert!(state.endgame_tableau_is_settled());
@@ -22846,6 +22917,19 @@ fn endgame_entry_restores_announces_places_and_walks_each_member_in_slot_order()
 
     state.enter_endgame();
 
+    // Lord British walks to the throne row before any party slot is placed.
+    for expected_y in (3..=7).rev() {
+        assert!(state.advance_endgame_entry_presentation());
+        assert_eq!(
+            (
+                state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].x,
+                state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].y
+            ),
+            (5, expected_y)
+        );
+        assert!(state.active_objects[0].is_empty());
+    }
+
     // Slot zero walks all four cells to (5,5) before slot one is touched.
     for expected_y in (5..=8).rev() {
         assert!(state.advance_endgame_entry_presentation());
@@ -22932,11 +23016,13 @@ fn endgame_rendering_does_not_repopulate_gameplay_player_object() {
     state.enter_endgame();
     state.resolve_endgame_confirmation(true);
     state.resolve_endgame_confirmation(true);
+    assert!(state.advance_endgame_display_frame());
+    state.resolve_endgame_confirmation(false);
     for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
         if state.active_objects[0].is_empty() {
             break;
         }
-        state.resolve_endgame_confirmation(false);
+        assert!(state.advance_endgame_display_frame());
     }
     assert!(state.active_objects[0].is_empty());
 
@@ -22961,7 +23047,7 @@ fn endgame_tableau_target_step_moves_active_objects_until_settled() {
     assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 8));
     assert_eq!(
         state.animation.frame,
-        (frame_before + 2) % STATIC_TILE_ANIMATION_PERIOD_TICKS
+        (frame_before + 3) % STATIC_TILE_ANIMATION_PERIOD_TICKS
     );
 
     let frame_before = state.animation.frame;
