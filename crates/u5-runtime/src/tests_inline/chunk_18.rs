@@ -186,7 +186,7 @@
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert_eq!(
             state.message,
-            "Exited DUNGEON:0 (Deceit) to UNDERWORLD at (10, 20)."
+            DUNGEON_EXIT_TO_UNDERWORLD_NARRATION
         );
         let _ = fs::remove_dir_all(dir);
     }

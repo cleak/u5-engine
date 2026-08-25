@@ -662,7 +662,7 @@
 
         assert_eq!(state.view_gem(), MoveOutcome::Blocked);
 
-        assert_eq!(state.message, "No gems!");
+        assert_eq!(state.message, VIEW_NO_GEM_REFUSAL);
         assert_eq!(state.turn, 0);
     }
 

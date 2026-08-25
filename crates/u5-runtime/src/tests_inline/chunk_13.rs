@@ -17094,7 +17094,7 @@ fn dungeon_energy_field_marker_variants_keep_subtype_reaction() {
 }
 
 #[test]
-fn dungeon_room_trigger_marks_visit_local_helper_state_and_reports_arena() {
+fn dungeon_room_trigger_marks_visit_local_helper_state_and_uses_stock_narration() {
     let scene = DungeonScene::new(35).unwrap();
     let mut grid = open_dungeon_record();
     grid[dungeon_cell_index(0, 2, 1)] = 0xf7;
@@ -17111,9 +17111,7 @@ fn dungeon_room_trigger_marks_visit_local_helper_state_and_reports_arena() {
         7
     ));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("slot 7"));
-    assert!(state.message.contains("selected DUNGEON.CBT arena 23"));
-    assert!(!state.message.contains("out of scope"));
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
 }
 
 #[test]
@@ -17211,10 +17209,7 @@ fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
     assert!(state.combat_active);
-    assert!(state.message.contains("entered dungeon combat"));
-    assert!(state.message.contains("DUNGEON.CBT arena 23"));
-    assert!(state.message.contains("1 room source marker(s)"));
-    assert!(state.message.contains("1 ordinary combatant"));
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert_eq!(state.combat_terrain[0][0], 0x00);
     assert_eq!(state.active_objects[6].tile, 0xc4);
     assert_eq!(
@@ -17272,9 +17267,7 @@ fn dungeon_room_helper_state_loads_dungeon_cbt_record_when_available() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa4);
     assert!(state.combat_active);
-    assert!(state.message.contains("room-helper state slot 4"));
-    assert!(state.message.contains("entered dungeon combat"));
-    assert!(state.message.contains("DUNGEON.CBT arena 20"));
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert_eq!(state.combat_terrain[0][0], 0x00);
     assert_eq!(state.active_objects[6].tile, 0);
     assert!(state.combat_actors[6].is_empty());
@@ -17300,7 +17293,7 @@ fn dungeon_current_room_trigger_fires_before_next_key() {
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xa3);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("slot 3"));
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
 }
 
 fn synthetic_endmsg_dat_bytes() -> Vec<u8> {
@@ -17510,9 +17503,7 @@ fn doom_final_room_trigger_loads_dungeon_cbt_before_endgame_when_available() {
         state.grid[dungeon_cell_index(DOOM_FINAL_ROOM_LEVEL, DOOM_FINAL_ROOM_X, DOOM_FINAL_ROOM_Y,)],
         0xf0 | DOOM_FINAL_ROOM_SLOT
     );
-    assert!(state.message.contains("entered dungeon combat"));
-    assert!(state.message.contains("DUNGEON.CBT arena 111"));
-    assert!(state.message.contains("kept final room trigger state"));
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert!(!dungeon_room_clear_bit_is_set(
         &state.dungeon_room_clear_bitmap,
         scene,
@@ -23014,12 +23005,11 @@ fn dungeon_current_room_helper_state_fires_before_next_key_without_rewriting() {
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xa4);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("slot 4"));
-    assert!(state.message.contains("arena 4"));
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
 }
 
 #[test]
-fn dungeon_room_helper_state_reports_arena_without_rewriting() {
+fn dungeon_room_helper_state_uses_stock_narration_without_rewriting() {
     let mut grid = open_dungeon_record();
     grid[dungeon_cell_index(0, 2, 1)] = 0xa4;
     let mut state = dungeon_state(grid, 0, 1, 1);
@@ -23029,8 +23019,7 @@ fn dungeon_room_helper_state_reports_arena_without_rewriting() {
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa4);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("room-helper state slot 4"));
-    assert!(state.message.contains("arena 4"));
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
 }
 
 #[test]
@@ -23488,7 +23477,10 @@ fn z_stats_selector_cancels_with_the_observed_none_result() {
         );
         assert!(state.active_party_selector.is_some());
         assert_eq!(state.roster_box_label(), Some("Select:"));
-        assert_eq!(transcript_texts(&state), vec!["Z-stats...", "Player:"]);
+        assert_eq!(
+            transcript_texts(&state),
+            vec!["Z-stats...", PARTY_SELECTION_PROMPT]
+        );
         assert!(state.message_entries()[0].is_command_echo);
         assert!(!state.message_entries()[1].is_command_echo);
 
@@ -23515,7 +23507,7 @@ fn z_stats_selector_rejects_slots_beyond_the_travelling_party() {
     );
     assert!(state.active_party_selector.is_some());
     assert!(state.active_z_stats.is_none());
-    assert_eq!(state.message, "Player:");
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
 }
 
 #[test]
@@ -23547,6 +23539,29 @@ fn command_echo_opens_a_transcript_entry_before_the_handler_prompts() {
     );
     assert_eq!(transcript_texts(&state), vec!["Look-"]);
     assert!(state.message_entries()[0].is_command_echo);
+}
+
+#[test]
+fn view_without_a_gem_keeps_the_published_echo_then_refusal_lines() {
+    // `commands.md` §5/#81: the command echo is emitted before the
+    // inventory gate, and the refusal is exactly `You have none!` on
+    // the following line.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.gems = 0;
+
+    assert!(
+        state
+            .handle_top_down_key_with_inline('V', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+
+    assert_eq!(
+        transcript_texts(&state),
+        vec!["View a gem!", VIEW_NO_GEM_REFUSAL]
+    );
+    assert!(state.message_entries()[0].is_command_echo);
+    assert!(!state.message_entries()[1].is_command_echo);
+    assert_eq!(state.turn, 0);
 }
 
 #[test]
@@ -23590,7 +23605,7 @@ fn use_item_echo_puts_the_item_prompt_on_the_next_line() {
     let entries = state.message_entries();
     assert_eq!(entries[0].text, "Use item");
     assert!(entries[0].is_command_echo);
-    assert_eq!(entries[1].text, "Item:");
+    assert_eq!(entries[1].text, ITEM_SELECTION_PROMPT);
     assert!(!entries[1].is_command_echo);
 }
 
@@ -23664,9 +23679,9 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
         ('M', MMIX_SPELL_PROMPT_MESSAGE),
         ('N', "New order:"),
         ('Q', "Save game?"),
-        ('U', "Item:"),
+        ('U', ITEM_SELECTION_PROMPT),
         ('W', "What?"),
-        ('Z', "Player:"),
+        ('Z', PARTY_SELECTION_PROMPT),
     ] {
         let mut state = test_state(open_grid(), 5, 5);
 
@@ -24008,7 +24023,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('U', "No usable items.", 1),
         ('W', "What?", 0),
         ('Y', "Yell what?", 0),
-        ('Z', "Player:", 0),
+        ('Z', PARTY_SELECTION_PROMPT, 0),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 

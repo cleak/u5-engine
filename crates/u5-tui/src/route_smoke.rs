@@ -82,9 +82,9 @@ use u5_runtime::{
     TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y, TOWN_DOOR_MAGIC_PLAIN_TILE, TOWN_GAS_DOORWAY_RANGE_MAX,
     TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, TOWN_TRAPDOOR_LIVE_TILE,
     TRANSPORT_MARKER_SHIP_FURLED_FIRST, Tavern, TileGraphicsDepth, TransportState,
-    UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_CLEARED_TILE,
-    VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X,
-    WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEALED_TILE, WORD_OF_POWER_SEALS,
+    UNDER_OOL_FILENAME, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX,
+    VANISH_CLEARED_TILE, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEALED_TILE, WORD_OF_POWER_SEALS,
     WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WORLD_SIDE, WindState,
     WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, combat_class_stats,
@@ -782,6 +782,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: PlayOptions::default(),
             script: &["empty", "idle:2"],
             expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-canonical-ool-exit",
+            options: PlayOptions::default(),
+            script: &["s", "s", "Y"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
@@ -3004,9 +3012,13 @@ pub fn run_route_smoke(
 ) -> io::Result<()> {
     let cases = route_smoke_cases();
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    let baseline_brit_ool = fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
+    let baseline_under_ool = fs::read(game_dir.join(UNDER_OOL_FILENAME))?;
     println!("Route smoke: {} case(s).", cases.len());
     let mut reports = Vec::with_capacity(cases.len());
     for case in &cases {
+        fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
+        fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
         let report = run_route_smoke_case(game_dir, &atlas, case)?;
         println!(
             "route-smoke {}: {} command(s), {}",
@@ -3015,6 +3027,8 @@ pub fn run_route_smoke(
         println!("{}", report.final_raster_line);
         reports.push(report);
     }
+    fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
+    fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
     if let Some(path) = manifest_path {
         write_route_smoke_manifest(path, &reports)?;
         println!("Saved route smoke manifest: {}.", path.display());
@@ -5360,44 +5374,82 @@ fn validate_route_smoke_case_state(
                 "route smoke `{case_name}` does not map to a published location row"
             )));
         };
-        let Some(return_world) = state.return_world.as_ref() else {
-            return Err(io::Error::other(format!(
-                "route smoke `{case_name}` did not cache a return-world checkpoint"
-            )));
-        };
-        if return_world.plane != entry.plane
-            || return_world.x != entry.x
-            || return_world.y != entry.y
-        {
-            return Err(io::Error::other(format!(
-                "route smoke `{case_name}` saved return ({}, {}, {}) instead of ({}, {}, {})",
-                return_world.plane.key(),
-                return_world.x,
-                return_world.y,
-                entry.plane.key(),
-                entry.x,
-                entry.y
-            )));
-        }
-        if let PlayTarget::Dungeon(scene) = entry.target {
-            let expected_level = if entry.plane == WorldPlane::Underworld && scene.record != 7 {
-                7
-            } else {
-                0
-            };
-            match state.area {
-                Area::Dungeon { level, .. } if level == expected_level => {}
-                _ => {
+        match entry.target {
+            PlayTarget::Town(_) => {
+                if state.return_world.is_some() {
                     return Err(io::Error::other(format!(
-                        "route smoke `{case_name}` did not enter the expected dungeon level {expected_level}"
+                        "route smoke `{case_name}` retained a forbidden town return snapshot"
+                    )));
+                }
+                let file_name = match entry.plane {
+                    WorldPlane::Britannia => BRIT_OOL_FILENAME,
+                    WorldPlane::Underworld => UNDER_OOL_FILENAME,
+                };
+                let table = fs::read(game_dir.join(file_name))?;
+                if table.get(2).copied() != Some(entry.x as u8)
+                    || table.get(3).copied() != Some(entry.y as u8)
+                    || table.get(4).copied() != Some(entry.plane.save_floor() as u8)
+                {
+                    return Err(io::Error::other(format!(
+                        "route smoke `{case_name}` did not persist slot zero to the canonical {} mirror",
+                        entry.plane.key()
                     )));
                 }
             }
+            PlayTarget::Dungeon(scene) => {
+                let Some(return_world) = state.return_world.as_ref() else {
+                    return Err(io::Error::other(format!(
+                        "route smoke `{case_name}` did not cache its dungeon return checkpoint"
+                    )));
+                };
+                if return_world.plane != entry.plane
+                    || return_world.x != entry.x
+                    || return_world.y != entry.y
+                {
+                    return Err(io::Error::other(format!(
+                        "route smoke `{case_name}` saved return ({}, {}, {}) instead of ({}, {}, {})",
+                        return_world.plane.key(),
+                        return_world.x,
+                        return_world.y,
+                        entry.plane.key(),
+                        entry.x,
+                        entry.y
+                    )));
+                }
+                let expected_level = if entry.plane == WorldPlane::Underworld && scene.record != 7 {
+                    7
+                } else {
+                    0
+                };
+                match state.area {
+                    Area::Dungeon { level, .. } if level == expected_level => {}
+                    _ => {
+                        return Err(io::Error::other(format!(
+                            "route smoke `{case_name}` did not enter the expected dungeon level {expected_level}"
+                        )));
+                    }
+                }
+            }
+            PlayTarget::World(_) => unreachable!("published table excludes world targets"),
         }
         return Ok(());
     }
 
     match case_name {
+        "castle-canonical-ool-exit" => {
+            if state.area
+                != (Area::World {
+                    plane: WorldPlane::Britannia,
+                })
+                || (state.player.x, state.player.y) != (86, 107)
+                || state.return_world.is_some()
+                || !state.message.contains("canonical outdoor table")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete the fixed-coordinate canonical-OOL town exit"
+                )));
+            }
+        }
         "britannia-defeat-persists-ool-before-rescue" => {
             let rescue_scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
             let bytes = fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
@@ -6715,10 +6767,18 @@ fn validate_route_smoke_case_state(
                 .active_objects
                 .iter()
                 .find(|object| object.type_byte == HORSE_PARKED_FIRST);
-            let boardable = state.boardable_vehicle_slot_at(15, 16).is_some();
+            // The post-reload Pass runs the town free-roaming object walker,
+            // so the delivered horse may take one legal step. Its identity
+            // and boardability, not its pre-turn sale coordinate, are the
+            // durable reload contract.
+            let boardable = horse.is_some_and(|object| {
+                state
+                    .boardable_vehicle_slot_at(object.x, object.y)
+                    .is_some()
+            });
             if state.gold != expected_gold
                 || state.active_shop.is_some()
-                || horse.is_none_or(|object| object.x != 15 || object.y != 16)
+                || horse.is_none()
                 || !boardable
                 || !state.message.contains("Pass")
             {

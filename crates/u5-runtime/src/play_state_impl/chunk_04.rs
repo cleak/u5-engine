@@ -14,7 +14,7 @@ struct UseItemPickerRow {
 
 /// `commands.md §5` + observation: the U-Use handler's message-window
 /// prompt, printed on the line after the `Use item` verb echo.
-pub const USE_ITEM_PROMPT_MESSAGE: &str = "Item:";
+pub const USE_ITEM_PROMPT_MESSAGE: &str = ITEM_SELECTION_PROMPT;
 
 impl PlayState {
     pub fn cast_rel_hur(
@@ -1902,7 +1902,7 @@ impl PlayState {
 
     pub fn view_gem(&mut self) -> MoveOutcome {
         if self.gems == 0 {
-            self.message = "No gems!".to_string();
+            self.message = VIEW_NO_GEM_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 

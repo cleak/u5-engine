@@ -5,7 +5,7 @@ full-game goal. It is intentionally evidence-oriented: passing tests are useful
 only for the behavior they actually cover.
 
 Last refreshed on 2026-08-24 in the current worktree after reconciling public
-issues through `#126` and removing the last engine-side `0x2A` spawn-marker
+issues through `#141` and removing the last engine-side `0x2A` spawn-marker
 classification and player-entry naming from the town-cell pipeline. Public
 issue `#112` resolved the stale spec prose in `8a73d12`; runtime behavior
 already follows the settled `#94` contract. Public commit `82daf8d` resolves
@@ -37,6 +37,15 @@ terrain arm suppresses markers even when Poison is rejected. Doom absorption is
 a separate earlier committed non-digit player-action check against companion
 row 1 while the actor stands on row 2; digits, refusals, and automatic actors
 bypass it.
+Public `#141`, resolved by clean commit `74e5053`, replaces the town return
+snapshot model with the published canonical-object lifecycle. Every published
+foot/horse/carpet/frigate/skiff marker enters unchanged and without an outdoor
+turn; entry writes all 32 live slots to the current plane `.OOL`; exit uses the
+fixed scene coordinate and scene-`0x19` plane rule, reloads all 32 destination
+records, retains slot-zero auxiliaries, and only then places queued shipwright
+delivery. The accepted path owns no cached pre-entry coordinate, plane, marker,
+grid, or object snapshot. Failed coordinate lookup consumes the normal
+two-minute outdoor action.
 Public issues `#127` and `#128` are resolved and implemented from `21698d6` and
 `98dfd45`: the certificate uses exact one-cell TH/ST/space encoding and encoded
 centering, while conversation gold payments use automatic affordability,
@@ -199,9 +208,9 @@ cargo run -- --compare-frame-manifests target\baseline\manifest.txt target\frame
 cargo run --features visual -- --visual --scene BRITANNIA <asset-copy>
 ```
 
-Measured on 2026-08-24 in the current worktree against the read-only local
-asset directory: `--route-smoke` **all 513 cases passed**, `--visual-frame-suite`
-**193 PNGs**, `--visual-route-suite` **1906 PNGs**, which include the whole
+Measured on 2026-08-24 in the current worktree from a writable copy of the
+read-only local asset input: `--route-smoke` **all 514 cases passed**,
+`--visual-frame-suite` **193 PNGs**, `--visual-route-suite` **1910 PNGs**, which include the whole
 victory ending through the shared-moongate rise/hold/sink raster sequence and
 on to the certificate.
 

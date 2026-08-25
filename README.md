@@ -148,7 +148,7 @@ Britannia, a moved Britannia frame, Castle:0, a lit Dungeon:0 frame, composed
 combat, View/Peer/X-Ray/night-sky overlays, intro/status/modal surfaces, and an
 endgame status panel, plus a sanitized manifest with dimensions, frame kinds,
 positions, and hashes. The Bevy feature also provides `--visual-frame-suite`
-for 193 composed Bevy-owned frames and `--visual-route-suite` for 1906
+for 193 composed Bevy-owned frames and `--visual-route-suite` for 1910
 per-step route frames; both Bevy manifests include review coverage rows and
 per-frame clean metadata for auditing generated screenshots. Use
 `--compare-frame-manifests <BASE> <CURRENT>` to gate sanitized manifests by
@@ -170,17 +170,19 @@ for N no-turn visual ticks:
 cargo run -- --play-script "d;empty;idle:4;q" --raster-diagnostics C:\Games\U5-Clean
 ```
 
-`--route-smoke` runs a bundled 513-case local-asset route suite covering world,
+`--route-smoke` runs a bundled 514-case local-asset route suite covering world,
 town, dungeon, combat, shop, endgame, transition, save/reload, and modal
 routes, including native Jimmy magic-lock, empty-restraint, prisoner-release,
-and prisoner-removal save/reload paths. It prints sanitized state lines and raster hashes; add
+and prisoner-removal save/reload paths. Town routes exercise the canonical
+`.OOL` write/reload lifecycle, so point the command at a writable asset copy,
+not the pristine install. It prints sanitized state lines and raster hashes; add
 `--route-smoke-manifest <PATH>` to write a clean manifest with initial,
 per-command, and final route labels, command counts, frame dimensions, hashes,
 nonblack counts, and state hashes:
 
 ```powershell
-cargo run -- --route-smoke C:\Games\U5-Clean
-cargo run -- --route-smoke --route-smoke-manifest target\route-smoke\manifest.txt C:\Games\U5-Clean
+cargo run -- --route-smoke target\acceptance-assets
+cargo run -- --route-smoke --route-smoke-manifest target\route-smoke\manifest.txt target\acceptance-assets
 ```
 
 `--play-script` can be combined with `--scene` and `--debug-enter` for focused

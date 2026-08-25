@@ -483,7 +483,7 @@
     }
 
     #[test]
-    fn world_enter_reports_no_matching_coordinate() {
+    fn world_enter_reports_no_matching_coordinate_after_consuming_world_action() {
         let mut state = world_state(open_world_grid(), 10, 20);
 
         assert_eq!(
@@ -492,7 +492,8 @@
         );
 
         assert!(state.message.contains("No entry in world_locations.tsv"));
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!((state.clock.hour, state.clock.minute), (12, 2));
     }
 
     #[test]
@@ -578,12 +579,7 @@
                         (state.active_objects[0].x, state.active_objects[0].y),
                         (LOCATION_DEFAULT_ENTRY_X, LOCATION_DEFAULT_ENTRY_Y)
                     );
-                    assert_eq!(
-                        state.return_world.as_ref().map(|ret| (
-                            ret.plane, ret.x, ret.y
-                        )),
-                        Some((entry.plane, entry.x, entry.y))
-                    );
+                    assert!(state.return_world.is_none());
                     assert!(state.message.contains(&format!(
                         "Entered {} from {}",
                         scene.key(),
@@ -670,16 +666,13 @@
         );
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!(
-            state.return_world.as_ref().map(|ret| (ret.x, ret.y)),
-            Some((86, 107))
-        );
+        assert!(state.return_world.is_none());
         assert!(state.message.contains("Entered CASTLE:0 from BRITANNIA"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn world_enter_existing_table_without_matching_coordinate_is_not_a_turn() {
+    fn world_enter_existing_table_without_matching_coordinate_consumes_world_action() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
@@ -703,13 +696,14 @@
             }
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!((state.clock.hour, state.clock.minute), (12, 2));
         assert!(state.message.contains("No entry in world_locations.tsv"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn world_enter_location_tile_guard_mismatch_is_not_a_turn() {
+    fn world_enter_location_tile_guard_mismatch_consumes_world_action() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
@@ -730,7 +724,8 @@
             }
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!((state.clock.hour, state.clock.minute), (12, 2));
         assert!(state.message.contains("No entry in world_locations.tsv"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -765,23 +760,12 @@
         );
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!(state.player.transport, TransportState::Foot);
+        assert_eq!(state.player.transport, transport);
         assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
-        assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
-        assert_eq!(
-            state.return_world.as_ref().map(|ret| (ret.x, ret.y)),
-            Some((10, 20))
-        );
-        assert_eq!(
-            state.return_world.as_ref().map(|ret| (
-                ret.transport,
-                ret.sail_cadence,
-                ret.sail_stall_pending
-            )),
-            Some((transport, 1, true))
-        );
+        assert_eq!(state.active_objects[0].tile, transport.avatar_tile());
+        assert!(state.return_world.is_none());
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert!(state.message.contains("Entered CASTLE:0 from BRITANNIA"));
         let _ = fs::remove_dir_all(dir);

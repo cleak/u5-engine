@@ -752,9 +752,9 @@ pub const SELECTION_CANCELLED_LITERAL: &str = "None!";
 /// `commands.md §5.5` (`#81`) dungeon narration. The engine's old
 /// `Entered <name> level N at (x, y).` has no counterpart in the
 /// original; these two lines are the ones that do exist.
-pub const DUNGEON_ROOM_ENTRY_NARRATION: &str = "Entering room...";
-pub const DUNGEON_EXIT_TO_BRITANNIA_NARRATION: &str = "\nExit to Britannia!";
-pub const DUNGEON_EXIT_TO_UNDERWORLD_NARRATION: &str = "\nExit to Underworld!";
+pub const DUNGEON_ROOM_ENTRY_NARRATION: &str = "Entering room...\n";
+pub const DUNGEON_EXIT_TO_BRITANNIA_NARRATION: &str = "\nExit to Britannia!\n\n";
+pub const DUNGEON_EXIT_TO_UNDERWORLD_NARRATION: &str = "\nExit to Underworld!\n\n";
 
 /// `commands.md §5.2` (`cleak/u5-spec#81`): surface and town movement
 /// keys echo the direction's name plus a newline — the same four words

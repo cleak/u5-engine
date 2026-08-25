@@ -146,8 +146,9 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#138` | Alternate-depth cinematic rendering scope | Resolved in public commit `230b024`: EGA is the sole pixel-exact v1 target. CGA, Hercules, and Tandy cinematic presentation is optional and must be labeled a modern approximation, so no alternate-depth conversion remains a v1 completion blocker |
 | `cleak/u5-spec#139` | Title-flourish timing | Resolved in public commit `0ebc456`: 14 ms for each of 85 logical presentations is the normative modern cadence, nominally 1.190 s total, with no catch-up. The existing scheduler uses this exact deadline; captured acceptance allows mean 14 ms ± 1 ms and total 1.190 s ± 0.100 s |
 | `cleak/u5-spec#140` | Ashes status producer and gameplay reachability | Resolved in public commit `2f75588`: a valid new game has no shipped Ashes producer; imported, external, or edited legacy saves may contain it and must round-trip it. Resurrection accepts exactly Dead, while the shared poison helper excludes exactly Dead and therefore overwrites imported Ashes with Poisoned. Existing runtime behavior and focused tests already match this contract |
+| `cleak/u5-spec#141` | Town transport and outdoor-object lifecycle | Resolved in public commit `74e5053` and implemented: every published foot/horse/carpet/frigate/skiff family enters without a marker gate or overworld turn; entry writes all 32 live records to the current canonical plane `.OOL`; town keeps slot zero and owns slots 1..31; accepted exit uses the fixed scene coordinate and scene-`0x19` plane rule, reloads all 32 records without a return snapshot, preserves the marker and reloaded slot-zero auxiliaries, then materializes a queued shipwright delivery. Failed coordinate lookup consumes the ordinary two-minute outdoor action |
 
-The answered public clean-room issue queue is reconciled through `#140`.
+The answered public clean-room issue queue is reconciled through `#141`.
 The later corrective answer on public `#11` is also reconciled: Kill's
 protected class-id filter is 14/15/47; Cause Fear and Repel Undead directly
 write combat HP 1 and fleeing bit `0x02`; Repel does not enter death or XP
@@ -186,9 +187,9 @@ clears the read-only bit Windows `fs::copy` propagates into scratch copies.
 | `cargo test --workspace` | pass, including all asset-backed suites and doc tests |
 | `cargo fmt --all -- --check` | clean |
 | `cargo clippy --workspace --all-targets` | **zero errors**; style warnings remain and are not gated |
-| `--route-smoke <asset-copy>` | all **513** scripted cases pass |
+| `--route-smoke <asset-copy>` | all **514** scripted cases pass |
 | `--visual-frame-suite <asset-copy>` | **193** PNGs plus a sanitized manifest |
-| `--visual-route-suite <asset-copy>` | **1906** PNGs plus a sanitized manifest |
+| `--visual-route-suite <asset-copy>` | **1910** PNGs plus a sanitized manifest |
 
 The route-smoke corpus spans world, town, dungeon, combat, endgame and shop
 play: all 40 published stock world-location entry rows, TLK-backed reserved-word
@@ -212,7 +213,7 @@ synthetic far-slot live object to the plane OOL mirror before the ordinary
 rescue restores the party. Its validator requires
 `cinematic_is_finished()`, so an ending that stops short fails the case.
 
-The visual route suite's 1906 frames are all nonblank except exactly one, which
+The visual route suite's 1910 frames are all nonblank except exactly one, which
 is black by contract: the `endgame.md §7.1` fade between the throne tableau and
 the first `END.DAT` window. The suite also rejects any scripted step that leaves
 the frame unchanged, outside the explicit terminal-endgame and Doom
@@ -403,7 +404,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| `endgame.md` §1–§12 | `endgame.rs`, `endgame_cinematic.rs`, `end_io.rs` (public END.DAT final narrative windows), `endmsg_io.rs`; Bevy endgame modal drives Lord British's entrance, the Orb acknowledgement, the shared-moongate `1..15` rise/four-tick full hold/actor exits/`15..1` sink/floor restore, advances the six fixed END.DAT narrative windows without intro-style page wipes, and presents the full-screen fade before the first window | exact shared-counter sequence and row-splice tests; Bevy actor-over-gate raster test; endgame fade tests; route-smoke and 1,906-frame visual-route terminal-victory coverage | Implemented through public issue #136 |
+| `endgame.md` §1–§12 | `endgame.rs`, `endgame_cinematic.rs`, `end_io.rs` (public END.DAT final narrative windows), `endmsg_io.rs`; Bevy endgame modal drives Lord British's entrance, the Orb acknowledgement, the shared-moongate `1..15` rise/four-tick full hold/actor exits/`15..1` sink/floor restore, advances the six fixed END.DAT narrative windows without intro-style page wipes, and presents the full-screen fade before the first window | exact shared-counter sequence and row-splice tests; Bevy actor-over-gate raster test; endgame fade tests; route-smoke and 1,910-frame visual-route terminal-victory coverage | Implemented through public issue #136 |
 | `blackthorn.md` §1–§11 | `blackthorn.rs`, `blackthorn_session.rs`, KARMA.DAT verdict mapping | Blackthorn challenge/rescue tests; Blackthorn audience/rescue route-smoke; Shadowlord route-smoke | Implemented |
 
 ### `systems/boot.md`, `systems/launcher.md`, `systems/main-loop.md`, `systems/disk-prompt.md`, `systems/runtime.md`, `systems/input.md`, `systems/commands.md`, `systems/animation.md`, `systems/lighting.md`, `systems/view.md`, `systems/visibility.md`
@@ -713,9 +714,11 @@ changed hue once it was corrected. Nothing in the game reprograms the palette
 after mode setup; apparent recolouring is a restricted plane write mask or a
 display effect mutating the loaded asset data, never a palette change.
 
-Verified on 2026-08-24 in the current worktree: 3222 u5-runtime, 183 u5-bevy,
+Verified on 2026-08-24 in the current worktree: 3226 u5-runtime, 183 u5-bevy,
 and 103 u5-tui tests pass, `cargo fmt --all -- --check` is clean, `cargo clippy
 --workspace --all-targets` reports zero errors (its existing style-warning
-baseline is not gated), `--route-smoke` passes all 513 cases,
-`--visual-frame-suite` writes 193 PNGs and `--visual-route-suite` writes 1906.
-Asset-backed verification used the local asset directory read-only.
+baseline is not gated), `--route-smoke` passes all 514 cases,
+`--visual-frame-suite` writes 193 PNGs and `--visual-route-suite` writes 1910.
+Asset-backed verification treated the local install as read-only input; the
+stateful route suites ran from a dedicated writable copy and restored their
+canonical world-object mirrors between cases.

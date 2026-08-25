@@ -171,7 +171,7 @@
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.active_objects[0].z, 0);
         assert_eq!(state.grid[world_cell_index(10, 20)], 5);
-        assert!(state.message.contains("world-location table point"));
+        assert!(state.message.contains("canonical outdoor table"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -203,13 +203,13 @@
         assert_eq!(state.active_objects[0].z, 0);
         assert_eq!(
             state.message,
-            "Exited DUNGEON:0 (Deceit) to BRITANNIA at (10, 20)."
+            DUNGEON_EXIT_TO_BRITANNIA_NARRATION
         );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn debug_enter_town_round_trips_to_saved_world_grid_and_objects() {
+    fn debug_enter_town_exit_uses_fixed_plane_and_canonical_object_mirror() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         let mut grid = open_world_grid();
@@ -232,10 +232,13 @@
             MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
         );
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
-        assert_eq!(
-            state.return_world.as_ref().map(|ret| (ret.x, ret.y)),
-            Some((10, 20))
-        );
+        assert!(state.return_world.is_none());
+        let persisted_underworld = decode_full_ool_plane_table(
+            &fs::read(dir.join(UNDER_OOL_FILENAME)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(persisted_underworld[1].x, 11);
+        assert_eq!(persisted_underworld[1].y, 20);
 
         state.player.x = 0;
         state.player.y = 1;
@@ -252,23 +255,13 @@
         assert_eq!(
             state.area,
             Area::World {
-                plane: WorldPlane::Underworld
+                plane: WorldPlane::Britannia
             }
         );
-        assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.grid[world_cell_index(10, 20)], 7);
+        assert_eq!((state.player.x, state.player.y), (86, 107));
         assert_eq!(
             state.world_object_at(11, 20),
-            Some(&ActiveObject {
-                type_byte: 168,
-                tile: 168,
-                x: 11,
-                y: 20,
-                z: -1,
-                phase: 0x22,
-                aux1: 0,
-                aux3: 0,
-            })
+            None
         );
         assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
@@ -340,12 +333,12 @@
     }
 
     #[test]
-    fn debug_enter_town_round_trips_to_saved_world_sailing_state() {
+    fn debug_enter_town_preserves_ship_marker_without_a_return_snapshot() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         let transport = TransportState::Ship {
-            type_byte: 168,
-            tile: 168,
+            type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
             sails_hoisted: true,
             hull: 0,
             skiffs: 0,
@@ -363,15 +356,10 @@
             state.enter_current_location(&dir).unwrap(),
             MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
         );
-        assert_eq!(
-            state.return_world.as_ref().map(|ret| (
-                ret.transport,
-                ret.sail_cadence,
-                ret.sail_stall_pending
-            )),
-            Some((transport, 1, true))
-        );
+        assert!(state.return_world.is_none());
+        assert_eq!(state.player.transport, transport);
         assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
+        state.grid[31 * 32 + 31] = BRIT_DEEP_WATER_TILE;
 
         state.player.x = 0;
         state.player.y = 1;
@@ -389,19 +377,24 @@
         assert_eq!(
             state.area,
             Area::World {
-                plane: WorldPlane::Underworld
+                plane: WorldPlane::Britannia
             }
         );
-        assert_eq!(state.player.transport, transport);
+        assert_eq!(
+            state.player.transport,
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 3,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE + 3,
+                sails_hoisted: true,
+                hull: 0,
+                skiffs: 0,
+            }
+        );
         assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
-        assert_eq!(state.sail_cadence, 1);
-        assert!(state.sail_stall_pending);
-        assert_eq!(state.active_objects[0].tile, 168);
-
-        assert_eq!(state.pass_turn(), MoveOutcome::Passed);
-        assert_eq!(state.message, "Ship remains stalled by the wind.");
+        assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
+        assert_eq!(state.active_objects[0].tile, FIRST_PLAYABLE_FRIGATE_TILE + 3);
         let _ = fs::remove_dir_all(dir);
     }
 

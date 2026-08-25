@@ -511,7 +511,7 @@
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(
             state.message,
-            "Exited DUNGEON:0 (Deceit) to BRITANNIA at (10, 20)."
+            DUNGEON_EXIT_TO_BRITANNIA_NARRATION
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -546,7 +546,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
-            "Exited DUNGEON:0 (Deceit) to UNDERWORLD at (10, 20)."
+            DUNGEON_EXIT_TO_UNDERWORLD_NARRATION
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -597,7 +597,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
-            "Exited DUNGEON:0 (Deceit) to UNDERWORLD at (10, 20)."
+            DUNGEON_EXIT_TO_UNDERWORLD_NARRATION
         );
         let _ = fs::remove_dir_all(dir);
     }

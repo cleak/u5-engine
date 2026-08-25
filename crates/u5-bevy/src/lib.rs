@@ -95,13 +95,14 @@ use u5_runtime::{
     TOWN_POISON_GAS_LIVE_TILE, TOWN_TRAPDOOR_LIVE_TILE, Tavern, TerrainCombatSetup,
     TextWindowDescriptor, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport,
     TitleBitAsset, TitleBitImages, TitleBitPlacement, TitleTickFrameSet, TransportState,
-    ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNLOCK_MAGIC_COST,
-    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE,
-    WORLD_SHRINE_COORDINATES, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST,
-    X_RAY_SPELL_INDEX, YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE,
-    blit_tile_id_to_viewport, blit_tile_pixels_to_viewport, combat_actor_is_active_not_dead,
-    combat_class_stats, commit_chargen_save, configure_talk_shop_text_window,
+    ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNDER_OOL_FILENAME,
+    UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST,
+    VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, ViewOverlayMode,
+    WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SIDE,
+    WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, YELL_NOTHING_SAID_MESSAGE,
+    YELL_SAILS_HOISTED_MESSAGE, blit_tile_id_to_viewport, blit_tile_pixels_to_viewport,
+    combat_actor_is_active_not_dead, combat_class_stats, commit_chargen_save,
+    configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -1268,8 +1269,12 @@ pub fn visual_route_suite(
         cursor_frame: 0,
     };
     let mut reports = Vec::new();
+    let baseline_brit_ool = std::fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
+    let baseline_under_ool = std::fs::read(game_dir.join(UNDER_OOL_FILENAME))?;
 
     for case in visual_route_suite_cases() {
+        std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
+        std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
         let route_game_dir = prepare_visual_route_case_game_dir(game_dir, case.label)?;
         let reload_save_dir = prepare_visual_route_reload_save_dir(game_dir, case.label)?;
         let reload_checkpoints = visual_route_reload_checkpoints(case.label);
@@ -1328,6 +1333,8 @@ pub fn visual_route_suite(
             let _ = std::fs::remove_dir_all(dir);
         }
     }
+    std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
+    std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
     push_visual_key_route_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
 
     for report in &reports {
@@ -1339,6 +1346,8 @@ pub fn visual_route_suite(
             )));
         }
     }
+    std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
+    std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
     write_visual_frame_suite_manifest(out_dir, &reports)?;
     Ok(reports)
 }
@@ -1349,6 +1358,20 @@ fn validate_visual_route_final_state(
     game_dir: &Path,
 ) -> io::Result<()> {
     match label {
+        "route-castle-canonical-ool-exit" => {
+            if state.area
+                != (u5_runtime::Area::World {
+                    plane: WorldPlane::Britannia,
+                })
+                || (state.player.x, state.player.y) != (86, 107)
+                || state.return_world.is_some()
+            {
+                return Err(io::Error::other(
+                    "canonical-OOL town-exit visual route missed the fixed Britannia return",
+                ));
+            }
+            return Ok(());
+        }
         "route-castle-jimmy-magic-lock-no-picker" => {
             if state.turn != 1
                 || state.keys != DEFAULT_KEY_STOCK - 1
@@ -3722,7 +3745,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         word_of_power_seal_for_word("FALLAX").expect("FALLAX Word-of-Power seal row is public");
     let veramocor_seal = word_of_power_seal_for_word("VERAMOCOR")
         .expect("VERAMOCOR Word-of-Power seal row is public");
-    let mut cases = Vec::with_capacity(534);
+    let mut cases = Vec::with_capacity(535);
     macro_rules! push_visual_route_cases {
         ($target:ident; $($case:expr),* $(,)?) => {
             $($target.push($case);)*
@@ -6229,6 +6252,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 ..PlayOptions::default()
             },
             script: &["w", "w", "d", "d", "s", "s", "Q", "N", "Z"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-canonical-ool-exit",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["s", "s", "Y"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -19624,14 +19657,14 @@ mod tests {
             .join()
             .expect("visual-route case inventory fits a one-megabyte stack");
 
-        assert_eq!(case_count, 534);
+        assert_eq!(case_count, 535);
     }
 
     #[test]
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 534);
+        assert_eq!(cases.len(), 535);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -20484,12 +20517,28 @@ mod tests {
             return;
         }
 
+        // Town entry writes the canonical `.OOL` mirror. Exercise that path
+        // in a writable copy, never the pristine local asset install.
+        let writable_game_dir = temp_output_dir("route-assets");
+        fs::create_dir_all(&writable_game_dir).unwrap();
+        for entry in fs::read_dir(game_dir).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_file() {
+                u5_runtime::test_fixtures::copy_asset_writable(
+                    &entry.path(),
+                    &writable_game_dir.join(entry.file_name()),
+                )
+                .unwrap();
+            }
+        }
+
         let dir = temp_output_dir("routes");
-        let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
+        let reports =
+            visual_route_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         // route-endgame-tableau-walk-in adds 29 (endgame.md §4 walk-in);
         // the full-victory cinematic now runs to the §9.5 terminal hold.
-        assert_eq!(reports.len(), 1906);
+        assert_eq!(reports.len(), 1910);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -20504,7 +20553,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1906"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1910"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -20838,6 +20887,7 @@ mod tests {
         assert!(manifest.contains("route-endgame-class-tableau-restoration-01-y"));
         assert!(manifest.contains("route-britannia-extended-exploration-12-1"));
         assert!(manifest.contains("route-castle-extended-walk-and-save-09-z"));
+        assert!(manifest.contains("route-castle-canonical-ool-exit-03-y"));
         assert!(manifest.contains("route-castle-extended-walk-and-rest-01-s"));
         assert!(manifest.contains("route-dungeon-extended-turn-and-search-09-s6"));
         assert!(manifest.contains("route-doom-combat-multi-round-pass-05-empty"));

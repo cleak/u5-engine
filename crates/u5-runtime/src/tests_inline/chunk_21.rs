@@ -148,7 +148,7 @@
         assert_eq!((state.player.x, state.player.y), (2, 1));
         assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xA2);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("room trigger slot 2"));
+        assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -195,7 +195,7 @@
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.door_tracker, None);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("room trigger slot 2"));
+        assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
         let _ = fs::remove_dir_all(dir);
     }
@@ -214,7 +214,7 @@
 
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xA1);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("room trigger slot 1"));
+        assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -237,7 +237,7 @@
         assert_eq!((state.player.x, state.player.y), (2, 1));
         assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xA1);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("room trigger slot 1"));
+        assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
         let _ = fs::remove_dir_all(dir);
     }
 

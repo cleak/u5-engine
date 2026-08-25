@@ -556,11 +556,7 @@ fn empty_play_input_resolves_dungeon_room_trigger_before_pass() {
 
     assert_eq!(state.turn, 1);
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xa3);
-    assert!(
-        state
-            .message
-            .contains("Entered dungeon room trigger slot 3")
-    );
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert!(!state.message.contains("Passed"));
 }
 
@@ -772,8 +768,9 @@ fn route_smoke_cases_cover_representative_modes() {
     // defeat persistence, four native Jimmy/restraint production routes, and
     // four dungeon Jimmy committed-exit/rewrite routes, and the ruined-shrine
     // Word-of-Power restoration route from public issue #135, and the corrected
-    // empty-Yell acted-result route from the public #134 return contract.
-    assert_eq!(cases.len(), 513);
+    // empty-Yell acted-result route from the public #134 return contract, and
+    // the canonical-OOL Castle exit from public #141.
+    assert_eq!(cases.len(), 514);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
@@ -1486,9 +1483,39 @@ fn route_smoke_local_clean_cases_run_when_present() {
         return;
     }
 
-    let atlas = load_tile_atlas(game_dir, TileGraphicsDepth::Ega16).unwrap();
+    // Town entry writes the canonical `.OOL` mirror. Run the corpus from one
+    // writable asset copy so the pristine local install remains read-only.
+    let writable_game_dir = std::env::temp_dir().join(format!(
+        "u5-route-smoke-assets-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&writable_game_dir).unwrap();
+    for entry in fs::read_dir(game_dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            copy_asset_writable(&entry.path(), &writable_game_dir.join(entry.file_name())).unwrap();
+        }
+    }
+
+    let atlas = load_tile_atlas(&writable_game_dir, TileGraphicsDepth::Ega16).unwrap();
+    let baseline_brit_ool = fs::read(writable_game_dir.join(BRIT_OOL_FILENAME)).unwrap();
+    let baseline_under_ool = fs::read(writable_game_dir.join(UNDER_OOL_FILENAME)).unwrap();
     for case in route_smoke_cases() {
-        let report = run_route_smoke_case(game_dir, &atlas, &case).unwrap();
+        fs::write(
+            writable_game_dir.join(BRIT_OOL_FILENAME),
+            &baseline_brit_ool,
+        )
+        .unwrap();
+        fs::write(
+            writable_game_dir.join(UNDER_OOL_FILENAME),
+            &baseline_under_ool,
+        )
+        .unwrap();
+        let report = run_route_smoke_case(&writable_game_dir, &atlas, &case).unwrap();
         assert_eq!(report.name, case.name);
         assert_eq!(report.commands_run, case.script.len());
         assert!(report.final_state_line.contains("State:"));
@@ -1505,6 +1532,7 @@ fn route_smoke_local_clean_cases_run_when_present() {
                 .any(|frame| frame.label == format!("route-{}", case.name))
         );
     }
+    let _ = fs::remove_dir_all(writable_game_dir);
 }
 
 #[test]

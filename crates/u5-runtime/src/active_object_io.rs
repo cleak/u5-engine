@@ -702,6 +702,16 @@ pub fn decode_ool_plane_objects(bytes: &[u8]) -> io::Result<Vec<ActiveObject>> {
     decode_active_object_table(bytes, "OOL plane table")
 }
 
+/// Decode a canonical plane mirror without discarding slot zero.
+///
+/// `town-mode.md §15.1` makes the town round trip a replacing 32-record
+/// handoff.  Most older overlay callers deliberately expose only slots
+/// 1..31, so keep that API intact and give the town transition an explicit
+/// whole-table decoder.
+pub fn decode_full_ool_plane_table(bytes: &[u8]) -> io::Result<Vec<ActiveObject>> {
+    decode_full_active_object_table(bytes, "OOL plane table")
+}
+
 pub fn decode_saved_active_objects(bytes: &[u8]) -> io::Result<Vec<ActiveObject>> {
     let end = SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN;
     let table = bytes
@@ -711,6 +721,12 @@ pub fn decode_saved_active_objects(bytes: &[u8]) -> io::Result<Vec<ActiveObject>
 }
 
 pub fn decode_active_object_table(bytes: &[u8], label: &str) -> io::Result<Vec<ActiveObject>> {
+    let mut objects = decode_full_active_object_table(bytes, label)?;
+    objects.remove(0);
+    Ok(objects)
+}
+
+pub fn decode_full_active_object_table(bytes: &[u8], label: &str) -> io::Result<Vec<ActiveObject>> {
     if bytes.len() != OOL_PLANE_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -718,12 +734,9 @@ pub fn decode_active_object_table(bytes: &[u8], label: &str) -> io::Result<Vec<A
         ));
     }
 
-    let mut objects = Vec::with_capacity(OOL_SLOTS - 1);
-    for (slot, record) in bytes.chunks_exact(OOL_RECORD_LEN).enumerate() {
+    let mut objects = Vec::with_capacity(OOL_SLOTS);
+    for record in bytes.chunks_exact(OOL_RECORD_LEN) {
         let type_byte = record[0];
-        if slot == 0 {
-            continue;
-        }
         objects.push(ActiveObject {
             type_byte,
             tile: record[1],

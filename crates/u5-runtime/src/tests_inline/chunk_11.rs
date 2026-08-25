@@ -349,48 +349,56 @@
     }
 
     #[test]
-    fn town_boundary_exit_restores_return_world_transport() {
+    fn town_boundary_exit_reloads_canonical_table_and_preserves_live_transport() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
         write_save_template_and_empty_overlays(&dir, 0, 0xff, 10, 20);
         let mut state = test_state(open_grid(), 0, 0);
-        let mut world_grid = open_world_grid();
-        world_grid[world_cell_index(10, 20)] = 7;
         let world_object = ActiveObject {
             type_byte: 168,
             tile: 168,
             x: 11,
             y: 20,
-            z: -1,
+            z: 0,
             phase: 0x22,
             aux1: 0,
             aux3: 0,
         };
         let transport = TransportState::Carpet {
-            type_byte: 184,
+            type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
             tile: 184,
         };
+        state.player.transport = transport;
+        let canonical_player = ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x: 12,
+            y: 21,
+            z: 0,
+            phase: 0x42,
+            aux1: 0xa5,
+            aux3: 0x5a,
+        };
+        let canonical_table = vec![canonical_player, world_object];
+        fs::write(
+            dir.join(BRIT_OOL_FILENAME),
+            encode_active_object_table(&canonical_table).unwrap(),
+        )
+        .unwrap();
         state.return_world = Some(WorldReturn {
-            plane: WorldPlane::Underworld,
-            x: 10,
-            y: 20,
-            transport,
+            plane: WorldPlane::Britannia,
+            x: 99,
+            y: 98,
+            transport: TransportState::Foot,
             sail_cadence: 1,
             sail_stall_pending: true,
-            grid: world_grid,
-            active_objects: vec![
-                ActiveObject {
-                    type_byte: PLAYER_TILE,
-                    tile: PLAYER_TILE,
-                    x: 10,
-                    y: 20,
-                    z: -1,
-                    phase: STEADY_PHASE,
-                    aux1: 0,
-                    aux3: 0,
-                },
-                world_object,
-            ],
+            grid: vec![0xff; WORLD_SIDE * WORLD_SIDE],
+            active_objects: Vec::new(),
             pending_vehicle: None,
         });
         state.visibility_dirty = false;
@@ -412,20 +420,23 @@
         assert_eq!(
             state.area,
             Area::World {
-                plane: WorldPlane::Underworld
+                plane: WorldPlane::Britannia
             }
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.player.transport, transport);
-        assert_eq!(state.sail_cadence, 1);
-        assert!(state.sail_stall_pending);
-        assert_eq!(state.grid[world_cell_index(10, 20)], 7);
+        assert_eq!(state.sail_cadence, 0);
+        assert!(!state.sail_stall_pending);
         assert_eq!(state.world_object_at(11, 20), Some(&world_object));
+        assert_eq!(state.active_objects[0].phase, 0x42);
+        assert_eq!(state.active_objects[0].aux1, 0xa5);
+        assert_eq!(state.active_objects[0].aux3, 0x5a);
+        assert!(state.return_world.is_none());
         assert_eq!(state.turn, 0);
         assert!(state.visibility_dirty);
         assert_eq!(
             state.message,
-            "Yes. Left CASTLE:0 for UNDERWORLD via the saved return point."
+            "Yes. Left CASTLE:0 for BRITANNIA via the canonical outdoor table."
         );
 
         assert_eq!(
@@ -433,7 +444,7 @@
             MoveOutcome::Saved
         );
         let options = load_play_options_from_save(&dir).unwrap();
-        assert_eq!(options.target, PlayTarget::World(WorldPlane::Underworld));
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Britannia));
         assert_eq!(options.start, Some((10, 20)));
         assert_eq!(
             options.transport,
@@ -446,6 +457,160 @@
             options.saved_active_objects.as_ref().unwrap()[0],
             world_object
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_entry_accepts_every_published_transport_family_and_writes_all_32_slots() {
+        let scene = Scene::new(17).unwrap();
+        let transports = [
+            TransportState::Foot,
+            TransportState::Horse {
+                type_byte: 0x10,
+                tile: FIRST_PLAYABLE_HORSE_TILE,
+            },
+            TransportState::Carpet {
+                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST + 1,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE + 1,
+            },
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 2,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE + 2,
+                sails_hoisted: true,
+                hull: 61,
+                skiffs: 3,
+            },
+            TransportState::Skiff {
+                type_byte: TRANSPORT_MARKER_SKIFF_FIRST + 3,
+                tile: FIRST_PLAYABLE_SKIFF_TILE + 3,
+            },
+        ];
+
+        for transport in transports {
+            let dir = debug_game_dir();
+            let mut state = world_state(open_world_grid(), 10, 20);
+            state.area = Area::World {
+                plane: WorldPlane::Britannia,
+            };
+            state.player.transport = transport;
+            state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+            state.sync_player_object();
+            state.active_objects[0].phase = 0x42;
+            state.active_objects[31] = ActiveObject {
+                type_byte: 0x83,
+                tile: 0x84,
+                x: 77,
+                y: 88,
+                z: 0,
+                phase: 0x65,
+                aux1: 0x54,
+                aux3: 0x76,
+            };
+            let expected_table = state.active_objects.clone();
+            let turn_before = state.turn;
+
+            assert_eq!(
+                state
+                    .enter_world_target(
+                        &dir,
+                        WorldPlane::Britannia,
+                        PlayTarget::Town(scene),
+                        false,
+                    )
+                    .unwrap(),
+                MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+            );
+
+            assert_eq!(state.player.transport, transport);
+            assert_eq!(state.turn, turn_before);
+            assert!(state.return_world.is_none());
+            assert_eq!(state.active_objects[0].phase, 0x42);
+            assert_eq!(
+                decode_full_ool_plane_table(
+                    &fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap()
+                )
+                .unwrap(),
+                expected_table
+            );
+            assert!(state.active_objects.iter().skip(1).all(|object| {
+                object.type_byte != 0x83 || (object.x, object.y) != (77, 88)
+            }));
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn direct_town_exit_reloads_before_materializing_queued_shipwright_delivery() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
+        let canonical_object = ActiveObject {
+            type_byte: 0x81,
+            tile: 0x82,
+            x: 44,
+            y: 45,
+            z: 0,
+            phase: 0x33,
+            aux1: 0x22,
+            aux3: 0x11,
+        };
+        let mut canonical_table = vec![ActiveObject::empty(); OOL_SLOTS];
+        canonical_table[0] = ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x: 99,
+            y: 98,
+            z: 0,
+            phase: 0x67,
+            aux1: 0x56,
+            aux3: 0x78,
+        };
+        canonical_table[2] = canonical_object;
+        fs::write(
+            dir.join(BRIT_OOL_FILENAME),
+            encode_active_object_table(&canonical_table).unwrap(),
+        )
+        .unwrap();
+
+        let pending = PendingVehicleAcquisition::Frigate {
+            x: 136,
+            y: 158,
+            skiffs: 3,
+        };
+        let mut state = test_state(open_grid(), 0, 0);
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0xee,
+            tile: 0xef,
+            x: 1,
+            y: 1,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.pending_vehicle_save = PendingVehicleSaveState::from_acquisition(pending);
+        state.return_world = None;
+
+        assert_eq!(
+            state
+                .resolve_town_boundary_exit_transition(&dir, scene, 0)
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+        );
+
+        assert_eq!(state.active_objects.len(), OOL_SLOTS);
+        assert_eq!(state.active_objects[1], pending.active_object(0));
+        assert_eq!(state.active_objects[2], canonical_object);
+        assert_eq!(state.active_objects[0].phase, 0x67);
+        assert_eq!(state.active_objects[0].aux1, 0x56);
+        assert_eq!(state.active_objects[0].aux3, 0x78);
+        assert_eq!(state.pending_vehicle_save.class_byte, 0);
+        assert!(state.return_world.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -484,8 +649,57 @@
         assert_eq!(state.turn, 0);
         assert_eq!(
             state.message,
-            "Yes. Left CASTLE:0 for BRITANNIA via the world-location table point."
+            "Yes. Left CASTLE:0 for BRITANNIA via the canonical outdoor table."
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn ordinary_town_exit_ignores_conflicting_underworld_return_snapshot() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
+        write_save_template_and_empty_overlays(&dir, 0, 0, 10, 20);
+        let mut state = test_state(open_grid(), 31, 0);
+        state.return_world = Some(WorldReturn {
+            plane: WorldPlane::Underworld,
+            x: 99,
+            y: 98,
+            transport: TransportState::Carpet {
+                type_byte: 184,
+                tile: 184,
+            },
+            sail_cadence: 1,
+            sail_stall_pending: true,
+            grid: open_world_grid(),
+            active_objects: Vec::new(),
+            pending_vehicle: None,
+        });
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Observed
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Britannia
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.player.transport, TransportState::Foot);
+        assert!(state.return_world.is_none());
+        assert_eq!(state.active_objects[0].z, WorldPlane::Britannia.save_floor());
         let _ = fs::remove_dir_all(dir);
     }
 

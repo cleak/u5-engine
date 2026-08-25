@@ -330,22 +330,10 @@ impl PlayState {
         }
         self.mark_visibility_dirty();
         self.advance_turn();
-        let state_note = if doom_final_room {
-            "kept final room trigger state"
-        } else if marked_helper {
-            "marked visit-local room-helper state"
-        } else {
-            "kept visit-local room-helper state"
-        };
-        let trigger_kind = if helper_state {
-            "room-helper state"
-        } else {
-            "room trigger"
-        };
         if dungeon_cbt_available {
             let game_dir = game_dir.expect("availability checked from game_dir");
             let entry_seed = dungeon_room_entry_seed_for_direction(self.player.facing);
-            let combat_note = self.enter_dungeon_room_combat(
+            let _combat_note = self.enter_dungeon_room_combat(
                 game_dir,
                 scene,
                 level,
@@ -355,17 +343,13 @@ impl PlayState {
                 !helper_state,
                 doom_final_room,
             )?;
-            self.message = format!(
-                "Entered dungeon {trigger_kind} slot {slot} at ({x}, {y}) on {} level {level}; {combat_note}; {state_note}.",
-                scene.key()
-            );
+            self.message = DUNGEON_ROOM_ENTRY_NARRATION.to_string();
             return Ok(MoveOutcome::Moved);
         }
-        let arena_note = self.dungeon_room_arena_note(game_dir, arena)?;
-        self.message = format!(
-            "Entered dungeon {trigger_kind} slot {slot} at ({x}, {y}) on {} level {level}; {arena_note}; {state_note}.",
-            scene.key()
-        );
+        // Keep the asset/arena validation side effect even though the original
+        // user-facing narration contains none of the clean harness diagnostics.
+        let _arena_note = self.dungeon_room_arena_note(game_dir, arena)?;
+        self.message = DUNGEON_ROOM_ENTRY_NARRATION.to_string();
         Ok(MoveOutcome::Moved)
     }
 

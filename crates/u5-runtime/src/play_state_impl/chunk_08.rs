@@ -1067,14 +1067,11 @@ impl PlayState {
         // so the world-mode two-minute cadence is not applied retroactively.
         self.advance_turn();
         self.restore_world_at(game_dir, plane, entry.x, entry.y)?;
-        self.message = format!(
-            "Exited {} ({}) to {} at ({}, {}).",
-            scene.key(),
-            scene.name(),
-            plane.key(),
-            entry.x,
-            entry.y
-        );
+        self.message = match plane {
+            WorldPlane::Britannia => DUNGEON_EXIT_TO_BRITANNIA_NARRATION,
+            WorldPlane::Underworld => DUNGEON_EXIT_TO_UNDERWORLD_NARRATION,
+        }
+        .to_string();
         Ok(MoveOutcome::Transition(
             AreaTransition::ExitedDungeonToWorldPlane { scene, plane },
         ))
@@ -1102,6 +1099,11 @@ impl PlayState {
         }
 
         if has_sidecar {
+            // `town-mode.md §15.1`: a recognized overworld Enter whose
+            // coordinate lookup does not transition is still an ordinary
+            // consumed two-minute outdoor action.  Advancing here lets the
+            // caller's shared post-turn gate run the remaining outdoor work.
+            self.advance_turn();
             self.message = format!(
                 "No entry in {WORLD_LOCATION_TABLE_FILE} for {} at ({}, {}).",
                 plane.key(),
@@ -1112,6 +1114,7 @@ impl PlayState {
         }
 
         let Some(target) = self.debug_enter else {
+            self.advance_turn();
             self.message = format!(
                 "No entry in {WORLD_LOCATION_TABLE_FILE} for {} at ({}, {}).",
                 plane.key(),
@@ -1338,7 +1341,9 @@ impl PlayState {
 
         self.restore_tracked_natural_moongates();
         self.cache_current_world_overlay();
-        let return_world = WorldReturn {
+        let entering_transport = self.player.transport;
+        let entering_player_object = self.active_objects.first().copied();
+        let return_world = matches!(target, PlayTarget::Dungeon(_)).then(|| WorldReturn {
             plane,
             x: self.player.x,
             y: self.player.y,
@@ -1348,7 +1353,19 @@ impl PlayState {
             grid: self.grid.clone(),
             active_objects: self.active_objects.clone(),
             pending_vehicle: self.pending_vehicle_save.acquisition(),
-        };
+        });
+        if matches!(target, PlayTarget::Town(_)) {
+            // `town-mode.md §15.1`: entry persists the complete current
+            // outdoor table before the town owns slots 1..31.  The canonical
+            // disk mirror, rather than `WorldReturn` or `world_overlays`, is
+            // the authoritative source reloaded by the later exit.
+            let bytes = encode_active_object_table(&self.active_objects)?;
+            let file_name = match plane {
+                WorldPlane::Britannia => BRIT_OOL_FILENAME,
+                WorldPlane::Underworld => UNDER_OOL_FILENAME,
+            };
+            write_disk_file(&game_dir.join(file_name), bytes)?;
+        }
         let mut options = PlayOptions {
             target,
             floor: 0,
@@ -1407,7 +1424,7 @@ impl PlayState {
             active_player: self.active_player,
             combat_round_counter: self.combat_round_counter,
             combat_interference_sources: self.combat_interference_sources,
-            transport: TransportState::Foot,
+            transport: entering_transport,
             facing: None,
             pending_vehicle: None,
             pending_vehicle_save: self.pending_vehicle_save,
@@ -1451,11 +1468,32 @@ impl PlayState {
                 return Ok(MoveOutcome::Blocked);
             }
         };
-        // Interior play starts on foot; the return snapshot owns outside transport.
-        next.force_foot_transport();
-        next.sync_player_object();
+        match target {
+            PlayTarget::Town(_) => {
+                // Fresh town setup owns slots 1..31 but preserves the outdoor
+                // player record. Install its seven auxiliary bytes, then only
+                // synchronize the interior coordinate and transport frame.
+                if let Some(player_object) = entering_player_object {
+                    next.active_objects[0] = player_object;
+                }
+                let floor = next.current_floor().unwrap_or(0);
+                let player_object = &mut next.active_objects[0];
+                player_object.type_byte = PLAYER_TILE;
+                player_object.tile = entering_transport.avatar_tile();
+                player_object.x = next.player.x;
+                player_object.y = next.player.y;
+                player_object.z = floor;
+            }
+            PlayTarget::Dungeon(_) => {
+                // Dungeon entry retains its independently specified on-foot
+                // interior and return-snapshot behavior.
+                next.force_foot_transport();
+                next.sync_player_object();
+            }
+            PlayTarget::World(_) => unreachable!(),
+        }
         next.turn = self.turn;
-        next.return_world = Some(return_world);
+        next.return_world = return_world;
         next.world_overlays = self.world_overlays.clone();
         next.message = match target {
             PlayTarget::Town(scene) if debug => {
@@ -1588,6 +1626,56 @@ impl PlayState {
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, plane, x, y)?;
+        self.clear_town_visit_state();
+        self.return_world = None;
+        self.pending_town_arrest = None;
+        self.active_blackthorn = None;
+        self.mode_zero_cleanup();
+        self.mark_visibility_dirty();
+        Ok(())
+    }
+
+    /// Install the world side of a town boundary exit from the destination
+    /// plane's complete canonical `.OOL` mirror.
+    ///
+    /// `town-mode.md §15.1`: no pre-entry snapshot participates.  The
+    /// current marker survives, the fixed exterior coordinate is installed,
+    /// all 32 records are replaced, slot zero keeps the mirror's auxiliary
+    /// bytes while receiving the marker frame and coordinate, and only then
+    /// is a queued shipwright acquisition materialized.
+    pub fn restore_world_from_town_mirror(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+        x: usize,
+        y: usize,
+    ) -> io::Result<()> {
+        self.area = Area::World { plane };
+        self.player.x = x;
+        self.player.y = y;
+        self.grid = load_world_map(game_dir, plane)?;
+        apply_world_quest_tile_substitutions(
+            &mut self.grid,
+            &self.word_of_power_seal_flags,
+            &self.shrine_ruin_flags,
+        );
+        self.rebuild_world_live_chunks_from_grid(plane)?;
+        self.natural_moongate_live_cells.clear();
+        self.npcs.clear();
+        self.active_objects = load_world_active_object_mirror_table(game_dir, plane)?;
+
+        let player_object = &mut self.active_objects[0];
+        player_object.type_byte = PLAYER_TILE;
+        player_object.tile = self.player.transport.avatar_tile();
+        player_object.x = x;
+        player_object.y = y;
+        player_object.z = plane.save_floor();
+
+        if let Some(pending) = self.pending_vehicle_save.acquisition() {
+            place_pending_vehicle_acquisition(&mut self.active_objects, plane, pending)?;
+            self.pending_vehicle_save = self.pending_vehicle_save.clear_class();
+        }
+        self.cache_current_world_overlay();
         self.clear_town_visit_state();
         self.return_world = None;
         self.pending_town_arrest = None;

@@ -20,7 +20,7 @@ fn cardinal_direction_key(direction: Direction) -> char {
 /// cleak/u5-spec#81 asks for the published literal; the form below is the
 /// one observed in the original's message window (`Player:` followed by
 /// the selection, `Player: None!` on cancel).
-pub const PARTY_SELECTOR_PROMPT_MESSAGE: &str = "Player:";
+pub const PARTY_SELECTOR_PROMPT_MESSAGE: &str = PARTY_SELECTION_PROMPT;
 /// The cancel result printed on Escape or Space.
 pub const PARTY_SELECTOR_CANCELLED_MESSAGE: &str = "Player: None!";
 /// `stats-panel.md §4` + observation: the party-roster box's border label

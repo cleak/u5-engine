@@ -394,15 +394,20 @@ impl PlayState {
         };
 
         let world_overlays = initial_world_overlay_cache(&options);
+        let transport = options.transport;
+        let (player_aux1, player_aux3) = match transport {
+            TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
+            _ => (0, 0),
+        };
         let mut active_objects = vec![ActiveObject {
             type_byte: PLAYER_TILE,
-            tile: PLAYER_TILE,
+            tile: transport.avatar_tile(),
             x,
             y,
             z: options.floor,
             phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
+            aux1: player_aux1,
+            aux3: player_aux3,
         }];
         if let Some(objects) = saved_active_objects {
             active_objects.extend(objects);
@@ -416,7 +421,7 @@ impl PlayState {
                 x,
                 y,
                 facing: options.facing.unwrap_or(Direction::South),
-                transport: TransportState::Foot,
+                transport,
             },
             active_objects,
             npcs: Vec::new(),
@@ -1281,38 +1286,47 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> io::Result<MoveOutcome> {
-        if self.restore_return_world() {
-            let Area::World { plane } = self.area else {
-                unreachable!("restoring a town return snapshot enters world mode")
-            };
-            self.message = format!(
-                "Yes. Left {} for {} via the saved return point.",
-                scene.key(),
-                plane.key()
-            );
-            self.mark_visibility_dirty();
-            return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
+        let entries = effective_world_location_entries(game_dir)?;
+        let matches: Vec<_> = entries
+            .iter()
+            .copied()
+            .filter(|entry| entry.target == PlayTarget::Town(scene))
+            .collect();
+        let Some(entry) = matches.first().copied() else {
+            return Ok(self.block_missing_town_return(
                 scene,
-            )));
-        } else if self.restore_world_for_target(game_dir, PlayTarget::Town(scene))? {
-            let Area::World { plane } = self.area else {
-                unreachable!("restoring a published town return enters world mode")
-            };
-            self.message = format!(
-                "Yes. Left {} for {} via the world-location table point.",
-                scene.key(),
-                plane.key()
-            );
-            self.mark_visibility_dirty();
-            return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
-                scene,
-            )));
+                floor,
+                format!("Accepted the boundary exit from {}", scene.key()),
+            ));
+        };
+        if matches.len() > 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{WORLD_LOCATION_TABLE_FILE} has multiple return rows for {}",
+                    PlayTarget::Town(scene).key()
+                ),
+            ));
         }
-        Ok(self.block_missing_town_return(
+
+        // `town-mode.md` §15: the scene selects the destination plane;
+        // neither the gazetteer row's entry plane nor a cached debug return
+        // point may override it. Ararat (`0x19`) is the sole Underworld arm.
+        let plane = if scene.byte == TOWN_EXIT_UNDERWORLD_SCENE {
+            WorldPlane::Underworld
+        } else {
+            WorldPlane::Britannia
+        };
+
+        self.restore_world_from_town_mirror(game_dir, plane, entry.x, entry.y)?;
+        self.message = format!(
+            "Yes. Left {} for {} via the canonical outdoor table.",
+            scene.key(),
+            plane.key()
+        );
+        Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
             scene,
-            floor,
-            format!("Accepted the boundary exit from {}", scene.key()),
-        ))
+        )))
     }
 
     pub fn block_missing_town_return(

@@ -40,7 +40,7 @@
         assert!(state.active_z_stats.is_none());
         assert_eq!(state.selector_highlight(), Some(0));
         assert_eq!(state.roster_box_label(), Some("Select:"));
-        assert_eq!(state.message, "Player:");
+        assert_eq!(state.message, PARTY_SELECTION_PROMPT);
 
         assert_eq!(
             handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),

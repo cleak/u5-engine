@@ -277,6 +277,36 @@ pub fn load_world_overlay_mirror_objects(
     load_world_overlay_objects(game_dir, plane)
 }
 
+/// Load all 32 records from the current canonical plane mirror.
+///
+/// Town exit must replace the live table, including slot zero, and must not
+/// consult the in-memory overlay cache.  A missing per-plane mirror falls
+/// back to the matching `SAVED.OOL` half so a directly loaded town save has
+/// the same exit path after ordinary save-mirror reconstruction.
+pub fn load_world_active_object_mirror_table(
+    game_dir: &Path,
+    plane: WorldPlane,
+) -> io::Result<Vec<ActiveObject>> {
+    let plane_file = game_dir.join(match plane {
+        WorldPlane::Britannia => BRIT_OOL_FILENAME,
+        WorldPlane::Underworld => UNDER_OOL_FILENAME,
+    });
+    if plane_file.exists() {
+        return decode_full_ool_plane_table(&read(&plane_file)?);
+    }
+
+    let saved_ool = game_dir.join(SAVED_OOL_FILENAME);
+    if !saved_ool.exists() {
+        return Ok(vec![ActiveObject::empty(); OOL_SLOTS]);
+    }
+    let bytes = read_saved_ool_bytes(game_dir)?;
+    let start = match plane {
+        WorldPlane::Britannia => 0,
+        WorldPlane::Underworld => OOL_PLANE_LEN,
+    };
+    decode_full_ool_plane_table(&bytes[start..start + OOL_PLANE_LEN])
+}
+
 pub fn load_init_overlay_objects(game_dir: &Path) -> io::Result<Vec<ActiveObject>> {
     let path = game_dir.join(INIT_OOL_FILENAME);
     let bytes = read(&path)?;
