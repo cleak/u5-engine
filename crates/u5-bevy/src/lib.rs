@@ -108,7 +108,7 @@ use u5_runtime::{
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
-    hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
+    hash_bytes, input_function_key_code, input_keypad_digit_direction_code,
     intro_doorway_paragraph_boxes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_menu_frame_border_start_column, intro_step_has_story6_secondary_pass,
@@ -3205,6 +3205,15 @@ impl VisualKeyStep {
             control: true,
         }
     }
+
+    const fn shifted(label: &'static str, key: KeyCode) -> Self {
+        Self {
+            label,
+            key,
+            shift: true,
+            control: false,
+        }
+    }
 }
 
 const VISUAL_KEY_WORLD_STEPS: &[VisualKeyStep] = &[
@@ -3213,7 +3222,7 @@ const VISUAL_KEY_WORLD_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::control("ctrl_s", KeyCode::KeyS),
 ];
 const VISUAL_KEY_SAVE_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_q", KeyCode::KeyQ),
+    VisualKeyStep::shifted("key_q", KeyCode::KeyQ),
     VisualKeyStep::key("key_n", KeyCode::KeyN),
 ];
 const VISUAL_KEY_TALK_STEPS: &[VisualKeyStep] = &[
@@ -3246,21 +3255,21 @@ const VISUAL_KEY_ESCAPE_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("escape", KeyCode::Escape),
 ];
 const VISUAL_KEY_DIRECTION_PROMPT_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_l", KeyCode::KeyL),
+    VisualKeyStep::shifted("key_l", KeyCode::KeyL),
     VisualKeyStep::key("key_d", KeyCode::KeyD),
-    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::shifted("key_a", KeyCode::KeyA),
     VisualKeyStep::key("key_d", KeyCode::KeyD),
-    VisualKeyStep::key("key_g", KeyCode::KeyG),
+    VisualKeyStep::shifted("key_g", KeyCode::KeyG),
     VisualKeyStep::key("key_d", KeyCode::KeyD),
-    VisualKeyStep::key("key_o", KeyCode::KeyO),
+    VisualKeyStep::shifted("key_o", KeyCode::KeyO),
     VisualKeyStep::key("key_d", KeyCode::KeyD),
-    VisualKeyStep::key("key_p", KeyCode::KeyP),
+    VisualKeyStep::shifted("key_p", KeyCode::KeyP),
     VisualKeyStep::key("key_d", KeyCode::KeyD),
-    VisualKeyStep::key("key_s", KeyCode::KeyS),
+    VisualKeyStep::shifted("key_s", KeyCode::KeyS),
     VisualKeyStep::key("key_d", KeyCode::KeyD),
 ];
 const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_y", KeyCode::KeyY),
+    VisualKeyStep::shifted("key_y", KeyCode::KeyY),
     VisualKeyStep::key("key_f", KeyCode::KeyF),
     VisualKeyStep::key("key_a", KeyCode::KeyA),
     VisualKeyStep::key("key_l", KeyCode::KeyL),
@@ -3278,31 +3287,31 @@ const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
 // equips once and then exits. Unequip stays covered by the runtime test
 // `active_ready_picker_charges_one_turn_for_the_whole_invocation`.
 const VISUAL_KEY_READY_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_r", KeyCode::KeyR),
+    VisualKeyStep::shifted("key_r", KeyCode::KeyR),
     VisualKeyStep::key("digit_1", KeyCode::Digit1),
     VisualKeyStep::key("space", KeyCode::Space),
     VisualKeyStep::key("escape", KeyCode::Escape),
 ];
 const VISUAL_KEY_STATS_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_z", KeyCode::KeyZ),
+    VisualKeyStep::shifted("key_z", KeyCode::KeyZ),
     VisualKeyStep::key("space", KeyCode::Space),
 ];
 const VISUAL_KEY_USE_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_u", KeyCode::KeyU),
+    VisualKeyStep::shifted("key_u", KeyCode::KeyU),
     VisualKeyStep::key("space", KeyCode::Space),
 ];
 const VISUAL_KEY_MIX_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_m", KeyCode::KeyM),
+    VisualKeyStep::shifted("key_m", KeyCode::KeyM),
     VisualKeyStep::key("escape", KeyCode::Escape),
 ];
 const VISUAL_KEY_REST_WATCH_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_h", KeyCode::KeyH),
+    VisualKeyStep::shifted("key_h", KeyCode::KeyH),
     VisualKeyStep::key("digit_1", KeyCode::Digit1),
     VisualKeyStep::key("key_y", KeyCode::KeyY),
     VisualKeyStep::key("digit_2", KeyCode::Digit2),
 ];
 const VISUAL_KEY_NEW_ORDER_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_n", KeyCode::KeyN),
+    VisualKeyStep::shifted("key_n", KeyCode::KeyN),
     VisualKeyStep::key("digit_2", KeyCode::Digit2),
     VisualKeyStep::key("digit_3", KeyCode::Digit3),
 ];
@@ -10714,7 +10723,7 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.message = message;
         }
         VisualIntroPanelOutcome::CommitChargen(result) => {
-            let avatar = commit_chargen_save(
+            commit_chargen_save(
                 &intro.game_dir,
                 &result.entered_name,
                 result.male,
@@ -10726,12 +10735,17 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
                 IntroSubflow::CharacterCreation,
                 IntroSubflowResult::SaveReady,
             );
+            // `systems/chargen.md §1`/`§9`: chargen returns to the intro
+            // menu and the player explicitly chooses Journey Onward. The
+            // completed subflow leaves Character Creation cached, so move the
+            // visible highlight to Journey Onward; otherwise Enter immediately
+            // starts chargen again. Do not replace the menu labels with an
+            // engine-authored completion notice.
+            intro.dispatch.intro.cached_selection = Some(IntroSubflow::JourneyOnward);
+            intro.modal_backing = None;
             intro.menu_idle_ticks = 0;
             intro.message_waiting_for_key = false;
-            intro.message = format!(
-                "Created {}. Choose Journey Onward to load the new save.",
-                display_name_bytes(&avatar.name)
-            );
+            intro.message.clear();
         }
     }
     true
@@ -15489,35 +15503,39 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
                 b'.'
             }
         }
-        KeyA => b'A',
-        KeyB => b'B',
-        KeyC => b'C',
-        KeyD => b'D',
-        KeyE => b'E',
-        KeyF => b'F',
-        KeyG => b'G',
-        KeyH => b'H',
-        KeyI => b'I',
-        KeyJ => b'J',
-        KeyK => b'K',
-        KeyL => b'L',
-        KeyM => b'M',
-        KeyN => b'N',
-        KeyO => b'O',
-        KeyP => b'P',
-        KeyQ => b'Q',
-        KeyR => b'R',
-        KeyS => b'S',
-        KeyT => b'T',
-        KeyU => b'U',
-        KeyV => b'V',
-        KeyW => b'W',
-        KeyX => b'X',
-        KeyY => b'Y',
-        KeyZ => b'Z',
+        KeyA => line_letter_for_shift(b'a', shift_pressed),
+        KeyB => line_letter_for_shift(b'b', shift_pressed),
+        KeyC => line_letter_for_shift(b'c', shift_pressed),
+        KeyD => line_letter_for_shift(b'd', shift_pressed),
+        KeyE => line_letter_for_shift(b'e', shift_pressed),
+        KeyF => line_letter_for_shift(b'f', shift_pressed),
+        KeyG => line_letter_for_shift(b'g', shift_pressed),
+        KeyH => line_letter_for_shift(b'h', shift_pressed),
+        KeyI => line_letter_for_shift(b'i', shift_pressed),
+        KeyJ => line_letter_for_shift(b'j', shift_pressed),
+        KeyK => line_letter_for_shift(b'k', shift_pressed),
+        KeyL => line_letter_for_shift(b'l', shift_pressed),
+        KeyM => line_letter_for_shift(b'm', shift_pressed),
+        KeyN => line_letter_for_shift(b'n', shift_pressed),
+        KeyO => line_letter_for_shift(b'o', shift_pressed),
+        KeyP => line_letter_for_shift(b'p', shift_pressed),
+        KeyQ => line_letter_for_shift(b'q', shift_pressed),
+        KeyR => line_letter_for_shift(b'r', shift_pressed),
+        KeyS => line_letter_for_shift(b's', shift_pressed),
+        KeyT => line_letter_for_shift(b't', shift_pressed),
+        KeyU => line_letter_for_shift(b'u', shift_pressed),
+        KeyV => line_letter_for_shift(b'v', shift_pressed),
+        KeyW => line_letter_for_shift(b'w', shift_pressed),
+        KeyX => line_letter_for_shift(b'x', shift_pressed),
+        KeyY => line_letter_for_shift(b'y', shift_pressed),
+        KeyZ => line_letter_for_shift(b'z', shift_pressed),
         _ => return None,
     };
-    Some(input_case_fold(byte))
+    // Preserve the physical Shift state here. The runtime owns context-specific
+    // folding: lowercase `wasd`/vi keys are movement before command dispatch,
+    // while command and menu classifiers fold letters when appropriate. Early
+    // folding made every name uppercase and made lowercase movement impossible.
+    Some(byte)
 }
 
 #[cfg(test)]
@@ -20988,10 +21006,10 @@ mod tests {
 
     #[test]
     fn visual_key_map_emits_spec_input_bytes_for_commands_and_movement() {
-        assert_eq!(key_code_to_char(KeyCode::KeyW, false, false), Some('W'));
-        assert_eq!(key_code_to_char(KeyCode::KeyA, false, false), Some('A'));
-        assert_eq!(key_code_to_char(KeyCode::KeyS, false, false), Some('S'));
-        assert_eq!(key_code_to_char(KeyCode::KeyD, false, false), Some('D'));
+        assert_eq!(key_code_to_char(KeyCode::KeyW, false, false), Some('w'));
+        assert_eq!(key_code_to_char(KeyCode::KeyA, false, false), Some('a'));
+        assert_eq!(key_code_to_char(KeyCode::KeyS, false, false), Some('s'));
+        assert_eq!(key_code_to_char(KeyCode::KeyD, false, false), Some('d'));
         assert_eq!(key_code_to_char(KeyCode::KeyA, true, false), Some('A'));
         assert_eq!(key_code_to_char(KeyCode::KeyS, true, false), Some('S'));
         assert_eq!(
@@ -20999,8 +21017,10 @@ mod tests {
             Some(PLAY_MUSIC_TOGGLE_KEY)
         );
         assert_eq!(key_code_to_char(KeyCode::KeyA, false, true), None);
-        assert_eq!(key_code_to_char(KeyCode::KeyQ, false, false), Some('Q'));
-        assert_eq!(key_code_to_char(KeyCode::KeyU, false, false), Some('U'));
+        assert_eq!(key_code_to_char(KeyCode::KeyQ, false, false), Some('q'));
+        assert_eq!(key_code_to_char(KeyCode::KeyU, false, false), Some('u'));
+        assert_eq!(key_code_to_char(KeyCode::KeyQ, true, false), Some('Q'));
+        assert_eq!(key_code_to_char(KeyCode::KeyU, true, false), Some('U'));
         assert_eq!(key_code_to_char(KeyCode::Digit2, false, false), Some('2'));
         assert_eq!(
             key_code_to_input_byte(KeyCode::ArrowUp, false, false),
@@ -21034,6 +21054,21 @@ mod tests {
             key_code_to_input_byte(KeyCode::F10, false, false),
             Some(u5_runtime::INPUT_CODE_F10)
         );
+    }
+
+    #[test]
+    fn visual_unshifted_wasd_reaches_top_down_movement() {
+        let mut state = test_state(open_grid(), 4, 4);
+        let key = key_code_to_char(KeyCode::KeyD, false, false)
+            .expect("unshifted D key must map to lowercase movement input");
+
+        assert_eq!(key, 'd');
+        assert!(matches!(
+            handle_play_key_input(&mut state, key, "", Path::new("")),
+            Ok(PlayInputDisposition::Continue)
+        ));
+        assert_eq!((state.player.x, state.player.y), (5, 4));
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
@@ -22071,7 +22106,15 @@ mod tests {
             },
         );
 
-        for ch in "Avatar".chars() {
+        for (key, shift) in [
+            (KeyCode::KeyA, true),
+            (KeyCode::KeyV, false),
+            (KeyCode::KeyA, false),
+            (KeyCode::KeyT, false),
+            (KeyCode::KeyA, false),
+            (KeyCode::KeyR, false),
+        ] {
+            let ch = key_code_to_char(key, shift, false).expect("name key must map to text");
             step_visual_intro_panel(&mut intro, ch);
         }
         step_visual_intro_panel(&mut intro, '\r');
@@ -22084,11 +22127,16 @@ mod tests {
         step_visual_intro_panel(&mut intro, ' ');
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Created Avatar"));
+        assert!(intro.message.is_empty());
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward,
+            "chargen return must make Enter choose Journey Onward instead of restarting chargen"
+        );
         assert_eq!(
             render_intro_frame(&mut intro).len(),
             INTRO_FRAMEBUFFER_WIDTH as usize * INTRO_FRAMEBUFFER_HEIGHT as usize * 4,
-            "the post-chargen status must wrap inside the menu interior"
+            "chargen return must redraw the actionable intro menu"
         );
         let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
         assert_eq!(
@@ -22106,6 +22154,12 @@ mod tests {
             fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap(),
             [vec![0u8; OOL_PLANE_LEN], vec![0x44; OOL_PLANE_LEN]].concat()
         );
+        assert!(step_visual_intro(&mut intro, '\r'));
+        assert!(
+            intro.launch_result.lock().unwrap().is_some(),
+            "Enter on the post-chargen menu must load the new save"
+        );
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -68,6 +68,15 @@ cargo run --features visual -- --intro --visual C:\Games\U5-Clean
 `--visual-playable` is the minimally playable Bevy v0 entrypoint. It opens the
 Bevy intro/menu shell, lets the player create or transfer a save, then Journey
 Onward into the same runtime gameplay loop used by the terminal harness.
+After character creation, the menu returns with Journey Onward highlighted;
+press Enter to load the new save. Journey Onward deliberately loads directly
+into Iolo's Hut. Select `U` / `Ultima V Introduction` on the intro menu to play
+the separate story sequence.
+
+In top-down play, use the arrow keys, numeric keypad, or unshifted lowercase
+`wasd`/vi keys to move. Hold Shift for uppercase game commands such as `A`
+(Attack), `L` (Look), `S` (Search), and `U` (Use). Name and free-text entry
+preserve the Shift state instead of forcing uppercase.
 Presentation is still v0: shops, conversations, and other text-heavy flows use
 the shared fixed-cell status/modal surface while exact original window pacing
 continues to be tracked as parity work.
