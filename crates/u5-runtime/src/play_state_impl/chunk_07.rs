@@ -3913,17 +3913,6 @@ impl PlayState {
             };
             return Ok(Some(outcome));
         }
-        if self.dungeon_exit_tile_at(Some(game_dir), scene, level, x, y, tile)? {
-            let pre_effect_message = self.message.clone();
-            let outcome = self.resolve_dungeon_exit_tile_after_turn(game_dir, scene, level)?;
-            let transition_message = self.message.clone();
-            self.message = if pre_effect_message.is_empty() {
-                transition_message
-            } else {
-                format!("{pre_effect_message} {transition_message}")
-            };
-            return Ok(Some(outcome));
-        }
         if is_dungeon_fall_trap(tile) {
             let pre_effect_message = self.message.clone();
             let outcome = self.resolve_dungeon_fall_trap_transition(

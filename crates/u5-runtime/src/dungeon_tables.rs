@@ -1,4 +1,5 @@
-//! Data structures for the dungeon TSV tables (deeper transitions, teleports, chests, exits, secret doors).
+//! Data structures for dungeon TSV tables, including parsers retained for
+//! retired clean-room compatibility artifacts.
 
 use crate::*;
 

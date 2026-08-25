@@ -17013,138 +17013,11 @@ fn dungeon_teleport_cell_guard_mismatch_keeps_normal_movement() {
 }
 
 #[test]
-fn dungeon_exit_tile_sidecar_returns_to_world_location_table() {
+fn retired_dungeon_exit_tile_sidecar_cannot_override_blocking_cell() {
     let dir = debug_game_dir();
-    let scene = DungeonScene::new(33).unwrap();
-    fs::write(
-        dir.join(DUNGEON_EXIT_TILE_TABLE_FILE),
-        "DUNGEON:0 0 2 1 0x70\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.join(WORLD_LOCATION_TABLE_FILE),
-        "UNDERWORLD 10 20 DUNGEON:0\n",
-    )
-    .unwrap();
-    let mut grid = open_dungeon_record();
-    grid[dungeon_cell_index(0, 2, 1)] = 0x70;
-    let mut state = dungeon_state(grid, 0, 1, 1);
-
-    assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
-        MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
-    );
-
-    assert_eq!(
-        state.area,
-        Area::World {
-            plane: WorldPlane::Underworld
-        }
-    );
-    assert_eq!((state.player.x, state.player.y), (10, 20));
-    assert_eq!(
-        state.active_objects[0].z,
-        WorldPlane::Underworld.save_floor()
-    );
-    assert_eq!(state.grid[world_cell_index(10, 20)], 5);
-    assert_eq!(state.turn, 1);
-    assert!(state.message.contains("dungeon exit tile"));
-    assert!(state.message.contains("world-location table point"));
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn pass_turn_on_dungeon_exit_tile_sidecar_returns_after_turn() {
-    let dir = debug_game_dir();
-    let scene = DungeonScene::new(33).unwrap();
-    fs::write(
-        dir.join(DUNGEON_EXIT_TILE_TABLE_FILE),
-        "DUNGEON:0 0 1 1 0x70\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.join(WORLD_LOCATION_TABLE_FILE),
-        "UNDERWORLD 10 20 DUNGEON:0\n",
-    )
-    .unwrap();
-    let mut grid = open_dungeon_record();
-    grid[dungeon_cell_index(0, 1, 1)] = 0x70;
-    let mut state = dungeon_state(grid, 0, 1, 1);
-
-    assert_eq!(
-        state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
-        MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
-    );
-
-    assert_eq!(
-        state.area,
-        Area::World {
-            plane: WorldPlane::Underworld
-        }
-    );
-    assert_eq!((state.player.x, state.player.y), (10, 20));
-    assert_eq!(
-        state.active_objects[0].z,
-        WorldPlane::Underworld.save_floor()
-    );
-    assert_eq!(state.turn, 1);
-    assert!(state.message.starts_with("Passed."));
-    assert!(state.message.contains("Triggered dungeon exit tile"));
-    assert!(state.message.contains("world-location table point"));
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn dungeon_exit_tile_uses_published_location_table_without_sidecar() {
-    let dir = debug_game_dir();
-    let scene = DungeonScene::new(33).unwrap();
-    fs::write(
-        dir.join(DUNGEON_EXIT_TILE_TABLE_FILE),
-        "DUNGEON:0 0 2 1 0x70\n",
-    )
-    .unwrap();
-    let mut grid = open_dungeon_record();
-    grid[dungeon_cell_index(0, 2, 1)] = 0x70;
-    let mut state = dungeon_state(grid, 0, 1, 1);
-
-    assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
-        MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
-    );
-
-    assert_eq!(
-        state.area,
-        Area::World {
-            plane: WorldPlane::Britannia
-        }
-    );
-    assert_eq!((state.player.x, state.player.y), (240, 73));
-    assert_eq!(
-        state.active_objects[0].z,
-        WorldPlane::Britannia.save_floor()
-    );
-    assert_eq!(state.turn, 1);
-    assert!(state.message.contains("dungeon exit tile"));
-    assert!(state.message.contains("world-location table point"));
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn dungeon_exit_tile_sidecar_overrides_blocking_cell() {
-    let dir = debug_game_dir();
-    let scene = DungeonScene::new(33).unwrap();
     fs::write(
         dir.join(DUNGEON_EXIT_TILE_TABLE_FILE),
         "DUNGEON:0 0 2 1 0xB0\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.join(WORLD_LOCATION_TABLE_FILE),
-        "UNDERWORLD 12 34 DUNGEON:0\n",
     )
     .unwrap();
     let mut grid = open_dungeon_record();
@@ -17155,28 +17028,27 @@ fn dungeon_exit_tile_sidecar_overrides_blocking_cell() {
         state
             .step_with_game_dir(Direction::East, Some(&dir))
             .unwrap(),
-        MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+        MoveOutcome::Blocked
     );
-
     assert_eq!(
         state.area,
-        Area::World {
-            plane: WorldPlane::Underworld
+        Area::Dungeon {
+            scene: DungeonScene::new(33).unwrap(),
+            level: 0,
         }
     );
-    assert_eq!((state.player.x, state.player.y), (12, 34));
-    assert_eq!(state.turn, 1);
-    assert!(state.message.contains("dungeon exit tile"));
-    assert!(state.message.contains("world-location table point"));
+    assert_eq!((state.player.x, state.player.y), (1, 1));
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.message, "Blocked!");
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
-fn dungeon_exit_tile_cell_guard_mismatch_keeps_normal_movement() {
+fn retired_dungeon_exit_tile_sidecar_does_not_change_walkable_cell_behavior() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(DUNGEON_EXIT_TILE_TABLE_FILE),
-        "DUNGEON:0 0 2 1 0x71\n",
+        "DUNGEON:0 0 2 1 0x70\n",
     )
     .unwrap();
     let mut grid = open_dungeon_record();
@@ -17199,7 +17071,7 @@ fn dungeon_exit_tile_cell_guard_mismatch_keeps_normal_movement() {
     );
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
-    assert!(!state.message.contains("dungeon exit tile"));
+    assert!(!state.message.contains("Exited"));
     let _ = fs::remove_dir_all(dir);
 }
 

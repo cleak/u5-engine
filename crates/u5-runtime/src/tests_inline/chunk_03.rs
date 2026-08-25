@@ -1013,27 +1013,23 @@
     #[test]
     fn dungeon_exit_save_load_round_trips_returned_underworld_state() {
         let dir = debug_game_dir();
-        write_save_template_and_empty_overlays(&dir, 33, 0, 1, 1);
+        write_save_template_and_empty_overlays(&dir, 33, 7, 1, 1);
         let scene = DungeonScene::new(33).unwrap();
         fs::write(
-            dir.join(DUNGEON_EXIT_TILE_TABLE_FILE),
-            "DUNGEON:0 0 2 1 0x70\n",
-        )
-        .unwrap();
-        fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "UNDERWORLD 10 20 DUNGEON:0\n",
+            "BRITANNIA 10 20 DUNGEON:0\n",
         )
         .unwrap();
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 2, 1)] = 0x70;
-        let mut state = dungeon_state(grid, 0, 1, 1);
+        grid[dungeon_cell_index(7, 1, 1)] = 0x20;
+        let mut state = dungeon_state(grid, 7, 1, 1);
 
         assert_eq!(
-            state
-                .step_with_game_dir(Direction::East, Some(&dir))
-                .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+            state.climb(&dir, ClimbIntent::Down).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
+                scene,
+                plane: WorldPlane::Underworld,
+            })
         );
         assert_eq!(
             state.save_game_command(&dir, Some(true)).unwrap(),

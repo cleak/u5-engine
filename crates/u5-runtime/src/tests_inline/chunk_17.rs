@@ -4112,7 +4112,9 @@
     #[test]
     fn cast_uus_por_moves_up_one_dungeon_level_without_ladder() {
         let scene = DungeonScene::new(33).unwrap();
-        let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(2, 1, 1)] = 0x10;
+        let mut state = dungeon_state(grid, 3, 1, 1);
         state.spell_charges[UUS_POR_SPELL_INDEX] = 1;
         state.party[0].mana = 4;
         state.party[0].level = 4;
@@ -4134,7 +4136,9 @@
     #[test]
     fn cast_des_por_moves_down_one_dungeon_level_without_ladder() {
         let scene = DungeonScene::new(33).unwrap();
-        let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(4, 1, 1)] = 0x10;
+        let mut state = dungeon_state(grid, 3, 1, 1);
         state.spell_charges[DES_POR_SPELL_INDEX] = 1;
         state.party[0].mana = 4;
         state.party[0].level = 4;

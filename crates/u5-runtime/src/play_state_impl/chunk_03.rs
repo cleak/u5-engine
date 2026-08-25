@@ -3227,25 +3227,44 @@ impl PlayState {
         spell_index: usize,
         delta: i8,
         label: &str,
-    ) -> MoveOutcome {
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
         let Area::Dungeon { scene, level } = self.area else {
             self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
+            return Ok(MoveOutcome::Blocked);
         };
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, spell_index, DUNGEON_LEVEL_SPELL_COST)
         {
-            return outcome;
+            return Ok(outcome);
+        }
+
+        // `dungeon-mode.md` §13.1/§13.3: both level-change spells refuse
+        // outright in Doom. This is an effect-level refusal after the common
+        // spell resource gate has accepted and spent the cast.
+        if scene.record == DOOM_DUNGEON_RECORD {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return Ok(MoveOutcome::Blocked);
         }
 
         let next_level = level as i8 + delta;
         if !(0..=7).contains(&next_level) {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            return MoveOutcome::Blocked;
+            return self.resolve_dungeon_surface_reset(
+                game_dir,
+                scene,
+                level,
+                format!("Cast {label} at the dungeon level edge"),
+            );
         }
 
         let next_level = next_level as u8;
+        let destination = self.dungeon_cell(next_level, self.player.x, self.player.y);
+        if !dungeon_level_change_spell_destination_allowed(destination) {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
         self.area = Area::Dungeon {
             scene,
             level: next_level,
@@ -3260,10 +3279,12 @@ impl PlayState {
             scene.name(),
             dungeon_display_level(next_level)
         );
-        MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel {
-            scene,
-            level: next_level,
-        })
+        Ok(MoveOutcome::Transition(
+            AreaTransition::ChangedDungeonLevel {
+                scene,
+                level: next_level,
+            },
+        ))
     }
 
     pub fn cast_dungeon_field_spell(

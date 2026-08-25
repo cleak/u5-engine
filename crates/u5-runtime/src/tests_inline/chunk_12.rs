@@ -196,12 +196,15 @@
         assert_eq!(
             state.area,
             Area::World {
-                plane: WorldPlane::Underworld
+                plane: WorldPlane::Britannia
             }
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.active_objects[0].z, -1);
-        assert!(state.message.contains("world-location table return point"));
+        assert_eq!(state.active_objects[0].z, 0);
+        assert_eq!(
+            state.message,
+            "Exited DUNGEON:0 (Deceit) to BRITANNIA at (10, 20)."
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -403,9 +406,9 @@
     }
 
     #[test]
-    fn debug_enter_dungeon_surface_reset_restores_return_world_transport() {
+    fn debug_enter_dungeon_surface_reset_uses_published_plane_coordinate_and_foot() {
         let dir = debug_game_dir();
-        let scene = DungeonScene::new(40).unwrap();
+        let scene = DungeonScene::new(33).unwrap();
         write_save_template_and_empty_overlays(&dir, 0, 0xff, 10, 20);
         fs::write(
             dir.join(UNDER_DAT_FILENAME),
@@ -432,7 +435,7 @@
             state.enter_current_location(&dir).unwrap(),
             MoveOutcome::Transition(AreaTransition::EnteredDungeon(scene))
         );
-        assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
+        assert_eq!(state.area, Area::Dungeon { scene, level: 7 });
         assert_eq!(
             state.return_world.as_ref().map(|ret| (
                 ret.transport,
@@ -445,60 +448,49 @@
 
         // An up ladder on level zero is the published climb-out route
         // (dungeon-mode.md §13); the withdrawn `0x60` pit bypass is not.
+        state.area = Area::Dungeon { scene, level: 0 };
+        state.player.x = 1;
+        state.player.y = 1;
+        state.sync_player_object();
         state.grid[dungeon_cell_index(0, 1, 1)] = 0x10;
         assert_eq!(
-            state.climb(Path::new(""), ClimbIntent::Up).unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+            state.climb(&dir, ClimbIntent::Up).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
+                scene,
+                plane: WorldPlane::Britannia,
+            })
         );
         assert_eq!(
             state.area,
             Area::World {
-                plane: WorldPlane::Underworld
+                plane: WorldPlane::Britannia
             }
         );
-        assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.player.transport, transport);
+        assert_eq!((state.player.x, state.player.y), (240, 73));
+        assert_eq!(state.player.transport, TransportState::Foot);
         assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
-        assert_eq!(state.sail_cadence, 1);
-        assert!(state.sail_stall_pending);
-        assert_eq!(state.active_objects[0].tile, 168);
+        assert_eq!(state.sail_cadence, 0);
+        assert!(!state.sail_stall_pending);
+        assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
 
         assert_eq!(
             state.save_game_command(&dir, Some(true)).unwrap(),
             MoveOutcome::Saved
         );
         let options = load_play_options_from_save(&dir).unwrap();
-        assert_eq!(options.target, PlayTarget::World(WorldPlane::Underworld));
-        assert_eq!(options.start, Some((10, 20)));
-        assert_eq!(
-            options.transport,
-            TransportState::Ship {
-                type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
-                tile: FIRST_PLAYABLE_FRIGATE_TILE,
-                sails_hoisted: true,
-                hull: 0,
-                skiffs: 0,
-            }
-        );
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Britannia));
+        assert_eq!(options.start, Some((240, 73)));
+        assert_eq!(options.transport, TransportState::Foot);
         let reloaded = PlayState::load_scene(&dir, options).unwrap();
         assert_eq!(
             reloaded.area,
             Area::World {
-                plane: WorldPlane::Underworld
+                plane: WorldPlane::Britannia
             }
         );
-        assert_eq!((reloaded.player.x, reloaded.player.y), (10, 20));
-        assert_eq!(
-            reloaded.player.transport,
-            TransportState::Ship {
-                type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
-                tile: FIRST_PLAYABLE_FRIGATE_TILE,
-                sails_hoisted: true,
-                hull: 0,
-                skiffs: 0,
-            }
-        );
+        assert_eq!((reloaded.player.x, reloaded.player.y), (240, 73));
+        assert_eq!(reloaded.player.transport, TransportState::Foot);
         assert!(reloaded.return_world.is_none());
         let _ = fs::remove_dir_all(dir);
     }
@@ -660,12 +652,12 @@
     }
 
     #[test]
-    fn dungeon_fall_trap_chain_clears_scene_at_trap_coordinate_with_location_table_plane() {
+    fn dungeon_fall_trap_chain_uses_underworld_and_ignores_location_row_plane() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(33).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "UNDERWORLD 10 20 DUNGEON:0\n",
+            "BRITANNIA 10 20 DUNGEON:0\n",
         )
         .unwrap();
         let mut grid = open_dungeon_record();
@@ -741,7 +733,7 @@
         world_grid[world_cell_index(2, 1)] = 7;
         world_grid[world_cell_index(10, 20)] = 9;
         state.return_world = Some(WorldReturn {
-            plane: WorldPlane::Britannia,
+            plane: WorldPlane::Underworld,
             x: 10,
             y: 20,
             transport: TransportState::Carpet {
@@ -756,7 +748,7 @@
                 tile: PLAYER_TILE,
                 x: 10,
                 y: 20,
-                z: WorldPlane::Britannia.save_floor(),
+                z: WorldPlane::Underworld.save_floor(),
                 phase: STEADY_PHASE,
                 aux1: 0,
                 aux3: 0,
@@ -768,14 +760,14 @@
             state.step(Direction::East),
             MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
                 scene,
-                plane: WorldPlane::Britannia
+                plane: WorldPlane::Underworld
             })
         );
 
         assert_eq!(
             state.area,
             Area::World {
-                plane: WorldPlane::Britannia
+                plane: WorldPlane::Underworld
             }
         );
         assert_eq!((state.player.x, state.player.y), (2, 1));

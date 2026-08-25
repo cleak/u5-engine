@@ -148,7 +148,7 @@ Britannia, a moved Britannia frame, Castle:0, a lit Dungeon:0 frame, composed
 combat, View/Peer/X-Ray/night-sky overlays, intro/status/modal surfaces, and an
 endgame status panel, plus a sanitized manifest with dimensions, frame kinds,
 positions, and hashes. The Bevy feature also provides `--visual-frame-suite`
-for 193 composed Bevy-owned frames and `--visual-route-suite` for 1856
+for 193 composed Bevy-owned frames and `--visual-route-suite` for 1906
 per-step route frames; both Bevy manifests include review coverage rows and
 per-frame clean metadata for auditing generated screenshots. Use
 `--compare-frame-manifests <BASE> <CURRENT>` to gate sanitized manifests by
@@ -170,7 +170,7 @@ for N no-turn visual ticks:
 cargo run -- --play-script "d;empty;idle:4;q" --raster-diagnostics C:\Games\U5-Clean
 ```
 
-`--route-smoke` runs a bundled 507-case local-asset route suite covering world,
+`--route-smoke` runs a bundled 513-case local-asset route suite covering world,
 town, dungeon, combat, shop, endgame, transition, save/reload, and modal
 routes, including native Jimmy magic-lock, empty-restraint, prisoner-release,
 and prisoner-removal save/reload paths. It prints sanitized state lines and raster hashes; add
@@ -183,9 +183,8 @@ cargo run -- --route-smoke C:\Games\U5-Clean
 cargo run -- --route-smoke --route-smoke-manifest target\route-smoke\manifest.txt C:\Games\U5-Clean
 ```
 
-`--play-script` can be combined with `--scene` and `--debug-enter` for
-transition plumbing while exact public overworld entrance coordinates remain
-unpublished:
+`--play-script` can be combined with `--scene` and `--debug-enter` for focused
+transition plumbing without first navigating to a published entrance coordinate:
 
 ```powershell
 cargo run -- --scene BRITANNIA --debug-enter CASTLE:0 --play-script "e;q" C:\Games\U5-Clean
@@ -276,8 +275,8 @@ secret doors, public chest cells enter the same visit-local chest path, and
 exact public bomb-trap bytes are marked as fired without changing level; other
 public dungeon cell classes narrate without triggering movement tile effects.
 Consumed non-movement dungeon commands and pass/empty waits already standing on
-clean `dungeon_teleports.tsv` or `dungeon_exit_tiles.tsv` cells, public pit,
-bomb-trap, or field bytes run the same post-action underfoot tile-effect pass,
+clean `dungeon_teleports.tsv` cells, public pit, bomb-trap, or field bytes run
+the same post-action underfoot tile-effect pass,
 without spending a second turn.
 Dungeon exploration keeps the top-down active-object table out of its
 turn and idle visual animators because the first-person dungeon renderer owns
@@ -285,9 +284,9 @@ its own position state; shared static animation still ticks. The dungeon raster
 projects same-level active dungeon objects into the visible first-person depth
 bands, while stale objects from other dungeon levels are ignored. Dungeon render
 and `L`ook obey the public personal-light gate; optional
-`dungeon_teleports.tsv` rows model scripted level-to-level cells, and optional
-`dungeon_exit_tiles.tsv` rows model immediate exit-dungeon cells while their
-exact encoding remains open. Runtime
+`dungeon_teleports.tsv` rows model scripted level-to-level cells. The withdrawn
+`dungeon_exit_tiles.tsv` mechanism is not read: the public spec establishes that
+no exit-dungeon cell class exists. Runtime
 `0xA?` room-helper state fires before the next dungeon key just like room
 triggers while keeping its low-nibble arena slot; reloaded cleared room triggers
 demote to navigable `0xA?` room-helper variants per the public dungeon-mode spec.
@@ -689,17 +688,10 @@ Dungeon records use the public `DUNGEON:n` record key:
 cargo run -- --play --scene DUNGEON:0 --floor 0 C:\Games\U5-Clean
 ```
 
-Ordinary dungeon ladders are level-to-level only unless a clean
-`dungeon_deeper_transitions.tsv` row is present for the deepest-level down
-ladder cell. Without a matching sidecar row, a deepest-level `K` command still
-fails in place. With a row, the harness spends one dungeon turn, exits dungeon
-mode, reloads the destination world plane, and places the party at the scripted
-world coordinate:
-
-```text
-# DUNGEON LEVEL X Y TO_PLANE TO_X TO_Y
-DUNGEON:6 7 1 1 UNDERWORLD 30 40
-```
+Dungeon level edges use the native uniform exit contract. An up ladder on level
+zero exits to Britannia; a down ladder on level seven exits to the Underworld.
+Both place the party at that dungeon's published outdoor entrance coordinate.
+The withdrawn `dungeon_deeper_transitions.tsv` mechanism is not read.
 
 Scripted dungeon level teleports can be supplied as `dungeon_teleports.tsv`
 while the exact cell identities remain open in the public spec:
@@ -717,21 +709,6 @@ coordinates from firing after the local dungeon image changes.
 Dungeon gust artwork is treated as ordinary dungeon terrain for torch handling.
 The runtime does not load a wind-tile sidecar or extinguish torches on gust
 contact; torch duration advances through the normal dungeon turn counter.
-
-Immediate dungeon-exit cells use the same clean-room coordinate pattern:
-
-```text
-# DUNGEON LEVEL X Y [CELL]
-DUNGEON:0 5 4 4 0x70
-```
-
-When the party steps onto a matching row, the harness exits dungeon mode and
-uses the in-memory debug return point or the `world_locations.tsv` return row
-for that dungeon. If neither source is available, the party stays in dungeon
-mode and reports missing clean return-coordinate metadata instead of moving to a
-placeholder surface cell. Matching rows fire before fallback packed-cell
-walkability can block the cell, which lets clean metadata model exit tiles whose
-exact class is still open.
 
 Dungeon heavy-door silhouettes are now native packed-cell behavior rather than
 sidecar metadata. Public dungeon-mode rules classify `0xE?` cells as
@@ -1191,8 +1168,8 @@ override is present. Focused tests can still provide the clean-room
 `n >> 3` and mask `0x80 >> (n & 7)`; a set bit means broadly passable for the
 legacy base-predicate override.
 
-For transition plumbing tests before those clean coordinates exist, use
-`--debug-enter` with an overworld scene. Press `e` to enter the requested
+For focused transition plumbing tests, use `--debug-enter` with an overworld
+scene. Press `e` to enter the requested
 town or dungeon from the current overworld coordinate; exiting restores that
 same overworld map and coordinate. When `world_locations.tsv` is present, that
 authored table is authoritative: a matching row enters, and a missing row blocks

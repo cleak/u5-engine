@@ -3795,6 +3795,9 @@ fn apply_route_smoke_case_setup(
             if let Some(cell) = state.grid.get_mut(current) {
                 *cell = 0x10;
             }
+            // Deliberately seed a conflicting cached coordinate. The native
+            // surface-reset contract must ignore it and use Deceit's public
+            // world-location row `(240, 73)`.
             state.return_world = Some(WorldReturn {
                 plane: WorldPlane::Britannia,
                 x: 62,
@@ -6900,11 +6903,11 @@ fn validate_route_smoke_case_state(
                     plane: WorldPlane::Britannia
                 }
             ) || state.player.transport != TransportState::Foot
-                || state.player.x != 62
-                || state.player.y != 124
+                || state.player.x != 240
+                || state.player.y != 73
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not restore the saved overworld return"
+                    "route smoke `{case_name}` did not use Deceit's published Britannia exit coordinate"
                 )));
             }
         }

@@ -66,13 +66,6 @@ impl PlayState {
         if let Some(entry) = self.dungeon_teleport_at(game_dir, scene, level, nx, ny, tile)? {
             return Ok(self.apply_dungeon_teleport(scene, entry, direction));
         }
-        if self.dungeon_exit_tile_at(game_dir, scene, level, nx, ny, tile)? {
-            self.player.x = nx;
-            self.player.y = ny;
-            self.sync_player_object();
-            self.mark_visibility_dirty();
-            return self.resolve_dungeon_exit_tile(game_dir, scene, level);
-        }
         if !is_dungeon_walkable(tile) {
             self.message = "Blocked!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -209,24 +202,6 @@ impl PlayState {
         })
     }
 
-    pub fn dungeon_exit_tile_at(
-        &self,
-        game_dir: Option<&Path>,
-        scene: DungeonScene,
-        level: u8,
-        x: usize,
-        y: usize,
-        cell: u8,
-    ) -> io::Result<bool> {
-        let Some(game_dir) = game_dir else {
-            return Ok(false);
-        };
-        Ok(load_dungeon_exit_tile_entries(game_dir)?
-            .unwrap_or_default()
-            .into_iter()
-            .any(|entry| dungeon_exit_tile_matches(entry, scene, level, x, y, cell)))
-    }
-
     pub fn apply_dungeon_field_effect_at(
         &mut self,
         level: u8,
@@ -288,66 +263,6 @@ impl PlayState {
 
     pub fn dungeon_fountain_damage_roll(&mut self) -> u8 {
         self.random_range_u8(0, 7)
-    }
-
-    pub fn resolve_dungeon_exit_tile(
-        &mut self,
-        game_dir: Option<&Path>,
-        scene: DungeonScene,
-        level: u8,
-    ) -> io::Result<MoveOutcome> {
-        self.resolve_dungeon_exit_tile_transition(
-            game_dir,
-            scene,
-            level,
-            true,
-            "Stepped onto dungeon exit tile",
-        )
-    }
-
-    pub fn resolve_dungeon_exit_tile_after_turn(
-        &mut self,
-        game_dir: &Path,
-        scene: DungeonScene,
-        level: u8,
-    ) -> io::Result<MoveOutcome> {
-        self.resolve_dungeon_exit_tile_transition(
-            Some(game_dir),
-            scene,
-            level,
-            false,
-            "Triggered dungeon exit tile",
-        )
-    }
-
-    pub fn resolve_dungeon_exit_tile_transition(
-        &mut self,
-        game_dir: Option<&Path>,
-        scene: DungeonScene,
-        level: u8,
-        advance_turn: bool,
-        event: &str,
-    ) -> io::Result<MoveOutcome> {
-        if advance_turn {
-            self.advance_turn();
-        }
-        let event = format!("{event} in {} ({})", scene.key(), scene.name());
-        if self.restore_return_world() {
-            self.message = format!("{event}; returned to overworld debug return point.");
-            self.mark_visibility_dirty();
-            return Ok(MoveOutcome::Transition(AreaTransition::ExitedDungeon(
-                scene,
-            )));
-        } else if let Some(game_dir) = game_dir {
-            if self.restore_world_for_target(game_dir, PlayTarget::Dungeon(scene))? {
-                self.message = format!("{event}; returned to world-location table point.");
-                self.mark_visibility_dirty();
-                return Ok(MoveOutcome::Transition(AreaTransition::ExitedDungeon(
-                    scene,
-                )));
-            }
-        }
-        Ok(self.block_missing_dungeon_return(scene, level, event))
     }
 
     pub fn block_missing_dungeon_return(
@@ -693,25 +608,13 @@ impl PlayState {
         if advance_turn {
             self.advance_turn();
         }
-        if let Some(return_world) = self.return_world.take() {
-            let plane = return_world.plane;
-            self.area = Area::World { plane };
-            self.player.x = x;
-            self.player.y = y;
-            self.player.transport = TransportState::Foot;
-            self.sail_cadence = 0;
-            self.sail_stall_pending = false;
-            self.grid = return_world.grid;
-            self.natural_moongate_live_cells.clear();
-            self.npcs.clear();
-            self.active_objects = return_world.active_objects;
-            self.sync_player_object();
-            self.cache_current_world_overlay();
-            self.clear_open_town_door_state();
-            self.pending_town_arrest = None;
-            self.active_blackthorn = None;
-            self.mode_zero_cleanup();
-            self.mark_visibility_dirty();
+        // `dungeon-mode.md` §13.2: the automatic fall-trap chain is the
+        // defensive off-bottom exception. It keeps the trap column instead
+        // of consulting the exterior-coordinate table, but an off-bottom
+        // handoff still resumes on the Underworld map.
+        let plane = WorldPlane::Underworld;
+        if let Some(game_dir) = game_dir {
+            self.restore_world_at(game_dir, plane, x, y)?;
             self.message = format!(
                 "Fell out of {} ({}) past level {}; cleared dungeon scene at trap-chain coordinate ({x}, {y}) on {:?}.",
                 scene.key(),
@@ -724,44 +627,29 @@ impl PlayState {
             ));
         }
 
-        if let Some(game_dir) = game_dir {
-            let entries = effective_world_location_entries(game_dir)?;
-            let matches: Vec<_> = entries
-                .iter()
-                .copied()
-                .filter(|entry| entry.target == PlayTarget::Dungeon(scene))
-                .collect();
-            let Some(entry) = matches.first().copied() else {
-                return Ok(self.block_missing_dungeon_return(
-                    scene,
-                    level,
-                    format!("Fell out of {} ({})", scene.key(), scene.name()),
-                ));
-            };
-            if matches.len() > 1 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "{WORLD_LOCATION_TABLE_FILE} has multiple return rows for {}",
-                        PlayTarget::Dungeon(scene).key()
-                    ),
-                ));
-            }
-            let plane = entry.plane;
+        // The no-I/O test/debug route can reuse a cached Underworld snapshot.
+        // A cached Britannia image cannot stand in for the required plane.
+        if self
+            .return_world
+            .as_ref()
+            .is_some_and(|return_world| return_world.plane == plane)
+        {
+            let return_world = self
+                .return_world
+                .take()
+                .expect("matching cached return world was just observed");
             self.area = Area::World { plane };
             self.player.x = x;
             self.player.y = y;
-            self.force_foot_transport();
-            self.grid = load_world_map(game_dir, plane)?;
-            apply_world_quest_tile_substitutions(
-                &mut self.grid,
-                &self.word_of_power_seal_flags,
-                &self.shrine_ruin_flags,
-            );
-            self.rebuild_world_live_chunks_from_grid(plane)?;
+            self.player.transport = TransportState::Foot;
+            self.sail_cadence = 0;
+            self.sail_stall_pending = false;
+            self.grid = return_world.grid;
             self.natural_moongate_live_cells.clear();
             self.npcs.clear();
-            self.replace_world_active_objects(game_dir, plane, x, y)?;
+            self.active_objects = return_world.active_objects;
+            self.sync_player_object();
+            self.cache_current_world_overlay();
             self.clear_open_town_door_state();
             self.pending_town_arrest = None;
             self.active_blackthorn = None;

@@ -13,13 +13,13 @@ from decompiled code.
 
 | File | Purpose |
 |---|---|
-| `world_locations.tsv` | Optional overrides/extensions for the published stock overworld coordinates used to enter named towns/dungeons and resolve interior exits when no in-memory return snapshot exists. |
+| `world_locations.tsv` | Optional overrides/extensions for published stock overworld coordinates used to enter named towns/dungeons and resolve their exterior return cells. |
 | `location_entry_y.tsv` | Sparse `LocationEntryYTable` overrides for town-family spawn Y values. |
 | `location_floor_pages.tsv` | Sparse `LocationFloorBaseTable` overrides for signed town floor page loading. |
 | `world_plane_transitions.tsv` | Britannia/Underworld chasm and ascent rows. |
-| `dungeon_deeper_transitions.tsv` | Scripted dungeon deeper-to-world transitions. |
+| `dungeon_deeper_transitions.tsv` | Removed. Deepest-level climbs use the uniform native Underworld exit. |
 | `dungeon_teleports.tsv` | Dungeon teleport cells. |
-| `dungeon_exit_tiles.tsv` | Dungeon exit cells that return to overworld metadata. |
+| `dungeon_exit_tiles.tsv` | Removed. The published dungeon format has no exit-dungeon cell class. |
 | `town_stairs.tsv` | Clean stair rows for town floor changes. |
 | `town_trap_doors.tsv` | Town trap-door/chute rows. |
 | `town_poison_gas.tsv` | Legacy town poison-gas doorway rows; no longer used by the native #51 tile `0x04` branch. |
@@ -41,14 +41,12 @@ per-row active-hour windows (§9: one shared counter driven by the hour band).
 The sidecar was also inert: nothing shipped a `moongates.tsv`. It has therefore
 been removed rather than repaired.
 
-`dungeon_deeper_transitions.tsv` rows use:
-
-```text
-DUNGEON LEVEL X Y TO_PLANE TO_X TO_Y
-```
-
-They only apply to bottom-level dungeon ladder descents that would otherwise
-move below level `7`. Missing rows preserve the conservative in-place block.
+`dungeon_deeper_transitions.tsv` and `dungeon_exit_tiles.tsv` were conservative
+clean-room placeholders from before the dungeon edge contract was published.
+They are now ignored. Every normal edge exit uses the dungeon's one published
+outdoor coordinate; level zero selects Britannia and any other edge level
+selects the Underworld. Automatic fall-trap chains that pass level seven retain
+their trap-column X/Y as the separately published defensive exception.
 
 ## Interaction Tables
 

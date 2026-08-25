@@ -809,7 +809,13 @@ impl PlayState {
                     self.message = "Who casts? Use C1DP for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                Ok(self.cast_dungeon_level_spell(caster_index, DES_POR_SPELL_INDEX, 1, "Down"))
+                self.cast_dungeon_level_spell(
+                    caster_index,
+                    DES_POR_SPELL_INDEX,
+                    1,
+                    "Down",
+                    game_dir,
+                )
             }
             "FV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -1195,7 +1201,7 @@ impl PlayState {
                     self.message = "Who casts? Use C1PU for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                Ok(self.cast_dungeon_level_spell(caster_index, UUS_POR_SPELL_INDEX, -1, "Up"))
+                self.cast_dungeon_level_spell(caster_index, UUS_POR_SPELL_INDEX, -1, "Up", game_dir)
             }
             "PRV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {

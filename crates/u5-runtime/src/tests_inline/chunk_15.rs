@@ -470,7 +470,7 @@
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "UNDERWORLD 10 20 DUNGEON:0
+            "BRITANNIA 10 20 DUNGEON:0
 ",
         )
         .unwrap();
@@ -497,44 +497,68 @@
 
         assert_eq!(
             state.climb(&dir, ClimbIntent::Up).unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+            MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
+                scene,
+                plane: WorldPlane::Britannia,
+            })
         );
         assert_eq!(
             state.area,
             Area::World {
-                plane: WorldPlane::Underworld
+                plane: WorldPlane::Britannia
             }
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert!(state.message.contains("world-location table return point"));
+        assert_eq!(
+            state.message,
+            "Exited DUNGEON:0 (Deceit) to BRITANNIA at (10, 20)."
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_bottom_ladder_without_clean_deeper_transition_refuses_without_turn() {
+    fn dungeon_bottom_ladder_uses_uniform_underworld_exit_without_sidecar() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 DUNGEON:0\n",
+        )
+        .unwrap();
+        let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(7, 1, 1)] = 0x20;
         let mut state = dungeon_state(grid, 7, 1, 1);
 
         assert_eq!(
-            state.climb(Path::new(""), ClimbIntent::Down).unwrap(),
-            MoveOutcome::Blocked
+            state.climb(&dir, ClimbIntent::Down).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
+                scene,
+                plane: WorldPlane::Underworld,
+            })
         );
-
         assert_eq!(
             state.area,
-            Area::Dungeon {
-                scene: DungeonScene::new(33).unwrap(),
-                level: 7,
+            Area::World {
+                plane: WorldPlane::Underworld,
             }
         );
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Blocked!");
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.message,
+            "Exited DUNGEON:0 (Deceit) to UNDERWORLD at (10, 20)."
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_bottom_ladder_uses_clean_deeper_transition_table() {
+    fn dungeon_bottom_ladder_ignores_retired_deeper_transition_sidecar() {
         let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 DUNGEON:0\n",
+        )
+        .unwrap();
         fs::write(
             dir.join(DUNGEON_DEEPER_TRANSITION_TABLE_FILE),
             "DUNGEON:0 7 1 1 UNDERWORLD 30 40\n",
@@ -563,7 +587,7 @@
                 plane: WorldPlane::Underworld,
             }
         );
-        assert_eq!((state.player.x, state.player.y), (30, 40));
+        assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.player.transport, TransportState::Foot);
         assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
@@ -571,9 +595,10 @@
         assert!(!state.sail_stall_pending);
         assert_eq!(state.active_objects[0].z, WorldPlane::Underworld.save_floor());
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains(
-            "Descended from DUNGEON:0 (Deceit) through a scripted deeper transition to UNDERWORLD at (30, 40)."
-        ));
+        assert_eq!(
+            state.message,
+            "Exited DUNGEON:0 (Deceit) to UNDERWORLD at (10, 20)."
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

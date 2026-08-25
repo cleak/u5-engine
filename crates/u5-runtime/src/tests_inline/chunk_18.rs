@@ -155,25 +155,106 @@
     }
 
     #[test]
-    fn cast_des_por_bottom_boundary_consumes_cast_and_fails_without_transition() {
-        let scene = DungeonScene::new(33).unwrap();
+    fn cast_des_por_bottom_boundary_exits_at_published_coordinate_on_underworld() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 DUNGEON:0\n",
+        )
+        .unwrap();
         let mut state = dungeon_state(open_dungeon_record(), 7, 1, 1);
         state.spell_charges[DES_POR_SPELL_INDEX] = 1;
         state.party[0].mana = 4;
         state.party[0].level = 4;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1DP", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1DP", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.area, Area::Dungeon { scene, level: 7 });
-        assert_eq!(state.active_objects[0].z, 7);
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.active_objects[0].z, WorldPlane::Underworld.save_floor());
         assert_eq!(state.spell_charges[DES_POR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(state.message, "Failed!");
+        assert_eq!(
+            state.message,
+            "Exited DUNGEON:0 (Deceit) to UNDERWORLD at (10, 20)."
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_level_spell_refuses_base_and_wall_destination_classes() {
+        for destination in [0x00, 0xb0, 0xc0, 0xd0, 0xe0] {
+            let mut grid = open_dungeon_record();
+            grid[dungeon_cell_index(2, 1, 1)] = destination;
+            let mut state = dungeon_state(grid, 3, 1, 1);
+            state.spell_charges[UUS_POR_SPELL_INDEX] = 1;
+            state.party[0].mana = 4;
+            state.party[0].level = 4;
+
+            assert_eq!(
+                handle_play_key_input(&mut state, 'C', "1PU", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert_eq!(
+                state.area,
+                Area::Dungeon {
+                    scene: DungeonScene::new(33).unwrap(),
+                    level: 3,
+                }
+            );
+            assert_eq!(state.spell_charges[UUS_POR_SPELL_INDEX], 0);
+            assert_eq!(state.party[0].mana, 0);
+            assert_eq!(state.turn, 1);
+            assert_eq!(state.message, "Failed!");
+        }
+    }
+
+    #[test]
+    fn dungeon_level_spells_refuse_outright_inside_doom() {
+        for (suffix, spell_index, delta_level) in [
+            ("1PU", UUS_POR_SPELL_INDEX, 3),
+            ("1DP", DES_POR_SPELL_INDEX, 3),
+        ] {
+            let doom = DungeonScene::new(DUNGEON_DOOM_SCENE_BYTE).unwrap();
+            let mut grid = open_dungeon_record();
+            grid[dungeon_cell_index(2, 1, 1)] = 0x10;
+            grid[dungeon_cell_index(4, 1, 1)] = 0x10;
+            let mut state = dungeon_state(grid, delta_level, 1, 1);
+            state.area = Area::Dungeon {
+                scene: doom,
+                level: delta_level,
+            };
+            state.sync_player_object();
+            state.spell_charges[spell_index] = 1;
+            state.party[0].mana = 4;
+            state.party[0].level = 4;
+
+            assert_eq!(
+                handle_play_key_input(&mut state, 'C', suffix, Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert_eq!(
+                state.area,
+                Area::Dungeon {
+                    scene: doom,
+                    level: delta_level,
+                }
+            );
+            assert_eq!(state.spell_charges[spell_index], 0);
+            assert_eq!(state.party[0].mana, 0);
+            assert_eq!(state.turn, 1);
+            assert_eq!(state.message, "Failed!");
+        }
     }
 
     #[test]

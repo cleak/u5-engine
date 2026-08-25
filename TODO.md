@@ -67,16 +67,16 @@ and 7 MP are spent, skips resistance PRNG and target effects, reports `Failed!`,
 and commits the combat action without reopening the cursor or actor prompt.
 
 - `cargo fmt --all -- --check` clean.
-- `cargo test -p u5-runtime --lib` 3211 passed.
+- `cargo test -p u5-runtime --lib` 3222 passed.
 - `cargo test -p u5-bevy` 181 passed.
 - `cargo test -p u5-tui -- --test-threads=1` 103 passed (14 + 51 + 38).
 - `cargo clippy --workspace --all-targets` **zero errors**. Style warnings
   remain across the existing workspace (333 in the runtime test target in the
   latest run, many duplicated) and are not gated.
-- `--route-smoke` all 507 scripted cases passed, including the overworld-defeat
+- `--route-smoke` all 513 scripted cases passed, including the overworld-defeat
   pre-rescue OOL-persistence path through the real command-boundary gate.
 - `--visual-frame-suite` wrote 193 PNGs and runs to completion.
-- `--visual-route-suite` wrote 1856 PNGs, including the whole victory
+- `--visual-route-suite` wrote 1906 PNGs, including the whole victory
   ending through to the certificate. Exactly one is black by contract: the
   `endgame.md §7.1` fade-to-black frame between the throne tableau and the first
   `END.DAT` window.
@@ -869,9 +869,7 @@ tables are not yet public or not yet encoded.
   - `world_encounters.tsv` (now overrides matching terrain before native fallback)
   - `shrines.tsv`
   - `codex_urns.tsv`
-  - `dungeon_deeper_transitions.tsv`
   - `dungeon_teleports.tsv`
-  - `dungeon_exit_tiles.tsv`
   - `dungeon_chests.tsv`
   - `secret_doors.tsv`
   - `town_fire_sources.tsv` (now an override for native `0xB4..=0xB7` cannons)

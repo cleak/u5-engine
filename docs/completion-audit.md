@@ -145,8 +145,9 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#137` | Rectangle-dissolve wall-clock contract | Resolved in public commit `5f1155b`: atomic publication at the blocking-call boundary is normative. The engine's existing completed-call presentation is correct; optional prefix animation has no normative duration and may not add ticks, input consumption, or abort points |
 | `cleak/u5-spec#138` | Alternate-depth cinematic rendering scope | Resolved in public commit `230b024`: EGA is the sole pixel-exact v1 target. CGA, Hercules, and Tandy cinematic presentation is optional and must be labeled a modern approximation, so no alternate-depth conversion remains a v1 completion blocker |
 | `cleak/u5-spec#139` | Title-flourish timing | Resolved in public commit `0ebc456`: 14 ms for each of 85 logical presentations is the normative modern cadence, nominally 1.190 s total, with no catch-up. The existing scheduler uses this exact deadline; captured acceptance allows mean 14 ms ± 1 ms and total 1.190 s ± 0.100 s |
+| `cleak/u5-spec#140` | Ashes status producer and gameplay reachability | Resolved in public commit `2f75588`: a valid new game has no shipped Ashes producer; imported, external, or edited legacy saves may contain it and must round-trip it. Resurrection accepts exactly Dead, while the shared poison helper excludes exactly Dead and therefore overwrites imported Ashes with Poisoned. Existing runtime behavior and focused tests already match this contract |
 
-The answered public clean-room issue queue is reconciled through `#139`.
+The answered public clean-room issue queue is reconciled through `#140`.
 The later corrective answer on public `#11` is also reconciled: Kill's
 protected class-id filter is 14/15/47; Cause Fear and Repel Undead directly
 write combat HP 1 and fleeing bit `0x02`; Repel does not enter death or XP
@@ -712,7 +713,7 @@ changed hue once it was corrected. Nothing in the game reprograms the palette
 after mode setup; apparent recolouring is a restricted plane write mask or a
 display effect mutating the loaded asset data, never a palette change.
 
-Verified on 2026-08-24 in the current worktree: 3223 u5-runtime, 183 u5-bevy,
+Verified on 2026-08-24 in the current worktree: 3222 u5-runtime, 183 u5-bevy,
 and 103 u5-tui tests pass, `cargo fmt --all -- --check` is clean, `cargo clippy
 --workspace --all-targets` reports zero errors (its existing style-warning
 baseline is not gated), `--route-smoke` passes all 513 cases,

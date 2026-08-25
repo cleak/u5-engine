@@ -983,39 +983,18 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         let next_level = level as i8 + delta;
-        if next_level > (DUNGEON_SIDE - 1) as i8 {
-            if let Some(entry) = self.dungeon_deeper_transition_at(
-                game_dir,
-                scene,
-                level,
-                self.player.x,
-                self.player.y,
-            )? {
-                self.advance_turn();
-                self.apply_dungeon_deeper_transition(game_dir, entry)?;
-                return Ok(MoveOutcome::Transition(
-                    AreaTransition::ExitedDungeonToWorldPlane {
-                        scene,
-                        plane: entry.to_plane,
-                    },
-                ));
-            }
-        }
-        if next_level < 0 {
+        if !(0..DUNGEON_SIDE as i8).contains(&next_level) {
             // `dungeon-mode.md` §13 up-ladder arm: K-Klimb moves Z to Z-1,
             // "or leaves the dungeon when the current level is already
-            // zero". Hitting a level edge goes through the one shared exit
-            // contract of §13.2 rather than refusing the climb.
+            // zero". The down-ladder arm is symmetric at level seven.
+            // Hitting either edge goes through the one shared surface-reset
+            // contract of §13.2; there is no per-dungeon transition table.
             return self.resolve_dungeon_surface_reset(
                 game_dir,
                 scene,
                 level,
                 format!("Klimbed out of {} ({})", scene.key(), scene.name()),
             );
-        }
-        if next_level > 7 {
-            self.message = "Blocked!".to_string();
-            return Ok(MoveOutcome::Blocked);
         }
 
         // `dungeon-mode.md` §13.1: a climb **never inspects the cell it
@@ -1055,86 +1034,50 @@ impl PlayState {
         level: u8,
         event: String,
     ) -> io::Result<MoveOutcome> {
-        if self.restore_return_world() {
-            self.advance_turn();
-            self.message = format!(
-                "Exited {} ({}) to overworld debug return point.",
-                scene.key(),
-                scene.name()
-            );
-        } else if self.restore_world_for_target(game_dir, PlayTarget::Dungeon(scene))? {
-            self.advance_turn();
-            self.message = format!(
-                "Exited {} ({}) to world-location table return point.",
-                scene.key(),
-                scene.name()
-            );
-        } else {
+        let entries = effective_world_location_entries(game_dir)?;
+        let matches: Vec<_> = entries
+            .iter()
+            .copied()
+            .filter(|entry| entry.target == PlayTarget::Dungeon(scene))
+            .collect();
+        let Some(entry) = matches.first().copied() else {
             return Ok(self.block_missing_dungeon_return(scene, level, event));
-        }
-        self.mark_visibility_dirty();
-        Ok(MoveOutcome::Transition(AreaTransition::ExitedDungeon(
-            scene,
-        )))
-    }
-
-    pub fn dungeon_deeper_transition_at(
-        &self,
-        game_dir: &Path,
-        scene: DungeonScene,
-        level: u8,
-        x: usize,
-        y: usize,
-    ) -> io::Result<Option<DungeonDeeperTransitionEntry>> {
-        Ok(
-            load_dungeon_deeper_transition_entries(game_dir)?.and_then(|entries| {
-                entries
-                    .iter()
-                    .find(|entry| {
-                        entry.scene == scene && entry.level == level && entry.x == x && entry.y == y
-                    })
-                    .copied()
-            }),
-        )
-    }
-
-    pub fn apply_dungeon_deeper_transition(
-        &mut self,
-        game_dir: &Path,
-        entry: DungeonDeeperTransitionEntry,
-    ) -> io::Result<()> {
-        self.area = Area::World {
-            plane: entry.to_plane,
         };
-        self.player.x = entry.to_x;
-        self.player.y = entry.to_y;
-        self.force_foot_transport();
-        self.grid = load_world_map(game_dir, entry.to_plane)?;
-        apply_world_quest_tile_substitutions(
-            &mut self.grid,
-            &self.word_of_power_seal_flags,
-            &self.shrine_ruin_flags,
-        );
-        self.rebuild_world_live_chunks_from_grid(entry.to_plane)?;
-        self.natural_moongate_live_cells.clear();
-        self.npcs.clear();
-        self.replace_world_active_objects(game_dir, entry.to_plane, entry.to_x, entry.to_y)?;
-        self.clear_town_visit_state();
-        self.return_world = None;
-        self.pending_town_arrest = None;
-        self.active_blackthorn = None;
-        self.mode_zero_cleanup();
-        self.mark_visibility_dirty();
+        if matches.len() > 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{WORLD_LOCATION_TABLE_FILE} has multiple return rows for {}",
+                    PlayTarget::Dungeon(scene).key()
+                ),
+            ));
+        }
+
+        // `dungeon-mode.md` §13.2: both exit arms use the dungeon's one
+        // published exterior coordinate. The level at which the edge was
+        // reached, not the entry row's plane and not the cached entry plane,
+        // selects the destination world.
+        let plane = if level == 0 {
+            WorldPlane::Britannia
+        } else {
+            WorldPlane::Underworld
+        };
+        // The committed command belongs to dungeon mode, whose ordinary
+        // minute increment is one. Advance before replacing the active area
+        // so the world-mode two-minute cadence is not applied retroactively.
+        self.advance_turn();
+        self.restore_world_at(game_dir, plane, entry.x, entry.y)?;
         self.message = format!(
-            "Descended from {} ({}) through a scripted deeper transition to {} at ({}, {}). {}.",
-            entry.scene.key(),
-            entry.scene.name(),
-            entry.to_plane.key(),
-            entry.to_x,
-            entry.to_y,
-            self.wind_status_message()
+            "Exited {} ({}) to {} at ({}, {}).",
+            scene.key(),
+            scene.name(),
+            plane.key(),
+            entry.x,
+            entry.y
         );
-        Ok(())
+        Ok(MoveOutcome::Transition(
+            AreaTransition::ExitedDungeonToWorldPlane { scene, plane },
+        ))
     }
 
     pub fn enter_current_location(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
@@ -1614,26 +1557,44 @@ impl PlayState {
             ));
         }
 
-        self.area = Area::World { plane: entry.plane };
-        self.player.x = entry.x;
-        self.player.y = entry.y;
+        self.restore_world_at(game_dir, entry.plane, entry.x, entry.y)?;
+        Ok(true)
+    }
+
+    /// Installs one outdoor world plane at an exact coordinate.
+    ///
+    /// Normal dungeon exits use this with the coordinate from the dungeon's
+    /// location row and a plane selected from the exited level. Keeping those
+    /// two inputs separate is important: seven dungeon rows are published on
+    /// Britannia even though their bottom exit lands on the Underworld map.
+    pub fn restore_world_at(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+        x: usize,
+        y: usize,
+    ) -> io::Result<()> {
+        self.area = Area::World { plane };
+        self.player.x = x;
+        self.player.y = y;
         self.force_foot_transport();
-        self.grid = load_world_map(game_dir, entry.plane)?;
+        self.grid = load_world_map(game_dir, plane)?;
         apply_world_quest_tile_substitutions(
             &mut self.grid,
             &self.word_of_power_seal_flags,
             &self.shrine_ruin_flags,
         );
-        self.rebuild_world_live_chunks_from_grid(entry.plane)?;
+        self.rebuild_world_live_chunks_from_grid(plane)?;
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
-        self.replace_world_active_objects(game_dir, entry.plane, entry.x, entry.y)?;
+        self.replace_world_active_objects(game_dir, plane, x, y)?;
         self.clear_town_visit_state();
+        self.return_world = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
-        Ok(true)
+        Ok(())
     }
 
     pub fn world_plane_transition_at(
