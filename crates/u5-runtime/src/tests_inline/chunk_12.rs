@@ -396,7 +396,10 @@
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
-        assert_eq!(state.active_objects[0].tile, FIRST_PLAYABLE_FRIGATE_TILE + 3);
+        assert_eq!(
+            state.active_objects[0].tile,
+            TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 3
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

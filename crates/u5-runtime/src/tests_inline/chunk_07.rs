@@ -1010,7 +1010,7 @@ fn use_command_routes_inline_magic_carpet_request() {
     );
     assert_eq!(
         world.active_objects[0].tile,
-        FIRST_PLAYABLE_MAGIC_CARPET_TILE
+        TRANSPORT_MARKER_MAGIC_CARPET_FIRST
     );
     assert_eq!(world.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
     assert_eq!(world.turn, 1);
@@ -1607,7 +1607,10 @@ fn ship_transport_can_move_over_water_that_blocks_foot() {
 
     assert_eq!((ship.player.x, ship.player.y), (1, 0));
     assert_eq!(ship.player.transport.save_marker(), TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1);
-    assert_eq!(ship.active_objects[0].tile, FIRST_PLAYABLE_FRIGATE_TILE + 1);
+    assert_eq!(
+        ship.active_objects[0].tile,
+        TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1
+    );
 }
 
 #[test]

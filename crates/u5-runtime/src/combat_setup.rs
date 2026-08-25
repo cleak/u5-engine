@@ -11,6 +11,19 @@ use crate::*;
 pub const OUTDOOR_ARENA_COUNT: usize = BRIT_CBT_RECORDS;
 
 pub const OUTDOOR_COMBAT_TYPE_FIRST: u8 = 0x40;
+
+/// `combat.md §4`: renderer-facing actor byte for a seated party member.
+/// The four human combat classes are Mage, Bard, Fighter, and Avatar;
+/// unsupported class letters leave the presentation byte at zero.
+pub const fn combat_party_actor_byte(class_byte: u8) -> u8 {
+    match class_byte.to_ascii_uppercase() {
+        b'M' | b'D' => 0x40,
+        b'B' | b'S' | b'T' => 0x44,
+        b'F' | b'P' | b'R' => 0x48,
+        b'A' => 0x4C,
+        _ => 0,
+    }
+}
 pub const OUTDOOR_PIRATE_TYPE_FIRST: u8 = 0x2c;
 pub const OUTDOOR_PIRATE_TYPE_LAST: u8 = 0x2f;
 pub const OUTDOOR_PIRATE_COMBAT_CLASS: u8 = 1;
@@ -868,9 +881,10 @@ impl PlayState {
             let base_step = combat_class_stats(member.class_byte)
                 .map(|stats| stats.speed_seed)
                 .unwrap_or(1);
+            let actor_byte = combat_party_actor_byte(member.class_byte);
             active_objects[slot] = ActiveObject {
-                type_byte: PLAYER_TILE,
-                tile: PLAYER_TILE,
+                type_byte: actor_byte,
+                tile: actor_byte,
                 x: usize::from(x),
                 y: usize::from(y),
                 z,

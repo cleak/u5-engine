@@ -2479,7 +2479,7 @@
                 x: 4,
                 y: 5,
                 z: 0,
-                phase: STEADY_PHASE,
+                phase: 0x22,
                 aux1: 0,
                 aux3: 0,
             }
@@ -3128,14 +3128,53 @@
         assert_eq!(viewport.depth, TileGraphicsDepth::Ega16);
         assert_eq!((viewport.cells_wide, viewport.cells_high), (3, 3));
         assert_eq!((viewport.width, viewport.height), (48, 48));
-        // PLAYER_TILE is a sentinel; the renderer resolves it to the
-        // actual avatar sprite at PLAYER_SPRITE_TILE.
+        // Slot zero stores the raw foot marker, and companion bytes render
+        // from the actor half of the atlas.
         assert_eq!(
             viewport.pixel(16, 16),
             Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
         );
         assert_eq!(viewport.pixel(0, 16), Some(18 % atlas.depth.pixel_limit()));
         assert_eq!(viewport.pixel(32, 16), Some(17 % atlas.depth.pixel_limit()));
+    }
+
+    #[test]
+    fn top_down_viewport_resolves_companion_bytes_in_actor_atlas_half() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x44,
+            tile: 0x44,
+            x: 0,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let mut atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let terrain_start = 0x44 * TILE_ATLAS_TILE_PIXELS;
+        let actor_start = (ACTOR_TILE_BANK_BASE + 0x44) * TILE_ATLAS_TILE_PIXELS;
+        atlas.pixels[terrain_start..terrain_start + TILE_ATLAS_TILE_PIXELS].fill(3);
+        atlas.pixels[actor_start..actor_start + TILE_ATLAS_TILE_PIXELS].fill(12);
+
+        let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
+
+        assert_eq!(viewport.pixel(0, 16), Some(12));
+    }
+
+    #[test]
+    fn combat_party_classes_select_the_four_published_actor_bytes() {
+        for (classes, expected) in [
+            (&b"MmDd"[..], 0x40),
+            (&b"BbSsTt"[..], 0x44),
+            (&b"FfPpRr"[..], 0x48),
+            (&b"Aa"[..], 0x4c),
+        ] {
+            for &class in classes {
+                assert_eq!(combat_party_actor_byte(class), expected, "class {class:#04x}");
+            }
+        }
+        assert_eq!(combat_party_actor_byte(b'?'), 0);
     }
 
     #[test]
@@ -3216,8 +3255,7 @@
 
         let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
 
-        // PLAYER_TILE is a sentinel; the renderer resolves it to the
-        // actual avatar sprite at PLAYER_SPRITE_TILE.
+        // The slot-zero marker resolves through the actor half of the atlas.
         assert_eq!(
             viewport.pixel(16, 16),
             Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
@@ -3286,8 +3324,7 @@
 
         let viewport = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
 
-        // PLAYER_TILE is a sentinel; the renderer resolves it to the
-        // actual avatar sprite at PLAYER_SPRITE_TILE.
+        // The slot-zero marker resolves through the actor half of the atlas.
         assert_eq!(
             viewport.pixel(16, 16),
             Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
@@ -3301,7 +3338,7 @@
                 x: 4,
                 y: 5,
                 z: 0,
-                phase: STEADY_PHASE,
+                phase: 0x22,
                 aux1: 0,
                 aux3: 0,
             }
@@ -3410,7 +3447,10 @@
         assert!(combat.apply_combat_potion_poof_presentation(0));
         let poof = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
 
-        assert_eq!(combat.combat_render_sprite_at(5, 5), Some(COMBAT_POTION_POOF_TILE as usize));
+        assert_eq!(
+            combat.combat_render_sprite_at(5, 5),
+            actor_tile_for_byte(COMBAT_POTION_POOF_TILE)
+        );
         assert_eq!(combat.active_objects[1].type_byte, COMBAT_POTION_POOF_TILE);
         assert_eq!(combat.active_objects[1].tile, COMBAT_POTION_POOF_TILE);
         assert_eq!(

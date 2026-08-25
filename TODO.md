@@ -231,8 +231,8 @@ Earlier verification detail, kept for history:
   saved-slot natural moongate live-entry routes (`8989fd97ff26da04`,
   `0242f19174914479`), public Britannia chasm fall route
   (`3f4fdf2e53e4e269`), forced whirlpool Underworld branch
-  (`1a25aca8d540a7fe`), fixed narrative gate open/ordained-block routes
-  (`f41fe34d7c89a48b`, `061731b8753aad9c`), public #48 Blink ray landing
+  (`1a25aca8d540a7fe`), fixed narrative gate unordained-refusal/ordained-passage
+  routes (`2f02efc2647c51e5`, `5251d0ba6d4dc654`), public #48 Blink ray landing
   (`f4b691ac224b385e`), public #51 poison-gas doorway step
   (`836b6cd5af06c44e`), public #47 dungeon no-direct-recovery rest
   (`161ad48dd2a91725`), completed long-camp recovery, plus hourly Ring of Regeneration
@@ -334,10 +334,10 @@ Earlier verification detail, kept for history:
   `6d146362bede1794`, `route-britannia-chasm-fall-to-underworld-01-s`
   `f4a55f01e90aedc0`, `route-britannia-whirlpool-forced-underworld-01-setup_whirlpool-engagement`
   `b0803c84058f9879`,
-  `route-britannia-fixed-narrative-gate-open-south-step-01-empty`
-  `ff4767117dbb9b7c`,
-  `route-britannia-fixed-narrative-gate-ordained-block-01-empty`
-  `ff4767117dbb9b7c`, `route-britannia-hole-up-rest-01-h1`
+  `route-britannia-fixed-narrative-gate-unordained-refusal-01-empty`
+  `b0ea1da7f32d897b`,
+  `route-britannia-fixed-narrative-gate-ordained-passage-01-empty`
+  `a7e78bf98b2b386e`, `route-britannia-hole-up-rest-01-h1`
   `766522e62f639357`, `route-britannia-save-refusal-02-n`
   `a89ba1fbff6881da`, `route-britannia-fixed-hidden-single-use-search-get-02-g6`
   `eb0e32b031d839a3`, `route-underworld-fixed-hidden-stack-search-get-search-03-s6`

@@ -643,14 +643,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         aux3: 0,
     }]);
 
-    let narrative_gate_open = PlayOptions {
+    let narrative_gate_unordained_refusal = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         start: Some((NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)),
         ..PlayOptions::default()
     };
 
-    let mut narrative_gate_ordained_block = narrative_gate_open.clone();
-    narrative_gate_ordained_block.shrine_ordained_mask = 0b0000_0001;
+    let mut narrative_gate_ordained_passage = narrative_gate_unordained_refusal.clone();
+    narrative_gate_ordained_passage.shrine_ordained_mask = 0b0000_0001;
 
     let mut wooden_box = PlayOptions::default();
     wooden_box.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
@@ -1132,16 +1132,16 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
-            name: "britannia-fixed-narrative-gate-open-south-step",
-            options: narrative_gate_open,
+            name: "britannia-fixed-narrative-gate-unordained-refusal",
+            options: narrative_gate_unordained_refusal,
             script: &["empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
-            name: "britannia-fixed-narrative-gate-ordained-block",
-            options: narrative_gate_ordained_block,
+            name: "britannia-fixed-narrative-gate-ordained-passage",
+            options: narrative_gate_ordained_passage,
             script: &["empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
@@ -6228,7 +6228,7 @@ fn validate_route_smoke_case_state(
                 )));
             }
         }
-        "britannia-fixed-narrative-gate-open-south-step" => {
+        "britannia-fixed-narrative-gate-unordained-refusal" => {
             if !matches!(
                 state.area,
                 Area::World {
@@ -6241,15 +6241,16 @@ fn validate_route_smoke_case_state(
                         || object.y != state.player.y
                         || object.z != WorldPlane::Britannia.save_floor()
                 })
-                || !state.message.contains("fixed narrative gate opens")
-                || !state.message.contains("steps south")
+                || !state
+                    .message
+                    .ends_with("\nThou art not upon a Sacred Quest!\nPassage denied!\n")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the unordained narrative gate branch"
                 )));
             }
         }
-        "britannia-fixed-narrative-gate-ordained-block" => {
+        "britannia-fixed-narrative-gate-ordained-passage" => {
             if !matches!(
                 state.area,
                 Area::World {
@@ -6258,11 +6259,10 @@ fn validate_route_smoke_case_state(
             ) || state.player.x != NARRATIVE_GATE_X as usize
                 || state.player.y != NARRATIVE_GATE_Y as usize
                 || state.shrine_ordained_mask == 0
-                || !state.message.contains("fixed narrative gate opens")
-                || !state.message.contains("blocks entry")
+                || !state.message.ends_with("\nPass, Seeker!\n")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the ordained narrative gate branch"
+                    "route smoke `{case_name}` did not apply the ordained passage branch"
                 )));
             }
         }

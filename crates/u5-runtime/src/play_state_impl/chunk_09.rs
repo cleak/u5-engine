@@ -27,6 +27,21 @@ impl PreparedTopDownCell {
             VisibilityMarker::DirectTile(tile) => tile,
         }
     }
+
+    /// Resolve the split terrain/actor storage domains into the 512-tile
+    /// atlas. `active-objects.md §12` makes a zero/use-companion grid cell
+    /// select `companion + 256`; direct and ordinary grid bytes stay in the
+    /// terrain half. Actor byte `0x16` is transparent.
+    fn tile_id(self) -> Option<usize> {
+        match visibility_marker(self.grid) {
+            VisibilityMarker::UseCompanion => actor_tile_for_byte(self.terrain),
+            VisibilityMarker::ClearVisible | VisibilityMarker::DimPeriphery => {
+                Some(usize::from(self.terrain))
+            }
+            VisibilityMarker::Hidden | VisibilityMarker::AlreadyRendered => None,
+            VisibilityMarker::DirectTile(tile) => Some(usize::from(tile)),
+        }
+    }
 }
 
 impl PlayState {
@@ -515,13 +530,8 @@ impl PlayState {
                 {
                     continue;
                 }
-                let tile_id = if tile == PLAYER_TILE {
-                    // PLAYER_TILE is a sentinel; 0xFC is "a bellows" in the
-                    // lower-half tile space. Resolve to the real upper-half
-                    // avatar sprite before blitting.
-                    PLAYER_SPRITE_TILE
-                } else {
-                    tile as usize
+                let Some(tile_id) = cell.tile_id() else {
+                    continue;
                 };
                 blit_tile_id_to_viewport(&mut viewport, atlas, tile_id, cell_x, cell_y)?;
             }
@@ -720,8 +730,8 @@ impl PlayState {
                 area,
                 radius,
                 ActiveObject {
-                    type_byte: PLAYER_TILE,
-                    tile: PLAYER_TILE,
+                    type_byte: self.player.transport.save_marker(),
+                    tile: self.player.transport.save_marker(),
                     x: sweep.center_x,
                     y: sweep.center_y,
                     z,
@@ -735,7 +745,7 @@ impl PlayState {
         prepared
     }
 
-    pub fn combat_render_sprite_at(&self, x: usize, y: usize) -> Option<usize> {
+    pub fn combat_render_actor_byte_at(&self, x: usize, y: usize) -> Option<u8> {
         self.active_objects
             .iter()
             .enumerate()
@@ -749,12 +759,13 @@ impl PlayState {
                 if linked_actor.is_some_and(CombatActorDescriptor::is_hidden_or_unrevealed) {
                     return None;
                 }
-                Some(if object.tile == PLAYER_TILE {
-                    PLAYER_SPRITE_TILE
-                } else {
-                    object.tile as usize
-                })
+                Some(object.tile)
             })
+    }
+
+    pub fn combat_render_sprite_at(&self, x: usize, y: usize) -> Option<usize> {
+        self.combat_render_actor_byte_at(x, y)
+            .and_then(actor_tile_for_byte)
     }
 
     pub fn render_dungeon_viewport(
@@ -1331,9 +1342,10 @@ impl PlayState {
             self.composite_top_down_object_into_visibility_buffers(area, radius, object);
         }
         if let Some(z) = self.current_floor() {
+            let marker = self.player.transport.save_marker();
             let player = ActiveObject {
-                type_byte: PLAYER_TILE,
-                tile: PLAYER_TILE,
+                type_byte: marker,
+                tile: marker,
                 x: self.player.x,
                 y: self.player.y,
                 z,
@@ -1437,9 +1449,10 @@ impl PlayState {
             self.composite_top_down_object(area, radius, object, &mut prepared);
         }
         if let Some(z) = self.current_floor() {
+            let marker = self.player.transport.save_marker();
             let player = ActiveObject {
-                type_byte: PLAYER_TILE,
-                tile: PLAYER_TILE,
+                type_byte: marker,
+                tile: marker,
                 x: self.player.x,
                 y: self.player.y,
                 z,
@@ -2839,7 +2852,6 @@ impl PlayState {
     pub fn animate_active_objects(&mut self) {
         for slot in 1..self.active_objects.len() {
             if self.active_objects[slot].is_empty()
-                || self.active_objects[slot].is_player()
                 || (matches!(self.area, Area::Town { .. })
                     && town_free_roaming_object_eligible(self.active_objects[slot]))
             {
@@ -2884,7 +2896,7 @@ impl PlayState {
         // fired, movement dispatch stays disabled for every remaining slot.
         let mut reaction_count = 0usize;
         for slot in (1..self.active_objects.len()).rev() {
-            if self.active_objects[slot].is_empty() || self.active_objects[slot].is_player() {
+            if self.active_objects[slot].is_empty() {
                 continue;
             }
             let tick = self.active_objects[slot].tick_phase();
@@ -3406,7 +3418,9 @@ impl PlayState {
             .iter()
             .enumerate()
             .any(|(other_slot, other)| {
-                other_slot != slot && !other.is_player() && self.object_occupies(*other, nx, ny)
+                other_slot != slot
+                    && other_slot != ACTIVE_OBJECT_PLAYER_SLOT
+                    && self.object_occupies(*other, nx, ny)
             })
         {
             return ActiveShipWind::Stalled;
@@ -3550,7 +3564,9 @@ impl PlayState {
             .iter()
             .enumerate()
             .any(|(other_slot, other)| {
-                other_slot != slot && !other.is_player() && self.object_occupies(*other, nx, ny)
+                other_slot != slot
+                    && other_slot != ACTIVE_OBJECT_PLAYER_SLOT
+                    && self.object_occupies(*other, nx, ny)
             })
         {
             return OutdoorActiveObjectStepAttempt::CandidateBlocked;

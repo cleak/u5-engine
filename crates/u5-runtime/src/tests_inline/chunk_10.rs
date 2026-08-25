@@ -83,7 +83,7 @@
             PlayState::load_world_scene(&dir, WorldPlane::Underworld, options.clone()).unwrap();
 
         assert_eq!(state.player.transport, transport);
-        assert_eq!(state.active_objects[0].tile, 168);
+        assert_eq!(state.active_objects[0].tile, TRANSPORT_MARKER_SHIP_FURLED_FIRST);
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.grid[world_cell_index(10, 20)], 1);
 
@@ -808,7 +808,7 @@
         assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
-        assert_eq!(state.active_objects[0].tile, transport.avatar_tile());
+        assert_eq!(state.active_objects[0].tile, transport.save_marker());
         assert!(state.return_world.is_none());
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert_eq!(state.message, "castle\n");

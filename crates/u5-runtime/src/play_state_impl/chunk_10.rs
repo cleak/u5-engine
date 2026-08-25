@@ -32,9 +32,10 @@ impl PlayState {
             TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
             _ => (0, 0),
         };
+        let marker = self.player.transport.save_marker();
         let player_object = ActiveObject {
-            type_byte: PLAYER_TILE,
-            tile: self.player.transport.avatar_tile(),
+            type_byte: marker,
+            tile: marker,
             x: self.player.x,
             y: self.player.y,
             z,
@@ -47,33 +48,19 @@ impl PlayState {
             return;
         }
 
-        if self.active_objects[0].is_player() {
-            self.active_objects[0].x = player_object.x;
-            self.active_objects[0].y = player_object.y;
-            self.active_objects[0].z = player_object.z;
-            self.active_objects[0].tile = player_object.tile;
-            self.active_objects[0].aux1 = player_object.aux1;
-            self.active_objects[0].aux3 = player_object.aux3;
-        } else {
-            self.active_objects[0] = player_object;
-        }
-        let linked_npc_active_objects = if matches!(self.area, Area::Town { .. }) {
-            self.npcs
-                .iter()
-                .filter_map(|npc| npc.active_object)
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
-        let preserve_unlinked_shadowlord = self.summoned_shadowlord.is_some();
-        for (slot, object) in self.active_objects.iter_mut().enumerate().skip(1) {
-            if object.is_player()
-                && !linked_npc_active_objects.contains(&slot)
-                && !preserve_unlinked_shadowlord
-            {
-                object.free();
-            }
-        }
+        // `active-objects.md §5`: index zero, not a magic type byte,
+        // identifies the player. Refresh the five compositor-owned bytes
+        // while retaining the record's phase field. Transport-specific
+        // auxiliary bytes follow the live transport state during ordinary
+        // play; the town-exit mirror path performs its narrower byte-0..4
+        // synchronization directly so reloaded auxiliary bytes survive.
+        self.active_objects[0].type_byte = player_object.type_byte;
+        self.active_objects[0].tile = player_object.tile;
+        self.active_objects[0].x = player_object.x;
+        self.active_objects[0].y = player_object.y;
+        self.active_objects[0].z = player_object.z;
+        self.active_objects[0].aux1 = player_object.aux1;
+        self.active_objects[0].aux3 = player_object.aux3;
     }
 
     pub fn current_floor(&self) -> Option<i8> {

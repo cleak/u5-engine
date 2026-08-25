@@ -330,10 +330,6 @@ impl ActiveObject {
         }
     }
 
-    pub fn is_player(self) -> bool {
-        self.type_byte == PLAYER_TILE
-    }
-
     pub fn is_empty(self) -> bool {
         self.type_byte == 0
     }

@@ -3836,7 +3836,7 @@
     }
 
     #[test]
-    fn cast_blink_preserves_current_transport_marker_without_vehicle_refusal() {
+    fn cast_blink_preserves_transport_while_slot_zero_uses_supported_save_marker() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.player.transport = TransportState::Horse {
             type_byte: 0x10,
@@ -3860,7 +3860,7 @@
                 tile: 0x10,
             }
         );
-        assert_eq!(state.active_objects[0].tile, 0x10);
+        assert_eq!(state.active_objects[0].tile, state.player.transport.save_marker());
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
     }

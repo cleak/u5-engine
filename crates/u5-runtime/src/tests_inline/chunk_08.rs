@@ -255,13 +255,15 @@
             (state.player.x, state.player.y)
         );
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("fixed narrative gate opens"));
-        assert!(state.message.contains("steps south"));
+        assert_eq!(
+            state.message,
+            "Moved East to (233, 235) on BRITANNIA; underfoot terrain.\nThou art not upon a Sacred Quest!\nPassage denied!\n"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn fixed_narrative_gate_with_ordained_mask_blocks_after_world_turn() {
+    fn fixed_narrative_gate_with_ordained_mask_grants_passage_after_world_turn() {
         let dir = debug_game_dir();
         let mut state = britannia_state(
             open_world_grid(),
@@ -280,9 +282,7 @@
             (NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)
         );
         assert_eq!(state.turn, 1);
-        assert!(state.message.starts_with("Passed."));
-        assert!(state.message.contains("fixed narrative gate opens"));
-        assert!(state.message.contains("blocks entry"));
+        assert_eq!(state.message, "Passed.\nPass, Seeker!\n");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -305,7 +305,8 @@
             (NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)
         );
         assert_eq!(state.turn, 1);
-        assert!(!state.message.contains("fixed narrative gate"));
+        assert!(!state.message.contains("Pass, Seeker!"));
+        assert!(!state.message.contains("Passage denied!"));
         let _ = fs::remove_dir_all(dir);
     }
 

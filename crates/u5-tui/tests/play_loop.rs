@@ -879,12 +879,12 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "britannia-fixed-narrative-gate-open-south-step")
+            .any(|case| case.name == "britannia-fixed-narrative-gate-unordained-refusal")
     );
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "britannia-fixed-narrative-gate-ordained-block")
+            .any(|case| case.name == "britannia-fixed-narrative-gate-ordained-passage")
     );
     assert!(
         cases

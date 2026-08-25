@@ -1517,8 +1517,9 @@ impl PlayState {
                 }
                 let floor = next.current_floor().unwrap_or(0);
                 let player_object = &mut next.active_objects[0];
-                player_object.type_byte = PLAYER_TILE;
-                player_object.tile = entering_transport.avatar_tile();
+                let marker = entering_transport.save_marker();
+                player_object.type_byte = marker;
+                player_object.tile = marker;
                 player_object.x = next.player.x;
                 player_object.y = next.player.y;
                 player_object.z = floor;
@@ -1708,8 +1709,9 @@ impl PlayState {
         self.active_objects = load_world_active_object_mirror_table(game_dir, plane)?;
 
         let player_object = &mut self.active_objects[0];
-        player_object.type_byte = PLAYER_TILE;
-        player_object.tile = self.player.transport.avatar_tile();
+        let marker = self.player.transport.save_marker();
+        player_object.type_byte = marker;
+        player_object.tile = marker;
         player_object.x = x;
         player_object.y = y;
         player_object.z = plane.save_floor();
@@ -1885,20 +1887,15 @@ impl PlayState {
         }
 
         let narrative = if self.shrine_ordained_mask != 0 {
-            "A fixed narrative gate opens. Ordained shrine progress blocks entry."
+            "\nPass, Seeker!\n"
         } else {
             self.player.y = (self.player.y + 1) % WORLD_SIDE;
             self.sync_player_object();
             let _ = self.rebuild_world_live_chunks_from_grid(plane);
             self.mark_visibility_dirty();
-            "A fixed narrative gate opens. The party enters and steps south."
+            "\nThou art not upon a Sacred Quest!\nPassage denied!\n"
         };
-        if self.message.is_empty() {
-            self.message = narrative.to_string();
-        } else {
-            self.message.push(' ');
-            self.message.push_str(narrative);
-        }
+        self.message.push_str(narrative);
         true
     }
 }

@@ -22,7 +22,7 @@
                 x: 4,
                 y: 5,
                 z: 0,
-                phase: STEADY_PHASE,
+                phase: 0x22,
                 aux1: 0,
                 aux3: 0,
             }

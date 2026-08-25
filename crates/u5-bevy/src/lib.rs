@@ -65,22 +65,22 @@ use u5_runtime::{
     NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NPC_DIALOG_ID_NONE,
     NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS,
     OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
-    PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAYER_TILE, POISON_FIELD_SPELL_INDEX,
-    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE,
-    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyCapability, PartyMember, PlayInputDisposition,
-    PlayOptions, PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome,
-    ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
-    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
-    RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectangleDissolve,
-    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
-    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
+    POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST,
+    PROTECTION_SPELL_INDEX, PartyCapability, PartyMember, PlayInputDisposition, PlayOptions,
+    PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome, ProportionalLayoutDescriptor,
+    QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST,
+    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_CAPTION_TEXT_ROW,
+    RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y,
+    RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectangleDissolve, ReturnToViewFrameKind,
+    SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
+    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
+    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
+    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED,
+    SHIP_NO_SKIFFS_WARNING, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
     SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
@@ -101,8 +101,8 @@ use u5_runtime::{
     WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SIDE,
     WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, YELL_NOTHING_SAID_MESSAGE,
     YELL_SAILS_HOISTED_MESSAGE, blit_tile_id_to_viewport, blit_tile_pixels_to_viewport,
-    combat_actor_is_active_not_dead, combat_class_stats, commit_chargen_save,
-    configure_talk_shop_text_window,
+    combat_actor_is_active_not_dead, combat_class_stats, combat_party_actor_byte,
+    commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
@@ -2914,10 +2914,11 @@ fn validate_visual_combat_party_slots(
         {
             continue;
         }
+        let expected_actor_byte = combat_party_actor_byte(state.party[slot].class_byte);
         validate_visual_combat_actor_link(
             state,
             slot,
-            PLAYER_TILE,
+            expected_actor_byte,
             usize::from(x),
             usize::from(y),
             z,
@@ -3642,13 +3643,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         aux1: 0,
         aux3: 0,
     }]);
-    let narrative_gate_open = PlayOptions {
+    let narrative_gate_unordained_refusal = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         start: Some((NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)),
         ..PlayOptions::default()
     };
-    let mut narrative_gate_ordained_block = narrative_gate_open.clone();
-    narrative_gate_ordained_block.shrine_ordained_mask = 0b0000_0001;
+    let mut narrative_gate_ordained_passage = narrative_gate_unordained_refusal.clone();
+    narrative_gate_ordained_passage.shrine_ordained_mask = 0b0000_0001;
     let fixed_hidden_single_use = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         start: Some((79, 64)),
@@ -4077,16 +4078,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
-            label: "route-britannia-fixed-narrative-gate-open-south-step",
+            label: "route-britannia-fixed-narrative-gate-unordained-refusal",
             frame_kind: "visual route world frame",
-            options: narrative_gate_open,
+            options: narrative_gate_unordained_refusal,
             script: &["empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
-            label: "route-britannia-fixed-narrative-gate-ordained-block",
+            label: "route-britannia-fixed-narrative-gate-ordained-passage",
             frame_kind: "visual route world frame",
-            options: narrative_gate_ordained_block,
+            options: narrative_gate_ordained_passage,
             script: &["empty"],
             configure: None,
         },
@@ -19722,8 +19723,8 @@ mod tests {
             "route-britannia-chasm-fall-to-underworld",
             "route-reload-chasm-underworld-pass",
             "route-britannia-whirlpool-forced-underworld",
-            "route-britannia-fixed-narrative-gate-open-south-step",
-            "route-britannia-fixed-narrative-gate-ordained-block",
+            "route-britannia-fixed-narrative-gate-unordained-refusal",
+            "route-britannia-fixed-narrative-gate-ordained-passage",
             "route-britannia-hole-up-rest",
             "route-britannia-save-refusal",
             "route-britannia-dispatcher-refusals",
@@ -20612,8 +20613,12 @@ mod tests {
                 "route-britannia-whirlpool-forced-underworld-01-setup_whirlpool-engagement"
             )
         );
-        assert!(manifest.contains("route-britannia-fixed-narrative-gate-open-south-step-01-empty"));
-        assert!(manifest.contains("route-britannia-fixed-narrative-gate-ordained-block-01-empty"));
+        assert!(
+            manifest.contains("route-britannia-fixed-narrative-gate-unordained-refusal-01-empty")
+        );
+        assert!(
+            manifest.contains("route-britannia-fixed-narrative-gate-ordained-passage-01-empty")
+        );
         assert!(manifest.contains("route-britannia-hole-up-rest-01-h1"));
         assert!(manifest.contains("route-britannia-save-refusal-02-n"));
         assert!(manifest.contains("route-britannia-dispatcher-refusals-01-b"));

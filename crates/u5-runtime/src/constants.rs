@@ -277,19 +277,16 @@ pub const PLAY_MUSIC_TOGGLE_KEY: char = '\u{13}';
 pub const TRAP_NON_COMBAT_EFFECT_TABLE: [u8; 8] = [0, 0, 0, 1, 1, 2, 2, 3];
 pub const TRAP_ACID_DAMAGE_MAX: u8 = 30;
 pub const TRAP_BOMB_DAMAGE_MAX: u8 = 8;
-// Sentinel value the active-object table uses to mark the player slot
-// (slot zero). Per `u5-spec/catalogs/tile-catalog.md` Section 14, this
-// is "the player avatar sprite sentinel value 0xFC referenced in the
-// town-entry handler" -- a marker, NOT the actual sprite to render.
-// `PLAYER_SPRITE_TILE` below is what the renderer should display.
-pub const PLAYER_TILE: u8 = 0xfc;
+/// `vehicles.md §2` / `active-objects.md §5`: the default on-foot actor
+/// byte copied into both type/frame fields of active-object slot zero.
+///
+/// Player identity comes exclusively from the slot index. There is no
+/// separate `0xFC` player sentinel; `0xFC` is the Shadow Lord actor byte.
+pub const PLAYER_TILE: u8 = crate::TRANSPORT_MARKER_FOOT_FIRST;
 
-// The actual avatar sprite tile id in the EGA atlas. The character
-// sprites live in the upper half of the 9-bit tile space (256..=511);
-// tile 0x144 is the south-facing on-foot avatar walking frame. LOOK2.DAT
-// labels lower-half 0xFC as "a bellows" which is why a literal blit of
-// PLAYER_TILE shows a blacksmith's bellows on the map.
-pub const PLAYER_SPRITE_TILE: usize = 0x144;
+/// Actor-atlas index selected by the default on-foot marker. Kept as a
+/// compatibility name for callers/tests that need the resolved tile id.
+pub const PLAYER_SPRITE_TILE: usize = crate::ACTOR_TILE_BANK_BASE + PLAYER_TILE as usize;
 
 // Moongate artwork lives at tile id 0xDC per LOOK2.DAT ("a moon gate!").
 // Earlier guesses at 0x80 and 0xD4 picked the wrong tiles (food/banquet

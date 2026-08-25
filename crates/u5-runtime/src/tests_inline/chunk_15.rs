@@ -2470,7 +2470,13 @@
         assert_eq!(world.npcs.len(), 1);
         assert_eq!(world.npcs[0].active_object, None);
         assert_eq!(world.active_objects.len(), 1);
-        assert!(world.active_objects[0].is_player());
+        assert_eq!(
+            (
+                world.active_objects[0].type_byte,
+                world.active_objects[0].tile
+            ),
+            (PLAYER_TILE, PLAYER_TILE)
+        );
 
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
         dungeon.clock = GameClock::new(12, 0).unwrap();
@@ -2479,7 +2485,13 @@
         assert_eq!(dungeon.npcs.len(), 1);
         assert_eq!(dungeon.npcs[0].active_object, None);
         assert_eq!(dungeon.active_objects.len(), 1);
-        assert!(dungeon.active_objects[0].is_player());
+        assert_eq!(
+            (
+                dungeon.active_objects[0].type_byte,
+                dungeon.active_objects[0].tile
+            ),
+            (PLAYER_TILE, PLAYER_TILE)
+        );
     }
 
     #[test]

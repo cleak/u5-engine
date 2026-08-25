@@ -5,8 +5,8 @@ full-game goal. It is intentionally evidence-oriented: passing tests are useful
 only for the behavior they actually cover.
 
 Last refreshed on 2026-08-24 in the current worktree after reconciling public
-issues through `#141` and removing the last engine-side `0x2A` spawn-marker
-classification and player-entry naming from the town-cell pipeline. Public
+issues through `#144`, correcting slot-zero transport-marker serialization,
+and routing active-object bytes through the actor half of the atlas. Public
 issue `#112` resolved the stale spec prose in `8a73d12`; runtime behavior
 already follows the settled `#94` contract. Public commit `82daf8d` resolves
 `#113`: Ready charges exactly once per invocation, at nominal 2/1/1-minute
@@ -46,6 +46,18 @@ records, retains slot-zero auxiliaries, and only then places queued shipwright
 delivery. The accepted path owns no cached pre-entry coordinate, plane, marker,
 grid, or object snapshot. Failed coordinate lookup consumes the normal
 two-minute outdoor action.
+Public `#142` and `#143` are implemented from `fb05888` and `5933b35`: Push
+and all 40 stock Enter routes now use their exact transcripts, failures,
+ordering, and action results. Public `#144`, resolved by clean commit `5cba5e9`,
+corrects the Shrine of the Codex approach to an ordained passage and an
+unordained two-line refusal followed by the south push. The same audit removed
+the retired `0xFC` player sentinel: slot index zero alone identifies the
+player, both slot-zero bytes carry the saved transport marker, and companion
+bytes render at actor-atlas index `byte + 256`. Combat party records now use
+the four published class actor bytes rather than a shared foot marker.
+The older World-row `open-south-step` / `ordained-block` labels and its
+495-case count are superseded by the current 514-case run and the
+`unordained-refusal` / `ordained-passage` routes recorded above.
 Public issues `#127` and `#128` are resolved and implemented from `21698d6` and
 `98dfd45`: the certificate uses exact one-cell TH/ST/space encoding and encoded
 centering, while conversation gold payments use automatic affordability,

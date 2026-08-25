@@ -330,9 +330,10 @@ impl PlayState {
     ) -> io::Result<()> {
         let overlay = self.load_world_overlay_for_plane(game_dir, plane)?;
         self.active_objects.clear();
+        let marker = self.player.transport.save_marker();
         self.active_objects.push(ActiveObject {
-            type_byte: PLAYER_TILE,
-            tile: PLAYER_TILE,
+            type_byte: marker,
+            tile: marker,
             x,
             y,
             z: plane.save_floor(),
@@ -399,9 +400,10 @@ impl PlayState {
             TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
             _ => (0, 0),
         };
+        let marker = transport.save_marker();
         let mut active_objects = vec![ActiveObject {
-            type_byte: PLAYER_TILE,
-            tile: transport.avatar_tile(),
+            type_byte: marker,
+            tile: marker,
             x,
             y,
             z: options.floor,
@@ -916,9 +918,10 @@ impl PlayState {
 
         let transport = options.transport;
         let world_overlays = initial_world_overlay_cache(&options);
+        let marker = transport.save_marker();
         let mut active_objects = vec![ActiveObject {
-            type_byte: PLAYER_TILE,
-            tile: PLAYER_TILE,
+            type_byte: marker,
+            tile: marker,
             x,
             y,
             z: plane.save_floor(),

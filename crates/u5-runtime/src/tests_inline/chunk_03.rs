@@ -294,10 +294,13 @@
             INN_STAY_COUNTER_CAP
         );
         assert_eq!(saved[second + SAVE_CHARACTER_LEVEL_OFFSET], 4);
-        assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET], PLAYER_TILE);
+        assert_eq!(
+            saved[SAVE_ACTIVE_OBJECTS_OFFSET],
+            state.player.transport.save_marker()
+        );
         assert_eq!(
             saved[SAVE_ACTIVE_OBJECTS_OFFSET + 1],
-            FIRST_PLAYABLE_SKIFF_TILE
+            state.player.transport.save_marker()
         );
         let object_slot = SAVE_ACTIVE_OBJECTS_OFFSET + OOL_RECORD_LEN;
         assert_eq!(saved[object_slot], FIRST_PLAYABLE_FRIGATE_TILE);

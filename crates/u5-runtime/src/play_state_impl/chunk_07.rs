@@ -3985,7 +3985,9 @@ impl PlayState {
                 .iter()
                 .enumerate()
                 .any(|(other_slot, other)| {
-                    other_slot != slot && !other.is_player() && self.object_occupies(*other, nx, ny)
+                    other_slot != slot
+                        && other_slot != ACTIVE_OBJECT_PLAYER_SLOT
+                        && self.object_occupies(*other, nx, ny)
                 })
             {
                 continue;

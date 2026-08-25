@@ -1,5 +1,5 @@
     #[test]
-    fn sync_player_object_repairs_slot_zero_and_clears_duplicate_player_records() {
+    fn sync_player_object_refreshes_slot_zero_without_treating_actor_bytes_as_duplicates() {
         let mut state = world_state(open_world_grid(), 4, 5);
         state.player.transport = TransportState::Carpet {
             type_byte: 184,
@@ -16,7 +16,7 @@
             aux3: 8,
         };
         state.active_objects.push(ActiveObject {
-            type_byte: PLAYER_TILE,
+            type_byte: SHADOWLORD_ACTOR_TILE,
             tile: 201,
             x: 1,
             y: 1,
@@ -31,12 +31,12 @@
         assert_eq!(
             state.active_objects[0],
             ActiveObject {
-                type_byte: PLAYER_TILE,
-                tile: 184,
+                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+                tile: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
                 x: 4,
                 y: 5,
                 z: WorldPlane::Underworld.save_floor(),
-                phase: STEADY_PHASE,
+                phase: 0x21,
                 aux1: 0,
                 aux3: 0,
             }
@@ -44,7 +44,7 @@
         assert_eq!(
             state.active_objects[1],
             ActiveObject {
-                type_byte: 0,
+                type_byte: SHADOWLORD_ACTOR_TILE,
                 tile: 201,
                 x: 1,
                 y: 1,
@@ -54,7 +54,7 @@
                 aux3: 0x77,
             }
         );
-        assert!(state.active_objects[1].is_empty());
+        assert!(!state.active_objects[1].is_empty());
     }
 
     #[test]
@@ -339,7 +339,7 @@
             }
         );
         assert_eq!(state.active_objects.len(), 2);
-        assert_eq!(state.active_objects[0].tile, 168);
+        assert_eq!(state.active_objects[0].tile, TRANSPORT_MARKER_SHIP_FURLED_FIRST);
         assert_eq!(
             state.active_objects[1],
             ActiveObject {
@@ -502,7 +502,7 @@
             }
         );
         assert_eq!(state.active_objects.len(), 2);
-        assert_eq!(state.active_objects[0].tile, 168);
+        assert_eq!(state.active_objects[0].tile, TRANSPORT_MARKER_SHIP_FURLED_FIRST);
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert_eq!(
@@ -547,7 +547,10 @@
             state.player.transport.save_marker(),
             TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1
         );
-        assert_eq!(state.active_objects[0].tile, FIRST_PLAYABLE_FRIGATE_TILE + 1);
+        assert_eq!(
+            state.active_objects[0].tile,
+            TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1
+        );
         assert!(state.active_objects[1].is_empty());
     }
 
@@ -571,7 +574,10 @@
             state.player.transport.save_marker(),
             TRANSPORT_MARKER_MAGIC_CARPET_LAST
         );
-        assert_eq!(state.active_objects[0].tile, FIRST_PLAYABLE_MAGIC_CARPET_TILE + 3);
+        assert_eq!(
+            state.active_objects[0].tile,
+            TRANSPORT_MARKER_MAGIC_CARPET_LAST
+        );
     }
 
     #[test]
@@ -785,7 +791,10 @@
             }
         );
         assert_eq!(state.active_objects.len(), 2);
-        assert_eq!(state.active_objects[0].tile, 184);
+        assert_eq!(
+            state.active_objects[0].tile,
+            TRANSPORT_MARKER_MAGIC_CARPET_FIRST
+        );
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("carpet"));
@@ -915,7 +924,7 @@
 
         assert_eq!((state.player.x, state.player.y), (1, 0));
         assert_eq!(state.player.facing, Direction::East);
-        assert_eq!(state.active_objects[0].tile, FIRST_PLAYABLE_BALLOON_TILE);
+        assert_eq!(state.active_objects[0].tile, state.player.transport.save_marker());
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Moved East"));
         assert!(state.message.contains("underfoot wall"));

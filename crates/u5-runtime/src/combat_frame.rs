@@ -1234,8 +1234,7 @@ impl PlayState {
         }
         let companion_band_index = terrain_band_active_index(1, usize::from(actor.x))?;
         let marker_byte = self
-            .combat_render_sprite_at(usize::from(actor.x), 1)
-            .and_then(|tile| u8::try_from(tile).ok())
+            .combat_render_actor_byte_at(usize::from(actor.x), 1)
             .unwrap_or(self.combat_terrain[1][usize::from(actor.x)]);
         self.terrain_band[companion_band_index] = marker_byte;
         if !dungeon_room_absorbable_field_family(marker_byte) {
