@@ -8901,66 +8901,76 @@ fn run_visual_intro_menu_app(
     )
     .unwrap_or_else(|err| panic!("intro pre-flourish phase failed: {err}"));
 
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Ultima V Intro".into(),
-                resolution: (820.0, 620.0).into(),
-                resizable: true,
-                ..default()
-            }),
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Ultima V Intro".into(),
+            resolution: (820.0, 620.0).into(),
+            resizable: true,
             ..default()
-        }))
-        .add_audio_source::<Pitch>()
-        .add_event::<VisualSoundCue>()
-        .insert_resource(ClearColor(Color::BLACK))
-        .insert_resource(VisualIntroState {
-            game_dir,
-            raster_depth,
-            dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: 0,
-            title_flourish_complete: false,
-            title_signature_progress: 0,
-            title_signature_complete: false,
-            title_presents_hold_ticks: 0,
-            title_sequence_skipped: false,
-            pending_auto_return_to_view: false,
-            title_tick_frame: 0,
-            title_tick_visible_frame: 0,
-            surface: new_intro_display_buffer(),
-            modal_backing: None,
-            menu_idle_ticks: 0,
-            menu_idle_bios_ticks: 0,
-            message_waiting_for_key: false,
-            message: String::new(),
-            panel: VisualIntroPanel::Menu,
-            launch_result,
-            image_handle: None,
-            font_slots: Some(font_slots),
-            text_windows,
-            pending_pre_flourish_outcome: Some(pre_flourish_outcome),
-            title_tick_frames: None,
-        })
-        .insert_resource(VisualIntroAnimationPump::default())
-        .insert_resource(ScreenshotConfig {
-            path: screenshot_path,
-            frame_delay: screenshot_delay,
-            preset_keys,
-        })
-        .insert_resource(ScreenshotState::default())
-        .add_systems(Startup, (setup_intro, setup_visual_sound_bank))
-        .add_systems(
-            Update,
-            (
-                drive_visual_intro,
-                animate_visual_intro_title_effects,
-                play_visual_sound_cues,
-                cleanup_visual_sound_cues,
-                screenshot_system,
-            )
-                .chain(),
+        }),
+        ..default()
+    }))
+    .add_audio_source::<Pitch>()
+    .add_event::<VisualSoundCue>()
+    .insert_resource(ClearColor(Color::BLACK))
+    .insert_resource(VisualIntroState {
+        game_dir,
+        raster_depth,
+        dispatch: UnifiedMenuDispatch::new(),
+        title_flourish_step: 0,
+        title_flourish_complete: false,
+        title_signature_progress: 0,
+        title_signature_complete: false,
+        title_presents_hold_ticks: 0,
+        title_sequence_skipped: false,
+        pending_auto_return_to_view: false,
+        title_tick_frame: 0,
+        title_tick_visible_frame: 0,
+        surface: new_intro_display_buffer(),
+        modal_backing: None,
+        menu_idle_ticks: 0,
+        menu_idle_bios_ticks: 0,
+        message_waiting_for_key: false,
+        message: String::new(),
+        panel: VisualIntroPanel::Menu,
+        launch_result,
+        image_handle: None,
+        font_slots: Some(font_slots),
+        text_windows,
+        pending_pre_flourish_outcome: Some(pre_flourish_outcome),
+        title_tick_frames: None,
+    })
+    .insert_resource(VisualIntroAnimationPump::default())
+    .insert_resource(ScreenshotConfig {
+        path: screenshot_path,
+        frame_delay: screenshot_delay,
+        preset_keys,
+    })
+    .insert_resource(ScreenshotState::default())
+    .add_systems(Startup, (setup_intro, setup_visual_sound_bank));
+    add_visual_intro_update_systems(&mut app);
+    app.run();
+}
+
+fn add_visual_intro_update_systems(app: &mut App) {
+    app.add_systems(
+        Update,
+        (
+            // The intro and gameplay share this App. Register the gameplay
+            // input driver here as well as in `run_visual_app`; it is inert
+            // until Journey Onward replaces `VisualIntroState` with
+            // `VisualState`. Without it, the first gameplay frame rendered
+            // correctly but every key after the transition was ignored.
+            drive_visual,
+            drive_visual_intro,
+            animate_visual_intro_title_effects,
+            play_visual_sound_cues,
+            cleanup_visual_sound_cues,
+            screenshot_system,
         )
-        .run();
+            .chain(),
+    );
 }
 
 fn setup_visual_sound_bank(mut commands: Commands, mut pitches: ResMut<Assets<Pitch>>) {
@@ -16431,6 +16441,25 @@ mod tests {
         assert_eq!(INTRO_FRAMEBUFFER_HEIGHT, 200);
         assert_eq!(INTRO_FRAMEBUFFER_WIDTH, VISUAL_PLAY_FRAME_WIDTH);
         assert_eq!(INTRO_FRAMEBUFFER_HEIGHT, VISUAL_PLAY_FRAME_HEIGHT);
+    }
+
+    #[test]
+    fn intro_runtime_keeps_gameplay_input_driver_after_journey_handoff() {
+        let mut app = App::new();
+        add_visual_intro_update_systems(&mut app);
+
+        let schedules = app
+            .world()
+            .get_resource::<bevy::ecs::schedule::Schedules>()
+            .expect("adding intro update systems must install Schedules");
+        let update = schedules
+            .get(Update)
+            .expect("intro runtime must install an Update schedule");
+        assert_eq!(
+            update.systems_len(),
+            6,
+            "intro runtime needs both input drivers plus animation, sound playback, sound cleanup, and screenshots"
+        );
     }
 
     #[test]
