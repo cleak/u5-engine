@@ -7,8 +7,9 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use bevy::audio::{AddAudioSource, Volume};
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
@@ -197,6 +198,97 @@ const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = BIOS_USER_TICK_INTERVAL_SECS;
 /// whole 85-step script. The earlier "one BIOS tick per row-reveal
 /// group" reading was retracted upstream.
 const INTRO_FLOURISH_STEP_INTERVAL_SECS: f32 = 0.014;
+
+/// Generated single-channel tones used by the visual shell. The analyzed DOS
+/// baseline ships no external music resources (`EXTRACTION.md`), so the Bevy
+/// frontend models the published PC-speaker feedback boundaries with short
+/// procedural pitches instead of importing or inventing a soundtrack.
+#[derive(Event, Clone, Copy, Debug, PartialEq, Eq)]
+enum VisualSoundCue {
+    CombatBlocked,
+    PotionFlash,
+    WindChange,
+    SubtitleIgnition,
+}
+
+#[derive(Resource)]
+struct VisualSoundBank {
+    combat_blocked: Handle<Pitch>,
+    potion_flash: Handle<Pitch>,
+    wind_change: Handle<Pitch>,
+    subtitle_ignition: Handle<Pitch>,
+}
+
+#[derive(Component)]
+struct VisualSoundLifetime(Timer);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct VisualSoundSpec {
+    frequency_hz: f32,
+    duration: Duration,
+    volume: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PlaySoundSnapshot {
+    combat_active: bool,
+    sound_enabled: bool,
+    wind: WindState,
+}
+
+fn play_sound_snapshot(state: &PlayState) -> PlaySoundSnapshot {
+    PlaySoundSnapshot {
+        combat_active: state.combat_active,
+        sound_enabled: state.music_enabled,
+        wind: state.wind,
+    }
+}
+
+fn visual_sound_cue_after_play_input(
+    before: PlaySoundSnapshot,
+    state: &PlayState,
+    _input: char,
+) -> Option<VisualSoundCue> {
+    if !before.sound_enabled {
+        return None;
+    }
+    // `combat.md §10.1`: a blocked combat step emits a beep. Ordinary
+    // world movement has no published sound boundary and stays silent.
+    if (before.combat_active || state.combat_active) && state.message.contains("Blocked!") {
+        return Some(VisualSoundCue::CombatBlocked);
+    }
+    // `weather.md §3`: every accepted non-Calm-to-Calm transition plays the
+    // wind effect before storing/displaying the new state.
+    if state.wind != before.wind {
+        return Some(VisualSoundCue::WindChange);
+    }
+    None
+}
+
+const fn visual_sound_spec(cue: VisualSoundCue) -> VisualSoundSpec {
+    match cue {
+        VisualSoundCue::CombatBlocked => VisualSoundSpec {
+            frequency_hz: 82.41,
+            duration: Duration::from_millis(125),
+            volume: 0.24,
+        },
+        VisualSoundCue::PotionFlash => VisualSoundSpec {
+            frequency_hz: 110.0,
+            duration: Duration::from_millis(150),
+            volume: 0.20,
+        },
+        VisualSoundCue::WindChange => VisualSoundSpec {
+            frequency_hz: 146.83,
+            duration: Duration::from_millis(180),
+            volume: 0.18,
+        },
+        VisualSoundCue::SubtitleIgnition => VisualSoundSpec {
+            frequency_hz: 98.0,
+            duration: Duration::from_millis(32),
+            volume: 0.18,
+        },
+    }
+}
 
 /// Modern-host scale for a silent 50-unit subtitle-ignition publication.
 /// `timing.md §5.1` publishes calibrated work rather than a portable wall-clock
@@ -922,6 +1014,8 @@ pub fn run_visual_loop(
             }),
             ..default()
         }))
+        .add_audio_source::<Pitch>()
+        .add_event::<VisualSoundCue>()
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
         .insert_resource(ScreenshotConfig {
@@ -930,11 +1024,18 @@ pub fn run_visual_loop(
             preset_keys,
         })
         .insert_resource(ScreenshotState::default())
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, setup_visual_sound_bank))
         .insert_resource(AnimationPump::default())
         .add_systems(
             Update,
-            (drive_visual, animate_static_tiles, screenshot_system).chain(),
+            (
+                drive_visual,
+                animate_static_tiles,
+                play_visual_sound_cues,
+                cleanup_visual_sound_cues,
+                screenshot_system,
+            )
+                .chain(),
         )
         .run();
 
@@ -8810,6 +8911,8 @@ fn run_visual_intro_menu_app(
             }),
             ..default()
         }))
+        .add_audio_source::<Pitch>()
+        .add_event::<VisualSoundCue>()
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(VisualIntroState {
             game_dir,
@@ -8845,16 +8948,68 @@ fn run_visual_intro_menu_app(
             preset_keys,
         })
         .insert_resource(ScreenshotState::default())
-        .add_systems(Startup, setup_intro)
+        .add_systems(Startup, (setup_intro, setup_visual_sound_bank))
         .add_systems(
             Update,
             (
                 drive_visual_intro,
                 animate_visual_intro_title_effects,
+                play_visual_sound_cues,
+                cleanup_visual_sound_cues,
                 screenshot_system,
-            ),
+            )
+                .chain(),
         )
         .run();
+}
+
+fn setup_visual_sound_bank(mut commands: Commands, mut pitches: ResMut<Assets<Pitch>>) {
+    let mut add = |cue| {
+        let spec = visual_sound_spec(cue);
+        pitches.add(Pitch::new(spec.frequency_hz, spec.duration))
+    };
+    commands.insert_resource(VisualSoundBank {
+        combat_blocked: add(VisualSoundCue::CombatBlocked),
+        potion_flash: add(VisualSoundCue::PotionFlash),
+        wind_change: add(VisualSoundCue::WindChange),
+        subtitle_ignition: add(VisualSoundCue::SubtitleIgnition),
+    });
+}
+
+fn play_visual_sound_cues(
+    mut commands: Commands,
+    bank: Res<VisualSoundBank>,
+    mut cues: EventReader<VisualSoundCue>,
+) {
+    for cue in cues.read().copied() {
+        let handle = match cue {
+            VisualSoundCue::CombatBlocked => &bank.combat_blocked,
+            VisualSoundCue::PotionFlash => &bank.potion_flash,
+            VisualSoundCue::WindChange => &bank.wind_change,
+            VisualSoundCue::SubtitleIgnition => &bank.subtitle_ignition,
+        };
+        let spec = visual_sound_spec(cue);
+        commands.spawn((
+            AudioPlayer(handle.clone()),
+            PlaybackSettings::ONCE.with_volume(Volume::Linear(spec.volume)),
+            VisualSoundLifetime(Timer::new(
+                spec.duration + Duration::from_millis(100),
+                TimerMode::Once,
+            )),
+        ));
+    }
+}
+
+fn cleanup_visual_sound_cues(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut sounds: Query<(Entity, &mut VisualSoundLifetime)>,
+) {
+    for (entity, mut lifetime) in &mut sounds {
+        if lifetime.0.tick(time.delta()).just_finished() {
+            commands.entity(entity).despawn();
+        }
+    }
 }
 
 #[derive(Resource)]
@@ -9859,6 +10014,7 @@ fn animate_visual_intro_title_effects(
     mut pump: ResMut<VisualIntroAnimationPump>,
     intro: Option<ResMut<VisualIntroState>>,
     mut images: ResMut<Assets<Image>>,
+    mut sound_cues: EventWriter<VisualSoundCue>,
 ) {
     let Some(mut intro) = intro else {
         return;
@@ -9879,12 +10035,16 @@ fn animate_visual_intro_title_effects(
     // paced (`cleak/u5-spec#68`, `cleak/u5-spec#77`).
     pump.interval = visual_intro_animation_interval(&intro);
 
+    let subtitle_ignition_active = matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. });
     let mut advanced = false;
     if advance_intro_animation_pump(&mut pump, time.delta_secs()) {
         advanced = advance_visual_intro_animation_tick(&mut intro);
     }
     if !advanced {
         return;
+    }
+    if subtitle_ignition_active {
+        sound_cues.write(VisualSoundCue::SubtitleIgnition);
     }
 
     let rgba = render_intro_frame(&mut intro);
@@ -10719,7 +10879,7 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.dispatch.complete_subflow(subflow, result);
             intro.modal_backing = None;
             intro.menu_idle_ticks = 0;
-            intro.message_waiting_for_key = false;
+            intro.message_waiting_for_key = !message.is_empty();
             intro.message = message;
         }
         VisualIntroPanelOutcome::CommitChargen(result) => {
@@ -10808,7 +10968,7 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     intro.dispatch.complete_subflow(subflow, result);
     intro.modal_backing = None;
     intro.menu_idle_ticks = 0;
-    intro.message_waiting_for_key = false;
+    intro.message_waiting_for_key = !message.is_empty();
     intro.message = message.to_string();
     true
 }
@@ -11022,6 +11182,7 @@ fn drive_visual(
     visual: Option<ResMut<VisualState>>,
     mut images: ResMut<Assets<Image>>,
     mut exit: EventWriter<AppExit>,
+    mut sound_cues: EventWriter<VisualSoundCue>,
 ) {
     let Some(mut visual) = visual else {
         return;
@@ -11115,6 +11276,7 @@ fn drive_visual(
         let Some(ch) = key_code_to_char(*key, shift_pressed, control_pressed) else {
             continue;
         };
+        let sound_before = play_sound_snapshot(&visual.state);
         let game_dir = visual.game_dir.clone();
         match handle_play_key_input(&mut visual.state, ch, "", &game_dir) {
             Ok(PlayInputDisposition::Quit) => {
@@ -11123,6 +11285,11 @@ fn drive_visual(
             }
             Ok(PlayInputDisposition::Continue) => {
                 handled = true;
+                if let Some(cue) =
+                    visual_sound_cue_after_play_input(sound_before, &visual.state, ch)
+                {
+                    sound_cues.write(cue);
+                }
                 if visual.state.pending_potion_flash.is_some() {
                     break;
                 }
@@ -11140,6 +11307,11 @@ fn drive_visual(
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
     if let Some(playback) = v.state.take_pending_potion_flash() {
+        if v.state.music_enabled {
+            // `catalogs/item-list.md §7.2`: the accepted potion owns one
+            // blocking rumble/envelope presentation before its effect lands.
+            sound_cues.write(VisualSoundCue::PotionFlash);
+        }
         let mut rgba = images
             .get(&v.image_handle)
             .and_then(|image| image.data.clone())
@@ -16314,6 +16486,7 @@ mod tests {
         app.insert_resource(Assets::<Image>::default());
         app.insert_resource(intro);
         app.insert_resource(pump);
+        app.add_event::<VisualSoundCue>();
         app.add_systems(Update, animate_visual_intro_title_effects);
 
         app.update();
@@ -21072,6 +21245,53 @@ mod tests {
     }
 
     #[test]
+    fn visual_sound_cues_cover_only_published_effect_boundaries() {
+        for cue in [
+            VisualSoundCue::CombatBlocked,
+            VisualSoundCue::PotionFlash,
+            VisualSoundCue::WindChange,
+            VisualSoundCue::SubtitleIgnition,
+        ] {
+            let spec = visual_sound_spec(cue);
+            assert!(spec.frequency_hz.is_finite() && spec.frequency_hz > 0.0);
+            assert!(!spec.duration.is_zero());
+            assert!((0.0..=1.0).contains(&spec.volume));
+        }
+
+        let mut state = test_state(open_grid(), 4, 4);
+        let before = play_sound_snapshot(&state);
+        state.player.x += 1;
+        state.turn += 1;
+        assert_eq!(
+            visual_sound_cue_after_play_input(before, &state, 'd'),
+            None,
+            "ordinary movement has no published sound boundary"
+        );
+
+        let before = play_sound_snapshot(&state);
+        state.combat_active = true;
+        state.message = "Blocked!".to_string();
+        assert_eq!(
+            visual_sound_cue_after_play_input(before, &state, 'a'),
+            Some(VisualSoundCue::CombatBlocked)
+        );
+
+        state.combat_active = false;
+        state.message.clear();
+        let before = play_sound_snapshot(&state);
+        state.wind = WindState::North;
+        assert_eq!(
+            visual_sound_cue_after_play_input(before, &state, 'C'),
+            Some(VisualSoundCue::WindChange)
+        );
+
+        state.music_enabled = false;
+        let before = play_sound_snapshot(&state);
+        state.wind = WindState::South;
+        assert_eq!(visual_sound_cue_after_play_input(before, &state, 'C'), None);
+    }
+
+    #[test]
     fn visual_key_map_emits_modal_prompt_controls() {
         assert_eq!(key_code_to_char(KeyCode::Enter, false, false), Some('\r'));
         assert_eq!(
@@ -22541,6 +22761,14 @@ mod tests {
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.contains("Character creation cancelled"));
+        assert!(intro.message_waiting_for_key);
+        assert!(step_visual_intro(&mut intro, ' '));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.is_empty());
+        assert!(
+            !intro.message_waiting_for_key,
+            "the dismissal key must be consumed instead of reopening cached chargen"
+        );
         assert!(!dir.join(SAVED_GAM_FILENAME).exists());
         assert!(matches!(
             intro.dispatch.submit_menu_key(b'A'),

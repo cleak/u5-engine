@@ -77,6 +77,14 @@ In top-down play, use the arrow keys, numeric keypad, or unshifted lowercase
 `wasd`/vi keys to move. Hold Shift for uppercase game commands such as `A`
 (Attack), `L` (Look), `S` (Search), and `U` (Use). Name and free-text entry
 preserve the Shift state instead of forcing uppercase.
+
+The analyzed DOS asset set contains no external music tracks. The visual shell
+therefore generates conservative PC-speaker-style cues at the currently
+published effect boundaries: the intro subtitle ignition, potion flash/rumble,
+wind changes, and blocked combat steps. Press `Ctrl+S` during play to disable
+or re-enable these sound effects. Exact original tone envelopes remain upstream
+specification work; ordinary menu input and movement stay silent rather than
+inventing unverified effects.
 Presentation is still v0: shops, conversations, and other text-heavy flows use
 the shared fixed-cell status/modal surface while exact original window pacing
 continues to be tracked as parity work.
