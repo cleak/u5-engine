@@ -9855,6 +9855,16 @@ fn animate_visual_intro_title_effects(
         return;
     };
 
+    // `drive_visual_intro` can transfer the framebuffer handle to
+    // `VisualState` and queue `VisualIntroState` for removal earlier in the
+    // same Update. Commands are applied after the schedule, so this system may
+    // still observe the old intro resource once after that transfer. The intro
+    // no longer owns a drawable surface in that state and must not advance or
+    // publish another animation frame.
+    let Some(handle) = intro.image_handle.clone() else {
+        return;
+    };
+
     // `systems/timing.md §5.1`: the flourish runs on its own
     // calibrated ~14 ms step; every other intro phase is BIOS-tick
     // paced (`cleak/u5-spec#68`, `cleak/u5-spec#77`).
@@ -9869,11 +9879,7 @@ fn animate_visual_intro_title_effects(
     }
 
     let rgba = render_intro_frame(&mut intro);
-    let handle = intro
-        .image_handle
-        .as_ref()
-        .expect("intro animation tick requires a visual framebuffer handle");
-    replace_visual_image_data(&mut images, handle, rgba, "intro animation tick");
+    replace_visual_image_data(&mut images, &handle, rgba, "intro animation tick");
 }
 
 /// `systems/timing.md §5.1`: the per-phase animation step interval.
@@ -13449,16 +13455,62 @@ fn overlay_intro_menu_message_rgba(dst: &mut [u8], game_dir: &Path, message: &st
         return;
     }
     let font = load_ibm_ch_font(game_dir).expect("intro menu message requires IBM.CH");
-    overlay_fixed_cell_text_rgba(
+    const MESSAGE_CELL_X: usize = 1;
+    const MESSAGE_CELL_Y: usize = 16;
+    const MESSAGE_CELL_WIDTH: usize = 38;
+    const MESSAGE_CELL_HEIGHT: usize = 8;
+
+    // `systems/intro.md §6.1`/`§6.2`: messages reuse the menu window's
+    // 38-by-8 interior (cells 1..=38, rows 16..=23). Row 24 is the bottom
+    // border, not a message row. Clear the interior before printing because
+    // the ordinary text-window path clears each destination cell and the menu
+    // labels must not show through a multi-line notice.
+    fill_rgba_rect_inclusive(
         dst,
         INTRO_FRAMEBUFFER_WIDTH as usize,
         INTRO_FRAMEBUFFER_HEIGHT as usize,
-        &font,
-        message,
-        1,
-        24,
-        false,
+        MESSAGE_CELL_X * CH_CELL_SIDE,
+        MESSAGE_CELL_Y * CH_CELL_SIDE,
+        (MESSAGE_CELL_X + MESSAGE_CELL_WIDTH) * CH_CELL_SIDE - 1,
+        (MESSAGE_CELL_Y + MESSAGE_CELL_HEIGHT) * CH_CELL_SIDE - 1,
+        [0x00, 0x00, 0x00, 0xff],
     );
+
+    for (row, line) in fixed_cell_message_lines(message, MESSAGE_CELL_WIDTH)
+        .into_iter()
+        .take(MESSAGE_CELL_HEIGHT)
+        .enumerate()
+    {
+        overlay_fixed_cell_text_rgba(
+            dst,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            &font,
+            &line,
+            MESSAGE_CELL_X,
+            MESSAGE_CELL_Y + row,
+            false,
+        );
+    }
+}
+
+fn fixed_cell_message_lines(message: &str, width: usize) -> Vec<String> {
+    assert!(width > 0, "fixed-cell message width must be nonzero");
+    let mut lines = Vec::new();
+    for explicit_line in message.split('\n') {
+        let explicit_line = explicit_line.strip_suffix('\r').unwrap_or(explicit_line);
+        if explicit_line.is_empty() {
+            lines.push(String::new());
+            continue;
+        }
+        let mut remaining = explicit_line.as_bytes();
+        while !remaining.is_empty() {
+            let split = remaining.len().min(width);
+            lines.push(String::from_utf8_lossy(&remaining[..split]).into_owned());
+            remaining = &remaining[split..];
+        }
+    }
+    lines
 }
 
 fn fill_rgba_rect_inclusive(
@@ -16232,6 +16284,33 @@ mod tests {
     }
 
     #[test]
+    fn intro_animation_is_inert_after_framebuffer_transfers_to_gameplay() {
+        let dir = debug_game_dir();
+        let intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        assert!(intro.image_handle.is_none());
+        let mut pump = VisualIntroAnimationPump::default();
+        pump.accumulator = pump.interval;
+
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default());
+        app.insert_resource(Assets::<Image>::default());
+        app.insert_resource(intro);
+        app.insert_resource(pump);
+        app.add_systems(Update, animate_visual_intro_title_effects);
+
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<VisualIntroAnimationPump>()
+                .accumulator,
+            INTRO_ANIMATION_TICK_INTERVAL_SECS,
+            "a transferred intro framebuffer must not consume another animation tick"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn intro_menu_frame_renders_nonblank_rgba() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -18343,8 +18422,31 @@ mod tests {
             ]
             .join("\n")
         );
+        assert_eq!(
+            render_intro_frame(&mut intro).len(),
+            INTRO_FRAMEBUFFER_WIDTH as usize * INTRO_FRAMEBUFFER_HEIGHT as usize * 4,
+            "the published three-line empty-save notice must fit the menu interior"
+        );
         assert!(intro.launch_result.lock().unwrap().is_none());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn intro_menu_message_layout_preserves_lines_and_wraps_at_window_width() {
+        assert_eq!(
+            fixed_cell_message_lines("first\nsecond", 38),
+            ["first", "second"]
+        );
+        let wrapped = fixed_cell_message_lines(
+            "Created Avatar. Choose Journey Onward to load the new save.",
+            38,
+        );
+        assert_eq!(
+            wrapped.concat(),
+            "Created Avatar. Choose Journey Onward to load the new save."
+        );
+        assert!(wrapped.iter().all(|line| line.len() <= 38));
+        assert_eq!(wrapped.len(), 2);
     }
 
     #[test]
@@ -21983,6 +22085,11 @@ mod tests {
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.contains("Created Avatar"));
+        assert_eq!(
+            render_intro_frame(&mut intro).len(),
+            INTRO_FRAMEBUFFER_WIDTH as usize * INTRO_FRAMEBUFFER_HEIGHT as usize * 4,
+            "the post-chargen status must wrap inside the menu interior"
+        );
         let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
         assert_eq!(
             &saved[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + SAVE_CHARACTER_NAME_LEN - 1],
