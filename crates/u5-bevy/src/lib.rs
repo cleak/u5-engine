@@ -209,6 +209,9 @@ enum VisualSoundCue {
     CombatEscape,
     CombatPossession,
     CombatSummon,
+    DungeonDecorationSweep0,
+    DungeonDecorationSweep1,
+    DungeonDecorationSweep2,
     PotionFlash,
     RingVanish,
     ShrineWordRumble,
@@ -278,6 +281,9 @@ struct VisualSoundBank {
     combat_escape: Handle<VisualSoundWave>,
     combat_possession: Handle<VisualSoundWave>,
     combat_summon: Handle<VisualSoundWave>,
+    dungeon_decoration_sweep_0: Handle<VisualSoundWave>,
+    dungeon_decoration_sweep_1: Handle<VisualSoundWave>,
+    dungeon_decoration_sweep_2: Handle<VisualSoundWave>,
     potion_flash: Handle<VisualSoundWave>,
     ring_vanish: Handle<VisualSoundWave>,
     shrine_word_rumble: Handle<VisualSoundWave>,
@@ -302,25 +308,15 @@ struct VisualSoundSpec {
 
 const VISUAL_SOUND_SAMPLE_RATE: u32 = 44_100;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct PlaySoundSnapshot {
-    sound_enabled: bool,
-    sound_effect_serial: u64,
-}
-
-fn play_sound_snapshot(state: &PlayState) -> PlaySoundSnapshot {
-    PlaySoundSnapshot {
-        sound_enabled: state.music_enabled,
-        sound_effect_serial: state.sound_effect_serial,
-    }
-}
-
 const fn visual_sound_cue_for_play_effect(effect: PlaySoundEffect) -> VisualSoundCue {
     match effect {
         PlaySoundEffect::CombatBlocked => VisualSoundCue::CombatBlocked,
         PlaySoundEffect::CombatEscape => VisualSoundCue::CombatEscape,
         PlaySoundEffect::CombatPossession => VisualSoundCue::CombatPossession,
         PlaySoundEffect::CombatSummon => VisualSoundCue::CombatSummon,
+        PlaySoundEffect::DungeonDecorationSweep0 => VisualSoundCue::DungeonDecorationSweep0,
+        PlaySoundEffect::DungeonDecorationSweep1 => VisualSoundCue::DungeonDecorationSweep1,
+        PlaySoundEffect::DungeonDecorationSweep2 => VisualSoundCue::DungeonDecorationSweep2,
         PlaySoundEffect::RingVanish => VisualSoundCue::RingVanish,
         PlaySoundEffect::ShrineWordRumble => VisualSoundCue::ShrineWordRumble,
         PlaySoundEffect::StonegateTone => VisualSoundCue::StonegateTone,
@@ -330,16 +326,16 @@ const fn visual_sound_cue_for_play_effect(effect: PlaySoundEffect) -> VisualSoun
     }
 }
 
-fn visual_sound_cues_after_play_input(
-    before: PlaySoundSnapshot,
+fn visual_sound_cues_after(
+    serial: u64,
+    sound_enabled: bool,
     state: &PlayState,
-    _input: char,
 ) -> Vec<VisualSoundCue> {
-    if !before.sound_enabled {
+    if !sound_enabled {
         return Vec::new();
     }
     state
-        .sound_effects_after(before.sound_effect_serial)
+        .sound_effects_after(serial)
         .into_iter()
         .map(visual_sound_cue_for_play_effect)
         .collect()
@@ -374,6 +370,30 @@ const fn visual_sound_spec(cue: VisualSoundCue) -> VisualSoundSpec {
             jitter_hz: 8.0,
             duration: Duration::from_millis(280),
             volume: 0.40,
+        },
+        VisualSoundCue::DungeonDecorationSweep0 => VisualSoundSpec {
+            // The calibrated busy-wait unit has no portable wall-clock value;
+            // use 1 ms per unit while retaining the exact update count,
+            // frequencies, and 400:144:16 total-unit pacing ratio.
+            start_frequency_hz: 3_200.0,
+            end_frequency_hz: 3_485.0,
+            jitter_hz: 0.0,
+            duration: Duration::from_millis(400),
+            volume: 0.34,
+        },
+        VisualSoundCue::DungeonDecorationSweep1 => VisualSoundSpec {
+            start_frequency_hz: 3_200.0,
+            end_frequency_hz: 3_475.0,
+            jitter_hz: 0.0,
+            duration: Duration::from_millis(144),
+            volume: 0.34,
+        },
+        VisualSoundCue::DungeonDecorationSweep2 => VisualSoundSpec {
+            start_frequency_hz: 3_200.0,
+            end_frequency_hz: 3_425.0,
+            jitter_hz: 0.0,
+            duration: Duration::from_millis(16),
+            volume: 0.34,
         },
         VisualSoundCue::PotionFlash => VisualSoundSpec {
             start_frequency_hz: 123.47,
@@ -434,6 +454,15 @@ const fn visual_sound_spec(cue: VisualSoundCue) -> VisualSoundSpec {
     }
 }
 
+const fn visual_sound_frequency_steps(cue: VisualSoundCue) -> u8 {
+    match cue {
+        VisualSoundCue::DungeonDecorationSweep0 => 20,
+        VisualSoundCue::DungeonDecorationSweep1 => 12,
+        VisualSoundCue::DungeonDecorationSweep2 => 4,
+        _ => 0,
+    }
+}
+
 fn visual_sound_wave(cue: VisualSoundCue, mut jitter_seed: u32) -> VisualSoundWave {
     let spec = visual_sound_spec(cue);
     let sample_count = ((spec.duration.as_secs_f64() * f64::from(VISUAL_SOUND_SAMPLE_RATE)).ceil()
@@ -458,7 +487,14 @@ fn visual_sound_wave(cue: VisualSoundCue, mut jitter_seed: u32) -> VisualSoundWa
             let unit = ((jitter_seed >> 16) as f32 / 65_535.0) * 2.0 - 1.0;
             jitter = unit * spec.jitter_hz;
         }
-        let progress = index as f32 / denominator;
+        let frequency_steps = visual_sound_frequency_steps(cue);
+        let progress = if frequency_steps > 1 {
+            let step = (index * usize::from(frequency_steps) / sample_count)
+                .min(usize::from(frequency_steps) - 1);
+            step as f32 / f32::from(frequency_steps - 1)
+        } else {
+            index as f32 / denominator
+        };
         let frequency = (spec.start_frequency_hz
             + (spec.end_frequency_hz - spec.start_frequency_hz) * progress
             + jitter)
@@ -9173,6 +9209,9 @@ fn setup_visual_sound_bank(mut commands: Commands, mut sounds: ResMut<Assets<Vis
         combat_escape: add(VisualSoundCue::CombatEscape),
         combat_possession: add(VisualSoundCue::CombatPossession),
         combat_summon: add(VisualSoundCue::CombatSummon),
+        dungeon_decoration_sweep_0: add(VisualSoundCue::DungeonDecorationSweep0),
+        dungeon_decoration_sweep_1: add(VisualSoundCue::DungeonDecorationSweep1),
+        dungeon_decoration_sweep_2: add(VisualSoundCue::DungeonDecorationSweep2),
         potion_flash: add(VisualSoundCue::PotionFlash),
         ring_vanish: add(VisualSoundCue::RingVanish),
         shrine_word_rumble: add(VisualSoundCue::ShrineWordRumble),
@@ -9195,6 +9234,9 @@ fn play_visual_sound_cues(
             VisualSoundCue::CombatEscape => &bank.combat_escape,
             VisualSoundCue::CombatPossession => &bank.combat_possession,
             VisualSoundCue::CombatSummon => &bank.combat_summon,
+            VisualSoundCue::DungeonDecorationSweep0 => &bank.dungeon_decoration_sweep_0,
+            VisualSoundCue::DungeonDecorationSweep1 => &bank.dungeon_decoration_sweep_1,
+            VisualSoundCue::DungeonDecorationSweep2 => &bank.dungeon_decoration_sweep_2,
             VisualSoundCue::PotionFlash => &bank.potion_flash,
             VisualSoundCue::RingVanish => &bank.ring_vanish,
             VisualSoundCue::ShrineWordRumble => &bank.shrine_word_rumble,
@@ -9433,6 +9475,8 @@ struct VisualState {
     /// `RUNES.CH`, the alphabet the sky strip's moon phases and hour
     /// marker are drawn from.
     rune_font: FixedCellFont,
+    /// Last runtime presentation-event serial consumed by the audio frontend.
+    sound_effect_cursor: u64,
     /// Scrolling command/output history for the message window.
     /// Live input line's barber-pole cursor animation frame.
     prompt_cursor_frame: u64,
@@ -10056,6 +10100,7 @@ fn setup(
         image_handle,
         text_font,
         rune_font,
+        sound_effect_cursor: 0,
         prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
@@ -10220,6 +10265,7 @@ fn transition_visual_intro_to_gameplay(
         image_handle,
         text_font,
         rune_font,
+        sound_effect_cursor: 0,
         prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
@@ -11398,6 +11444,17 @@ fn visual_intro_empty_save_message() -> String {
     .join("\n")
 }
 
+fn queue_pending_visual_sound_cues(
+    visual: &mut VisualState,
+    sound_cues: &mut EventWriter<VisualSoundCue>,
+) {
+    let serial = visual.sound_effect_cursor;
+    visual.sound_effect_cursor = visual.state.sound_effect_serial;
+    for cue in visual_sound_cues_after(serial, visual.state.music_enabled, &visual.state) {
+        sound_cues.write(cue);
+    }
+}
+
 fn drive_visual(
     keyboard: Res<ButtonInput<KeyCode>>,
     visual: Option<ResMut<VisualState>>,
@@ -11408,6 +11465,7 @@ fn drive_visual(
     let Some(mut visual) = visual else {
         return;
     };
+    queue_pending_visual_sound_cues(&mut visual, &mut sound_cues);
     if let Some(playback) = visual.potion_flash_restore_pending.take() {
         let v: &mut VisualState = visual.as_mut();
         v.skip_animation_pump_once = true;
@@ -11464,9 +11522,6 @@ fn drive_visual(
         keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
     for key in keyboard.get_just_pressed() {
         if visual_line_prompt_active(&visual.state) {
-            let sound_before = play_sound_snapshot(&visual.state);
-            let sound_input =
-                key_code_to_char(*key, shift_pressed, control_pressed).unwrap_or('\0');
             let game_dir = visual.game_dir.clone();
             let v: &mut VisualState = visual.as_mut();
             let result = handle_visual_line_key(
@@ -11484,11 +11539,6 @@ fn drive_visual(
                 }
                 Ok(Some(PlayInputDisposition::Continue)) => {
                     handled = true;
-                    for cue in
-                        visual_sound_cues_after_play_input(sound_before, &visual.state, sound_input)
-                    {
-                        sound_cues.write(cue);
-                    }
                     if visual.state.pending_potion_flash.is_some() {
                         break;
                     }
@@ -11505,7 +11555,6 @@ fn drive_visual(
         let Some(ch) = key_code_to_char(*key, shift_pressed, control_pressed) else {
             continue;
         };
-        let sound_before = play_sound_snapshot(&visual.state);
         let game_dir = visual.game_dir.clone();
         match handle_play_key_input(&mut visual.state, ch, "", &game_dir) {
             Ok(PlayInputDisposition::Quit) => {
@@ -11514,9 +11563,6 @@ fn drive_visual(
             }
             Ok(PlayInputDisposition::Continue) => {
                 handled = true;
-                for cue in visual_sound_cues_after_play_input(sound_before, &visual.state, ch) {
-                    sound_cues.write(cue);
-                }
                 if visual.state.pending_potion_flash.is_some() {
                     break;
                 }
@@ -11527,6 +11573,7 @@ fn drive_visual(
             }
         }
     }
+    queue_pending_visual_sound_cues(&mut visual, &mut sound_cues);
     if !handled {
         return;
     }
@@ -11568,6 +11615,7 @@ fn drive_visual(
         v.prompt_cursor_visible,
     );
     replace_visual_image_data(&mut images, &v.image_handle, rgba, "play input redraw");
+    queue_pending_visual_sound_cues(v, &mut sound_cues);
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
@@ -21497,6 +21545,9 @@ mod tests {
             VisualSoundCue::CombatEscape,
             VisualSoundCue::CombatPossession,
             VisualSoundCue::CombatSummon,
+            VisualSoundCue::DungeonDecorationSweep0,
+            VisualSoundCue::DungeonDecorationSweep1,
+            VisualSoundCue::DungeonDecorationSweep2,
             VisualSoundCue::PotionFlash,
             VisualSoundCue::RingVanish,
             VisualSoundCue::ShrineWordRumble,
@@ -21522,30 +21573,50 @@ mod tests {
             );
         }
 
+        for (band, cue) in [
+            (0, VisualSoundCue::DungeonDecorationSweep0),
+            (1, VisualSoundCue::DungeonDecorationSweep1),
+            (2, VisualSoundCue::DungeonDecorationSweep2),
+        ] {
+            let sweep = u5_runtime::dungeon_decoration_tone_sweep(band).unwrap();
+            let spec = visual_sound_spec(cue);
+            assert_eq!(visual_sound_frequency_steps(cue), sweep.updates);
+            assert_eq!(spec.start_frequency_hz, f32::from(sweep.start_hz));
+            assert_eq!(
+                spec.end_frequency_hz,
+                f32::from(sweep.frequency(sweep.updates - 1).unwrap())
+            );
+            assert_eq!(
+                spec.duration.as_millis(),
+                u128::from(sweep.updates) * u128::from(sweep.delay_units),
+                "the modern host maps one calibrated delay unit to one millisecond while preserving the published pacing ratio"
+            );
+        }
+
         let mut state = test_state(open_grid(), 4, 4);
-        let before = play_sound_snapshot(&state);
+        let before = state.sound_effect_serial;
         state.player.x += 1;
         state.turn += 1;
         assert_eq!(
-            visual_sound_cues_after_play_input(before, &state, 'd'),
+            visual_sound_cues_after(before, true, &state),
             Vec::<VisualSoundCue>::new(),
             "ordinary movement has no published sound boundary"
         );
 
-        let before = play_sound_snapshot(&state);
+        let before = state.sound_effect_serial;
         assert!(state.apply_wind_state(WindState::North));
         let _ = state.apply_shared_trap_effect_to_slot(0);
         assert_eq!(
-            visual_sound_cues_after_play_input(before, &state, 'C'),
+            visual_sound_cues_after(before, true, &state),
             vec![VisualSoundCue::WindChange, VisualSoundCue::TrapSting],
             "typed runtime effects preserve ordering when one input emits multiple cues"
         );
 
         state.music_enabled = false;
-        let before = play_sound_snapshot(&state);
+        let before = state.sound_effect_serial;
         assert!(state.apply_wind_state(WindState::South));
         assert_eq!(
-            visual_sound_cues_after_play_input(before, &state, 'C'),
+            visual_sound_cues_after(before, false, &state),
             Vec::<VisualSoundCue>::new()
         );
 
@@ -21560,6 +21631,18 @@ mod tests {
                 VisualSoundCue::CombatPossession,
             ),
             (PlaySoundEffect::CombatSummon, VisualSoundCue::CombatSummon),
+            (
+                PlaySoundEffect::DungeonDecorationSweep0,
+                VisualSoundCue::DungeonDecorationSweep0,
+            ),
+            (
+                PlaySoundEffect::DungeonDecorationSweep1,
+                VisualSoundCue::DungeonDecorationSweep1,
+            ),
+            (
+                PlaySoundEffect::DungeonDecorationSweep2,
+                VisualSoundCue::DungeonDecorationSweep2,
+            ),
             (PlaySoundEffect::RingVanish, VisualSoundCue::RingVanish),
             (
                 PlaySoundEffect::ShrineWordRumble,

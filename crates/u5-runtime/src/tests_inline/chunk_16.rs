@@ -1821,3 +1821,38 @@ BRITANNIA 11 21
         assert_eq!(state.sound_effect_serial, serial + 2);
     }
 
+    #[test]
+    fn dungeon_stage_five_decoration_emits_its_depth_band_sweep_once() {
+        let mut grid = open_dungeon_record();
+        // Facing east, the north-adjacent cell is the visible band-0
+        // left wall. A flavour-wall class routes through the decoration pass.
+        let index = dungeon_cell_index(0, 4, 3);
+        grid[index] = 0xc5;
+        let mut state = dungeon_state(grid, 0, 4, 4);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::from_record(1).unwrap(),
+            level: 0,
+        };
+        state.torch_counter = 10;
+        let serial = state.sound_effect_serial;
+
+        state
+            .render_dungeon_viewport(4, TileGraphicsDepth::Ega16, None, None)
+            .unwrap();
+
+        assert_eq!(
+            state.sound_effects_after(serial),
+            vec![PlaySoundEffect::DungeonDecorationSweep0]
+        );
+        assert_eq!(state.grid[index], 0xc0);
+
+        state
+            .render_dungeon_viewport(4, TileGraphicsDepth::Ega16, None, None)
+            .unwrap();
+        assert_eq!(
+            state.sound_effects_after(serial),
+            vec![PlaySoundEffect::DungeonDecorationSweep0],
+            "clearing stage five prevents the presentation cue from replaying on redraw"
+        );
+    }
+

@@ -83,8 +83,9 @@ therefore generates short PC-speaker-style envelopes at the currently
 published effect boundaries: intro subtitle ignition, potion flash/rumble,
 wind changes, blocked combat steps, accepted combat escape, possession and
 daemon-summon effects, shared traps, Words of Power, ring vanish, Stonegate
-entry, and stolen-goods warnings. Press `Ctrl+S` during play to disable or
-re-enable these sound effects. Exact original frequencies and envelopes remain
+entry, stolen-goods warnings, and the exact published dungeon-decoration
+frequency steps. Press `Ctrl+S` during play to disable or re-enable these sound
+effects. Exact original timings and otherwise unpublished envelopes remain
 upstream specification work; ordinary menu input and movement stay silent
 rather than inventing unverified effects.
 Presentation is still v0: shops, conversations, and other text-heavy flows use

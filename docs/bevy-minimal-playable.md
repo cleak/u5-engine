@@ -59,9 +59,11 @@ cargo run -p u5-tui --features visual -- --visual-route-suite target\visual-rout
 
 - The game uses the supplied asset/save directory directly. Use a copied clean
   asset directory when testing destructive save flows.
-- The published effect boundaries have generated PC-speaker-style audio; exact
-  historical frequencies/envelopes, original modal pacing, and historical
-  display-driver deltas remain outside this v0 target.
+- The published effect boundaries have generated PC-speaker-style audio. The
+  dungeon-decoration sweep retains its published discrete frequencies and
+  pacing ratio; exact historical timings for calibrated waits, other
+  unpublished envelopes, original modal pacing, and historical display-driver
+  deltas remain outside this v0 target.
 - Remaining public-spec parity gaps are tracked in `docs/completion-audit.md`
   and the open `cleak/u5-spec` issues; they do not block this playable Bevy
   shell unless they surface as crashes, trapped prompts, or impossible ordinary

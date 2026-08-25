@@ -1149,9 +1149,14 @@ impl PlayState {
         }
         let stage = cell & 0x07;
         if stage == 5 {
-            // The modern renderer has no PC-speaker backend, but the exact
-            // sweep/delay contract is retained as a typed presentation value.
-            let _tone = dungeon_decoration_tone_sweep(band);
+            if dungeon_decoration_tone_sweep(band).is_some() {
+                self.emit_sound_effect(match band {
+                    0 => PlaySoundEffect::DungeonDecorationSweep0,
+                    1 => PlaySoundEffect::DungeonDecorationSweep1,
+                    2 => PlaySoundEffect::DungeonDecorationSweep2,
+                    _ => unreachable!("only dungeon bands 0..=2 publish a tone sweep"),
+                });
+            }
             self.grid[index] = cell & 0xf8;
             return;
         }
