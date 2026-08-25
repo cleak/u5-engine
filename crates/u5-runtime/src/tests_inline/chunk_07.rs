@@ -1301,7 +1301,7 @@ fn town_push_dynamic_object_moves_slot_and_avatar() {
 }
 
 #[test]
-fn town_push_refuses_missing_or_mismatched_sidecar_without_turn() {
+fn town_push_source_miss_keeps_map_and_consumes_the_default_acted_turn() {
     let dir = debug_game_dir();
     let mut grid = open_grid();
     grid[32 + 2] = 44;
@@ -1312,7 +1312,7 @@ fn town_push_refuses_missing_or_mismatched_sidecar_without_turn() {
         state.push_facing_with_game_dir(&dir).unwrap(),
         MoveOutcome::Blocked
     );
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
 
     fs::write(dir.join(TOWN_PUSHABLE_TABLE_FILE), "CASTLE:0 0 2 1 45\n").unwrap();
     assert_eq!(
@@ -1320,7 +1320,24 @@ fn town_push_refuses_missing_or_mismatched_sidecar_without_turn() {
         MoveOutcome::Blocked
     );
     assert_eq!(state.grid[32 + 2], 44);
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 2);
+    assert_eq!(state.message, "Nothing to push there.");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn world_push_source_miss_consumes_the_default_acted_turn() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 1, 1);
+    state.player.facing = Direction::East;
+
+    assert_eq!(
+        state.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Blocked
+    );
+
+    assert_eq!((state.player.x, state.player.y), (1, 1));
+    assert_eq!(state.turn, 1);
     assert_eq!(state.message, "Nothing to push there.");
     let _ = fs::remove_dir_all(dir);
 }

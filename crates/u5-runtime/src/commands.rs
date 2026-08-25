@@ -673,7 +673,7 @@ pub const fn command_echo(command: Command, mode: CommandEchoMode) -> Option<Com
         Command::NewOrder => ("New Order", Complete),
         Command::View => ("View a gem!", Complete),
         Command::Enter => ("Enter ", AwaitsArgument),
-        Command::Quit => ("Quit", Complete),
+        Command::Quit => ("Quit:", Complete),
         // §5.2: the two sibling refusals reach the screen with a
         // disambiguating prefix.
         Command::UnassignedRefusal => ("What?", Complete),

@@ -2335,6 +2335,11 @@ impl PlayState {
         }
 
         let Some(family) = pushable_tile_family(target_tile) else {
+            // `commands.md §3`: P-Push does not forward the handler's
+            // refusal status. Outside dungeons the resident dispatcher keeps
+            // its default acted result, so even a source miss consumes the
+            // ordinary world action.
+            self.advance_turn();
             self.message = "Nothing to push there.".to_string();
             return MoveOutcome::Blocked;
         };
@@ -2677,6 +2682,9 @@ impl PlayState {
             || !(0..32).contains(&px)
             || !(0..32).contains(&py)
         {
+            // The preflight above has already ticked the last-open-door
+            // tracker; consume the acted P command without ticking it twice.
+            self.advance_turn_without_door_tick();
             self.message = "Nothing to push there.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
@@ -2701,6 +2709,7 @@ impl PlayState {
             if sidecar_pushable {
                 return Ok(self.push_town_sidecar_tile(scene, floor, direction, tx, ty, px, py));
             }
+            self.advance_turn_without_door_tick();
             self.message = "Nothing to push there.".to_string();
             return Ok(MoveOutcome::Blocked);
         };

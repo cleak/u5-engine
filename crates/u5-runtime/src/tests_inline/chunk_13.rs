@@ -23565,6 +23565,24 @@ fn view_without_a_gem_keeps_the_published_echo_then_refusal_lines() {
 }
 
 #[test]
+fn save_prompt_keeps_the_exact_quit_colon_echo_before_its_question() {
+    // `commands.md §5.2`: Q's resident echo is exactly `Quit:`. The
+    // save handler's own question follows it instead of supplying the colon.
+    let mut state = test_state(open_grid(), 5, 5);
+
+    assert!(
+        state
+            .handle_top_down_key_with_inline('Q', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
+
+    assert_eq!(transcript_texts(&state), vec!["Quit:", SAVE_PROMPT_MESSAGE]);
+    assert!(state.message_entries()[0].is_command_echo);
+    assert!(!state.message_entries()[1].is_command_echo);
+    assert_eq!(state.turn, 0);
+}
+
+#[test]
 fn direction_result_continues_the_echoed_verb_line() {
     // Observed: the verb prefix plus the resolved direction result render
     // as one message-window line, `Look-Pass`. Open takes the same
