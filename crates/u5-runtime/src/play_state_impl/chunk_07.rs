@@ -1120,6 +1120,7 @@ impl PlayState {
         match yell_input_context(scene_byte) {
             YellInputContext::WordOfPower => {
                 if let Some((word_index, seal)) = word_of_power_seal_prefix_match(&word) {
+                    self.emit_sound_effect(PlaySoundEffect::ShrineWordRumble);
                     let outcome = self.open_word_of_power_seal(word_index, seal);
                     let utterance = format!(
                         "Yelled {word}, the Word of Power for {}. A word of power is uttered. {}",
@@ -1702,6 +1703,13 @@ impl PlayState {
         let Some(note) = self.stonegate_entry_presentation_message() else {
             return;
         };
+        if self
+            .sound_effect_history
+            .last()
+            .is_none_or(|(_, effect)| *effect != PlaySoundEffect::StonegateTone)
+        {
+            self.emit_sound_effect(PlaySoundEffect::StonegateTone);
+        }
         if !self.message.is_empty() {
             self.message.push('\n');
         }

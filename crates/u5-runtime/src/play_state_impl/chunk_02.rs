@@ -1466,6 +1466,7 @@ impl PlayState {
     /// apart; this match is exhaustive over [`TrapEffect`] rather than
     /// falling through a catch-all arm.
     pub fn apply_shared_trap_effect_to_slot(&mut self, triggering_slot: usize) -> String {
+        self.emit_sound_effect(PlaySoundEffect::TrapSting);
         match self.shared_trap_effect_family(triggering_slot) {
             TrapEffect::Acid => self.apply_acid_trap_effect(triggering_slot),
             TrapEffect::Poison => self.apply_poison_trap_effect(triggering_slot),

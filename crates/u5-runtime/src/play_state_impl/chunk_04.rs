@@ -60,6 +60,7 @@ impl PlayState {
         if self.wind == WindState::Calm && wind == WindState::Calm {
             return false;
         }
+        self.emit_sound_effect(PlaySoundEffect::WindChange);
         let changed = self.wind != wind;
         self.wind = wind;
         self.wind_save_byte = wind.save_byte();
@@ -1662,6 +1663,7 @@ impl PlayState {
         floor: i8,
         start: (usize, usize),
     ) -> io::Result<()> {
+        let prior_sound_serial = self.sound_effect_serial;
         self.cache_current_world_overlay();
         let previous_turn = self.turn;
         let mut options = PlayOptions {
@@ -1754,6 +1756,12 @@ impl PlayState {
             start.0,
             start.1
         );
+        let entry_effects = next.sound_effects_after(0);
+        next.sound_effect_serial = prior_sound_serial;
+        next.sound_effect_history.clear();
+        for effect in entry_effects {
+            next.emit_sound_effect(effect);
+        }
         *self = next;
         Ok(())
     }
@@ -4060,6 +4068,7 @@ impl PlayState {
         if self.resident_shadowlord != Some(SHADOWLORD_FALSEHOOD_INDEX) {
             return None;
         }
+        self.emit_sound_effect(PlaySoundEffect::StolenWarning);
 
         // `prng.md §3`: this sample precedes inventory inspection even when
         // the selected branch below is a deterministic high-to-low scan.

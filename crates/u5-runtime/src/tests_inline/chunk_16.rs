@@ -1806,3 +1806,18 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn published_sound_boundaries_emit_ordered_typed_frontend_events() {
+        let mut state = test_state(open_grid(), 4, 4);
+        let serial = state.sound_effect_serial;
+
+        assert!(state.apply_wind_state(WindState::North));
+        let _ = state.apply_shared_trap_effect_to_slot(0);
+
+        assert_eq!(
+            state.sound_effects_after(serial),
+            vec![PlaySoundEffect::WindChange, PlaySoundEffect::TrapSting]
+        );
+        assert_eq!(state.sound_effect_serial, serial + 2);
+    }
+

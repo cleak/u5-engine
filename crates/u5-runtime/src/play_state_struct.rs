@@ -4,6 +4,23 @@ use std::collections::HashMap;
 
 use crate::*;
 
+/// Frontend-facing sound boundaries published by the clean specification.
+/// The runtime records only the effect identity and a monotonically changing
+/// serial; each frontend owns the actual sound synthesis and playback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaySoundEffect {
+    CombatBlocked,
+    CombatEscape,
+    CombatPossession,
+    CombatSummon,
+    RingVanish,
+    ShrineWordRumble,
+    StonegateTone,
+    StolenWarning,
+    TrapSting,
+    WindChange,
+}
+
 #[derive(Clone, Debug)]
 pub struct PlayState {
     pub area: Area,
@@ -193,6 +210,10 @@ pub struct PlayState {
     pub save_template_source: SaveTemplateSource,
     pub typeahead_buffer_enabled: bool,
     pub music_enabled: bool,
+    /// Non-saved presentation event. The serial lets a frontend distinguish a
+    /// new occurrence from a redraw of the same message or state.
+    pub sound_effect_serial: u64,
+    pub(crate) sound_effect_history: Vec<(u64, PlaySoundEffect)>,
     pub active_blackthorn_guard_demand: Option<ActiveBlackthornGuardDemand>,
     pub pending_town_arrest: Option<TownArrestPrompt>,
     pub endgame: Option<EndgameState>,

@@ -1717,6 +1717,7 @@ impl PlayState {
             &legal_cells,
             candidate_coordinates,
         )?;
+        self.emit_sound_effect(PlaySoundEffect::CombatSummon);
         self.message = "Monster summons daemon.".to_string();
         Some(CombatAiSpecialApplication::SummonDaemon { actor_slot, summon })
     }
@@ -1775,6 +1776,7 @@ impl PlayState {
                 }
             }
             self.mark_visibility_dirty();
+            self.emit_sound_effect(PlaySoundEffect::CombatPossession);
             self.message = format!("Monster possessed party member {}.", target_slot + 1);
         } else {
             self.message = "Possession resisted.".to_string();
@@ -4035,6 +4037,17 @@ impl PlayState {
             },
         };
 
+        if matches!(
+            action,
+            CombatPlayerCommandAction::StepOrAttack {
+                outcome: CombatStepOrAttackPrimitiveOutcome::BlockedActor { .. }
+                    | CombatStepOrAttackPrimitiveOutcome::BlockedWall,
+                ..
+            }
+        ) {
+            self.emit_sound_effect(PlaySoundEffect::CombatBlocked);
+        }
+
         let mut control_after = match action {
             CombatPlayerCommandAction::EscapeCleanup {
                 application:
@@ -4196,6 +4209,7 @@ impl PlayState {
             }
         }
         self.mark_visibility_dirty();
+        self.emit_sound_effect(PlaySoundEffect::CombatEscape);
         CombatEscapeCleanupApplication::accepted(
             cleared_descriptor_slots,
             cleared_active_object_slots,
@@ -4827,6 +4841,7 @@ impl PlayState {
         if combat_magic_ring_vanishes(ring, vanish_roll) {
             self.party_equipment[wearer_slot][EQUIP_SLOT_RING] = EQUIPMENT_EMPTY;
             outcome.vanished_ring = Some(ring);
+            self.emit_sound_effect(PlaySoundEffect::RingVanish);
             self.message = "A ring has vanished!".to_string();
             if ring as usize == EQUIPMENT_ID_RING_INVISIBILITY
                 && clear_combat_linked_invisibility(

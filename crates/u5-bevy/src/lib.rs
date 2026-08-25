@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use bevy::audio::{AddAudioSource, Volume};
+use bevy::audio::{AddAudioSource, Decodable, Source, Volume};
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
@@ -69,19 +69,19 @@ use u5_runtime::{
     PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
     POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST,
     PROTECTION_SPELL_INDEX, PartyCapability, PartyMember, PlayInputDisposition, PlayOptions,
-    PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome, ProportionalLayoutDescriptor,
-    QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST,
-    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_CAPTION_TEXT_ROW,
-    RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y,
-    RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectangleDissolve, ReturnToViewFrameKind,
-    SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
-    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
-    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
-    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED,
-    SHIP_NO_SKIFFS_WARNING, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
-    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    PlaySoundEffect, PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome,
+    ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
+    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
+    RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
+    RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectangleDissolve,
+    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
+    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
     SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
@@ -202,21 +202,90 @@ const INTRO_FLOURISH_STEP_INTERVAL_SECS: f32 = 0.014;
 /// Generated single-channel tones used by the visual shell. The analyzed DOS
 /// baseline ships no external music resources (`EXTRACTION.md`), so the Bevy
 /// frontend models the published PC-speaker feedback boundaries with short
-/// procedural pitches instead of importing or inventing a soundtrack.
+/// procedural envelopes instead of importing or inventing a soundtrack.
 #[derive(Event, Clone, Copy, Debug, PartialEq, Eq)]
 enum VisualSoundCue {
     CombatBlocked,
+    CombatEscape,
+    CombatPossession,
+    CombatSummon,
     PotionFlash,
+    RingVanish,
+    ShrineWordRumble,
+    StonegateTone,
+    StolenWarning,
+    TrapSting,
     WindChange,
     SubtitleIgnition,
 }
 
+#[derive(Asset, Clone, Debug, TypePath)]
+struct VisualSoundWave {
+    samples: Arc<[f32]>,
+    duration: Duration,
+}
+
+struct VisualSoundDecoder {
+    samples: Arc<[f32]>,
+    index: usize,
+    duration: Duration,
+}
+
+impl Iterator for VisualSoundDecoder {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let sample = self.samples.get(self.index).copied()?;
+        self.index += 1;
+        Some(sample)
+    }
+}
+
+impl Source for VisualSoundDecoder {
+    fn current_frame_len(&self) -> Option<usize> {
+        Some(self.samples.len().saturating_sub(self.index))
+    }
+
+    fn channels(&self) -> u16 {
+        1
+    }
+
+    fn sample_rate(&self) -> u32 {
+        VISUAL_SOUND_SAMPLE_RATE
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        Some(self.duration)
+    }
+}
+
+impl Decodable for VisualSoundWave {
+    type DecoderItem = f32;
+    type Decoder = VisualSoundDecoder;
+
+    fn decoder(&self) -> Self::Decoder {
+        VisualSoundDecoder {
+            samples: self.samples.clone(),
+            index: 0,
+            duration: self.duration,
+        }
+    }
+}
+
 #[derive(Resource)]
 struct VisualSoundBank {
-    combat_blocked: Handle<Pitch>,
-    potion_flash: Handle<Pitch>,
-    wind_change: Handle<Pitch>,
-    subtitle_ignition: Handle<Pitch>,
+    combat_blocked: Handle<VisualSoundWave>,
+    combat_escape: Handle<VisualSoundWave>,
+    combat_possession: Handle<VisualSoundWave>,
+    combat_summon: Handle<VisualSoundWave>,
+    potion_flash: Handle<VisualSoundWave>,
+    ring_vanish: Handle<VisualSoundWave>,
+    shrine_word_rumble: Handle<VisualSoundWave>,
+    stonegate_tone: Handle<VisualSoundWave>,
+    stolen_warning: Handle<VisualSoundWave>,
+    trap_sting: Handle<VisualSoundWave>,
+    wind_change: Handle<VisualSoundWave>,
+    subtitle_ignition: Handle<VisualSoundWave>,
 }
 
 #[derive(Component)]
@@ -224,69 +293,186 @@ struct VisualSoundLifetime(Timer);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct VisualSoundSpec {
-    frequency_hz: f32,
+    start_frequency_hz: f32,
+    end_frequency_hz: f32,
+    jitter_hz: f32,
     duration: Duration,
     volume: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+const VISUAL_SOUND_SAMPLE_RATE: u32 = 44_100;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct PlaySoundSnapshot {
-    combat_active: bool,
     sound_enabled: bool,
-    wind: WindState,
+    sound_effect_serial: u64,
 }
 
 fn play_sound_snapshot(state: &PlayState) -> PlaySoundSnapshot {
     PlaySoundSnapshot {
-        combat_active: state.combat_active,
         sound_enabled: state.music_enabled,
-        wind: state.wind,
+        sound_effect_serial: state.sound_effect_serial,
     }
 }
 
-fn visual_sound_cue_after_play_input(
+const fn visual_sound_cue_for_play_effect(effect: PlaySoundEffect) -> VisualSoundCue {
+    match effect {
+        PlaySoundEffect::CombatBlocked => VisualSoundCue::CombatBlocked,
+        PlaySoundEffect::CombatEscape => VisualSoundCue::CombatEscape,
+        PlaySoundEffect::CombatPossession => VisualSoundCue::CombatPossession,
+        PlaySoundEffect::CombatSummon => VisualSoundCue::CombatSummon,
+        PlaySoundEffect::RingVanish => VisualSoundCue::RingVanish,
+        PlaySoundEffect::ShrineWordRumble => VisualSoundCue::ShrineWordRumble,
+        PlaySoundEffect::StonegateTone => VisualSoundCue::StonegateTone,
+        PlaySoundEffect::StolenWarning => VisualSoundCue::StolenWarning,
+        PlaySoundEffect::TrapSting => VisualSoundCue::TrapSting,
+        PlaySoundEffect::WindChange => VisualSoundCue::WindChange,
+    }
+}
+
+fn visual_sound_cues_after_play_input(
     before: PlaySoundSnapshot,
     state: &PlayState,
     _input: char,
-) -> Option<VisualSoundCue> {
+) -> Vec<VisualSoundCue> {
     if !before.sound_enabled {
-        return None;
+        return Vec::new();
     }
-    // `combat.md §10.1`: a blocked combat step emits a beep. Ordinary
-    // world movement has no published sound boundary and stays silent.
-    if (before.combat_active || state.combat_active) && state.message.contains("Blocked!") {
-        return Some(VisualSoundCue::CombatBlocked);
-    }
-    // `weather.md §3`: every accepted non-Calm-to-Calm transition plays the
-    // wind effect before storing/displaying the new state.
-    if state.wind != before.wind {
-        return Some(VisualSoundCue::WindChange);
-    }
-    None
+    state
+        .sound_effects_after(before.sound_effect_serial)
+        .into_iter()
+        .map(visual_sound_cue_for_play_effect)
+        .collect()
 }
 
 const fn visual_sound_spec(cue: VisualSoundCue) -> VisualSoundSpec {
     match cue {
         VisualSoundCue::CombatBlocked => VisualSoundSpec {
-            frequency_hz: 82.41,
+            start_frequency_hz: 185.0,
+            end_frequency_hz: 92.5,
+            jitter_hz: 0.0,
             duration: Duration::from_millis(125),
-            volume: 0.24,
+            volume: 0.42,
+        },
+        VisualSoundCue::CombatEscape => VisualSoundSpec {
+            start_frequency_hz: 164.81,
+            end_frequency_hz: 659.25,
+            jitter_hz: 0.0,
+            duration: Duration::from_millis(240),
+            volume: 0.40,
+        },
+        VisualSoundCue::CombatPossession => VisualSoundSpec {
+            start_frequency_hz: 196.0,
+            end_frequency_hz: 73.42,
+            jitter_hz: 5.0,
+            duration: Duration::from_millis(260),
+            volume: 0.38,
+        },
+        VisualSoundCue::CombatSummon => VisualSoundSpec {
+            start_frequency_hz: 82.41,
+            end_frequency_hz: 329.63,
+            jitter_hz: 8.0,
+            duration: Duration::from_millis(280),
+            volume: 0.40,
         },
         VisualSoundCue::PotionFlash => VisualSoundSpec {
-            frequency_hz: 110.0,
-            duration: Duration::from_millis(150),
-            volume: 0.20,
+            start_frequency_hz: 123.47,
+            end_frequency_hz: 61.74,
+            jitter_hz: 12.0,
+            duration: Duration::from_millis(220),
+            volume: 0.40,
+        },
+        VisualSoundCue::RingVanish => VisualSoundSpec {
+            start_frequency_hz: 783.99,
+            end_frequency_hz: 1_318.51,
+            jitter_hz: 0.0,
+            duration: Duration::from_millis(180),
+            volume: 0.36,
+        },
+        VisualSoundCue::ShrineWordRumble => VisualSoundSpec {
+            start_frequency_hz: 92.5,
+            end_frequency_hz: 55.0,
+            jitter_hz: 18.0,
+            duration: Duration::from_millis(340),
+            volume: 0.48,
+        },
+        VisualSoundCue::StonegateTone => VisualSoundSpec {
+            start_frequency_hz: 146.83,
+            end_frequency_hz: 110.0,
+            jitter_hz: 3.0,
+            duration: Duration::from_millis(260),
+            volume: 0.38,
+        },
+        VisualSoundCue::StolenWarning => VisualSoundSpec {
+            start_frequency_hz: 880.0,
+            end_frequency_hz: 110.0,
+            jitter_hz: 0.0,
+            duration: Duration::from_millis(320),
+            volume: 0.40,
+        },
+        VisualSoundCue::TrapSting => VisualSoundSpec {
+            start_frequency_hz: 1_046.5,
+            end_frequency_hz: 130.81,
+            jitter_hz: 7.0,
+            duration: Duration::from_millis(180),
+            volume: 0.46,
         },
         VisualSoundCue::WindChange => VisualSoundSpec {
-            frequency_hz: 146.83,
-            duration: Duration::from_millis(180),
-            volume: 0.18,
+            start_frequency_hz: 220.0,
+            end_frequency_hz: 110.0,
+            jitter_hz: 10.0,
+            duration: Duration::from_millis(240),
+            volume: 0.36,
         },
         VisualSoundCue::SubtitleIgnition => VisualSoundSpec {
-            frequency_hz: 98.0,
-            duration: Duration::from_millis(32),
-            volume: 0.18,
+            start_frequency_hz: 440.0,
+            end_frequency_hz: 220.0,
+            jitter_hz: 0.0,
+            duration: Duration::from_millis(8),
+            volume: 0.24,
         },
+    }
+}
+
+fn visual_sound_wave(cue: VisualSoundCue, mut jitter_seed: u32) -> VisualSoundWave {
+    let spec = visual_sound_spec(cue);
+    let sample_count = ((spec.duration.as_secs_f64() * f64::from(VISUAL_SOUND_SAMPLE_RATE)).ceil()
+        as usize)
+        .max(1);
+    let mut samples = Vec::with_capacity(sample_count);
+    let mut phase = 0.0_f32;
+    let envelope_cap = (sample_count / 4).max(1);
+    let attack_samples = (VISUAL_SOUND_SAMPLE_RATE as usize / 200)
+        .min(envelope_cap)
+        .max(1);
+    let release_samples = (VISUAL_SOUND_SAMPLE_RATE as usize / 100)
+        .min(envelope_cap)
+        .max(1);
+    let denominator = sample_count.saturating_sub(1).max(1) as f32;
+    let mut jitter = 0.0_f32;
+    for index in 0..sample_count {
+        if index % 64 == 0 {
+            jitter_seed = jitter_seed
+                .wrapping_mul(1_664_525)
+                .wrapping_add(1_013_904_223);
+            let unit = ((jitter_seed >> 16) as f32 / 65_535.0) * 2.0 - 1.0;
+            jitter = unit * spec.jitter_hz;
+        }
+        let progress = index as f32 / denominator;
+        let frequency = (spec.start_frequency_hz
+            + (spec.end_frequency_hz - spec.start_frequency_hz) * progress
+            + jitter)
+            .max(20.0);
+        phase += std::f32::consts::TAU * frequency / VISUAL_SOUND_SAMPLE_RATE as f32;
+        let attack = (index as f32 / attack_samples as f32).min(1.0);
+        let remaining = sample_count - index;
+        let release = (remaining as f32 / release_samples as f32).min(1.0);
+        let square = if phase.sin() >= 0.0 { 1.0 } else { -1.0 };
+        samples.push(square * attack * release);
+    }
+    VisualSoundWave {
+        samples: samples.into(),
+        duration: spec.duration,
     }
 }
 
@@ -1014,7 +1200,7 @@ pub fn run_visual_loop(
             }),
             ..default()
         }))
-        .add_audio_source::<Pitch>()
+        .add_audio_source::<VisualSoundWave>()
         .add_event::<VisualSoundCue>()
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
@@ -8911,7 +9097,7 @@ fn run_visual_intro_menu_app(
         }),
         ..default()
     }))
-    .add_audio_source::<Pitch>()
+    .add_audio_source::<VisualSoundWave>()
     .add_event::<VisualSoundCue>()
     .insert_resource(ClearColor(Color::BLACK))
     .insert_resource(VisualIntroState {
@@ -8973,14 +9159,26 @@ fn add_visual_intro_update_systems(app: &mut App) {
     );
 }
 
-fn setup_visual_sound_bank(mut commands: Commands, mut pitches: ResMut<Assets<Pitch>>) {
+fn setup_visual_sound_bank(mut commands: Commands, mut sounds: ResMut<Assets<VisualSoundWave>>) {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO);
+    let mut jitter_seed = elapsed.subsec_nanos() ^ elapsed.as_secs() as u32;
     let mut add = |cue| {
-        let spec = visual_sound_spec(cue);
-        pitches.add(Pitch::new(spec.frequency_hz, spec.duration))
+        jitter_seed = jitter_seed.wrapping_add(0x9e37_79b9);
+        sounds.add(visual_sound_wave(cue, jitter_seed))
     };
     commands.insert_resource(VisualSoundBank {
         combat_blocked: add(VisualSoundCue::CombatBlocked),
+        combat_escape: add(VisualSoundCue::CombatEscape),
+        combat_possession: add(VisualSoundCue::CombatPossession),
+        combat_summon: add(VisualSoundCue::CombatSummon),
         potion_flash: add(VisualSoundCue::PotionFlash),
+        ring_vanish: add(VisualSoundCue::RingVanish),
+        shrine_word_rumble: add(VisualSoundCue::ShrineWordRumble),
+        stonegate_tone: add(VisualSoundCue::StonegateTone),
+        stolen_warning: add(VisualSoundCue::StolenWarning),
+        trap_sting: add(VisualSoundCue::TrapSting),
         wind_change: add(VisualSoundCue::WindChange),
         subtitle_ignition: add(VisualSoundCue::SubtitleIgnition),
     });
@@ -8994,11 +9192,24 @@ fn play_visual_sound_cues(
     for cue in cues.read().copied() {
         let handle = match cue {
             VisualSoundCue::CombatBlocked => &bank.combat_blocked,
+            VisualSoundCue::CombatEscape => &bank.combat_escape,
+            VisualSoundCue::CombatPossession => &bank.combat_possession,
+            VisualSoundCue::CombatSummon => &bank.combat_summon,
             VisualSoundCue::PotionFlash => &bank.potion_flash,
+            VisualSoundCue::RingVanish => &bank.ring_vanish,
+            VisualSoundCue::ShrineWordRumble => &bank.shrine_word_rumble,
+            VisualSoundCue::StonegateTone => &bank.stonegate_tone,
+            VisualSoundCue::StolenWarning => &bank.stolen_warning,
+            VisualSoundCue::TrapSting => &bank.trap_sting,
             VisualSoundCue::WindChange => &bank.wind_change,
             VisualSoundCue::SubtitleIgnition => &bank.subtitle_ignition,
         };
         let spec = visual_sound_spec(cue);
+        if cue == VisualSoundCue::SubtitleIgnition {
+            debug!(?cue, "queued visual PC-speaker cue");
+        } else {
+            info!(?cue, "queued visual PC-speaker cue");
+        }
         commands.spawn((
             AudioPlayer(handle.clone()),
             PlaybackSettings::ONCE.with_volume(Volume::Linear(spec.volume)),
@@ -11253,6 +11464,9 @@ fn drive_visual(
         keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
     for key in keyboard.get_just_pressed() {
         if visual_line_prompt_active(&visual.state) {
+            let sound_before = play_sound_snapshot(&visual.state);
+            let sound_input =
+                key_code_to_char(*key, shift_pressed, control_pressed).unwrap_or('\0');
             let game_dir = visual.game_dir.clone();
             let v: &mut VisualState = visual.as_mut();
             let result = handle_visual_line_key(
@@ -11270,6 +11484,11 @@ fn drive_visual(
                 }
                 Ok(Some(PlayInputDisposition::Continue)) => {
                     handled = true;
+                    for cue in
+                        visual_sound_cues_after_play_input(sound_before, &visual.state, sound_input)
+                    {
+                        sound_cues.write(cue);
+                    }
                     if visual.state.pending_potion_flash.is_some() {
                         break;
                     }
@@ -11295,9 +11514,7 @@ fn drive_visual(
             }
             Ok(PlayInputDisposition::Continue) => {
                 handled = true;
-                if let Some(cue) =
-                    visual_sound_cue_after_play_input(sound_before, &visual.state, ch)
-                {
+                for cue in visual_sound_cues_after_play_input(sound_before, &visual.state, ch) {
                     sound_cues.write(cue);
                 }
                 if visual.state.pending_potion_flash.is_some() {
@@ -21277,14 +21494,32 @@ mod tests {
     fn visual_sound_cues_cover_only_published_effect_boundaries() {
         for cue in [
             VisualSoundCue::CombatBlocked,
+            VisualSoundCue::CombatEscape,
+            VisualSoundCue::CombatPossession,
+            VisualSoundCue::CombatSummon,
             VisualSoundCue::PotionFlash,
+            VisualSoundCue::RingVanish,
+            VisualSoundCue::ShrineWordRumble,
+            VisualSoundCue::StonegateTone,
+            VisualSoundCue::StolenWarning,
+            VisualSoundCue::TrapSting,
             VisualSoundCue::WindChange,
             VisualSoundCue::SubtitleIgnition,
         ] {
             let spec = visual_sound_spec(cue);
-            assert!(spec.frequency_hz.is_finite() && spec.frequency_hz > 0.0);
+            assert!(spec.start_frequency_hz.is_finite() && spec.start_frequency_hz > 0.0);
+            assert!(spec.end_frequency_hz.is_finite() && spec.end_frequency_hz > 0.0);
+            assert!(spec.jitter_hz.is_finite() && spec.jitter_hz >= 0.0);
             assert!(!spec.duration.is_zero());
             assert!((0.0..=1.0).contains(&spec.volume));
+            let wave = visual_sound_wave(cue, 0x1234_5678);
+            assert_eq!(wave.duration, spec.duration);
+            assert!(!wave.samples.is_empty());
+            assert!(
+                wave.samples
+                    .iter()
+                    .all(|sample| sample.is_finite() && (-1.0..=1.0).contains(sample))
+            );
         }
 
         let mut state = test_state(open_grid(), 4, 4);
@@ -21292,32 +21527,87 @@ mod tests {
         state.player.x += 1;
         state.turn += 1;
         assert_eq!(
-            visual_sound_cue_after_play_input(before, &state, 'd'),
-            None,
+            visual_sound_cues_after_play_input(before, &state, 'd'),
+            Vec::<VisualSoundCue>::new(),
             "ordinary movement has no published sound boundary"
         );
 
         let before = play_sound_snapshot(&state);
-        state.combat_active = true;
-        state.message = "Blocked!".to_string();
+        assert!(state.apply_wind_state(WindState::North));
+        let _ = state.apply_shared_trap_effect_to_slot(0);
         assert_eq!(
-            visual_sound_cue_after_play_input(before, &state, 'a'),
-            Some(VisualSoundCue::CombatBlocked)
-        );
-
-        state.combat_active = false;
-        state.message.clear();
-        let before = play_sound_snapshot(&state);
-        state.wind = WindState::North;
-        assert_eq!(
-            visual_sound_cue_after_play_input(before, &state, 'C'),
-            Some(VisualSoundCue::WindChange)
+            visual_sound_cues_after_play_input(before, &state, 'C'),
+            vec![VisualSoundCue::WindChange, VisualSoundCue::TrapSting],
+            "typed runtime effects preserve ordering when one input emits multiple cues"
         );
 
         state.music_enabled = false;
         let before = play_sound_snapshot(&state);
-        state.wind = WindState::South;
-        assert_eq!(visual_sound_cue_after_play_input(before, &state, 'C'), None);
+        assert!(state.apply_wind_state(WindState::South));
+        assert_eq!(
+            visual_sound_cues_after_play_input(before, &state, 'C'),
+            Vec::<VisualSoundCue>::new()
+        );
+
+        for (effect, cue) in [
+            (
+                PlaySoundEffect::CombatBlocked,
+                VisualSoundCue::CombatBlocked,
+            ),
+            (PlaySoundEffect::CombatEscape, VisualSoundCue::CombatEscape),
+            (
+                PlaySoundEffect::CombatPossession,
+                VisualSoundCue::CombatPossession,
+            ),
+            (PlaySoundEffect::CombatSummon, VisualSoundCue::CombatSummon),
+            (PlaySoundEffect::RingVanish, VisualSoundCue::RingVanish),
+            (
+                PlaySoundEffect::ShrineWordRumble,
+                VisualSoundCue::ShrineWordRumble,
+            ),
+            (
+                PlaySoundEffect::StonegateTone,
+                VisualSoundCue::StonegateTone,
+            ),
+            (
+                PlaySoundEffect::StolenWarning,
+                VisualSoundCue::StolenWarning,
+            ),
+            (PlaySoundEffect::TrapSting, VisualSoundCue::TrapSting),
+            (PlaySoundEffect::WindChange, VisualSoundCue::WindChange),
+        ] {
+            assert_eq!(visual_sound_cue_for_play_effect(effect), cue);
+        }
+    }
+
+    #[test]
+    fn visual_sound_event_queues_a_decodable_audio_player() {
+        let mut app = App::new();
+        app.init_resource::<Assets<VisualSoundWave>>()
+            .add_event::<VisualSoundCue>()
+            .add_systems(Startup, setup_visual_sound_bank)
+            .add_systems(Update, play_visual_sound_cues);
+        app.update();
+        app.world_mut()
+            .resource_mut::<Events<VisualSoundCue>>()
+            .send(VisualSoundCue::TrapSting);
+        app.update();
+
+        let bank = app.world().resource::<VisualSoundBank>();
+        let wave = app
+            .world()
+            .resource::<Assets<VisualSoundWave>>()
+            .get(&bank.trap_sting)
+            .expect("the trap cue must resolve to generated waveform samples");
+        assert!(wave.decoder().next().is_some());
+        assert_eq!(
+            app.world_mut()
+                .query::<(&AudioPlayer<VisualSoundWave>, &VisualSoundLifetime)>()
+                .iter(app.world())
+                .count(),
+            1,
+            "a cue event must spawn one owned Bevy audio player"
+        );
     }
 
     #[test]

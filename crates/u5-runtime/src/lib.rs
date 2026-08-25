@@ -578,8 +578,8 @@ pub use play_state_impl::{
     town_free_roaming_pen_tile_blocks,
 };
 pub use play_state_struct::{
-    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, PlayState, ViewOverlay, ViewOverlayKind,
-    ViewOverlayMode, WhitePotionSweep, WorldOverlayCache, WorldReturn,
+    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, PlaySoundEffect, PlayState, ViewOverlay,
+    ViewOverlayKind, ViewOverlayMode, WhitePotionSweep, WorldOverlayCache, WorldReturn,
 };
 pub use predicates::*;
 pub use prng::*;

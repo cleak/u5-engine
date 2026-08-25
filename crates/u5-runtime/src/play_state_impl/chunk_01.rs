@@ -4,6 +4,22 @@ use std::path::Path;
 use crate::*;
 
 impl PlayState {
+    pub(crate) fn emit_sound_effect(&mut self, effect: PlaySoundEffect) {
+        self.sound_effect_serial = self.sound_effect_serial.wrapping_add(1);
+        self.sound_effect_history
+            .push((self.sound_effect_serial, effect));
+        if self.sound_effect_history.len() > 16 {
+            self.sound_effect_history.remove(0);
+        }
+    }
+
+    pub fn sound_effects_after(&self, serial: u64) -> Vec<PlaySoundEffect> {
+        self.sound_effect_history
+            .iter()
+            .filter_map(|(event_serial, effect)| (*event_serial > serial).then_some(*effect))
+            .collect()
+    }
+
     pub fn load_scene(game_dir: &Path, options: PlayOptions) -> io::Result<Self> {
         match options.target {
             PlayTarget::Town(scene) => Self::load_town_scene(game_dir, scene, options),
@@ -540,6 +556,8 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
+            sound_effect_serial: 0,
+            sound_effect_history: Vec::new(),
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
@@ -806,6 +824,8 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
+            sound_effect_serial: 0,
+            sound_effect_history: Vec::new(),
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
@@ -1092,6 +1112,8 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             music_enabled: true,
+            sound_effect_serial: 0,
+            sound_effect_history: Vec::new(),
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,

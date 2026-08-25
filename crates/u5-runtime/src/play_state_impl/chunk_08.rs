@@ -1378,6 +1378,7 @@ impl PlayState {
         target: PlayTarget,
         debug: bool,
     ) -> io::Result<MoveOutcome> {
+        let prior_sound_serial = self.sound_effect_serial;
         self.restore_tracked_natural_moongates();
         self.cache_current_world_overlay();
         let entering_transport = self.player.transport;
@@ -1562,6 +1563,12 @@ impl PlayState {
         }
         if debug {
             next.append_stonegate_entry_presentation_message();
+        }
+        let entry_effects = next.sound_effects_after(0);
+        next.sound_effect_serial = prior_sound_serial;
+        next.sound_effect_history.clear();
+        for effect in entry_effects {
+            next.emit_sound_effect(effect);
         }
         *self = next;
         Ok(match target {
