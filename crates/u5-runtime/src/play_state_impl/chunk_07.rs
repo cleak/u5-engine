@@ -2308,16 +2308,37 @@ impl PlayState {
         direction: Direction,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
+        if matches!(self.area, Area::Dungeon { .. }) {
+            self.message = PUSH_NOT_HERE_REFUSAL.to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
+        self.tick_door_tracker();
+        let outcome = self.push_direction_after_cleanup_with_game_dir(direction, game_dir)?;
+        self.prepend_push_direction_result(direction);
+        Ok(outcome)
+    }
+
+    pub(crate) fn push_direction_after_cleanup_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
         match self.area {
             Area::Town { scene, floor } => {
-                self.push_town_direction(game_dir, scene, floor, direction)
+                self.push_town_direction_after_cleanup(game_dir, scene, floor, direction)
             }
-            Area::Dungeon { .. } => {
-                self.message = "What?".to_string();
-                Ok(MoveOutcome::Blocked)
-            }
+            Area::Dungeon { .. } => unreachable!("dungeon Push bypasses direction handling"),
             Area::World { .. } => Ok(self.push_world_direction(direction)),
         }
+    }
+
+    pub(crate) fn prepend_push_direction_result(&mut self, direction: Direction) {
+        let result = std::mem::take(&mut self.message);
+        self.message = if result.is_empty() {
+            direction.name().to_string()
+        } else {
+            format!("{}\n{result}", direction.name())
+        };
     }
 
     pub fn push_world_direction(&mut self, direction: Direction) -> MoveOutcome {
@@ -2330,8 +2351,10 @@ impl PlayState {
         let target_idx = world_cell_index(tx, ty);
         let target_tile = self.grid[target_idx];
 
-        if let Some((slot, object)) = self.object_slot_at_current_floor(tx, ty) {
-            return self.push_world_dynamic_object(direction, tx, ty, px, py, slot, *object);
+        if self.object_slot_at_current_floor(tx, ty).is_some() {
+            self.advance_turn_without_door_tick();
+            self.message = PUSH_WONT_BUDGE_EMPHATIC.to_string();
+            return MoveOutcome::Blocked;
         }
 
         let Some(family) = pushable_tile_family(target_tile) else {
@@ -2340,7 +2363,7 @@ impl PlayState {
             // its default acted result, so even a source miss consumes the
             // ordinary world action.
             self.advance_turn();
-            self.message = "Nothing to push there.".to_string();
+            self.message = PUSH_WONT_BUDGE_EMPHATIC.to_string();
             return MoveOutcome::Blocked;
         };
 
@@ -2348,6 +2371,17 @@ impl PlayState {
     }
 
     pub fn push_combat_actor_direction(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+    ) -> MoveOutcome {
+        self.tick_door_tracker();
+        let outcome = self.push_combat_actor_direction_after_cleanup(actor_slot, direction);
+        self.prepend_push_direction_result(direction);
+        outcome
+    }
+
+    pub(crate) fn push_combat_actor_direction_after_cleanup(
         &mut self,
         actor_slot: usize,
         direction: Direction,
@@ -2374,10 +2408,28 @@ impl PlayState {
         let sy = actor.y as isize + dy;
         let dx2 = sx + dx;
         let dy2 = sy + dy;
+        if apply_combat_ambush_reveal_records(
+            &mut self.combat_ambush_reveals,
+            &mut self.combat_terrain,
+            sx as u8,
+            sy as u8,
+        )
+        .is_some()
+        {
+            // `commands.md §8.2`: a pre-placed ambush/camp reveal marker
+            // consumes the action before the ordinary source predicate and
+            // has no result continuation after the direction echo.
+            self.mark_visibility_dirty();
+            self.message.clear();
+            return MoveOutcome::Pushed;
+        }
         if !combat_arena_coordinate_in_bounds(sx as i16, sy as i16)
             || !combat_arena_coordinate_in_bounds(dx2 as i16, dy2 as i16)
         {
-            self.message = "Nothing to push there.".to_string();
+            // The finite clean arena has no exposed backing bytes. Its
+            // default off-grid sample is zero/non-pushable; tests that model
+            // another backing byte must provide an in-range fixture cell.
+            self.message = PUSH_WONT_BUDGE_EMPHATIC.to_string();
             return MoveOutcome::Blocked;
         }
         let sx = sx as usize;
@@ -2385,29 +2437,25 @@ impl PlayState {
         let dx2 = dx2 as usize;
         let dy2 = dy2 as usize;
 
-        if let Some(blocking_slot) = self.combat_actor_slot_at(sx as u8, sy as u8, actor_slot) {
-            self.message = format!("Push blocked by combatant in slot {blocking_slot}.");
+        if self
+            .combat_actor_slot_at(sx as u8, sy as u8, actor_slot)
+            .is_some()
+        {
+            self.message = PUSH_WONT_BUDGE_EMPHATIC.to_string();
             return MoveOutcome::Blocked;
         }
 
-        if let Some((object_slot, object)) =
-            self.combat_loose_object_slot_at(sx, sy, actor.active_object_slot as usize)
+        if self
+            .combat_loose_object_slot_at(sx, sy, actor.active_object_slot as usize)
+            .is_some()
         {
-            return self.push_combat_dynamic_object(
-                actor_slot,
-                direction,
-                sx,
-                sy,
-                dx2,
-                dy2,
-                object_slot,
-                object,
-            );
+            self.message = PUSH_WONT_BUDGE_EMPHATIC.to_string();
+            return MoveOutcome::Blocked;
         }
 
         let source_tile = self.combat_terrain[sy][sx];
         let Some(family) = pushable_tile_family(source_tile) else {
-            self.message = "Nothing to push there.".to_string();
+            self.message = PUSH_WONT_BUDGE_EMPHATIC.to_string();
             return MoveOutcome::Blocked;
         };
 
@@ -2431,10 +2479,7 @@ impl PlayState {
             self.combat_terrain[sy][sx] = stamp;
             self.combat_terrain[dy2][dx2] = pushable_oriented_tile(source_tile, direction);
             self.finish_combat_push(actor_slot, sx, sy);
-            self.message = format!(
-                "Pushed combat tile {source_tile} {} from ({sx}, {sy}) to ({dx2}, {dy2}).",
-                direction.name()
-            );
+            self.message = PUSHED_SUCCESS.to_string();
             return MoveOutcome::Pushed;
         }
 
@@ -2444,50 +2489,12 @@ impl PlayState {
                 pushable_oriented_tile(source_tile, pull_direction);
             self.combat_terrain[sy][sx] = stamp;
             self.finish_combat_push(actor_slot, sx, sy);
-            self.message = format!(
-                "Pulled combat tile {source_tile} {} from ({sx}, {sy}) to ({}, {}).",
-                direction.name(),
-                actor.x,
-                actor.y
-            );
+            self.message = PULLED_SUCCESS.to_string();
             return MoveOutcome::Pushed;
         }
 
-        self.message = "Push blocked; it won't budge.".to_string();
+        self.message = PUSH_WONT_BUDGE_SHORT.to_string();
         MoveOutcome::Blocked
-    }
-
-    fn push_combat_dynamic_object(
-        &mut self,
-        actor_slot: usize,
-        direction: Direction,
-        sx: usize,
-        sy: usize,
-        dx2: usize,
-        dy2: usize,
-        object_slot: usize,
-        object: ActiveObject,
-    ) -> MoveOutcome {
-        if !self.combat_cell_clear_for_push(dx2, dy2)
-            || !is_probe_walkable(self.combat_terrain[dy2][dx2])
-        {
-            self.message = format!("Push blocked by combat arena cell ({dx2}, {dy2}).");
-            return MoveOutcome::Blocked;
-        }
-
-        if let Some(moved) = self.active_objects.get_mut(object_slot) {
-            moved.x = dx2;
-            moved.y = dy2;
-            moved.tile = pushable_oriented_tile(moved.tile, direction);
-            moved.type_byte = pushable_oriented_tile(moved.type_byte, direction);
-        }
-        self.finish_combat_push(actor_slot, sx, sy);
-        self.message = format!(
-            "Pushed combat object tile {} {} from ({sx}, {sy}) to ({dx2}, {dy2}).",
-            object.tile,
-            direction.name()
-        );
-        MoveOutcome::Pushed
     }
 
     fn finish_combat_push(&mut self, actor_slot: usize, x: usize, y: usize) {
@@ -2576,70 +2583,22 @@ impl PlayState {
             self.grid[target_idx] = stamp;
             self.grid[dest_idx] = pushable_oriented_tile(target_tile, direction);
             self.finish_world_push(tx, ty);
-            self.message = format!(
-                "Pushed tile {target_tile} {} from ({tx}, {ty}) to ({px}, {py}).",
-                direction.name()
-            );
+            self.message = PUSHED_SUCCESS.to_string();
             return MoveOutcome::Pushed;
         }
 
         if self.grid[player_idx] == stamp {
             let pull_direction = direction.opposite_cardinal().unwrap_or(direction);
-            let old_player_x = self.player.x;
-            let old_player_y = self.player.y;
             self.grid[player_idx] = pushable_oriented_tile(target_tile, pull_direction);
             self.grid[target_idx] = stamp;
             self.finish_world_push(tx, ty);
-            self.message = format!(
-                "Pulled tile {target_tile} {} from ({tx}, {ty}) to ({old_player_x}, {old_player_y}).",
-                direction.name()
-            );
+            self.message = PULLED_SUCCESS.to_string();
             return MoveOutcome::Pushed;
         }
 
         self.advance_turn();
-        self.message = "Push blocked; it won't budge.".to_string();
+        self.message = PUSH_WONT_BUDGE_SHORT.to_string();
         MoveOutcome::Blocked
-    }
-
-    fn push_world_dynamic_object(
-        &mut self,
-        direction: Direction,
-        tx: usize,
-        ty: usize,
-        px: usize,
-        py: usize,
-        slot: usize,
-        object: ActiveObject,
-    ) -> MoveOutcome {
-        if self.blocking_object_at(px, py).is_some() {
-            self.advance_turn_without_door_tick();
-            self.message = format!("Push blocked by actor at ({px}, {py}).");
-            return MoveOutcome::Blocked;
-        }
-        let dest_idx = world_cell_index(px, py);
-        if !self.tile_walkable(self.grid[dest_idx]) {
-            self.advance_turn();
-            self.message = format!(
-                "Push blocked by {} at ({px}, {py}).",
-                tile_class(self.grid[dest_idx])
-            );
-            return MoveOutcome::Blocked;
-        }
-
-        if let Some(moved) = self.active_objects.get_mut(slot) {
-            moved.x = px;
-            moved.y = py;
-            moved.tile = pushable_oriented_tile(moved.tile, direction);
-            moved.type_byte = pushable_oriented_tile(moved.type_byte, direction);
-        }
-        self.finish_world_push(tx, ty);
-        self.message = format!(
-            "Pushed object tile {} {} from ({tx}, {ty}) to ({px}, {py}).",
-            object.tile,
-            direction.name()
-        );
-        MoveOutcome::Pushed
     }
 
     fn finish_world_push(&mut self, tx: usize, ty: usize) {
@@ -2667,31 +2626,43 @@ impl PlayState {
         floor: i8,
         direction: Direction,
     ) -> io::Result<MoveOutcome> {
+        self.tick_door_tracker();
+        let outcome = self.push_town_direction_after_cleanup(game_dir, scene, floor, direction)?;
+        self.prepend_push_direction_result(direction);
+        Ok(outcome)
+    }
+
+    pub(crate) fn push_town_direction_after_cleanup(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        direction: Direction,
+    ) -> io::Result<MoveOutcome> {
         if !direction.is_cardinal() {
             self.message = "Push requires a cardinal facing direction.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        self.tick_door_tracker();
         let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         let px = tx + dx;
         let py = ty + dy;
-        if !(0..32).contains(&tx)
-            || !(0..32).contains(&ty)
-            || !(0..32).contains(&px)
-            || !(0..32).contains(&py)
-        {
-            // The preflight above has already ticked the last-open-door
-            // tracker; consume the acted P command without ticking it twice.
-            self.advance_turn_without_door_tick();
-            self.message = "Nothing to push there.".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
-        let tx = tx as usize;
-        let ty = ty as usize;
-        let px = px as usize;
-        let py = py as usize;
+        // `commands.md §8.2`: an out-of-grid location tile read aliases
+        // the southeast cell, while the true coordinate cannot match an
+        // ordinary active-object record.
+        let source_in_bounds = (0..32).contains(&tx) && (0..32).contains(&ty);
+        let far_in_bounds = (0..32).contains(&px) && (0..32).contains(&py);
+        let (tx, ty) = if source_in_bounds {
+            (tx as usize, ty as usize)
+        } else {
+            (31, 31)
+        };
+        let (px, py) = if far_in_bounds {
+            (px as usize, py as usize)
+        } else {
+            (31, 31)
+        };
         let target_idx = ty * 32 + tx;
         let target_tile = self.grid[target_idx];
         let entries = load_town_pushable_entries(game_dir)?;
@@ -2701,8 +2672,10 @@ impl PlayState {
                 .any(|entry| town_pushable_matches(*entry, scene, floor, tx, ty, target_tile))
         });
 
-        if let Some((slot, object)) = self.object_slot_at_current_floor(tx, ty) {
-            return Ok(self.push_town_dynamic_object(direction, tx, ty, px, py, slot, *object));
+        if source_in_bounds && self.object_slot_at_current_floor(tx, ty).is_some() {
+            self.advance_turn_without_door_tick();
+            self.message = PUSH_WONT_BUDGE_EMPHATIC.to_string();
+            return Ok(MoveOutcome::Blocked);
         }
 
         let Some(family) = pushable_tile_family(target_tile) else {
@@ -2710,7 +2683,7 @@ impl PlayState {
                 return Ok(self.push_town_sidecar_tile(scene, floor, direction, tx, ty, px, py));
             }
             self.advance_turn_without_door_tick();
-            self.message = "Nothing to push there.".to_string();
+            self.message = PUSH_WONT_BUDGE_EMPHATIC.to_string();
             return Ok(MoveOutcome::Blocked);
         };
 
@@ -2721,15 +2694,15 @@ impl PlayState {
         &mut self,
         scene: Scene,
         floor: i8,
-        direction: Direction,
+        _direction: Direction,
         tx: usize,
         ty: usize,
         px: usize,
         py: usize,
     ) -> MoveOutcome {
         if self.blocking_object_at(px, py).is_some() {
-            self.advance_turn();
-            self.message = format!("Push blocked by actor at ({px}, {py}).");
+            self.advance_turn_without_door_tick();
+            self.message = PUSH_WONT_BUDGE_SHORT.to_string();
             return MoveOutcome::Blocked;
         }
         let target_idx = ty * 32 + tx;
@@ -2738,17 +2711,14 @@ impl PlayState {
         let dest_tile = self.grid[dest_idx];
         if !self.tile_walkable(dest_tile) {
             self.advance_turn_without_door_tick();
-            self.message = format!("Push blocked by {} at ({px}, {py}).", tile_class(dest_tile));
+            self.message = PUSH_WONT_BUDGE_SHORT.to_string();
             return MoveOutcome::Blocked;
         }
 
         self.grid[target_idx] = dest_tile;
         self.grid[dest_idx] = target_tile;
         self.finish_town_push(scene, floor, tx, ty, px, py);
-        self.message = format!(
-            "Pushed tile {target_tile} {} from ({tx}, {ty}) to ({px}, {py}).",
-            direction.name()
-        );
+        self.message = PUSHED_SUCCESS.to_string();
         MoveOutcome::Pushed
     }
 
@@ -2772,10 +2742,7 @@ impl PlayState {
             self.grid[target_idx] = stamp;
             self.grid[dest_idx] = pushable_oriented_tile(target_tile, direction);
             self.finish_town_push(scene, floor, tx, ty, px, py);
-            self.message = format!(
-                "Pushed tile {target_tile} {} from ({tx}, {ty}) to ({px}, {py}).",
-                direction.name()
-            );
+            self.message = PUSHED_SUCCESS.to_string();
             return MoveOutcome::Pushed;
         }
 
@@ -2786,62 +2753,13 @@ impl PlayState {
             self.grid[player_idx] = pushable_oriented_tile(target_tile, pull_direction);
             self.grid[target_idx] = stamp;
             self.finish_town_push(scene, floor, tx, ty, old_player_x, old_player_y);
-            self.message = format!(
-                "Pulled tile {target_tile} {} from ({tx}, {ty}) to ({}, {}).",
-                direction.name(),
-                player_idx % 32,
-                player_idx / 32
-            );
+            self.message = PULLED_SUCCESS.to_string();
             return MoveOutcome::Pushed;
         }
 
         self.advance_turn_without_door_tick();
-        self.message = "Push blocked; it won't budge.".to_string();
+        self.message = PUSH_WONT_BUDGE_SHORT.to_string();
         MoveOutcome::Blocked
-    }
-
-    fn push_town_dynamic_object(
-        &mut self,
-        direction: Direction,
-        tx: usize,
-        ty: usize,
-        px: usize,
-        py: usize,
-        slot: usize,
-        object: ActiveObject,
-    ) -> MoveOutcome {
-        if self.blocking_object_at(px, py).is_some() {
-            self.advance_turn_without_door_tick();
-            self.message = format!("Push blocked by actor at ({px}, {py}).");
-            return MoveOutcome::Blocked;
-        }
-        let dest_idx = py * 32 + px;
-        if !self.tile_walkable(self.grid[dest_idx]) {
-            self.advance_turn_without_door_tick();
-            self.message = format!(
-                "Push blocked by {} at ({px}, {py}).",
-                tile_class(self.grid[dest_idx])
-            );
-            return MoveOutcome::Blocked;
-        }
-
-        if let Some(moved) = self.active_objects.get_mut(slot) {
-            moved.x = px;
-            moved.y = py;
-            moved.tile = pushable_oriented_tile(moved.tile, direction);
-            moved.type_byte = pushable_oriented_tile(moved.type_byte, direction);
-        }
-        self.player.x = tx;
-        self.player.y = ty;
-        self.sync_player_object();
-        self.mark_visibility_dirty();
-        self.advance_turn_without_door_tick();
-        self.message = format!(
-            "Pushed object tile {} {} from ({tx}, {ty}) to ({px}, {py}).",
-            object.tile,
-            direction.name()
-        );
-        MoveOutcome::Pushed
     }
 
     fn finish_town_push(

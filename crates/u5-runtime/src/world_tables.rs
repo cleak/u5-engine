@@ -12,6 +12,104 @@ pub struct WorldLocationEntry {
     /// that town entry ignores this value and always writes row 30.
     pub town_entry_y: Option<usize>,
     pub expected_tile: Option<u8>,
+    /// Clean sidecars must publish this independently from the storage target.
+    /// Stock rows always carry it; a missing extension value makes E-Enter
+    /// reject the row as unrecognized rather than inferring presentation.
+    pub narration_class: Option<WorldEntryNarrationClass>,
+    /// Uppercase stock name printed on its own centered line, when any.
+    pub proper_name: Option<&'static str>,
+    /// Zero-based column in the sixteen-cell message window.
+    pub name_column: Option<u8>,
+    /// The seven ordinary dungeon rows accept the same coordinate on both
+    /// outdoor planes. Doom is Underworld-only.
+    pub accepts_both_world_planes: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorldEntryHelper {
+    Town,
+    Dungeon,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorldEntryNarrationClass {
+    Hut,
+    Keep,
+    Village,
+    Towne,
+    Castle,
+    Lighthouse,
+    LordBritish,
+    Blackthorn,
+    Cave,
+    Mine,
+    Dungeon,
+}
+
+impl WorldEntryNarrationClass {
+    pub const fn from_live_tile(tile: u8) -> Option<Self> {
+        match tile {
+            0x10 => Some(Self::Hut),
+            0x12 => Some(Self::Keep),
+            0x13 => Some(Self::Village),
+            0x14 => Some(Self::Towne),
+            0x15 => Some(Self::Castle),
+            0x1B => Some(Self::Lighthouse),
+            0x39 => Some(Self::Blackthorn),
+            0x3E => Some(Self::LordBritish),
+            0x16 => Some(Self::Cave),
+            0x17 => Some(Self::Mine),
+            0x18 => Some(Self::Dungeon),
+            _ => None,
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        match key.to_ascii_uppercase().as_str() {
+            "HUT" => Some(Self::Hut),
+            "KEEP" => Some(Self::Keep),
+            "VILLAGE" => Some(Self::Village),
+            "TOWNE" | "TOWN" => Some(Self::Towne),
+            "CASTLE" => Some(Self::Castle),
+            "LIGHTHOUSE" => Some(Self::Lighthouse),
+            "LORD_BRITISH" | "LORDBRITISH" => Some(Self::LordBritish),
+            "BLACKTHORN" => Some(Self::Blackthorn),
+            "CAVE" => Some(Self::Cave),
+            "MINE" => Some(Self::Mine),
+            "DUNGEON" => Some(Self::Dungeon),
+            _ => None,
+        }
+    }
+
+    pub const fn helper(self) -> WorldEntryHelper {
+        match self {
+            Self::Hut
+            | Self::Keep
+            | Self::Village
+            | Self::Towne
+            | Self::Castle
+            | Self::Lighthouse
+            | Self::LordBritish
+            | Self::Blackthorn => WorldEntryHelper::Town,
+            Self::Cave | Self::Mine | Self::Dungeon => WorldEntryHelper::Dungeon,
+        }
+    }
+
+    pub const fn text(self) -> &'static str {
+        match self {
+            Self::Hut => "hut",
+            Self::Keep => "keep",
+            Self::Village => "village",
+            Self::Towne => "towne",
+            Self::Castle => "castle",
+            Self::Lighthouse => "lighthouse",
+            Self::LordBritish => "the Castle of Lord British!",
+            Self::Blackthorn => "the palace of Blackthorn!",
+            Self::Cave => "cave",
+            Self::Mine => "mine",
+            Self::Dungeon => "dungeon",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

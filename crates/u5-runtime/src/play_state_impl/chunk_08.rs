@@ -1083,47 +1083,94 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
 
-        let (entries, has_sidecar) =
+        let (entries, _has_sidecar) =
             effective_world_location_entries_with_sidecar_status(game_dir)?;
         let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
-        if let Some(entry) = entries.iter().find(|entry| {
-            entry.plane == plane
+        let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {
+            self.message = "What?".to_string();
+            return Ok(MoveOutcome::Blocked);
+        };
+        let helper = live_class.helper();
+        let coordinate_matches = |entry: &&WorldLocationEntry| {
+            (entry.plane == plane || entry.accepts_both_world_planes)
                 && entry.x == self.player.x
                 && entry.y == self.player.y
-                && match entry.expected_tile {
-                    Some(expected) => expected == tile,
-                    None => true,
-                }
-        }) {
-            return self.enter_world_target(game_dir, plane, entry.target, false);
-        }
+        };
 
-        if has_sidecar {
-            // `town-mode.md §15.1`: a recognized overworld Enter whose
-            // coordinate lookup does not transition is still an ordinary
-            // consumed two-minute outdoor action.  Advancing here lets the
-            // caller's shared post-turn gate run the remaining outdoor work.
-            self.advance_turn();
-            self.message = format!(
-                "No entry in {WORLD_LOCATION_TABLE_FILE} for {} at ({}, {}).",
-                plane.key(),
-                self.player.x,
-                self.player.y
-            );
+        // An extension row at this exact coordinate is deliberately unusable
+        // until it publishes a narration class. Never infer one from its key.
+        if entries
+            .iter()
+            .filter(coordinate_matches)
+            .any(|entry| entry.narration_class.is_none())
+        {
+            self.message = "What?".to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
-        let Some(target) = self.debug_enter else {
+        let entry = entries.iter().filter(coordinate_matches).find(|entry| {
+            let row_helper = match entry.target {
+                PlayTarget::Town(_) => WorldEntryHelper::Town,
+                PlayTarget::Dungeon(_) => WorldEntryHelper::Dungeon,
+                PlayTarget::World(_) => return false,
+            };
+            row_helper == helper
+        });
+        let Some(entry) = entry else {
             self.advance_turn();
             self.message = format!(
-                "No entry in {WORLD_LOCATION_TABLE_FILE} for {} at ({}, {}).",
-                plane.key(),
-                self.player.x,
-                self.player.y
+                "{}\n{}",
+                live_class.text(),
+                match helper {
+                    WorldEntryHelper::Town => "What town?",
+                    WorldEntryHelper::Dungeon => "What dungeon?",
+                }
             );
             return Ok(MoveOutcome::Blocked);
         };
-        self.enter_world_target(game_dir, plane, target, true)
+
+        if helper == WorldEntryHelper::Dungeon
+            && !matches!(self.player.transport, TransportState::Foot)
+        {
+            self.advance_turn();
+            self.message = format!("{}\nOn foot!", live_class.text());
+            return Ok(MoveOutcome::Blocked);
+        }
+
+        if matches!(entry.target, PlayTarget::Dungeon(scene) if scene.record == 7)
+            && !self.all_shadowlords_vanquished()
+        {
+            self.advance_turn();
+            self.message = format!("{}\nAttacked at entrance!", live_class.text());
+            // The public contract identifies this as an entrance ambush object,
+            // not an immediate scene transition. Reuse the native outdoor
+            // encounter placer so it obeys the live object table and terrain.
+            let _ = self.spawn_native_world_encounter(plane);
+            return Ok(MoveOutcome::Blocked);
+        }
+
+        self.emit_world_entry_narration(live_class, entry.proper_name);
+        self.enter_world_target(game_dir, plane, entry.target, false)
+    }
+
+    fn emit_world_entry_narration(
+        &mut self,
+        live_class: WorldEntryNarrationClass,
+        proper_name: Option<&'static str>,
+    ) {
+        let class_text = live_class.text();
+        self.message = class_text.to_string();
+        if !self.commit_command_echo() {
+            self.push_message_entry(class_text, false);
+        }
+        if let Some(name) = proper_name {
+            self.push_explicit_blank_message_entry();
+            self.push_centered_message_entry(name);
+            self.message = format!("{class_text}\n\n{name}\n");
+        } else {
+            self.message = format!("{class_text}\n");
+        }
+        self.message_flushed = self.message.clone();
     }
 
     /// `moons.md §3` / `time.md §5`: the hour-change hook that refreshes
@@ -1331,14 +1378,6 @@ impl PlayState {
         target: PlayTarget,
         debug: bool,
     ) -> io::Result<MoveOutcome> {
-        if !debug
-            && matches!(target, PlayTarget::Dungeon(scene) if scene.record == 7)
-            && !self.all_shadowlords_vanquished()
-        {
-            self.message = "Doom is sealed until all Shadowlords are vanquished.".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
-
         self.restore_tracked_natural_moongates();
         self.cache_current_world_overlay();
         let entering_transport = self.player.transport;
@@ -1354,18 +1393,18 @@ impl PlayState {
             active_objects: self.active_objects.clone(),
             pending_vehicle: self.pending_vehicle_save.acquisition(),
         });
-        if matches!(target, PlayTarget::Town(_)) {
-            // `town-mode.md §15.1`: entry persists the complete current
-            // outdoor table before the town owns slots 1..31.  The canonical
-            // disk mirror, rather than `WorldReturn` or `world_overlays`, is
-            // the authoritative source reloaded by the later exit.
-            let bytes = encode_active_object_table(&self.active_objects)?;
-            let file_name = match plane {
-                WorldPlane::Britannia => BRIT_OOL_FILENAME,
-                WorldPlane::Underworld => UNDER_OOL_FILENAME,
-            };
-            write_disk_file(&game_dir.join(file_name), bytes)?;
-        }
+        // Entry persists the complete current outdoor object table before
+        // either town-family setup or dungeon-record loading.
+        let bytes = encode_active_object_table(&self.active_objects)?;
+        let file_name = match plane {
+            WorldPlane::Britannia => BRIT_OOL_FILENAME,
+            WorldPlane::Underworld => UNDER_OOL_FILENAME,
+        };
+        write_disk_file(&game_dir.join(file_name), bytes)?;
+        let entry_transcript = self.message_transcript.clone();
+        let entry_transcript_revision = self.message_transcript_revision;
+        let entry_message = self.message.clone();
+        let entry_message_flushed = self.message_flushed.clone();
         let mut options = PlayOptions {
             target,
             floor: 0,
@@ -1495,30 +1534,34 @@ impl PlayState {
         next.turn = self.turn;
         next.return_world = return_world;
         next.world_overlays = self.world_overlays.clone();
-        next.message = match target {
-            PlayTarget::Town(scene) if debug => {
-                format!("Debug-entered {} from {}.", scene.key(), plane.key())
+        next.message = if debug {
+            match target {
+                PlayTarget::Town(scene) if debug => {
+                    format!("Debug-entered {} from {}.", scene.key(), plane.key())
+                }
+                PlayTarget::Dungeon(scene) if debug => {
+                    format!(
+                        "Debug-entered {} ({}) from {}.",
+                        scene.key(),
+                        scene.name(),
+                        plane.key()
+                    )
+                }
+                PlayTarget::Town(_) | PlayTarget::Dungeon(_) => unreachable!(),
+                PlayTarget::World(_) => unreachable!(),
             }
-            PlayTarget::Town(scene) => format!("Entered {} from {}.", scene.key(), plane.key()),
-            PlayTarget::Dungeon(scene) if debug => {
-                format!(
-                    "Debug-entered {} ({}) from {}.",
-                    scene.key(),
-                    scene.name(),
-                    plane.key()
-                )
-            }
-            PlayTarget::Dungeon(scene) => {
-                format!(
-                    "Entered {} ({}) from {}.",
-                    scene.key(),
-                    scene.name(),
-                    plane.key()
-                )
-            }
-            PlayTarget::World(_) => unreachable!(),
+        } else {
+            entry_message
         };
-        next.append_stonegate_entry_presentation_message();
+        if !debug {
+            next.message_transcript = entry_transcript;
+            next.message_transcript_revision = entry_transcript_revision;
+            next.message_flushed = entry_message_flushed;
+            next.pending_command_echo = None;
+        }
+        if debug {
+            next.append_stonegate_entry_presentation_message();
+        }
         *self = next;
         Ok(match target {
             PlayTarget::Town(scene) => {

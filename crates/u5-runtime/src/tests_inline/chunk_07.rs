@@ -1132,7 +1132,7 @@ fn town_push_uses_clean_sidecar_to_swap_target_into_destination() {
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("Pushed tile 44 East"));
+    assert_eq!(state.message, "East\nPushed!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1156,7 +1156,7 @@ fn town_push_static_chair_requires_stamp_rotates_and_advances_avatar() {
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("Pushed tile 144 East"));
+    assert_eq!(state.message, "East\nPushed!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1185,7 +1185,7 @@ fn town_push_runs_door_close_preflight_before_resolving_destination() {
     assert_eq!(state.door_tracker, None);
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Pushed tile 144 East"));
+    assert_eq!(state.message, "East\nPushed!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1265,12 +1265,12 @@ fn town_push_static_family_pulls_when_far_cell_blocked_and_player_on_stamp() {
     assert_eq!(state.grid[32 + 3], 24);
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Pulled tile 144 East"));
+    assert_eq!(state.message, "East\nPulled!");
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
-fn town_push_dynamic_object_moves_slot_and_avatar() {
+fn town_push_dynamic_object_is_an_emphatic_refusal_and_never_moves() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
@@ -1287,16 +1287,16 @@ fn town_push_dynamic_object_moves_slot_and_avatar() {
 
     assert_eq!(
         state.push_facing_with_game_dir(&dir).unwrap(),
-        MoveOutcome::Pushed
+        MoveOutcome::Blocked
     );
 
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
-        (3, 1)
+        (2, 1)
     );
-    assert_eq!((state.player.x, state.player.y), (2, 1));
+    assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Pushed object tile 91 East"));
+    assert_eq!(state.message, "East\nWon't budge!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1321,7 +1321,7 @@ fn town_push_source_miss_keeps_map_and_consumes_the_default_acted_turn() {
     );
     assert_eq!(state.grid[32 + 2], 44);
     assert_eq!(state.turn, 2);
-    assert_eq!(state.message, "Nothing to push there.");
+    assert_eq!(state.message, "East\nWon't budge!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1338,7 +1338,7 @@ fn world_push_source_miss_consumes_the_default_acted_turn() {
 
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Nothing to push there.");
+    assert_eq!(state.message, "East\nWon't budge!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1360,7 +1360,7 @@ fn town_push_consumes_turn_when_pushable_destination_is_blocked() {
     assert_eq!(state.grid[32 + 2], 44);
     assert_eq!(state.grid[32 + 3], 0x0c);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Push blocked"));
+    assert_eq!(state.message, "East\nWon't budge");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1387,7 +1387,7 @@ fn world_push_static_family_wraps_and_advances_avatar() {
     assert_eq!((state.player.x, state.player.y), (255, 1));
     assert_eq!(state.turn, 1);
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("Pushed tile 144 East"));
+    assert_eq!(state.message, "East\nPushed!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1414,12 +1414,12 @@ fn world_push_static_family_pulls_when_far_cell_blocked_and_player_on_stamp() {
     assert_eq!(state.grid[world_cell_index(3, 1)], 24);
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Pulled tile 144 East"));
+    assert_eq!(state.message, "East\nPulled!");
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
-fn world_push_dynamic_object_moves_slot_and_avatar() {
+fn world_push_dynamic_object_is_an_emphatic_refusal_and_never_moves() {
     let dir = debug_game_dir();
     let mut state = world_state(open_world_grid(), 1, 1);
     state.player.facing = Direction::East;
@@ -1436,16 +1436,16 @@ fn world_push_dynamic_object_moves_slot_and_avatar() {
 
     assert_eq!(
         state.push_facing_with_game_dir(&dir).unwrap(),
-        MoveOutcome::Pushed
+        MoveOutcome::Blocked
     );
 
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
-        (3, 1)
+        (2, 1)
     );
-    assert_eq!((state.player.x, state.player.y), (2, 1));
+    assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Pushed object tile 91 East"));
+    assert_eq!(state.message, "East\nWon't budge!");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1467,7 +1467,7 @@ fn world_push_consumes_turn_when_pushable_destination_is_blocked() {
     assert_eq!(state.grid[world_cell_index(3, 1)], 24);
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Push blocked"));
+    assert_eq!(state.message, "East\nWon't budge");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1500,6 +1500,88 @@ fn world_push_prompt_routes_to_overworld_push() {
         assert_eq!((state.player.x, state.player.y), (2, 1));
         assert_eq!(state.turn, 1);
     }
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn push_prompt_ignores_escape_then_space_completes_pass_and_consumes_action() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 1, 1);
+
+    handle_play_key_input(&mut state, 'P', "", &dir).unwrap();
+    assert!(state.active_direction_prompt.is_some());
+    assert_eq!(transcript_texts(&state), vec!["Push-"]);
+
+    handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+    assert!(state.active_direction_prompt.is_some());
+    assert_eq!(state.turn, 0);
+    assert_eq!(transcript_texts(&state), vec!["Push-"]);
+
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    assert!(state.active_direction_prompt.is_none());
+    assert_eq!(state.turn, 1);
+    assert_eq!(transcript_texts(&state), vec!["Push-Pass"]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn inline_world_push_source_refusal_has_exact_echo_and_emphatic_line() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 1, 1);
+
+    state
+        .handle_top_down_key_with_inline(
+            'P',
+            &dir,
+            Some(Direction::East),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(state.turn, 1);
+    assert_eq!(transcript_texts(&state), vec!["Push-East", "Won't budge!"]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn dungeon_push_replaces_the_hyphenated_echo_and_never_opens_a_prompt() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.door_tracker = Some(DoorTracker {
+        previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
+        x: 2,
+        y: 1,
+        turns_remaining: 1,
+    });
+
+    handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+
+    assert!(state.active_direction_prompt.is_none());
+    assert_eq!(transcript_texts(&state), vec!["Push", "Not here!"]);
+    assert!(state.door_tracker.is_some());
+}
+
+#[test]
+fn town_push_out_of_grid_samples_the_southeast_tile_without_a_bounds_literal() {
+    let dir = debug_game_dir();
+    let mut source_out = test_state(open_grid(), 31, 31);
+    source_out.player.facing = Direction::East;
+    assert_eq!(
+        source_out.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(source_out.message, "East\nWon't budge!");
+
+    let mut grid = open_grid();
+    grid[31 * 32 + 31] = 0x90;
+    let mut far_out = test_state(grid, 30, 31);
+    far_out.player.facing = Direction::East;
+    assert_eq!(
+        far_out.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(far_out.message, "East\nWon't budge");
     let _ = fs::remove_dir_all(dir);
 }
 

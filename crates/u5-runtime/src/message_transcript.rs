@@ -27,6 +27,12 @@ impl PlayState {
         self.message_transcript_revision
     }
 
+    /// Whether the compatibility message slot still contains output that has
+    /// not been represented in the transcript.
+    pub fn message_slot_needs_flush(&self) -> bool {
+        !self.message.is_empty() && self.message != self.message_flushed
+    }
+
     /// Append one entry and honour the transcript's capacity. Shared by
     /// the revision-bumping public push and the epilogue push below.
     fn append_transcript_entry(
@@ -34,11 +40,15 @@ impl PlayState {
         text: String,
         glyphs: Vec<TlkRenderedGlyph>,
         is_command_echo: bool,
+        centered: bool,
+        explicit_blank: bool,
     ) {
         self.message_transcript.push(MessageEntry {
             text,
             glyphs,
             is_command_echo,
+            centered,
+            explicit_blank,
         });
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
             let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
@@ -50,7 +60,7 @@ impl PlayState {
     pub fn push_message_entry(&mut self, text: impl Into<String>, is_command_echo: bool) {
         let text = text.into();
         let glyphs = text.bytes().map(TlkRenderedGlyph::ordinary).collect();
-        self.append_transcript_entry(text, glyphs, is_command_echo);
+        self.append_transcript_entry(text, glyphs, is_command_echo, false, false);
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
@@ -60,7 +70,20 @@ impl PlayState {
         glyphs: Vec<TlkRenderedGlyph>,
         is_command_echo: bool,
     ) {
-        self.append_transcript_entry(text, glyphs, is_command_echo);
+        self.append_transcript_entry(text, glyphs, is_command_echo, false, false);
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
+    /// Append one output line with the text cursor's centre mode enabled.
+    pub fn push_centered_message_entry(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        let glyphs = text.bytes().map(TlkRenderedGlyph::ordinary).collect();
+        self.append_transcript_entry(text, glyphs, false, true, false);
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
+    pub fn push_explicit_blank_message_entry(&mut self) {
+        self.append_transcript_entry(String::new(), Vec::new(), false, false, true);
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
@@ -237,6 +260,33 @@ impl PlayState {
         }
         for line in lines {
             self.push_message_entry(line, false);
+        }
+        true
+    }
+
+    /// Complete a direction echo that was published when a prompt opened on
+    /// an earlier input event. The original keeps the hyphenated verb line
+    /// open while it waits, so the accepted direction or `Pass` belongs on
+    /// that existing line rather than in a new transcript entry.
+    pub(crate) fn complete_open_direction_echo(&mut self, verb: &str, continuation: &str) -> bool {
+        let Some(last) = self.message_transcript.last_mut() else {
+            if self.message == verb {
+                self.message.push_str(continuation);
+                self.message_flushed = self.message.clone();
+                return true;
+            }
+            return false;
+        };
+        if last.text != verb {
+            return false;
+        }
+        last.text.push_str(continuation);
+        last.glyphs
+            .extend(continuation.bytes().map(TlkRenderedGlyph::ordinary));
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+        if self.message == verb {
+            self.message.push_str(continuation);
+            self.message_flushed = self.message.clone();
         }
         true
     }

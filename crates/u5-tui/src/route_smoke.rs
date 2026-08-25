@@ -2005,7 +2005,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "debug-enter-castle-from-underworld",
             options: underworld_to_castle,
             script: &["e", "empty"],
-            expected: RouteSmokeExpectation::Town(castle),
+            expected: RouteSmokeExpectation::Town(Scene::new(25).expect("Ararat scene is valid")),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
@@ -3410,6 +3410,16 @@ fn apply_route_smoke_case_setup(
     game_dir: &Path,
 ) -> io::Result<()> {
     if let Some(index) = route_smoke_public_location_index(case_name) {
+        seed_public_location_route_position(state, index)?;
+    }
+    // Legacy route labels retained for manifest stability. They now exercise
+    // real published E-Enter rows; debug target bypass is no longer valid.
+    if let Some(index) = match case_name {
+        "debug-enter-castle" | "debug-enter-castle-return-world" => Some(16),
+        "debug-enter-castle-from-underworld" => Some(24),
+        "debug-enter-dungeon" => Some(32),
+        _ => None,
+    } {
         seed_public_location_route_position(state, index)?;
     }
 
@@ -7208,6 +7218,9 @@ fn seed_public_location_route_position(state: &mut PlayState, index: usize) -> i
     state.area = Area::World { plane: entry.plane };
     state.player.x = entry.x;
     state.player.y = entry.y;
+    if let Some(tile) = entry.expected_tile {
+        state.grid[world_cell_index(entry.x, entry.y)] = tile;
+    }
     if let Some(object) = state.active_objects.get_mut(0) {
         object.z = entry.plane.save_floor();
     }

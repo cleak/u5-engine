@@ -27,6 +27,13 @@ from decompiled code.
 | `town_exit_tiles.tsv` | Removed. Town-family exit is a grid-boundary event; no tile id or sidecar row participates. |
 | `moongates.tsv` | Removed. Superseded by the published natural-gate system; the runtime no longer reads this file. See below. |
 
+`world_locations.tsv` rows use `PLANE X Y TARGET [TOWN_ENTRY_Y] [TILE]
+[NARRATION_CLASS]`. A custom row without the final class remains available to
+return-coordinate lookup but is intentionally rejected by E-Enter with
+`Enter What?`; the runtime never infers narration from a target key or storage
+family. The optional tile column records authored stock context, while the live
+underfoot tile selects the actual narration at runtime.
+
 `moongates.tsv` held authored moongate origin/destination rows from the period
 before the natural-gate coordinates were published. `systems/overworld.md` §9
 now specifies the whole feature from the eight saved Moonstone slots in

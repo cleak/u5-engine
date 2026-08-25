@@ -151,9 +151,9 @@ use u5_runtime::{
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
     RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, configure_play_text_windows,
-    gameplay_chrome_content, layout_message_window, load_runes_ch_font,
-    message_is_scene_entry_narration, message_log_from_entries, paint_fixed_cell_glyph,
-    paint_gameplay_frame_chrome, paint_message_line_cap, prompt_cursor_glyph, ribbon_cap_sprite,
+    gameplay_chrome_content, layout_message_window, load_runes_ch_font, message_log_from_entries,
+    paint_fixed_cell_glyph, paint_gameplay_frame_chrome, paint_message_line_cap,
+    prompt_cursor_glyph, ribbon_cap_sprite,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -1639,6 +1639,34 @@ fn apply_visual_route_initial_setup(
         state.area = u5_runtime::Area::World { plane: entry.plane };
         state.player.x = entry.x;
         state.player.y = entry.y;
+        if let Some(tile) = entry.expected_tile {
+            state.grid[u5_runtime::world_cell_index(entry.x, entry.y)] = tile;
+        }
+        if let Some(object) = state.active_objects.get_mut(0) {
+            object.z = entry.plane.save_floor();
+        }
+        state.sync_player_object();
+        state.mark_visibility_dirty();
+        return Ok(());
+    }
+    // Legacy labels retained for manifest stability. They now seed authentic
+    // published rows because E-Enter no longer honors a debug-target bypass.
+    if let Some(index) = match label {
+        "route-debug-enter-castle" | "route-debug-enter-castle-return-world" => Some(16),
+        "route-debug-enter-castle-from-underworld" => Some(24),
+        "route-debug-enter-dungeon" => Some(32),
+        _ => None,
+    } {
+        let entry = published_world_location_entries()
+            .into_iter()
+            .nth(index)
+            .expect("legacy entry route maps to a published row");
+        state.area = u5_runtime::Area::World { plane: entry.plane };
+        state.player.x = entry.x;
+        state.player.y = entry.y;
+        if let Some(tile) = entry.expected_tile {
+            state.grid[u5_runtime::world_cell_index(entry.x, entry.y)] = tile;
+        }
         if let Some(object) = state.active_objects.get_mut(0) {
             object.z = entry.plane.save_floor();
         }
@@ -15002,22 +15030,15 @@ fn render_integrated_status_framebuffer(
         // transcript has not recorded it yet — the line still being
         // composed.
         //
-        // The engine's scene-entry narration prints raw map
-        // coordinates, is specified by no `systems/` document, and the
-        // original never shows it, so it is kept out of the window.
-        // Every other message is shown normally.
-        let player_x = display_state.player.x;
-        let player_y = display_state.player.y;
         let keep = |text: &str| {
-            (!text.trim().is_empty() && !message_is_scene_entry_narration(text, player_x, player_y))
-                .then(|| visual_display_line(&display_state, text))
+            (!text.trim().is_empty()).then(|| visual_display_line(&display_state, text))
         };
         let mut log = message_log_from_entries(display_state.message_entries(), keep);
-        let already_recorded = display_state
-            .message_entries()
-            .last()
-            .is_some_and(|entry| entry.text == message);
-        if let Some(text) = (!already_recorded).then(|| keep(&message)).flatten() {
+        if let Some(text) = display_state
+            .message_slot_needs_flush()
+            .then(|| keep(&message))
+            .flatten()
+        {
             log.push_output(&text);
         }
         message_rows = layout_message_window(&log, Some(input_echo.unwrap_or(""))).rows;
@@ -19266,61 +19287,24 @@ mod tests {
     }
 
     #[test]
-    fn scene_entry_narration_is_hidden_but_later_messages_still_change_the_frame() {
-        // The engine's "Entered <scene> at (x, y)." narration prints
-        // raw map coordinates, is specified by no `systems/` document,
-        // and the original never shows it, so the message window stays
-        // empty on the opening frame. Every other message renders, so
-        // a turn that produces one still changes the frame -- which is
-        // the invariant `visual_route_suite` checks per command.
+    fn exact_scene_entry_narration_is_visible_in_the_message_window() {
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
         let mut state = test_state(open_grid(), 1, 1);
-        state.message = format!(
-            "Entered CASTLE:0 at ({}, {}).",
-            state.player.x, state.player.y
-        );
-        assert!(message_is_scene_entry_narration(
-            &state.message,
-            state.player.x,
-            state.player.y
-        ));
         let initial = render_visual_play_frame(&mut state.clone(), &atlas, play_ctx(&font));
-
-        let mut passed = state.clone();
-        passed.message = "Passed.".to_string();
-        assert!(!message_is_scene_entry_narration(
-            &passed.message,
-            passed.player.x,
-            passed.player.y
-        ));
-        let after = render_visual_play_frame(&mut passed, &atlas, play_ctx(&font));
+        state.begin_command_echo_for(u5_runtime::Command::Enter);
+        state.message = "towne".to_string();
+        state.commit_command_echo();
+        state.push_explicit_blank_message_entry();
+        state.push_centered_message_entry("MOONGLOW");
+        let after = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
 
         assert_ne!(
             hash_bytes(&initial),
             hash_bytes(&after),
-            "a turn that produces a message must change the frame"
+            "published Enter narration must be visible"
         );
-
-        // The narration frame really is message-free: every cell of the
-        // message window body is background.
-        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
-        for row in u5_runtime::MESSAGE_WINDOW_TOP..u5_runtime::MESSAGE_WINDOW_BOTTOM {
-            for column in u5_runtime::MESSAGE_WINDOW_LEFT..=MESSAGE_WINDOW_RIGHT {
-                for y in 0..8 {
-                    for x in 0..8 {
-                        let px = usize::from(column) * 8 + x;
-                        let py = usize::from(row) * 8 + y;
-                        assert_eq!(
-                            rgba_pixel(&initial, width, px, py),
-                            ega_rgba(0),
-                            "message window cell ({column}, {row}) must be empty"
-                        );
-                    }
-                }
-            }
-        }
     }
 
     #[test]

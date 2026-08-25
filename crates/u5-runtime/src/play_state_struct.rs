@@ -326,6 +326,11 @@ pub struct MessageEntry {
     /// the ordinary font; TLK `0x8E` spans retain their runic selection here.
     pub glyphs: Vec<TlkRenderedGlyph>,
     pub is_command_echo: bool,
+    /// Center this output line in the sixteen-cell message window. Cursor
+    /// centering is presentation state, not ASCII padding in `text`.
+    pub centered: bool,
+    /// Preserve this empty output row instead of treating it as an empty slot.
+    pub explicit_blank: bool,
 }
 
 /// Bookkeeping for a verb echo that has been written to the transcript

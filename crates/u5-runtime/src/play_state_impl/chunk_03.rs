@@ -1065,6 +1065,9 @@ impl PlayState {
     }
 
     pub fn start_push_direction_prompt(&mut self) -> MoveOutcome {
+        // `commands.md §8`: cleanup precedes the poll, so even an ignored
+        // Escape or a later Space cancellation observes the closed door.
+        self.tick_door_tracker();
         self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Push));
         self.message = self.render_active_direction_prompt();
         MoveOutcome::Observed
@@ -1168,6 +1171,15 @@ impl PlayState {
             return Ok(None);
         };
         for ch in std::iter::once(key).chain(suffix.chars()) {
+            let push_prompt = matches!(
+                session.kind,
+                DirectionPromptKind::Push | DirectionPromptKind::CombatPush { .. }
+            );
+            if ch == '\u{1b}' && push_prompt {
+                // `commands.md §8.1` row A: Escape is ignored. The open
+                // `Push-` echo and prompt session remain active.
+                continue;
+            }
             if matches!(ch, '\u{1b}' | ' ') {
                 if matches!(
                     session.kind,
@@ -1178,6 +1190,17 @@ impl PlayState {
                 }
                 if matches!(session.kind, DirectionPromptKind::Klimb) {
                     self.advance_turn();
+                }
+                if push_prompt {
+                    let _ = self.complete_open_direction_echo("Push-", DIRECTION_PROMPT_LABEL_PASS);
+                    if matches!(session.kind, DirectionPromptKind::Push) {
+                        match self.area {
+                            Area::World { .. } => self.advance_turn(),
+                            Area::Town { .. } => self.advance_turn_without_door_tick(),
+                            Area::Dungeon { .. } => {}
+                        }
+                    }
+                    return Ok(Some(MoveOutcome::PromptDeclined));
                 }
                 self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
                 return Ok(Some(MoveOutcome::PromptDeclined));
@@ -1284,7 +1307,7 @@ impl PlayState {
                     self.klimb_combat_actor_direction(actor_slot, direction)
                 }
                 DirectionPromptKind::CombatPush { actor_slot } => {
-                    self.push_combat_actor_direction(actor_slot, direction)
+                    self.push_combat_actor_direction_after_cleanup(actor_slot, direction)
                 }
                 DirectionPromptKind::CombatSjog { actor_slot, branch } => {
                     self.combat_sjog_actor_direction(actor_slot, branch, direction)
@@ -1300,7 +1323,7 @@ impl PlayState {
                     self.open_direction_with_game_dir(direction, Some(game_dir))?
                 }
                 DirectionPromptKind::Push => {
-                    self.push_direction_with_game_dir(direction, game_dir)?
+                    self.push_direction_after_cleanup_with_game_dir(direction, game_dir)?
                 }
                 DirectionPromptKind::Search => {
                     self.search_direction_with_game_dir(direction, game_dir)?
@@ -1309,6 +1332,9 @@ impl PlayState {
                     self.talk_direction_with_game_dir(direction, game_dir)?
                 }
             };
+            if push_prompt {
+                let _ = self.complete_open_direction_echo("Push-", direction.name());
+            }
             return Ok(Some(outcome));
         }
         self.active_direction_prompt = Some(session);

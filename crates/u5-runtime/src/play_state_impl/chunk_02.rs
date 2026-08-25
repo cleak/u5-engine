@@ -204,9 +204,16 @@ impl PlayState {
                 self.message = "Not here!".to_string();
                 handled!();
             }
-            'f' | 'p' => {
+            'f' => {
                 self.message = "What?".to_string();
                 handled!();
+            }
+            'p' => {
+                // `commands.md §8.1` row K: the dungeon echo is the
+                // complete `Push` line, followed by this exact refusal. The
+                // handler performs no direction poll or door cleanup.
+                self.message = PUSH_NOT_HERE_REFUSAL.to_string();
+                handled!(MoveOutcome::Blocked);
             }
             'q' => {
                 if inline_drink.is_some() {

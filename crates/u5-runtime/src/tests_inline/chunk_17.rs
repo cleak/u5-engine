@@ -686,7 +686,14 @@
         assert!(push.active_direction_prompt.is_none());
         assert_eq!(push.grid[32 + 3], 44);
         assert_eq!(push.turn, 1);
-        assert!(push.message.contains("Pushed tile 44 East"));
+        assert_eq!(push.message, "Pushed!");
+        assert_eq!(
+            push.message_entries()
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Push-East", "Pushed!"]
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

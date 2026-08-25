@@ -23979,11 +23979,13 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
         assert_eq!(state.turn, 0);
     }
 
-    for key in ['F', 'P'] {
-        assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
-        assert_eq!(state.message, "What?");
-        assert_eq!(state.turn, 0);
-    }
+    assert!(state.handle_dungeon_key('F', Path::new("")).unwrap());
+    assert_eq!(state.message, "What?");
+    assert_eq!(state.turn, 0);
+
+    assert!(state.handle_dungeon_key('P', Path::new("")).unwrap());
+    assert_eq!(state.message, PUSH_NOT_HERE_REFUSAL);
+    assert_eq!(state.turn, 0);
 
     assert!(state.handle_dungeon_key('Q', Path::new("")).unwrap());
     assert!(state.active_yes_no_prompt.is_some());

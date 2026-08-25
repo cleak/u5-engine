@@ -2403,12 +2403,18 @@ fn handle_combat_multistage_command(
             true
         }
         CombatCommandBranch::Push => {
+            // `commands.md §8`: combat reaches the same pre-prompt door
+            // cleanup and keeps the resident `Push-` echo open for either a
+            // direction or Space/Pass.
+            state.tick_door_tracker();
+            state.begin_command_echo_for(Command::Push);
             if let Some(direction) = suffix
                 .chars()
                 .find_map(Direction::from_play_key)
                 .filter(|direction| direction.is_cardinal())
             {
-                state.push_combat_actor_direction(actor_slot, direction);
+                state.push_combat_actor_direction_after_cleanup(actor_slot, direction);
+                state.prepend_push_direction_result(direction);
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
             } else {

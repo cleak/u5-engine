@@ -484,14 +484,16 @@
 
     #[test]
     fn world_enter_reports_no_matching_coordinate_after_consuming_world_action() {
-        let mut state = world_state(open_world_grid(), 10, 20);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x14;
+        let mut state = world_state(grid, 10, 20);
 
         assert_eq!(
             state.enter_current_location(Path::new("")).unwrap(),
             MoveOutcome::Blocked
         );
 
-        assert!(state.message.contains("No entry in world_locations.tsv"));
+        assert_eq!(state.message, "towne\nWhat town?");
         assert_eq!(state.turn, 1);
         assert_eq!((state.clock.hour, state.clock.minute), (12, 2));
     }
@@ -506,7 +508,8 @@
                 && entry.plane == WorldPlane::Britannia
                 && (entry.x, entry.y) == (232, 135)
                 && entry.town_entry_y.is_none()
-                && entry.expected_tile.is_none()
+                && entry.expected_tile == Some(0x14)
+                && entry.narration_class == Some(WorldEntryNarrationClass::Towne)
         }));
         assert!(entries.iter().any(|entry| {
             entry.target == PlayTarget::Town(Scene::new(32).unwrap())
@@ -548,14 +551,48 @@
         write_all_location_family_fixtures(&dir);
 
         for entry in published_world_location_entries() {
-            let mut state = world_state(open_world_grid(), entry.x, entry.y);
+            let mut grid = open_world_grid();
+            grid[world_cell_index(entry.x, entry.y)] = entry.expected_tile.unwrap();
+            let mut state = world_state(grid, entry.x, entry.y);
             state.area = Area::World { plane: entry.plane };
             state.active_objects[0].z = entry.plane.save_floor();
             if matches!(entry.target, PlayTarget::Dungeon(scene) if scene.record == 7) {
                 state.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; SHADOWLORD_COUNT];
             }
 
+            state.begin_command_echo_for(Command::Enter);
             let outcome = state.enter_current_location(&dir).unwrap();
+
+            let transcript = state.message_entries();
+            assert_eq!(
+                transcript.first().map(|line| line.text.as_str()),
+                Some(format!("Enter {}", entry.narration_class.unwrap().text()).as_str()),
+                "{} used the wrong Enter continuation",
+                entry.target.key()
+            );
+            assert!(transcript.first().unwrap().is_command_echo);
+            match (entry.proper_name, entry.name_column) {
+                (Some(name), Some(column)) => {
+                    let name_entry = transcript
+                        .iter()
+                        .find(|line| line.text == name)
+                        .expect("named entry must publish its proper-name line");
+                    assert!(name_entry.centered);
+                    assert!(transcript.iter().any(|line| line.explicit_blank));
+                    let log = message_log_from_entries(transcript, |text| Some(text.to_string()));
+                    let layout = layout_message_window(&log, Some(""));
+                    let row = layout
+                        .rows
+                        .iter()
+                        .find(|row| row.text == name)
+                        .expect("proper name must reach the message-window layout");
+                    assert_eq!(row.column, MESSAGE_WINDOW_LEFT + column);
+                }
+                (None, None) => {
+                    assert!(!transcript.iter().any(|line| line.centered));
+                }
+                _ => panic!("published proper-name metadata must be complete"),
+            }
 
             match entry.target {
                 PlayTarget::Town(scene) => {
@@ -580,11 +617,7 @@
                         (LOCATION_DEFAULT_ENTRY_X, LOCATION_DEFAULT_ENTRY_Y)
                     );
                     assert!(state.return_world.is_none());
-                    assert!(state.message.contains(&format!(
-                        "Entered {} from {}",
-                        scene.key(),
-                        entry.plane.key()
-                    )));
+                    assert!(!state.message.contains("Entered "));
                 }
                 PlayTarget::Dungeon(scene) => {
                     assert_eq!(
@@ -615,12 +648,7 @@
                         )),
                         Some((entry.plane, entry.x, entry.y))
                     );
-                    assert!(state.message.contains(&format!(
-                        "Entered {} ({}) from {}",
-                        scene.key(),
-                        scene.name(),
-                        entry.plane.key()
-                    )));
+                    assert!(!state.message.contains("Entered "));
                 }
                 PlayTarget::World(_) => unreachable!("published table excludes world targets"),
             }
@@ -658,7 +686,9 @@
     fn world_enter_uses_published_location_table_without_sidecar() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
-        let mut state = britannia_state(open_world_grid(), 86, 107);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(86, 107)] = 0x3E;
+        let mut state = britannia_state(grid, 86, 107);
 
         assert_eq!(
             state.enter_current_location(&dir).unwrap(),
@@ -667,7 +697,7 @@
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
         assert!(state.return_world.is_none());
-        assert!(state.message.contains("Entered CASTLE:0 from BRITANNIA"));
+        assert_eq!(state.message, "the Castle of Lord British!\n");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -676,10 +706,12 @@
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA\t11\t20\tCASTLE:0\n",
+            "BRITANNIA\t11\t20\tCASTLE:0\t7\t0x15\tCASTLE\n",
         )
         .unwrap();
-        let mut state = britannia_state(open_world_grid(), 10, 20);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x15;
+        let mut state = britannia_state(grid, 10, 20);
         state.debug_enter = Some(PlayTarget::Town(Scene::new(17).unwrap()));
 
         assert_eq!(
@@ -698,24 +730,33 @@
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.turn, 1);
         assert_eq!((state.clock.hour, state.clock.minute), (12, 2));
-        assert!(state.message.contains("No entry in world_locations.tsv"));
+        assert_eq!(state.message, "castle\nWhat town?");
+        assert_eq!(
+            state
+                .message_entries()
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Enter castle", "What town?"]
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn world_enter_location_tile_guard_mismatch_consumes_world_action() {
+    fn world_enter_sidecar_without_narration_class_is_no_action() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
             "BRITANNIA\t10\t20\tCASTLE:0\t7\t24\n",
         )
         .unwrap();
-        let mut state = britannia_state(open_world_grid(), 10, 20);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x15;
+        let mut state = britannia_state(grid, 10, 20);
 
-        assert_eq!(
-            state.enter_current_location(&dir).unwrap(),
-            MoveOutcome::Blocked
-        );
+        state.begin_command_echo_for(Command::Enter);
+        assert_eq!(state.enter_current_location(&dir).unwrap(), MoveOutcome::Blocked);
+        state.commit_command_echo();
 
         assert_eq!(
             state.area,
@@ -724,9 +765,10 @@
             }
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 1);
-        assert_eq!((state.clock.hour, state.clock.minute), (12, 2));
-        assert!(state.message.contains("No entry in world_locations.tsv"));
+        assert_eq!(state.turn, 0);
+        assert_eq!((state.clock.hour, state.clock.minute), (12, 0));
+        assert_eq!(state.message, "What?");
+        assert_eq!(state.message_entries()[0].text, "Enter What?");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -736,10 +778,12 @@
         let scene = Scene::new(17).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA\t10\t20\tCASTLE:0\n",
+            "BRITANNIA\t10\t20\tCASTLE:0\t7\t0x15\tCASTLE\n",
         )
         .unwrap();
-        let mut state = britannia_state(open_world_grid(), 10, 20);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x15;
+        let mut state = britannia_state(grid, 10, 20);
         let transport = TransportState::Ship {
             type_byte: 168,
             tile: 168,
@@ -767,7 +811,98 @@
         assert_eq!(state.active_objects[0].tile, transport.avatar_tile());
         assert!(state.return_world.is_none());
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
-        assert!(state.message.contains("Entered CASTLE:0 from BRITANNIA"));
+        assert_eq!(state.message, "castle\n");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_enter_live_tile_selects_noun_within_helper_not_authored_stock_tile() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0 7 0x15 CASTLE\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x10;
+        let mut state = britannia_state(grid, 10, 20);
+
+        state.begin_command_echo_for(Command::Enter);
+        assert_eq!(
+            state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(Scene::new(17).unwrap()))
+        );
+
+        assert_eq!(state.message_entries()[0].text, "Enter hut");
+        assert_eq!(state.message, "hut\n");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_enter_opposite_helper_uses_its_own_no_match_refusal() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0 7 0x15 CASTLE\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x17;
+        let mut state = britannia_state(grid, 10, 20);
+
+        assert!(
+            state
+                .handle_top_down_key_with_inline('E', &dir, None, None, None, None)
+                .unwrap()
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "mine\nWhat dungeon?");
+        assert_eq!(
+            state
+                .message_entries()
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Enter mine", "What dungeon?"]
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_enter_narration_and_current_plane_ool_precede_scene_load_failure() {
+        let dir = debug_game_dir();
+        fs::remove_file(dir.join("CASTLE.DAT")).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0 7 0x15 CASTLE\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x15;
+        let mut state = britannia_state(grid, 10, 20);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xA8,
+            tile: 0xA8,
+            x: 9,
+            y: 20,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.begin_command_echo_for(Command::Enter);
+
+        assert!(state.enter_current_location(&dir).is_err());
+
+        assert_eq!(state.message_entries()[0].text, "Enter castle");
+        let britannia = decode_full_ool_plane_table(
+            &fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!((britannia[1].type_byte, britannia[1].x, britannia[1].y), (0xA8, 9, 20));
+        assert!(!dir.join(UNDER_OOL_FILENAME).is_file());
+        assert!(matches!(state.area, Area::World { .. }));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -777,10 +912,12 @@
         let scene = Scene::new(17).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA 10 20 CASTLE:0 7\n",
+            "BRITANNIA 10 20 CASTLE:0 7 0x15 CASTLE\n",
         )
         .unwrap();
-        let mut state = britannia_state(open_world_grid(), 10, 20);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x15;
+        let mut state = britannia_state(grid, 10, 20);
 
         assert_eq!(
             state.enter_current_location(&dir).unwrap(),
@@ -797,7 +934,7 @@
     }
 
     #[test]
-    fn world_enter_stonegate_preserves_entry_message_and_presentation_notes() {
+    fn world_enter_stonegate_keeps_exact_entry_narration_without_diagnostics() {
         let dir = debug_game_dir();
         let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
         fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
@@ -805,10 +942,12 @@
         fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA 10 20 KEEP:4 7\n",
+            "BRITANNIA 10 20 KEEP:4 7 0x12 KEEP\n",
         )
         .unwrap();
-        let mut state = britannia_state(open_world_grid(), 10, 20);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x12;
+        let mut state = britannia_state(grid, 10, 20);
         state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
         state.shadowlord_hideouts = [
             1,
@@ -821,11 +960,8 @@
             MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
         );
 
-        assert!(state.message.contains("Entered KEEP:4 from BRITANNIA"));
-        assert!(state.message.contains("Sceptre prelude"));
-        assert!(state.message.contains("air of Falsehood"));
-        assert!(!state.message.contains("air of Hatred"));
-        assert!(!state.message.contains("air of Cowardice"));
+        assert_eq!(state.message, "keep\n");
+        assert!(!state.message.contains("Stonegate entry:"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -835,19 +971,17 @@
         let scene = DungeonScene::new(33).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA,10,20,DUNGEON:0\n",
+            "BRITANNIA,10,20,DUNGEON:0,0x18,DUNGEON\n",
         )
         .unwrap();
-        let mut state = world_state(open_world_grid(), 10, 20);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x18;
+        let mut state = world_state(grid, 10, 20);
         state.area = Area::World {
             plane: WorldPlane::Britannia,
         };
         state.active_objects[0].z = WorldPlane::Britannia.save_floor();
-        let transport = TransportState::Carpet {
-            type_byte: 176,
-            tile: 176,
-        };
-        state.player.transport = transport;
+        let transport = TransportState::Foot;
         state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
         state.active_effect_counter = 10;
         state.sail_cadence = 1;
@@ -879,7 +1013,44 @@
             Some((transport, 1, true))
         );
         assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
-        assert!(state.message.contains("Entered DUNGEON:0"));
+        assert_eq!(state.message, "dungeon\n");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_enter_dungeon_transport_refusal_is_exact_and_acted() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 DUNGEON:0 0x18 DUNGEON\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x18;
+        let mut state = britannia_state(grid, 10, 20);
+        state.player.transport = TransportState::Carpet {
+            type_byte: 176,
+            tile: 176,
+        };
+        state.sync_player_object();
+
+        assert!(
+            state
+                .handle_top_down_key_with_inline('E', &dir, None, None, None, None)
+                .unwrap()
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "dungeon\nOn foot!");
+        assert_eq!(
+            state
+                .message_entries()
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Enter dungeon", "On foot!"]
+        );
+        assert!(matches!(state.area, Area::World { .. }));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -891,10 +1062,12 @@
         fs::write(dir.join("DUNGEON.DAT"), vec![0; DUNGEON_DAT_LEN]).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "UNDERWORLD 10 20 DUNGEON:0\nUNDERWORLD 12 34 DUNGEON:7\n",
+            "UNDERWORLD 10 20 DUNGEON:0 0x18 DUNGEON\nUNDERWORLD 12 34 DUNGEON:7 0x16 CAVE\n",
         )
         .unwrap();
-        let mut non_doom_state = world_state(open_world_grid(), 10, 20);
+        let mut non_doom_grid = open_world_grid();
+        non_doom_grid[world_cell_index(10, 20)] = 0x18;
+        let mut non_doom_state = world_state(non_doom_grid, 10, 20);
 
         assert_eq!(
             non_doom_state.enter_current_location(&dir).unwrap(),
@@ -916,12 +1089,16 @@
             Some(WorldPlane::Underworld)
         );
 
-        let mut sealed_doom_state = world_state(open_world_grid(), 12, 34);
+        let mut doom_grid = open_world_grid();
+        doom_grid[world_cell_index(12, 34)] = 0x16;
+        let mut sealed_doom_state = world_state(doom_grid.clone(), 12, 34);
+        sealed_doom_state.begin_command_echo_for(Command::Enter);
 
         assert_eq!(
             sealed_doom_state.enter_current_location(&dir).unwrap(),
             MoveOutcome::Blocked
         );
+        sealed_doom_state.commit_command_echo();
 
         assert_eq!(
             sealed_doom_state.area,
@@ -932,10 +1109,26 @@
         assert!(sealed_doom_state.return_world.is_none());
         assert_eq!(
             sealed_doom_state.message,
-            "Doom is sealed until all Shadowlords are vanquished."
+            "cave\nAttacked at entrance!"
+        );
+        assert_eq!(
+            sealed_doom_state
+                .message_entries()
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Enter cave", "Attacked at entrance!"]
+        );
+        assert!(
+            sealed_doom_state
+                .active_objects
+                .iter()
+                .skip(1)
+                .any(|object| !object.is_empty()),
+            "sealed Doom entry must place its outdoor ambush object"
         );
 
-        let mut doom_state = world_state(open_world_grid(), 12, 34);
+        let mut doom_state = world_state(doom_grid, 12, 34);
         doom_state.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; SHADOWLORD_COUNT];
 
         assert_eq!(
@@ -963,19 +1156,21 @@
     #[test]
     fn parse_world_location_entries_accepts_optional_tile_guards() {
         let entries = parse_world_location_entries(
-            "BRITANNIA 10 20 CASTLE:0 7 0x18\nUNDERWORLD 12 34 DUNGEON:1 0x24\n",
+            "BRITANNIA 10 20 CASTLE:0 7 0x18 CASTLE\nUNDERWORLD 12 34 DUNGEON:1 0x24 CAVE\n",
         )
         .unwrap();
 
         assert_eq!(entries[0].target, PlayTarget::Town(Scene::new(17).unwrap()));
         assert_eq!(entries[0].town_entry_y, Some(7));
         assert_eq!(entries[0].expected_tile, Some(0x18));
+        assert_eq!(entries[0].narration_class, Some(WorldEntryNarrationClass::Castle));
         assert_eq!(
             entries[1].target,
             PlayTarget::Dungeon(DungeonScene::new(34).unwrap())
         );
         assert_eq!(entries[1].town_entry_y, None);
         assert_eq!(entries[1].expected_tile, Some(0x24));
+        assert_eq!(entries[1].narration_class, Some(WorldEntryNarrationClass::Cave));
     }
 
     #[test]
@@ -1008,8 +1203,8 @@ BRITANNIA 11 21 CASTLE:0
     }
 
     #[test]
-    fn world_location_table_rejects_underworld_town_rows() {
-        assert!(parse_world_location_entries("UNDERWORLD 10 20 CASTLE:0\n").is_err());
+    fn world_location_table_accepts_underworld_town_rows_for_ararat_extensions() {
+        assert!(parse_world_location_entries("UNDERWORLD 10 20 CASTLE:0\n").is_ok());
         assert!(parse_world_location_entries("UNDERWORLD 10 20 DUNGEON:0\n").is_ok());
     }
 

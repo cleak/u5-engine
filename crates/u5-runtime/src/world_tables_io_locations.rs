@@ -6,70 +6,498 @@ use std::path::Path;
 
 use crate::*;
 
-const PUBLISHED_WORLD_LOCATION_ROWS: &[(u8, WorldPlane, usize, usize)] = &[
-    (1, WorldPlane::Britannia, 232, 135),
-    (2, WorldPlane::Britannia, 81, 106),
-    (3, WorldPlane::Britannia, 36, 222),
-    (4, WorldPlane::Britannia, 58, 43),
-    (5, WorldPlane::Britannia, 159, 20),
-    (6, WorldPlane::Britannia, 106, 184),
-    (7, WorldPlane::Britannia, 22, 128),
-    (8, WorldPlane::Britannia, 187, 169),
-    (9, WorldPlane::Britannia, 88, 120),
-    (10, WorldPlane::Britannia, 152, 24),
-    (11, WorldPlane::Britannia, 104, 216),
-    (12, WorldPlane::Britannia, 216, 120),
-    (13, WorldPlane::Britannia, 45, 62),
-    (14, WorldPlane::Britannia, 176, 208),
-    (15, WorldPlane::Britannia, 201, 59),
-    (16, WorldPlane::Britannia, 153, 91),
-    (17, WorldPlane::Britannia, 86, 107),
-    (18, WorldPlane::Britannia, 196, 245),
-    (19, WorldPlane::Britannia, 84, 106),
-    (20, WorldPlane::Britannia, 86, 105),
-    (21, WorldPlane::Britannia, 88, 106),
-    (22, WorldPlane::Britannia, 98, 145),
-    (23, WorldPlane::Britannia, 136, 90),
-    (24, WorldPlane::Britannia, 136, 158),
-    (25, WorldPlane::Britannia, 49, 58),
-    (26, WorldPlane::Britannia, 15, 160),
-    (27, WorldPlane::Britannia, 64, 240),
-    (28, WorldPlane::Britannia, 248, 8),
-    (29, WorldPlane::Britannia, 148, 74),
-    (30, WorldPlane::Britannia, 218, 107),
-    (31, WorldPlane::Britannia, 28, 50),
-    (32, WorldPlane::Britannia, 146, 241),
-    (33, WorldPlane::Britannia, 240, 73),
-    (34, WorldPlane::Britannia, 91, 67),
-    (35, WorldPlane::Britannia, 72, 168),
-    (36, WorldPlane::Britannia, 126, 20),
-    (37, WorldPlane::Britannia, 156, 27),
-    (38, WorldPlane::Britannia, 58, 102),
-    (39, WorldPlane::Britannia, 239, 240),
-    (40, WorldPlane::Underworld, 128, 128),
+type PublishedWorldLocationRow = (
+    u8,
+    WorldPlane,
+    usize,
+    usize,
+    WorldEntryNarrationClass,
+    Option<&'static str>,
+    Option<u8>,
+    u8,
+    bool,
+);
+
+const PUBLISHED_WORLD_LOCATION_ROWS: &[PublishedWorldLocationRow] = &[
+    (
+        1,
+        WorldPlane::Britannia,
+        232,
+        135,
+        WorldEntryNarrationClass::Towne,
+        Some("MOONGLOW"),
+        Some(4),
+        0x14,
+        false,
+    ),
+    (
+        2,
+        WorldPlane::Britannia,
+        81,
+        106,
+        WorldEntryNarrationClass::Towne,
+        Some("BRITAIN"),
+        Some(4),
+        0x14,
+        false,
+    ),
+    (
+        3,
+        WorldPlane::Britannia,
+        36,
+        222,
+        WorldEntryNarrationClass::Towne,
+        Some("JHELOM"),
+        Some(5),
+        0x14,
+        false,
+    ),
+    (
+        4,
+        WorldPlane::Britannia,
+        58,
+        43,
+        WorldEntryNarrationClass::Towne,
+        Some("YEW"),
+        Some(6),
+        0x14,
+        false,
+    ),
+    (
+        5,
+        WorldPlane::Britannia,
+        159,
+        20,
+        WorldEntryNarrationClass::Towne,
+        Some("MINOC"),
+        Some(5),
+        0x14,
+        false,
+    ),
+    (
+        6,
+        WorldPlane::Britannia,
+        106,
+        184,
+        WorldEntryNarrationClass::Towne,
+        Some("TRINSIC"),
+        Some(4),
+        0x14,
+        false,
+    ),
+    (
+        7,
+        WorldPlane::Britannia,
+        22,
+        128,
+        WorldEntryNarrationClass::Towne,
+        Some("SKARA BRAE"),
+        Some(3),
+        0x14,
+        false,
+    ),
+    (
+        8,
+        WorldPlane::Britannia,
+        187,
+        169,
+        WorldEntryNarrationClass::Village,
+        Some("NEW MAGINCIA"),
+        Some(2),
+        0x13,
+        false,
+    ),
+    (
+        9,
+        WorldPlane::Britannia,
+        88,
+        120,
+        WorldEntryNarrationClass::Lighthouse,
+        Some("FOGSBANE"),
+        Some(4),
+        0x1B,
+        false,
+    ),
+    (
+        10,
+        WorldPlane::Britannia,
+        152,
+        24,
+        WorldEntryNarrationClass::Lighthouse,
+        Some("STORMCROW"),
+        Some(3),
+        0x1B,
+        false,
+    ),
+    (
+        11,
+        WorldPlane::Britannia,
+        104,
+        216,
+        WorldEntryNarrationClass::Lighthouse,
+        Some("GREYHAVEN"),
+        Some(3),
+        0x1B,
+        false,
+    ),
+    (
+        12,
+        WorldPlane::Britannia,
+        216,
+        120,
+        WorldEntryNarrationClass::Lighthouse,
+        Some("WAVEGUIDE"),
+        Some(3),
+        0x1B,
+        false,
+    ),
+    (
+        13,
+        WorldPlane::Britannia,
+        45,
+        62,
+        WorldEntryNarrationClass::Hut,
+        Some("IOLO'S HUT"),
+        Some(3),
+        0x10,
+        false,
+    ),
+    (
+        14,
+        WorldPlane::Britannia,
+        176,
+        208,
+        WorldEntryNarrationClass::Hut,
+        None,
+        None,
+        0x10,
+        false,
+    ),
+    (
+        15,
+        WorldPlane::Britannia,
+        201,
+        59,
+        WorldEntryNarrationClass::Hut,
+        None,
+        None,
+        0x10,
+        false,
+    ),
+    (
+        16,
+        WorldPlane::Britannia,
+        153,
+        91,
+        WorldEntryNarrationClass::Hut,
+        None,
+        None,
+        0x10,
+        false,
+    ),
+    (
+        17,
+        WorldPlane::Britannia,
+        86,
+        107,
+        WorldEntryNarrationClass::LordBritish,
+        None,
+        None,
+        0x3E,
+        false,
+    ),
+    (
+        18,
+        WorldPlane::Britannia,
+        196,
+        245,
+        WorldEntryNarrationClass::Blackthorn,
+        None,
+        None,
+        0x39,
+        false,
+    ),
+    (
+        19,
+        WorldPlane::Britannia,
+        84,
+        106,
+        WorldEntryNarrationClass::Village,
+        Some("WEST BRITANNY"),
+        Some(1),
+        0x13,
+        false,
+    ),
+    (
+        20,
+        WorldPlane::Britannia,
+        86,
+        105,
+        WorldEntryNarrationClass::Village,
+        Some("NORTH BRITANNY"),
+        Some(1),
+        0x13,
+        false,
+    ),
+    (
+        21,
+        WorldPlane::Britannia,
+        88,
+        106,
+        WorldEntryNarrationClass::Village,
+        Some("EAST BRITANNY"),
+        Some(1),
+        0x13,
+        false,
+    ),
+    (
+        22,
+        WorldPlane::Britannia,
+        98,
+        145,
+        WorldEntryNarrationClass::Village,
+        Some("PAWS"),
+        Some(6),
+        0x13,
+        false,
+    ),
+    (
+        23,
+        WorldPlane::Britannia,
+        136,
+        90,
+        WorldEntryNarrationClass::Village,
+        Some("COVE"),
+        Some(6),
+        0x13,
+        false,
+    ),
+    (
+        24,
+        WorldPlane::Britannia,
+        136,
+        158,
+        WorldEntryNarrationClass::Towne,
+        Some("BUCCANEER'S DEN"),
+        Some(0),
+        0x14,
+        false,
+    ),
+    (
+        25,
+        WorldPlane::Underworld,
+        49,
+        58,
+        WorldEntryNarrationClass::Keep,
+        Some("ARARAT"),
+        Some(5),
+        0x12,
+        false,
+    ),
+    (
+        26,
+        WorldPlane::Britannia,
+        15,
+        160,
+        WorldEntryNarrationClass::Keep,
+        Some("BORDERMARCH"),
+        Some(2),
+        0x12,
+        false,
+    ),
+    (
+        27,
+        WorldPlane::Britannia,
+        64,
+        240,
+        WorldEntryNarrationClass::Keep,
+        Some("FARTHING"),
+        Some(4),
+        0x12,
+        false,
+    ),
+    (
+        28,
+        WorldPlane::Britannia,
+        248,
+        8,
+        WorldEntryNarrationClass::Keep,
+        Some("WINDEMERE"),
+        Some(3),
+        0x12,
+        false,
+    ),
+    (
+        29,
+        WorldPlane::Britannia,
+        148,
+        74,
+        WorldEntryNarrationClass::Keep,
+        Some("STONEGATE"),
+        Some(3),
+        0x12,
+        false,
+    ),
+    (
+        30,
+        WorldPlane::Britannia,
+        218,
+        107,
+        WorldEntryNarrationClass::Castle,
+        Some("THE LYCAEUM"),
+        Some(2),
+        0x15,
+        false,
+    ),
+    (
+        31,
+        WorldPlane::Britannia,
+        28,
+        50,
+        WorldEntryNarrationClass::Castle,
+        Some("EMPATH ABBEY"),
+        Some(2),
+        0x15,
+        false,
+    ),
+    (
+        32,
+        WorldPlane::Britannia,
+        146,
+        241,
+        WorldEntryNarrationClass::Castle,
+        Some("SERPENT'S HOLD"),
+        Some(1),
+        0x15,
+        false,
+    ),
+    (
+        33,
+        WorldPlane::Britannia,
+        240,
+        73,
+        WorldEntryNarrationClass::Dungeon,
+        Some("DECEIT"),
+        Some(5),
+        0x18,
+        true,
+    ),
+    (
+        34,
+        WorldPlane::Britannia,
+        91,
+        67,
+        WorldEntryNarrationClass::Cave,
+        Some("DESPISE"),
+        Some(4),
+        0x16,
+        true,
+    ),
+    (
+        35,
+        WorldPlane::Britannia,
+        72,
+        168,
+        WorldEntryNarrationClass::Cave,
+        Some("DESTARD"),
+        Some(4),
+        0x16,
+        true,
+    ),
+    (
+        36,
+        WorldPlane::Britannia,
+        126,
+        20,
+        WorldEntryNarrationClass::Dungeon,
+        Some("WRONG"),
+        Some(5),
+        0x18,
+        true,
+    ),
+    (
+        37,
+        WorldPlane::Britannia,
+        156,
+        27,
+        WorldEntryNarrationClass::Dungeon,
+        Some("COVETOUS"),
+        Some(4),
+        0x18,
+        true,
+    ),
+    (
+        38,
+        WorldPlane::Britannia,
+        58,
+        102,
+        WorldEntryNarrationClass::Mine,
+        Some("SHAME"),
+        Some(5),
+        0x17,
+        true,
+    ),
+    (
+        39,
+        WorldPlane::Britannia,
+        239,
+        240,
+        WorldEntryNarrationClass::Mine,
+        Some("HYTHLOTH"),
+        Some(4),
+        0x17,
+        true,
+    ),
+    (
+        40,
+        WorldPlane::Underworld,
+        128,
+        128,
+        WorldEntryNarrationClass::Cave,
+        None,
+        None,
+        0x16,
+        false,
+    ),
 ];
 
 pub fn published_world_location_entries() -> Vec<WorldLocationEntry> {
     PUBLISHED_WORLD_LOCATION_ROWS
         .iter()
         .copied()
-        .map(|(scene_byte, plane, x, y)| {
-            let target = if scene_byte <= SCENE_TOWN_FAMILY_LAST {
-                PlayTarget::Town(Scene::new(scene_byte).expect("published town scene is valid"))
-            } else {
-                PlayTarget::Dungeon(
-                    DungeonScene::new(scene_byte).expect("published dungeon scene is valid"),
-                )
-            };
-            WorldLocationEntry {
+        .map(
+            |(
+                scene_byte,
                 plane,
                 x,
                 y,
-                target,
-                town_entry_y: None,
-                expected_tile: None,
-            }
-        })
+                narration_class,
+                proper_name,
+                name_column,
+                stock_tile,
+                accepts_both_world_planes,
+            )| {
+                let target = if scene_byte <= SCENE_TOWN_FAMILY_LAST {
+                    PlayTarget::Town(Scene::new(scene_byte).expect("published town scene is valid"))
+                } else {
+                    PlayTarget::Dungeon(
+                        DungeonScene::new(scene_byte).expect("published dungeon scene is valid"),
+                    )
+                };
+                WorldLocationEntry {
+                    plane,
+                    x,
+                    y,
+                    target,
+                    town_entry_y: None,
+                    expected_tile: Some(stock_tile),
+                    narration_class: Some(narration_class),
+                    proper_name,
+                    name_column,
+                    accepts_both_world_planes,
+                }
+            },
+        )
         .collect()
 }
 
@@ -113,11 +541,11 @@ pub fn parse_world_location_entries(text: &str) -> io::Result<Vec<WorldLocationE
             .split(|ch: char| ch == ',' || ch == '\t' || ch.is_whitespace())
             .filter(|part| !part.is_empty())
             .collect();
-        if !matches!(parts.len(), 4 | 5 | 6) {
+        if !(4..=7).contains(&parts.len()) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "{WORLD_LOCATION_TABLE_FILE} line {line_number} must be: PLANE X Y TARGET [TOWN_ENTRY_Y] [TILE]"
+                    "{WORLD_LOCATION_TABLE_FILE} line {line_number} must be: PLANE X Y TARGET [TOWN_ENTRY_Y] [TILE] [NARRATION_CLASS]"
                 ),
             ));
         }
@@ -165,15 +593,15 @@ pub fn parse_world_location_entries(text: &str) -> io::Result<Vec<WorldLocationE
                 ),
             ));
         }
-        if matches!(target, PlayTarget::Town(_)) && plane != WorldPlane::Britannia {
+        if matches!(target, PlayTarget::Dungeon(_)) && parts.len() == 7 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "{WORLD_LOCATION_TABLE_FILE} line {line_number} town-family entries must be on BRITANNIA"
+                    "{WORLD_LOCATION_TABLE_FILE} line {line_number} entry Y is only valid for town-family targets"
                 ),
             ));
         }
-        let (town_entry_y, expected_tile) = match target {
+        let (town_entry_y, expected_tile, narration_index) = match target {
             PlayTarget::Town(_) if parts.len() >= 5 => {
                 let entry_y = parse_u8_literal(parts[4]).map_err(|err| {
                     io::Error::new(
@@ -192,7 +620,7 @@ pub fn parse_world_location_entries(text: &str) -> io::Result<Vec<WorldLocationE
                         ),
                     ));
                 }
-                let expected_tile = if parts.len() == 6 {
+                let expected_tile = if parts.len() >= 6 {
                     Some(parse_u8_literal(parts[5]).map_err(|err| {
                         io::Error::new(
                             err.kind(),
@@ -205,10 +633,14 @@ pub fn parse_world_location_entries(text: &str) -> io::Result<Vec<WorldLocationE
                 } else {
                     None
                 };
-                (Some(entry_y), expected_tile)
+                (
+                    Some(entry_y),
+                    expected_tile,
+                    (parts.len() == 7).then_some(6),
+                )
             }
-            PlayTarget::Town(_) => (None, None),
-            PlayTarget::Dungeon(_) if parts.len() == 5 => {
+            PlayTarget::Town(_) => (None, None, None),
+            PlayTarget::Dungeon(_) if parts.len() >= 5 => {
                 let expected_tile = parse_u8_literal(parts[4]).map_err(|err| {
                     io::Error::new(
                         err.kind(),
@@ -218,19 +650,40 @@ pub fn parse_world_location_entries(text: &str) -> io::Result<Vec<WorldLocationE
                         ),
                     )
                 })?;
-                (None, Some(expected_tile))
+                (None, Some(expected_tile), (parts.len() == 6).then_some(5))
             }
-            PlayTarget::Dungeon(_) if parts.len() == 6 => {
+            PlayTarget::Dungeon(_) => (None, None, None),
+            PlayTarget::World(_) => unreachable!(),
+        };
+        let narration_class = narration_index
+            .map(|index| {
+                WorldEntryNarrationClass::from_key(parts[index]).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "{WORLD_LOCATION_TABLE_FILE} line {line_number} has unknown narration class `{}`",
+                            parts[index]
+                        ),
+                    )
+                })
+            })
+            .transpose()?;
+        if let Some(class) = narration_class {
+            let target_helper = match target {
+                PlayTarget::Town(_) => WorldEntryHelper::Town,
+                PlayTarget::Dungeon(_) => WorldEntryHelper::Dungeon,
+                PlayTarget::World(_) => unreachable!(),
+            };
+            if class.helper() != target_helper {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!(
-                        "{WORLD_LOCATION_TABLE_FILE} line {line_number} entry Y is only valid for town-family targets"
+                        "{WORLD_LOCATION_TABLE_FILE} line {line_number} narration class `{}` belongs to the opposite entry helper",
+                        parts[narration_index.expect("present narration has an index")]
                     ),
                 ));
             }
-            PlayTarget::Dungeon(_) => (None, None),
-            PlayTarget::World(_) => unreachable!(),
-        };
+        }
         if entries
             .iter()
             .any(|entry: &WorldLocationEntry| entry.plane == plane && entry.x == x && entry.y == y)
@@ -262,6 +715,10 @@ pub fn parse_world_location_entries(text: &str) -> io::Result<Vec<WorldLocationE
             target,
             town_entry_y,
             expected_tile,
+            narration_class,
+            proper_name: None,
+            name_column: None,
+            accepts_both_world_planes: false,
         });
     }
     Ok(entries)

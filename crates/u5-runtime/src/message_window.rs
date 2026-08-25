@@ -68,6 +68,7 @@ pub struct MessageLogLine {
     pub glyphs: Vec<crate::TlkRenderedGlyph>,
     /// How the row is drawn.
     pub kind: MessageLineKind,
+    pub centered: bool,
 }
 
 /// A scrolling log of command echoes and handler output.
@@ -137,6 +138,7 @@ impl GameplayMessageLog {
             text: String::new(),
             glyphs: Vec::new(),
             kind: MessageLineKind::Blank,
+            centered: false,
         });
         self.trim();
     }
@@ -152,7 +154,12 @@ impl GameplayMessageLog {
     fn push_wrapped_glyphs(&mut self, glyphs: &[crate::TlkRenderedGlyph], kind: MessageLineKind) {
         for glyphs in wrap_rendered_to_width(glyphs, kind.width()) {
             let text = glyphs.iter().map(|glyph| char::from(glyph.byte)).collect();
-            self.lines.push(MessageLogLine { text, glyphs, kind });
+            self.lines.push(MessageLogLine {
+                text,
+                glyphs,
+                kind,
+                centered: false,
+            });
         }
         self.trim();
     }
@@ -226,6 +233,23 @@ pub fn message_log_from_entries<'a>(
         if entry.is_command_echo {
             log.end_turn();
             log.push_command(&text);
+        } else if entry.explicit_blank {
+            log.lines.push(MessageLogLine {
+                text: String::new(),
+                glyphs: Vec::new(),
+                kind: MessageLineKind::Blank,
+                centered: false,
+            });
+            log.trim();
+        } else if entry.centered && text == entry.text {
+            let glyphs = entry.glyphs.clone();
+            log.lines.push(MessageLogLine {
+                text,
+                glyphs,
+                kind: MessageLineKind::Output,
+                centered: true,
+            });
+            log.trim();
         } else if text == entry.text {
             log.push_tlk_output(&text, &entry.glyphs);
         } else {
@@ -260,7 +284,15 @@ pub fn layout_message_window(
         let prefixed = line.kind.prefixed();
         rows.push(MessageWindowRow {
             row: (first_row + offset) as u8,
-            column: MESSAGE_WINDOW_LEFT + u8::from(prefixed),
+            column: if line.centered {
+                MESSAGE_WINDOW_LEFT
+                    + crate::text_window_centred_start_column(
+                        16,
+                        line.glyphs.len().min(u8::MAX as usize) as u8,
+                    )
+            } else {
+                MESSAGE_WINDOW_LEFT + u8::from(prefixed)
+            },
             text: line.text.clone(),
             glyphs: line.glyphs.clone(),
             prefixed,

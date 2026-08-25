@@ -121,11 +121,13 @@
         let scene = Scene::new(17).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
-            "BRITANNIA 10 20 CASTLE:0\n",
+            "BRITANNIA 10 20 CASTLE:0 7 0x15 CASTLE\n",
         )
         .unwrap();
         fs::write(dir.join(LOCATION_ENTRY_Y_TABLE_FILE), "CASTLE:0 7\n").unwrap();
-        let mut state = britannia_state(open_world_grid(), 10, 20);
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 0x15;
+        let mut state = britannia_state(grid, 10, 20);
 
         assert_eq!(
             state.enter_current_location(&dir).unwrap(),
@@ -225,10 +227,10 @@
             aux1: 0,
             aux3: 0,
         });
-        state.debug_enter = Some(PlayTarget::Town(scene));
-
         assert_eq!(
-            state.enter_current_location(&dir).unwrap(),
+            state
+                .enter_world_target(&dir, WorldPlane::Underworld, PlayTarget::Town(scene), true)
+                .unwrap(),
             MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
         );
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
@@ -350,10 +352,10 @@
         state.sail_cadence = 1;
         state.sail_stall_pending = true;
         state.sync_player_object();
-        state.debug_enter = Some(PlayTarget::Town(scene));
-
         assert_eq!(
-            state.enter_current_location(&dir).unwrap(),
+            state
+                .enter_world_target(&dir, WorldPlane::Underworld, PlayTarget::Town(scene), true)
+                .unwrap(),
             MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
         );
         assert!(state.return_world.is_none());
@@ -422,10 +424,15 @@
         state.sail_cadence = 1;
         state.sail_stall_pending = true;
         state.sync_player_object();
-        state.debug_enter = Some(PlayTarget::Dungeon(scene));
-
         assert_eq!(
-            state.enter_current_location(&dir).unwrap(),
+            state
+                .enter_world_target(
+                    &dir,
+                    WorldPlane::Underworld,
+                    PlayTarget::Dungeon(scene),
+                    true,
+                )
+                .unwrap(),
             MoveOutcome::Transition(AreaTransition::EnteredDungeon(scene))
         );
         assert_eq!(state.area, Area::Dungeon { scene, level: 7 });
@@ -496,10 +503,15 @@
         dungeon_dat[dungeon_cell_index(7, 7, 7)] = 0xf0;
         fs::write(dir.join("DUNGEON.DAT"), dungeon_dat).unwrap();
         let mut state = world_state(open_world_grid(), 10, 20);
-        state.debug_enter = Some(PlayTarget::Dungeon(scene));
-
         assert_eq!(
-            state.enter_current_location(&dir).unwrap(),
+            state
+                .enter_world_target(
+                    &dir,
+                    WorldPlane::Underworld,
+                    PlayTarget::Dungeon(scene),
+                    true,
+                )
+                .unwrap(),
             MoveOutcome::Transition(AreaTransition::EnteredDungeon(scene))
         );
 

@@ -657,7 +657,16 @@ pub const fn command_echo(command: Command, mode: CommandEchoMode) -> Option<Com
         Command::Jimmy => ("Jimmy-", AwaitsDirection),
         Command::Klimb => ("Klimb-", AwaitsDirection),
         Command::Open => ("Open-", AwaitsDirection),
-        Command::Push => ("Push-", AwaitsDirection),
+        Command::Push => {
+            if dungeon {
+                // `commands.md §8.1`: dungeon P bypasses direction
+                // handling and replaces the ordinary hyphenated echo with
+                // the complete `Push` line before `Not here!`.
+                ("Push", Complete)
+            } else {
+                ("Push-", AwaitsDirection)
+            }
+        }
         Command::Search => ("Search-", AwaitsDirection),
         Command::Talk => ("Talk-", AwaitsDirection),
         Command::Cast => ("Cast...", AwaitsSelection),
@@ -734,11 +743,20 @@ pub const VIEW_NO_GEM_REFUSAL: &str = "You have none!";
 /// `#81`: two refusals fold the verb into the refusal literal instead of
 /// following the echo, so the verb is not echoed separately for them.
 pub const PUSH_NOT_HERE_REFUSAL: &str = "Not here!";
+/// `commands.md §8.1`: a source active object or non-pushable static
+/// tile takes the emphatic refusal.
+pub const PUSH_WONT_BUDGE_EMPHATIC: &str = "Won't budge!";
+/// `commands.md §8.1`: a pushable static source with neither a legal
+/// push nor pull takes the shorter refusal.
+pub const PUSH_WONT_BUDGE_SHORT: &str = "Won't budge";
+pub const PUSHED_SUCCESS: &str = "Pushed!";
+pub const PULLED_SUCCESS: &str = "Pulled!";
 
 /// `commands.md §5.4` (`#81`): "The direction prompt prints nothing. The
 /// hyphen *is* the prompt." It ignores every key except the four
-/// directions, Space and Escape; Space and Escape both print `Pass` and
-/// return "no direction", which is why `Look-Pass` renders on one line.
+/// directions, Space and Escape. Ordinarily Space and Escape both print
+/// `Pass`; `commands.md §8.1` gives Push its narrower exception: Space
+/// prints Pass, while Escape emits nothing and leaves the prompt active.
 pub const DIRECTION_PROMPT_CANCEL_LITERAL: &str = "Pass";
 
 /// `commands.md §5.6` (`#81`) selection prompts, each with exactly one

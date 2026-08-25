@@ -185,11 +185,12 @@ cargo run -- --route-smoke target\acceptance-assets
 cargo run -- --route-smoke --route-smoke-manifest target\route-smoke\manifest.txt target\acceptance-assets
 ```
 
-`--play-script` can be combined with `--scene` and `--debug-enter` for focused
-transition plumbing without first navigating to a published entrance coordinate:
+`--play-script` can be combined with `--scene` for direct interior construction
+without E-Enter narration. E itself always requires a published live tile and
+coordinate; `--debug-enter` no longer bypasses that production contract:
 
 ```powershell
-cargo run -- --scene BRITANNIA --debug-enter CASTLE:0 --play-script "e;q" C:\Games\U5-Clean
+cargo run -- --scene CASTLE:0 --play-script "empty;q" C:\Games\U5-Clean
 ```
 
 Town and overworld movement use numpad-style directions, common terminal
@@ -806,19 +807,23 @@ the engine. `world_locations.tsv` is an optional clean override/extension for
 focused tests and newly published rows:
 
 ```text
-# PLANE X Y TARGET [TOWN_ENTRY_Y] [TILE]
-BRITANNIA 0 0 CASTLE:0 7 24
-UNDERWORLD 0 0 DUNGEON:0 24
+# PLANE X Y TARGET [TOWN_ENTRY_Y] [TILE] [NARRATION_CLASS]
+BRITANNIA 0 0 CASTLE:0 7 0x15 CASTLE
+UNDERWORLD 0 0 DUNGEON:0 0x18 DUNGEON
 ```
 
 For town-family targets, the optional fifth column is the clean
 `LocationEntryYTable` value; X is fixed at 15 and floor is 0. A town row can use
-an optional sixth source-tile guard after that entry Y, while a dungeon row can
-use an optional fifth source-tile guard. The guard keeps stale coordinates from
-firing after local map edits. Town-family entries are surface entries and must
-use `BRITANNIA`; dungeon entries may use `BRITANNIA` or a clean scripted
-`UNDERWORLD` row. Each target may appear only once so exits can resolve a single
-unambiguous return coordinate.
+an optional sixth stock-tile annotation after that entry Y, while a dungeon row
+can use an optional fifth stock-tile annotation. E-Enter always classifies the
+live tile instead of comparing that annotation. The final narration class is
+required for a custom row to be enterable; omitting it leaves the row usable for
+returns but makes E-Enter answer `What?` without inferring presentation from the
+target key. Classes are `HUT`, `KEEP`, `VILLAGE`, `TOWNE`, `CASTLE`,
+`LIGHTHOUSE`, `LORD_BRITISH`, `BLACKTHORN`, `CAVE`, `MINE`, and `DUNGEON`.
+Underworld town-family rows are permitted for clean extensions such as the
+published Ararat row. Each target may appear only once so exits can resolve a
+single unambiguous return coordinate.
 Direct town or dungeon sessions also use the same table to resolve exits back
 to the overworld when no in-memory return point exists. Missing town or dungeon
 return rows keep the party in the current interior mode with a diagnostic,
@@ -1063,20 +1068,21 @@ vanquished, matching active Shadowlord encounter objects on the current floor
 are cleared, and one turn is consumed. Missing rows, stale tile guards, or the
 wrong flame keep the existing no-effect branch without consuming the shard.
 
-Town Push is externalized for the same clean-room reason: the public spec
-defines the swap behavior, but not the complete movable-tile table. Place rows
-next to the game data as `town_pushables.tsv`:
+Push now recognizes the public static movable families directly in world,
+town, and combat grids, including their floor stamps, push/pull rules, exact
+refusals, and facing rewrites. `town_pushables.tsv` remains a clean extension
+for an authored non-stock town fixture:
 
 ```text
 # SCENE FLOOR X Y [TILE]
 CASTLE:0 0 12 6 44
 ```
 
-`P`/`p` checks the facing town cell for a matching row, optionally verifies the
-current tile id, and if the destination cell beyond it is walkable swaps the
-two live tile IDs. Missing or mismatched rows do not spend a turn; a matched
-pushable tile with a blocked destination consumes the push attempt without
-rewriting the map.
+Native static families do not need a row. Dynamic active objects never move;
+they take the emphatic `Won't budge!` refusal. A sidecar match retains the
+legacy clean-extension swap for non-stock fixtures. Every completed Push in
+world/town consumes the ordinary action, including source misses and blocked
+attempts; Escape alone leaves the `Push-` prompt open.
 
 Town Hole-up rest uses a clean bed sidecar while the complete inn/bed tile table
 is still outside the public implementation surface. Place rows next to the game
