@@ -147,12 +147,16 @@ fn advance_combat_round_after_scenario_actor(
     actor_slot: usize,
 ) -> Option<CombatRoundLoopExit> {
     state.next_combat_actor_slot = actor_slot.saturating_add(1).min(crate::COMBAT_ACTOR_SLOTS);
-    for _ in 0..crate::COMBAT_ACTOR_SLOTS {
+    for _ in 0..crate::COMBAT_ROUND_WALK_DRAIN_LIMIT {
         if !state.combat_active || state.pending_combat_actor_slot.is_some() {
             return None;
         }
         let start_slot = state.next_combat_actor_slot.min(crate::COMBAT_ACTOR_SLOTS);
-        let application = state.apply_combat_round_walk_from_slot(start_slot, 30, false);
+        let application = state.apply_combat_round_walk_from_slot(
+            start_slot,
+            crate::COMBAT_PHASE_REFRESH_CONSTANT,
+            false,
+        );
         state.next_combat_actor_slot = match application.stop_reason {
             CombatRoundWalkStopReason::EndOfRound => 0,
             CombatRoundWalkStopReason::AwaitingPlayer

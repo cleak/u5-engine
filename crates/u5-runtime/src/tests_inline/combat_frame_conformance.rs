@@ -601,3 +601,369 @@
         assert_eq!(combat_placement_base_step(10, 7), 13);
         assert_eq!(COMBAT_PLACEMENT_PHASE_BASE, 36);
     }
+
+    #[test]
+    fn every_combat_class_refreshes_its_phase_counter_above_zero() {
+        // `combat.md §7` per-actor body step 5: "The counter is reset to
+        // `36 - base_step`." `tick_combat_actor_phase_counter` treats a
+        // counter of one or less as Ready, so a class whose refresh
+        // resolves to zero acts on *every* table walk forever. The
+        // regression this pins is a refresh constant of thirty: the ten
+        // classes with a speed seed of thirty (Bat, Mongbat, Guard,
+        // Insect Swarm, Wisp, Mimic, the three unique humans and the
+        // Shadow Lord) all refreshed to zero, and a sixteen-Bat swarm
+        // resolved dozens of attacks per player keystroke.
+        assert_eq!(COMBAT_PHASE_REFRESH_CONSTANT, 36);
+        assert_eq!(COMBAT_PHASE_REFRESH_CONSTANT, COMBAT_PLACEMENT_PHASE_BASE);
+        for class in 0..=47u8 {
+            let Some(stats) = combat_class_stats(class) else {
+                continue;
+            };
+            for roll in 0..8u8 {
+                let base_step = combat_placement_base_step(stats.speed_seed, roll);
+                assert!(
+                    base_step <= COMBAT_PLACEMENT_BASE_STEP_MAX,
+                    "class {class} ({}) placed at base-step {base_step}",
+                    stats.name
+                );
+                assert_ne!(
+                    resolve_combat_phase_refresh_counter(base_step, COMBAT_PHASE_REFRESH_CONSTANT),
+                    0,
+                    "class {class} ({}) refreshes to zero at base-step {base_step}",
+                    stats.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn terrain_placement_seeds_base_step_and_phase_from_the_speed_variation_draw() {
+        // `combat.md §5`: the placed descriptor gets "a base-step of the
+        // class speed seed randomised by a uniform `[-4, +3]` adjustment,
+        // reverted to the unadjusted seed whenever the adjusted value
+        // would exceed thirty; a phase counter of thirty-six minus the
+        // base-step". Every ordinary placement site used to write a phase
+        // counter of zero and the raw speed seed.
+        let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
+        let trigger = ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 10,
+            y: 20,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        let setup =
+            terrain_combat_setup_from_record_at_arena(WorldPlane::Britannia, trigger, 4, &record)
+                .unwrap();
+        let stats = setup.base_class.expect("the synthetic trigger has a class");
+
+        // One seed per spawn, walking the whole `[-4, +3]` span.
+        let speed_adjust_rolls: Vec<u8> = (0..8u8).collect();
+        let instance =
+            terrain_combat_instance_from_setup(&setup, 8, None, &[], &speed_adjust_rolls).unwrap();
+        assert_eq!(instance.placed_count, 8);
+
+        for spawn in 0..usize::from(instance.placed_count) {
+            let actor = instance.actors[COMBAT_PARTY_ACTOR_SLOTS + spawn];
+            let expected_base_step =
+                combat_placement_base_step(stats.speed_seed, speed_adjust_rolls[spawn]);
+            assert_eq!(actor.base_step, expected_base_step, "spawn {spawn}");
+            assert_eq!(
+                actor.phase_counter,
+                COMBAT_PLACEMENT_PHASE_BASE - expected_base_step,
+                "spawn {spawn}"
+            );
+            assert_ne!(actor.phase_counter, 0, "spawn {spawn}");
+        }
+    }
+
+    #[test]
+    fn terrain_placement_takes_one_speed_variation_draw_per_monster_in_placement_order() {
+        // `combat.md §5`: "Each ordinary monster placement then consumes
+        // one speed-variation draw." The draws interleave with the
+        // per-monster companion check, which only early spawn indexes
+        // below the `count / 4 + 1` threshold roll at all.
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = 0x1234;
+        let requested_count = 8u8;
+        let companion_class = Some(41u8);
+
+        let mut expected_prng = state.prng_state;
+        let threshold = terrain_combat_replacement_threshold(requested_count);
+        let mut expected_replacement = Vec::new();
+        let mut expected_speed = Vec::new();
+        for spawn in 0..requested_count {
+            expected_replacement.push(if spawn != 0 && spawn < threshold {
+                u5_prng_range_u16(
+                    &mut expected_prng,
+                    0,
+                    u16::from(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR - 1),
+                ) as u8
+            } else {
+                1
+            });
+            expected_speed.push(u5_prng_range_u16(
+                &mut expected_prng,
+                u16::from(COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_LOW),
+                u16::from(COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_HIGH),
+            ) as u8);
+        }
+
+        let (replacement_rolls, speed_rolls) =
+            state.terrain_combat_placement_roll_seeds(requested_count, companion_class);
+
+        assert_eq!(replacement_rolls, expected_replacement);
+        assert_eq!(speed_rolls, expected_speed);
+        assert_eq!(speed_rolls.len(), usize::from(requested_count));
+        assert!(speed_rolls.iter().all(|roll| *roll <= 7));
+        assert_eq!(state.prng_state, expected_prng);
+    }
+
+    #[test]
+    fn dungeon_room_placement_consumes_its_speed_draw_instead_of_discarding_it() {
+        // `combat.md §5`: the dungeon-room source scan places actors "in
+        // ascending occupied-source order" and each ordinary placement
+        // consumes one speed-variation draw. The site previously burned
+        // the draw and wrote a phase counter of zero.
+        let mut bytes = synthetic_combat_arena_record();
+        let source_base =
+            DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+        for offset in 0..DUNGEON_ROOM_SOURCE_COUNT {
+            bytes[source_base + offset] = 0x00;
+        }
+        bytes[source_base + 1] = 0x44;
+        let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
+        let setup = dungeon_room_combat_setup_from_record(111, &record);
+
+        let mut prng_state = 0x2468u16;
+        let instance = dungeon_room_combat_instance_from_setup_with_prng(&setup, 7, &mut prng_state);
+
+        // Mirror the published draw order: the four random-special
+        // palette draws first, then this placement's speed variation.
+        let mut expected_prng = 0x2468u16;
+        let _ = dungeon_room_random_special_setup_ids(setup.scan_sources, &mut expected_prng);
+        let expected_roll = u5_prng_range_u16(
+            &mut expected_prng,
+            u16::from(COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_LOW),
+            u16::from(COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_HIGH),
+        ) as u8;
+        assert_eq!(prng_state, expected_prng);
+
+        let actor = instance.actors[COMBAT_PARTY_ACTOR_SLOTS];
+        assert!(!actor.is_empty(), "the ordinary source must place an actor");
+        let stats = combat_class_stats(actor.owner_target_class).unwrap();
+        let expected_base_step = combat_placement_base_step(stats.speed_seed, expected_roll);
+        assert_eq!(actor.base_step, expected_base_step);
+        assert_eq!(
+            actor.phase_counter,
+            COMBAT_PLACEMENT_PHASE_BASE - expected_base_step
+        );
+        assert_ne!(actor.phase_counter, 0);
+    }
+
+    #[test]
+    fn sleep_ambush_placement_seeds_base_step_and_phase_like_any_other_placement() {
+        // `combat.md §5`: the alternate rest/camp entry modes seat the
+        // party and then write monster records through the same
+        // placement rule.
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = 0x0f0f;
+        state
+            .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0)
+            .unwrap();
+
+        let stats = combat_class_stats(COMBAT_CLASS_BAT).unwrap();
+        assert_eq!(stats.speed_seed, 30);
+        let placed: Vec<CombatActorDescriptor> = (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS)
+            .map(|slot| state.combat_actors[slot])
+            .filter(|actor| !actor.is_empty())
+            .collect();
+        assert!(!placed.is_empty(), "the ambush must place at least one Bat");
+        for actor in placed {
+            assert_eq!(actor.owner_target_class, COMBAT_CLASS_BAT);
+            assert!((26..=30).contains(&actor.base_step));
+            assert_eq!(
+                actor.phase_counter,
+                COMBAT_PLACEMENT_PHASE_BASE - actor.base_step
+            );
+            assert_ne!(actor.phase_counter, 0);
+        }
+    }
+
+    #[test]
+    fn party_seating_takes_its_base_step_from_dexterity_and_no_prng_draw() {
+        // `combat.md §5` party descriptor seeding: "Base-step | The
+        // character's dexterity" and "Phase counter | Thirty-six minus
+        // the base-step". §5 charges a speed-variation draw only to
+        // *monster* placements, so seating must not touch the PRNG. The
+        // class stat table's speed seed - the value this site used to
+        // read - is a monster placement input.
+        //
+        // Whether a very low dexterity is floored before the subtraction
+        // is an open question in `cleak/u5-spec#178`; the published raw
+        // contract is what is implemented here.
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = 0xbeef;
+        state.party.truncate(1);
+        state.party[0].class_byte = b'A';
+        state.party[0].climb_stat = 3;
+        state.party[0].status = b'G';
+        let mut bard = state.party[0];
+        bard.slot = 1;
+        bard.class_byte = b'B';
+        bard.climb_stat = 22;
+        state.party.push(bard);
+
+        let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        let positions = [(1u8, 1u8), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)];
+        state.populate_combat_party_with_positions(&mut active_objects, &mut actors, 0, &positions);
+
+        assert_eq!(state.prng_state, 0xbeef, "party seating takes no draw");
+        for slot in 0..2usize {
+            let dexterity = state.party[slot].dexterity();
+            assert_eq!(state.party[slot].climb_stat, dexterity);
+            assert_eq!(actors[slot].base_step, dexterity, "slot {slot}");
+            assert_eq!(
+                actors[slot].phase_counter,
+                COMBAT_PLACEMENT_PHASE_BASE - dexterity,
+                "slot {slot}"
+            );
+        }
+        // The Avatar's class-table speed seed is 25 and the Bard's is 20;
+        // neither is what the descriptor now carries.
+        assert_ne!(actors[0].base_step, combat_class_stats(3).unwrap().speed_seed);
+        assert_ne!(actors[1].base_step, combat_class_stats(1).unwrap().speed_seed);
+    }
+
+    #[test]
+    fn a_fast_monster_swarm_acts_about_twice_between_player_turns() {
+        // `combat.md §7`, closing paragraph: "initiative is *interleaved*
+        // by phase counter, so a fast monster might act twice between the
+        // player's turns." Sixteen Bats (speed seed 30, refresh 6-10)
+        // against a dexterity-22 party member (refresh 14) is the worst
+        // shipped case. Before the fix every Bat refreshed to zero and
+        // the swarm resolved twenty to forty actions per player turn.
+        let mut state = combat_frame_conformance_state();
+        state.party.truncate(1);
+        state.party[0].climb_stat = 22;
+        state.party[0].status = b'G';
+        state.party[0].hp = 999;
+        state.party[0].max_hp = 999;
+
+        let party_step = state.party[0].dexterity();
+        state.active_objects[0] = ActiveObject {
+            type_byte: 0x4c,
+            tile: 0x4c,
+            x: 5,
+            y: 10,
+            ..ActiveObject::empty()
+        };
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            0,
+            party_step,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            COMBAT_PLACEMENT_PHASE_BASE - party_step,
+            5,
+            10,
+        ]);
+
+        let bat_stats = combat_class_stats(COMBAT_CLASS_BAT).unwrap();
+        const BATS: usize = 16;
+        for index in 0..BATS {
+            let slot = COMBAT_PARTY_ACTOR_SLOTS + index;
+            let x = (index % 8) as u8;
+            let y = (index / 8) as u8;
+            state.active_objects[slot] = ActiveObject {
+                type_byte: 0xb4,
+                tile: 0xb4,
+                x: usize::from(x),
+                y: usize::from(y),
+                aux1: bat_stats.max_hp,
+                ..ActiveObject::empty()
+            };
+            state.combat_actors[slot] = combat_placement_descriptor(
+                bat_stats,
+                slot as u8,
+                x,
+                y,
+                COMBAT_ACTOR_FLAG_SELECTABLE_40,
+                (index % 8) as u8,
+            );
+        }
+
+        const PLAYER_TURNS: usize = 8;
+        let mut monster_actions_between_turns = Vec::new();
+        let mut since_player_turn = 0usize;
+        let mut per_bat_since_player_turn = [0usize; BATS];
+        let mut worst_single_bat = 0usize;
+        let mut slot = 0usize;
+        for _ in 0..4000 {
+            if !state.combat_active || monster_actions_between_turns.len() >= PLAYER_TURNS {
+                break;
+            }
+            let application =
+                state.apply_combat_round_walk_from_slot(slot, COMBAT_PHASE_REFRESH_CONSTANT, false);
+            for entry in &application.applications {
+                if let CombatActorSlotDispatchApplication::Slot {
+                    slot: acted,
+                    phase_tick: Some(CombatActorPhaseTick::Ready { .. }),
+                    ..
+                } = entry
+                {
+                    if *acted >= COMBAT_PARTY_ACTOR_SLOTS {
+                        since_player_turn += 1;
+                        per_bat_since_player_turn[*acted - COMBAT_PARTY_ACTOR_SLOTS] += 1;
+                    }
+                }
+            }
+            slot = match application.stop_reason {
+                CombatRoundWalkStopReason::EndOfRound => 0,
+                _ => application.next_slot,
+            };
+            if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
+                monster_actions_between_turns.push(since_player_turn);
+                since_player_turn = 0;
+                worst_single_bat =
+                    worst_single_bat.max(per_bat_since_player_turn.iter().copied().max().unwrap());
+                per_bat_since_player_turn = [0usize; BATS];
+            }
+            if application.stop_reason == CombatRoundWalkStopReason::Exit {
+                break;
+            }
+        }
+
+        assert_eq!(
+            monster_actions_between_turns.len(),
+            PLAYER_TURNS,
+            "the player must keep getting turns: {monster_actions_between_turns:?}"
+        );
+        // "A fast monster might act twice between the player's turns."
+        // The fastest Bat here refreshes to six against the party's
+        // fourteen, so a single Bat lands two or three actions per player
+        // turn depending on where the window falls - never the fourteen
+        // or more a refresh of zero produced.
+        assert!(
+            worst_single_bat <= 3,
+            "one Bat acted {worst_single_bat} times inside a single player turn"
+        );
+        assert!(worst_single_bat >= 2, "initiative must stay interleaved");
+        let worst = monster_actions_between_turns
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or_default();
+        assert!(
+            worst <= 3 * BATS,
+            "sixteen Bats resolved {worst} actions in one player turn: {monster_actions_between_turns:?}"
+        );
+        assert!(
+            state.party[0].living(),
+            "the party must survive eight interleaved turns"
+        );
+    }

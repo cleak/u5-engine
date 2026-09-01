@@ -32,16 +32,16 @@ use u5_runtime::{
     COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
     COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_POISON,
     COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
-    COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE, COMBAT_VANISH_DEATH_MARKER_TILE,
-    CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, ChargenSession,
-    ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_LOOK_TILE,
-    DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
-    DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
-    DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES, Direction,
-    DisplayDriverFamily, DungeonRoomCombatSetup, DungeonScene,
-    EGA_PALETTE_RGB as ENHANCED_EGA_PALETTE_RGB, ENDGAME_GATE_CELL, ENDGAME_TABLEAU_HEIGHT,
-    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING,
-    EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
+    COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE, COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_NEUTRAL,
+    COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST,
+    CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
+    CombatActorDescriptor, DEATH_VISION_LOOK_TILE, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
+    DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX,
+    DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST,
+    DUNGEON_MONSTER_COMBAT_CLASSES, Direction, DisplayDriverFamily, DungeonRoomCombatSetup,
+    DungeonScene, EGA_PALETTE_RGB as ENHANCED_EGA_PALETTE_RGB, ENDGAME_GATE_CELL,
+    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
+    EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, ExplorationTurnGateOutcome, FIELD_SPELL_COST,
     FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
     FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FULL_SCREEN_TEXT_WINDOW_INDEX, FixedCellFont,
@@ -2734,11 +2734,16 @@ fn seed_visual_suite_combat(state: &mut PlayState, game_dir: &Path) -> io::Resul
         .base_class
         .and_then(|stats| combat_class_companion(stats.class));
     let replacement_rolls = vec![0; usize::from(REQUESTED_MONSTERS)];
+    // Deterministic gallery: the neutral speed-variation roll leaves every
+    // placed monster on its unadjusted class speed seed.
+    let speed_adjust_rolls =
+        vec![COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_NEUTRAL; usize::from(REQUESTED_MONSTERS)];
     let mut instance = terrain_combat_instance_from_setup(
         &setup,
         REQUESTED_MONSTERS,
         companion_class,
         &replacement_rolls,
+        &speed_adjust_rolls,
     )?;
     if instance.placed_count == 0 {
         return Err(io::Error::new(
@@ -2911,8 +2916,14 @@ fn push_visual_combat_gallery_reports(
             .base_class
             .and_then(|stats| combat_class_companion(stats.class));
         let replacement_rolls = vec![0; 16];
-        let mut instance =
-            terrain_combat_instance_from_setup(&setup, 16, companion_class, &replacement_rolls)?;
+        let speed_adjust_rolls = vec![COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_NEUTRAL; 16];
+        let mut instance = terrain_combat_instance_from_setup(
+            &setup,
+            16,
+            companion_class,
+            &replacement_rolls,
+            &speed_adjust_rolls,
+        )?;
 
         let mut state = PlayState::load_scene(
             game_dir,

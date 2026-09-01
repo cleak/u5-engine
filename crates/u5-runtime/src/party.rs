@@ -22,6 +22,10 @@ pub struct PartyMember {
     pub slot: u8,
     pub class_byte: u8,
     pub status: u8,
+    /// The character record's DEX byte
+    /// ([`SAVE_CHARACTER_DEX_OFFSET`]). Named for the KLIMB check that
+    /// first needed it; read it through [`PartyMember::dexterity`] where
+    /// the caller means dexterity rather than climbing.
     pub climb_stat: u8,
     pub mana: u8,
     pub hp: u16,
@@ -30,6 +34,14 @@ pub struct PartyMember {
 }
 
 impl PartyMember {
+    /// The character's dexterity - the same byte [`Self::climb_stat`]
+    /// holds. `save_load.rs` loads it from `SAVE_CHARACTER_DEX_OFFSET`,
+    /// and `combat.md §5` seeds a seated party member's combat base-step
+    /// from it.
+    pub const fn dexterity(self) -> u8 {
+        self.climb_stat
+    }
+
     pub fn living(self) -> bool {
         self.hp > 0 && !matches!(self.status, b'D' | b'A')
     }

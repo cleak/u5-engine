@@ -17690,7 +17690,7 @@ fn terrain_combat_instance_places_monsters_and_parallel_descriptors() {
         terrain_combat_setup_from_record_at_arena(WorldPlane::Britannia, trigger, 4, &record)
             .unwrap();
 
-    let instance = terrain_combat_instance_from_setup(&setup, 8, Some(41), &[0, 0, 1]).unwrap();
+    let instance = terrain_combat_instance_from_setup(&setup, 8, Some(41), &[0, 0, 1], &[]).unwrap();
 
     assert_eq!(instance.requested_count, 8);
     assert_eq!(instance.placed_count, 8);
@@ -17759,12 +17759,15 @@ fn terrain_combat_party_seats_come_from_arena_entry_coordinates() {
 
     let mut state = world_state(open_world_grid(), 10, 20);
     state.party[0].class_byte = b'A';
+    // `combat.md §5` party descriptor seeding: base-step is the
+    // character's dexterity, phase counter thirty-six minus it.
+    state.party[0].climb_stat = 22;
 
     // The seats must be identical no matter how many monsters the
     // count roll produced.
     for requested_count in [1u8, 8, 16] {
         let mut instance =
-            terrain_combat_instance_from_setup(&setup, requested_count, None, &[]).unwrap();
+            terrain_combat_instance_from_setup(&setup, requested_count, None, &[], &[]).unwrap();
         state.populate_combat_party_with_positions(
             &mut instance.active_objects,
             &mut instance.actors,
@@ -17779,11 +17782,11 @@ fn terrain_combat_party_seats_come_from_arena_entry_coordinates() {
         assert_eq!((instance.actors[0].x, instance.actors[0].y), positions[0]);
         assert_eq!(instance.actors[0].owner_target_class, 0);
         assert_eq!(instance.actors[0].active_object_slot, 0);
+        assert_eq!(instance.actors[0].base_step, state.party[0].dexterity());
         assert_eq!(
-            instance.actors[0].base_step,
-            combat_class_stats(3).unwrap().speed_seed
+            instance.actors[0].phase_counter,
+            COMBAT_PLACEMENT_PHASE_BASE - state.party[0].dexterity()
         );
-        assert_eq!(instance.actors[0].phase_counter, 0);
     }
 }
 
@@ -17804,7 +17807,7 @@ fn terrain_combat_instance_reports_unplaced_count_when_placement_slots_end() {
         terrain_combat_setup_from_record_at_arena(WorldPlane::Britannia, trigger, 4, &record)
             .unwrap();
 
-    let instance = terrain_combat_instance_from_setup(&setup, 26, None, &[]).unwrap();
+    let instance = terrain_combat_instance_from_setup(&setup, 26, None, &[], &[]).unwrap();
 
     assert_eq!(instance.placed_count, 16);
     assert_eq!(instance.unplaced_count, 10);
@@ -17935,7 +17938,7 @@ fn terrain_combat_local_brit_cbt_records_drive_all_outdoor_arenas_when_present()
             );
         }
 
-        let instance = terrain_combat_instance_from_setup(&setup, 16, None, &[]).unwrap();
+        let instance = terrain_combat_instance_from_setup(&setup, 16, None, &[], &[]).unwrap();
         assert_eq!(instance.requested_count, 16);
         assert_eq!(instance.placed_count, 16);
         assert_eq!(instance.unplaced_count, 0);

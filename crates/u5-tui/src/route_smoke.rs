@@ -40,16 +40,17 @@ use u5_runtime::{
     COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
     COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_CLASS_SHADOW_LORD,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
-    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMPLETED_LONG_CAMP_COOLDOWN_HOURS,
-    CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
-    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_LOOK_TILE, DEATH_WIND_COST,
-    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX,
-    DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
-    DUNGEON_AMBUSH_PARTY_ENTRY_X, DUNGEON_AMBUSH_PARTY_ENTRY_Y, DUNGEON_LEVEL_SPELL_COST,
-    DUNGEON_MONSTER_COMBAT_CLASSES, DUNGEON_ROOM_SOURCE_COUNT, Direction, DungeonScene,
-    ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
-    EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
-    EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
+    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PLACEMENT_PHASE_BASE,
+    COMPLETED_LONG_CAMP_COOLDOWN_HOURS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT,
+    CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor,
+    CombatArenaFieldKind, DEATH_VISION_LOOK_TILE, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
+    DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
+    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_AMBUSH_PARTY_ENTRY_X,
+    DUNGEON_AMBUSH_PARTY_ENTRY_Y, DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES,
+    DUNGEON_ROOM_SOURCE_COUNT, Direction, DungeonScene, ENERGY_FIELD_COST,
+    ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY,
+    EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION, EndgameOutcome,
+    FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
     FLAME_WIND_SPELL_INDEX, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST,
     GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HARPSICHORD_FLOOR,
@@ -90,7 +91,7 @@ use u5_runtime::{
     WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WORLD_SIDE, WindState,
     WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, combat_class_sprite_byte,
-    combat_class_stats, combat_party_class_id, default_party_equipment, default_party_experience,
+    combat_class_stats, default_party_equipment, default_party_experience,
     default_party_intelligence, default_party_names, default_party_roster,
     default_party_stay_counters, default_party_strengths, dungeon_ambush_source_rows,
     dungeon_cell_index, dungeon_room_entry_seed_for_direction, hash_palette_indices,
@@ -7759,13 +7760,16 @@ fn validate_combat_party_descriptor_links(state: &PlayState, case_name: &str) ->
                 "route smoke `{case_name}` did not seed party active-object slot {slot}"
             )));
         };
-        let expected_step = combat_party_class_id(state.party[slot].class_byte)
-            .and_then(combat_class_stats)
-            .map(|stats| stats.speed_seed)
-            .unwrap_or(1);
+        // `combat.md §5` party descriptor seeding: base-step is the
+        // character's dexterity and the phase counter is thirty-six
+        // minus it. The class stat table's speed seed is a monster
+        // placement input and has no part in party seating.
+        let expected_step = state.party[slot].dexterity();
+        let expected_phase = COMBAT_PLACEMENT_PHASE_BASE.saturating_sub(expected_step);
         if actor.owner_target_class != slot as u8
             || actor.active_object_slot != slot as u8
             || actor.base_step != expected_step
+            || actor.phase_counter != expected_phase
             || actor.x != object.x as u8
             || actor.y != object.y as u8
             || !actor.has_field_lookup_selectable_bit()

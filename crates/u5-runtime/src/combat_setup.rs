@@ -482,18 +482,25 @@ pub fn dungeon_room_combat_instance_from_setup_after_party(
                     aux1: stats.max_hp,
                     aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
                 };
-                // The public contract fixes one speed-variation PRNG draw per
-                // ordinary placement but does not expose a further observable
-                // phase formula. Preserve the established phase seed while
-                // consuming the exact shared-state draw.
-                *prng_state = u5_prng_advance_state(*prng_state);
-                actors[descriptor_slot] = CombatActorDescriptor::for_monster_placement(
+                // `combat.md §5`: "Each ordinary monster placement then
+                // consumes one speed-variation draw." The draw is the
+                // uniform `0..7` adjustment feeding the base-step, and
+                // the phase counter is thirty-six minus that base-step.
+                // "The later source setup scans indexes in ascending
+                // order, so actor placement and speed draws occur in
+                // ascending occupied-source order."
+                let speed_adjust_roll = u5_prng_range_u16(
+                    prng_state,
+                    u16::from(COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_LOW),
+                    u16::from(COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_HIGH),
+                ) as u8;
+                actors[descriptor_slot] = combat_placement_descriptor(
                     stats,
                     record_slot as u8,
                     source.x,
                     source.y,
                     combat_monster_placement_flags(stats.class),
-                    0,
+                    speed_adjust_roll,
                 );
                 placed_count = placed_count.saturating_add(1);
             }
@@ -691,6 +698,7 @@ pub fn terrain_combat_instance_from_setup(
     requested_count: u8,
     companion_class: Option<u8>,
     replacement_roll_seeds: &[u8],
+    speed_adjust_roll_seeds: &[u8],
 ) -> io::Result<TerrainCombatInstance> {
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
@@ -701,6 +709,7 @@ pub fn terrain_combat_instance_from_setup(
         requested_count,
         companion_class,
         replacement_roll_seeds,
+        speed_adjust_roll_seeds,
         &mut active_objects,
         &mut actors,
         COMBAT_PARTY_ACTOR_SLOTS,
@@ -719,11 +728,13 @@ pub fn terrain_combat_instance_from_setup(
 /// written by step 2. Seating is not this pass's business - "party
 /// seats never depend on the monster count and never consume a
 /// placement slot."
+#[allow(clippy::too_many_arguments)]
 pub fn terrain_combat_place_monsters(
     setup: &TerrainCombatSetup,
     requested_count: u8,
     companion_class: Option<u8>,
     replacement_roll_seeds: &[u8],
+    speed_adjust_roll_seeds: &[u8],
     active_objects: &mut [ActiveObject],
     actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
 ) -> io::Result<u8> {
@@ -734,6 +745,7 @@ pub fn terrain_combat_place_monsters(
         requested_count,
         companion_class,
         replacement_roll_seeds,
+        speed_adjust_roll_seeds,
         active_objects,
         actors,
         COMBAT_PARTY_ACTOR_SLOTS,
@@ -751,6 +763,7 @@ pub fn terrain_combat_place_monsters_after_party(
     requested_count: u8,
     companion_class: Option<u8>,
     replacement_roll_seeds: &[u8],
+    speed_adjust_roll_seeds: &[u8],
     active_objects: &mut [ActiveObject],
     actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
     first_free_record: usize,
@@ -824,14 +837,21 @@ pub fn terrain_combat_place_monsters_after_party(
             aux1: stats.max_hp,
             aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
         };
-        actors[descriptor_slot] = CombatActorDescriptor::for_monster_placement(
+        // `combat.md §5`: "Each ordinary monster placement then consumes
+        // one speed-variation draw." The caller pre-rolls one uniform
+        // `0..7` value per spawn, in placement order.
+        let speed_adjust_roll = speed_adjust_roll_seeds
+            .get(spawn_index)
+            .copied()
+            .unwrap_or(COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_NEUTRAL);
+        actors[descriptor_slot] = combat_placement_descriptor(
             stats,
             // The link byte is the authoritative pairing.
             record_slot as u8,
             placement.x,
             placement.y,
             combat_monster_placement_flags(stats.class),
-            0,
+            speed_adjust_roll,
         );
         written = spawn_index + 1;
     }
@@ -1068,13 +1088,16 @@ impl PlayState {
                 aux1: stats.max_hp,
                 aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
             };
-            actors[descriptor_slot] = CombatActorDescriptor::for_monster_placement(
+            // `combat.md §5`: one speed-variation draw per ordinary
+            // placement, phase counter of thirty-six minus the base-step.
+            let speed_adjust_roll = self.combat_placement_speed_adjust_roll();
+            actors[descriptor_slot] = combat_placement_descriptor(
                 stats,
                 record_slot as u8,
                 x,
                 y,
                 combat_monster_placement_flags(stats.class),
-                0,
+                speed_adjust_roll,
             );
             placed += 1;
         }
@@ -1238,13 +1261,14 @@ impl PlayState {
 
         // Step 5: place the monsters.
         let companion_class = combat_class_companion(base_class.class);
-        let replacement_roll_seeds =
-            self.terrain_combat_replacement_roll_seeds(requested_count, companion_class);
+        let (replacement_roll_seeds, speed_adjust_roll_seeds) =
+            self.terrain_combat_placement_roll_seeds(requested_count, companion_class);
         let placed_count = terrain_combat_place_monsters_after_party(
             &setup,
             requested_count,
             companion_class,
             &replacement_roll_seeds,
+            &speed_adjust_roll_seeds,
             &mut active_objects,
             &mut actors,
             first_free_record,
@@ -1330,14 +1354,22 @@ impl PlayState {
             let record_slot = packed_slot;
             packed_slot += 1;
             let (x, y) = positions[roster_slot];
+            // `combat.md §5` party descriptor seeding: base-step is "The
+            // character's dexterity", and the phase counter is
+            // "Thirty-six minus the base-step". The class stat table's
+            // speed seed is a *monster* placement input and has no part
+            // in party seating; §5 also charges no speed-variation draw
+            // to a party seat, so nothing here touches the shared PRNG.
+            //
+            // The raw DEX byte is used as published. Whether a very low
+            // dexterity is floored before the subtraction is open in
+            // `cleak/u5-spec#178`; until that is answered a DEX-3 Avatar
+            // legitimately seats at phase 33.
+            let base_step = member.dexterity();
             // The save stores an ASCII profession letter, while the combat
-            // stat table uses the four numeric human-class rows. Feeding the
-            // ASCII byte directly to that table falls through to speed 1 and
-            // can let an entire hostile group act before the first prompt.
-            let base_step = combat_party_class_id(member.class_byte)
-                .and_then(combat_class_stats)
-                .map(|stats| stats.speed_seed)
-                .unwrap_or(1);
+            // stat table uses the four numeric human-class rows; that
+            // mapping still selects the *sprite*, and an unrecognised
+            // letter still leaves the presentation byte at zero.
             let actor_byte = combat_party_actor_byte(member.class_byte);
             // `combat.md §5`: an `'S'` member's "presentation record
             // shows the prone marker". `§5` names the marker only by
@@ -1387,7 +1419,9 @@ impl PlayState {
                 // these two are no longer the same number.
                 roster_slot as u8,
                 record_slot as u8,
-                0,
+                // `combat.md §5`: "Phase counter | Thirty-six minus the
+                // base-step."
+                COMBAT_PLACEMENT_PHASE_BASE.saturating_sub(base_step),
                 x,
                 y,
             ]);
@@ -1443,16 +1477,51 @@ impl PlayState {
         requested_count: u8,
         companion_class: Option<u8>,
     ) -> Vec<u8> {
-        let threshold = terrain_combat_replacement_threshold(requested_count);
         (0..requested_count)
             .map(|spawn| {
-                if companion_class.is_some() && spawn != 0 && spawn < threshold {
-                    self.random_mod_u8(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR)
-                } else {
-                    1
-                }
+                self.terrain_combat_replacement_roll_seed(spawn, requested_count, companion_class)
             })
             .collect()
+    }
+
+    /// `combat.md §5` "Picking a class per monster": one spawn index's
+    /// one-in-nine companion check. Spawn zero and every index at or above
+    /// the `count / 4 + 1` threshold never roll, and consume no draw.
+    pub fn terrain_combat_replacement_roll_seed(
+        &mut self,
+        spawn: u8,
+        requested_count: u8,
+        companion_class: Option<u8>,
+    ) -> u8 {
+        let threshold = terrain_combat_replacement_threshold(requested_count);
+        if companion_class.is_some() && spawn != 0 && spawn < threshold {
+            self.random_mod_u8(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR)
+        } else {
+            1
+        }
+    }
+
+    /// `combat.md §5` step 5 draw order: each monster is created in
+    /// placement order, so its class check (when it rolls one at all) and
+    /// the one speed-variation draw its placement consumes are taken back
+    /// to back rather than in two separate sweeps. Returns the per-spawn
+    /// class-replacement seeds and the per-spawn speed-variation seeds.
+    pub fn terrain_combat_placement_roll_seeds(
+        &mut self,
+        requested_count: u8,
+        companion_class: Option<u8>,
+    ) -> (Vec<u8>, Vec<u8>) {
+        let mut replacement_roll_seeds = Vec::with_capacity(usize::from(requested_count));
+        let mut speed_adjust_roll_seeds = Vec::with_capacity(usize::from(requested_count));
+        for spawn in 0..requested_count {
+            replacement_roll_seeds.push(self.terrain_combat_replacement_roll_seed(
+                spawn,
+                requested_count,
+                companion_class,
+            ));
+            speed_adjust_roll_seeds.push(self.combat_placement_speed_adjust_roll());
+        }
+        (replacement_roll_seeds, speed_adjust_roll_seeds)
     }
 }
 

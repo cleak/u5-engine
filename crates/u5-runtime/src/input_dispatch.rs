@@ -3214,12 +3214,20 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
         return;
     }
 
-    for _ in 0..COMBAT_ACTOR_SLOTS {
+    for _ in 0..COMBAT_ROUND_WALK_DRAIN_LIMIT {
         let start_slot = state.next_combat_actor_slot.min(COMBAT_ACTOR_SLOTS);
         let application = if state.pace_combat_presentations {
-            state.apply_combat_round_walk_from_slot_paced(start_slot, 30, false)
+            state.apply_combat_round_walk_from_slot_paced(
+                start_slot,
+                COMBAT_PHASE_REFRESH_CONSTANT,
+                false,
+            )
         } else {
-            state.apply_combat_round_walk_from_slot(start_slot, 30, false)
+            state.apply_combat_round_walk_from_slot(
+                start_slot,
+                COMBAT_PHASE_REFRESH_CONSTANT,
+                false,
+            )
         };
         append_combat_round_walk_messages(state, &application);
         state.next_combat_actor_slot = match application.stop_reason {

@@ -826,9 +826,69 @@ pub const fn combat_placement_base_step(speed_seed: u8, adjust_roll_0_to_7: u8) 
 /// `[-4, +3]` adjustment is reverted.
 pub const COMBAT_PLACEMENT_BASE_STEP_MAX: u8 = 30;
 
+/// `combat.md §5`: the inclusive bounds of the one speed-variation draw
+/// each ordinary monster placement consumes. Eight outcomes spanning the
+/// uniform `[-4, +3]` adjustment.
+pub const COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_LOW: u8 = 0;
+pub const COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_HIGH: u8 = 7;
+
+/// The speed-variation roll that leaves the class speed seed unchanged
+/// (`4 - 4 == 0`). Callers handed a short pre-rolled seed slice - the
+/// deterministic gallery and conformance harnesses - fall back to this so
+/// a missing seed means "no adjustment" rather than the `-4` end.
+pub const COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_NEUTRAL: u8 = 4;
+
 /// `combat.md §5`: a placed monster's phase counter is thirty-six minus
 /// its base-step.
 pub const COMBAT_PLACEMENT_PHASE_BASE: u8 = 36;
+
+/// `combat.md §7` per-actor body step 5: "The counter is reset to
+/// `36 - base_step`." The round walker's refresh constant is the same
+/// thirty-six the placement seed in `§5` uses, so both spell it with one
+/// value. Every production round-walk call site must pass this constant
+/// rather than a bare literal - a smaller constant makes every class
+/// whose base-step reaches it refresh to zero and act on every pass.
+pub const COMBAT_PHASE_REFRESH_CONSTANT: u8 = COMBAT_PLACEMENT_PHASE_BASE;
+
+/// How many consecutive table walks a driver runs while looking for the
+/// next actor that is ready to act. `combat.md §7` restarts the table walk
+/// whenever slot 32 is reached with actors still present, so this is only
+/// a non-termination guard - but it has to be able to cross the largest
+/// phase counter a descriptor can hold, which is
+/// [`COMBAT_PLACEMENT_PHASE_BASE`] at a base-step of zero. A bound below
+/// that silently drops a slow party member's turn.
+pub const COMBAT_ROUND_WALK_DRAIN_LIMIT: usize = COMBAT_PLACEMENT_PHASE_BASE as usize + 1;
+
+/// `combat.md §5` monster placement seeding, shared by every placement
+/// site (terrain, dungeon-room, sleep ambush, and the `§6.3` Gazer death
+/// spawn). The descriptor takes "the class's maximum HP as its HP/wound
+/// counter; a base-step of the class speed seed randomised by a uniform
+/// `[-4, +3]` adjustment, reverted to the unadjusted seed whenever the
+/// adjusted value would exceed thirty; a phase counter of thirty-six
+/// minus the base-step". `speed_adjust_roll_0_to_7` is the one
+/// speed-variation draw `§5` charges to each ordinary placement; the
+/// caller owns the draw so the shared PRNG order stays visible at the
+/// placement site.
+pub fn combat_placement_descriptor(
+    stats: CombatClassStats,
+    active_object_slot: u8,
+    x: u8,
+    y: u8,
+    flags: u8,
+    speed_adjust_roll_0_to_7: u8,
+) -> CombatActorDescriptor {
+    let base_step = combat_placement_base_step(stats.speed_seed, speed_adjust_roll_0_to_7);
+    let mut actor = CombatActorDescriptor::for_monster_placement(
+        stats,
+        active_object_slot,
+        x,
+        y,
+        flags,
+        COMBAT_PLACEMENT_PHASE_BASE.saturating_sub(base_step),
+    );
+    actor.base_step = base_step;
+    actor
+}
 
 impl PlayState {
     pub fn set_combat_actor_status_disabled(&mut self, slot: usize) -> bool {
@@ -1772,6 +1832,16 @@ impl PlayState {
         (first, second)
     }
 
+    /// `combat.md §5`: "Each ordinary monster placement then consumes one
+    /// speed-variation draw." One uniform `0..7` draw off the shared PRNG,
+    /// fed to [`combat_placement_base_step`].
+    pub fn combat_placement_speed_adjust_roll(&mut self) -> u8 {
+        self.random_range_u8(
+            COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_LOW,
+            COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_HIGH,
+        )
+    }
+
     /// `combat.md §5` monster placement in its ordinary place-a-monster
     /// mode: allocate a fresh descriptor and a fresh active-object record
     /// for `class` at the given arena cell and Z plane, seeded with the
@@ -1793,16 +1863,14 @@ impl PlayState {
         let active_object =
             summoned_active_object_record(class, usize::from(x), usize::from(y), z)?;
         let allocation = resolve_clone_spell_allocation(&self.combat_actors, &self.active_objects)?;
-        let base_step = combat_placement_base_step(stats.speed_seed, self.random_range_u8(0, 7));
-        let mut actor = CombatActorDescriptor::for_monster_placement(
+        let actor = combat_placement_descriptor(
             stats,
             allocation.active_object_slot as u8,
             x,
             y,
             actor_flags,
-            COMBAT_PLACEMENT_PHASE_BASE.saturating_sub(base_step),
+            self.combat_placement_speed_adjust_roll(),
         );
-        actor.base_step = base_step;
 
         self.combat_actors[allocation.actor_slot] = actor;
         self.active_objects[allocation.active_object_slot] = active_object;
@@ -5764,9 +5832,13 @@ impl PlayState {
         }
 
         let mut last_application = None;
-        for _ in 0..COMBAT_ACTOR_SLOTS {
+        for _ in 0..COMBAT_ROUND_WALK_DRAIN_LIMIT {
             let start_slot = self.next_combat_actor_slot.min(COMBAT_ACTOR_SLOTS);
-            let application = self.apply_combat_round_walk_from_slot(start_slot, 30, false);
+            let application = self.apply_combat_round_walk_from_slot(
+                start_slot,
+                COMBAT_PHASE_REFRESH_CONSTANT,
+                false,
+            );
             self.next_combat_actor_slot = match application.stop_reason {
                 CombatRoundWalkStopReason::EndOfRound => 0,
                 CombatRoundWalkStopReason::AwaitingPlayer
