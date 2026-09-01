@@ -1136,9 +1136,21 @@ pub fn is_water_tile(tile: u8) -> bool {
 /// Which `animation.md §6` family owns `tile`, or `None` when the tile is
 /// not animated by the world-tick tile animator.
 ///
-/// The family list is [`STATIC_TILE_ANIMATION_FAMILIES`]. It includes the
-/// published terrain-domain fire/light source runs `0xB0..0xB3` and
-/// `0xBC..0xBF` as well as the decorative selector families.
+/// The family list is [`STATIC_TILE_ANIMATION_FAMILIES`], and it is the
+/// complete list: the five decorative selector families and nothing
+/// else.
+///
+/// `RETRACTIONS.md` R148 withdrew the earlier reading that the
+/// terrain-domain fire/light-source runs `0xB0..0xB3` and `0xBC..0xBF`
+/// are animation families. "The animator touches exactly five id ranges
+/// and no others ... and **no water, lava, torch or brazier tile is
+/// among them**." Those two runs are the light-source lookup instead —
+/// "this cell illuminates its surroundings", see
+/// [`crate::is_local_light_source_tile`] — and each of their four ids is an
+/// independently authored fixture, not a frame of its neighbour.
+/// Open water `0x01..=0x03` is likewise not a family here; the measured
+/// per-tick water treatment is a display-driver pixel effect that runs
+/// beside this pass, see [`crate::water_scroll`].
 ///
 /// Dungeon-mode and combat-mode effect tiles (fire field, poison field,
 /// sleep / energy field) are owned by per-effect handlers, not by this

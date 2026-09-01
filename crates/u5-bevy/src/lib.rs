@@ -223,6 +223,31 @@ const INTRO_DISPLAY_SCALE: f32 = 2.5;
 const BIOS_USER_TICK_INTERVAL_SECS: f32 = 65_536.0 / 1_193_182.0;
 const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = BIOS_USER_TICK_INTERVAL_SECS;
 
+/// Cadence of the gameplay wait-for-command loop's world tick.
+///
+/// Runtime observation, `cleak/u5-spec#179`: every animated element on the
+/// idle gameplay screen advances on one shared clock, measured at
+/// **54.913 ms / 18.2105 Hz** over an 89.9 s sample (1638 transitions,
+/// two independent regions of interest agreeing on the integer count) —
+/// the IBM PC BIOS timer tick to within 0.02 %, and identical at two
+/// emulated CPU speeds an order of magnitude apart, so it is timer-driven
+/// rather than loop-count-driven. The published spec set has no gameplay
+/// figure to contradict: `timing.md §5` is intro-scoped, and `input.md
+/// §12` says only that the idle tick runs "typically many times per
+/// second".
+///
+/// The validation anchor is the command cursor: `text-output.md §10.6`'s
+/// four-glyph barber pole advances one phase per tick, so a full cursor
+/// cycle must take four ticks ≈ 219.7 ms, which is what was measured.
+/// This replaces an uncited `0.33` literal that ran the whole idle screen
+/// six times too slowly.
+const GAMEPLAY_WORLD_TICK_INTERVAL_SECS: f32 = BIOS_USER_TICK_INTERVAL_SECS;
+
+/// Slack left in the accumulator when `timing.md §5.3`'s catch-up cap
+/// discards surplus time, so the next host frame still needs a real delta
+/// to reach the interval. Mirrors `advance_intro_animation_pump`.
+const ANIMATION_PUMP_CATCH_UP_EPSILON_SECS: f32 = 1e-6;
+
 /// `systems/timing.md §5.1` (`cleak/u5-spec#77`): the `TITLE.BIT`
 /// flourish is **not** BIOS-tick paced. It is one call into the
 /// driver's animation-script entry, and every presentation step is
@@ -9979,9 +10004,18 @@ struct VisualReturnToViewFrameMeta {
     caption: Option<&'static str>,
 }
 
-/// Drives the five published static-tile families at a stable simulation
-/// cadence so the world remains animated while input is idle. The cadence is
-/// intentionally independent of host render FPS (`animation.md §2`).
+/// Drives the gameplay world tick at a stable simulation cadence so the
+/// screen remains animated while input is idle. The cadence is
+/// intentionally independent of host render FPS (`animation.md §2`: "The
+/// important implementation rule is that animation is *tick based*, not
+/// wall clock based") and is one BIOS user tick, per
+/// [`GAMEPLAY_WORLD_TICK_INTERVAL_SECS`].
+///
+/// One firing advances presentation only — the five published static-tile
+/// family selectors, the active-object sprite phases, the water-surface
+/// scroll and the command cursor. It spends no game-clock minutes and
+/// moves no scheduled NPC (`input.md §2`: "NPC schedules and the in-world
+/// clock do not advance from this idle tick").
 #[derive(Resource)]
 struct AnimationPump {
     accumulator: f32,
@@ -9992,7 +10026,7 @@ impl Default for AnimationPump {
     fn default() -> Self {
         Self {
             accumulator: 0.0,
-            interval: 0.33,
+            interval: GAMEPLAY_WORLD_TICK_INTERVAL_SECS,
         }
     }
 }
@@ -10034,6 +10068,45 @@ fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> 
             )
         },
     )
+}
+
+/// One firing of the gameplay world-tick pump, or none.
+///
+/// `systems/timing.md §5.3`: "The correct behaviour is at most one step per
+/// BIOS-tick interval; if a host frame straddles multiple ticks, draw one
+/// step and let the remaining ticks elapse on subsequent frames." A
+/// renderer driven by `Time::delta_secs()` must "only advance one logical
+/// step per ~55 ms slot, dropping anything more than one slot's worth of
+/// accumulated time per advance to avoid catch-up."
+///
+/// §5.3 is written about the intro, and `advance_intro_animation_pump` has
+/// always obeyed it. The gameplay pump used to be the one accumulator in
+/// this frontend that did not: a `while` loop could run several logical
+/// world ticks inside a single host frame after a stall. The published
+/// pattern is the same shape for both, and at the measured 18.2 Hz world
+/// tick an uncapped pump turns a one-second hiccup into eighteen queued
+/// ticks.
+fn advance_gameplay_animation_pump(
+    pump: &mut AnimationPump,
+    delta: f32,
+    interval: f32,
+    white_active: bool,
+) -> bool {
+    pump.accumulator += delta;
+    if pump.accumulator < interval {
+        return false;
+    }
+    if white_active {
+        // White is a paced blocking presentation. Never catch up by
+        // skipping multiple visible repaints after a slow host frame.
+        pump.accumulator = 0.0;
+    } else {
+        pump.accumulator -= interval;
+        if pump.accumulator >= interval {
+            pump.accumulator = interval - ANIMATION_PUMP_CATCH_UP_EPSILON_SECS;
+        }
+    }
+    true
 }
 
 fn animate_static_tiles(
@@ -10079,65 +10152,58 @@ fn animate_static_tiles(
         return;
     }
 
-    pump.accumulator += time.delta_secs();
     let mut advanced = false;
     let (white_active, interval) = visual_animation_pump_interval(&visual.state, pump.interval);
-    while pump.accumulator >= interval {
-        if white_active {
-            // White is a paced blocking presentation. Never catch up by
-            // skipping multiple visible repaints after a slow host frame.
-            pump.accumulator = 0.0;
-        } else {
-            pump.accumulator -= interval;
-        }
-        let mut prompt_cursor_visible = visual.prompt_cursor_visible;
-        if visual.state.combat_active
-            && visual.state.pace_combat_presentations
-            && visual.state.pending_combat_actor_slot.is_none()
-        {
-            advance_paced_combat_presentation(&mut visual.state);
-            visual.prompt_cursor_visible = false;
-            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
-            // One automatic action owns one visible host frame. A slow frame
-            // must never collapse several combat actions into one redraw.
-            pump.accumulator = 0.0;
-            advanced = true;
-            break;
-        }
-        let gate_outcome = if visual_modal_prompt_active(&visual.state) {
-            None
-        } else {
-            let game_dir = visual.game_dir.clone();
-            match visual.state.apply_exploration_turn_gate(&game_dir) {
-                Ok(outcome) => Some(outcome),
-                Err(err) => {
-                    visual.state.message = format!("Party capability error: {err}");
-                    Some(ExplorationTurnGateOutcome::Slept { transition: None })
-                }
+    if advance_gameplay_animation_pump(&mut pump, time.delta_secs(), interval, white_active) {
+        // One pump firing is one logical step. The early exits below used
+        // to `break` out of a catch-up loop; they now leave this block.
+        'step: {
+            let mut prompt_cursor_visible = visual.prompt_cursor_visible;
+            if visual.state.combat_active
+                && visual.state.pace_combat_presentations
+                && visual.state.pending_combat_actor_slot.is_none()
+            {
+                advance_paced_combat_presentation(&mut visual.state);
+                visual.prompt_cursor_visible = false;
+                visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+                // One automatic action owns one visible host frame. A slow frame
+                // must never collapse several combat actions into one redraw.
+                pump.accumulator = 0.0;
+                advanced = true;
+                break 'step;
             }
-        };
-        let automatic_gate_pass = matches!(
-            gate_outcome,
-            Some(
-                ExplorationTurnGateOutcome::Slept { .. }
-                    | ExplorationTurnGateOutcome::Rescued { .. }
-            )
-        );
-        if !automatic_gate_pass {
-            advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
-        } else {
-            // Never catch up multiple automatic sleep/rescue passes in one
-            // host frame; each receives one ordinary visual-pump interval.
-            pump.accumulator = 0.0;
-        }
-        visual.prompt_cursor_visible = prompt_cursor_visible;
-        // The live input line's barber pole scrolls one phase per pump
-        // tick whether or not a line prompt is open, so every tick needs
-        // a redraw regardless of what the wait frame itself reported.
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
-        advanced = true;
-        if white_active || automatic_gate_pass {
-            break;
+            let gate_outcome = if visual_modal_prompt_active(&visual.state) {
+                None
+            } else {
+                let game_dir = visual.game_dir.clone();
+                match visual.state.apply_exploration_turn_gate(&game_dir) {
+                    Ok(outcome) => Some(outcome),
+                    Err(err) => {
+                        visual.state.message = format!("Party capability error: {err}");
+                        Some(ExplorationTurnGateOutcome::Slept { transition: None })
+                    }
+                }
+            };
+            let automatic_gate_pass = matches!(
+                gate_outcome,
+                Some(
+                    ExplorationTurnGateOutcome::Slept { .. }
+                        | ExplorationTurnGateOutcome::Rescued { .. }
+                )
+            );
+            if !automatic_gate_pass {
+                advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
+            } else {
+                // Never catch up multiple automatic sleep/rescue passes in one
+                // host frame; each receives one ordinary visual-pump interval.
+                pump.accumulator = 0.0;
+            }
+            visual.prompt_cursor_visible = prompt_cursor_visible;
+            // The live input line's barber pole scrolls one phase per pump
+            // tick whether or not a line prompt is open, so every tick needs
+            // a redraw regardless of what the wait frame itself reported.
+            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            advanced = true;
         }
     }
     if !advanced {
@@ -17433,6 +17499,88 @@ mod tests {
             &mut pump,
             INTRO_ANIMATION_TICK_INTERVAL_SECS * 0.4
         ));
+    }
+
+    /// Runtime observation, `cleak/u5-spec#179`: the shipped build's idle
+    /// gameplay screen advances every animated element on one clock
+    /// measured at 54.913 ms / 18.2105 Hz — the BIOS user tick. The
+    /// validation anchor is the command cursor, a four-phase glyph
+    /// advancing one phase per tick, whose full cycle was measured at
+    /// 219.7 ms.
+    #[test]
+    fn gameplay_animation_pump_runs_on_the_measured_world_tick_cadence() {
+        assert_eq!(
+            GAMEPLAY_WORLD_TICK_INTERVAL_SECS, BIOS_USER_TICK_INTERVAL_SECS,
+            "the gameplay world tick is one BIOS user tick"
+        );
+        assert!(
+            (GAMEPLAY_WORLD_TICK_INTERVAL_SECS - 0.054_913).abs() < 5e-5,
+            "measured 54.913 ms, got {GAMEPLAY_WORLD_TICK_INTERVAL_SECS}"
+        );
+        assert_eq!(
+            AnimationPump::default().interval,
+            GAMEPLAY_WORLD_TICK_INTERVAL_SECS
+        );
+
+        // The cursor advances one of its four phases per pump firing, so
+        // a full barber-pole cycle is four intervals.
+        let cursor_phases = u5_runtime::gameplay_chrome::PROMPT_CURSOR_FRAME_GLYPHS.len() as f32;
+        let cursor_cycle_secs = cursor_phases * GAMEPLAY_WORLD_TICK_INTERVAL_SECS;
+        assert!(
+            (cursor_cycle_secs - 0.219_7).abs() < 2e-4,
+            "measured a 219.7 ms cursor cycle, got {cursor_cycle_secs}"
+        );
+
+        // Sub-interval frames accumulate without firing; the frame that
+        // crosses the interval fires exactly once.
+        let mut pump = AnimationPump::default();
+        let step = GAMEPLAY_WORLD_TICK_INTERVAL_SECS * 0.4;
+        assert!(!advance_gameplay_animation_pump(
+            &mut pump,
+            step,
+            GAMEPLAY_WORLD_TICK_INTERVAL_SECS,
+            false
+        ));
+        assert!(!advance_gameplay_animation_pump(
+            &mut pump,
+            step,
+            GAMEPLAY_WORLD_TICK_INTERVAL_SECS,
+            false
+        ));
+        assert!(advance_gameplay_animation_pump(
+            &mut pump,
+            step,
+            GAMEPLAY_WORLD_TICK_INTERVAL_SECS,
+            false
+        ));
+    }
+
+    /// `systems/timing.md §5.3`: at most one step per interval, and any
+    /// further accumulated time is dropped rather than replayed. The
+    /// gameplay pump owes the same contract the intro pump already keeps.
+    #[test]
+    fn gameplay_animation_pump_caps_burst_catch_up_when_host_stalls() {
+        let mut pump = AnimationPump::default();
+        let interval = GAMEPLAY_WORLD_TICK_INTERVAL_SECS;
+
+        // A one-second host stall is eighteen elapsed ticks. Exactly one
+        // logical step may come out of it.
+        assert!(advance_gameplay_animation_pump(
+            &mut pump, 1.0, interval, false
+        ));
+        assert!(
+            !advance_gameplay_animation_pump(&mut pump, 0.0, interval, false),
+            "the surplus must be dropped, not replayed"
+        );
+        assert!(pump.accumulator < interval);
+
+        // The blocking White presentation keeps its stricter rule: the
+        // accumulator is pinned, so a stall never skips a visible repaint.
+        let mut white = AnimationPump::default();
+        assert!(advance_gameplay_animation_pump(
+            &mut white, 1.0, interval, true
+        ));
+        assert_eq!(white.accumulator, 0.0);
     }
 
     #[test]

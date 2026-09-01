@@ -74,6 +74,83 @@
         assert_eq!(animated.len(), 20, "five families of four adjacent ids");
     }
 
+    /// The withdrawn contract must not come back silently.
+    ///
+    /// `RETRACTIONS.md` R148: "The animator touches exactly five id ranges
+    /// and no others — waterfall `0xD4..0xD7`, fountain `0xD8..0xDB`,
+    /// standard of Britannia `0xEC..0xEF`, pendulum `0x80..0x83` and
+    /// clock/bellows `0xFA..0xFD` — and **no water, lava, torch or brazier
+    /// tile is among them**." `animation.md §8` adds: "Torches, braziers,
+    /// fireplaces and interior water are static tiles; they do not
+    /// animate."
+    ///
+    /// An earlier build of this engine carried the fire/light-source runs
+    /// `0xB0..0xB3` and `0xBC..0xBF` in the family table, which made a
+    /// hearth cycle through a second hearth, a standing brazier and a
+    /// forge — four unrelated fixtures, each independently authored in the
+    /// shipped maps. Those two runs are the *light-source* lookup
+    /// ([`is_local_light_source_tile`]), which says a cell illuminates its
+    /// surroundings, not that its neighbours are its frames.
+    #[test]
+    fn withdrawn_fire_and_water_runs_are_not_animation_families() {
+        // The exact id/cycle table, pinned as a whole so a sixth row
+        // cannot be added without this test being updated deliberately.
+        let published: [(u8, u8, u8); 5] = [
+            (0x80, 4, 2),
+            (0xD4, 4, 4),
+            (0xD8, 4, 4),
+            (0xEC, 4, 4),
+            (0xFA, 4, 2),
+        ];
+        let mut actual: Vec<(u8, u8, u8)> = STATIC_TILE_ANIMATION_FAMILIES
+            .iter()
+            .map(|spec| (spec.first_id, spec.id_count, spec.cycle))
+            .collect();
+        actual.sort_unstable();
+        assert_eq!(
+            actual,
+            published.to_vec(),
+            "exactly the five published families, with their published id ranges and cycle lengths"
+        );
+
+        // The withdrawn fire / light-source runs.
+        for tile in (0xB0..=0xB3u8).chain(0xBC..=0xBF) {
+            assert_eq!(
+                static_tile_animation_family(tile),
+                None,
+                "0x{tile:02x} is a light source, not an animation family (R148)"
+            );
+            assert!(
+                is_local_light_source_tile(tile),
+                "0x{tile:02x} is what the light-source lookup actually owns"
+            );
+            for phase in 0..STATIC_TILE_ANIMATION_PERIOD_TICKS {
+                assert_eq!(
+                    AnimationClock::at_static_tile_phase(phase).resolve_static_tile(tile),
+                    tile,
+                    "0x{tile:02x} must render as itself at phase {phase}"
+                );
+            }
+        }
+
+        // Water and lava, named in the same retraction. Water animates,
+        // but as a display-driver pixel roll, never through this pass.
+        for tile in (0x01..=0x03u8).chain([0x04, 0x8F]) {
+            assert_eq!(
+                static_tile_animation_family(tile),
+                None,
+                "0x{tile:02x} is not a §6 family (R148)"
+            );
+            for phase in 0..STATIC_TILE_ANIMATION_PERIOD_TICKS {
+                assert_eq!(
+                    AnimationClock::at_static_tile_phase(phase).resolve_static_tile(tile),
+                    tile,
+                    "0x{tile:02x} must render as itself at phase {phase}"
+                );
+            }
+        }
+    }
+
     /// `animation.md §6`: "advance the waterfall family, advance the
     /// fountain family, then test bit 0 of the shared phase counter. If
     /// bit 0 is clear, the pass skips **everything** that follows —

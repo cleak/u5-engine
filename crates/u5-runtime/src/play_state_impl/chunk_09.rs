@@ -533,7 +533,18 @@ impl PlayState {
                 let Some(tile_id) = cell.tile_id() else {
                     continue;
                 };
-                blit_tile_id_to_viewport(&mut viewport, atlas, tile_id, cell_x, cell_y)?;
+                // Runtime observation, `cleak/u5-spec#179`: open water is
+                // rolled down one pixel row per tick by the display layer. A cell
+                // whose composed tile is a sprite takes the ordinary path,
+                // exactly as it does for the `§6` families.
+                blit_terrain_tile_to_viewport(
+                    &mut viewport,
+                    atlas,
+                    tile_id,
+                    cell_x,
+                    cell_y,
+                    self.water_scroll,
+                )?;
             }
         }
         Ok(Some(viewport))
@@ -648,7 +659,14 @@ impl PlayState {
                 let terrain = self
                     .animation
                     .resolve_static_tile(self.combat_terrain[arena_y][arena_x]);
-                blit_tile_to_viewport(viewport, atlas, terrain, cell_x, cell_y)?;
+                blit_terrain_tile_to_viewport(
+                    viewport,
+                    atlas,
+                    usize::from(terrain),
+                    cell_x,
+                    cell_y,
+                    self.water_scroll,
+                )?;
                 if let Some(sprite) = self.combat_render_sprite_at(arena_x, arena_y) {
                     blit_tile_id_to_viewport(viewport, atlas, sprite, cell_x, cell_y)?;
                 }
@@ -1632,6 +1650,28 @@ impl PlayState {
         Some(((dx + r) as usize, (dy + r) as usize))
     }
 
+    /// `visibility.md §8`'s shared variant selector for a composited
+    /// active object: Tinker takes the first entry, anything else "a
+    /// **uniform random** entry from the four-value range".
+    ///
+    /// The animation phase is deliberately **not** an input. It used to be,
+    /// which made a stationary actor standing on one of the four-entry
+    /// terrains (`0x84`, `0x85`, `0x90`, `0x92`, `0x9D`, `0x9E`) re-stamp
+    /// itself on every animation tick — and correlated with the animation
+    /// phase rather than random. Runtime observation,
+    /// `cleak/u5-spec#179`: outside combat nothing of the sort happens.
+    /// The party sprite standing on the overworld and the Avatar seated in
+    /// a chair indoors were both bit-identical across 160 s idle windows,
+    /// with zero transitions. At the measured 18.2 Hz world tick the old
+    /// selector would have flickered them roughly eighteen times a second.
+    ///
+    /// The turn counter stays in the hash, so the draw is re-rolled once
+    /// per consumed turn — the coarsest lifetime that still looks random
+    /// and the one that survives the observation. `#179` question 6 asks
+    /// whether the original re-draws per composite pass or per placement;
+    /// until it is answered, per turn is the conservative reading.
+    /// Combat-mode presentation is untouched: it has its own renderer, and
+    /// the same capture shows combat actors genuinely do re-roll per tick.
     fn active_object_render_variant(
         &self,
         cell_x: usize,
@@ -1643,7 +1683,6 @@ impl PlayState {
             .and_then(|index| self.party.get(index))
             .is_some_and(|member| member.class_byte == b'T');
         let selector = (self.turn as u8)
-            ^ self.animation.frame
             ^ (cell_x as u8).wrapping_mul(3)
             ^ (cell_y as u8).wrapping_mul(5)
             ^ object.type_byte
@@ -2968,7 +3007,11 @@ impl PlayState {
             && !self.negate_time_active()
             && !matches!(self.area, Area::Dungeon { .. })
         {
-            self.animate_active_objects();
+            // Presentation only: see
+            // [`Self::animate_active_object_sprites_only`]. A visual tick
+            // must not move an actor, because the observed original does
+            // not move one while the player is idle.
+            self.animate_active_object_sprites_only();
         }
         self.advance_animation_clock();
     }
@@ -3069,6 +3112,16 @@ impl PlayState {
         // at the end, "whichever path was taken".
         let pass = static_tile_animation_pass(self.animation.frame);
         self.animation.tick_static_tiles();
+        // Runtime observation, `cleak/u5-spec#179`: the water surface
+        // scrolls down one pixel row per world tick through sixteen
+        // phases, on one global counter shared by every water tile. It rides the same
+        // tick as the `§6` pass but is not part of it — no water tile is
+        // a member of any published family (`RETRACTIONS.md` R148), and
+        // this counter has neither the family gates nor their period.
+        // Advancing it costs no repaint decision of its own: the water
+        // pixels are rolled inside the blit, so the cached tile-id
+        // buffers `main-loop.md §9` guards stay valid.
+        self.water_scroll.tick();
         // `animation.md §7`/`§10`: "after advancing phases and tile
         // selectors, the engine explicitly gives the display layer a
         // chance to make the result visible", and an implementation must
@@ -3094,7 +3147,40 @@ impl PlayState {
         }
     }
 
+    /// The per-turn animator pass: sprite phases **and** the movement the
+    /// animator owns (wind-driven ship drift, autonomous wandering).
     pub fn animate_active_objects(&mut self) {
+        self.animate_active_objects_with_movement(true);
+    }
+
+    /// The idle presentation pass: sprite phases only, no movement.
+    ///
+    /// Runtime observation, `cleak/u5-spec#179`: the world does not advance
+    /// while the player is idle. Over a 160 s idle sample the date, food,
+    /// gold, sun/moon indicator and every status row were bit-identical,
+    /// and over a separate 28 s sample a hostile creature standing in the
+    /// tile adjacent to the party animated its sprite continuously but
+    /// **never moved to another tile and never attacked** — combat began
+    /// only once the player passed a turn. Actor movement is therefore
+    /// driven by player turns, not by wall-clock time.
+    ///
+    /// `input.md §2` agrees for the scheduled half — "NPC schedules and the
+    /// in-world clock do not advance from this idle tick" — while
+    /// `main-loop.md §9` and `animation.md §5` describe ambient wandering
+    /// as something the world tick's animator can do. The measurement is
+    /// the narrower and more direct evidence about what a player sees, so
+    /// the idle tick is presentation-only here and every wander step is
+    /// paid for out of a consumed turn by
+    /// [`Self::advance_outdoor_active_objects`] (overworld) or
+    /// [`Self::advance_town_free_roaming_active_objects`] (towns). This
+    /// mattered little at the frontend's old ~3 Hz pump; at the measured
+    /// 18.2 Hz world tick an idle party would otherwise watch creatures
+    /// jitter around it once a second.
+    pub fn animate_active_object_sprites_only(&mut self) {
+        self.animate_active_objects_with_movement(false);
+    }
+
+    fn animate_active_objects_with_movement(&mut self, movement_allowed: bool) {
         for slot in 1..self.active_objects.len() {
             if self.active_objects[slot].is_empty()
                 || (matches!(self.area, Area::Town { .. })
@@ -3104,20 +3190,22 @@ impl PlayState {
             }
             let phase_before_tick = self.active_objects[slot].phase;
             let tick = self.active_objects[slot].tick_phase();
-            let ship_wind = if self.slot_is_wind_driven_ship(slot, phase_before_tick) {
-                // `weather.md §7`: the wind cadence counter "is stored per
-                // active-object slot" and is not the shared animation
-                // countdown, so carry it across the tick untouched.
-                self.active_objects[slot].phase = merge_active_ship_cadence_phase(
-                    self.active_objects[slot].phase,
-                    phase_before_tick,
-                );
-                self.try_drift_active_ship(slot)
-            } else {
-                ActiveShipWind::None
-            };
+            let ship_wind =
+                if movement_allowed && self.slot_is_wind_driven_ship(slot, phase_before_tick) {
+                    // `weather.md §7`: the wind cadence counter "is stored per
+                    // active-object slot" and is not the shared animation
+                    // countdown, so carry it across the tick untouched.
+                    self.active_objects[slot].phase = merge_active_ship_cadence_phase(
+                        self.active_objects[slot].phase,
+                        phase_before_tick,
+                    );
+                    self.try_drift_active_ship(slot)
+                } else {
+                    ActiveShipWind::None
+                };
             let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
-            let wandered = !ship_wind_changed
+            let wandered = movement_allowed
+                && !ship_wind_changed
                 && !matches!(self.area, Area::Town { .. })
                 && (self.active_objects[slot].phase & 0x0f) == 0
                 && self.try_wander_active_object(slot);

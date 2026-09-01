@@ -130,6 +130,7 @@ pub mod u4_transfer_session;
 pub mod view_classes;
 pub mod visibility;
 pub mod visual_asset_audit;
+pub mod water_scroll;
 pub mod wind;
 pub mod world_chunk_buffer;
 pub mod world_progress;
@@ -881,6 +882,10 @@ pub use visibility::{
     visibility_marker,
 };
 pub use visual_asset_audit::*;
+pub use water_scroll::{
+    WATER_SCROLL_PHASE_COUNT, WATER_SCROLL_ROWS_PER_PHASE, WATER_SCROLL_TOWARD_HIGHER_Y,
+    WaterScrollClock, scroll_tile_pixels, tile_uses_water_scroll,
+};
 pub use wind::{
     ACTIVE_SHIP_CADENCE_EVERY_TURN, ACTIVE_SHIP_CADENCE_INTO_WIND, ACTIVE_SHIP_CADENCE_WITH_WIND,
     PLAYER_SAIL_WAIT_TICKS_INTO_WIND, PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR,

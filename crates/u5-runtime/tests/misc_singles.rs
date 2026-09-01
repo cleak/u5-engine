@@ -252,3 +252,250 @@ fn active_ship_cadence_counter_lives_in_the_object_slot() {
     state.animate_active_objects();
     assert_eq!(counter(&state), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Idle world tick — runtime observation, `cleak/u5-spec#179`.
+// ---------------------------------------------------------------------------
+
+/// Runtime observation, `cleak/u5-spec#179`: over a 28 s idle sample a
+/// hostile creature standing in the tile adjacent to the party animated
+/// its sprite continuously but never moved to another tile and never
+/// attacked; combat began only once the player passed a turn. Over a
+/// separate 160 s idle sample the date, food, gold, sun/moon indicator
+/// and every status row were bit-identical. Actor movement is driven by
+/// player turns, not by wall-clock time.
+///
+/// `input.md §2` agrees for the scheduled half: "NPC schedules and the
+/// in-world clock do not advance from this idle tick."
+#[test]
+fn the_idle_visual_tick_animates_sprites_without_moving_actors() {
+    let mut state = world_state(open_world_grid(), 100, 100);
+    state.active_objects.truncate(1);
+    state.active_objects.push(ActiveObject {
+        type_byte: 176,
+        tile: 176,
+        x: 101,
+        y: 100,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    let placed = (state.active_objects[1].x, state.active_objects[1].y);
+    let turn_before = state.turn;
+    let clock_before = state.clock;
+
+    // Four full water cycles' worth of idle ticks, plus one so neither
+    // shared counter lands back on zero: far more phase-zero
+    // opportunities than the 28 s sample gave the observed creature.
+    let ticks = 65u32;
+    for _ in 0..ticks {
+        state.advance_visual_tick();
+    }
+
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        placed,
+        "an idle tick must not move an active object"
+    );
+    assert_eq!(state.turn, turn_before, "an idle tick spends no turn");
+    assert_eq!(state.clock, clock_before, "an idle tick spends no minutes");
+    assert_eq!(
+        u32::from(state.animation.frame),
+        ticks % u32::from(STATIC_TILE_ANIMATION_PERIOD_TICKS),
+        "the `animation.md §6` counter must still be advancing"
+    );
+    assert_eq!(
+        u32::from(state.water_scroll.phase),
+        ticks % u32::from(WATER_SCROLL_PHASE_COUNT),
+        "the water-scroll counter must still be advancing"
+    );
+}
+
+/// A wind-driven ship is world movement too, so the idle presentation
+/// tick must not drift it either. The per-turn animator still does; that
+/// is the `weather.md §7` cadence the ship tests above pin.
+#[test]
+fn the_idle_visual_tick_does_not_drift_a_wind_driven_ship() {
+    let mut state = world_state(vec![0x01; WORLD_CELLS], 100, 100);
+    state.wind = WindState::North;
+    state.active_objects.truncate(1);
+    state.active_objects.push(ActiveObject {
+        type_byte: 168,
+        tile: 168,
+        x: 120,
+        y: 120,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0x20,
+        aux1: 0,
+        aux3: 0,
+    });
+    let placed = (state.active_objects[1].x, state.active_objects[1].y);
+
+    for _ in 0..16 {
+        state.animate_active_object_sprites_only();
+    }
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        placed,
+        "a perpendicular frame drifts every turn, but never on an idle tick"
+    );
+
+    // The movement-bearing pass is unchanged.
+    state.animate_active_objects();
+    assert_ne!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        placed,
+        "the per-turn animator still drifts the ship"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Water-surface scroll — runtime observation, `cleak/u5-spec#179`.
+// ---------------------------------------------------------------------------
+
+/// A 512-tile atlas whose every tile paints its row index, so a vertical
+/// roll is visible as a permuted column and nothing else is.
+fn row_ramp_atlas() -> TileAtlas {
+    let mut pixels = vec![0u8; 512 * TILE_ATLAS_TILE_PIXELS];
+    for tile in 0..512 {
+        for row in 0..TILE_ATLAS_SIDE {
+            for x in 0..TILE_ATLAS_SIDE {
+                pixels[tile * TILE_ATLAS_TILE_PIXELS + row * TILE_ATLAS_SIDE + x] = row as u8;
+            }
+        }
+    }
+    TileAtlas {
+        depth: TileGraphicsDepth::Ega16,
+        pixels,
+        dungeon_billboards: None,
+        dungeon_sprites: None,
+    }
+}
+
+/// Runtime observation, `cleak/u5-spec#179`: open water advances one
+/// phase per world tick through sixteen phases, scrolling straight down
+/// one pixel row per tick with no horizontal component, with every water
+/// tile on screen in lockstep on a single global counter.
+///
+/// This is a display-layer treatment, so it must show up in the rendered
+/// pixels while leaving the map byte and the resolved tile id alone —
+/// `animation.md §6` and `RETRACTIONS.md` R148 keep water out of the five
+/// tile-id families.
+#[test]
+fn open_water_scrolls_one_row_down_per_world_tick_in_lockstep() {
+    let atlas = row_ramp_atlas();
+    let mut state = world_state(vec![0x01; WORLD_CELLS], 100, 100);
+    let radius = VIEWPORT_PLAYER_ROW;
+
+    let column_of = |viewport: &TileViewport, cell_x: usize, cell_y: usize| -> Vec<u8> {
+        let x = cell_x * TILE_ATLAS_SIDE;
+        (0..TILE_ATLAS_SIDE)
+            .map(|row| viewport.pixels[(cell_y * TILE_ATLAS_SIDE + row) * viewport.width + x])
+            .collect()
+    };
+
+    let authored: Vec<u8> = (0..TILE_ATLAS_SIDE as u8).collect();
+    let first = state
+        .render_top_down_viewport(radius, &atlas)
+        .unwrap()
+        .expect("a world viewport");
+    assert_eq!(
+        column_of(&first, radius, radius - 1),
+        authored,
+        "phase zero draws the authored tile"
+    );
+
+    // Sixteen ticks walk the whole cycle; each must move the water down by
+    // exactly one more row, and two cells apart on screen must agree.
+    for tick in 1..=WATER_SCROLL_PHASE_COUNT {
+        state.advance_visual_tick();
+        let viewport = state
+            .render_top_down_viewport(radius, &atlas)
+            .unwrap()
+            .expect("a world viewport");
+        let shift = usize::from(tick) % TILE_ATLAS_SIDE;
+        let above = column_of(&viewport, radius, radius - 1);
+        let far = column_of(&viewport, 0, 0);
+        assert_eq!(
+            above, far,
+            "tick {tick}: every water tile reads the one global counter"
+        );
+        // Downward by `shift`: drawn row y shows the authored row
+        // `(y - shift) mod 16`.
+        let expected: Vec<u8> = (0..TILE_ATLAS_SIDE)
+            .map(|y| authored[(y + TILE_ATLAS_SIDE - shift) % TILE_ATLAS_SIDE])
+            .collect();
+        assert_eq!(above, expected, "tick {tick}: rolled down {shift} row(s)");
+    }
+
+    assert_eq!(state.water_scroll.phase, 0, "sixteen ticks close the cycle");
+    assert_eq!(
+        state.grid[world_cell_index(100, 99)],
+        0x01,
+        "the map byte is never rewritten"
+    );
+    assert_eq!(
+        static_tile_animation_family(0x01),
+        None,
+        "water is still not a §6 tile-id family"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `visibility.md §8` variant lifetime — runtime observation,
+// `cleak/u5-spec#179`.
+// ---------------------------------------------------------------------------
+
+/// `visibility.md §8`'s four-entry compositor variant must not be
+/// re-drawn by the animation tick.
+///
+/// Runtime observation, `cleak/u5-spec#179`: outside combat, actor
+/// sprites are static while the player is idle — the party sprite on the
+/// overworld and the Avatar seated in a chair were both bit-identical
+/// across 160 s idle windows with zero transitions. The engine used to
+/// mix the animation phase into the selector, so a stationary actor on
+/// one of the four-entry terrains re-stamped itself on every animation
+/// tick; at the measured 18.2 Hz world tick that is a visible flicker.
+#[test]
+fn the_compositor_variant_is_stable_across_animation_ticks() {
+    let mut grid = open_world_grid();
+    grid[world_cell_index(101, 100)] = 0x84;
+    let mut state = world_state(grid, 100, 100);
+    state.active_objects.truncate(1);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x44,
+        tile: 0x44,
+        x: 101,
+        y: 100,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    let area = state.top_down_render_area().expect("a world area");
+
+    let stamped = |state: &PlayState| {
+        state
+            .top_down_render_cell(area, 100, 100, 101, 100, VIEWPORT_PLAYER_ROW)
+            .expect("the adjacent cell is visible")
+            .1
+            .expect("the actor is composited over the terrain")
+    };
+
+    let first = stamped(&state);
+    assert!(
+        (0x60..=0x63).contains(&first),
+        "`visibility.md §8`: terrain 0x84 selects one of 0x60..0x63, got 0x{first:02x}"
+    );
+
+    for phase in 0..STATIC_TILE_ANIMATION_PERIOD_TICKS {
+        state.animation = AnimationClock::at_static_tile_phase(phase);
+        assert_eq!(
+            stamped(&state),
+            first,
+            "phase {phase} must not re-roll the variant"
+        );
+    }
+}

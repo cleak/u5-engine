@@ -54,6 +54,15 @@ pub struct PlayState {
     pub dungeon_loop_minute_charged: bool,
     pub prng_state: u16,
     pub animation: AnimationClock,
+    /// The one global water-surface scroll counter.
+    ///
+    /// Runtime observation, `cleak/u5-spec#179`: every water tile on
+    /// screen advances on the same tick, so this is one counter for the
+    /// whole map rather than a per-cell phase. It is deliberately
+    /// separate from [`AnimationClock`], which owns the published
+    /// `animation.md §6` family pass and nothing else — see
+    /// [`crate::water_scroll`].
+    pub water_scroll: WaterScrollClock,
     /// `dungeon-mode.md §6.7`: shared three-frame fountain-water phase,
     /// advanced once per point-blank corridor paint.
     pub dungeon_fountain_frame: u8,

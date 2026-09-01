@@ -116,6 +116,41 @@ pub fn blit_tile_id_to_viewport(
     Ok(())
 }
 
+/// Terrain blit that applies the measured water-surface scroll.
+///
+/// Runtime observation, `cleak/u5-spec#179`: open water animates as a
+/// one-row-per-tick downward roll of the tile graphic rather than as a
+/// tile-id family, so the treatment belongs here, in the display layer,
+/// and not in the `animation.md §6` selector pass. Every other tile takes
+/// the ordinary path untouched.
+pub fn blit_terrain_tile_to_viewport(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    tile: usize,
+    cell_x: usize,
+    cell_y: usize,
+    water_scroll: crate::WaterScrollClock,
+) -> io::Result<()> {
+    let scrolls = u8::try_from(tile).is_ok_and(crate::tile_uses_water_scroll);
+    let shift = water_scroll.row_shift();
+    if !scrolls || shift == 0 {
+        return blit_tile_id_to_viewport(viewport, atlas, tile, cell_x, cell_y);
+    }
+    let source = atlas.tile_pixels(tile).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("tile atlas is missing tile {tile}"),
+        )
+    })?;
+    let rolled = crate::scroll_tile_pixels(source, shift).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("tile {tile} is not one atlas tile of pixels"),
+        )
+    })?;
+    blit_tile_pixels_to_viewport(viewport, &rolled, cell_x, cell_y)
+}
+
 /// Opaque blit of an already-composed tile-sized pixel block, for frames
 /// that are built at draw time rather than read from the atlas.
 ///

@@ -115,6 +115,34 @@ impl StaticTileAnimationFamily {
 /// which was justified as "the LCM of the three-frame water cycle and
 /// the four-frame lava / fire / wind cycles". Both of those cycles are
 /// withdrawn, so the justification and the value went with them.
+///
+/// # This is a wrap, not a divisor
+///
+/// `§6` publishes **bit gates on the shared counter**, not a division of
+/// the tick rate: bit 0 gates the pendulum and the flag, bit 1 nested
+/// inside it gates the clock and bellows, and the two ungated families
+/// advance "every tick". Eight is therefore only where the counter is
+/// allowed to wrap — the exact period of the whole layer, so every
+/// family's phase is unchanged by wrapping there. It does not slow
+/// anything down, and the spec is silent on whether the original's
+/// counter wraps at all (it cannot be observed: every published family
+/// behaviour has a period dividing 8).
+///
+/// # On-screen cadence, and what is unverified
+///
+/// With the frontend's world tick at the measured 54.9 ms
+/// (`cleak/u5-spec#179`), "every tick" means the waterfall and fountain
+/// run their four frames in 219.7 ms, the pendulum toggles every
+/// 109.9 ms, the flag runs its four frames in 439.3 ms, and the clock and
+/// bellows toggle every 219.7 ms. Those follow from `§6`'s own rates, so
+/// they are kept as published rather than re-timed.
+///
+/// `cleak/u5-spec#179` mechanism question 6 asks whether **any** town
+/// fixture of the five families visibly advances on a cadence other than
+/// one phase per gated tick of that clock. The capture session never
+/// reached a town or castle, so no `§6` family has been observed running
+/// yet — the rates above are spec-derived, not measured. If the answer
+/// comes back "no", nothing here changes.
 pub const STATIC_TILE_ANIMATION_PERIOD_TICKS: u8 = 8;
 
 /// Which families one run of the `animation.md §6` pass advances.
