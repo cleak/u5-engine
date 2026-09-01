@@ -533,8 +533,9 @@ impl PlayState {
                 let Some(tile_id) = cell.tile_id() else {
                     continue;
                 };
-                // Runtime observation, `cleak/u5-spec#179`: open water is
-                // rolled down one pixel row per tick by the display layer. A cell
+                // `cleak/u5-spec#179`: the display driver rotates water and
+                // lava, and composites the river, coast and shore ids from
+                // the rotated shoals tile. A cell
                 // whose composed tile is a sprite takes the ordinary path,
                 // exactly as it does for the `§6` families.
                 blit_terrain_tile_to_viewport(
@@ -3112,9 +3113,9 @@ impl PlayState {
         // at the end, "whichever path was taken".
         let pass = static_tile_animation_pass(self.animation.frame);
         self.animation.tick_static_tiles();
-        // Runtime observation, `cleak/u5-spec#179`: the water surface
-        // scrolls down one pixel row per world tick through sixteen
-        // phases, on one global counter shared by every water tile. It rides the same
+        // `cleak/u5-spec#179`: the display driver's water animator advances
+        // one step per world tick through sixteen phases, on one global
+        // counter shared by its rotation and composite stages. It rides the same
         // tick as the `§6` pass but is not part of it — no water tile is
         // a member of any published family (`RETRACTIONS.md` R148), and
         // this counter has neither the family gates nor their period.

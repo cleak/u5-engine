@@ -356,7 +356,7 @@ fn the_idle_visual_tick_does_not_drift_a_wind_driven_ship() {
 // ---------------------------------------------------------------------------
 
 /// A 512-tile atlas whose every tile paints its row index, so a vertical
-/// roll is visible as a permuted column and nothing else is.
+/// rotation is visible as a permuted column and nothing else is.
 fn row_ramp_atlas() -> TileAtlas {
     let mut pixels = vec![0u8; 512 * TILE_ATLAS_TILE_PIXELS];
     for tile in 0..512 {
@@ -374,9 +374,8 @@ fn row_ramp_atlas() -> TileAtlas {
     }
 }
 
-/// Runtime observation, `cleak/u5-spec#179`: open water advances one
-/// phase per world tick through sixteen phases, scrolling straight down
-/// one pixel row per tick with no horizontal component, with every water
+/// `cleak/u5-spec#179`: stage one rotates the water and lava ids one pixel
+/// row downward per world tick through sixteen phases, with every rotated
 /// tile on screen in lockstep on a single global counter.
 ///
 /// This is a display-layer treatment, so it must show up in the rendered
@@ -384,66 +383,156 @@ fn row_ramp_atlas() -> TileAtlas {
 /// `animation.md §6` and `RETRACTIONS.md` R148 keep water out of the five
 /// tile-id families.
 #[test]
-fn open_water_scrolls_one_row_down_per_world_tick_in_lockstep() {
+fn rotated_water_moves_one_row_down_per_world_tick_in_lockstep() {
     let atlas = row_ramp_atlas();
-    let mut state = world_state(vec![0x01; WORLD_CELLS], 100, 100);
     let radius = VIEWPORT_PLAYER_ROW;
-
-    let column_of = |viewport: &TileViewport, cell_x: usize, cell_y: usize| -> Vec<u8> {
-        let x = cell_x * TILE_ATLAS_SIDE;
-        (0..TILE_ATLAS_SIDE)
-            .map(|row| viewport.pixels[(cell_y * TILE_ATLAS_SIDE + row) * viewport.width + x])
-            .collect()
-    };
-
     let authored: Vec<u8> = (0..TILE_ATLAS_SIDE as u8).collect();
-    let first = state
-        .render_top_down_viewport(radius, &atlas)
-        .unwrap()
-        .expect("a world viewport");
-    assert_eq!(
-        column_of(&first, radius, radius - 1),
-        authored,
-        "phase zero draws the authored tile"
-    );
 
-    // Sixteen ticks walk the whole cycle; each must move the water down by
-    // exactly one more row, and two cells apart on screen must agree.
-    for tick in 1..=WATER_SCROLL_PHASE_COUNT {
-        state.advance_visual_tick();
-        let viewport = state
+    // Every rotated id, water and lava alike, takes the identical path.
+    for rotated_tile in WATER_ROTATED_TILES {
+        let mut state = world_state(vec![rotated_tile; WORLD_CELLS], 100, 100);
+
+        let column_of = |viewport: &TileViewport, cell_x: usize, cell_y: usize| -> Vec<u8> {
+            let x = cell_x * TILE_ATLAS_SIDE;
+            (0..TILE_ATLAS_SIDE)
+                .map(|row| viewport.pixels[(cell_y * TILE_ATLAS_SIDE + row) * viewport.width + x])
+                .collect()
+        };
+
+        let first = state
             .render_top_down_viewport(radius, &atlas)
             .unwrap()
             .expect("a world viewport");
-        let shift = usize::from(tick) % TILE_ATLAS_SIDE;
-        let above = column_of(&viewport, radius, radius - 1);
-        let far = column_of(&viewport, 0, 0);
         assert_eq!(
-            above, far,
-            "tick {tick}: every water tile reads the one global counter"
+            column_of(&first, radius, radius - 1),
+            authored,
+            "0x{rotated_tile:02x}: phase zero draws the authored tile"
         );
-        // Downward by `shift`: drawn row y shows the authored row
-        // `(y - shift) mod 16`.
-        let expected: Vec<u8> = (0..TILE_ATLAS_SIDE)
-            .map(|y| authored[(y + TILE_ATLAS_SIDE - shift) % TILE_ATLAS_SIDE])
-            .collect();
-        assert_eq!(above, expected, "tick {tick}: rolled down {shift} row(s)");
-    }
 
-    assert_eq!(state.water_scroll.phase, 0, "sixteen ticks close the cycle");
-    assert_eq!(
-        state.grid[world_cell_index(100, 99)],
-        0x01,
-        "the map byte is never rewritten"
-    );
-    assert_eq!(
-        static_tile_animation_family(0x01),
-        None,
-        "water is still not a §6 tile-id family"
-    );
+        for tick in 1..=WATER_SCROLL_PHASE_COUNT {
+            state.advance_visual_tick();
+            let viewport = state
+                .render_top_down_viewport(radius, &atlas)
+                .unwrap()
+                .expect("a world viewport");
+            let shift = usize::from(tick) % TILE_ATLAS_SIDE;
+            let above = column_of(&viewport, radius, radius - 1);
+            let far = column_of(&viewport, 0, 0);
+            assert_eq!(
+                above, far,
+                "0x{rotated_tile:02x} tick {tick}: one global counter"
+            );
+            let expected: Vec<u8> = (0..TILE_ATLAS_SIDE)
+                .map(|y| authored[(y + TILE_ATLAS_SIDE - shift) % TILE_ATLAS_SIDE])
+                .collect();
+            assert_eq!(
+                above, expected,
+                "0x{rotated_tile:02x} tick {tick}: rotated down {shift} row(s)"
+            );
+        }
+
+        assert_eq!(state.water_scroll.phase, 0, "sixteen ticks close the cycle");
+        assert_eq!(
+            state.grid[world_cell_index(100, 99)],
+            rotated_tile,
+            "the map byte is never rewritten"
+        );
+        assert_eq!(
+            static_tile_animation_family(rotated_tile),
+            None,
+            "0x{rotated_tile:02x} is still not a §6 tile-id family"
+        );
+    }
+}
+
+/// `cleak/u5-spec#179`: stage two rebuilds each composite destination as
+/// `dest = (dest & !mask) | (rotated_shoals & mask)`, pairing destination
+/// and mask index for index, with the third set seeing the complement.
+///
+/// The mask geometry is shipped-atlas data, so this test supplies its own
+/// distinctive masks — one solid row per destination — and checks that the
+/// render path routes the right mask to the right destination with the
+/// right polarity. That the *shipped* masks reproduce the measured coast
+/// and river shapes is verified against the captures, not here.
+#[test]
+fn composite_destinations_take_the_rotated_shoals_through_their_mask_tile() {
+    let radius = VIEWPORT_PLAYER_ROW;
+    let source_id = usize::from(WATER_COMPOSITE_SOURCE_TILE);
+
+    // Source carries its row index; destinations are a flat value; each
+    // mask tile is solid on exactly one row, a different row per id.
+    let mut pixels = vec![0u8; 512 * TILE_ATLAS_TILE_PIXELS];
+    for row in 0..TILE_ATLAS_SIDE {
+        for x in 0..TILE_ATLAS_SIDE {
+            pixels[source_id * TILE_ATLAS_TILE_PIXELS + row * TILE_ATLAS_SIDE + x] = row as u8;
+        }
+    }
+    for set in WATER_COMPOSITE_SETS {
+        for offset in 0..set.count {
+            let dest = usize::from(set.first_dest + offset) * TILE_ATLAS_TILE_PIXELS;
+            pixels[dest..dest + TILE_ATLAS_TILE_PIXELS].fill(0x0A);
+            let mask = usize::from(set.first_mask + offset) * TILE_ATLAS_TILE_PIXELS;
+            let solid_row = usize::from(offset) % TILE_ATLAS_SIDE;
+            for x in 0..TILE_ATLAS_SIDE {
+                pixels[mask + solid_row * TILE_ATLAS_SIDE + x] = 0x0F;
+            }
+        }
+    }
+    let atlas = TileAtlas {
+        depth: TileGraphicsDepth::Ega16,
+        pixels,
+        dungeon_billboards: None,
+        dungeon_sprites: None,
+    };
+
+    for set in WATER_COMPOSITE_SETS {
+        for offset in 0..set.count {
+            let dest_tile = set.first_dest + offset;
+            let solid_row = usize::from(offset) % TILE_ATLAS_SIDE;
+
+            let mut grid = vec![0x05u8; WORLD_CELLS];
+            grid[world_cell_index(100, 99)] = dest_tile;
+            let mut state = world_state(grid, 100, 100);
+
+            for tick in 0..TILE_ATLAS_SIDE {
+                let viewport = state
+                    .render_top_down_viewport(radius, &atlas)
+                    .unwrap()
+                    .expect("a world viewport");
+                let at = |x: usize, y: usize| {
+                    viewport.pixels[((radius - 1) * TILE_ATLAS_SIDE + y) * viewport.width
+                        + radius * TILE_ATLAS_SIDE
+                        + x]
+                };
+                // The frame the rotated source is showing this tick.
+                let shift = state.water_scroll.row_shift();
+                let source_row = |y: usize| ((y + TILE_ATLAS_SIDE - shift) % TILE_ATLAS_SIDE) as u8;
+
+                for y in 0..TILE_ATLAS_SIDE {
+                    // Solid where the mask is set, unless this set is
+                    // composited through the complement.
+                    let takes_source = (y == solid_row) != set.mask_inverted;
+                    let expected = if takes_source { source_row(y) } else { 0x0A };
+                    assert_eq!(
+                        at(0, y),
+                        expected,
+                        "0x{dest_tile:02x} tick {tick} row {y}: mask 0x{:02x}{}",
+                        set.first_mask + offset,
+                        if set.mask_inverted {
+                            " (complement)"
+                        } else {
+                            ""
+                        }
+                    );
+                }
+                state.advance_visual_tick();
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
+// `visibility.md §8` variant lifetime// ---------------------------------------------------------------------------
 // `visibility.md §8` variant lifetime — runtime observation,
 // `cleak/u5-spec#179`.
 // ---------------------------------------------------------------------------

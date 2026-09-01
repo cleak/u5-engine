@@ -116,13 +116,19 @@ pub fn blit_tile_id_to_viewport(
     Ok(())
 }
 
-/// Terrain blit that applies the measured water-surface scroll.
+/// Terrain blit that runs the display driver's water animator.
 ///
-/// Runtime observation, `cleak/u5-spec#179`: open water animates as a
-/// one-row-per-tick downward roll of the tile graphic rather than as a
-/// tile-id family, so the treatment belongs here, in the display layer,
-/// and not in the `animation.md §6` selector pass. Every other tile takes
-/// the ordinary path untouched.
+/// `cleak/u5-spec#179` (01:48, as corrected at 02:07), interim contract
+/// pending the spec commit. Two stages, both off one counter and neither
+/// part of the `animation.md §6` tile-id selector pass:
+///
+/// * the rotated ids — the three water ids and lava — take a whole-tile
+///   vertical rotation of their own art;
+/// * the composite destinations are rebuilt from the rotated shoals tile
+///   through a mask tile out of the same shipped atlas.
+///
+/// Every other tile takes the ordinary path untouched. See
+/// [`crate::water_scroll`] for the mechanism and its provenance.
 pub fn blit_terrain_tile_to_viewport(
     viewport: &mut TileViewport,
     atlas: &TileAtlas,
@@ -131,24 +137,53 @@ pub fn blit_terrain_tile_to_viewport(
     cell_y: usize,
     water_scroll: crate::WaterScrollClock,
 ) -> io::Result<()> {
-    let scrolls = u8::try_from(tile).is_ok_and(crate::tile_uses_water_scroll);
-    let shift = water_scroll.row_shift();
-    if !scrolls || shift == 0 {
-        return blit_tile_id_to_viewport(viewport, atlas, tile, cell_x, cell_y);
-    }
-    let source = atlas.tile_pixels(tile).ok_or_else(|| {
+    let missing = |tile: usize| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("tile atlas is missing tile {tile}"),
         )
-    })?;
-    let rolled = crate::scroll_tile_pixels(source, shift).ok_or_else(|| {
+    };
+    let not_one_tile = |tile: usize| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("tile {tile} is not one atlas tile of pixels"),
         )
-    })?;
-    blit_tile_pixels_to_viewport(viewport, &rolled, cell_x, cell_y)
+    };
+    let shift = water_scroll.row_shift();
+    let Ok(terrain) = u8::try_from(tile) else {
+        // An actor-bank id. Sprites are not touched by either stage.
+        return blit_tile_id_to_viewport(viewport, atlas, tile, cell_x, cell_y);
+    };
+
+    // Stage two. Composited even at phase zero: the authored destination's
+    // water pixels are start-up art, not a frame of the cycle, so the live
+    // frame replaces them on every tick including the first.
+    if let Some((mask_tile, mask_inverted)) = crate::water_composite_mask(terrain) {
+        let source_id = usize::from(crate::WATER_COMPOSITE_SOURCE_TILE);
+        let mask_id = usize::from(mask_tile);
+        let dest = atlas.tile_pixels(tile).ok_or_else(|| missing(tile))?;
+        let mask = atlas.tile_pixels(mask_id).ok_or_else(|| missing(mask_id))?;
+        let source = atlas
+            .tile_pixels(source_id)
+            .ok_or_else(|| missing(source_id))?;
+        // The rotated source frame does not advance between destinations,
+        // so every composited id shows the phase the rotated tiles show.
+        let rotated =
+            crate::rotate_tile_rows_down(source, shift).ok_or_else(|| not_one_tile(source_id))?;
+        let plane_mask = atlas.depth.pixel_limit().wrapping_sub(1);
+        let composed =
+            crate::composite_tile_pixels(dest, mask, &rotated, mask_inverted, plane_mask)
+                .ok_or_else(|| not_one_tile(tile))?;
+        return blit_tile_pixels_to_viewport(viewport, &composed, cell_x, cell_y);
+    }
+
+    // Stage one.
+    if !crate::water_pass_rotates_tile(terrain) || shift == 0 {
+        return blit_tile_id_to_viewport(viewport, atlas, tile, cell_x, cell_y);
+    }
+    let source = atlas.tile_pixels(tile).ok_or_else(|| missing(tile))?;
+    let rotated = crate::rotate_tile_rows_down(source, shift).ok_or_else(|| not_one_tile(tile))?;
+    blit_tile_pixels_to_viewport(viewport, &rotated, cell_x, cell_y)
 }
 
 /// Opaque blit of an already-composed tile-sized pixel block, for frames

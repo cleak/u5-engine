@@ -1,123 +1,221 @@
-//! Water-surface scroll — a display-driver pixel treatment.
+//! The display driver's water animator: a rotation pass and a composite pass.
 //!
 //! # Provenance
 //!
-//! **Runtime observation, `cleak/u5-spec#179`.** Nothing in the published
-//! spec set describes this effect; `systems/animation.md §6` explicitly
-//! excludes water from the five global tile-animation families
-//! (`RETRACTIONS.md` R148: "no water, lava, brazier or torch tile animates
-//! through this pass at all"), and the shipped location maps author
-//! `0x01`, `0x02` and `0x03` independently in the tens of thousands, so
-//! water cannot be a tile-id frame family. It nevertheless animates.
+//! The mechanism is published on `cleak/u5-spec#179` (comments of
+//! 2026-09-01 01:48 and the 02:07 correction), as **interim contract pending
+//! the spec commit** — it is still going through an adversarial verification
+//! pass upstream. The cadence and the visible result are independently
+//! measured, black-box, from the shipped build (same issue).
 //!
-//! Black-box capture of the shipped build (DOSBox Staging, `machine=ega`)
-//! measured, on a Britannia overworld river:
+//! This is not the `animation.md §6` tile-id selector pass.
+//! `RETRACTIONS.md` R148 keeps water out of the five published families —
+//! "no water, lava, brazier or torch tile animates through this pass at
+//! all" — and the shipped maps author `0x01`, `0x02` and `0x03`
+//! independently in the tens of thousands, so water was never a frame
+//! family. It animates through the display driver instead, in two stages
+//! that run one after the other on the same counter.
 //!
-//! * exactly **16 distinct phases**, in strict repeating order
-//!   `0 1 2 … 15 0 1 …`, over 1638 transitions with no deviation;
-//! * **one phase advance per BIOS user tick** (54.913 ms measured), so a
-//!   full cycle is 878.6 ms;
-//! * the surface pattern **scrolls straight down, one pixel row per
-//!   tick**, with no horizontal component at all, wrapping after 16 rows —
-//!   the tile is 16 rows tall, which is why 16 phases close the cycle;
-//! * **one global counter**: five water regions of interest spread across
-//!   the viewport transitioned within 0.07–0.41 ms of each other, so there
-//!   is no per-tile phase and no offset seeded from map position. This is
-//!   the opposite of the `§6` families, whose ids are deliberately a
-//!   quarter-cycle apart so a wall of them does not flicker in lockstep.
+//! ## Stage one: rotation
 //!
-//! The model is therefore, for a tile of pure water:
+//! A whole-tile vertical rotation, one pixel row per step, wrapping inside
+//! the 16-row tile:
 //!
 //! ```text
 //! phase_k[row] = authored[(row - k) mod 16]
 //! ```
 //!
-//! This is a **display-driver pixel treatment**, not a tile-id selector:
-//! the map byte and the resolved tile id are untouched, and only the
-//! pixels handed to the blit are rolled. It runs beside
-//! [`crate::static_tile_animation_pass`], never inside it.
+//! The rotated set is exactly [`WATER_ROTATED_TILES`] — the three water ids
+//! **and lava `0x8F`**, which takes literally the same code path rather
+//! than an analogue. Period 16, one global counter, no horizontal
+//! component anywhere.
 //!
-//! # The direction was measured twice, and the first reading was wrong
+//! Measured to match: 16 phases in strict order over 1638 transitions, one
+//! phase per BIOS user tick (54.913 ms), an 878.6 ms cycle. On the clean
+//! open-sea art the model holds for **256 of 256** (phase, row) pairs, with
+//! the downward test matching 240/240 rows and the upward test 0.
 //!
-//! An earlier revision of this module implemented a *horizontal* roll,
-//! from an initial report describing the effect as "a horizontal scroll of
-//! the water surface pattern". That reading is **withdrawn upstream**, and
-//! it is worth recording why, because the wrong answer is what a naive
-//! analysis produces: successive rows of the wave texture are themselves
-//! horizontally offset from one another, so scrolling a diagonal texture
-//! vertically reads as sideways motion to a row-wise cross-correlator. It
-//! reports a confident ~4 px per tick leftward — and never matches a row
-//! exactly. The vertical roll matches bit for bit.
+//! ## Stage two: composite
 //!
-//! Checked against the captured 16-phase art at true EGA resolution, over
-//! every consecutive phase pair: rows 5..=10 of the tile satisfy
-//! `phase_k[row] == phase_{k-1}[row - 1]` in **15 of 15** pairs, the
-//! upward test matches **0** times anywhere, and rows 0..=1 and 13..=15
-//! are bit-identical in all 16 phases. Those static rows are the river
-//! tile's bank, composited over the moving water after the roll; the five
-//! remaining rows are the band edges where bank pixels partly mask it.
+//! Several ids animate without being rotated themselves. Each step they are
+//! rebuilt from the *shoals* tile [`WATER_COMPOSITE_SOURCE_TILE`] through a
+//! mask tile, bitwise across the colour planes:
 //!
-//! # What is still unverified
+//! ```text
+//! dest = (dest & !mask) | (rotated_shoals & mask)
+//! ```
 //!
-//! `cleak/u5-spec#179` mechanism question 1 is still open as a *spec*
-//! answer — this is measurement, not published contract.
+//! The destination sets and their masks are [`WATER_COMPOSITE_SETS`], and
+//! the masks are **tiles in the shipped atlas the engine already parses** —
+//! nothing about the geometry is hardcoded here. The rotated source frame
+//! is **not** advanced between destinations, so every composited id shows
+//! the same phase as the rotated tiles, which is why separate water regions
+//! were measured transitioning within 0.07–0.41 ms of each other.
 //!
-//! * **Which tile ids.** The capture is black-box and cannot name ids. It
-//!   saw 23 animated water cells resolving to 14 distinct appearances —
-//!   river runs, bends and shore corners — so more ids animate than the
-//!   three treated here. This module deliberately covers only open water
-//!   `0x01..=0x03`, whose art is water edge to edge and needs no mask. The
-//!   river and shore ids are a known gap: animating them correctly needs
-//!   the bank/water split the capture describes, which would be invented
-//!   here rather than derived.
-//! * **Open sea.** The capture never reached it; everything measured is
-//!   river and shore. All three water ids are treated alike, which is the
-//!   conservative reading of "all water tiles are in lockstep".
-//! * **The tile-edge wrap.** No two vertically adjacent tiles of identical
-//!   water art were on screen, so per-tile wrapping is inferred from the
-//!   16-row period rather than directly observed. It is indistinguishable
-//!   from a continuous scroll while the field is 16-row periodic and every
-//!   tile shares the counter, which is exactly the case here.
+//! The bitwise form matters and a boolean "pick one side" implementation
+//! would be wrong: the river masks `0x70..=0x7F` hold the value `13`
+//! (`0b1101`), not `15`, so they keep one colour plane of the destination
+//! and take the other three from the source.
+//!
+//! ### The third set is composited through the complement
+//!
+//! `0xE4..=0xE7` use the *same* mask tiles as `0x34..=0x37`, but a
+//! standalone inversion pass runs between the two composites and flips
+//! those mask tiles' plane-3 bytes, so the third set sees the complement of
+//! the mask the second set used. Applying one uniform rule puts that set
+//! inside-out — water where bank belongs. This engine models it as
+//! [`WaterCompositeSet::mask_inverted`] and never mutates shared state to
+//! get there.
+//!
+//! ## Why one counter is enough
+//!
+//! In the original, both stages mutate the **shared tile asset** rather
+//! than per-instance screen pixels, so every on-screen instance of a tile
+//! changes identically and simultaneously by construction. This engine
+//! re-derives each frame from pristine art instead, which is equivalent for
+//! these two stages because both are idempotent functions of the phase.
+//! (It would *not* be equivalent for the fire XOR, which is cumulative and
+//! never restored — see "Not implemented" below.)
+//!
+//! # Emergence check
+//!
+//! The masks are not asserted here; they fall out of the shipped art. With
+//! the rule above and the shipped atlas:
+//!
+//! * `0x34..=0x37` through `0xD0..=0xD3` move exactly 136 pixels each, in
+//!   the four distinct 45-degree half-tiles — the same three shapes and the
+//!   same 136-pixel count that were measured on seven coast cells, plus the
+//!   fourth that was never on screen;
+//! * `0xE4..=0xE7` through the complement move exactly the 120-pixel
+//!   remainder;
+//! * `0x60..=0x6F` through `0x70..=0x7F` move horizontal bands with static
+//!   top and bottom rows — the river shape that was measured separately;
+//! * composing shipped art per this rule reproduces the captured coast
+//!   frames in **540 of 546** frames whose phase could be read (the six
+//!   misses are torn captures, in the same cells the observation session
+//!   reported tearing).
+//!
+//! # Not implemented, deliberately
+//!
+//! * **Two further composite destinations**, "two gem ids", are named
+//!   upstream but not yet identified. Pending `#179`.
+//! * **Fire.** Each step XORs fresh pseudo-random noise from a dedicated
+//!   noise tile through a per-fixture mask, admitting noise only on certain
+//!   colour planes. The noise-tile id and the per-fixture plane rules are
+//!   unpublished until the upstream adversarial pass completes. Note for
+//!   whoever implements it: the XOR is cumulative and never restored, so a
+//!   pristine-art engine will be statistically equivalent but **not**
+//!   bit-identical — do not write a pixel-parity test against the original.
+//! * **Banner and sail row-pair swaps** under per-bit pseudo-random gates,
+//!   a third mechanism again, covering keep/towne/castle banners and four
+//!   ship ids. Unpublished.
+//!
+//! # One caveat on the period
+//!
+//! What the code establishes upstream is 16 invocations of the driver
+//! animator per full cycle. That equals 16 ticks only if there is exactly
+//! one invocation per tick, and a third caller into the animator exists on
+//! a path where that has not been checked. On the measured path the
+//! 878.6 ms / 16 phases figure is authoritative, and it is what this engine
+//! implements.
 
 use crate::{TILE_ATLAS_SIDE, TILE_ATLAS_TILE_PIXELS};
 
-/// Measured phase count of the water scroll: sixteen, the tile height.
-///
-/// Runtime observation, `cleak/u5-spec#179`.
+/// Phases in one full cycle: sixteen, the tile height.
 pub const WATER_SCROLL_PHASE_COUNT: u8 = 16;
 
-/// Measured advance per world tick: one pixel row.
-///
-/// Runtime observation, `cleak/u5-spec#179`. A single bright highlight
-/// pixel tracked across the whole cycle moves down exactly one row per
-/// phase and never changes column.
+/// Rows the rotation advances per step.
 pub const WATER_SCROLL_ROWS_PER_PHASE: usize = 1;
 
-/// Scroll direction: `true` means the surface pattern travels toward
-/// higher y, i.e. **downward** on screen.
-///
-/// Runtime observation, `cleak/u5-spec#179`: the downward test matches
-/// rows bit for bit and the upward test matches nowhere. This is the
-/// single place the direction is encoded, so flipping this constant flips
-/// the effect.
+/// Rotation direction: `true` means the pattern travels toward higher y,
+/// i.e. **downward** on screen. The single place the direction is encoded.
 pub const WATER_SCROLL_TOWARD_HIGHER_Y: bool = true;
 
-/// The terrain ids the scroll applies to: open water `0x01..=0x03`.
+/// The ids stage one rotates: the three water ids and lava.
 ///
-/// Deliberately the same set as [`crate::is_water_tile`] and deliberately
-/// **not** swamp `0x04`, which is walkable terrain rather than water. See
-/// the module docs for why the river and shore ids are left out.
-pub fn tile_uses_water_scroll(tile: u8) -> bool {
-    crate::is_water_tile(tile)
+/// `cleak/u5-spec#179`: "The rotated set is exactly `0x01`, `0x02`, `0x03`
+/// and `0x8F`", all period 16 on one counter, and lava "is literally the
+/// same code path, not an analogue". Tile `0x00` is not in it.
+pub const WATER_ROTATED_TILES: [u8; 4] = [0x01, 0x02, 0x03, 0x8F];
+
+/// The tile stage two takes every composited id's water pixels from: the
+/// shoals tile, rotated to the current phase.
+pub const WATER_COMPOSITE_SOURCE_TILE: u8 = 0x03;
+
+/// One contiguous run of composite destinations and the mask run it pairs
+/// with, index for index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WaterCompositeSet {
+    /// First destination id.
+    pub first_dest: u8,
+    /// How many adjacent ids the set covers.
+    pub count: u8,
+    /// First mask id; destination `first_dest + n` uses `first_mask + n`.
+    pub first_mask: u8,
+    /// Whether the standalone inversion pass has already flipped these mask
+    /// tiles by the time this set is composited.
+    pub mask_inverted: bool,
 }
 
-/// The one global water-scroll counter.
+/// The published composite destination sets.
 ///
-/// Every water tile on screen reads this same value — the measured
-/// lockstep — so it lives once on [`crate::PlayState`] rather than per
-/// cell. It is **not** a member of [`crate::AnimationClock`]: that clock
-/// is the `animation.md §6` shared phase counter with its own published
-/// period and nested gates, and this counter has neither.
+/// `cleak/u5-spec#179` (01:48, as corrected at 02:07). Order matters only
+/// as documentation of the original's pass order — the sets are disjoint,
+/// so this engine can resolve any one of them on its own.
+///
+/// `0x70..=0x7F` are **also real drawable terrain** ("strange walls"); the
+/// driver reuses them as masks. Anything enumerating drawable tiles must
+/// not exclude that range on the strength of their mask role.
+pub const WATER_COMPOSITE_SETS: [WaterCompositeSet; 3] = [
+    // Rivers and bridges.
+    WaterCompositeSet {
+        first_dest: 0x60,
+        count: 16,
+        first_mask: 0x70,
+        mask_inverted: false,
+    },
+    // Diagonal coast.
+    WaterCompositeSet {
+        first_dest: 0x34,
+        count: 4,
+        first_mask: 0xD0,
+        mask_inverted: false,
+    },
+    // The same mask tiles, after the standalone inversion pass.
+    WaterCompositeSet {
+        first_dest: 0xE4,
+        count: 4,
+        first_mask: 0xD0,
+        mask_inverted: true,
+    },
+];
+
+/// Does stage one rotate this tile?
+pub fn water_pass_rotates_tile(tile: u8) -> bool {
+    WATER_ROTATED_TILES.contains(&tile)
+}
+
+/// The mask tile and polarity stage two rebuilds `tile` through, or `None`
+/// if `tile` is not a composite destination.
+pub fn water_composite_mask(tile: u8) -> Option<(u8, bool)> {
+    WATER_COMPOSITE_SETS.iter().find_map(|set| {
+        let offset = tile.checked_sub(set.first_dest)?;
+        (offset < set.count).then(|| (set.first_mask + offset, set.mask_inverted))
+    })
+}
+
+/// Does the water animator touch this tile at all, by either stage?
+pub fn water_pass_animates_tile(tile: u8) -> bool {
+    water_pass_rotates_tile(tile) || water_composite_mask(tile).is_some()
+}
+
+/// The one global counter both stages read.
+///
+/// Every animated tile on screen reads this same value — the measured
+/// lockstep, which in the original falls out of both stages mutating the
+/// shared tile asset. It is **not** a member of [`crate::AnimationClock`]:
+/// that clock is the `animation.md §6` shared phase counter with its own
+/// published period and nested gates, and this counter has neither.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WaterScrollClock {
     /// Current phase, always `< WATER_SCROLL_PHASE_COUNT`.
@@ -137,7 +235,7 @@ impl WaterScrollClock {
         self.phase = self.phase.wrapping_add(1) % WATER_SCROLL_PHASE_COUNT;
     }
 
-    /// How many pixel rows the surface pattern is displaced by right now.
+    /// How many pixel rows the rotation is displaced by right now.
     pub const fn row_shift(self) -> usize {
         (self.phase as usize * WATER_SCROLL_ROWS_PER_PHASE) % TILE_ATLAS_SIDE
     }
@@ -155,18 +253,12 @@ const fn source_row(y: usize, shift: usize) -> usize {
     }
 }
 
-/// Roll one tile's pixels vertically by `shift` rows, wrapping at the tile
-/// edge.
+/// Stage one: rotate one tile's rows by `shift`, wrapping at the tile edge.
 ///
-/// Every row is displaced by the same amount and no row moves sideways —
-/// a uniform whole-tile scroll, which is what the phase art shows for the
-/// rows that are water edge to edge. Tiles that mix water with a static
-/// bank need that bank composited back over the result; this engine only
-/// scrolls the open-water ids, which have no bank, so no mask is applied
-/// and none is invented.
+/// Every row is displaced by the same amount and no row moves sideways.
 ///
 /// Returns `None` when `source` is not exactly one tile.
-pub fn scroll_tile_pixels(source: &[u8], shift: usize) -> Option<Vec<u8>> {
+pub fn rotate_tile_rows_down(source: &[u8], shift: usize) -> Option<Vec<u8>> {
     if source.len() != TILE_ATLAS_TILE_PIXELS {
         return None;
     }
@@ -181,6 +273,45 @@ pub fn scroll_tile_pixels(source: &[u8], shift: usize) -> Option<Vec<u8>> {
         rolled[dst..dst + TILE_ATLAS_SIDE].copy_from_slice(&source[src..src + TILE_ATLAS_SIDE]);
     }
     Some(rolled)
+}
+
+/// Stage two: `dest = (dest & !mask) | (source & mask)`, bitwise over the
+/// `plane_mask` colour planes, with `mask_inverted` selecting the
+/// complement of each mask pixel.
+///
+/// Deliberately bitwise rather than a per-pixel choice between two tiles:
+/// the river mask tiles carry `0b1101`, so they keep one plane of the
+/// destination while taking the other three from the source. A "pick a
+/// side" implementation renders those tiles wrong.
+///
+/// `plane_mask` is the atlas depth's plane count expressed as a bit mask —
+/// `0x0F` for the sixteen-colour EGA sheet, `0x03` for the four-colour CGA
+/// one — so the complement never invents planes the sheet does not have.
+///
+/// Returns `None` unless all three inputs are exactly one tile.
+pub fn composite_tile_pixels(
+    dest: &[u8],
+    mask: &[u8],
+    source: &[u8],
+    mask_inverted: bool,
+    plane_mask: u8,
+) -> Option<Vec<u8>> {
+    if dest.len() != TILE_ATLAS_TILE_PIXELS
+        || mask.len() != TILE_ATLAS_TILE_PIXELS
+        || source.len() != TILE_ATLAS_TILE_PIXELS
+    {
+        return None;
+    }
+    let mut composed = vec![0u8; TILE_ATLAS_TILE_PIXELS];
+    for index in 0..TILE_ATLAS_TILE_PIXELS {
+        let m = if mask_inverted {
+            !mask[index] & plane_mask
+        } else {
+            mask[index] & plane_mask
+        };
+        composed[index] = (dest[index] & !m) | (source[index] & m);
+    }
+    Some(composed)
 }
 
 #[cfg(test)]
@@ -207,7 +338,6 @@ mod tests {
     /// exact test the capture was scored against.
     #[test]
     fn each_phase_moves_the_pattern_down_exactly_one_row() {
-        // Rows carrying distinct content, so a displacement is visible.
         let source: Vec<u8> = (0..TILE_ATLAS_TILE_PIXELS)
             .map(|i| (i / TILE_ATLAS_SIDE) as u8)
             .collect();
@@ -215,7 +345,7 @@ mod tests {
             |tile: &[u8], y: usize| tile[y * TILE_ATLAS_SIDE..(y + 1) * TILE_ATLAS_SIDE].to_vec();
 
         let phases: Vec<Vec<u8>> = (0..TILE_ATLAS_SIDE)
-            .map(|k| scroll_tile_pixels(&source, k).expect("one tile"))
+            .map(|k| rotate_tile_rows_down(&source, k).expect("one tile"))
             .collect();
 
         let mut down = 0;
@@ -240,7 +370,7 @@ mod tests {
     /// reordered. The withdrawn first reading of this effect was a
     /// horizontal roll, so this is pinned explicitly.
     #[test]
-    fn water_scroll_has_no_horizontal_component() {
+    fn the_rotation_has_no_horizontal_component() {
         let source: Vec<u8> = (0..TILE_ATLAS_TILE_PIXELS).map(|i| i as u8).collect();
         let column = |tile: &[u8], x: usize| {
             (0..TILE_ATLAS_SIDE)
@@ -249,7 +379,7 @@ mod tests {
         };
 
         for shift in 0..TILE_ATLAS_SIDE {
-            let rolled = scroll_tile_pixels(&source, shift).expect("one tile");
+            let rolled = rotate_tile_rows_down(&source, shift).expect("one tile");
             for x in 0..TILE_ATLAS_SIDE {
                 let mut before = column(&source, x);
                 let mut after = column(&rolled, x);
@@ -260,45 +390,159 @@ mod tests {
         }
     }
 
-    /// Phase zero draws the authored tile, and a whole cycle returns to
-    /// it. Every phase is a pure row permutation — never new pixel data.
+    /// Phase zero draws the authored tile, and a whole cycle returns to it.
     #[test]
     fn a_whole_cycle_returns_the_authored_tile() {
         let source: Vec<u8> = (0..TILE_ATLAS_TILE_PIXELS)
             .map(|i| (i % 251) as u8)
             .collect();
 
-        assert_eq!(scroll_tile_pixels(&source, 0).expect("one tile"), source);
+        assert_eq!(rotate_tile_rows_down(&source, 0).expect("one tile"), source);
         assert_eq!(
-            scroll_tile_pixels(&source, TILE_ATLAS_SIDE).expect("one tile"),
+            rotate_tile_rows_down(&source, TILE_ATLAS_SIDE).expect("one tile"),
             source
         );
+    }
 
-        for shift in 0..TILE_ATLAS_SIDE {
-            let rolled = scroll_tile_pixels(&source, shift).expect("one tile");
-            assert_eq!(rolled.len(), TILE_ATLAS_TILE_PIXELS);
-            let mut before = source.clone();
-            let mut after = rolled;
-            before.sort_unstable();
-            after.sort_unstable();
-            assert_eq!(before, after, "shift {shift} is a permutation");
+    /// The rotated set is the three water ids and lava, and nothing else —
+    /// in particular not `0x00`, not swamp, and not the composite
+    /// destinations, which animate through the other stage.
+    #[test]
+    fn the_rotated_set_is_the_three_water_ids_and_lava() {
+        assert_eq!(WATER_ROTATED_TILES, [0x01, 0x02, 0x03, 0x8F]);
+        for tile in WATER_ROTATED_TILES {
+            assert!(water_pass_rotates_tile(tile), "0x{tile:02x} rotates");
+            assert_eq!(
+                water_composite_mask(tile),
+                None,
+                "0x{tile:02x} is rotated, not composited"
+            );
+        }
+        for tile in [0x00u8, 0x04, 0x05, 0x0A, 0x8E, 0x90, 0xD4, 0xEC, 0xFA] {
+            assert!(
+                !water_pass_rotates_tile(tile),
+                "0x{tile:02x} must not rotate"
+            );
         }
     }
 
-    /// Only open water scrolls. Swamp is walkable terrain, and the five
-    /// `animation.md §6` families own a different mechanism entirely.
+    /// The composite sets, their index-for-index mask pairing, and the one
+    /// set that is composited through the complement.
     #[test]
-    fn only_open_water_ids_scroll() {
-        for tile in 0x01..=0x03u8 {
-            assert!(tile_uses_water_scroll(tile), "0x{tile:02x} is open water");
-        }
-        for tile in [
-            0x00u8, 0x04, 0x05, 0x0A, 0x8F, 0xB0, 0xD4, 0xD8, 0xE4, 0xEC, 0xFA,
+    fn the_composite_sets_pair_destinations_with_masks_index_for_index() {
+        assert_eq!(WATER_COMPOSITE_SOURCE_TILE, 0x03);
+        assert!(
+            water_pass_rotates_tile(WATER_COMPOSITE_SOURCE_TILE),
+            "the composite source is itself a rotated tile"
+        );
+
+        for (dest, mask, inverted) in [
+            (0x60u8, 0x70u8, false),
+            (0x6F, 0x7F, false),
+            (0x34, 0xD0, false),
+            (0x37, 0xD3, false),
+            (0xE4, 0xD0, true),
+            (0xE7, 0xD3, true),
         ] {
-            assert!(
-                !tile_uses_water_scroll(tile),
-                "0x{tile:02x} must not scroll"
+            assert_eq!(
+                water_composite_mask(dest),
+                Some((mask, inverted)),
+                "0x{dest:02x}"
             );
+        }
+
+        // The two sets that share mask tiles must disagree about polarity;
+        // one uniform rule would render `0xE4..=0xE7` inside-out.
+        for offset in 0..4u8 {
+            let (coast_mask, coast_inverted) = water_composite_mask(0x34 + offset).expect("coast");
+            let (shore_mask, shore_inverted) = water_composite_mask(0xE4 + offset).expect("shore");
+            assert_eq!(coast_mask, shore_mask, "the same mask tile");
+            assert!(!coast_inverted);
+            assert!(shore_inverted);
+        }
+
+        // Just outside every run.
+        for tile in [0x33u8, 0x38, 0x5F, 0x70, 0xE3, 0xE8] {
+            assert_eq!(water_composite_mask(tile), None, "0x{tile:02x}");
+        }
+    }
+
+    /// The composite is bitwise across colour planes, not a choice between
+    /// two tiles. A mask of `0b1101` must keep plane 1 of the destination
+    /// and take planes 0, 2 and 3 from the source.
+    #[test]
+    fn the_composite_is_bitwise_across_colour_planes() {
+        let dest = vec![0b1111u8; TILE_ATLAS_TILE_PIXELS];
+        let source = vec![0b0000u8; TILE_ATLAS_TILE_PIXELS];
+        let mask = vec![0b1101u8; TILE_ATLAS_TILE_PIXELS];
+
+        let composed = composite_tile_pixels(&dest, &mask, &source, false, 0x0F).expect("one tile");
+        assert!(
+            composed.iter().all(|value| *value == 0b0010),
+            "only the plane the mask leaves clear survives from the destination"
+        );
+
+        // The complement keeps exactly the other planes.
+        let inverted = composite_tile_pixels(&dest, &mask, &source, true, 0x0F).expect("one tile");
+        assert!(inverted.iter().all(|value| *value == 0b1101));
+
+        // A four-colour sheet must not have planes invented for it.
+        let cga = composite_tile_pixels(&dest, &mask, &source, true, 0x03).expect("one tile");
+        assert!(cga.iter().all(|value| *value == 0b1111 & !0b0010));
+    }
+
+    /// A solid mask reduces the composite to "take the source there", which
+    /// is what the coast stencils do: they hold `0` and `15` only.
+    #[test]
+    fn a_solid_mask_selects_whole_pixels() {
+        let dest = vec![0x0Au8; TILE_ATLAS_TILE_PIXELS];
+        let source: Vec<u8> = (0..TILE_ATLAS_TILE_PIXELS)
+            .map(|i| (i % 16) as u8)
+            .collect();
+        // Lower-left half solid, the rest clear.
+        let mut mask = vec![0u8; TILE_ATLAS_TILE_PIXELS];
+        let mut solid = 0;
+        for y in 0..TILE_ATLAS_SIDE {
+            for x in 0..TILE_ATLAS_SIDE {
+                if x <= y {
+                    mask[y * TILE_ATLAS_SIDE + x] = 0x0F;
+                    solid += 1;
+                }
+            }
+        }
+        assert_eq!(solid, TILE_ATLAS_SIDE * (TILE_ATLAS_SIDE + 1) / 2);
+
+        let composed = composite_tile_pixels(&dest, &mask, &source, false, 0x0F).expect("one tile");
+        for y in 0..TILE_ATLAS_SIDE {
+            for x in 0..TILE_ATLAS_SIDE {
+                let at = y * TILE_ATLAS_SIDE + x;
+                if x <= y {
+                    assert_eq!(composed[at], source[at], "({x},{y}) takes the source");
+                } else {
+                    assert_eq!(composed[at], dest[at], "({x},{y}) keeps the destination");
+                }
+            }
+        }
+    }
+
+    /// Both stages read one counter and the source frame does not advance
+    /// between destinations, so two composited ids are always at the same
+    /// phase as each other and as the rotated tiles.
+    #[test]
+    fn every_destination_shows_the_same_phase_as_the_source() {
+        let source: Vec<u8> = (0..TILE_ATLAS_TILE_PIXELS)
+            .map(|i| (i / TILE_ATLAS_SIDE) as u8)
+            .collect();
+        let mask = vec![0x0Fu8; TILE_ATLAS_TILE_PIXELS];
+        let dest_a = vec![0x01u8; TILE_ATLAS_TILE_PIXELS];
+        let dest_b = vec![0x02u8; TILE_ATLAS_TILE_PIXELS];
+
+        for shift in 0..TILE_ATLAS_SIDE {
+            let rotated = rotate_tile_rows_down(&source, shift).expect("one tile");
+            let a = composite_tile_pixels(&dest_a, &mask, &rotated, false, 0x0F).expect("a");
+            let b = composite_tile_pixels(&dest_b, &mask, &rotated, false, 0x0F).expect("b");
+            assert_eq!(a, b, "shift {shift}: both destinations show one frame");
+            assert_eq!(a, rotated, "and that frame is the rotated source");
         }
     }
 }

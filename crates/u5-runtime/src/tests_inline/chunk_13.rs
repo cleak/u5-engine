@@ -11633,64 +11633,57 @@ fn save_scene_byte_normalised_swaps_combat_marker_for_home_scene() {
     }
 }
 
+/// The withdrawn classifier this test used to pin is gone.
+///
+/// It asserted `0x01..=0x03` water was a four-frame tile-id family and
+/// `0xEC..=0xEF` a "whirlpool" family. `RETRACTIONS.md` R148 withdrew both:
+/// the animator "touches exactly five id ranges and no others ... and no
+/// water, lava, torch or brazier tile is among them". The test is kept,
+/// pointed at the surviving classifier, so the two mechanisms stay apart:
+/// the `animation.md §6` tile-id families, and the display driver's water
+/// animator (`cleak/u5-spec#179`) that water, lava and the composited
+/// river/coast/shore ids use instead.
 #[test]
-fn tile_animation_family_classifies_published_ranges() {
-    // animation.md §6
-    // Water 0x01..=0x03 — four-frame cycle.
-    for tile in 0x01u8..=0x03 {
+fn the_two_animation_mechanisms_stay_separate() {
+    // The rotated set animates — but never as a tile-id family.
+    for tile in WATER_ROTATED_TILES {
         assert_eq!(
-            tile_animation_family(tile),
-            Some(TileAnimationFamily::Water)
-        );
-        assert_eq!(tile_animation_family(tile).unwrap().frame_count(), 4);
-    }
-    // 0x80..=0x83 short toggle (2 frames).
-    for tile in 0x80u8..=0x83 {
-        assert_eq!(
-            tile_animation_family(tile),
-            Some(TileAnimationFamily::EffectShortToggle)
-        );
-        assert_eq!(tile_animation_family(tile).unwrap().frame_count(), 2);
-    }
-    // 0xD4..=0xD7 first quad terrain.
-    for tile in 0xD4u8..=0xD7 {
-        assert_eq!(
-            tile_animation_family(tile),
-            Some(TileAnimationFamily::TerrainQuad1)
-        );
-    }
-    // 0xD8..=0xDB second quad terrain.
-    for tile in 0xD8u8..=0xDB {
-        assert_eq!(
-            tile_animation_family(tile),
-            Some(TileAnimationFamily::TerrainQuad2)
-        );
-    }
-    // 0xEC..=0xEF effect quad.
-    for tile in 0xECu8..=0xEF {
-        assert_eq!(
-            tile_animation_family(tile),
-            Some(TileAnimationFamily::EffectQuad)
-        );
-    }
-    // 0xFA..=0xFD long toggle (2 frames).
-    for tile in 0xFAu8..=0xFD {
-        assert_eq!(
-            tile_animation_family(tile),
-            Some(TileAnimationFamily::LongToggle)
-        );
-        assert_eq!(tile_animation_family(tile).unwrap().frame_count(), 2);
-    }
-    // Tiles outside the published animator ranges return None.
-    for tile in [
-        0x00u8, 0x10, 0x40, 0x7F, 0x84, 0xD3, 0xDC, 0xEB, 0xF0, 0xF9, 0xFE,
-    ] {
-        assert_eq!(
-            tile_animation_family(tile),
+            static_tile_animation_family(tile),
             None,
-            "tile {:#x} should not be in any animator family",
-            tile
+            "0x{tile:02x} is not a §6 family (R148)"
         );
+        assert!(water_pass_rotates_tile(tile));
+        assert!(water_pass_animates_tile(tile));
+    }
+
+    // The composite destinations likewise: no family, and rebuilt from the
+    // rotated shoals tile rather than rotated themselves.
+    for set in WATER_COMPOSITE_SETS {
+        for offset in 0..set.count {
+            let tile = set.first_dest + offset;
+            assert_eq!(static_tile_animation_family(tile), None);
+            assert!(!water_pass_rotates_tile(tile));
+            assert_eq!(
+                water_composite_mask(tile),
+                Some((set.first_mask + offset, set.mask_inverted))
+            );
+        }
+    }
+
+    // The five published families are the whole of the tile-id mechanism,
+    // and the water animator touches none of them.
+    for spec in STATIC_TILE_ANIMATION_FAMILIES {
+        for offset in 0..spec.id_count {
+            let tile = spec.first_id + offset;
+            assert_eq!(static_tile_animation_family(tile), Some(spec.family));
+            assert!(!water_pass_animates_tile(tile), "tile 0x{tile:02x}");
+        }
+    }
+
+    // Tiles owned by neither mechanism.
+    for tile in [0x00u8, 0x04, 0x10, 0x40, 0x7F, 0x84, 0x90, 0xDC, 0xF0, 0xF9, 0xFE] {
+        assert_eq!(static_tile_animation_family(tile), None);
+        assert!(!water_pass_animates_tile(tile), "tile 0x{tile:02x}");
     }
 }
 
@@ -20521,12 +20514,6 @@ fn tile_super_category_splits_per_spec() {
     // Above the published sheet
     assert_eq!(tile_super_category(512), None);
     assert_eq!(tile_super_category(65535), None);
-    // Water animates with a four-frame cycle
-    assert_eq!(tile_animation_cycle_length(0x01), Some(4));
-    assert_eq!(tile_animation_cycle_length(0x04), Some(4));
-    // Walls and most other classes do not animate
-    assert_eq!(tile_animation_cycle_length(0x18), None);
-    assert_eq!(tile_animation_cycle_length(0x60), None);
 }
 
 #[test]

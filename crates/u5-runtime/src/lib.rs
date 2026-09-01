@@ -755,8 +755,7 @@ pub use tile_classes::{
     TILE_PATH_LAST, TILE_RIVER_FIRST, TILE_RIVER_LAST, TILE_SPECIAL_FIRST, TILE_SPECIAL_LAST,
     TILE_TERRAIN_FIRST, TILE_TERRAIN_LAST, TILE_VEHICLE_ART_FIRST, TILE_VEHICLE_ART_LAST,
     TILE_VEHICLE_FIRST, TILE_VEHICLE_LAST, TILE_WALL_FIRST, TILE_WALL_LAST, TILE_WATER_FIRST,
-    TILE_WATER_LAST, TileAnimationFamily, TileClass, TileSuperCategory, coarse_tile_class,
-    tile_animation_cycle_length, tile_animation_family, tile_super_category,
+    TILE_WATER_LAST, TileClass, TileSuperCategory, coarse_tile_class, tile_super_category,
 };
 pub use tile_helpers::*;
 pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
@@ -883,8 +882,10 @@ pub use visibility::{
 };
 pub use visual_asset_audit::*;
 pub use water_scroll::{
+    WATER_COMPOSITE_SETS, WATER_COMPOSITE_SOURCE_TILE, WATER_ROTATED_TILES,
     WATER_SCROLL_PHASE_COUNT, WATER_SCROLL_ROWS_PER_PHASE, WATER_SCROLL_TOWARD_HIGHER_Y,
-    WaterScrollClock, scroll_tile_pixels, tile_uses_water_scroll,
+    WaterCompositeSet, WaterScrollClock, composite_tile_pixels, rotate_tile_rows_down,
+    water_composite_mask, water_pass_animates_tile, water_pass_rotates_tile,
 };
 pub use wind::{
     ACTIVE_SHIP_CADENCE_EVERY_TURN, ACTIVE_SHIP_CADENCE_INTO_WIND, ACTIVE_SHIP_CADENCE_WITH_WIND,

@@ -1148,9 +1148,10 @@ pub fn is_water_tile(tile: u8) -> bool {
 /// "this cell illuminates its surroundings", see
 /// [`crate::is_local_light_source_tile`] — and each of their four ids is an
 /// independently authored fixture, not a frame of its neighbour.
-/// Open water `0x01..=0x03` is likewise not a family here; the measured
-/// per-tick water treatment is a display-driver pixel effect that runs
-/// beside this pass, see [`crate::water_scroll`].
+/// Open water `0x01..=0x03` and lava `0x8F` are likewise not families
+/// here; they animate through the display driver's own rotation and
+/// composite stages, which run beside this pass — see
+/// [`crate::water_scroll`].
 ///
 /// Dungeon-mode and combat-mode effect tiles (fire field, poison field,
 /// sleep / energy field) are owned by per-effect handlers, not by this

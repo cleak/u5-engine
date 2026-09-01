@@ -116,70 +116,21 @@ pub const fn tile_super_category(tile_id: u16) -> Option<TileSuperCategory> {
     }
 }
 
-/// `animation.md §6` global tile-animation family classification.
-/// The renderer's resident frame selector advances these contiguous
-/// tile-id ranges at the shared tick cadence. Each variant carries
-/// the family's frame-cycle length (2 or 4 frames per cycle).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TileAnimationFamily {
-    /// `0x01..=0x03` water — four-frame cycle (the published water
-    /// class).
-    Water,
-    /// `0x80..=0x83` two-frame effect family gated by the low bit
-    /// of the shared phase counter.
-    EffectShortToggle,
-    /// `0xD4..=0xD7` first four-frame terrain family in the
-    /// `0xD4..=0xDB` band.
-    TerrainQuad1,
-    /// `0xD8..=0xDB` second four-frame terrain family in the same
-    /// band.
-    TerrainQuad2,
-    /// `0xEC..=0xEF` four-frame whirlpool / outdoor-effect family.
-    EffectQuad,
-    /// `0xFA..=0xFD` two-frame family gated by a higher phase bit.
-    LongToggle,
-}
-
-impl TileAnimationFamily {
-    /// `animation.md §6` frame-cycle length (`2` or `4`).
-    pub const fn frame_count(self) -> u8 {
-        match self {
-            Self::EffectShortToggle | Self::LongToggle => 2,
-            Self::Water | Self::TerrainQuad1 | Self::TerrainQuad2 | Self::EffectQuad => 4,
-        }
-    }
-}
-
-/// `animation.md §6`: classify a tile id into its global animation
-/// family, or `None` for tiles outside the animator's published
-/// ranges.
-pub const fn tile_animation_family(tile: u8) -> Option<TileAnimationFamily> {
-    Some(match tile {
-        0x01..=0x03 => TileAnimationFamily::Water,
-        0x80..=0x83 => TileAnimationFamily::EffectShortToggle,
-        0xD4..=0xD7 => TileAnimationFamily::TerrainQuad1,
-        0xD8..=0xDB => TileAnimationFamily::TerrainQuad2,
-        0xEC..=0xEF => TileAnimationFamily::EffectQuad,
-        0xFA..=0xFD => TileAnimationFamily::LongToggle,
-        _ => return None,
-    })
-}
-
-/// `catalogs/tile-catalog.md §4` per-class animation cycle length, or
-/// `None` for tiles whose class does not animate. Returns `Some(4)`
-/// for the four-frame cycle classes (water/lava/fire), `Some(16)` for
-/// moongate frames, and `None` for non-animated classes (walls,
-/// doors, paths, terrain, vegetation, furniture).
-pub const fn tile_animation_cycle_length(tile_id: u8) -> Option<u8> {
-    match tile_id {
-        // Water class — four-frame cycle.
-        TILE_WATER_FIRST..=TILE_WATER_LAST => Some(4),
-        // The barrier band carries field/fire variants in the special
-        // tile encoding; treat as a four-frame animator class.
-        // (Lava/fire tiles live in the Special band 0x80..=0x9F.)
-        _ => None,
-    }
-}
+// The withdrawn `TileAnimationFamily` / `tile_animation_family` /
+// `tile_animation_cycle_length` trio used to live here. It classified
+// `0x01..=0x03` water as a four-frame tile-id family, `0xEC..=0xEF` as a
+// "whirlpool" family and moongate frames as a sixteen-frame cycle.
+//
+// `RETRACTIONS.md` R148 withdrew all of that: "The animator touches exactly
+// five id ranges and no others ... and no water, lava, torch or brazier tile
+// is among them", `0xEC..=0xEF` is the standard of Britannia, and
+// `overworld.md §9.1` says the moongate counter "is not a member of the
+// global tile-animation families ... it has no frame selector".
+//
+// The surviving classifier is [`crate::static_tile_animation_family`], which
+// reads the five published families and has no catch-all. Water does animate,
+// but through the display-layer treatment in [`crate::water_scroll`], not
+// through a tile-id family.
 
 /// Classify a 0..=255 tile id into the coarse `TileClass` group from
 /// `catalogs/tile-catalog.md` §3. Distinct from `tile_helpers::tile_class`,
