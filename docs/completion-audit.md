@@ -4,10 +4,10 @@ This audit maps each public-spec deliverable (the systems and formats published
 in `C:\Projects\Rust\u5-clean\u5-spec`) to concrete engine evidence
 (`crates/u5-runtime`, `crates/u5-tui`, `crates/u5-bevy`) and to test coverage.
 
-Created on 2026-05-19; last refreshed on 2026-08-24 at public spec head
-`60ac944`, after reconciling the answered public issue queue through `#131`,
-including exact monster-special dispatch, the settled local-View contract, and
-the shared combat-resistance and distinct target-weight predicates.
+Created on 2026-05-19; last refreshed on 2026-08-27 at public spec head
+`02550e2`, after reconciling the answered public issue queue through `#177`.
+There are no open clean-spec issues; the remaining public engine issues are
+implementation/conformance trackers rather than missing clean-room facts.
 
 **Read spec contracts from GitHub, not from the local checkout** — the issues,
 and document text through
@@ -150,8 +150,30 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#142` | Exact P-Push output and turn table | Resolved in public commit `fb05888` and implemented: exact direction echo/continuations, Space-only cancellation, ignored Escape, dynamic-object refusal, dungeon replacement transcript, cleanup ordering, and acted/no-action results |
 | `cleak/u5-spec#143` | Complete E-Enter narration and failure table | Resolved in public commit `5933b35` and implemented for all 40 stock entries, including centered proper names, live-tile guards, transport/Doom failures, action results, and narration-before-I/O ordering |
 | `cleak/u5-spec#144` | Shrine of the Codex approach transcript | Resolved in public commit `5cba5e9` and implemented: exact LF-delimited `Pass, Seeker!` success and two-line Sacred Quest refusal, coordinate-only dispatch, refusal south push, no extra presentation, and no second turn |
+| `cleak/u5-spec#163` | Overworld ranged-projectile blockers | Resolved and implemented as the exact 46-tile blocker set, shared by both ranged outdoor object families |
+| `cleak/u5-spec#164` | Ordinary TLK `0x90` label marker | Resolved and implemented: the marker remains printable and then declares the following label; lookup and normal execution no longer disagree |
+| `cleak/u5-spec#165` | Drowning-loop status asymmetry and continuation | Resolved and implemented: the exact per-member status branches, restoration boundary, long-descent cue, and post-loop continuation are covered |
+| `cleak/u5-spec#166` | Outdoor-damage stats-panel side effects | Resolved and implemented: damage refreshes the published stats-panel regions without inventing combat framing |
+| `cleak/u5-spec#167` | Vanish-on-death status byte and terrain fade | Resolved and implemented: matching terrain uses the shared 256-pixel LFSR reveal with 31 checkpoints, the actor slot is released by clearing its flags byte while preserving the remaining descriptor bytes, and the controlled-party faint tail disarms and sleeps its target |
+| `cleak/u5-spec#168` | Alleged captive-cell counter | Resolved by retraction and implemented: no `SAVED.BTH`, capture context, captive counter, or parallel rescue-progress field remains. Rescue tests the full Food word once, changing exactly zero to 63 and preserving every nonzero value |
+| `cleak/u5-spec#169` | Exact Blackthorn cutscene visuals | Resolved in public commit `be2df6a` and implemented: slots 6/7 are the two `0x70` guards, slot 8 is the `0x16`-suppressed then `0x78` seated-Blackthorn tableau, quiet-pause operands are redraw counts rather than output bytes, explicit redraw never clears the screen, terrain writes expose only on later world ticks, direct cell reveals carry the exact 256-pixel/31-checkpoint schedule, and the rescue record pins Guardian/spectral/party tile identities plus both 1,856-draw thunder flashes |
+| `cleak/u5-spec#170` | CBT metadata, arena setup, edge exits, and ambush ordering | Resolved and implemented: exact arena-id-14 draw timing, setup fields, dungeon permutations, edge/exit result constants, escape cleanup, victory cleanup, and narration |
+| `cleak/u5-spec#171` | Tavern zero-quantity and lore-continuation edges | Resolved and implemented: zero quantity follows the `Hrumph.` continuation, lore is ignored when continuation is unavailable, and exact Y/N/Space/Return/Escape behavior is covered |
+| `cleak/u5-spec#172` | Combat faction groups, passive occupancy, and controlled turns | Resolved and implemented: party/monster group ids are 0/1, class 8/9 flags are `0x20`, passive targets are excluded, controlled party actors dispatch automatically, and Mass Charm uses linked Dexterity |
+| `cleak/u5-spec#173` | Sailing collision, docking, and rough-seas cadence | Resolved and implemented: exact rumble recipes, messages, hull draw, deep-water/transport predicates, pier silence, visual tick, damage order, and post-turn epilogue |
+| `cleak/u5-spec#174` | Combat Open/status selection and wrong-Mix stale target | Resolved and implemented: live descriptor ownership and status gates are honored; wrong Mix chooses the first Good-or-Poisoned member, while forced invalid Acid/Poison safely no-op without an arbitrary fallback and Bomb/Gas remain party-wide |
+| `cleak/u5-spec#175` | Moldy-corpse Search tree and Plague consequence | Resolved and implemented: scope excludes rotting bodies and Get, all four inclusive draw stages and exact transcript lines are pinned, quantity is 1..3, and Plague rumbles before directly poisoning the selected member |
+| `cleak/u5-spec#176` | Controlled-party faint presentation after Vanish | Resolved and implemented: control clear, narration, possession envelope, first Sword-of-Chaos removal, Dead exception, sleep mutation, and rest/camp-guarded world tick run in order |
+| `cleak/u5-spec#177` | Blackthorn stinger and rescue-envelope parameters | Resolved in public head `02550e2` and implemented: every live VM stinger emits the exact 25+25-update recipe before its separate two-tick pause, and rescue runs six independent divisor-60 envelope rows with a hard stop after each |
 
-The answered public clean-room issue queue is reconciled through `#144`.
+The answered public clean-room issue queue is reconciled through `#177`.
+Issues `#145`–`#162` supplied the intervening audio, palette, command-result,
+dungeon-field, endgame-timing, docking, door-tracker, tavern, and drunkenness
+corrections; those changes and their focused tests are in the current worktree.
+Issues `#170`–`#177` supplied the final CBT, tavern, combat-faction, sailing,
+trap, corpse-search, Vanish-faint, and Blackthorn-audio details; those changes
+and focused tests are now in the current worktree. No public specification
+blocker remains open.
 The later corrective answer on public `#11` is also reconciled: Kill's
 protected class-id filter is 14/15/47; Cause Fear and Repel Undead directly
 write combat HP 1 and fleeing bit `0x02`; Repel does not enter death or XP
@@ -176,7 +198,7 @@ sound-loop values, frozen White repaint sequence, and no-extra-turn rules.
 
 ## Verification Baseline
 
-Re-measured on 2026-08-24 in the current worktree. Asset-backed runs used isolated
+Re-measured on 2026-08-27 in the current worktree. Asset-backed runs used isolated
 temporary save directories and treated `C:\Games\U5-Clean` as read-only input;
 the visual asset corpus itself was never modified. The engine refuses a write
 destination that resolves to `DEFAULT_GAME_DIR`, and `copy_asset_writable`
@@ -184,15 +206,15 @@ clears the read-only bit Windows `fs::copy` propagates into scratch copies.
 
 | Command | Result |
 |---|---|
-| `cargo test -p u5-runtime --lib` | 3223 pass |
-| `cargo test -p u5-bevy` | 183 pass |
-| `cargo test -p u5-tui -- --test-threads=1` | 103 pass (14 + 51 + 38) |
+| `cargo test -p u5-runtime --lib` | 3629 pass |
+| `cargo test -p u5-bevy` | 211 pass, including the asset-backed visual route |
+| `cargo test -p u5-tui -- --test-threads=1` | pass, including CLI/play-loop/route-smoke integrations |
 | `cargo test --workspace` | pass, including all asset-backed suites and doc tests |
 | `cargo fmt --all -- --check` | clean |
 | `cargo clippy --workspace --all-targets` | **zero errors**; style warnings remain and are not gated |
 | `--route-smoke <asset-copy>` | all **514** scripted cases pass |
 | `--visual-frame-suite <asset-copy>` | **193** PNGs plus a sanitized manifest |
-| `--visual-route-suite <asset-copy>` | **1910** PNGs plus a sanitized manifest |
+| `--visual-route-suite <asset-copy>` | **1949** PNGs plus a sanitized manifest |
 
 The route-smoke corpus spans world, town, dungeon, combat, endgame and shop
 play: all 40 published stock world-location entry rows, TLK-backed reserved-word
@@ -216,7 +238,7 @@ synthetic far-slot live object to the plane OOL mirror before the ordinary
 rescue restores the party. Its validator requires
 `cinematic_is_finished()`, so an ending that stops short fails the case.
 
-The visual route suite's 1910 frames are all nonblank except exactly one, which
+The visual route suite's 1949 frames are all nonblank except exactly one, which
 is black by contract: the `endgame.md §7.1` fade between the throne tableau and
 the first `END.DAT` window. The suite also rejects any scripted step that leaves
 the frame unchanged, outside the explicit terminal-endgame and Doom
@@ -374,7 +396,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| §1–§8 | `save_load.rs`, `disk_prompt.rs`, `disk_io.rs`, `active_object_io.rs`, `play_state_struct.rs` four-file contract (SAVED.GAM/SAVED.OOL/BRIT.OOL/UNDER.OOL), empty-save guard, load-time mirror refresh, save-time UNDER-then-BRIT staging with the conditional unchanged `UNDER.OOL` write and no `BRIT.OOL` write, typed disk-role restoration, shared active-effect and queued-vehicle bytes, read/write retry wrapper, original binary content/resource loader disk I/O, vehicle/transition save round-trips; `town_npc_mutations.rs` preserves public destructive schedule/dialogue rewrites in a narrow engine-owned companion save without modifying original `.NPC` assets | save/load tests across `chunk_03.rs`, `chunk_04.rs`, `chunk_05.rs`, `chunk_07.rs`, `chunk_09.rs`, `chunk_11.rs`, `chunk_13.rs`, `chunk_23.rs`, plus companion-ledger round-trip, malformed-row rejection, and town-reload reapplication tests | Implemented |
+| §1–§8 | `save_load.rs`, `disk_prompt.rs`, `disk_io.rs`, `active_object_io.rs`, `play_state_struct.rs` four-file contract (SAVED.GAM/SAVED.OOL/BRIT.OOL/UNDER.OOL), empty-save guard, load-time mirror refresh, save-time UNDER-then-BRIT staging with the conditional unchanged `UNDER.OOL` write and no `BRIT.OOL` write, typed disk-role restoration, shared active-effect and queued-vehicle bytes, read/write retry wrapper, original binary content/resource loader disk I/O, vehicle/transition save round-trips; `town_npc_mutations.rs` preserves public destructive schedule/dialogue rewrites in a narrow engine-owned companion save without modifying original `.NPC` assets; interactive frontends use `runtime_game_dir.rs` to place the whole four-file mutable contract in a persistent writable mirror when the supplied clean install is read-only | save/load tests across `chunk_03.rs`, `chunk_04.rs`, `chunk_05.rs`, `chunk_07.rs`, `chunk_09.rs`, `chunk_11.rs`, `chunk_13.rs`, `chunk_23.rs`, plus companion-ledger round-trip, malformed-row rejection, town-reload reapplication, read-only-install mirroring, runtime-save preservation, real Journey Onward, and post-chargen launch tests | Implemented |
 
 ### `systems/movement.md`, `systems/overworld.md`, `systems/town-mode.md`, `systems/dungeon-mode.md`
 
@@ -539,7 +561,42 @@ a phase leaves a column of the band unpublished — not contract gates.
 
 These are honest gaps: the contract is published and the engine does not do it.
 
-**Every fully published gameplay contract is now implemented.** Four entries left this list on
+**Withdrawn 2026-08-26.** This section used to open "Every fully published
+gameplay contract is now implemented." That claim was false, and the way it was
+false is worth recording because it will recur.
+
+A systematic audit on 2026-08-26 read all ~85 published specification documents
+against the engine — ten readers, each candidate gap then handed to an
+independent verifier whose job was to refute it by finding the implementing
+code. **106 claims survived refutation** (`cleak/u5-engine#2`).
+
+Most are not oversights. The upstream specification has been corrected and
+reversed repeatedly, and the engine implemented an **earlier revision** that was
+later retracted. `npc-schedules.md §10`'s pathfinding tile set was published
+with one polarity and republished with the exact opposite; `§11`'s hidden-NPC
+scene table was published zero-based and republished one-based. In both cases
+the engine still carried the retracted reading — together with a doc comment
+quoting the retracted sentence and a test asserting the retracted behaviour.
+
+The process lesson is the important part:
+
+- **A passing test is not evidence of conformance.** These tests passed. They
+  were written against text that has since been reversed, so they actively
+  concealed the defect.
+- **An engine doc comment quoting the spec is not evidence either.** The quote
+  is precisely what goes stale, and it is more convincing than bare code, so it
+  is worse than no citation at all.
+- **Only spec HEAD is authority.** Any conformance claim must be re-derived by
+  fetching the document fresh, not by reading the repository. The local
+  `u5-spec` checkout is stale and must not be used for this.
+- Documents carrying "retracted", "withdrawn", or "earlier wording" notes are
+  the highest-yield places to look. `cleak/u5-spec#149` asks upstream to publish
+  a retraction index so this becomes a targeted check rather than a full sweep.
+
+The rest of this section is the historical record from before that audit and
+should be read with the above in mind.
+
+Four entries left this list on
 2026-08-23 — `visibility.md §12.6`'s night beacon, `overworld.md §9.2`'s blocking
 transit, `active-objects.md §8`'s outdoor walker phase, and `overworld.md §6.2`'s
 ranged-attack payload, the last one to close (`cleak/u5-spec#90`).
@@ -554,8 +611,8 @@ one-in-**seven** against a published one-in-eight (nothing called it, so the wro
 value passed its own test), and `0xE0..0xE3` was treated as a sea-serpent family
 when it is the **Sand Trap** — the sea serpent is `0x88`.
 
-There is no remaining *fully published* gameplay contract known to be
-unimplemented. Public `#131` closed the last pending combat-resistance question
+(Historical, and now known to be wrong: this paragraph asserted that no
+remaining fully published gameplay contract was unimplemented.) Public `#131` closed the last pending combat-resistance question
 in `60ac944`; the conservative placeholder has been removed.
 The public `#11` corrections to protected Kill targets, the shared
 Cause-Fear/Repel-Undead one-HP fleeing writer, and the exact
@@ -717,11 +774,12 @@ changed hue once it was corrected. Nothing in the game reprograms the palette
 after mode setup; apparent recolouring is a restricted plane write mask or a
 display effect mutating the loaded asset data, never a palette change.
 
-Verified on 2026-08-24 in the current worktree: 3226 u5-runtime, 183 u5-bevy,
-and 103 u5-tui tests pass, `cargo fmt --all -- --check` is clean, `cargo clippy
---workspace --all-targets` reports zero errors (its existing style-warning
-baseline is not gated), `--route-smoke` passes all 514 cases,
-`--visual-frame-suite` writes 193 PNGs and `--visual-route-suite` writes 1910.
+Verified on 2026-08-27 in the current worktree: 3,638 u5-runtime unit tests,
+211 u5-bevy tests, 21 u5-tui unit tests, and all workspace integration/doc tests
+pass. `cargo fmt --all -- --check`, `cargo check --workspace`, and
+`git diff --check` are clean (apart from the existing dead-code and line-ending
+warnings). The asset-backed Bevy visual route suite and TUI route smoke both
+completed inside `cargo test --workspace`.
 Asset-backed verification treated the local install as read-only input; the
 stateful route suites ran from a dedicated writable copy and restored their
 canonical world-object mirrors between cases.

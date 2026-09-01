@@ -14,7 +14,9 @@ pub enum TileClass {
     Path,
     Wall,
     Furniture,
-    Door,
+    /// `catalogs/tile-catalog.md` §2 names `96..103` the **River**
+    /// class - "River terrain frames; not a door range".
+    River,
     Decoration,
     Barrier,
     Special,
@@ -27,7 +29,7 @@ pub enum TileClass {
 pub const TILE_WATER_FIRST: u8 = 0x01;
 pub const TILE_WATER_LAST: u8 = 0x04;
 /// `catalogs/tile-catalog.md §2`: the lower-half tile classes
-/// (terrain, path, wall, furniture, door) tile contiguously from
+/// (terrain, path, wall, furniture, river) tile contiguously from
 /// the water range upward. Anchor each *_FIRST to the previous
 /// class's *_LAST + 1 so adding or resizing a class automatically
 /// shifts the later ranges.
@@ -44,15 +46,22 @@ pub const TILE_WALL_LAST: u8 = 0x3F;
 /// stairs, ladders, sign posts, brazier).
 pub const TILE_FURNITURE_FIRST: u8 = TILE_WALL_LAST + 1;
 pub const TILE_FURNITURE_LAST: u8 = 0x5F;
-/// Inclusive door tile range `0x60..=0x67` (door variants).
-pub const TILE_DOOR_FIRST: u8 = TILE_FURNITURE_LAST + 1;
-pub const TILE_DOOR_LAST: u8 = 0x67;
+/// Inclusive river tile range `0x60..=0x67`.
+/// `catalogs/tile-catalog.md` §3: "96..103 | terrain | River terrain
+/// frames. The obsolete door classification for this range is withdrawn."
+/// §7 adds: "Top-down doors are not the obsolete contiguous decimal
+/// `96..103` range; every shipped Look entry in that range is river
+/// terrain." The live door identifiers are `0xB8`/`0xB9`/`0xBA`/`0xBB`
+/// and the magic-locked `0x97`/`0x98`; they are owned by the command
+/// predicates, not by this coarse range table.
+pub const TILE_RIVER_FIRST: u8 = TILE_FURNITURE_LAST + 1;
+pub const TILE_RIVER_LAST: u8 = 0x67;
 /// `catalogs/tile-catalog.md §2`: the upper-half tile classes
 /// (decoration, barrier, special, vehicle, vehicle-art, NPC)
-/// tile contiguously from the door range upward. Anchor each
+/// tile contiguously from the river range upward. Anchor each
 /// *_FIRST to the previous class's *_LAST + 1 so adding or
 /// resizing a class automatically shifts the later ranges.
-pub const TILE_DECORATION_FIRST: u8 = TILE_DOOR_LAST + 1;
+pub const TILE_DECORATION_FIRST: u8 = TILE_RIVER_LAST + 1;
 pub const TILE_DECORATION_LAST: u8 = 0x6F;
 /// Inclusive Sceptre-dissolvable barrier/field range `0x70..=0x7F`.
 pub const TILE_BARRIER_FIRST: u8 = TILE_DECORATION_LAST + 1;
@@ -183,7 +192,7 @@ pub const fn coarse_tile_class(tile: u8) -> TileClass {
         TILE_PATH_FIRST..=TILE_PATH_LAST => TileClass::Path,
         TILE_WALL_FIRST..=TILE_WALL_LAST => TileClass::Wall,
         TILE_FURNITURE_FIRST..=TILE_FURNITURE_LAST => TileClass::Furniture,
-        TILE_DOOR_FIRST..=TILE_DOOR_LAST => TileClass::Door,
+        TILE_RIVER_FIRST..=TILE_RIVER_LAST => TileClass::River,
         TILE_DECORATION_FIRST..=TILE_DECORATION_LAST => TileClass::Decoration,
         TILE_BARRIER_FIRST..=TILE_BARRIER_LAST => TileClass::Barrier,
         TILE_SPECIAL_FIRST..=TILE_SPECIAL_LAST => TileClass::Special,

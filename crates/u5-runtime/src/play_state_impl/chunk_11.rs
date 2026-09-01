@@ -128,8 +128,11 @@ impl PlayState {
         if x >= 32 || y >= 32 {
             return false;
         }
+        // npc-schedules.md §10: the waypoint-match rule reports the NPC's
+        // own active waypoint open regardless of tile id; otherwise a set
+        // bit in the NPC tile set marks the cell as an obstacle.
         let coordinate_goal = (x, y) == (destination_x, destination_y);
-        if !coordinate_goal && !npc_path_tile_open(self.grid[y * 32 + x]) {
+        if !coordinate_goal && npc_path_tile_obstacle(self.grid[y * 32 + x]) {
             return false;
         }
 

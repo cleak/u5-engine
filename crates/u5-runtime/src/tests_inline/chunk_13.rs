@@ -285,19 +285,15 @@ fn blackthorn_captive_cell_scene_anchors_to_blackthorns_castle() {
 
 #[test]
 fn combat_target_group_and_round_result_chains() {
-    // combat.md §7: combat-round results and target groups
-    // are sequential byte enums. combat_actor.rs declared
-    // each value as a bare literal. Chain
-    // COMBAT_ROUND_RESULT_SUCCESS from COMBAT_ROUND_RESULT_DEFEAT
-    // and COMBAT_TARGET_GROUP_PARTY/MONSTER from
-    // COMBAT_TARGET_GROUP_NEUTRAL so the published enum
-    // ordering stays explicit.
-    assert_eq!(COMBAT_ROUND_RESULT_DEFEAT, 0);
-    assert_eq!(COMBAT_ROUND_RESULT_SUCCESS, COMBAT_ROUND_RESULT_DEFEAT + 1);
-    assert_eq!(COMBAT_TARGET_GROUP_NEUTRAL, 0);
-    assert_eq!(COMBAT_TARGET_GROUP_PARTY, COMBAT_TARGET_GROUP_NEUTRAL + 1);
+    // combat.md §7: an empty table returns zero and defeat returns one.
+    // combat.md §16.1: group 0 is party-aligned and group 1 is hostile;
+    // neutral is only an internal invalid-slot sentinel outside both groups.
+    assert_eq!(COMBAT_ROUND_RESULT_SUCCESS, 0);
+    assert_eq!(COMBAT_ROUND_RESULT_DEFEAT, 1);
+    assert_eq!(COMBAT_TARGET_GROUP_PARTY, 0);
     assert_eq!(COMBAT_TARGET_GROUP_MONSTER, COMBAT_TARGET_GROUP_PARTY + 1);
-    assert_eq!(COMBAT_TARGET_GROUP_MONSTER, 2);
+    assert_eq!(COMBAT_TARGET_GROUP_MONSTER, 1);
+    assert_eq!(COMBAT_TARGET_GROUP_NEUTRAL, 2);
 }
 
 #[test]
@@ -911,9 +907,29 @@ fn fixed_hidden_treasure_found_bytes_derives_from_treasure_count() {
         0x02c4
     );
     assert_eq!(SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET, 0x020c);
-    assert_eq!(SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET, 0x0241);
-    assert_eq!(FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY, 0xff);
-    assert_eq!(FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR, 0);
+    // formats/saved-gam.md §10, record 15: "`0x0241` - the equipment
+    // counter for item id `39`, the Glass Sword - is also the gate for
+    // fixed hidden-treasure record 15. It is the same byte, not a
+    // parallel cookie." The engine used to declare a dedicated
+    // SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET at the same
+    // address, which is exactly the withdrawn reading; the gate is now
+    // derived from the equipment block so the two cannot disagree.
+    assert_eq!(SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET, 0x0241);
+    assert_eq!(
+        SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET,
+        SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_ID_GLASS_SWORD
+    );
+    assert!(
+        (SAVE_EQUIPMENT_STOCK_OFFSET..SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_COUNT)
+            .contains(&SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET)
+    );
+    // hidden-treasures.md §2 record 14 / time.md §8: the daily
+    // cooldown cookie's factory value is ZERO, which matches no
+    // calendar day (days run 1..28), so the record is available on
+    // the first search. The byte reaches the save image, so an
+    // out-of-band 0xFF sentinel would diverge from the original.
+    assert_eq!(FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY, 0);
+    assert_eq!(RARE_REAGENT_HARVEST_UNSEEN_DAY, 0);
 }
 
 #[test]
@@ -1171,9 +1187,11 @@ fn playable_vehicle_tile_bands_chain_from_vehicle_range_start() {
     // catalogs/tile-catalog.md §6: playable-vehicle tile
     // bands start at TILE_VEHICLE_FIRST (0xA0). Each major
     // vehicle (horse, frigate, skiff, carpet) occupies an
-    // 8-tile band; the balloon band starts 4 tiles past the
-    // carpet. Anchor the chain so adding or resizing a
-    // vehicle automatically shifts the later bands.
+    // 8-tile band; the balloon *art* band starts 4 tiles past
+    // the carpet. vehicles.md §11: "Balloon sprites are
+    // catalog assets only" -- the band is a tile-catalog
+    // anchor, not a transport family. Anchor the chain so
+    // adding or resizing a vehicle shifts the later bands.
     assert_eq!(FIRST_PLAYABLE_HORSE_TILE, TILE_VEHICLE_FIRST);
     assert_eq!(FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_HORSE_TILE + 8);
     assert_eq!(FIRST_PLAYABLE_SKIFF_TILE, FIRST_PLAYABLE_FRIGATE_TILE + 8);
@@ -1210,32 +1228,34 @@ fn horse_object_and_transport_bands_chain_through_boarding_bias() {
 }
 
 #[test]
-fn transport_marker_foot_band_anchors_to_facing_mask() {
-    // vehicles.md §2: the foot/avatar transport family is
-    // four markers wide (facing in low 2 bits). Anchor
-    // TRANSPORT_MARKER_FOOT_LAST to FIRST + TRANSPORT_FACING_MASK
-    // so the foot band uses the same chain as the other
-    // transport families.
+fn transport_marker_foot_band_is_two_frames_wide() {
+    // vehicles.md §2: the on-foot family persists exactly 0x1C.
+    // 0x1D is the second frame of the on-foot sprite pair, accepted
+    // by the two "party is on foot" predicates as defensive breadth
+    // but never written; 0x1E and 0x1F are outside the published
+    // set entirely, so the band is two markers wide, not four.
     assert_eq!(
         TRANSPORT_MARKER_FOOT_LAST,
-        TRANSPORT_MARKER_FOOT_FIRST + TRANSPORT_FACING_MASK,
+        TRANSPORT_MARKER_FOOT_FIRST + TRANSPORT_TWO_FRAME_WEST_BIAS,
     );
     assert_eq!(TRANSPORT_MARKER_FOOT_FIRST, 0x1C);
-    assert_eq!(TRANSPORT_MARKER_FOOT_LAST, 0x1F);
+    assert_eq!(TRANSPORT_MARKER_FOOT_LAST, 0x1D);
+    assert_eq!(transport_family(0x1E), None);
+    assert_eq!(transport_family(0x1F), None);
 }
 
 #[test]
 fn transport_marker_families_chain_through_facing_mask() {
-    // vehicles.md §2: each transport-marker family is four
-    // markers wide (facing carried in low two bits =
-    // TRANSPORT_FACING_MASK). The ship-hoisted/ship-furled/
-    // skiff bands tile contiguously from 0x20. Anchor each
-    // *_LAST to FIRST + TRANSPORT_FACING_MASK and chain
-    // SHIP_FURLED/SKIFF *_FIRST to the previous family's
-    // *_LAST + 1.
+    // vehicles.md §2: only the ship-hoisted, ship-furled and skiff
+    // families carry full four-way facing in the low two bits
+    // (TRANSPORT_FACING_MASK); those three bands tile contiguously
+    // from 0x20. The magic carpet has TWO frames only - 0x14 east
+    // and 0x15 west - so its band is anchored to
+    // TRANSPORT_TWO_FRAME_WEST_BIAS instead, and 0x16/0x17 are
+    // values the original engine cannot produce.
     assert_eq!(
         TRANSPORT_MARKER_MAGIC_CARPET_LAST,
-        TRANSPORT_MARKER_MAGIC_CARPET_FIRST + TRANSPORT_FACING_MASK,
+        TRANSPORT_MARKER_MAGIC_CARPET_FIRST + TRANSPORT_TWO_FRAME_WEST_BIAS,
     );
     assert_eq!(
         TRANSPORT_MARKER_SHIP_HOISTED_LAST,
@@ -1257,7 +1277,9 @@ fn transport_marker_families_chain_through_facing_mask() {
         TRANSPORT_MARKER_SKIFF_LAST,
         TRANSPORT_MARKER_SKIFF_FIRST + TRANSPORT_FACING_MASK,
     );
-    assert_eq!(TRANSPORT_MARKER_MAGIC_CARPET_LAST, 0x17);
+    assert_eq!(TRANSPORT_MARKER_MAGIC_CARPET_LAST, 0x15);
+    assert_eq!(transport_family(0x16), None);
+    assert_eq!(transport_family(0x17), None);
     assert_eq!(TRANSPORT_MARKER_SHIP_HOISTED_LAST, 0x23);
     assert_eq!(TRANSPORT_MARKER_SKIFF_LAST, 0x2B);
 }
@@ -1598,7 +1620,7 @@ fn active_object_eviction_band_boundaries_chain() {
 #[test]
 fn lower_tile_class_first_offsets_chain_to_previous_last() {
     // catalogs/tile-catalog.md §2: the lower-half tile classes
-    // (terrain, path, wall, furniture, door) tile contiguously
+    // (terrain, path, wall, furniture, river) tile contiguously
     // from the water range upward. Anchor each *_FIRST to the
     // previous class's *_LAST + 1 so resizing any class
     // automatically shifts the later ranges.
@@ -1606,19 +1628,19 @@ fn lower_tile_class_first_offsets_chain_to_previous_last() {
     assert_eq!(TILE_PATH_FIRST, TILE_TERRAIN_LAST + 1);
     assert_eq!(TILE_WALL_FIRST, TILE_PATH_LAST + 1);
     assert_eq!(TILE_FURNITURE_FIRST, TILE_WALL_LAST + 1);
-    assert_eq!(TILE_DOOR_FIRST, TILE_FURNITURE_LAST + 1);
+    assert_eq!(TILE_RIVER_FIRST, TILE_FURNITURE_LAST + 1);
     assert_eq!(TILE_TERRAIN_FIRST, 0x05);
-    assert_eq!(TILE_DOOR_FIRST, 0x60);
+    assert_eq!(TILE_RIVER_FIRST, 0x60);
 }
 
 #[test]
 fn tile_class_first_offsets_chain_to_previous_last() {
     // catalogs/tile-catalog.md §2: the upper-half tile classes
-    // tile contiguously from the door range upward. Anchor
+    // tile contiguously from the river range upward. Anchor
     // each *_FIRST to the previous class's *_LAST + 1 so
     // adding or resizing any class automatically shifts the
     // later ranges.
-    assert_eq!(TILE_DECORATION_FIRST, TILE_DOOR_LAST + 1);
+    assert_eq!(TILE_DECORATION_FIRST, TILE_RIVER_LAST + 1);
     assert_eq!(TILE_BARRIER_FIRST, TILE_DECORATION_LAST + 1);
     assert_eq!(TILE_SPECIAL_FIRST, TILE_BARRIER_LAST + 1);
     assert_eq!(TILE_VEHICLE_FIRST, TILE_SPECIAL_LAST + 1);
@@ -1650,19 +1672,28 @@ fn constants_town_stair_range_anchors_to_town_mode_module() {
 }
 
 #[test]
-fn town_door_tile_range_anchors_to_tile_door_range() {
-    // catalogs/tile-catalog.md §6: door tile-ids occupy
-    // 0x60..=0x67. constants.rs declared TOWN_DOOR_TILE_FIRST
-    // = 96 / TOWN_DOOR_TILE_LAST = 103 as bare decimal
-    // literals in parallel with tile_classes.rs's
-    // TILE_DOOR_FIRST / TILE_DOOR_LAST. Anchor each end of
-    // the town-door range to the tile-catalog constants so
-    // the two parallel range definitions share one source of
-    // truth.
-    assert_eq!(TOWN_DOOR_TILE_FIRST, TILE_DOOR_FIRST);
-    assert_eq!(TOWN_DOOR_TILE_LAST, TILE_DOOR_LAST);
-    assert_eq!(TOWN_DOOR_TILE_FIRST, 96);
-    assert_eq!(TOWN_DOOR_TILE_LAST, 103);
+fn the_96_to_103_range_is_river_terrain_and_no_door_range_is_published_for_it() {
+    // catalogs/tile-catalog.md §7: "Top-down doors are not the
+    // obsolete contiguous decimal `96..103` range; every shipped
+    // Look entry in that range is river terrain. The live ordinary
+    // pairs used by Jimmy and Open are `0xB8`/`0xB9`
+    // (wooden/locked) and `0xBA`/`0xBB`
+    // (wooden-with-window/locked-with-window). Magic-locked plain
+    // and windowed forms are `0x97` and `0x98`." The engine used to
+    // carry TOWN_DOOR_TILE_FIRST/LAST = 96/103 anchored to a
+    // TILE_DOOR_FIRST/LAST pair; both are gone, and the live door
+    // identifiers are owned by the command predicates.
+    assert_eq!(TILE_RIVER_FIRST, 96);
+    assert_eq!(TILE_RIVER_LAST, 103);
+    for tile in TILE_RIVER_FIRST..=TILE_RIVER_LAST {
+        assert_eq!(coarse_tile_class(tile), TileClass::River);
+        assert_eq!(crate::tile_helpers::tile_class(tile), "river");
+    }
+    // The live door ids are classified by the command predicates,
+    // never by this coarse range.
+    for tile in [0xB8u8, 0xB9, 0xBA, 0xBB, 0x97, 0x98] {
+        assert_ne!(coarse_tile_class(tile), TileClass::River);
+    }
 }
 
 #[test]
@@ -1884,14 +1915,25 @@ fn npc_schedule_record_len_anchors_to_waypoint_and_time_counts() {
 }
 
 #[test]
-fn combat_spawn_count_cap_anchors_to_max_combatants() {
-    // combat.md §5: the post-roll spawn-count clamp reduces
-    // the count to the combat actor table's total combatant
-    // capacity (26 records). Anchor COMBAT_SPAWN_COUNT_CAP to
-    // COMBAT_MAX_COMBATANTS so the spawn cap and the combat
-    // actor capacity stay one value.
-    assert_eq!(COMBAT_SPAWN_COUNT_CAP as usize, COMBAT_MAX_COMBATANTS);
+fn combat_spawn_count_cap_is_the_reroll_defensive_cap() {
+    // combat.md §5: "The reroll arm ends with a defensive cap at
+    // twenty-six." The cap is a clamp on the rolled count only;
+    // active-objects.md §7: "Within combat there is no reserved
+    // player slot and no twenty-six-combatant cap; earlier drafts
+    // of this section claimed both and were wrong." So the value
+    // must NOT be anchored to any combatant-capacity constant.
     assert_eq!(COMBAT_SPAWN_COUNT_CAP, 26);
+    // combat.md §5: "The twenty-six cap is therefore unreachable
+    // defensive code" - the largest shipped default spawn count is
+    // the sentinel 16, and every non-sentinel value rerolls into
+    // [1, max] with max at most 13.
+    let shipped_max = (0..COMBAT_CLASS_COUNT as u8)
+        .filter_map(combat_class_stats)
+        .map(|row| row.default_spawn_count)
+        .max()
+        .unwrap();
+    assert!(shipped_max <= 16);
+    assert!(shipped_max < COMBAT_SPAWN_COUNT_CAP);
 }
 
 #[test]
@@ -2125,17 +2167,17 @@ fn npc_block_offsets_chain_through_slots_per_sub_map() {
 }
 
 #[test]
-fn combat_max_combatants_and_record_len_anchor() {
-    // active-objects.md §7: combat caps total combatants at
-    // the last monster slot index + 1 (slots 0..=25 = 26
-    // records); each combat actor record shares the 8-byte
-    // active-object record layout. Anchor COMBAT_MAX_COMBATANTS
-    // to COMBAT_MONSTER_SLOT_LAST + 1 and COMBAT_ACTOR_RECORD_LEN
-    // to OOL_RECORD_LEN so the combat-side counts and the
-    // format-side record stride share one source of truth.
-    assert_eq!(COMBAT_MAX_COMBATANTS, COMBAT_MONSTER_SLOT_LAST + 1);
+fn combat_actor_record_len_anchor() {
+    // active-objects.md §7: each combat actor record shares the
+    // 8-byte active-object record layout. Anchor
+    // COMBAT_ACTOR_RECORD_LEN to OOL_RECORD_LEN so the combat-side
+    // stride and the format-side record length share one value.
+    // The withdrawn `COMBAT_MAX_COMBATANTS == COMBAT_MONSTER_SLOT_LAST + 1`
+    // anchor that used to sit here is gone: §7 says "Within combat
+    // there is no reserved player slot and no twenty-six-combatant
+    // cap; earlier drafts of this section claimed both and were
+    // wrong."
     assert_eq!(COMBAT_ACTOR_RECORD_LEN, OOL_RECORD_LEN);
-    assert_eq!(COMBAT_MAX_COMBATANTS, 26);
     assert_eq!(COMBAT_ACTOR_RECORD_LEN, 8);
 }
 
@@ -2483,8 +2525,7 @@ fn save_location_and_lighting_offsets_chain() {
     assert_eq!(SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET, 0x0302);
     assert_eq!(SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN, OOL_SLOTS);
     assert_eq!(
-        SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET
-            + SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN,
+        SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_OFFSET + SAVE_COMBAT_INTERFERENCE_SOURCE_MAP_LEN,
         SAVE_SHADOWLORD_HIDEOUTS_OFFSET
     );
 }
@@ -3553,11 +3594,13 @@ fn ship_broadside_damage_roll_routes_through_named_min_max() {
 
 #[test]
 fn transport_marker_ranges_match_spec_table() {
-    // vehicles.md §2: each four-marker transport family carries
-    // facing in its low two bits.
+    // vehicles.md §2: the ship and skiff families carry full
+    // four-way facing in their low two bits; the horse, carpet and
+    // on-foot families are two frames wide.
     assert_eq!(TRANSPORT_FACING_MASK, 0b0000_0011);
+    assert_eq!(TRANSPORT_TWO_FRAME_WEST_BIAS, 1);
     assert_eq!(TRANSPORT_MARKER_MAGIC_CARPET_FIRST, 0x14);
-    assert_eq!(TRANSPORT_MARKER_MAGIC_CARPET_LAST, 0x17);
+    assert_eq!(TRANSPORT_MARKER_MAGIC_CARPET_LAST, 0x15);
     assert_eq!(TRANSPORT_MARKER_SHIP_HOISTED_FIRST, 0x20);
     assert_eq!(TRANSPORT_MARKER_SHIP_HOISTED_LAST, 0x23);
     assert_eq!(TRANSPORT_MARKER_SHIP_FURLED_FIRST, 0x24);
@@ -3582,9 +3625,10 @@ fn transport_marker_ranges_match_spec_table() {
         ),
         (TRANSPORT_MARKER_SKIFF_FIRST, TRANSPORT_MARKER_SKIFF_LAST),
     ] {
-        // Mounted horse is the only two-marker family (0x12..=0x13);
-        // every other family is four wide. Both shapes need their
-        // low-bit facing nibble to round-trip through the mask.
+        // Mounted horse (0x12..=0x13), magic carpet (0x14..=0x15)
+        // and foot (0x1C..=0x1D) are two markers wide; the ship and
+        // skiff families are four. Every shape needs its low-bit
+        // facing nibble to round-trip through the mask.
         assert!(last >= first);
         for marker in first..=last {
             assert_eq!(
@@ -3704,7 +3748,11 @@ fn native_transport_terrain_predicates_match_published_tile_sets() {
     ]);
     let ship = movement_range_table(&[(0x00, 0x02)]);
     for tile in 0u8..=u8::MAX {
-        assert_eq!(foot_terrain_accepts(tile), foot[tile as usize], "foot 0x{tile:02x}");
+        assert_eq!(
+            foot_terrain_accepts(tile),
+            foot[tile as usize],
+            "foot 0x{tile:02x}"
+        );
         assert_eq!(
             horse_terrain_accepts(tile),
             horse[tile as usize],
@@ -3715,7 +3763,11 @@ fn native_transport_terrain_predicates_match_published_tile_sets() {
             carpet[tile as usize],
             "carpet 0x{tile:02x}"
         );
-        assert_eq!(ship_terrain_accepts(tile), ship[tile as usize], "ship 0x{tile:02x}");
+        assert_eq!(
+            ship_terrain_accepts(tile),
+            ship[tile as usize],
+            "ship 0x{tile:02x}"
+        );
         assert_eq!(
             is_tile_walkable_for_transport(tile, None, TransportState::Foot),
             foot[tile as usize],
@@ -4069,12 +4121,8 @@ fn save_flow_underworld_write_uses_entry_required_disk() {
     // save-load.md §5.2 step 5: the one save-time UNDER.OOL
     // write is skipped only when the entry required-disk state is
     // already canonical Britannia index 1.
-    assert!(!save_flow_writes_underworld_mirror(
-        RequiredDisk::Britannia
-    ));
-    assert!(save_flow_writes_underworld_mirror(
-        RequiredDisk::Program
-    ));
+    assert!(!save_flow_writes_underworld_mirror(RequiredDisk::Britannia));
+    assert!(save_flow_writes_underworld_mirror(RequiredDisk::Program));
     assert!(save_flow_writes_underworld_mirror(
         RequiredDisk::UltimaVSave
     ));
@@ -4199,14 +4247,14 @@ fn tile_pixel_packing_density_matches_spec() {
     assert_eq!(EGA_TILE_BYTES, CGA_TILE_BYTES * 2);
 }
 
+/// `formats/bit.md §3`: each sub-image opens with a width word and a
+/// height word before its one-bit-per-pixel rows — the "4" in the
+/// record stride "4 + max(1, ceil(width / 8)) * height".
 #[test]
-fn bit_strip_header_widths_match_spec() {
-    // formats/bit.md §3: each strip body opens with a
-    // width-related word and a row-count word before the packed
-    // pixel payload — four bytes of header total.
-    assert_eq!(BIT_STRIP_WIDTH_WORD_LEN, 2);
-    assert_eq!(BIT_STRIP_ROW_COUNT_WORD_LEN, 2);
-    assert_eq!(BIT_STRIP_HEADER_LEN, 4);
+fn bit_sub_image_header_widths_match_spec() {
+    assert_eq!(BIT_SUB_IMAGE_WIDTH_WORD_LEN, 2);
+    assert_eq!(BIT_SUB_IMAGE_HEIGHT_WORD_LEN, 2);
+    assert_eq!(BIT_SUB_IMAGE_HEADER_LEN, 4);
 }
 
 #[test]
@@ -4412,21 +4460,17 @@ fn tile_image_directory_header_widths_match_spec() {
     assert_eq!(TILE_IMAGE_BLOCK_HEADER_BYTES, 4);
 }
 
+/// `formats/tiles.md §5.1.1`, "Resident miniature tile glyphs —
+/// withdrawn": "**Withdrawn in full.** ... No such path exists." The
+/// thirty-two-byte records are "the sixteen-bearing beam stencil of the
+/// night-time rotating light beacon", so the record length is owned by
+/// `light_beacon.rs`, and there are no miniature-tile constants left to
+/// pin.
 #[test]
-fn miniature_tile_glyph_record_layout_matches_spec() {
-    // formats/tiles.md §5.1.1: each resident miniature tile glyph
-    // record describes sixteen rows with two offset bytes per row,
-    // for thirty-two bytes per tile. Promote the row count, the
-    // bytes-per-row, and the derived record length so a future
-    // miniature-glyph decoder has named constants instead of bare
-    // literals.
-    assert_eq!(MINIATURE_TILE_ROWS, 16);
-    assert_eq!(MINIATURE_TILE_OFFSET_BYTES_PER_ROW, 2);
-    assert_eq!(MINIATURE_TILE_RECORD_BYTES, 32);
-    assert_eq!(
-        MINIATURE_TILE_RECORD_BYTES,
-        MINIATURE_TILE_ROWS * MINIATURE_TILE_OFFSET_BYTES_PER_ROW
-    );
+fn resident_miniature_tile_glyph_path_is_withdrawn() {
+    assert_eq!(BEACON_STENCIL_RECORD_BYTES, 32);
+    assert_eq!(BEACON_STENCIL_RECORD_BYTES, BEACON_STENCIL_MAX_OFFSETS * 2);
+    assert_eq!(BEACON_STENCIL_TABLE_BYTES, 512);
 }
 
 #[test]
@@ -4588,12 +4632,16 @@ fn quest_password_constants_match_spec_strings() {
     // distinct from each other; they should not accidentally
     // alias to the same string after any future normalisation.
     assert_ne!(QUEST_PASSWORD_RESISTANCE, QUEST_PASSWORD_OPPRESSION);
-    assert!(QUEST_PASSWORD_RESISTANCE
-        .chars()
-        .all(|c| c.is_ascii_uppercase()));
-    assert!(QUEST_PASSWORD_OPPRESSION
-        .chars()
-        .all(|c| c.is_ascii_uppercase()));
+    assert!(
+        QUEST_PASSWORD_RESISTANCE
+            .chars()
+            .all(|c| c.is_ascii_uppercase())
+    );
+    assert!(
+        QUEST_PASSWORD_OPPRESSION
+            .chars()
+            .all(|c| c.is_ascii_uppercase())
+    );
 }
 
 #[test]
@@ -4641,7 +4689,10 @@ fn jimmy_chest_threshold_bias_is_shared_across_object_and_dungeon_paths() {
     for dexterity in 0u8..30 {
         let obj = object_chest_jimmy_threshold(object_stat, dexterity).unwrap();
         let dun = dungeon_chest_jimmy_threshold(dungeon_depth, dexterity);
-        assert_eq!(obj, dun, "Dexterity {dexterity}: object {obj} vs dungeon {dun}");
+        assert_eq!(
+            obj, dun,
+            "Dexterity {dexterity}: object {obj} vs dungeon {dun}"
+        );
     }
 }
 
@@ -4672,15 +4723,15 @@ fn karma_dat_band_width_matches_rescue_and_camp_selectors() {
 
 #[test]
 fn input_code_direction_range_bounds_match_spec() {
-    // input.md §5: the eight published direction codes occupy two
-    // contiguous high-byte ranges — diagonals 0xD3..=0xD6 and
-    // cardinals 0xFB..=0xFE. Promote both range bounds so callers
+    // input.md §5: "The four cardinals land in a low code block and
+    // the four diagonals in a high one" — cardinals 0x01..=0x04 and
+    // diagonals 0xD3..=0xD6. Promote both range bounds so callers
     // that probe whether a returned byte is a direction can use a
     // named range pair instead of bare hex literals.
     assert_eq!(INPUT_CODE_DIAGONAL_FIRST, 0xD3);
     assert_eq!(INPUT_CODE_DIAGONAL_LAST, 0xD6);
-    assert_eq!(INPUT_CODE_CARDINAL_FIRST, 0xFB);
-    assert_eq!(INPUT_CODE_CARDINAL_LAST, 0xFE);
+    assert_eq!(INPUT_CODE_CARDINAL_FIRST, 0x01);
+    assert_eq!(INPUT_CODE_CARDINAL_LAST, 0x04);
     for byte in INPUT_CODE_DIAGONAL_FIRST..=INPUT_CODE_DIAGONAL_LAST {
         let dir = input_code_direction(byte).unwrap();
         assert!(!dir.is_cardinal(), "byte {byte:#04x} should be diagonal");
@@ -4839,11 +4890,7 @@ fn disk_write_retry_wrapper_restores_read_handler_after_retry() {
         DiskRetryPolicy::unbounded(),
         || {
             calls += 1;
-            if calls == 1 {
-                Ok(0)
-            } else {
-                Ok(7)
-            }
+            if calls == 1 { Ok(0) } else { Ok(7) }
         },
         |event| {
             prompts.push(event);
@@ -4954,8 +5001,7 @@ fn saved_ool_io_counts_distinguish_load_mirroring_from_save_staging() {
             under_ool: 2,
         }
     );
-    let (staged, counts) =
-        stage_saved_ool_for_save(&dir, RequiredDisk::Britannia).unwrap();
+    let (staged, counts) = stage_saved_ool_for_save(&dir, RequiredDisk::Britannia).unwrap();
     assert_eq!(staged, saved_ool);
     assert_eq!(
         counts,
@@ -5095,9 +5141,10 @@ fn miscmaps_cutscene_map_parser_extracts_visible_cells() {
     assert_eq!(map.tile(0, 0), Some(0));
     assert_eq!(map.tile(10, 10), Some(170));
     assert_eq!(map.tile(11, 0), None);
-    assert!(!map
-        .tiles
-        .contains(&(0xf0 + MISCMAPS_CUTSCENE_VISIBLE_COLUMNS as u8)));
+    assert!(
+        !map.tiles
+            .contains(&(0xf0 + MISCMAPS_CUTSCENE_VISIBLE_COLUMNS as u8))
+    );
 }
 
 #[test]
@@ -5132,7 +5179,7 @@ fn tlk_introducer_argument_widths_match_spec_table() {
     // Non-introducer codes still return None, including 0x87's
     // no-argument follow-up keyword scan.
     assert_eq!(tlk_introducer_argument_count(TLK_CODE_PAUSE), None);
-    assert_eq!(tlk_introducer_argument_count(TLK_CODE_SET_FLAG), None);
+    assert_eq!(tlk_introducer_argument_count(TLK_CODE_KEYWORD_ALIAS), None);
     assert_eq!(tlk_introducer_argument_count(0), None);
 }
 
@@ -5323,23 +5370,139 @@ fn display_text_cell_rect_converts_to_inclusive_pixel_rect() {
     );
 }
 
+/// `display-driver-abi.md §9.5`, general path: "The entry takes an
+/// inclusive rectangle and a **signed row distance**: positive moves the
+/// rectangle's contents one way, negative the other, and the sign is
+/// folded into the row-walk direction so the copy never overlaps itself
+/// destructively. ... When the copy finishes, the entry **blanks the
+/// vacated band**: it saves the current drawing colour, fills the band
+/// the contents moved out of with colour index `0`, and restores the
+/// colour. The band is computed from the distance and its sign, so it is
+/// the correct edge of the rectangle in either direction."
 #[test]
-fn display_surface_scrolls_rect_up_one_text_row_and_blanks_exposed_band() {
-    let mut surface = EgaDisplaySurface::new();
+fn display_surface_scrolls_rect_by_signed_distance_and_blanks_vacated_band() {
+    let ramp = |surface: &mut EgaDisplaySurface| {
+        for y in 0..16 {
+            surface.fill_rect(normalize_clamp_pixel_rect(0, y, 15, y).unwrap(), y as u8);
+        }
+    };
     let rect = normalize_clamp_pixel_rect(0, 0, 15, 15).unwrap();
-    for y in 0..16 {
-        surface.fill_rect(
-            normalize_clamp_pixel_rect(0, y, 15, y).unwrap(),
-            y as u8,
-        );
-    }
 
-    surface.scroll_text_rect_up_one_row(rect, 0);
+    // One text row up: the wrapper's fixed distance.
+    let mut surface = EgaDisplaySurface::new();
+    ramp(&mut surface);
+    surface.set_current_color(7);
+    surface.scroll_text_rect_up_one_row(rect);
 
     assert_eq!(surface.read_pixel(0, 0), Some(8));
     assert_eq!(surface.read_pixel(15, 7), Some(15));
     assert_eq!(surface.read_pixel(0, 8), Some(0));
     assert_eq!(surface.read_pixel(15, 15), Some(0));
+    // The drawing colour is saved across the band blank and restored.
+    assert_eq!(surface.current_color(), 7);
+
+    // The distance argument is live, and not only in multiples of a cell:
+    // three scanlines up vacates the bottom three rows.
+    let mut surface = EgaDisplaySurface::new();
+    ramp(&mut surface);
+    surface.scroll_rect_rows(rect, -3);
+
+    assert_eq!(surface.read_pixel(0, 0), Some(3));
+    assert_eq!(surface.read_pixel(15, 12), Some(15));
+    assert_eq!(surface.read_pixel(0, 13), Some(0));
+    assert_eq!(surface.read_pixel(15, 15), Some(0));
+
+    // The opposite sign scrolls the other way and blanks the other edge.
+    let mut surface = EgaDisplaySurface::new();
+    ramp(&mut surface);
+    surface.scroll_rect_rows(rect, 3);
+
+    assert_eq!(surface.read_pixel(0, 15), Some(12));
+    assert_eq!(surface.read_pixel(15, 4), Some(1));
+    assert_eq!(surface.read_pixel(0, 2), Some(0));
+    assert_eq!(surface.read_pixel(15, 0), Some(0));
+}
+
+/// `display-driver-abi.md §9.5`: the entry "reads the descriptor's
+/// render-target selector and has a **separate, complete body for the
+/// hidden surface**, exactly like the fill, tile and glyph entries." An
+/// earlier revision called `0x27` "strictly a right-side-text-panel
+/// scroll"; that is withdrawn, so a hidden-surface scroll of an
+/// arbitrary rectangle must be a real scroll rather than a no-op.
+#[test]
+fn display_dispatch_scroll_rect_runs_on_the_hidden_surface() {
+    let mut surface = EgaDisplaySurface::new();
+    surface.set_render_target(DisplayRenderTarget::Back);
+    for y in 0..16 {
+        surface.fill_back_rect(normalize_clamp_pixel_rect(0, y, 15, y).unwrap(), y as u8);
+    }
+    let rect = normalize_clamp_pixel_rect(0, 0, 15, 15).unwrap();
+
+    assert_eq!(
+        surface
+            .execute(EgaDisplayOperation::ScrollRect {
+                rect,
+                rows: -(CH_CELL_SIDE as i32),
+            })
+            .unwrap(),
+        EgaDispatchResult::None
+    );
+
+    assert_eq!(surface.back_pixels()[0], 8);
+    assert_eq!(surface.back_pixels()[7 * DISPLAY_SURFACE_WIDTH + 15], 15);
+    assert_eq!(surface.back_pixels()[8 * DISPLAY_SURFACE_WIDTH], 0);
+    // The visible page was never touched.
+    assert_eq!(surface.read_pixel(0, 0), Some(0));
+}
+
+/// `display-driver-abi.md §9.5`, message-panel fast path: "This path is
+/// hardwired and ignores both the rest of the rectangle and the distance
+/// argument", scrolls "exactly eight scanlines upward", and its exposed
+/// band is "Not blanked."
+#[test]
+fn display_surface_message_panel_scroll_ignores_distance_and_leaves_band_unblanked() {
+    // A non-zero ramp, so "kept its old value" is distinguishable from
+    // "blanked to colour 0".
+    let value = |y: usize| ((y % 15) + 1) as u8;
+    let mut surface = EgaDisplaySurface::new();
+    for y in MESSAGE_PANEL_SCROLL_TOP..=MESSAGE_PANEL_SCROLL_BOTTOM {
+        surface.fill_rect(
+            normalize_clamp_pixel_rect(
+                MESSAGE_PANEL_SCROLL_LEFT_EDGE as i32,
+                y as i32,
+                MESSAGE_PANEL_SCROLL_RIGHT_EDGE as i32,
+                y as i32,
+            )
+            .unwrap(),
+            value(y),
+        );
+    }
+    // A rectangle naming the panel's left edge, with a distance the fast
+    // path must ignore.
+    let rect =
+        normalize_clamp_pixel_rect(MESSAGE_PANEL_SCROLL_LEFT_EDGE as i32, 88, 319, 199).unwrap();
+    surface.scroll_rect_rows(rect, -1);
+
+    // Eight scanlines up, whatever the caller asked for.
+    assert_eq!(
+        surface.read_pixel(MESSAGE_PANEL_SCROLL_LEFT_EDGE, 88),
+        Some(value(96))
+    );
+    assert_eq!(
+        surface.read_pixel(MESSAGE_PANEL_SCROLL_RIGHT_EDGE, 191),
+        Some(value(199))
+    );
+    // The exposed bottom band keeps whatever it held; it is not blanked.
+    assert_eq!(
+        surface.read_pixel(MESSAGE_PANEL_SCROLL_LEFT_EDGE, 199),
+        Some(value(199))
+    );
+    // Rows above the panel and columns left of it are untouched.
+    assert_eq!(surface.read_pixel(0, 88), Some(0));
+    assert_eq!(
+        surface.read_pixel(MESSAGE_PANEL_SCROLL_LEFT_EDGE, 87),
+        Some(0)
+    );
 }
 
 #[test]
@@ -5356,7 +5519,9 @@ fn display_surface_draws_tiles_and_fixed_glyphs_to_front_buffer() {
     font_bytes[glyph] = 0b1000_0001;
     font_bytes[glyph + 1] = 0b0111_1110;
     let font = parse_ch_font(&font_bytes, "fixture").unwrap();
-    surface.draw_fixed_glyph_cell(&font, b'A', 1, 1, 0x0e, 0x01).unwrap();
+    surface
+        .draw_fixed_glyph_cell(&font, b'A', 1, 1, 0x0e, 0x01)
+        .unwrap();
 
     assert_eq!(surface.read_pixel(8, 8), Some(0x0e));
     assert_eq!(surface.read_pixel(9, 8), Some(0x01));
@@ -5376,7 +5541,9 @@ fn display_entries_have_real_back_buffer_bodies_per_abi_sections_6_8_and_9_2() {
     // would leave the endgame and map-viewport fades dissolving stale
     // pixels.
     let mut surface = EgaDisplaySurface::new();
-    surface.execute(EgaDisplayOperation::InitBackBuffer).unwrap();
+    surface
+        .execute(EgaDisplayOperation::InitBackBuffer)
+        .unwrap();
     surface
         .execute(EgaDisplayOperation::SetRenderTarget(
             DisplayRenderTarget::Back,
@@ -5384,14 +5551,18 @@ fn display_entries_have_real_back_buffer_bodies_per_abi_sections_6_8_and_9_2() {
         .unwrap();
 
     // `0x3F` clipped rectangle fill.
-    surface.execute(EgaDisplayOperation::SetCurrentColor(0x0c)).unwrap();
+    surface
+        .execute(EgaDisplayOperation::SetCurrentColor(0x0c))
+        .unwrap();
     let rect = normalize_clamp_pixel_rect(0, 0, 3, 3).unwrap();
     surface
         .execute(EgaDisplayOperation::FillClippedRect(rect))
         .unwrap();
 
     // `0x30` pixel plot.
-    surface.execute(EgaDisplayOperation::SetCurrentColor(0x09)).unwrap();
+    surface
+        .execute(EgaDisplayOperation::SetCurrentColor(0x09))
+        .unwrap();
     surface
         .execute(EgaDisplayOperation::PlotPixel { x: 100, y: 100 })
         .unwrap();
@@ -5429,9 +5600,17 @@ fn display_entries_have_real_back_buffer_bodies_per_abi_sections_6_8_and_9_2() {
     assert_eq!(at(3, 3), 0x0c);
     assert_eq!(at(4, 0), 0x00, "the fill must not spill past the rectangle");
     assert_eq!(at(100, 100), 0x09, "0x30 must plot on the hidden surface");
-    assert_eq!(at(304, 184), 3, "0x51 must stamp the tile on the hidden surface");
+    assert_eq!(
+        at(304, 184),
+        3,
+        "0x51 must stamp the tile on the hidden surface"
+    );
     assert_eq!(at(319, 199), 3);
-    assert_eq!(at(8, 8), 0x0e, "0x5D must draw the glyph on the hidden surface");
+    assert_eq!(
+        at(8, 8),
+        0x0e,
+        "0x5D must draw the glyph on the hidden surface"
+    );
     assert_eq!(at(9, 8), 0x01, "and its background where the bit is clear");
 
     // None of it may leak onto the visible page while the selector names
@@ -5444,7 +5623,9 @@ fn display_entries_have_real_back_buffer_bodies_per_abi_sections_6_8_and_9_2() {
     // `display-driver-abi.md §9.2` dispatch offset `0x33`: the line entry
     // re-points its pixel writer at the visible page before every pixel,
     // so it draws to the FRONT buffer even with the back buffer selected.
-    surface.execute(EgaDisplayOperation::SetCurrentColor(0x0f)).unwrap();
+    surface
+        .execute(EgaDisplayOperation::SetCurrentColor(0x0f))
+        .unwrap();
     surface
         .execute(EgaDisplayOperation::DrawLine {
             x0: 0,
@@ -5541,7 +5722,9 @@ fn display_driver_executes_back_buffer_copy_and_front_fill_boundaries() {
         EgaDispatchResult::ScreenHeight(200)
     );
     assert_eq!(
-        surface.execute(EgaDisplayOperation::InitBackBuffer).unwrap(),
+        surface
+            .execute(EgaDisplayOperation::InitBackBuffer)
+            .unwrap(),
         EgaDispatchResult::BackBufferSegment(0)
     );
     assert!(surface.back_buffer_active());
@@ -5562,10 +5745,7 @@ fn display_driver_executes_back_buffer_copy_and_front_fill_boundaries() {
     surface
         .execute(EgaDisplayOperation::FillBackRect { rect, color: 0x1e })
         .unwrap();
-    assert_eq!(
-        surface.back_pixels()[2 * DISPLAY_SURFACE_WIDTH + 2],
-        0x0e
-    );
+    assert_eq!(surface.back_pixels()[2 * DISPLAY_SURFACE_WIDTH + 2], 0x0e);
     assert_eq!(surface.read_pixel(2, 2), Some(0));
 
     surface
@@ -5604,7 +5784,10 @@ fn display_driver_dissolve_progresses_in_deterministic_partial_order() {
         5
     );
 
-    assert_eq!(surface.dissolve_back_to_front_step(&mut dissolve, usize::MAX), 7);
+    assert_eq!(
+        surface.dissolve_back_to_front_step(&mut dissolve, usize::MAX),
+        7
+    );
     assert!(dissolve.is_finished());
     for y in rect.y0..=rect.y1 {
         for x in rect.x0..=rect.x1 {
@@ -5676,7 +5859,7 @@ fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
             x0: 0,
             y0: 4,
             x1: 2,
-            y1: 4
+            y1: 4,
         })
         .unwrap();
     assert_eq!(surface.read_pixel(0, 4), Some(0x0f));
@@ -6205,8 +6388,13 @@ fn fresh_dungeon_monster_setup_writes_the_public_record_shape() {
     assert_eq!(object.phase, DUNGEON_MONSTER_INITIAL_STATES[family]);
     assert_eq!(object.z, 3);
     assert_ne!((object.x, object.y), (state.player.x, state.player.y));
-    assert!(dungeon_active_object_spawn_accepts(state.dungeon_cell(3, object.x, object.y)));
-    assert!(matches!(object.aux3, DUNGEON_MONSTER_FLOOR_DEP3 | DUNGEON_MONSTER_UPPER_DEP3));
+    assert!(dungeon_active_object_spawn_accepts(
+        state.dungeon_cell(3, object.x, object.y)
+    ));
+    assert!(matches!(
+        object.aux3,
+        DUNGEON_MONSTER_FLOOR_DEP3 | DUNGEON_MONSTER_UPPER_DEP3
+    ));
     if object.aux3 == DUNGEON_MONSTER_UPPER_DEP3 {
         assert!(matches!(family, 2 | 4));
     }
@@ -6219,7 +6407,10 @@ fn failed_dungeon_monster_setup_uses_dep1_as_the_inactive_marker() {
     assert!(!state.setup_dungeon_active_monster_fresh());
 
     let object = state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT];
-    assert_eq!((object.type_byte, object.tile, object.x, object.y), (0, 0, 0, 0));
+    assert_eq!(
+        (object.type_byte, object.tile, object.x, object.y),
+        (0, 0, 0, 0)
+    );
     assert_eq!(object.aux1, DUNGEON_MONSTER_INACTIVE_DEP1);
     assert!(!dungeon_monster_record_active(object));
 }
@@ -6252,22 +6443,45 @@ fn talk_branch_flag_bank_caps_at_thirty_two_bits() {
 }
 
 #[test]
-fn talk_through_tile_band_constants_match_spec() {
-    // conversation.md §2: Talk advances `(dx, dy)` once more when
-    // the facing tile is a talk-through tile (shop counter, low
-    // fence, etc.) so the player can address an NPC across the
-    // barrier. Promote the band edges to named constants so the
-    // is_talk_through_tile classifier does not bake `64..=71` as
-    // bare literals.
-    assert_eq!(TALK_THROUGH_TILE_FIRST, 64);
-    assert_eq!(TALK_THROUGH_TILE_LAST, 71);
-    // Every tile in the band classifies as talk-through.
-    for tile in TALK_THROUGH_TILE_FIRST..=TALK_THROUGH_TILE_LAST {
+fn talk_through_tile_white_list_matches_published_id_set() {
+    // conversation.md §2 step 3: Talk advances `(dx, dy)` once more
+    // when the facing tile is a talk-through tile (counter-height
+    // and waist-height furniture). The shipped white-list is the
+    // DISCRETE id set 0x29, 0x94..0x9C, 0xA5, 0xAE, 0xBA..0xBB,
+    // 0xBE, 0xCA..0xCB - not a contiguous band. An earlier revision
+    // of this engine used `0x40..=0x47`, which shares no member with
+    // the published set and let Talk reach through the wall band.
+    assert_eq!(
+        TALK_THROUGH_TILES,
+        [
+            0x29, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0x9B, 0x9C, 0xA5, 0xAE, 0xBA, 0xBB,
+            0xBE, 0xCA, 0xCB,
+        ]
+    );
+    for tile in TALK_THROUGH_TILES {
         assert!(is_talk_through_tile(tile), "tile {tile:#04x}");
     }
-    // The neighbouring tiles on either side do not.
-    assert!(!is_talk_through_tile(TALK_THROUGH_TILE_FIRST - 1));
-    assert!(!is_talk_through_tile(TALK_THROUGH_TILE_LAST + 1));
+    // The mirror sits immediately past the 0x94..0x9C run and is
+    // deliberately excluded, so Talk never reaches past a mirror.
+    assert_eq!(TALK_MIRROR_TILE, 0x9D);
+    assert!(!is_talk_through_tile(TALK_MIRROR_TILE));
+    // Neighbours of every run edge stay opaque.
+    for tile in [
+        0x28, 0x2A, 0x93, 0x9E, 0xA4, 0xA6, 0xAD, 0xAF, 0xB9, 0xBC, 0xBD, 0xBF, 0xC9, 0xCC,
+    ] {
+        assert!(!is_talk_through_tile(tile), "tile {tile:#04x}");
+    }
+    // The old wall/closed-door band is opaque to Talk in full.
+    for tile in 0x40..=0x47u8 {
+        assert!(!is_talk_through_tile(tile), "tile {tile:#04x}");
+    }
+    // Exactly seventeen ids are talk-through across the whole space.
+    assert_eq!(
+        (0..=u8::MAX)
+            .filter(|tile| is_talk_through_tile(*tile))
+            .count(),
+        TALK_THROUGH_TILES.len()
+    );
 }
 
 #[test]
@@ -6376,10 +6590,41 @@ fn dawn_dusk_hour_constants_match_spec() {
         daylight_base_value(DUSK_HOUR + 1, 0, false, 0),
         FULL_DARKNESS
     );
-    // The underworld and dungeon depths force full darkness
-    // regardless of the hour.
+    // `lighting.md §3`: the plane/floor forced-dark test is on the party's Z
+    // "read as an unsigned byte: any Z with its high bit set - that is, any
+    // value above one hundred twenty-seven". The Underworld plane and a
+    // below-entry town floor both carry `0xFF`.
     assert_eq!(daylight_base_value(12, 0, true, 0), FULL_DARKNESS);
-    assert_eq!(daylight_base_value(12, 0, false, 1), FULL_DARKNESS);
+    assert_eq!(daylight_base_value(12, 0, false, 0xFF), FULL_DARKNESS);
+    assert_eq!(
+        daylight_base_value(12, 0, false, FORCED_DARK_MIN_DEPTH_Z),
+        FULL_DARKNESS
+    );
+
+    // The same section is explicit that it "does **not** select ordinary
+    // dungeon levels: a dungeon level index counts upward from zero at the top
+    // of the stack, so it never sets the high bit, and the ambient value
+    // computed while the party is inside a dungeon is simply whatever the clock
+    // produces."
+    //
+    // This assertion previously read `daylight_base_value(12, 0, false, 1) ==
+    // FULL_DARKNESS` under the comment "dungeon depths force full darkness".
+    // That is the earlier wording §3 withdraws, and it passed only because the
+    // engine still implemented the retracted rule — the test and the defect
+    // were introduced together and protected each other.
+    assert_ne!(daylight_base_value(12, 0, false, 1), FULL_DARKNESS);
+    assert_eq!(
+        daylight_base_value(12, 0, false, 1),
+        daylight_base_value(12, 0, false, 0),
+        "an ordinary dungeon level takes whatever the clock produces",
+    );
+    for depth in 1..FORCED_DARK_MIN_DEPTH_Z {
+        assert_ne!(
+            daylight_base_value(12, 0, false, depth),
+            FULL_DARKNESS,
+            "depth {depth} has no high bit and must not force darkness",
+        );
+    }
 }
 
 #[test]
@@ -6679,29 +6924,39 @@ fn dungeon_walkability_matches_room_trigger_class_table() {
 }
 
 #[test]
-fn tlk_ask_party_name_match_returns_1_based_slot_index() {
-    // conversation.md §7.6: ASK-PARTY-NAME compares the typed
-    // answer to each live member's name with the bit-7-stripping
-    // case-insensitive convention. Returns the 1-based slot
-    // index on a match; 0 means no match.
+fn tlk_ask_who_match_uses_the_published_first_four_character_rule() {
+    // conversation.md §7.6: "For each active party slot in order, the
+    // engine takes the first four characters of that member's name and
+    // searches for them as a substring of the typed line. A hit counts
+    // only at the start of the line or immediately after a literal space;
+    // a hit in the middle of a longer word is rejected and the scan
+    // continues with the next member."
+    //
+    // This replaces the whole-string equality matcher this engine used to
+    // route 0x88 through, which the same section withdraws.
     let names: [&[u8]; 4] = [b"Avatar", b"Shamino", b"Iolo", b"Mariah"];
-    assert_eq!(tlk_ask_party_name_match(b"Avatar", &names), 1);
-    assert_eq!(tlk_ask_party_name_match(b"shamino", &names), 2);
-    assert_eq!(tlk_ask_party_name_match(b"IOLO", &names), 3);
-    assert_eq!(tlk_ask_party_name_match(b"Mariah", &names), 4);
-    // No match returns 0.
-    assert_eq!(tlk_ask_party_name_match(b"Dupre", &names), 0);
-    assert_eq!(tlk_ask_party_name_match(b"", &names), 0);
-    // Partial prefixes don't match (whole-string equality).
-    assert_eq!(tlk_ask_party_name_match(b"Shamin", &names), 0);
-    // High-bit-encoded name on the engine side matches a plain
-    // typed answer (the typed side is bit-7-stripped too).
+    assert_eq!(tlk_ask_who_match(b"Avatar", &names), 1);
+    assert_eq!(tlk_ask_who_match(b"shamino", &names), 2);
+    assert_eq!(tlk_ask_who_match(b"IOLO", &names), 3);
+    assert_eq!(tlk_ask_who_match(b"Mariah", &names), 4);
+    // Four characters is enough, and the rest of the line is ignored.
+    assert_eq!(tlk_ask_who_match(b"Sham", &names), 2);
+    assert_eq!(tlk_ask_who_match(b"Marianne of Britain", &names), 4);
+    // A hit after a literal space counts.
+    assert_eq!(tlk_ask_who_match(b"my friend Iolo", &names), 3);
+    // A hit inside a longer word is rejected and the scan continues.
+    assert_eq!(tlk_ask_who_match(b"triolo", &names), 0);
+    // Empty input is its own early exit.
+    assert_eq!(tlk_ask_who_match(b"", &names), 0);
+    assert_eq!(tlk_ask_who_match(b"Dupre", &names), 0);
+    // High-bit-encoded name on the engine side matches a plain typed
+    // answer (the typed side is bit-7-stripped too).
     let obfuscated: [u8; 4] = [b'I' | 0x80, b'o' | 0x80, b'l' | 0x80, b'o' | 0x80];
     let obfuscated_names: [&[u8]; 1] = [obfuscated.as_slice()];
-    assert_eq!(tlk_ask_party_name_match(b"iolo", &obfuscated_names), 1);
+    assert_eq!(tlk_ask_who_match(b"iolo", &obfuscated_names), 1);
     // Empty roster slots are skipped.
     let with_blank: [&[u8]; 3] = [b"", b"Geoffrey", b""];
-    assert_eq!(tlk_ask_party_name_match(b"Geoffrey", &with_blank), 2);
+    assert_eq!(tlk_ask_who_match(b"Geoffrey", &with_blank), 2);
 }
 
 #[test]
@@ -6716,10 +6971,11 @@ fn dos_eof_marker_byte_is_ctrl_z() {
 #[test]
 fn foot_avatar_transport_marker_default_and_band_match_spec() {
     // vehicles.md §2: clean-seed foot/avatar transport marker is
-    // 0x1C (facing north); the foot family band is 0x1C..=0x1F.
+    // 0x1C, the single persistent on-foot value; the accepted foot
+    // band is 0x1C..=0x1D, where 0x1D is defensive breadth only.
     assert_eq!(TRANSPORT_MARKER_FOOT_DEFAULT, 0x1C);
     assert_eq!(TRANSPORT_MARKER_FOOT_FIRST, 0x1C);
-    assert_eq!(TRANSPORT_MARKER_FOOT_LAST, 0x1F);
+    assert_eq!(TRANSPORT_MARKER_FOOT_LAST, 0x1D);
     // Each byte in the foot band classifies as the foot family.
     for marker in TRANSPORT_MARKER_FOOT_FIRST..=TRANSPORT_MARKER_FOOT_LAST {
         assert_eq!(
@@ -7602,7 +7858,7 @@ fn chest_primary_and_secondary_pool_thresholds_match_published_table() {
     assert_eq!(chest_secondary_pool_threshold(42), Some(23));
     assert_eq!(chest_secondary_pool_threshold(46), Some(15));
     assert_eq!(chest_secondary_pool_threshold(47), None); // Amulet disabled
-                                                          // Out-of-range indices.
+    // Out-of-range indices.
     assert_eq!(chest_secondary_pool_threshold(48), None);
     assert_eq!(chest_secondary_pool_threshold(usize::MAX), None);
 }
@@ -8319,7 +8575,13 @@ fn tlk_payment_milestone_requires_live_beggar_speaker_and_aged_cooldown() {
     // standing. The payment does not increment the counter.
     let mut state = test_state(open_grid(), 1, 1);
     state.load_scheduled_npcs(&[
-        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
         NpcSlot {
             slot: 1,
             type_byte: TLK_GOLD_PAYMENT_KARMA_SPEAKER_CLASS,
@@ -8414,7 +8676,10 @@ fn shipped_return_to_view_strips_are_nineteen_across_by_four_down() {
 
     for strip in 0..RTV_STRIP_COUNT {
         let cells = &strips.strips[strip];
-        assert_eq!(cells.len(), RTV_STRIP_VISIBLE_COLUMNS * RTV_STRIP_VISIBLE_ROWS);
+        assert_eq!(
+            cells.len(),
+            RTV_STRIP_VISIBLE_COLUMNS * RTV_STRIP_VISIBLE_ROWS
+        );
         assert!(
             cells.iter().all(|tile| *tile != 0),
             "strip {strip} has an empty cell; the terrain-first draw rule assumes none"
@@ -8433,8 +8698,8 @@ fn shipped_return_to_view_strips_are_nineteen_across_by_four_down() {
             let row_start = MISCMAPS_RTV_STRIP_SECTION_OFFSET
                 + strip * RTV_STRIP_RECORD_BYTES
                 + row * MISCMAPS_RTV_STRIP_ROW_STRIDE;
-            let padding = &bytes[row_start + RTV_STRIP_VISIBLE_COLUMNS
-                ..row_start + MISCMAPS_RTV_STRIP_ROW_STRIDE];
+            let padding = &bytes
+                [row_start + RTV_STRIP_VISIBLE_COLUMNS..row_start + MISCMAPS_RTV_STRIP_ROW_STRIDE];
             assert!(
                 padding.iter().all(|byte| *byte == 0),
                 "strip {strip} row {row} padding is not zero"
@@ -8493,11 +8758,9 @@ fn return_to_view_published_wait_cadence_constants() {
 
 #[test]
 fn title_tick_frame_set_requires_complete_ega_palette_frames() {
-    let short = TitleTickFrameSet::from_palette_indices(
-        vec![0; TITLE_TICK_FRAME_SET_BYTES - 1],
-        "fixture",
-    )
-    .expect_err("short title-tick frame set must fail");
+    let short =
+        TitleTickFrameSet::from_palette_indices(vec![0; TITLE_TICK_FRAME_SET_BYTES - 1], "fixture")
+            .expect_err("short title-tick frame set must fail");
     assert!(
         short.to_string().contains("exactly"),
         "unexpected error: {short}"
@@ -8546,7 +8809,10 @@ fn display_surface_title_tick_overwrites_the_full_320_wide_band_and_advances() {
     // overwritten opaquely from the staged band.
     let band_last_y = (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize;
     assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(1));
-    assert_eq!(surface.read_pixel(319, TITLE_TICK_FRAME_Y as usize), Some(1));
+    assert_eq!(
+        surface.read_pixel(319, TITLE_TICK_FRAME_Y as usize),
+        Some(1)
+    );
     assert_eq!(surface.read_pixel(0, band_last_y), Some(1));
     assert_eq!(surface.read_pixel(319, band_last_y), Some(1));
     // Nothing outside the rectangle is touched.
@@ -8561,7 +8827,6 @@ fn display_surface_title_tick_overwrites_the_full_320_wide_band_and_advances() {
     assert_eq!(surface.read_pixel(0, TITLE_TICK_FRAME_Y as usize), Some(2));
     assert_eq!(surface.title_tick_frame(), 2);
 }
-
 
 #[test]
 fn intro_start_menu_reveal_uses_published_startsc_rect() {
@@ -9249,23 +9514,13 @@ fn potion_flash_xor_pair_is_lossless_and_touches_only_the_playfield() {
         .collect::<Vec<_>>();
     let original = pixels.clone();
 
-    assert!(apply_potion_flash_xor_pass(
-        &mut pixels,
-        320,
-        200,
-        playback
-    ));
+    assert!(apply_potion_flash_xor_pass(&mut pixels, 320, 200, playback));
     assert_eq!(pixels[8 * 320 + 8], original[8 * 320 + 8] ^ 15);
     assert_eq!(pixels[183 * 320 + 183], original[183 * 320 + 183] ^ 15);
     assert_eq!(pixels[8 * 320 + 7], original[8 * 320 + 7]);
     assert_eq!(pixels[184 * 320 + 8], original[184 * 320 + 8]);
 
-    assert!(apply_potion_flash_xor_pass(
-        &mut pixels,
-        320,
-        200,
-        playback
-    ));
+    assert!(apply_potion_flash_xor_pass(&mut pixels, 320, 200, playback));
     assert_eq!(pixels, original);
     assert!(!apply_potion_flash_xor_pass(
         &mut vec![0; 176 * 176],
@@ -9423,12 +9678,7 @@ fn sage_rumour_table_shape_matches_public_issue() {
         ("hyth", "Kaiko", "New Magincia", 100),
         ("crow", "Terrance", "Britain", 200),
         ("scep", "Greymarch", "Yew", 200),
-        (
-            "amul",
-            "Simon and Tessa",
-            "a hidden mountain keep",
-            200,
-        ),
+        ("amul", "Simon and Tessa", "a hidden mountain keep", 200),
         ("fals", "Shalineth", "the Lycaeum", 250),
         ("hatr", "a daemon", "the desert", 250),
         ("cowa", "Lord Malone", "Serpent's Hold", 250),
@@ -9993,14 +10243,77 @@ fn text_window_inner_width_and_centred_start_match_spec() {
     assert_eq!(text_window_inner_width(20, 10), 0);
     assert_eq!(text_window_inner_width(15, 15), 0);
 
-    // text-output.md §5: centred start column = (width - line) / 2.
-    assert_eq!(text_window_centred_start_column(27, 7), 10);
-    assert_eq!(text_window_centred_start_column(27, 27), 0);
+    // text-output.md §5: the centre branch measures against
+    // `columns_in_window = bottom_right_x - top_left_x + 1`, one
+    // MORE than the wrap width above. Dropping the plus one agrees
+    // on odd-length lines but shifts every even-length line one
+    // whole cell left, so `column_count()` - not `inner_width()` -
+    // is what the helper takes.
+    let window = TextWindowDescriptor {
+        top_left_x: 6,
+        bottom_right_x: 33,
+        ..TextWindowDescriptor::default()
+    };
+    assert_eq!(window.inner_width(), 27);
+    assert_eq!(window.column_count(), 28);
+
+    // Centred start column = (columns_in_window - line) / 2.
+    assert_eq!(text_window_centred_start_column(28, 7), 10);
+    assert_eq!(text_window_centred_start_column(28, 28), 0);
     // Lines wider than the window collapse to column 0 rather than
     // producing a negative offset.
-    assert_eq!(text_window_centred_start_column(27, 30), 0);
+    assert_eq!(text_window_centred_start_column(28, 30), 0);
     // Even split.
     assert_eq!(text_window_centred_start_column(40, 10), 15);
+
+    // The printer's own form works from the columns still available
+    // on the row and the index of the line's LAST character:
+    // `(available - (len - 1)) / 2`. At the window's left edge it
+    // agrees with the column-count form above.
+    for line_chars in 1..=28u8 {
+        assert_eq!(
+            text_window_centred_start_column_from_cursor(window.inner_width(), 0, line_chars),
+            text_window_centred_start_column(window.column_count(), line_chars),
+            "line of {line_chars} characters",
+        );
+    }
+    // An even-length line is exactly where the dropped plus one
+    // would have shifted it one cell left of.
+    assert_eq!(
+        text_window_centred_start_column_from_cursor(27, 0, 10),
+        9,
+        "the (brx - tlx - len) / 2 form would have said 8",
+    );
+    // A mid-row cursor consumes the available columns.
+    assert_eq!(text_window_centred_start_column_from_cursor(27, 7, 10), 5);
+    // A line that cannot fit in what remains collapses to column 0.
+    assert_eq!(text_window_centred_start_column_from_cursor(27, 20, 10), 0);
+}
+
+#[test]
+fn centred_printer_uses_the_plus_one_column_count() {
+    // text-output.md §5: a window spanning columns 0..=11 is TWELVE
+    // columns wide, so an eight-character line starts at column 2
+    // and ends in column 9. Centring against the eleven-cell wrap
+    // width instead would have started it in column 1 - one whole
+    // cell (eight pixels) left of the original.
+    let mut system = TextWindowSystem::new();
+    system.set_window_rect(0, 0, 0, 11, 2);
+    system.emit_byte(TEXT_CTRL_CENTRE_ON);
+    system.print_wrapped_string("abcdefgh");
+    assert_eq!(system.cell(2, 0).unwrap().byte, b'a');
+    assert_eq!(system.cell(9, 0).unwrap().byte, b'h');
+    assert_eq!(system.cell(1, 0), None);
+
+    // A seven-character line in the same window lands where the
+    // dropped-plus-one form would also have put it, which is why
+    // the defect showed as inconsistent centring between adjacent
+    // lines of one block rather than a uniform shift.
+    let mut system = TextWindowSystem::new();
+    system.set_window_rect(0, 0, 0, 11, 2);
+    system.emit_byte(TEXT_CTRL_CENTRE_ON);
+    system.print_wrapped_string("abcdefg");
+    assert_eq!(system.cell(2, 0).unwrap().byte, b'a');
 }
 
 #[test]
@@ -10320,7 +10633,11 @@ fn yell_scene_context_is_exhaustive_and_uses_only_outdoors_or_three_keeps() {
             }
             _ => YellInputContext::NoEffect,
         };
-        assert_eq!(yell_input_context(scene_byte), expected, "scene {scene_byte}");
+        assert_eq!(
+            yell_input_context(scene_byte),
+            expected,
+            "scene {scene_byte}"
+        );
     }
 }
 
@@ -10507,16 +10824,20 @@ fn transport_marker_facing_decodes_low_two_bits_per_spec() {
     // are South (bits 10) and West (bits 11).
     assert_eq!(transport_marker_facing(0x12), Some(Direction::South));
     assert_eq!(transport_marker_facing(0x13), Some(Direction::West));
+    // The carpet and on-foot families are likewise two markers
+    // wide, so only bits 00 and 01 are expressible for them.
     assert_eq!(transport_marker_facing(0x14), Some(Direction::North));
-    assert_eq!(transport_marker_facing(0x17), Some(Direction::West));
+    assert_eq!(transport_marker_facing(0x15), Some(Direction::East));
     assert_eq!(transport_marker_facing(0x1C), Some(Direction::North));
-    assert_eq!(transport_marker_facing(0x1F), Some(Direction::West));
+    assert_eq!(transport_marker_facing(0x1D), Some(Direction::East));
     assert_eq!(transport_marker_facing(0x20), Some(Direction::North));
     assert_eq!(transport_marker_facing(0x22), Some(Direction::South));
     assert_eq!(transport_marker_facing(0x25), Some(Direction::East));
     assert_eq!(transport_marker_facing(0x2A), Some(Direction::South));
     // Out-of-range markers stay opaque per spec.
-    for marker in [0x00u8, 0x0F, 0x10, 0x11, 0x18, 0x1B, 0x2C, 0xFF] {
+    for marker in [
+        0x00u8, 0x0F, 0x10, 0x11, 0x16, 0x17, 0x18, 0x1B, 0x1E, 0x1F, 0x2C, 0xFF,
+    ] {
         assert_eq!(
             transport_marker_facing(marker),
             None,
@@ -10526,15 +10847,80 @@ fn transport_marker_facing_decodes_low_two_bits_per_spec() {
 }
 
 #[test]
-fn transport_marker_with_facing_preserves_transport_family() {
-    assert_eq!(
-        transport_marker_with_facing(TRANSPORT_MARKER_FOOT_FIRST, Direction::West),
-        Some(TRANSPORT_MARKER_FOOT_LAST)
-    );
-    assert_eq!(
-        transport_marker_with_facing(TRANSPORT_MARKER_MAGIC_CARPET_FIRST, Direction::South),
-        Some(TRANSPORT_MARKER_MAGIC_CARPET_FIRST + 2)
-    );
+fn transport_marker_with_facing_follows_published_per_family_rule() {
+    // vehicles.md §2: horse and carpet have TWO frames only - FIRST
+    // when the last announced move was east, FIRST + 1 when it was
+    // west - and moving north or south leaves the frame unchanged.
+    for (first, last) in [
+        (HORSE_TRANSPORT_FIRST, HORSE_TRANSPORT_LAST),
+        (
+            TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+            TRANSPORT_MARKER_MAGIC_CARPET_LAST,
+        ),
+    ] {
+        assert_eq!(
+            transport_marker_with_facing(first, Direction::East),
+            Some(first)
+        );
+        assert_eq!(
+            transport_marker_with_facing(first, Direction::West),
+            Some(last)
+        );
+        assert_eq!(
+            transport_marker_with_facing(last, Direction::East),
+            Some(first)
+        );
+        assert_eq!(
+            transport_marker_with_facing(last, Direction::West),
+            Some(last)
+        );
+        // North and south are frame-preserving in both frames.
+        for facing in [Direction::North, Direction::South] {
+            assert_eq!(transport_marker_with_facing(first, facing), Some(first));
+            assert_eq!(transport_marker_with_facing(last, facing), Some(last));
+        }
+    }
+    // Foot persists exactly 0x1C whatever the direction; nothing
+    // ever writes 0x1D.
+    for facing in [
+        Direction::North,
+        Direction::East,
+        Direction::South,
+        Direction::West,
+    ] {
+        assert_eq!(
+            transport_marker_with_facing(TRANSPORT_MARKER_FOOT_FIRST, facing),
+            Some(TRANSPORT_MARKER_FOOT_FIRST)
+        );
+        assert_eq!(
+            transport_marker_with_facing(TRANSPORT_MARKER_FOOT_LAST, facing),
+            Some(TRANSPORT_MARKER_FOOT_FIRST)
+        );
+    }
+    // No reachable step can produce a value outside the published
+    // set for the two-frame and on-foot families.
+    for marker in [
+        HORSE_TRANSPORT_FIRST,
+        HORSE_TRANSPORT_LAST,
+        TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+        TRANSPORT_MARKER_MAGIC_CARPET_LAST,
+        TRANSPORT_MARKER_FOOT_FIRST,
+        TRANSPORT_MARKER_FOOT_LAST,
+    ] {
+        for facing in [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ] {
+            let produced = transport_marker_with_facing(marker, facing).unwrap();
+            assert!(
+                !matches!(produced, 0x16 | 0x17 | 0x1E | 0x1F),
+                "marker {marker:#04x} facing {facing:?} produced {produced:#04x}"
+            );
+        }
+    }
+    // Ship and skiff keep full four-way facing.
     assert_eq!(
         transport_marker_with_facing(TRANSPORT_MARKER_SHIP_HOISTED_FIRST, Direction::East),
         Some(TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1)
@@ -10762,7 +11148,7 @@ fn input_byte_class_partitions_keyboard_return_bytes_per_spec() {
         );
     }
 
-    // Direction codes: diagonals 0xD3..=0xD6 and cardinals 0xFB..=0xFE.
+    // Direction codes: cardinals 0x01..=0x04 and diagonals 0xD3..=0xD6.
     for byte in [
         INPUT_CODE_NORTHWEST,
         INPUT_CODE_SOUTHWEST,
@@ -10780,10 +11166,11 @@ fn input_byte_class_partitions_keyboard_return_bytes_per_spec() {
         );
     }
 
-    // "No key" — unbound control bytes, the gap between function keys
-    // and diagonals, the gap between diagonals and cardinals, and 0xFF.
+    // "No key" — unbound control bytes either side of the low
+    // cardinal block, the gap between function keys and diagonals,
+    // and the whole high tail above the diagonals.
     for byte in [
-        0x00u8, 0x01, 0x07, 0x09, 0x1A, 0x7F, 0x80, 0xC8, 0xD7, 0xFA, 0xFF,
+        0x00u8, 0x05, 0x07, 0x09, 0x1A, 0x7F, 0x80, 0xC8, 0xD7, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF,
     ] {
         assert_eq!(
             input_byte_class(byte),
@@ -10920,17 +11307,13 @@ fn rest_with_watch_has_no_direct_hp_recovery() {
     // rest-participating set at all.
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Good));
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Sleeping));
-    assert!(!rest_with_watch_recovers_hp(
-        CharacterStatus::Poisoned
-    ));
+    assert!(!rest_with_watch_recovers_hp(CharacterStatus::Poisoned));
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Charmed));
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Dead));
     assert!(!rest_with_watch_recovers_hp(CharacterStatus::Ashes));
     // Sanity: Poisoned still participates even though it does not
     // recover HP — the two predicates are independent.
-    assert!(rest_with_watch_participates(
-        CharacterStatus::Poisoned
-    ));
+    assert!(rest_with_watch_participates(CharacterStatus::Poisoned));
 }
 
 #[test]
@@ -11041,8 +11424,13 @@ fn surface_wishing_well_look_tile_matches_published_special_handler() {
     assert!(wishing_well_grant_scene(0x16));
     assert!(wishing_well_grant_scene(0x1f));
     assert!(!wishing_well_grant_scene(0x11));
-    assert!(death_vision_object_class(DEATH_VISION_OBJECT_CLASS));
-    assert!(!death_vision_object_class(0x28));
+    // view.md §3 entry-dispatch row 2: the death-vision test is on the
+    // live terrain-layer byte, "never an active-object or creature
+    // descriptor". This assertion previously named an object class.
+    assert_eq!(DEATH_VISION_LOOK_TILE, 0x29);
+    assert!(death_vision_look_tile(DEATH_VISION_LOOK_TILE));
+    assert!(!death_vision_look_tile(0x28));
+    assert!(!death_vision_look_tile(0x2a));
     for class in [0xa0, 0xa4, 0xf8, 0x89, 0x8a] {
         assert!(sign_or_wanted_poster_object_class(class));
     }
@@ -11074,7 +11462,7 @@ fn shadowlord_names_match_quest_graph_md_section_5() {
     assert_eq!(shadowlord_slot_for_name("NOSFENTOR"), Some(2));
     assert_eq!(shadowlord_slot_for_name("MONDAIN"), None);
     assert_eq!(shadowlord_slot_for_name("faulinei"), None); // case sensitive
-                                                            // Round-trip.
+    // Round-trip.
     for slot in 0usize..=2 {
         let name = shadowlord_name_for_slot(slot).unwrap();
         assert_eq!(shadowlord_slot_for_name(name), Some(slot));
@@ -11209,10 +11597,13 @@ fn text_emitter_byte_kind_classifies_per_spec() {
         text_emitter_byte_kind(0x0D),
         EmitterByteKind::CarriageReturn
     );
-    // Printable ASCII -> glyph render.
+    // Every high-bit-clear byte except LF/CR -> glyph render.
     assert_eq!(text_emitter_byte_kind(b'A'), EmitterByteKind::Glyph(b'A'));
     assert_eq!(text_emitter_byte_kind(b' '), EmitterByteKind::Glyph(b' '));
     assert_eq!(text_emitter_byte_kind(0x7E), EmitterByteKind::Glyph(0x7E));
+    for byte in [0x00u8, 0x07, 0x1B, 0x1F, 0x7F] {
+        assert_eq!(text_emitter_byte_kind(byte), EmitterByteKind::Glyph(byte));
+    }
     // Extended control bytes.
     for (byte, kind) in [
         (0xFBu8, TextControlByte::CentreOff),
@@ -11224,7 +11615,7 @@ fn text_emitter_byte_kind_classifies_per_spec() {
         assert_eq!(text_emitter_byte_kind(byte), EmitterByteKind::Control(kind));
     }
     // Other high-bit bytes have no public glyph meaning.
-    for byte in [0x00u8, 0x07, 0x1B, 0x1F, 0x7F, 0x80, 0xA0, 0xFA] {
+    for byte in [0x80u8, 0xA0, 0xFA] {
         assert_eq!(text_emitter_byte_kind(byte), EmitterByteKind::Other);
     }
 }
@@ -11315,16 +11706,13 @@ fn hidden_treasure_record_special_gates_match_spec() {
     assert!(hidden_treasure_record_14_ready(0, 5));
     assert!(hidden_treasure_record_14_ready(4, 5));
     assert!(!hidden_treasure_record_14_ready(5, 5));
-    // Record 15: single-use cookie must be clear; no NPC.
-    assert!(hidden_treasure_record_15_accepts(
-        FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR,
-        false
-    ));
+    // Record 15: formats/saved-gam.md §10 - "Record 15 grants only when
+    // the byte is zero and no NPC is present at the searched tile; the
+    // skip predicate is `byte != 0` OR an NPC is present." The byte is
+    // the Glass Sword equipment counter, "Not a dedicated cookie".
+    assert!(hidden_treasure_record_15_accepts(0, false));
     assert!(!hidden_treasure_record_15_accepts(1, false));
-    assert!(!hidden_treasure_record_15_accepts(
-        FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR,
-        true
-    ));
+    assert!(!hidden_treasure_record_15_accepts(0, true));
     assert!(!hidden_treasure_record_15_accepts(1, true));
 }
 
@@ -11446,12 +11834,18 @@ fn shadowlord_hideout_predicates_match_spec() {
     assert_eq!(SAVE_NPC_REMOVED_MASKS_OFFSET, 0x05B4);
     assert_eq!(SAVE_NPC_NAME_KNOWN_MASKS_OFFSET, 0x0634);
     assert_eq!(SAVE_NPC_MASK_BANK_LEN, 0x80);
-    assert_eq!(SAVE_NPC_NAME_KNOWN_MASKS_OFFSET + SAVE_NPC_MASK_BANK_LEN, 0x06B4);
+    assert_eq!(
+        SAVE_NPC_NAME_KNOWN_MASKS_OFFSET + SAVE_NPC_MASK_BANK_LEN,
+        0x06B4
+    );
     assert_eq!(
         SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT - 1,
         0x0324
     );
-    assert_eq!(DEFAULT_SHADOWLORD_HIDEOUTS, [4, 7, 8]);
+    // `time.md §7`: "A newly created game starts with all three slots at
+    // `0`, so no Shadowlord is anywhere until the first midnight pass
+    // assigns hideouts."
+    assert_eq!(DEFAULT_SHADOWLORD_HIDEOUTS, [0, 0, 0]);
     // Vanquished sentinel.
     assert!(shadowlord_hideout_is_vanquished(
         SHADOWLORD_HIDEOUT_VANQUISHED
@@ -11807,8 +12201,7 @@ fn u4_transfer_avatar_latch_fires_only_when_all_eight_standings_are_zero() {
     let standings = |values: [u16; 8]| {
         let mut bytes = synthetic_party_sav_fixture(&source);
         for (index, value) in values.into_iter().enumerate() {
-            let at = U4_PREVIEW_VIRTUE_STANDING_OFFSET
-                + index * U4_PREVIEW_VIRTUE_STANDING_STRIDE;
+            let at = U4_PREVIEW_VIRTUE_STANDING_OFFSET + index * U4_PREVIEW_VIRTUE_STANDING_STRIDE;
             bytes[at..at + 2].copy_from_slice(&value.to_le_bytes());
         }
         parse_u4_preview_source(&bytes).unwrap().is_avatar
@@ -11867,15 +12260,15 @@ fn blackthorn_cutscene_actor_slots_match_spec_role_table() {
     );
     assert_eq!(
         blackthorn_cutscene_actor(6),
-        Some(BlackthornCutsceneActor::Blackthorn)
+        Some(BlackthornCutsceneActor::LeftGuard)
     );
     assert_eq!(
         blackthorn_cutscene_actor(7),
-        Some(BlackthornCutsceneActor::Attendant)
+        Some(BlackthornCutsceneActor::RightGuard)
     );
     assert_eq!(
         blackthorn_cutscene_actor(8),
-        Some(BlackthornCutsceneActor::Throne)
+        Some(BlackthornCutsceneActor::SeatedBlackthorn)
     );
     // Slot indices outside the published roles are temporary
     // (caller-private) and have no named role.
@@ -11886,9 +12279,9 @@ fn blackthorn_cutscene_actor_slots_match_spec_role_table() {
     for actor in [
         BlackthornCutsceneActor::Avatar,
         BlackthornCutsceneActor::SecondPartyMember,
-        BlackthornCutsceneActor::Blackthorn,
-        BlackthornCutsceneActor::Attendant,
-        BlackthornCutsceneActor::Throne,
+        BlackthornCutsceneActor::LeftGuard,
+        BlackthornCutsceneActor::RightGuard,
+        BlackthornCutsceneActor::SeatedBlackthorn,
     ] {
         assert_eq!(blackthorn_cutscene_actor(actor.slot_index()), Some(actor));
     }
@@ -11907,9 +12300,9 @@ fn blackthorn_audience_actor_placements_cover_named_roles() {
         vec![
             BlackthornCutsceneActor::Avatar,
             BlackthornCutsceneActor::SecondPartyMember,
-            BlackthornCutsceneActor::Blackthorn,
-            BlackthornCutsceneActor::Attendant,
-            BlackthornCutsceneActor::Throne,
+            BlackthornCutsceneActor::LeftGuard,
+            BlackthornCutsceneActor::RightGuard,
+            BlackthornCutsceneActor::SeatedBlackthorn,
         ]
     );
     assert_eq!(
@@ -11924,6 +12317,30 @@ fn blackthorn_audience_actor_placements_cover_named_roles() {
         BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[4].actor.slot_index(),
         8
     );
+    assert_eq!(
+        (
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[2].tile,
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[2].x,
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[2].y,
+        ),
+        (0x70, 4, 10)
+    );
+    assert_eq!(
+        (
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[3].tile,
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[3].x,
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[3].y,
+        ),
+        (0x70, 6, 10)
+    );
+    assert_eq!(
+        (
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[4].tile,
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[4].x,
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[4].y,
+        ),
+        (0x16, 5, 5)
+    );
 }
 
 #[test]
@@ -11932,93 +12349,121 @@ fn blackthorn_cutscene_vm_runs_repeat_pair_and_step_pause() {
             0;
             MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
         ]);
-    let blackthorn_start = vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap();
-    let attendant_start = vm.actor(BlackthornCutsceneActor::Attendant).unwrap();
+    let left_start = vm.actor(BlackthornCutsceneActor::LeftGuard).unwrap();
+    let right_start = vm.actor(BlackthornCutsceneActor::RightGuard).unwrap();
 
     vm.run(&[
         BlackthornCutsceneCommand::SetRepeat(2),
         BlackthornCutsceneCommand::SetPairedMovement {
-            actor: BlackthornCutsceneActor::Attendant,
+            actor: BlackthornCutsceneActor::RightGuard,
             direction: Direction::North,
         },
-        BlackthornCutsceneCommand::SetPerStepPause(true),
         BlackthornCutsceneCommand::MoveActor {
-            actor: BlackthornCutsceneActor::Blackthorn,
+            actor: BlackthornCutsceneActor::LeftGuard,
             direction: Direction::North,
         },
     ]);
 
     assert_eq!(
-        vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap().y,
-        blackthorn_start.y - 2
+        vm.actor(BlackthornCutsceneActor::LeftGuard).unwrap().y,
+        left_start.y - 2
     );
     assert_eq!(
-        vm.actor(BlackthornCutsceneActor::Attendant).unwrap().y,
-        attendant_start.y - 2
+        vm.actor(BlackthornCutsceneActor::RightGuard).unwrap().y,
+        right_start.y - 2
     );
-    assert_eq!(vm.pause_ticks, 2);
+    assert_eq!(vm.stinger_count, 2);
+    assert_eq!(vm.world_ticks, 4);
+    assert_eq!(vm.bios_ticks, 4);
 
     vm.step(BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
+        actor: BlackthornCutsceneActor::LeftGuard,
         direction: Direction::East,
     });
     assert_eq!(
-        vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap().x,
-        blackthorn_start.x + 1
+        vm.actor(BlackthornCutsceneActor::LeftGuard).unwrap().x,
+        left_start.x + 1
     );
     assert_eq!(
-        vm.actor(BlackthornCutsceneActor::Attendant).unwrap().y,
-        attendant_start.y - 2
+        vm.actor(BlackthornCutsceneActor::RightGuard).unwrap().y,
+        right_start.y - 2
     );
 
     vm.step(BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
+        actor: BlackthornCutsceneActor::LeftGuard,
         direction: Direction::NorthEast,
     });
     assert_eq!(
-        vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap().x,
-        blackthorn_start.x + 1
+        vm.actor(BlackthornCutsceneActor::LeftGuard).unwrap().x,
+        left_start.x + 1
     );
     assert_eq!(
-        vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap().y,
-        blackthorn_start.y - 2
+        vm.actor(BlackthornCutsceneActor::LeftGuard).unwrap().y,
+        left_start.y - 2
     );
 }
 
 #[test]
-fn blackthorn_cutscene_vm_writes_tiles_output_and_clears_actor() {
+fn blackthorn_cutscene_vm_buffers_terrain_and_redraws_without_text_output_or_clear() {
     let mut vm = BlackthornCutsceneVm::with_audience_setup(vec![
             0;
             MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
         ]);
 
     vm.run(&[
-        BlackthornCutsceneCommand::WriteTile {
+        BlackthornCutsceneCommand::WriteTerrain {
             x: 2,
             y: 3,
             tile: 0x44,
         },
-        BlackthornCutsceneCommand::OutputByte(0x0d),
-        BlackthornCutsceneCommand::SetRepeat(3),
-        BlackthornCutsceneCommand::TimedPause(4),
-        BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Throne),
+        BlackthornCutsceneCommand::QuietRedrawPause(4),
+        BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SeatedBlackthorn),
     ]);
 
     assert_eq!(vm.tile(2, 3, MISCMAPS_CUTSCENE_VISIBLE_COLUMNS), Some(0x44));
-    assert_eq!(vm.output_bytes, vec![0x0d]);
-    assert_eq!(vm.pause_ticks, 12);
-    assert_eq!(vm.actor(BlackthornCutsceneActor::Throne), None);
+    assert_eq!(vm.world_ticks, 4);
+    assert_eq!(vm.bios_ticks, 4);
+    assert_eq!(vm.actor(BlackthornCutsceneActor::SeatedBlackthorn), None);
+    assert_eq!(
+        vm.visible_tile_buffer[3 * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS + 2],
+        0x44
+    );
 
     vm.run(&[
-        BlackthornCutsceneCommand::ClearScreen,
+        BlackthornCutsceneCommand::ExplicitRedraw,
         BlackthornCutsceneCommand::End,
-        BlackthornCutsceneCommand::OutputByte(0xff),
+        BlackthornCutsceneCommand::QuietRedrawPause(0xff),
     ]);
 
-    assert!(vm.screen_cleared);
     assert!(vm.ended);
-    assert!(vm.tile_buffer.iter().all(|tile| *tile == 0));
-    assert_eq!(vm.output_bytes, vec![0x0d]);
+    assert_eq!(vm.world_ticks, 5);
+    assert_eq!(vm.tile(2, 3, MISCMAPS_CUTSCENE_VISIBLE_COLUMNS), Some(0x44));
+}
+
+#[test]
+fn blackthorn_direct_reveal_uses_shared_256_pixel_order_and_31_checkpoints() {
+    let mut vm = BlackthornCutsceneVm::with_audience_setup(vec![
+        0;
+        MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
+    ]);
+    vm.step(BlackthornCutsceneCommand::RevealActor {
+        actor: BlackthornCutsceneActor::SeatedBlackthorn,
+        x: 5,
+        y: 5,
+        atlas_index: BLACKTHORN_SEATED_ATLAS_INDEX,
+        actor_byte: BLACKTHORN_SEATED_ACTOR_BYTE,
+    });
+    assert_eq!(vm.cell_reveals.len(), 1);
+    assert_eq!(vm.cell_reveals[0].pixel_order.len(), 256);
+    assert_eq!(vm.cell_reveals[0].world_tick_after_operations.len(), 31);
+    assert_eq!(vm.cell_reveals[0].world_tick_after_operations[30], 248);
+    assert_eq!(vm.world_ticks, 31);
+    assert_eq!(
+        vm.actor(BlackthornCutsceneActor::SeatedBlackthorn)
+            .unwrap()
+            .actor_byte,
+        0x78
+    );
 }
 
 #[test]
@@ -12297,9 +12742,9 @@ fn combat_range_effect_is_cast_like_recognises_selector_1() {
 #[test]
 fn combat_exit_outcome_result_codes_match_spec() {
     // combat.md §14
-    assert_eq!(CombatExitOutcome::Victory.result_code(), 1);
-    assert_eq!(CombatExitOutcome::Escape.result_code(), 1);
-    assert_eq!(CombatExitOutcome::Defeat.result_code(), 0);
+    assert_eq!(CombatExitOutcome::Victory.result_code(), 0);
+    assert_eq!(CombatExitOutcome::Escape.result_code(), 0);
+    assert_eq!(CombatExitOutcome::Defeat.result_code(), 1);
 }
 
 #[test]
@@ -12394,11 +12839,16 @@ fn dungeon_minimap_flood_expands_except_through_walls() {
     }
 }
 
+/// `dungeon-mode.md §10`: "result code five moves the party one level
+/// **up** — it decrements the level byte ... result code six moves the
+/// party one level **down** — it increments the level byte ... Other
+/// combat results keep the party on the current level."
 #[test]
 fn dungeon_attack_post_combat_z_intent_translates_result_code() {
-    // dungeon-mode.md §10
-    assert_eq!(dungeon_attack_post_combat_z_intent(5), Some(1));
-    assert_eq!(dungeon_attack_post_combat_z_intent(6), Some(-1));
+    // Code 5 = up = decrement; code 6 = down = increment. Same
+    // polarity as K-Klimb: a smaller level byte is nearer the surface.
+    assert_eq!(dungeon_attack_post_combat_z_intent(5), Some(-1));
+    assert_eq!(dungeon_attack_post_combat_z_intent(6), Some(1));
     for code in [0u8, 1, 2, 3, 4, 7, 8, 99, 255] {
         assert_eq!(dungeon_attack_post_combat_z_intent(code), None);
     }
@@ -12702,10 +13152,7 @@ fn npc_type_byte_class_recognises_published_special_values() {
         npc_type_byte_class(0x01),
         NpcTypeByteClass::DefaultHumanSprite
     );
-    assert_eq!(
-        npc_type_byte_class(0xFC),
-        NpcTypeByteClass::ShadowlordActor
-    );
+    assert_eq!(npc_type_byte_class(0xFC), NpcTypeByteClass::ShadowlordActor);
     // Stable shipped sprite-class tags fall through to the
     // ordinary derived-sprite path.
     for tag in [0x50u8, 0x54, 0x70, 0x90, 0xD8] {
@@ -13067,8 +13514,14 @@ fn spell_scene_allow_mask_bits_match_spec() {
     // and refuses elsewhere; the dungeon-only pair ships as 0x02.
     let combat_only = 0x01;
     let dungeon_only = 0x02;
-    assert!(spell_allowed_in_scene(dungeon_only, SpellSceneClass::Dungeon));
-    assert!(!spell_allowed_in_scene(dungeon_only, SpellSceneClass::Combat));
+    assert!(spell_allowed_in_scene(
+        dungeon_only,
+        SpellSceneClass::Dungeon
+    ));
+    assert!(!spell_allowed_in_scene(
+        dungeon_only,
+        SpellSceneClass::Combat
+    ));
     assert!(spell_allowed_in_scene(combat_only, SpellSceneClass::Combat));
     assert!(!spell_allowed_in_scene(
         combat_only,
@@ -13176,8 +13629,7 @@ fn directed_utility_live_tile_rewrites_match_magic_contract() {
     assert_eq!(
         VANISH_REMOVABLE_TILES,
         [
-            0x5B, 0x90, 0x91, 0x92, 0x93, 0x9D, 0xA5, 0xA6, 0xA8, 0xA9, 0xAD, 0xAE,
-            0xAF,
+            0x5B, 0x90, 0x91, 0x92, 0x93, 0x9D, 0xA5, 0xA6, 0xA8, 0xA9, 0xAD, 0xAE, 0xAF,
         ]
     );
     for tile in 0u8..=u8::MAX {
@@ -13196,10 +13648,7 @@ fn directed_utility_live_tile_rewrites_match_magic_contract() {
             MAGIC_LOCK_SPELL_INDEX,
             &[(0xB8, 0x97), (0xB9, 0x97), (0xBA, 0x98), (0xBB, 0x98)][..],
         ),
-        (
-            UNLOCK_MAGIC_SPELL_INDEX,
-            &[(0x97, 0xB8), (0x98, 0xBA)][..],
-        ),
+        (UNLOCK_MAGIC_SPELL_INDEX, &[(0x97, 0xB8), (0x98, 0xBA)][..]),
     ] {
         for tile in 0u8..=u8::MAX {
             let expected = accepted
@@ -13433,13 +13882,13 @@ fn encounter_spawner_separation_gate_matches_spec() {
     assert!(encounter_spawner_separation_ok(57, 57, 50, 50));
     assert!(encounter_spawner_separation_ok(43, 43, 50, 50)); // dx=7, dy=7
     assert!(encounter_spawner_separation_ok(60, 60, 50, 50)); // dx=10, dy=10
-                                                              // dx > 6 but dy <= 6 — rejected.
+    // dx > 6 but dy <= 6 — rejected.
     assert!(!encounter_spawner_separation_ok(57, 53, 50, 50));
     // Either axis at the boundary — rejected.
     assert!(!encounter_spawner_separation_ok(56, 60, 50, 50)); // dx=6
     assert!(!encounter_spawner_separation_ok(60, 56, 50, 50)); // dy=6
-                                                               // Wrapped-near torus distances: dx == 250 -> rejected, dx ==
-                                                               // 249 -> accepted (open interval at MAX).
+    // Wrapped-near torus distances: dx == 250 -> rejected, dx ==
+    // 249 -> accepted (open interval at MAX).
     assert!(!encounter_spawner_separation_ok(0, 100, 250, 100));
     assert!(encounter_spawner_separation_ok(0, 100, 249, 80));
 }
@@ -14016,6 +14465,131 @@ fn active_object_composite_dispatches_companion_and_guard_branches() {
 }
 
 #[test]
+fn player_slot_survives_the_terrain_aware_suppress_rows() {
+    // `visibility.md §8` lists "current terrain `0xEC` or `0x0A` -> suppress
+    // the active-object stamp" with no effective-tile qualifier, and
+    // `visibility.md §6` names `0x0A` "tropical forest". The shipped
+    // passability bitset marks that terrain walkable, so applying the row to
+    // slot zero leaves the bare forest tile on screen and the party sprite
+    // nowhere - the avatar renders *behind* the forest. `active-objects.md §5`
+    // gives slot zero the opposite contract: the table is walked "from slot
+    // thirty-one down so slot zero paints on top". Every other slot keeps the
+    // published row.
+    for terrain in [0x0A, 0xEC] {
+        assert_eq!(
+            active_object_composite(
+                PLAYER_TILE,
+                PLAYER_TILE,
+                VISIBILITY_CLEAR,
+                terrain,
+                None,
+                None,
+                5,
+                0
+            ),
+            ActiveObjectCompositeResult::Suppress,
+            "non-player slots keep the published suppress row on terrain {terrain:#04x}"
+        );
+        assert_eq!(
+            composite_active_object_slot(
+                false,
+                PLAYER_TILE,
+                PLAYER_TILE,
+                VISIBILITY_CLEAR,
+                terrain,
+                None,
+                None,
+                5,
+                0
+            ),
+            ActiveObjectCompositeResult::Suppress
+        );
+        assert_eq!(
+            composite_active_object_slot(
+                true,
+                PLAYER_TILE,
+                PLAYER_TILE,
+                VISIBILITY_CLEAR,
+                terrain,
+                None,
+                None,
+                5,
+                0
+            ),
+            ActiveObjectCompositeResult::Companion(PLAYER_TILE),
+            "slot zero still stamps the party sprite on terrain {terrain:#04x}"
+        );
+    }
+
+    // The `0x6A`/`0x6B` suppress row is qualified by effective tile, so it
+    // never reached the walking party in the first place; the exemption does
+    // not change what a monster frame does there.
+    assert_eq!(
+        active_object_composite(0x80, 0x84, VISIBILITY_CLEAR, 0x6A, None, None, 5, 0),
+        ActiveObjectCompositeResult::Suppress
+    );
+
+    // `visibility.md §8` step 3: the two cell-state guards run before any class
+    // branch and still hide the party. Fog is not a draw-order question.
+    for guard in [VISIBILITY_HIDDEN, VISIBILITY_ALREADY_RENDERED] {
+        assert_eq!(
+            composite_active_object_slot(
+                true,
+                PLAYER_TILE,
+                PLAYER_TILE,
+                guard,
+                5,
+                None,
+                None,
+                5,
+                0
+            ),
+            ActiveObjectCompositeResult::Suppress
+        );
+    }
+
+    // Terrain-aware *substitutions* are untouched: `active-objects.md §12`
+    // still swaps in the seated/climbing actor byte.
+    assert_eq!(
+        composite_active_object_slot(
+            true,
+            PLAYER_TILE,
+            PLAYER_TILE,
+            VISIBILITY_CLEAR,
+            0xC8,
+            None,
+            None,
+            5,
+            0
+        ),
+        ActiveObjectCompositeResult::Companion(0x17)
+    );
+}
+
+#[test]
+fn party_sprite_is_composited_onto_dense_forest_terrain() {
+    // End-to-end through the visibility buffers the renderer actually reads:
+    // standing on `0x0A` must leave the companion band holding the party's
+    // actor byte, not the forest terrain byte.
+    const DENSE_FOREST_TILE: u8 = 0x0A;
+    let mut grid = open_grid();
+    grid[5 * TOWN_GRID_SIDE + 5] = DENSE_FOREST_TILE;
+    let mut state = test_state(grid, 5, 5);
+    state.visibility_dirty = true;
+    state.refresh_top_down_visibility_buffers(TopDownRenderArea::Town, VIEWPORT_PLAYER_ROW);
+
+    let center_grid =
+        visibility_grid_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL).unwrap();
+    let center_terrain =
+        terrain_band_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL).unwrap();
+    assert_eq!(state.visibility_grid[center_grid], VISIBILITY_USE_COMPANION);
+    assert_eq!(
+        state.terrain_band[center_terrain], PLAYER_TILE,
+        "the party sprite must draw on top of the forest cell it occupies"
+    );
+}
+
+#[test]
 fn fog_refinement_squared_distance_matches_spec_threshold() {
     // visibility.md §7
     assert_eq!(FOG_REFINE_SQUARED_THRESHOLD, 5);
@@ -14449,20 +15023,47 @@ fn codex_turnin_stat_reward_matches_spec_table() {
 }
 
 #[test]
-fn blackthorn_challenge_prompt_table_matches_spec() {
-    // blackthorn.md §4
-    assert_eq!(BLACKTHORN_CHALLENGE_PROMPT_TABLE.len(), 4);
-    assert_eq!(blackthorn_challenge_prompt(0), Some(("Honesty", "Ahm")));
-    assert_eq!(blackthorn_challenge_prompt(1), Some(("Compassion", "Mu")));
-    assert_eq!(blackthorn_challenge_prompt(2), Some(("Valour", "Ra")));
-    assert_eq!(blackthorn_challenge_prompt(3), Some(("Justice", "Beh")));
-    // The traced loop only iterates the first four ordinals.
-    assert_eq!(blackthorn_challenge_prompt(4), None);
-    assert_eq!(blackthorn_challenge_prompt(7), None);
-    assert_eq!(blackthorn_challenge_prompt(255), None);
+fn blackthorn_shrine_mantra_table_matches_spec() {
+    // blackthorn.md §4: "All eight virtue/mantra pairs are live". The
+    // withdrawal box in the same section retires the earlier reading
+    // that the answer lookup was "indexed by prompt ordinal" and that
+    // "this traced challenge loop only iterates the first four
+    // ordinals" — this assertion previously pinned that four-pair,
+    // ordinal-keyed table.
+    assert_eq!(BLACKTHORN_SHRINE_MANTRAS.len(), 8);
+    assert_eq!(BLACKTHORN_SHRINE_COUNT, 8);
+    assert_eq!(blackthorn_shrine_mantra(0), Some(("Honesty", "Ahm")));
+    assert_eq!(blackthorn_shrine_mantra(1), Some(("Compassion", "Mu")));
+    assert_eq!(blackthorn_shrine_mantra(2), Some(("Valour", "Ra")));
+    assert_eq!(blackthorn_shrine_mantra(3), Some(("Justice", "Beh")));
+    assert_eq!(blackthorn_shrine_mantra(4), Some(("Sacrifice", "Cah")));
+    assert_eq!(blackthorn_shrine_mantra(5), Some(("Honor", "Summ")));
+    assert_eq!(blackthorn_shrine_mantra(6), Some(("Spirituality", "Om")));
+    assert_eq!(blackthorn_shrine_mantra(7), Some(("Humility", "Lum")));
+    assert_eq!(blackthorn_shrine_mantra(8), None);
+    assert_eq!(blackthorn_shrine_mantra(255), None);
+    // The four prompt ordinals select wording only.
+    assert_eq!(BLACKTHORN_CHALLENGE_PROMPT_COUNT, 4);
+    assert_eq!(
+        blackthorn_challenge_wording(0),
+        Some(BlackthornChallengeWording::Plain)
+    );
+    assert_eq!(
+        blackthorn_challenge_wording(1),
+        Some(BlackthornChallengeWording::Repeat)
+    );
+    assert_eq!(
+        blackthorn_challenge_wording(2),
+        Some(BlackthornChallengeWording::ImpatientDemand)
+    );
+    assert_eq!(
+        blackthorn_challenge_wording(3),
+        Some(BlackthornChallengeWording::ShoutedFinalDemand)
+    );
+    assert_eq!(blackthorn_challenge_wording(4), None);
     // Cross-check: matches answer-comparison contract.
-    for ord in 0u8..4 {
-        let (_, expected) = blackthorn_challenge_prompt(ord).unwrap();
+    for shrine in 0u8..8 {
+        let (_, expected) = blackthorn_shrine_mantra(shrine).unwrap();
         assert!(blackthorn_challenge_answer_matches(expected, expected));
     }
 }
@@ -14690,11 +15291,10 @@ fn world_live_chunk_buffer_projects_four_quadrants_from_full_grid() {
         }
     }
 
-    let buffer =
-        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Underworld, &grid, 8, 8, |_| {
-            LiveChunkSubstitutionPolicy::NONE
-        })
-        .unwrap();
+    let buffer = WorldLiveChunkBuffer::from_full_grid(WorldPlane::Underworld, &grid, 8, 8, |_| {
+        LiveChunkSubstitutionPolicy::NONE
+    })
+    .unwrap();
 
     assert_eq!(buffer.scroll_base, (0, 0));
     assert_eq!(
@@ -14719,11 +15319,10 @@ fn world_live_chunk_buffer_wraps_scroll_base_around_world_edges() {
     grid[world_cell_index(255, 255)] = 0xAA;
     grid[world_cell_index(0, 0)] = 0xBB;
 
-    let buffer =
-        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 0, 0, |_| {
-            LiveChunkSubstitutionPolicy::NONE
-        })
-        .unwrap();
+    let buffer = WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 0, 0, |_| {
+        LiveChunkSubstitutionPolicy::NONE
+    })
+    .unwrap();
 
     assert_eq!(buffer.scroll_base, (240, 240));
     assert_eq!(buffer.quadrant_chunk_origin(0), (240, 240));
@@ -14774,21 +15373,19 @@ fn world_live_chunk_buffer_decodes_britannia_water_and_stored_chunks() {
         brit[file_index * CHUNK_BYTES..file_index * CHUNK_BYTES + CHUNK_BYTES].fill(tile);
     }
 
-    let stored =
-        WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 8, 8, |_| {
-            LiveChunkSubstitutionPolicy::NONE
-        })
-        .unwrap();
+    let stored = WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 8, 8, |_| {
+        LiveChunkSubstitutionPolicy::NONE
+    })
+    .unwrap();
     assert_eq!(stored.tile_at(0, 0), 0x80);
     assert_eq!(stored.tile_at(16, 0), 0x81);
     assert_eq!(stored.tile_at(0, 16), 0x90);
     assert_eq!(stored.descriptors[0].file_index, Some(0));
 
-    let water =
-        WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 0, 0, |_| {
-            LiveChunkSubstitutionPolicy::NONE
-        })
-        .unwrap();
+    let water = WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 0, 0, |_| {
+        LiveChunkSubstitutionPolicy::NONE
+    })
+    .unwrap();
     assert_eq!(water.tile_at(255, 255), BRIT_DEEP_WATER_TILE);
     assert_eq!(water.descriptors[0].logical_slot, 255);
     assert!(water.descriptors[0].all_water);
@@ -14800,11 +15397,10 @@ fn world_live_chunk_buffer_decodes_underworld_dense_chunk_offsets() {
     let mut under = vec![0; UNDER_DAT_LEN];
     under[under_file_offset(16, 16)] = 0x44;
 
-    let buffer =
-        WorldLiveChunkBuffer::from_underworld_bytes(&under, 8, 8, |_| {
-            LiveChunkSubstitutionPolicy::NONE
-        })
-        .unwrap();
+    let buffer = WorldLiveChunkBuffer::from_underworld_bytes(&under, 8, 8, |_| {
+        LiveChunkSubstitutionPolicy::NONE
+    })
+    .unwrap();
 
     assert_eq!(buffer.tile_at(16, 16), 0x44);
     assert_eq!(buffer.descriptors[3].logical_slot, 17);
@@ -14827,11 +15423,10 @@ fn world_live_chunk_buffer_shuffle_preserves_overlapping_chunks() {
             }
         }
     }
-    let buffer =
-        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 8, 8, |_| {
-            LiveChunkSubstitutionPolicy::NONE
-        })
-        .unwrap();
+    let buffer = WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 8, 8, |_| {
+        LiveChunkSubstitutionPolicy::NONE
+    })
+    .unwrap();
 
     let shuffled = buffer.shuffled_to_scroll_base((16, 0));
 
@@ -15047,30 +15642,32 @@ fn dungeon_presentation_flavour_matches_spec_table() {
 #[test]
 fn npc_schedule_state_for_floor_transition_matches_spec_table() {
     // npc-schedules.md §6 floor-classification table (map = floor 1).
+    // The floor index grows upward, so a numerically larger floor byte is
+    // ABOVE the displayed floor.
     // both on map -> in-plane (2)
     assert_eq!(
         npc_schedule_state_for_floor_transition(1, 1, 1),
         NPC_STATE_INPLANE_MOVE
     );
-    // NPC on map, target above (z < 1) -> climb-up (6)
-    assert_eq!(
-        npc_schedule_state_for_floor_transition(1, 0, 1),
-        NPC_STATE_CLIMB_UP_OFF_FLOOR
-    );
-    // NPC on map, target below (z > 1) -> climb-down (7)
+    // NPC on map, target above (z = 2) -> climb-up (6)
     assert_eq!(
         npc_schedule_state_for_floor_transition(1, 2, 1),
+        NPC_STATE_CLIMB_UP_OFF_FLOOR
+    );
+    // NPC on map, target below (z = 0) -> climb-down (7)
+    assert_eq!(
+        npc_schedule_state_for_floor_transition(1, 0, 1),
         NPC_STATE_CLIMB_DOWN_OFF_FLOOR
     );
-    // NPC above, target on map -> ascend (5)
-    assert_eq!(
-        npc_schedule_state_for_floor_transition(0, 1, 1),
-        NPC_STATE_ASCEND_TOWARD_TARGET
-    );
-    // NPC below, target on map -> descend (4)
+    // NPC above, target on map -> state 4 (surfaces at an ascend link)
     assert_eq!(
         npc_schedule_state_for_floor_transition(2, 1, 1),
         NPC_STATE_DESCEND_TOWARD_TARGET
+    );
+    // NPC below, target on map -> state 5 (surfaces at a descend link)
+    assert_eq!(
+        npc_schedule_state_for_floor_transition(0, 1, 1),
+        NPC_STATE_ASCEND_TOWARD_TARGET
     );
     // Neither on map -> parked off-floor (8)
     assert_eq!(
@@ -15206,15 +15803,17 @@ fn inn_leave_and_pickup_bills_match_spec_formulas() {
     assert_eq!(inn_pickup_bill(0, 0), 0);
     // Public issue #15 applies the shared Intelligence adjustment after
     // each raw inn bill is computed.
-    assert_eq!(quote_inn_rest_for_speaker(Inn::HotelBrittany, 2, 17).unwrap().total_price, 8);
+    assert_eq!(
+        quote_inn_rest_for_speaker(Inn::HotelBrittany, 2, 17)
+            .unwrap()
+            .total_price,
+        8
+    );
     assert_eq!(
         inn_leave_companion_deposit_for_speaker(Inn::HotelBrittany, 17),
         44
     );
-    assert_eq!(
-        inn_pickup_bill_for_speaker(Inn::HotelBrittany, 3, 17),
-        132
-    );
+    assert_eq!(inn_pickup_bill_for_speaker(Inn::HotelBrittany, 3, 17), 132);
     assert_eq!(
         quote_inn_rest_for_speaker(Inn::HotelBrittany, 2, 75)
             .unwrap()
@@ -15316,7 +15915,7 @@ fn combat_interference_blocks_only_when_all_five_conditions_hold() {
     assert!(!combat_interference_blocks(true, false, true, false, 1)); // invalid actor
     assert!(!combat_interference_blocks(true, true, false, false, 1)); // hidden/asleep
     assert!(!combat_interference_blocks(true, true, true, true, 1)); // Negate-Time active
-                                                                     // Distance != 1 fails.
+    // Distance != 1 fails.
     assert!(!combat_interference_blocks(true, true, true, false, 0));
     assert!(!combat_interference_blocks(true, true, true, false, 2));
     assert!(!combat_interference_blocks(true, true, true, false, 7));
@@ -15534,11 +16133,17 @@ fn transport_family_classifier_matches_spec_table() {
     for b in 0x12u8..=0x13 {
         assert_eq!(transport_family(b), Some(TransportFamily::MountedHorse));
     }
-    for b in 0x14u8..=0x17 {
+    // The carpet and on-foot families are two markers wide, like
+    // the horse: 0x16/0x17 and 0x1E/0x1F are outside the published
+    // persistent value set and stay opaque.
+    for b in 0x14u8..=0x15 {
         assert_eq!(transport_family(b), Some(TransportFamily::MagicCarpet));
     }
-    for b in 0x1Cu8..=0x1F {
+    for b in 0x1Cu8..=0x1D {
         assert_eq!(transport_family(b), Some(TransportFamily::Foot));
+    }
+    for b in [0x16u8, 0x17, 0x1E, 0x1F] {
+        assert_eq!(transport_family(b), None, "marker {b:#04x}");
     }
     for b in 0x20u8..=0x23 {
         assert_eq!(transport_family(b), Some(TransportFamily::ShipHoisted));
@@ -15558,10 +16163,10 @@ fn transport_family_classifier_matches_spec_table() {
     assert_eq!(transport_family(0xFF), None);
 
     // Facing index = low two bits within each accepted family.
-    assert_eq!(transport_facing_index(0x1C), Some(0)); // foot N
-    assert_eq!(transport_facing_index(0x1D), Some(1)); // foot E
-    assert_eq!(transport_facing_index(0x1E), Some(2)); // foot S
-    assert_eq!(transport_facing_index(0x1F), Some(3)); // foot W
+    assert_eq!(transport_facing_index(0x1C), Some(0)); // foot, frame 0
+    assert_eq!(transport_facing_index(0x1D), Some(1)); // foot, frame 1
+    assert_eq!(transport_facing_index(0x1E), None); // outside the band
+    assert_eq!(transport_facing_index(0x1F), None); // outside the band
     assert_eq!(transport_facing_index(0x22), Some(2)); // ship S
     assert_eq!(transport_facing_index(0x10), None); // not a transport
 }
@@ -15917,9 +16522,7 @@ fn rest_status_predicates_match_spec_tables() {
     // rest-and-camp.md §5
     // Rest-with-watch participation.
     assert!(rest_with_watch_participates(CharacterStatus::Good));
-    assert!(rest_with_watch_participates(
-        CharacterStatus::Poisoned
-    ));
+    assert!(rest_with_watch_participates(CharacterStatus::Poisoned));
     assert!(rest_with_watch_participates(CharacterStatus::Sleeping));
     assert!(!rest_with_watch_participates(CharacterStatus::Charmed));
     assert!(!rest_with_watch_participates(CharacterStatus::Dead));
@@ -15927,9 +16530,7 @@ fn rest_status_predicates_match_spec_tables() {
 
     // Town-hours temporary-sleep marking only Good members.
     assert!(town_rest_temp_sleep_marked(CharacterStatus::Good));
-    assert!(!town_rest_temp_sleep_marked(
-        CharacterStatus::Poisoned
-    ));
+    assert!(!town_rest_temp_sleep_marked(CharacterStatus::Poisoned));
     assert!(!town_rest_temp_sleep_marked(CharacterStatus::Sleeping));
     assert!(!town_rest_temp_sleep_marked(CharacterStatus::Charmed));
     assert!(!town_rest_temp_sleep_marked(CharacterStatus::Dead));
@@ -15938,9 +16539,7 @@ fn rest_status_predicates_match_spec_tables() {
     // Cleanup restores Sleeping -> Good only.
     assert!(rest_cleanup_transitions_to_good(CharacterStatus::Sleeping));
     assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Good));
-    assert!(!rest_cleanup_transitions_to_good(
-        CharacterStatus::Poisoned
-    ));
+    assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Poisoned));
     assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Charmed));
     assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Dead));
     assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Ashes));
@@ -16509,13 +17108,24 @@ fn title_screen_layout_constants_match_spec() {
     assert_eq!(BRITISH_PTH_PEN_ORIGINS.len(), BRITISH_PTH_SEGMENT_COUNT);
 }
 
+/// `formats/location-dat.md §11`: "Each record is **four 32-byte
+/// rows**; within a row the first nineteen bytes carry tile data and
+/// the trailing thirteen bytes are unused padding. The strip is
+/// therefore wide and short, which is also what the preview displays:
+/// nineteen tiles across by four tiles down."
+///
+/// The withdrawn 4-columns-by-19-rows transposition used to be pinned
+/// here by `RTV_STRIP_ROWS`/`RTV_STRIP_COLUMNS`; those constants are
+/// deleted and the strip geometry now has exactly one source.
 #[test]
 fn return_to_view_constants_match_spec() {
     // intro.md §12
     assert_eq!(MISCMAPS_DAT_FILE, "MISCMAPS.DAT");
     assert_eq!(RTV_STRIP_COUNT, 4);
-    assert_eq!(RTV_STRIP_ROWS, 19);
-    assert_eq!(RTV_STRIP_COLUMNS, 4);
+    assert_eq!(RTV_STRIP_VISIBLE_COLUMNS, 19);
+    assert_eq!(RTV_STRIP_VISIBLE_ROWS, 4);
+    // Four 32-byte rows per record.
+    assert_eq!(RTV_STRIP_RECORD_BYTES, 4 * 32);
     assert_eq!(RTV_COMMAND_STREAM_BYTES, 655);
     assert_eq!(RTV_COMMAND_COUNT, 16);
 }
@@ -16554,9 +17164,22 @@ fn eternal_flame_pairs_with_each_shadowlord_slot() {
 
 #[test]
 fn town_npc_attack_resolution_gates_death_mask_by_type() {
+    // town-mode.md §4: the sandalwood box keeps its direct bypass write.
     assert!(town_npc_activation_mask_eligible(0x0E));
-    assert!(!town_npc_activation_mask_eligible(0x50));
-    assert!(!town_npc_activation_mask_eligible(0x70));
+    // town-mode.md §4 write-path filter: townspeople and regalia in,
+    // guards and creatures out.
+    assert!(town_npc_removal_recorded(0x0E));
+    assert!(town_npc_removal_recorded(0x50));
+    assert!(town_npc_removal_recorded(0x40));
+    assert!(town_npc_removal_recorded(0x6C));
+    for regalia in TOWN_NPC_REGALIA_TYPE_FIRST..=TOWN_NPC_REGALIA_TYPE_LAST {
+        assert!(town_npc_removal_recorded(regalia), "type 0x{regalia:02X}");
+    }
+    assert!(!town_npc_removal_recorded(0x70));
+    assert!(!town_npc_removal_recorded(0x90));
+    assert!(!town_npc_removal_recorded(0x94));
+    assert!(!town_npc_removal_recorded(0xD8));
+    assert!(!town_npc_removal_recorded(0xFC));
     assert_eq!(
         town_npc_attack_resolution(0x0E),
         TownNpcAttackResolution::DeathMask
@@ -16567,6 +17190,14 @@ fn town_npc_attack_resolution_gates_death_mask_by_type() {
     );
     assert_eq!(
         town_npc_attack_resolution(0x50),
+        TownNpcAttackResolution::DeathMask
+    );
+    assert_eq!(
+        town_npc_attack_resolution(0xB5),
+        TownNpcAttackResolution::DeathMask
+    );
+    assert_eq!(
+        town_npc_attack_resolution(0x94),
         TownNpcAttackResolution::Refused
     );
 }
@@ -16641,9 +17272,14 @@ fn conversation_password_classifies_dawn_and_impera() {
 
 #[test]
 fn npc_dialog_id_classifier_matches_spec_table() {
-    // catalogs/npc-roster.md §4
+    // formats/npc.md §7: "Dialog index `1` is **not** reserved. It
+    // addresses an ordinary authored blob like any other id, and
+    // exactly one occupied roster slot in each of the four class
+    // files carries it". catalogs/npc-roster.md: "There is no
+    // \"dialog id 1\" category: the four slots that carry index `1`
+    // are ordinary speaking NPCs".
     assert_eq!(npc_dialog_id_kind(0), NpcDialogIdKind::NoDialogue);
-    assert_eq!(npc_dialog_id_kind(1), NpcDialogIdKind::TlkHeaderSentinel);
+    assert_eq!(npc_dialog_id_kind(1), NpcDialogIdKind::OrdinaryBlobId);
     assert_eq!(npc_dialog_id_kind(2), NpcDialogIdKind::OrdinaryBlobId);
     assert_eq!(npc_dialog_id_kind(50), NpcDialogIdKind::OrdinaryBlobId);
     assert_eq!(npc_dialog_id_kind(128), NpcDialogIdKind::OrdinaryBlobId);
@@ -16699,13 +17335,40 @@ fn ch_font_layout_constants_match_spec() {
     assert_eq!(CH_GLYPH_COUNT * CH_GLYPH_BYTES, CH_FONT_LEN);
 }
 
+/// `formats/bit.md §3`: the directory is a two-byte "Sub-image count"
+/// followed by an offset table of `count * 2` bytes — "For each
+/// sub-image, its byte offset measured from the start of the decoded
+/// image."
+///
+/// §1: "Nothing in the family is a display-driver 'sparse strip' table,
+/// and the leading value is never an entry count for such a table." The
+/// withdrawn four-byte pointer/metadata entry and its zero-pointer
+/// sentinel are gone; §6: "There are no sparse or skipped entries and
+/// no over-allocated table."
 #[test]
 fn bit_format_constants_match_spec() {
     // formats/bit.md §3,§4.3
-    assert_eq!(BIT_POINTER_TABLE_ENTRY_LEN, 4);
-    assert_eq!(BIT_ENTRY_COUNT_WORD_LEN, 2);
-    assert_eq!(BIT_STRIP_POINTER_NONE, 0);
+    assert_eq!(BIT_SUB_IMAGE_COUNT_WORD_LEN, 2);
+    assert_eq!(BIT_OFFSET_TABLE_ENTRY_LEN, 2);
     assert_eq!(WD_BIT_LETTERING_ROWS, 49);
+    assert_eq!(WD_BIT_LETTERING_COLUMNS, 288);
+    // §4.3: "count `1`, single offset `4`, then a 288x49 image whose
+    // rows occupy 36 bytes each. Header plus offset table plus
+    // `36 * 49` accounts for the whole file exactly."
+    let row_stride = bit_sub_image_row_stride(WD_BIT_LETTERING_COLUMNS as usize).unwrap();
+    assert_eq!(row_stride, 36);
+    assert_eq!(
+        BIT_SUB_IMAGE_COUNT_WORD_LEN
+            + BIT_OFFSET_TABLE_ENTRY_LEN
+            + BIT_SUB_IMAGE_HEADER_LEN
+            + row_stride * WD_BIT_LETTERING_ROWS as usize,
+        1772
+    );
+    // §3: "The `max(1, ...)` clause covers the one shipped record whose
+    // width is zero — glyph index 0 of `PROPORT.PCS`, the space."
+    assert_eq!(bit_sub_image_row_stride(0).unwrap(), 1);
+    assert_eq!(bit_sub_image_row_stride(8).unwrap(), 1);
+    assert_eq!(bit_sub_image_row_stride(9).unwrap(), 2);
 }
 
 #[test]
@@ -16790,6 +17453,17 @@ fn pth_decode_byte_matches_spec_encoding() {
     );
 }
 
+/// `dungeon-mode.md §7`: "The analyzed dungeon contact paths do not include a
+/// wind/breeze tile that extinguishes only the torch counter." The gust art
+/// cell is decoration, so it never zeroes the counter.
+///
+/// The counter still ages by one: `dungeon-mode.md §15` lists "**lighting
+/// decay** (the torch and light-spell counters tick down each turn — § 7)" as
+/// a consequence of the loop-head clock advance, which "does **not** gate that
+/// call on whether the command consumed a turn", and § 7 places the decay "as
+/// part of the world-clock advance call, not the dungeon mode loop's own
+/// logic". A no-turn dungeon action therefore spends one counter unit without
+/// spending an action.
 #[test]
 fn no_turn_dungeon_action_on_gust_art_keeps_torch_unchanged() {
     let dir = debug_game_dir();
@@ -16797,12 +17471,16 @@ fn no_turn_dungeon_action_on_gust_art_keeps_torch_unchanged() {
     grid[dungeon_cell_index(0, 1, 1)] = 0x70;
     let mut state = dungeon_state(grid, 0, 1, 1);
     state.torch_counter = 5;
+    // `time.md §6`: the ambient byte is one "the cleanup routine recomputes on
+    // every call", so settle it against the torch this fixture just lit before
+    // asking whether the command itself dirtied the viewport.
+    state.recompute_daylight();
     state.visibility_dirty = false;
 
     assert!(state.handle_dungeon_key('l', &dir).unwrap());
 
     assert_eq!(state.turn, 0);
-    assert_eq!(state.torch_counter, 5);
+    assert_eq!(state.torch_counter, 4);
     assert!(!state.visibility_dirty);
     assert!(!state.message.contains("breeze blows out the torch"));
     let _ = fs::remove_dir_all(dir);
@@ -17211,12 +17889,23 @@ fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
     assert!(state.combat_active);
     assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert_eq!(state.combat_terrain[0][0], 0x00);
-    assert_eq!(state.active_objects[6].tile, 0xc4);
+    // `combat.md §5` / `formats/cbt.md §5`: the room helper seats the
+    // party first, so the monster descriptor is index six while its
+    // renderer record continues from the first record the seated party
+    // left free. Follow the descriptor's link byte, which is "the
+    // authoritative pairing in both directions". The stock roster is one
+    // live member, so that record is one.
+    assert!(!state.combat_actors[6].is_empty());
+    let monster_record = usize::from(state.combat_actors[6].active_object_slot);
+    assert_eq!(monster_record, 1);
+    assert_eq!(state.active_objects[monster_record].tile, 0x44);
     assert_eq!(
-        (state.active_objects[6].x, state.active_objects[6].y),
+        (
+            state.active_objects[monster_record].x,
+            state.active_objects[monster_record].y
+        ),
         (2, 13)
     );
-    assert!(!state.combat_actors[6].is_empty());
     assert!(!dungeon_room_clear_bit_is_set(
         &state.dungeon_room_clear_bitmap,
         scene,
@@ -17509,10 +18198,20 @@ fn doom_final_room_trigger_loads_dungeon_cbt_before_endgame_when_available() {
         scene,
         DOOM_FINAL_ROOM_SLOT
     ));
-    assert_eq!(state.active_objects[6].tile, DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE);
-    assert!(state.combat_actors[6].is_empty());
-    assert_eq!(state.active_objects[7].tile, 0xc4);
-    assert!(!state.combat_actors[7].is_empty());
+    // The absorbable field is a marker placement: it takes a renderer
+    // record but no descriptor. The ordinary combatant behind it takes
+    // the still-free descriptor six, and its link
+    // byte names its own record (`combat.md §5`). With one live party
+    // member the marker sits at record one and the monster at record two.
+    assert!(!state.combat_actors[6].is_empty());
+    assert!(state.combat_actors[7].is_empty());
+    let monster_record = usize::from(state.combat_actors[6].active_object_slot);
+    assert_eq!(monster_record, 2);
+    assert_eq!(state.active_objects[monster_record].tile, 0x44);
+    assert_eq!(
+        state.active_objects[monster_record - 1].tile,
+        DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -17527,10 +18226,8 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
         DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
     record[source_base] = DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE;
     record[source_base + 1] = 0x44;
-    record[DUNGEON_ROOM_SOURCE_X_ROW * COMBAT_ARENA_ROW_STRIDE
-        + COMBAT_ARENA_METADATA_START] = 5;
-    record[DUNGEON_ROOM_SOURCE_Y_ROW * COMBAT_ARENA_ROW_STRIDE
-        + COMBAT_ARENA_METADATA_START] = 1;
+    record[DUNGEON_ROOM_SOURCE_X_ROW * COMBAT_ARENA_ROW_STRIDE + COMBAT_ARENA_METADATA_START] = 5;
+    record[DUNGEON_ROOM_SOURCE_Y_ROW * COMBAT_ARENA_ROW_STRIDE + COMBAT_ARENA_METADATA_START] = 1;
     let mut dungeon_cbt = Vec::new();
     for index in 0..DUNGEON_CBT_RECORDS {
         if index == DUNGEON_CBT_RECORDS - 1 {
@@ -17562,11 +18259,13 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
             .map(|snapshot| snapshot.enter_endgame_after_successful_combat),
         Some(false)
     );
-    assert!(state
-        .combat_frame_snapshot
-        .as_ref()
-        .and_then(|snapshot| snapshot.endgame_messages.as_ref())
-        .is_some());
+    assert!(
+        state
+            .combat_frame_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.endgame_messages.as_ref())
+            .is_some()
+    );
     let mut no_absorption = state.clone();
     no_absorption.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
     let no_absorption_application =
@@ -17779,7 +18478,11 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     victory.resolve_endgame_confirmation(true);
     victory.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
     assert_eq!(victory.message, "Rite 1");
-    for expected in ["Rite 2", "Rite 3", "Rite 4", "Rite 5", "Rite 6", "Rite 7"] {
+    for _ in 0..crate::endgame_cinematic::ENDGAME_RITE_LEAD_IN_PAUSE_TICKS {
+        assert!(victory.advance_endgame_display_frame());
+    }
+    assert_eq!(victory.message, "\nHe says:\n\nRite 2");
+    for expected in ["Rite 3", "Rite 4", "Rite 5", "Rite 6", "Rite 7"] {
         victory.resolve_endgame_confirmation(true);
         assert_eq!(victory.message, expected);
     }
@@ -17818,16 +18521,18 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
         ENDGAME_TABLEAU_BOX_ACTOR_BYTE
     );
-    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 5));
+    assert_eq!(
+        (state.active_objects[0].x, state.active_objects[0].y),
+        (5, 5)
+    );
 
     run_victory_tableau_to_first_narrative_window(&mut state);
-    assert!((0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
-        .chain([
-            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
-            ENDGAME_TABLEAU_BOX_SLOT
-        ])
-        .all(|slot| state.active_objects[slot].type_byte == 0
-            && state.active_objects[slot].tile == 0));
+    assert!(
+        (0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
+            .chain([ENDGAME_TABLEAU_LORD_BRITISH_SLOT, ENDGAME_TABLEAU_BOX_SLOT])
+            .all(|slot| state.active_objects[slot].type_byte == 0
+                && state.active_objects[slot].tile == 0)
+    );
 
     // The automatic tableau sequence includes the one silent fade and
     // publishes the first narrative window without consuming another key.
@@ -17861,7 +18566,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         assert_eq!(certificate.day_ordinal, "sixth");
         assert_eq!(certificate.month_ordinal, "fifth");
         assert_eq!(certificate.year_hundreds_words, "one");
-    assert_eq!(certificate.year_remainder_words, "forty-one");
+        assert_eq!(certificate.year_remainder_words, "forty-one");
         assert_eq!(
             endgame.final_report.unwrap().elapsed_label(),
             "2 years, 1 month, 1 day"
@@ -18084,8 +18789,7 @@ fn endgame_final_report_omits_zero_units_and_pluralises() {
     // one, and the separator is emitted only when a later component
     // will also print.
     let label = |year, month, day| {
-        endgame_final_report(GameClock::with_date(year, month, day, 12, 0).unwrap())
-            .elapsed_label()
+        endgame_final_report(GameClock::with_date(year, month, day, 12, 0).unwrap()).elapsed_label()
     };
     assert_eq!(label(139, 4, 6), "1 day");
     assert_eq!(label(139, 5, 5), "1 month");
@@ -18296,29 +19000,68 @@ fn natural_moongate_counter_step_matches_spec_hour_band() {
 }
 
 #[test]
-fn moon_glyph_tables_match_published_hour_index() {
-    // moons.md §2 — both 24-entry tables, ASCII '0'..'7' or sentinel
-    assert_eq!(TRAMMEL_GLYPH_BY_HOUR.len(), 24);
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR.len(), 24);
-    // Hour 0 is the published midnight off-horizon row for both moons
-    assert_eq!(TRAMMEL_GLYPH_BY_HOUR[0], TRAMMEL_OFF_HORIZON_SENTINEL);
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[0], FELUCCA_OFF_HORIZON_SENTINEL);
-    // Spot-check several published hours
-    assert_eq!(TRAMMEL_GLYPH_BY_HOUR[1], b'0');
-    assert_eq!(TRAMMEL_GLYPH_BY_HOUR[8], b'4');
-    assert_eq!(TRAMMEL_GLYPH_BY_HOUR[15], b'0');
-    assert_eq!(TRAMMEL_GLYPH_BY_HOUR[23], b'5');
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[9], b'7');
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[12], b'1');
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[18], b'7');
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[23], b'3');
-    // Public issue #38 corrected these Felucca rows to literal
-    // phase-0 glyph bytes, not high-bit off-horizon sentinels.
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[10], b'0');
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[11], b'0');
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[19], b'0');
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[20], b'0');
-    // Decode rule: high-bit => None, '0'..'7' => Some(slot)
+fn moon_glyph_tables_match_published_day_index() {
+    // `moons.md §2.2`: "The glyph identity for each moon is
+    // table-driven, **indexed by the calendar day of the month, one
+    // through twenty-eight**. It is not indexed by the hour. Two
+    // earlier statements in this document were wrong and are retracted:
+    // the tables are not twenty-four-entry hour tables, and they
+    // contain no off-horizon sentinel entries at all."
+    //
+    // This test previously pinned the retracted 24-entry hour tables
+    // and their sentinel rows.
+    assert_eq!(TRAMMEL_GLYPH_BY_DAY.len(), MOON_GLYPH_DAYS_PER_MONTH);
+    assert_eq!(FELUCCA_GLYPH_BY_DAY.len(), MOON_GLYPH_DAYS_PER_MONTH);
+    assert_eq!(MOON_GLYPH_DAYS_PER_MONTH, 28);
+
+    // "There is no sentinel byte in either table" — every entry is an
+    // ASCII digit b'0'..=b'7'.
+    for (index, byte) in TRAMMEL_GLYPH_BY_DAY
+        .iter()
+        .chain(FELUCCA_GLYPH_BY_DAY.iter())
+        .enumerate()
+    {
+        assert!((b'0'..=b'7').contains(byte), "entry {index} is {byte:#04x}");
+    }
+
+    // The published twenty-eight-row day table, in full.
+    let trammel: Vec<u8> = (1..=28u8)
+        .map(|day| trammel_moonstone_slot_for_day(day).unwrap() as u8)
+        .collect();
+    let felucca: Vec<u8> = (1..=28u8)
+        .map(|day| felucca_moonstone_slot_for_day(day).unwrap() as u8)
+        .collect();
+    assert_eq!(
+        trammel,
+        vec![
+            0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7
+        ]
+    );
+    assert_eq!(
+        felucca,
+        vec![
+            0, 0, 1, 2, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 4, 5, 6, 7, 0
+        ]
+    );
+
+    // §2.2's worked example: "Trammel's **glyph** comes from day 5, not
+    // hour 8, and the day-5 row of the table above gives `'2'`. Any
+    // implementation that indexes the phase table by the hour will draw
+    // `'4'` there and be visibly wrong."
+    assert_eq!(cached_moon_glyph_bytes_for_day(5).unwrap()[0], b'2');
+    assert_eq!(trammel_moonstone_slot_for_day(5), Some(2));
+
+    // "There is no day zero, so an implementation should treat a zero
+    // or out-of-range day as a save-data error rather than looking up a
+    // twenty-ninth entry."
+    assert_eq!(cached_moon_glyph_bytes_for_day(0), None);
+    assert_eq!(cached_moon_glyph_bytes_for_day(29), None);
+    assert_eq!(cached_moon_glyph_bytes_for_day(255), None);
+    assert_eq!(trammel_moonstone_slot_for_day(0), None);
+    assert_eq!(felucca_moonstone_slot_for_day(29), None);
+
+    // Decode rule: high-bit cache-only "no gate" byte => None,
+    // b'0'..=b'7' => Some(slot).
     assert_eq!(moonstone_slot_from_glyph_byte(b'0'), Some(0));
     assert_eq!(moonstone_slot_from_glyph_byte(b'7'), Some(7));
     assert_eq!(
@@ -18331,25 +19074,10 @@ fn moon_glyph_tables_match_published_hour_index() {
     );
     assert_eq!(moonstone_slot_from_glyph_byte(b'8'), None);
     assert_eq!(moonstone_slot_from_glyph_byte(b'/'), None);
-    // Hour-indexed slot lookups
-    assert_eq!(trammel_moonstone_slot_for_hour(0), None);
-    assert_eq!(trammel_moonstone_slot_for_hour(1), Some(0));
-    assert_eq!(trammel_moonstone_slot_for_hour(8), Some(4));
-    assert_eq!(felucca_moonstone_slot_for_hour(10), Some(0));
-    assert_eq!(felucca_moonstone_slot_for_hour(20), Some(0));
-    assert_eq!(felucca_moonstone_slot_for_hour(12), Some(1));
-    // Out-of-range hours
-    assert_eq!(trammel_moonstone_slot_for_hour(24), None);
-    assert_eq!(felucca_moonstone_slot_for_hour(255), None);
-    // Every published in-range entry decodes to either Some(0..=7) or None
-    for hour in 0..24u8 {
-        if let Some(slot) = trammel_moonstone_slot_for_hour(hour) {
-            assert!(slot < 8, "trammel hour {hour} slot {slot}");
-        }
-        if let Some(slot) = felucca_moonstone_slot_for_hour(hour) {
-            assert!(slot < 8, "felucca hour {hour} slot {slot}");
-        }
-    }
+    assert_eq!(
+        MOON_GLYPH_CACHE_NO_GATE,
+        [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL]
+    );
 }
 
 #[test]
@@ -18515,7 +19243,7 @@ fn town_location_class_and_index_split_per_spec() {
     assert_eq!(town_floor_offset(127), 127);
     assert_eq!(town_floor_offset(128), -128);
     assert_eq!(town_floor_offset(255), -1); // basement (one floor below base)
-                                            // Per-location grid + roster constants
+    // Per-location grid + roster constants
     assert_eq!(TOWN_GRID_SIDE, 32);
     assert_eq!(TOWN_GRID_BYTES, 1024);
     assert_eq!(TOWN_NPC_ROSTER_SLOTS, 31);
@@ -18545,24 +19273,13 @@ fn hidden_treasure_rule_special_records_match_spec() {
     // Record 14: cookie != current day
     assert!(hidden_treasure_can_stage(14, 0, false, 5, 6, 0));
     assert!(!hidden_treasure_can_stage(14, 0, false, 7, 7, 0));
-    // Record 15: cookie clear AND no NPC
-    assert!(hidden_treasure_can_stage(
-        15,
-        0,
-        false,
-        0,
-        0,
-        FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR
-    ));
+    // Record 15: the Glass Sword equipment counter is zero AND no NPC.
+    // formats/saved-gam.md §10: "An engine that gives record 15 a
+    // separate never-written cookie yields an infinitely repeatable
+    // Glass Sword."
+    assert!(hidden_treasure_can_stage(15, 0, false, 0, 0, 0));
     assert!(!hidden_treasure_can_stage(15, 0, false, 0, 0, 1));
-    assert!(!hidden_treasure_can_stage(
-        15,
-        0,
-        true,
-        0,
-        0,
-        FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR
-    ));
+    assert!(!hidden_treasure_can_stage(15, 0, true, 0, 0, 0));
     // Ordinary one-shot record passes the per-record gate (caller
     // owns the found bitmap).
     assert!(hidden_treasure_can_stage(0, 0, true, 0, 0, 1));
@@ -19323,9 +20040,19 @@ fn command_for_letter_covers_full_a_to_z_table() {
     assert_eq!(Command::UnassignedRefusal.verb_prefix(), "What?");
 }
 
+/// `intro.md §6.2`: "What exists is a fixed six-entry row-to-letter
+/// table: rows `0` through `5` map to `J`, `C`, `T`, `U`, `A`, `R`",
+/// with "Enter, Space | Commit whichever row is currently highlighted,
+/// resolved through the row-to-letter table" and the arrows moving the
+/// highlight. The withdrawn "recent-selection cache" that Enter replays
+/// no longer exists, and Space is not a discarded key.
 #[test]
 fn intro_menu_action_matches_spec_keys() {
-    // intro.md §6
+    // intro.md §6.2
+    assert_eq!(INTRO_MENU_ROW_COUNT, 6);
+    assert_eq!(INTRO_MENU_ROW_LETTERS, [b'J', b'C', b'T', b'U', b'A', b'R']);
+    assert_eq!(INTRO_MENU_INITIAL_HIGHLIGHT_ROW, 0);
+    assert_eq!(INTRO_MENU_IDLE_TIMEOUT_PASSES, 200);
     assert_eq!(
         intro_menu_action(b'J'),
         Some(IntroMenuAction::JourneyOnward)
@@ -19353,20 +20080,53 @@ fn intro_menu_action_matches_spec_keys() {
         Some(IntroMenuAction::JourneyOnward)
     );
     assert_eq!(intro_menu_action(b'r'), Some(IntroMenuAction::ReturnToView));
-    // Enter / Return -> RepeatCachedSelection
+    // Every letter resolves to its published row.
+    for (row, letter) in INTRO_MENU_ROW_LETTERS.iter().enumerate() {
+        assert_eq!(
+            intro_menu_action(*letter).and_then(IntroMenuAction::letter_row),
+            Some(row as u8)
+        );
+    }
+    // "Enter, Space | Commit whichever row is currently highlighted."
     assert_eq!(
         intro_menu_action(b'\r'),
-        Some(IntroMenuAction::RepeatCachedSelection)
+        Some(IntroMenuAction::CommitHighlight)
     );
     assert_eq!(
         intro_menu_action(b'\n'),
-        Some(IntroMenuAction::RepeatCachedSelection)
+        Some(IntroMenuAction::CommitHighlight)
     );
-    // Invalid
+    assert_eq!(
+        intro_menu_action(b' '),
+        Some(IntroMenuAction::CommitHighlight)
+    );
+    // "Up arrow, left arrow | Move the highlight one row toward row 0"
+    // / "Down arrow, right arrow | Move the highlight one row toward
+    // row 5".
+    assert_eq!(
+        intro_menu_action(INPUT_CODE_NORTH),
+        Some(IntroMenuAction::MoveHighlightUp)
+    );
+    assert_eq!(
+        intro_menu_action(INPUT_CODE_WEST),
+        Some(IntroMenuAction::MoveHighlightUp)
+    );
+    assert_eq!(
+        intro_menu_action(INPUT_CODE_SOUTH),
+        Some(IntroMenuAction::MoveHighlightDown)
+    );
+    assert_eq!(
+        intro_menu_action(INPUT_CODE_EAST),
+        Some(IntroMenuAction::MoveHighlightDown)
+    );
+    // Motion and commit actions do not name a letter row of their own.
+    assert_eq!(IntroMenuAction::CommitHighlight.letter_row(), None);
+    assert_eq!(IntroMenuAction::MoveHighlightUp.letter_row(), None);
+    assert_eq!(IntroMenuAction::MoveHighlightDown.letter_row(), None);
+    // "Any other key | Discarded."
     assert_eq!(intro_menu_action(b'B'), None);
     assert_eq!(intro_menu_action(b'X'), None);
     assert_eq!(intro_menu_action(0), None);
-    assert_eq!(intro_menu_action(b' '), None);
 }
 
 #[test]
@@ -19412,7 +20172,10 @@ fn boardable_family_classifier_matches_spec_table() {
             no_skiffs: false
         }
     );
-    assert_eq!(ship_boarding_warnings(10, 2), ShipBoardingWarnings::default());
+    assert_eq!(
+        ship_boarding_warnings(10, 2),
+        ShipBoardingWarnings::default()
+    );
     assert_eq!(
         ship_boarding_warnings(50, 0),
         ShipBoardingWarnings {
@@ -19420,7 +20183,10 @@ fn boardable_family_classifier_matches_spec_table() {
             no_skiffs: true
         }
     );
-    assert_eq!(ship_boarding_warnings(50, 1), ShipBoardingWarnings::default());
+    assert_eq!(
+        ship_boarding_warnings(50, 1),
+        ShipBoardingWarnings::default()
+    );
     // Both warnings can fire on the same board; a single bool
     // would lose which one the player was shown.
     assert_eq!(
@@ -19609,18 +20375,91 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
 }
 
 #[test]
-fn combat_combatant_capacity_matches_spec() {
-    // active-objects.md §7
-    assert_eq!(COMBAT_MAX_COMBATANTS, 26);
-    assert_eq!(COMBAT_MONSTER_SLOT_FIRST, 1);
-    assert_eq!(COMBAT_MONSTER_SLOT_LAST, 25);
-    assert_eq!(
-        COMBAT_MONSTER_SLOT_LAST - COMBAT_MONSTER_SLOT_FIRST + 1,
-        COMBAT_MAX_COMBATANTS - 1
+fn summoned_creatures_never_reach_the_player_command_path() {
+    // magic.md §8: "All three place their creature through the ordinary
+    // monster placement path, so the new actor keeps the monster-side
+    // class byte and monster AI drives its turns exactly as it drives
+    // any other monster. Nothing routes a summoned creature through the
+    // player command parser, and the player never gets to move it."
+    //
+    // combat.md §6.1a: "The walker sends the group ordinarily occupied
+    // by seated party members to the keystroke/command path (Section 8)
+    // and the other group to the automatic actor driver (Section 9). A
+    // party-side actor carrying this bit therefore takes its turns
+    // through the automatic driver instead of the player's prompt."
+    let descriptor = |flags: u8, owner: u8| CombatActorDescriptor {
+        hp_or_wound: 10,
+        base_step: 1,
+        flags,
+        owner_target_class: owner,
+        active_object_slot: 0,
+        phase_counter: 0,
+        x: 1,
+        y: 1,
+    };
+
+    // An ordinary seated party member takes the keystroke path.
+    let party = descriptor(COMBAT_ACTOR_FLAG_SELECTABLE_80, 0);
+    assert!(combat_slot_takes_player_command_path(0, party));
+    assert!(combat_slot_takes_player_command_path(
+        COMBAT_PARTY_ACTOR_SLOTS - 1,
+        party
+    ));
+
+    // Sword of Chaos / possession / Charm on a party-side slot: the
+    // controlled bit moves it to the automatic driver, not the prompt.
+    let controlled_party = descriptor(
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+        0,
     );
-    // Player slot 0 plus 25 monster slots == 26 total combatants.
-    assert!(COMBAT_PARTY_ACTOR_SLOTS <= COMBAT_MAX_COMBATANTS);
-    assert!(COMBAT_MAX_COMBATANTS <= COMBAT_ACTOR_SLOTS);
+    assert!(!combat_slot_takes_player_command_path(0, controlled_party));
+
+    // An ordinary monster is driven by monster AI.
+    let monster = descriptor(COMBAT_ACTOR_FLAG_SELECTABLE_80, 20);
+    assert!(!combat_slot_takes_player_command_path(
+        COMBAT_PARTY_ACTOR_SLOTS,
+        monster
+    ));
+
+    // Conjure / Swarm / Summon stamp COMBAT_SUMMONED_ACTOR_FLAGS into a
+    // monster-side slot. The bit groups the creature with the party for
+    // the same-faction filter, but it must not hand the creature to the
+    // player's prompt.
+    let summoned = descriptor(COMBAT_SUMMONED_ACTOR_FLAGS, 20);
+    assert!(summoned.is_controlled());
+    assert_eq!(
+        resolve_combat_target_group_for_actor(summoned, COMBAT_PARTY_ACTOR_SLOTS, None),
+        COMBAT_TARGET_GROUP_PARTY
+    );
+    for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+        assert!(
+            !combat_slot_takes_player_command_path(slot, summoned),
+            "summoned creature in slot {slot} reached the player command path"
+        );
+    }
+
+    // combat.md §9: the traitor-roster override applies "for both the
+    // friendly-fire filter and the player-versus-AI dispatch gate".
+    let traitor = descriptor(COMBAT_ACTOR_FLAG_SELECTABLE_80, TRAITOR_ROSTER_RECORD);
+    assert!(!combat_slot_takes_player_command_path(1, traitor));
+}
+
+#[test]
+fn combat_combatant_capacity_matches_spec() {
+    // active-objects.md §7: "Within combat there is no reserved
+    // player slot and no twenty-six-combatant cap; earlier drafts
+    // of this section claimed both and were wrong. ... The hard
+    // limits are the thirty-two records themselves and, for terrain
+    // combat, the sixteen arena placement slots; a terrain
+    // encounter can never place more than sixteen monsters."
+    assert_eq!(COMBAT_ACTOR_SLOTS, 32);
+    assert_eq!(CBT_PLACEMENT_SLOT_COUNT, 16);
+    // "a full party occupies records zero through five" - the party
+    // takes the first free records, it does not reserve slot zero
+    // for a player figure.
+    assert_eq!(COMBAT_PARTY_ACTOR_SLOTS, 6);
+    assert!(COMBAT_PARTY_ACTOR_SLOTS <= COMBAT_ACTOR_SLOTS);
+    assert!(CBT_PLACEMENT_SLOT_COUNT <= COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS);
 }
 
 #[test]
@@ -19783,8 +20622,14 @@ fn dungeon_cell_class_of_matches_high_nibble_table() {
     for high in 0xB..=0xD {
         assert_eq!(dungeon_cell_class_of(high << 4), DungeonCellClass::Wall);
     }
-    assert_eq!(dungeon_cell_class_of(0xE0), DungeonCellClass::HeavyDoorVariant);
-    assert_eq!(dungeon_cell_class_of(0xEF), DungeonCellClass::HeavyDoorVariant);
+    assert_eq!(
+        dungeon_cell_class_of(0xE0),
+        DungeonCellClass::HeavyDoorVariant
+    );
+    assert_eq!(
+        dungeon_cell_class_of(0xEF),
+        DungeonCellClass::HeavyDoorVariant
+    );
     assert_eq!(dungeon_cell_class_of(0xF0), DungeonCellClass::RoomTrigger);
     // Convenience predicates
     assert!(DungeonCellClass::Wall.is_wall());
@@ -19802,10 +20647,17 @@ fn dungeon_cell_class_of_matches_high_nibble_table() {
 
 #[test]
 fn daylight_base_value_matches_spec_table() {
-    // time.md §6
-    // Underworld / dungeon depth are always dark
+    // `lighting.md §3`: the plane/floor forced-dark test fires on "any Z with
+    // its high bit set - that is, any value above one hundred twenty-seven",
+    // which selects the Underworld plane and a below-entry town floor (both
+    // `0xFF`). It "does **not** select ordinary dungeon levels".
+    //
+    // §3 records that the earlier wording placing "any dungeon depth" inside
+    // the forced-dark scope is withdrawn, "in this document and in
+    // `systems/time.md`" — which is what the retired comment here cited.
     assert_eq!(daylight_base_value(12, 0, true, 0), FULL_DARKNESS);
-    assert_eq!(daylight_base_value(12, 0, false, 1), FULL_DARKNESS);
+    assert_eq!(daylight_base_value(12, 0, false, 0xFF), FULL_DARKNESS);
+    assert_ne!(daylight_base_value(12, 0, false, 1), FULL_DARKNESS);
     // Pre-dawn / post-dusk surface
     assert_eq!(daylight_base_value(0, 0, false, 0), FULL_DARKNESS);
     assert_eq!(daylight_base_value(4, 59, false, 0), FULL_DARKNESS);
@@ -19988,12 +20840,8 @@ fn save_load_disk_swap_and_conditional_write_predicates() {
 
     // save-load.md §5.2 step 5: the staged UNDER.OOL bytes are
     // written back once unless entry state is Britannia index 1.
-    assert!(save_flow_writes_underworld_mirror(
-        RequiredDisk::Program
-    ));
-    assert!(!save_flow_writes_underworld_mirror(
-        RequiredDisk::Britannia
-    ));
+    assert!(save_flow_writes_underworld_mirror(RequiredDisk::Program));
+    assert!(!save_flow_writes_underworld_mirror(RequiredDisk::Britannia));
     assert!(save_flow_writes_underworld_mirror(
         RequiredDisk::UltimaVSave
     ));
@@ -20012,13 +20860,17 @@ fn input_direction_codes_match_spec_table() {
     assert_eq!(input_code_direction(0xD4), Some(InputDirection::Southwest));
     assert_eq!(input_code_direction(0xD5), Some(InputDirection::Northeast));
     assert_eq!(input_code_direction(0xD6), Some(InputDirection::Southeast));
-    assert_eq!(input_code_direction(0xFB), Some(InputDirection::West));
-    assert_eq!(input_code_direction(0xFC), Some(InputDirection::East));
-    assert_eq!(input_code_direction(0xFD), Some(InputDirection::North));
-    assert_eq!(input_code_direction(0xFE), Some(InputDirection::South));
-    // Non-direction bytes
+    assert_eq!(input_code_direction(0x01), Some(InputDirection::West));
+    assert_eq!(input_code_direction(0x02), Some(InputDirection::East));
+    assert_eq!(input_code_direction(0x03), Some(InputDirection::North));
+    assert_eq!(input_code_direction(0x04), Some(InputDirection::South));
+    // Non-direction bytes — including the high tail 0xFB..=0xFE an
+    // earlier revision of input.md §5 assigned to the cardinals.
     assert_eq!(input_code_direction(b'A'), None);
     assert_eq!(input_code_direction(0x00), None);
+    assert_eq!(input_code_direction(0x05), None);
+    assert_eq!(input_code_direction(0xFB), None);
+    assert_eq!(input_code_direction(0xFE), None);
     assert_eq!(input_code_direction(0xFF), None);
     assert_eq!(
         input_direction_code(InputDirection::North),
@@ -20195,30 +21047,45 @@ fn npc_ai_behavior_classifies_per_spec_table() {
 
 #[test]
 fn schedule_floor_state_matches_spec_table() {
-    // npc-schedules.md §6
+    // npc-schedules.md §6: "The floor index grows upward", and the
+    // ordering test is a signed eight-bit comparison.
     // both equal -> 2
     assert_eq!(schedule_floor_state(1, 1, 1), NPC_STATE_INPLANE_MOVE);
-    // equal/below -> 7 (target floor index > map floor index)
+    // equal/below -> 7 (target floor index < map floor index)
     assert_eq!(
-        schedule_floor_state(1, 2, 1),
+        schedule_floor_state(1, 0, 1),
         NPC_STATE_CLIMB_DOWN_OFF_FLOOR
     );
     // equal/above -> 6
-    assert_eq!(schedule_floor_state(1, 0, 1), NPC_STATE_CLIMB_UP_OFF_FLOOR);
-    // below/equal -> 5 (npc floor index > map floor index)
+    assert_eq!(schedule_floor_state(1, 2, 1), NPC_STATE_CLIMB_UP_OFF_FLOOR);
+    // below/equal -> 5 (npc floor index < map floor index)
     assert_eq!(
-        schedule_floor_state(2, 1, 1),
+        schedule_floor_state(0, 1, 1),
         NPC_STATE_ASCEND_TOWARD_TARGET
     );
     // above/equal -> 4
     assert_eq!(
-        schedule_floor_state(0, 1, 1),
+        schedule_floor_state(2, 1, 1),
         NPC_STATE_DESCEND_TOWARD_TARGET
     );
     // neither/neither -> 8
     assert_eq!(schedule_floor_state(0, 2, 1), NPC_STATE_PARKED_OFF_FLOOR);
     assert_eq!(schedule_floor_state(2, 0, 1), NPC_STATE_PARKED_OFF_FLOOR);
     assert_eq!(schedule_floor_state(2, 3, 1), NPC_STATE_PARKED_OFF_FLOOR);
+    // §6: the basement byte 0xFF orders BELOW 0x00, so a basement NPC
+    // whose waypoint is on floor 0 lands in state 5 (surfaces at a
+    // descend link), never state 4. Ordering it as an unsigned byte is
+    // exactly the failure the spec calls out.
+    assert_eq!(
+        schedule_floor_state(0xFF, 0x00, 0x00),
+        NPC_STATE_ASCEND_TOWARD_TARGET
+    );
+    assert_eq!(
+        schedule_floor_state(0x00, 0xFF, 0x00),
+        NPC_STATE_CLIMB_DOWN_OFF_FLOOR
+    );
+    assert!(npc_floor_is_above(0x00, 0xFF));
+    assert!(!npc_floor_is_above(0xFF, 0x00));
 }
 
 #[test]
@@ -21097,7 +21964,7 @@ fn tlk_introducer_argument_widths_match_section_seven_six() {
         TLK_CODE_WAIT_KEY,
         TLK_CODE_CURSE_CHECK,
         TLK_CODE_PROTECT_RUN,
-        TLK_CODE_SET_FLAG,
+        TLK_CODE_KEYWORD_ALIAS,
         TLK_CODE_END_OF_RESPONSE,
     ] {
         assert_eq!(tlk_introducer_argument_count(code), None);
@@ -21119,8 +21986,11 @@ fn tile_class_partitions_byte_range_per_catalog_section_three() {
     assert_eq!(coarse_tile_class(0x3F), TileClass::Wall);
     assert_eq!(coarse_tile_class(0x40), TileClass::Furniture);
     assert_eq!(coarse_tile_class(0x5F), TileClass::Furniture);
-    assert_eq!(coarse_tile_class(0x60), TileClass::Door);
-    assert_eq!(coarse_tile_class(0x67), TileClass::Door);
+    // catalogs/tile-catalog.md §3: "96..103 | terrain | River
+    // terrain frames. The obsolete door classification for this
+    // range is withdrawn."
+    assert_eq!(coarse_tile_class(0x60), TileClass::River);
+    assert_eq!(coarse_tile_class(0x67), TileClass::River);
     assert_eq!(coarse_tile_class(0x68), TileClass::Decoration);
     assert_eq!(coarse_tile_class(0x6F), TileClass::Decoration);
     assert_eq!(coarse_tile_class(0x70), TileClass::Barrier);
@@ -21325,23 +22195,43 @@ fn npc_dynamic_obstacle_radius_matches_published_threshold() {
 }
 
 #[test]
-fn npc_path_tile_open_matches_published_bitmap_ranges() {
-    // npc-schedules.md section 10: NPC pathfinding uses its own tile-open
-    // bitmap, independent of player and vehicle passability.
+fn npc_path_tile_obstacle_matches_published_obstacle_ranges() {
+    // npc-schedules.md §10: "A set bit marks the tile id as an obstacle for
+    // NPC pathfinding; a clear bit marks it open." The published obstacle
+    // ranges; everything else is open.
     for tile in [
         0x01u8, 0x03, 0x0C, 0x0D, 0x10, 0x1C, 0x27, 0x2B, 0x2E, 0x3F, 0x41, 0x43, 0x46, 0x4A, 0x69,
         0x6C, 0x86, 0x88, 0x8F, 0x94, 0xA9, 0xAB, 0xB7, 0xB9, 0xBB, 0xC3, 0xCA, 0xFF,
     ] {
-        assert!(npc_path_tile_open(tile), "tile 0x{tile:02X} should be open");
+        assert!(
+            npc_path_tile_obstacle(tile),
+            "tile 0x{tile:02X} should be an obstacle"
+        );
     }
     for tile in [
         0x00u8, 0x04, 0x0B, 0x0E, 0x1D, 0x26, 0x2C, 0x2D, 0x40, 0x44, 0x45, 0x47, 0x49, 0x6A, 0x6B,
         0x87, 0x90, 0x93, 0xAA, 0xB8, 0xBA, 0xC4, 0xC9,
     ] {
         assert!(
-            !npc_path_tile_open(tile),
-            "tile 0x{tile:02X} should be blocked"
+            !npc_path_tile_obstacle(tile),
+            "tile 0x{tile:02X} should be open"
         );
+    }
+    // §10's own confirmation that the polarity is this way round: the
+    // unlocked doors route, the locked doors do not.
+    assert!(!npc_path_tile_obstacle(0xB8));
+    assert!(!npc_path_tile_obstacle(0xBA));
+    assert!(npc_path_tile_obstacle(0xB9));
+    assert!(npc_path_tile_obstacle(0xBB));
+    // Chairs are walkable for NPC routing and beds are not.
+    for chair in 0x90u8..=0x93 {
+        assert!(!npc_path_tile_obstacle(chair));
+    }
+    assert!(npc_path_tile_obstacle(0xAB));
+    // Both floor links and the whole stairway family are ordinary open
+    // ground; they are never obstacles at any point in the pass.
+    for tile in 0xC4u8..=0xC9 {
+        assert!(!npc_path_tile_obstacle(tile), "tile 0x{tile:02X}");
     }
 }
 
@@ -21491,8 +22381,9 @@ fn read_codex_urn_no_ordained_branch_when_no_bits_set() {
 #[test]
 fn town_tile_predicates_match_published_catalog_ranges() {
     // doors-and-z-transitions.md §2: command door ids are dispersed;
-    // stairs remain 0xC4..=0xC7,
-    // chair 0x8C, NPC floor-link markers 0xC8 and 0xC9.
+    // stairs remain 0xC4..=0xC7, the loose-brick/trapdoor trigger is 0x8C,
+    // the actual chair family is 0x90..=0x93, and NPC floor-link markers are
+    // 0xC8 and 0xC9.
     for tile in [0x97, 0x98, 0xB8, 0xB9, 0xBA, 0xBB] {
         assert!(is_town_door_tile(tile));
     }
@@ -21510,7 +22401,10 @@ fn town_tile_predicates_match_published_catalog_ranges() {
     assert!(!is_npc_floor_link_tile(0xC7));
     assert!(!is_npc_floor_link_tile(0xCA));
 
-    assert_eq!(TOWN_CHAIR_TILE, 0x8C);
+    assert_eq!(TOWN_LOOSE_BRICK_TRAPDOOR_TILE, 0x8C);
+    for tile in 0x90..=0x93 {
+        assert!(!is_town_trapdoor_live_tile(tile));
+    }
 }
 
 #[test]
@@ -21830,10 +22724,7 @@ fn wrap_text_matches_the_observed_fifteen_cell_message_window_wrap() {
     // §5, observed in the original's 15-cell dungeon message window: every
     // break lands on a space, never mid-word.
     let lines = wrap_text("Wielding the Sceptre of Lord British...", 15, 0);
-    assert_eq!(
-        lines,
-        vec!["Wielding the", "Sceptre of Lord", "British..."]
-    );
+    assert_eq!(lines, vec!["Wielding the", "Sceptre of Lord", "British..."]);
     for line in &lines {
         assert!(line.len() <= 15, "line {line:?} crosses the right edge");
     }
@@ -22330,7 +23221,7 @@ fn parse_sign_records_decodes_directory_and_payload() {
     bytes.extend_from_slice(b"Hello");
     bytes.push(0x00);
     bytes.push(0x00); // end-of-block sentinel
-                      // Scene 18 block.
+    // Scene 18 block.
     bytes.extend_from_slice(&[18, 1, 7, 8]);
     bytes.extend_from_slice(&[b'A', 0x26, b'B', 0x29, b'C']);
     bytes.push(0x00);
@@ -22650,15 +23541,24 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
         Some(EndgameTableauActorRole::PartyMember(2))
     );
     assert_eq!(
-        (state.active_objects[0].type_byte, state.active_objects[0].tile),
+        (
+            state.active_objects[0].type_byte,
+            state.active_objects[0].tile
+        ),
         (0x4c, 0x4c)
     );
     assert_eq!(
-        (state.active_objects[1].type_byte, state.active_objects[1].tile),
+        (
+            state.active_objects[1].type_byte,
+            state.active_objects[1].tile
+        ),
         (0x40, 0x40)
     );
     assert_eq!(
-        (state.active_objects[2].type_byte, state.active_objects[2].tile),
+        (
+            state.active_objects[2].type_byte,
+            state.active_objects[2].tile
+        ),
         (0x44, 0x44)
     );
     assert_eq!(
@@ -22668,14 +23568,13 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
         ),
         Some(EndgameTableauActorRole::LordBritish)
     );
-    assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
-        0
+    assert_eq!(state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte, 0);
+    assert!(
+        !state
+            .active_objects
+            .iter()
+            .any(|object| object.type_byte == 0xaa)
     );
-    assert!(!state
-        .active_objects
-        .iter()
-        .any(|object| object.type_byte == 0xaa));
 }
 
 #[test]
@@ -22744,16 +23643,16 @@ fn endgame_tableau_six_member_layout_restores_dead_and_omits_lord_british_until_
     for (slot, class) in classes.iter().enumerate() {
         let object = state.active_objects[slot];
         let expected_tile = endgame_tableau_tile_for_class_byte(*class);
-        assert_eq!((object.type_byte, object.tile), (expected_tile, expected_tile));
+        assert_eq!(
+            (object.type_byte, object.tile),
+            (expected_tile, expected_tile)
+        );
         assert_eq!(
             endgame_tableau_role_for_slot(slot, object),
             Some(EndgameTableauActorRole::PartyMember(slot as u8))
         );
     }
-    assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte,
-        0
-    );
+    assert_eq!(state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].type_byte, 0);
 
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     state.resolve_endgame_confirmation(true);
@@ -22796,7 +23695,10 @@ fn endgame_entry_restores_announces_places_and_walks_each_member_in_slot_order()
     // Slot zero walks all four cells to (5,5) before slot one is touched.
     for expected_y in (5..=8).rev() {
         assert!(state.advance_endgame_entry_presentation());
-        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, expected_y));
+        assert_eq!(
+            (state.active_objects[0].x, state.active_objects[0].y),
+            (5, expected_y)
+        );
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.party[1].status, CharacterStatus::Dead.save_byte());
     }
@@ -22809,18 +23711,27 @@ fn endgame_entry_restores_announces_places_and_walks_each_member_in_slot_order()
     assert_eq!(state.party[1].hp, 77);
     assert!(state.active_objects[1].is_empty());
     assert_eq!(
-        state.endgame.as_ref().map(|endgame| endgame.entry_restoration_beats),
+        state
+            .endgame
+            .as_ref()
+            .map(|endgame| endgame.entry_restoration_beats),
         Some(0)
     );
 
     // Only the following display frame places slot one and performs its first
     // one-cell movement toward (4,6).
     assert!(state.advance_endgame_entry_presentation());
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 8));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (5, 8)
+    );
     assert!(state.message.ends_with("\nIOLO lives!\n"));
 
     state.finish_endgame_entry_presentation();
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (4, 6));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (4, 6)
+    );
     assert!(state.message.contains("IOLO lives!"));
     assert!(state.message.contains("Lord British asks"));
 }
@@ -22850,13 +23761,19 @@ fn endgame_tableau_install_preserves_non_type_tile_fields() {
     let party_slot = state.active_objects[0];
     assert_eq!((party_slot.x, party_slot.y), ENDGAME_TABLEAU_PARTY_START);
     assert_eq!(party_slot.phase, ENDGAME_TABLEAU_PHASE);
-    assert_eq!((party_slot.z, party_slot.aux1, party_slot.aux3), (-3, 0x11, 0x22));
+    assert_eq!(
+        (party_slot.z, party_slot.aux1, party_slot.aux3),
+        (-3, 0x11, 0x22)
+    );
 
     let empty_slot = state.active_objects[10];
     assert_eq!((empty_slot.type_byte, empty_slot.tile), (0, 0));
     assert_eq!((empty_slot.x, empty_slot.y), (30, 50));
     assert_eq!(empty_slot.phase, 0x7e);
-    assert_eq!((empty_slot.z, empty_slot.aux1, empty_slot.aux3), (-3, 0x11, 0x22));
+    assert_eq!(
+        (empty_slot.z, empty_slot.aux1, empty_slot.aux3),
+        (-3, 0x11, 0x22)
+    );
 
     let marker = state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT];
     assert_eq!(
@@ -22907,7 +23824,10 @@ fn endgame_tableau_target_step_moves_active_objects_until_settled() {
 
     let frame_before = state.animation.frame;
     assert!(state.advance_endgame_tableau_toward_targets());
-    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 8));
+    assert_eq!(
+        (state.active_objects[0].x, state.active_objects[0].y),
+        (5, 8)
+    );
     assert_eq!(
         state.animation.frame,
         (frame_before + 3) % STATIC_TILE_ANIMATION_PERIOD_TICKS
@@ -22963,8 +23883,14 @@ fn missing_box_terminal_input_runs_tableau_jitter_without_leaving_endgame() {
         Some(EndgameOutcome::MissingBoxOrRefused)
     );
     assert_ne!(state.active_objects, before);
-    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (8, 4));
-    assert_eq!((state.active_objects[2].x, state.active_objects[2].y), (8, 6));
+    assert_eq!(
+        (state.active_objects[0].x, state.active_objects[0].y),
+        (8, 4)
+    );
+    assert_eq!(
+        (state.active_objects[2].x, state.active_objects[2].y),
+        (8, 6)
+    );
     assert_eq!(
         (
             state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].x,
@@ -22973,13 +23899,12 @@ fn missing_box_terminal_input_runs_tableau_jitter_without_leaving_endgame() {
         (4, 1)
     );
     assert!(ENDGAME_TABLEAU_JITTER_SLOTS.iter().all(|slot| {
-        *slot >= state.party.len()
-            || {
-                let object = state.active_objects[*slot];
-                object.x < ENDGAME_TABLEAU_WIDTH
-                    && object.y < ENDGAME_TABLEAU_HEIGHT
-                    && endgame_tableau_cell_walkable_in_grid(&state.grid, object.x, object.y)
-            }
+        *slot >= state.party.len() || {
+            let object = state.active_objects[*slot];
+            object.x < ENDGAME_TABLEAU_WIDTH
+                && object.y < ENDGAME_TABLEAU_HEIGHT
+                && endgame_tableau_cell_walkable_in_grid(&state.grid, object.x, object.y)
+        }
     }));
 }
 
@@ -23372,7 +24297,11 @@ fn dungeon_attack_forward_monster_clears_active_object_and_consumes_turn() {
     assert_eq!(state.turn, 1);
     assert!(state.combat_active);
     assert!(state.combat_frame_snapshot.as_ref().unwrap().active_objects[1].is_empty());
-    assert_eq!(state.active_objects[6].aux1, 20);
+    // `dungeon-mode.md §14.1`: the synthesised source band encodes the
+    // class as the ordinary source byte `class * 4 + 0x40`, and the
+    // room-combat setup helper recovers it on the ordinary path.
+    assert_eq!(state.active_objects[6].tile, combat_class_sprite_byte(20));
+    assert_eq!(state.combat_actors[6].owner_target_class, 20);
     assert!(!state.combat_actors[6].is_empty());
     assert!(state.message.contains("Attacked dungeon monster tile 0"));
     assert!(state.message.contains("entered dungeon combat"));
@@ -23457,11 +24386,7 @@ fn party_name_records_inside_the_travelling_party_must_be_readable() {
     let bad = [*b"AVATAR\0\0\0", [0; SAVE_CHARACTER_NAME_LEN]];
     let error = validate_party_names(&bad).expect_err("empty name record must fail loudly");
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
-    assert!(
-        error.to_string().contains("slot 1"),
-        "{}",
-        error
-    );
+    assert!(error.to_string().contains("slot 1"), "{}", error);
 }
 
 #[test]
@@ -23500,10 +24425,7 @@ fn z_stats_selector_rejects_slots_beyond_the_travelling_party() {
     assert_eq!(state.z_stats_command(), MoveOutcome::Observed);
     let party_len = state.party.len();
     assert!(
-        state.step_active_party_selector(
-            char::from_digit(party_len as u32 + 1, 10).unwrap(),
-            ""
-        )
+        state.step_active_party_selector(char::from_digit(party_len as u32 + 1, 10).unwrap(), "")
     );
     assert!(state.active_party_selector.is_some());
     assert!(state.active_z_stats.is_none());
@@ -23703,9 +24625,11 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
     ] {
         let mut state = test_state(open_grid(), 5, 5);
 
-        assert!(state
-            .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
-            .unwrap());
+        assert!(
+            state
+                .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
+                .unwrap()
+        );
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.turn, 0);
@@ -23717,25 +24641,30 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
     }
 }
 
+/// `movement.md §2`: "World and town movement consume the four cardinal
+/// directions only: west, east, north, and south. Diagonal codes exist in the
+/// input vocabulary, but the only consumer that treats one as a movement is
+/// the combat targeting cursor; elsewhere they page full-screen lists or are
+/// refused. **No mode steps diagonally.**" The same section adds that "each
+/// active mode handles movement before the resident A-Z command dispatcher"
+/// and that "letter commands and non-movement controls fall through to the
+/// mode's ordinary command dispatcher only after this movement layer declines
+/// them".
+///
+/// So the four cardinal `wasd` keys still beat the dispatcher, while the
+/// diagonal `vi`/keypad-corner keys are declined by the movement layer and
+/// land on their letter command instead — `commands.md §2`: "Lowercase
+/// letters should already have been folded to uppercase by the input system."
 #[test]
 fn top_down_lowercase_vi_and_wasd_movement_still_routes_before_commands() {
-    for (key, expected_position) in [
-        ('y', (4, 4)),
-        ('w', (5, 4)),
-        ('u', (6, 4)),
-        ('a', (4, 5)),
-        ('d', (6, 5)),
-        ('b', (4, 6)),
-        ('s', (5, 6)),
-        ('n', (6, 6)),
-        ('c', (6, 6)),
-        ('z', (4, 6)),
-    ] {
+    for (key, expected_position) in [('w', (5, 4)), ('a', (4, 5)), ('d', (6, 5)), ('s', (5, 6))] {
         let mut state = test_state(open_grid(), 5, 5);
 
-        assert!(state
-            .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
-            .unwrap());
+        assert!(
+            state
+                .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
+                .unwrap()
+        );
 
         assert_eq!(
             (state.player.x, state.player.y),
@@ -23744,6 +24673,34 @@ fn top_down_lowercase_vi_and_wasd_movement_still_routes_before_commands() {
             state.message
         );
         assert_eq!(state.turn, 1);
+    }
+
+    for (key, expected_message) in [
+        ('y', "Yell what?"),
+        ('u', ITEM_SELECTION_PROMPT),
+        ('b', "What?"),
+        ('n', "New order:"),
+        ('c', "Spell name:"),
+        ('z', PARTY_SELECTION_PROMPT),
+    ] {
+        let mut state = test_state(open_grid(), 5, 5);
+
+        assert!(
+            state
+                .handle_top_down_key_with_inline(key, Path::new(""), None, None, None, None)
+                .unwrap()
+        );
+
+        assert_eq!(
+            (state.player.x, state.player.y),
+            (5, 5),
+            "diagonal key {key} stepped the party"
+        );
+        assert!(
+            state.message.contains(expected_message),
+            "{key} reported `{}`",
+            state.message
+        );
     }
 }
 
@@ -23756,9 +24713,11 @@ fn top_down_lowercase_x_routes_to_vehicle_exit() {
     };
     state.sync_player_object();
 
-    assert!(state
-        .handle_top_down_key_with_inline('x', Path::new(""), None, None, None, None)
-        .unwrap());
+    assert!(
+        state
+            .handle_top_down_key_with_inline('x', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
 
     assert_eq!(state.player.transport, TransportState::Foot);
     assert_eq!((state.player.x, state.player.y), (5, 5));
@@ -23777,9 +24736,11 @@ fn top_down_lowercase_x_routes_to_vehicle_exit() {
 fn town_enter_uses_stock_refusal_without_turn() {
     let mut state = test_state(open_grid(), 5, 5);
 
-    assert!(state
-        .handle_top_down_key_with_inline('E', Path::new(""), None, None, None, None)
-        .unwrap());
+    assert!(
+        state
+            .handle_top_down_key_with_inline('E', Path::new(""), None, None, None, None)
+            .unwrap()
+    );
 
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.turn, 0);
@@ -23835,9 +24796,11 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
         object.phase,
         active_object_phase_from_direction(Direction::West, 0)
     );
-    assert!(state
-        .message
-        .contains("Dungeon monster tile 192 moved West to (2, 1)"));
+    assert!(
+        state
+            .message
+            .contains("Dungeon monster tile 192 moved West to (2, 1)")
+    );
 }
 
 #[test]
@@ -23889,7 +24852,8 @@ fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() 
     assert_eq!(state.player.facing, Direction::East);
     assert!(state.combat_active);
     assert!(state.combat_frame_snapshot.as_ref().unwrap().active_objects[1].is_empty());
-    assert_eq!(state.active_objects[6].aux1, 20);
+    assert_eq!(state.active_objects[6].tile, combat_class_sprite_byte(20));
+    assert_eq!(state.combat_actors[6].owner_target_class, 20);
     assert!(!state.combat_actors[6].is_empty());
     assert!(state.message.contains("approaches from the East"));
     assert!(state.message.contains("entered dungeon combat"));
@@ -23919,9 +24883,11 @@ fn dungeon_post_turn_non_class_contact_reports_no_combat_class() {
     assert_eq!(state.player.facing, Direction::East);
     assert!(!state.combat_active);
     assert!(state.active_objects[1].is_empty());
-    assert!(state
-        .message
-        .contains("Dungeon object tile 66 approaches from the East"));
+    assert!(
+        state
+            .message
+            .contains("Dungeon object tile 66 approaches from the East")
+    );
     assert!(state.message.contains("no published combat class"));
     assert!(!state.message.contains("pending"));
 }
@@ -24175,7 +25141,9 @@ fn shipped_dungeon_billboard_banks_match_the_published_directory() {
         assert_eq!(empty, vec![8, 24], "{stem} empty slots");
 
         for (slot, shape) in this.iter().enumerate() {
-            let Some((width, height)) = shape else { continue };
+            let Some((width, height)) = shape else {
+                continue;
+            };
             assert_eq!(*height, 164, "{stem} slot {slot} height");
             let band = slot % 4;
             let expected = if slot / 4 == 3 && band == 0 {
@@ -24397,6 +25365,35 @@ fn exactly_two_outdoor_ranged_attackers_exist() {
 }
 
 #[test]
+fn outdoor_projectile_obstruction_bitmap_is_the_published_46_id_set() {
+    let expected = [
+        0x0C..=0x0D,
+        0x12..=0x15,
+        0x19..=0x1B,
+        0x3A..=0x3F,
+        0x42..=0x42,
+        0x46..=0x46,
+        0x4D..=0x55,
+        0x5A..=0x5A,
+        0x70..=0x7F,
+        0xB8..=0xB9,
+        0xDF..=0xDF,
+    ];
+    let blocked = (u8::MIN..=u8::MAX)
+        .filter(|&tile| outdoor_projectile_tile_blocks(tile))
+        .collect::<Vec<_>>();
+    let published = expected.into_iter().flatten().collect::<Vec<_>>();
+
+    assert_eq!(blocked, published);
+    assert_eq!(blocked.len(), 46);
+    // These distinguish the private projectile bitmap from the broader
+    // surface/town-Fire predicate that previously stood in for it.
+    assert!(!outdoor_projectile_tile_blocks(0xA0));
+    assert!(!outdoor_projectile_tile_blocks(0xFF));
+    assert!(outdoor_projectile_tile_blocks(0xDF));
+}
+
+#[test]
 fn outdoor_ranged_attack_subtile_coordinate_space_matches_the_published_spans() {
     // `overworld.md §6.2.2`: "cell `c` owns the closed span of positions
     // `16c + 8` through `16c + 23`, and an endpoint converts to
@@ -24471,7 +25468,10 @@ fn outdoor_ranged_attack_run_steps_the_row_before_the_column() {
     for (dx, dy) in [(-3i32, -1i32), (-1, -3), (2, 3), (0, -2), (3, -3)] {
         let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
         let run = generate_outdoor_ranged_attack_run(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
-        assert_eq!(run[1].0, run[0].0, "offset ({dx}, {dy}) moved the column first");
+        assert_eq!(
+            run[1].0, run[0].0,
+            "offset ({dx}, {dy}) moved the column first"
+        );
         assert_eq!(
             (run[1].1 - run[0].1).abs(),
             1,
@@ -24498,7 +25498,10 @@ fn outdoor_ranged_attack_run_moves_one_axis_by_one_unit_per_step() {
             let attacker = outdoor_ranged_attacker_viewport_cell(dx, dy);
             let run =
                 generate_outdoor_ranged_attack_run(attacker, OUTDOOR_RANGED_ATTACK_PARTY_CELL);
-            assert!(run.len() < SUBTILE_RUN_BUDGET, "offset ({dx}, {dy}) hit the budget");
+            assert!(
+                run.len() < SUBTILE_RUN_BUDGET,
+                "offset ({dx}, {dy}) hit the budget"
+            );
             for pair in run.windows(2) {
                 let (dc, dr) = (pair[1].0 - pair[0].0, pair[1].1 - pair[0].1);
                 assert!(
@@ -24532,8 +25535,8 @@ fn outdoor_ranged_attack_run_ends_inside_the_target_cell() {
                 "offset ({dx}, {dy}) ended outside the target cell"
             );
             assert_eq!(row, subtile_endpoint(OUTDOOR_RANGED_ATTACK_PARTY_CELL.1));
-            let column_overshoot = (column - subtile_endpoint(OUTDOOR_RANGED_ATTACK_PARTY_CELL.0))
-                .abs();
+            let column_overshoot =
+                (column - subtile_endpoint(OUTDOOR_RANGED_ATTACK_PARTY_CELL.0)).abs();
             let expected = i32::from(dx == 0);
             assert_eq!(
                 column_overshoot, expected,

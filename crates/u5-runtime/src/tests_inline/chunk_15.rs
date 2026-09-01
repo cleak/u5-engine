@@ -414,6 +414,33 @@
         assert_eq!(state.turn, 0);
     }
 
+    /// `dungeon-mode.md §8`: "Under K-Klimb the pit family behaves as an
+    /// ordinary climb-*down* feature: the dispatcher masks the underfoot cell
+    /// to its high nibble before any comparison, so the whole `0x6?` family -
+    /// not just the exact byte `0x60`, and including the marked/fired variants
+    /// - enables the down arm. That arm calls the same level-step helper a
+    /// down ladder uses, so the party simply descends one level".
+    #[test]
+    fn dungeon_k_on_any_pit_byte_descends_one_level() {
+        let scene = DungeonScene::new(33).unwrap();
+        // Shipped data puts `0x60` at Destard level zero (7, 3) and (1, 7)
+        // and Deceit level zero (1, 3), so this route is reachable in
+        // ordinary play; the withdrawn reading printed "Not climbable!".
+        for pit in [0x60u8, 0x62, 0x68, 0x69, 0x6F] {
+            let mut grid = open_dungeon_record();
+            grid[dungeon_cell_index(0, 1, 1)] = pit;
+            let mut state = dungeon_state(grid, 0, 1, 1);
+
+            assert!(state.handle_dungeon_key('k', Path::new("")).unwrap());
+            assert_eq!(
+                state.area,
+                Area::Dungeon { scene, level: 1 },
+                "pit byte 0x{pit:02X} should descend one level"
+            );
+            assert_eq!(state.turn, 1, "pit byte 0x{pit:02X} should cost a turn");
+        }
+    }
+
     #[test]
     fn dungeon_two_way_ladder_keys_choose_up_or_down() {
         let scene = DungeonScene::new(33).unwrap();
@@ -633,11 +660,16 @@
         state.load_scheduled_npcs(&slots);
 
         assert_eq!(state.active_objects.len(), 2);
+        // `formats/npc.md` section 6 row `1` and `catalogs/npc-roster.md`
+        // section 4: tag `01` is the default-person sentinel, so the linked
+        // slot keeps the roster type byte and draws the forced person tile.
+        // The old expectation of `192` for both fields pinned the withdrawn
+        // "clamp every tag outside `192..=255` to `192`" behaviour.
         assert_eq!(
             state.active_objects[1],
             ActiveObject {
-                type_byte: 192,
-                tile: 192,
+                type_byte: NPC_TYPE_DEFAULT_HUMAN_SPRITE,
+                tile: NPC_DEFAULT_PERSON_SPRITE_TILE,
                 x: 5,
                 y: 8,
                 z: 0,
@@ -721,8 +753,11 @@
         assert_eq!(
             state.active_objects[1],
             ActiveObject {
-                type_byte: 192,
-                tile: 192,
+                // `formats/npc.md` section 6 row `1`: the default-person
+                // sentinel keeps its roster type byte and draws the forced
+                // person tile. The withdrawn clamp made both fields `192`.
+                type_byte: NPC_TYPE_DEFAULT_HUMAN_SPRITE,
+                tile: NPC_DEFAULT_PERSON_SPRITE_TILE,
                 x: 4,
                 y: 5,
                 z: 0,
@@ -735,9 +770,25 @@
         assert!(state.active_objects[3].is_empty());
     }
 
+    /// `npc-schedules.md §6` ("Floor classification"): the above/below test
+    /// "is a **signed eight-bit** comparison: `0xFF` orders below `0x00`, not
+    /// above it", so a waypoint on floor byte `0xFF` is *below* the displayed
+    /// floor `0x00` and classifies as state 7. `§8.5` then fixes the marker:
+    /// state 7 hunts "`0xC9` (descend link)". The earlier fixture paired a
+    /// descend link with a waypoint on floor `1`, which the corrected signed
+    /// ordering places *above* the displayed floor — the retracted unsigned
+    /// reading.
+    ///
+    /// `§8.5` also owns what happens once the NPC stands on the link: "When
+    /// the gate accepts, the walker writes the NPC's position directly to the
+    /// active waypoint's own `(x, y, z)`, caches the waypoint, deactivates the
+    /// move queue and returns the state to idle; the NPC leaves the displayed
+    /// floor and its sprite is released." There is "no 'paired marker cell on
+    /// the destination floor'" and no one-floor-at-a-time climb: the NPC lands
+    /// on `(6, 6, 0xFF)`, not on the link cell it departed from.
     #[test]
     fn scheduled_npc_leaving_current_floor_uses_floor_link_before_detaching() {
-        let mut grid = open_grid();
+        let mut grid = npc_open_grid();
         grid[32 + 3] = NPC_FLOOR_LINK_TILE_C9;
         let mut state = test_state(grid, 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
@@ -753,7 +804,7 @@
                 slot: 1,
                 type_byte: 1,
                 dialog_id: 0,
-                schedule: [0, 0, 0, 0, 2, 6, 0, 1, 6, 0, 0, 1, 8, 12, 18, 22],
+                schedule: [0, 0, 0, 0, 2, 6, 0, 1, 6, 0, 0, 0xFF, 8, 12, 18, 22],
                 name: None,
             },
         ];
@@ -761,7 +812,13 @@
 
         assert_eq!(state.npcs[0].active_object, Some(1));
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
+        // §8.5, states 6/7: the gate refuses on ordinary ground, so the walker
+        // "falls back to the tile-ID search for the matching marker, routes
+        // toward it and enters the queue-replay state, so the NPC walks onto
+        // the link and passes the gate on a later tick."
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!(
             (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z),
@@ -779,8 +836,11 @@
 
         assert_eq!(
             (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z),
-            (3, 1, 1)
+            (6, 6, 0xFF)
         );
+        assert_eq!(state.npcs[0].state, NPC_STATE_IDLE);
+        assert_eq!(state.npcs[0].cached_wp, 2);
+        assert!(state.npcs[0].move_queue.is_empty());
         assert_eq!(state.npcs[0].active_object, None);
         assert!(state.active_objects[1].is_empty());
         assert!(state.visibility_dirty);
@@ -814,6 +874,8 @@
 
         assert_eq!(state.npcs[0].active_object, None);
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!(state.npcs[0].active_object, Some(1));
@@ -824,8 +886,11 @@
         assert_eq!(
             state.active_objects[1],
             ActiveObject {
-                type_byte: 192,
-                tile: 192,
+                // `formats/npc.md` section 6 row `1`: the default-person
+                // sentinel keeps its roster type byte and draws the forced
+                // person tile. The withdrawn clamp made both fields `192`.
+                type_byte: NPC_TYPE_DEFAULT_HUMAN_SPRITE,
+                tile: NPC_DEFAULT_PERSON_SPRITE_TILE,
                 x: 5,
                 y: 6,
                 z: 0,
@@ -839,8 +904,8 @@
     }
 
     #[test]
-    fn scheduled_npc_off_floor_to_off_floor_stays_parked_without_teleport() {
-        let mut state = test_state(open_grid(), 10, 10);
+    fn scheduled_npc_off_floor_to_off_floor_is_placed_at_its_waypoint() {
+        let mut state = test_state(npc_open_grid(), 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
         let slots = vec![
             NpcSlot {
@@ -868,18 +933,27 @@
         state.clock = GameClock::new(18, 0).unwrap();
         state.advance_npc_schedules();
 
+        // npc-schedules.md §7: state 8 "is *not* a parked state: the walker
+        // resolves it immediately by writing the active waypoint's (x, y, z)
+        // straight into the NPC's runtime position, caching the waypoint,
+        // deactivating the move queue and returning the state to idle."
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!(
             (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z),
-            (2, 1, 1)
+            (6, 6, 2)
         );
+        assert_eq!(state.npcs[0].state, NPC_STATE_IDLE);
+        assert_eq!(state.npcs[0].cached_wp, 2);
+        assert!(state.npcs[0].move_queue.is_empty());
+        // "Because neither the old nor the new position is on the displayed
+        // floor, no sprite is allocated and nothing is visible."
         assert_eq!(state.npcs[0].active_object, None);
         assert!(!state.visibility_dirty);
     }
 
     #[test]
     fn scheduled_npc_moves_one_step_after_hour_boundary() {
-        let mut state = test_state(open_grid(), 1, 1);
+        let mut state = test_state(npc_open_grid(), 1, 1);
         state.clock = GameClock::new(17, 59).unwrap();
         let slots = vec![
             NpcSlot {
@@ -901,6 +975,8 @@
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
@@ -911,8 +987,54 @@
     }
 
     #[test]
+    fn ordinary_town_turn_defers_scheduler_until_after_underfoot_tail() {
+        let dir = debug_game_dir();
+        let mut state = test_state(npc_open_grid(), 1, 1);
+        state.clock = GameClock::new(17, 59).unwrap();
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 2, 4, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ]);
+
+        let turn_before = state.turn;
+        state.advance_turn();
+
+        // `town-mode.md §7`: clock/dawn-dusk happen first, while the NPC
+        // remains unmoved until waking, tile effects, and the trailing shared
+        // status/provision pass have all completed.
+        assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
+        assert!(state.pending_town_status_provision_pass);
+        assert!(state.pending_town_npc_schedule_pass);
+
+        assert_eq!(
+            state
+                .apply_town_post_turn_effects_after_turn(turn_before, &dir)
+                .unwrap(),
+            None
+        );
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
+        assert!(!state.pending_town_status_provision_pass);
+        assert!(!state.pending_town_npc_schedule_pass);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn scheduled_npc_continues_waypoint_move_after_boundary_hour() {
-        let mut state = test_state(open_grid(), 1, 1);
+        let mut state = test_state(npc_open_grid(), 1, 1);
         state.clock = GameClock::new(17, 59).unwrap();
         let slots = vec![
             NpcSlot {
@@ -934,6 +1056,8 @@
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
@@ -948,11 +1072,23 @@
         assert_eq!(state.npcs[0].cached_wp, 1);
     }
 
+    /// `npc-schedules.md §8.5` ("Which marker a state selects"): "Route
+    /// selection is entirely 'nearest reachable cell carrying the selected
+    /// marker', measured by the same breadth-first search used for ordinary
+    /// movement, so an authored map with several links routes the NPC through
+    /// whichever one the search reaches first."
+    ///
+    /// The two cells flanking the NPC are walled off with mountain `0x0C`,
+    /// which `§10` ("Tile passability") lists as an obstacle range: "A set bit
+    /// marks the tile id as an obstacle for NPC pathfinding; a clear bit marks
+    /// it open." The earlier fixture used tile `0x00` as the wall, which the
+    /// published open list (`0x00`, `0x04..0x0B`, ...) says is open ground;
+    /// that reading came from the retracted inverted polarity.
     #[test]
     fn scheduled_npc_floor_link_route_uses_single_bfs_over_matching_markers() {
-        let mut grid = open_grid();
-        grid[5 * 32 + 4] = 0;
-        grid[5 * 32 + 6] = 0;
+        let mut grid = npc_open_grid();
+        grid[5 * 32 + 4] = 0x0C;
+        grid[5 * 32 + 6] = 0x0C;
         grid[5 * 32 + 7] = NPC_FLOOR_LINK_TILE_C9;
         grid[8 * 32 + 5] = NPC_FLOOR_LINK_TILE_C9;
         let mut state = test_state(grid, 10, 10);
@@ -979,9 +1115,18 @@
         );
     }
 
+    /// `npc-schedules.md §8.5`: one call "hunts `0xC8` cells or `0xC9`
+    /// cells, never both", so the opposite marker is not a goal.
+    ///
+    /// `§10` ("Tile passability", rule 3) settles the per-step gate: the two
+    /// floor-link ids "short-circuit to open without consulting the tile set.
+    /// Both ids are already clear in the tile set, so this path changes
+    /// nothing about the result; it is a shortcut, not a special case, and it
+    /// must not be read as 'floor links are blocked as intermediate cells'."
+    /// The earlier assertion here pinned exactly that retracted reading.
     #[test]
     fn scheduled_npc_floor_link_route_ignores_opposite_marker_id() {
-        let mut grid = open_grid();
+        let mut grid = npc_open_grid();
         grid[6 * 32 + 5] = NPC_FLOOR_LINK_TILE_C8;
         grid[4 * 32 + 5] = NPC_FLOOR_LINK_TILE_C9;
         let mut state = test_state(grid, 10, 10);
@@ -1006,7 +1151,10 @@
             state.npc_path_step_to_floor_link(0, NPC_FLOOR_LINK_TILE_C9, 5, 4, 0),
             Some((5, 4))
         );
-        assert!(!state.npc_can_step_toward(0, 5, 4, 0, 5, 5));
+        // §10: "Both floor links are ordinary open ground. They are never
+        // obstacles at any point in the pass."
+        assert!(state.npc_can_step_toward(0, 5, 4, 0, 5, 5));
+        assert!(state.npc_can_step_toward(0, 5, 6, 0, 5, 5));
         assert!(state.npc_can_step_toward_floor_link_marker(
             0,
             5,
@@ -1019,7 +1167,7 @@
 
     #[test]
     fn hostile_town_npc_chases_player_from_active_waypoint() {
-        let mut state = test_state(open_grid(), 5, 5);
+        let mut state = test_state(npc_open_grid(), 5, 5);
         state.load_scheduled_npcs(&[
             NpcSlot {
                 slot: 0,
@@ -1038,15 +1186,27 @@
         ]);
 
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (8, 5));
         assert!(state.visibility_dirty);
     }
 
+    /// `npc-schedules.md §10` ("Tile passability"): NPC pathfinding uses its
+    /// own one-bit-per-tile-id resource, where "A set bit marks the tile id as
+    /// an obstacle for NPC pathfinding; a clear bit marks it open." The chair
+    /// family `0x90..0x93` is on the published open list, and the spec draws
+    /// the consequence out: "Chairs are walkable for NPC routing and beds are
+    /// not." The NPC therefore takes the direct step east onto the chair.
+    ///
+    /// The earlier fixture put mountain `0x0C` — a published obstacle range —
+    /// in the direct step's path and still expected the step to be taken; that
+    /// only holds under the retracted inverted polarity.
     #[test]
     fn scheduled_npc_uses_npc_path_bitmap_for_direct_step() {
-        let mut grid = open_grid();
-        grid[32 + 3] = 0x0C;
+        let mut grid = npc_open_grid();
+        grid[32 + 3] = 0x90;
         let mut state = test_state(grid, 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
         state.load_scheduled_npcs(&[
@@ -1067,6 +1227,8 @@
         ]);
 
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
         assert_eq!(
@@ -1077,7 +1239,7 @@
 
     #[test]
     fn scheduled_npc_dynamic_obstacle_radius_ignores_far_occupant() {
-        let mut state = test_state(open_grid(), 10, 10);
+        let mut state = test_state(npc_open_grid(), 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
         state.load_scheduled_npcs(&[
             NpcSlot {
@@ -1104,6 +1266,8 @@
         ]);
 
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
         assert_eq!((state.npcs[1].x, state.npcs[1].y), (3, 1));
@@ -1551,7 +1715,7 @@
                 if grid
                     .get(y * TOWN_GRID_SIDE + x)
                     .copied()
-                    .is_some_and(npc_path_tile_open)
+                    .is_some_and(|tile| !npc_path_tile_obstacle(tile))
                 {
                     return (x, y);
                 }
@@ -1645,6 +1809,24 @@
         }
     }
 
+    /// `npc-schedules.md §14` ("Rest / time-elapsing command path"): "the
+    /// scheduler's contract is only that each call advances each NPC by at
+    /// most one cell." That one-cell bound governs *walked* steps, so the
+    /// corpus checks it for NPCs that begin and end a tick on the displayed
+    /// floor.
+    ///
+    /// The published placements are not walked steps and are not bounded by
+    /// one cell. `§7` state 8: "The NPC is placed directly at the active
+    /// waypoint's `(x, y, z)` with no gate; the cached waypoint is updated, the
+    /// move queue is deactivated, and the state returns to idle... Because
+    /// neither the old nor the new position is on the displayed floor, no
+    /// sprite is allocated and nothing is visible; the NPC simply teleports
+    /// off-screen to where its schedule says it should be." With the corrected
+    /// signed floor ordering of `§6`, shipped rosters reach that state with the
+    /// NPC's floor and its waypoint's floor equal and both away from the
+    /// displayed floor, so the floor byte does not change across the teleport.
+    /// The earlier form of this loop treated any same-floor jump as a
+    /// violation, which only held while the classifier's polarity was inverted.
     #[test]
     fn shipped_npc_scheduler_corpus_runs_boundary_routes_when_present() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
@@ -1658,6 +1840,7 @@
         let mut linked_hidden_npcs = 0usize;
         let mut state_transitions = 0usize;
         let mut floor_handoffs = 0usize;
+        let mut off_floor_placements = 0usize;
         let mut visible_steps = 0usize;
 
         for scene_byte in SCENE_TOWN_FAMILY_FIRST..=SCENE_TOWN_FAMILY_LAST {
@@ -1730,13 +1913,42 @@
                                     panic!("scene {scene_byte} floor {floor} hour {hour} lost NPC slot {slot}")
                                 });
                             let distance = npc.x.abs_diff(old_x) + npc.y.abs_diff(old_y);
-                            if npc.z == old_z {
+                            if npc.z != old_z {
+                                // §8.5: the two floor-transition placements
+                                // (link arrival, gate hand-off) both change the
+                                // floor byte.
+                                floor_handoffs += 1;
+                            } else if npc.z as i8 == floor && old_z as i8 == floor {
+                                // §11/§14: an NPC that starts and ends the tick
+                                // on the displayed floor took an ordinary
+                                // walked step, and "each call advances each NPC
+                                // by at most one cell".
                                 assert!(
                                     distance <= 1,
-                                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {slot} moved {distance} cells without a floor handoff"
+                                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {slot} walked {distance} cells on the displayed floor"
                                 );
-                            } else {
-                                floor_handoffs += 1;
+                            } else if distance > 1 {
+                                // §7 state 8: neither end is on the displayed
+                                // floor, so "the walker resolves it immediately
+                                // by writing the active waypoint's (x, y, z)
+                                // straight into the NPC's runtime position...
+                                // the NPC simply teleports off-screen to where
+                                // its schedule says it should be."
+                                let wp = waypoint_for_hour(&npc.schedule, state.clock.hour);
+                                assert_eq!(
+                                    npc.waypoint_position(wp),
+                                    (npc.x, npc.y, npc.z),
+                                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {slot} jumped {distance} cells off-floor without landing on its active waypoint"
+                                );
+                                assert_eq!(
+                                    npc.state, NPC_STATE_IDLE,
+                                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {slot} ungated placement did not return to idle"
+                                );
+                                assert!(
+                                    npc.active_object.is_none(),
+                                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {slot} kept a sprite while off the displayed floor"
+                                );
+                                off_floor_placements += 1;
                             }
                             if npc.state != old_state {
                                 state_transitions += 1;
@@ -1755,6 +1967,9 @@
         assert!(runtime_npcs >= 325 * 7);
         assert!(state_transitions > 0);
         assert!(floor_handoffs > 0);
+        // The shipped rosters do reach §7's ungated placement, so the branch
+        // above is exercised rather than vacuously true.
+        assert!(off_floor_placements > 0);
         assert!(visible_steps > 0);
         assert!(linked_hidden_npcs > 0);
     }
@@ -1763,6 +1978,21 @@
     fn blackthorn_captive_arrest_enters_audience_and_handoffs_after_answer() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 5, 5);
+        // blackthorn.md §4: "If more than one companion is still alive,
+        // Blackthorn thanks the player for their honesty and **kills**
+        // one companion as 'a merciful death'."
+        for slot in 1..=2u8 {
+            state.party.push(PartyMember {
+                slot,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: 10,
+                mana: 0,
+                hp: 30,
+                max_hp: 42,
+                level: 3,
+            });
+        }
         let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
         state.area = Area::Town { scene, floor: 0 };
         state.pending_town_arrest = Some(TownArrestPrompt {
@@ -1788,7 +2018,13 @@
 
         assert!(state.pending_town_arrest.is_none());
         assert!(state.active_blackthorn.is_some());
-        assert!(state.active_objects[1].is_empty());
+        // blackthorn.md §3 step 3: "Clear the active-object table so the
+        // audience scene can reuse those records as temporary cinematic
+        // actors."
+        assert_eq!(
+            state.active_objects[1].aux3,
+            BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
+        );
         assert!(state.message.contains("Blackthorn audience"));
         assert!(state.message.contains("Honesty"));
 
@@ -1798,8 +2034,34 @@
         );
 
         assert!(state.active_blackthorn.is_none());
-        assert!(state.blackthorn_story.is_party_slot_jailed(0));
-        assert_eq!(state.blackthorn_story.captive_cell_counter, 1);
+        // blackthorn.md §8: "Roster removal of an executed companion |
+        // Durable and irreversible: record lifted from the party, party
+        // count decremented". §5: "The victim is the second living party
+        // member (the first living companion behind the Avatar)". The
+        // withdrawn reading set a durable per-member jail flag instead
+        // and left the roster intact.
+        assert_eq!(state.party.len(), 2);
+        assert_eq!(state.party[0].slot, 0);
+        // blackthorn.md §5: the routine "lifts their roster record out
+        // of the party, compacts the remaining records up, and
+        // decrements the party count". Compaction is the spec clause;
+        // the resulting slot *byte* is the engine's own contract, since
+        // `execute_blackthorn_companion` renumbers every survivor
+        // (`member.slot = slot as u8`) and `synced_party_roster` would
+        // reproduce that numbering on its next call anyway. So the
+        // surviving companion is reachable only at slot 1; the earlier
+        // pin of 2 encoded a pre-compaction bug, not a published value.
+        //
+        // A prior pass deleted this citation, having grepped the local
+        // `u5-spec` checkout, which is ~93 commits stale and carries a
+        // 338-line `blackthorn.md` against HEAD's 560. The sentence is
+        // verbatim at HEAD. Verify spec claims against the remote, not
+        // that checkout.
+        assert_eq!(state.party[1].slot, 1);
+        assert!(state.message.contains("merciful death"));
+        // blackthorn.md §4: "A correct answer ruins that shrine and
+        // costs five points of moral standing."
+        assert_ne!(state.shrine_ruin_flags[0], 0);
         assert_eq!(
             state.area,
             Area::Town {
@@ -1815,60 +2077,6 @@
             )
         );
         assert!(state.message.contains("Returned to Blackthorn's captive cell"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn blackthorn_story_state_codec_round_trips() {
-        let mut story = BlackthornStoryState {
-            jailed_slots_mask: 0,
-            captive_cell_counter: 3,
-            capture_context: 2,
-        };
-        assert!(story.mark_party_slot_jailed(0));
-        assert!(story.mark_party_slot_jailed(15));
-        assert!(!story.mark_party_slot_jailed(16));
-
-        let decoded = BlackthornStoryState::decode(&story.encoded()).unwrap();
-
-        assert_eq!(decoded, story);
-        assert_eq!(decoded.jailed_party_slots(), vec![0, 15]);
-        let mut legacy = story.encoded().to_vec();
-        legacy.insert(7, 75);
-        assert_eq!(legacy.len(), BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN);
-        assert_eq!(BlackthornStoryState::decode(&legacy).unwrap(), story);
-        assert!(BlackthornStoryState::decode(&[0; BLACKTHORN_STORY_STATE_LEN]).is_err());
-    }
-
-    #[test]
-    fn blackthorn_story_state_sidecar_save_load_round_trips() {
-        let dir = debug_game_dir();
-        let mut save = saved_game_seed_bytes(17, 0, 15, 15);
-        save[SAVE_AVATAR_NAME_OFFSET] = b'A';
-        fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
-        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
-        let mut story = BlackthornStoryState {
-            jailed_slots_mask: 0,
-            captive_cell_counter: 2,
-            capture_context: 3,
-        };
-        assert!(story.mark_party_slot_jailed(2));
-        write_blackthorn_story_state(&dir, story).unwrap();
-
-        let options = load_play_options_from_save(&dir).unwrap();
-        assert_eq!(options.blackthorn_story, story);
-        let mut state =
-            PlayState::load_town_scene(&dir, Scene::new(17).unwrap(), options).unwrap();
-        assert_eq!(state.blackthorn_story, story);
-
-        assert!(state.blackthorn_story.mark_party_slot_jailed(4));
-        state.blackthorn_story.captive_cell_counter = 5;
-        state.save_game_command(&dir, Some(true)).unwrap();
-
-        let reloaded = load_blackthorn_story_state(&dir).unwrap();
-        assert!(reloaded.is_party_slot_jailed(2));
-        assert!(reloaded.is_party_slot_jailed(4));
-        assert_eq!(reloaded.captive_cell_counter, 5);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1957,12 +2165,17 @@
             let slot = placement.actor.slot_index() as usize;
             let object = state.active_objects[slot];
             let expected_position = match placement.actor {
-                BlackthornCutsceneActor::Blackthorn => (3, 0),
-                BlackthornCutsceneActor::Attendant => (7, 1),
+                BlackthornCutsceneActor::LeftGuard => (1, 5),
+                BlackthornCutsceneActor::RightGuard => (9, 9),
                 _ => (placement.x, placement.y),
             };
-            assert_eq!(object.type_byte, placement.type_byte);
-            assert_eq!(object.tile, placement.tile);
+            let expected_actor_byte = match placement.actor {
+                BlackthornCutsceneActor::SecondPartyMember => 0x48,
+                BlackthornCutsceneActor::SeatedBlackthorn => 0x78,
+                _ => placement.tile,
+            };
+            assert_eq!(object.type_byte, expected_actor_byte);
+            assert_eq!(object.tile, expected_actor_byte);
             assert_eq!((object.x, object.y), expected_position);
             assert_eq!(object.aux1, placement.actor.slot_index());
             assert_eq!(object.aux3, BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER);
@@ -1986,27 +2199,35 @@
         });
 
         state.begin_blackthorn_audience_capture(&dir).unwrap();
+        let sound_before = state.sound_effect_serial;
         let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
 
         assert_eq!(
             state
                 .blackthorn_audience_map
                 .as_ref()
-                .and_then(|map| map.tile(5, 5)),
-            Some(BLACKTHORN_CUTSCENE_TEMP_TILE_A)
+                .and_then(|map| map.tile(0, 4)),
+            Some(BLACKTHORN_LOCKED_DOOR_TILE)
         );
         assert_eq!(
             state.active_objects[BlackthornCutsceneActor::Avatar.slot_index() as usize].y,
             7
         );
         for actor in [
-            BlackthornCutsceneActor::Throne,
-            BlackthornCutsceneActor::Blackthorn,
-            BlackthornCutsceneActor::Attendant,
+            BlackthornCutsceneActor::SeatedBlackthorn,
+            BlackthornCutsceneActor::LeftGuard,
+            BlackthornCutsceneActor::RightGuard,
         ] {
             assert!(state.active_objects[actor.slot_index() as usize].is_empty());
         }
-        assert_eq!(vm.pause_ticks, 4);
+        assert_eq!(vm.world_ticks, 29);
+        assert_eq!(vm.bios_ticks, 28);
+        assert_eq!(vm.stinger_count, 14);
+        let effects = state.sound_effects_after(sound_before);
+        assert_eq!(effects.len(), usize::from(vm.stinger_count));
+        assert!(effects
+            .iter()
+            .all(|effect| *effect == SoundEffect::BlackthornMovementStinger));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2028,22 +2249,24 @@
         state.begin_blackthorn_audience_capture(&dir).unwrap();
         let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::FailedChallengeReaction);
 
-        assert_eq!(vm.output_bytes, vec![BLACKTHORN_CUTSCENE_FORMAT_OUTPUT]);
+        assert_eq!(vm.world_ticks, 82);
+        assert_eq!(vm.bios_ticks, 81);
+        assert_eq!(vm.stinger_count, 22);
         assert!(state.active_objects[BlackthornCutsceneActor::SecondPartyMember.slot_index() as usize]
             .is_empty());
         assert_eq!(
             state
                 .blackthorn_audience_map
                 .as_ref()
-                .and_then(|map| map.tile(4, 8)),
-            Some(BLACKTHORN_CUTSCENE_TEMP_TILE_A)
+                .and_then(|map| map.tile(5, 7)),
+            Some(BLACKTHORN_PENDULUM_TILE)
         );
         assert_eq!(
             state
                 .blackthorn_audience_map
                 .as_ref()
-                .and_then(|map| map.tile(5, 8)),
-            Some(BLACKTHORN_CUTSCENE_TEMP_TILE_B)
+                .and_then(|map| map.tile(5, 9)),
+            Some(BLACKTHORN_HOURGLASS_TILE)
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -2074,12 +2297,14 @@
             max_hp: 42,
             level: 3,
         });
-        state.blackthorn_story.mark_party_slot_jailed(1);
         state.moral_standing = 12;
         state.active_effect_tag = Some(AMULET_LB_ACTIVE_EFFECT_TAG);
         state.active_effect_counter = PERMANENT_ACTIVE_EFFECT_DURATION;
         state.torch_counter = 20;
         state.light_spell_counter = 30;
+        state.food = 0;
+        let prng_before = state.prng_state;
+        let sound_serial_before = state.sound_effect_serial;
 
         assert!(matches!(
             state.apply_blackthorn_rescue_refuge(&dir).unwrap(),
@@ -2106,9 +2331,49 @@
                 && playback.world_ticks_advanced == 0
                 && playback.caller_redraws_during_dissolve == 0));
 
+        let rescue = state.take_pending_blackthorn_rescue_playbacks();
+        assert_eq!(rescue.len(), 1);
+        let rescue = &rescue[0];
+        assert_eq!(rescue.party_cell, (5, 5));
+        assert_eq!(rescue.party_atlas_index, 0x11c);
+        assert_eq!(rescue.software_envelope_count, 6);
+        assert_eq!(rescue.guardian_reveals.len(), 2);
+        assert_eq!(rescue.guardian_reveals[0].cell, (2, 7));
+        assert_eq!(rescue.guardian_reveals[0].atlas_index, 0x5e);
+        assert_eq!(rescue.guardian_reveals[1].cell, (8, 7));
+        assert_eq!(rescue.guardian_reveals[1].atlas_index, 0x5f);
+        assert!(rescue
+            .guardian_reveals
+            .iter()
+            .all(|reveal| reveal.pixel_order.len() == 256
+                && reveal.world_tick_after_operations.len() == 31));
+        assert_eq!(rescue.spectral_reveal.cell, (5, 2));
+        assert_eq!(rescue.spectral_reveal.atlas_index, 0x174);
+        assert_eq!(rescue.redraw_count, 4);
+        assert_eq!(rescue.bios_waits, vec![4, 4]);
+        assert_eq!(rescue.flash_count, 2);
+        assert_eq!(rescue.flash_prng_draws, 3_712);
+        assert_eq!(
+            rescue.persistent_terrain,
+            vec![((2, 7), 0x5e), ((8, 7), 0x5f)]
+        );
+        assert_eq!(
+            rescue.persistent_actors,
+            vec![((5, 5), PLAYER_TILE), ((5, 2), 0x74)]
+        );
+        let mut expected_prng = U5Prng::new(prng_before);
+        let _ = audio::draw_major_flash_bands(&mut expected_prng);
+        let _ = audio::draw_major_flash_bands(&mut expected_prng);
+        assert_eq!(state.prng_state, expected_prng.state());
+        let effects = state.sound_effects_after(sound_serial_before);
+        assert_eq!(effects.len(), 3);
+        assert_eq!(effects[0], SoundEffect::BlackthornRescueEnvelopes);
+        assert!(effects[1..]
+            .iter()
+            .all(|effect| matches!(effect, SoundEffect::MajorFlash { .. })));
+
         assert_eq!(state.moral_standing, BLACKTHORN_RESCUE_STANDING_FLOOR);
-        assert!(state.blackthorn_story.jailed_party_slots().is_empty());
-        assert_eq!(state.blackthorn_story.captive_cell_counter, 1);
+        assert_eq!(state.food, 63);
         assert_eq!(state.party[1].status, b'G');
         assert_eq!(state.party[1].hp, 42);
         assert_eq!(state.active_effect_tag, None);
@@ -2122,7 +2387,7 @@
                 BLACKTHORN_RESCUE_HANDOFF_Y as usize
             )
         );
-        assert!(state.message.contains("verdict record 0: strayed"));
+        assert_eq!(state.message, "strayed");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2143,6 +2408,7 @@
         .unwrap();
         let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
         state.moral_standing = 99;
+        state.food = 0x0100;
 
         assert!(matches!(
             state.apply_blackthorn_rescue_refuge(&dir).unwrap(),
@@ -2151,17 +2417,25 @@
         ));
 
         assert_eq!(state.moral_standing, 99);
-        assert!(state.message.contains("verdict record 4: destiny"));
-        assert!(!state.message.contains("camp-only"));
+        assert_eq!(state.food, 0x0100, "every nonzero Food word is preserved");
+        assert_eq!(state.message, "destiny");
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `npc-schedules.md §10` ("Tile passability"): "A set bit marks the tile
+    /// id as an obstacle for NPC pathfinding; a clear bit marks it open." The
+    /// mountain range `0x0C..0x0D` is on the published obstacle list, so the
+    /// direct step east is refused and the flood fill (§8.4) detours north.
+    ///
+    /// The earlier fixture walled the NPC in with `0x2C`, which the published
+    /// open list (`... 0x2C..0x2D ...`, "wooden planks and cobble") calls open
+    /// ground — a fixture that only blocks under the retracted polarity.
     #[test]
     fn scheduled_npc_pathfinds_around_blocked_direct_step() {
-        let mut grid = open_grid();
-        grid[32 + 1] = 0x2C;
-        grid[32 + 3] = 0x2C;
-        grid[2 * 32 + 2] = 0x2C;
+        let mut grid = npc_open_grid();
+        grid[32 + 1] = 0x0C;
+        grid[32 + 3] = 0x0C;
+        grid[2 * 32 + 2] = 0x0C;
         let mut state = test_state(grid, 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
         let slots = vec![
@@ -2184,6 +2458,8 @@
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 0));
         assert_eq!(
@@ -2192,12 +2468,20 @@
         );
     }
 
+    /// `npc-schedules.md §7` state 3: "once the pathfinder produces a route,
+    /// subsequent ticks dequeue and apply, and the pathfinder is not
+    /// re-invoked until the queue drains or resets."
+    ///
+    /// The walls use mountain `0x0C`, a published obstacle range under `§10`
+    /// ("A set bit marks the tile id as an obstacle for NPC pathfinding; a
+    /// clear bit marks it open"); the earlier fixture used `0x2C`, which that
+    /// same section lists as open ground.
     #[test]
     fn scheduled_npc_replays_cached_path_queue_after_pathfind() {
-        let mut grid = open_grid();
-        grid[32 + 1] = 0x2C;
-        grid[32 + 3] = 0x2C;
-        grid[2 * 32 + 2] = 0x2C;
+        let mut grid = npc_open_grid();
+        grid[32 + 1] = 0x0C;
+        grid[32 + 3] = 0x0C;
+        grid[2 * 32 + 2] = 0x0C;
         let mut state = test_state(grid, 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
         state.load_scheduled_npcs(&[
@@ -2218,6 +2502,8 @@
         ]);
 
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 0));
         assert_eq!(state.npcs[0].state, NPC_STATE_REPLAY_QUEUE);
@@ -2265,7 +2551,7 @@
 
     #[test]
     fn scheduled_npc_routes_around_player_instead_of_stepping_into_player() {
-        let mut state = test_state(open_grid(), 3, 1);
+        let mut state = test_state(npc_open_grid(), 3, 1);
         state.clock = GameClock::new(17, 59).unwrap();
         let slots = vec![
             NpcSlot {
@@ -2286,6 +2572,8 @@
         state.load_scheduled_npcs(&slots);
 
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_ne!((state.npcs[0].x, state.npcs[0].y), (3, 1));
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 0));
@@ -2293,33 +2581,54 @@
 
     #[test]
     fn hidden_npc_mask_matches_published_scene_slots() {
-        assert!(npc_hidden_sprite_slot(SCENE_MOONGLOW, 1));
-        assert!(npc_hidden_sprite_slot(SCENE_MOONGLOW, 5));
-        assert!(npc_hidden_sprite_slot(SCENE_MOONGLOW, 9));
-        assert!(npc_hidden_sprite_slot(SCENE_MOONGLOW, 11));
-        assert!(!npc_hidden_sprite_slot(SCENE_MOONGLOW, 6));
+        // npc-schedules.md §11: the mask is indexed by the ONE-BASED public
+        // scene byte, and the shipped data sets bits in exactly four scenes.
+        // Yew (scene 4): two of the three rodent-class actors.
+        assert!(npc_hidden_sprite_slot(SCENE_YEW, 15));
+        assert!(npc_hidden_sprite_slot(SCENE_YEW, 17));
+        assert!(!npc_hidden_sprite_slot(SCENE_YEW, 16));
 
-        assert!(npc_hidden_sprite_slot(SCENE_MINOC, 15));
-        assert!(npc_hidden_sprite_slot(SCENE_MINOC, 17));
-        assert!(!npc_hidden_sprite_slot(SCENE_MINOC, 16));
+        // Minoc (scene 5): Tactus alone.
+        assert!(npc_hidden_sprite_slot(SCENE_MINOC, 1));
+        assert!(!npc_hidden_sprite_slot(SCENE_MINOC, 0));
+        assert!(!npc_hidden_sprite_slot(SCENE_MINOC, 2));
 
-        assert!(npc_hidden_sprite_slot(SCENE_TRINSIC, 1));
-        assert!(!npc_hidden_sprite_slot(SCENE_TRINSIC, 2));
+        // Windemere (scene 28): the keep's entire rodent-class group.
+        for slot in 3..=9 {
+            assert!(npc_hidden_sprite_slot(SCENE_WINDEMERE, slot), "slot {slot}");
+        }
+        assert!(!npc_hidden_sprite_slot(SCENE_WINDEMERE, 2));
+        assert!(!npc_hidden_sprite_slot(SCENE_WINDEMERE, 10));
 
-        assert!(npc_hidden_sprite_slot(SCENE_STONEGATE, 3));
-        assert!(npc_hidden_sprite_slot(SCENE_STONEGATE, 9));
-        assert!(!npc_hidden_sprite_slot(SCENE_STONEGATE, 10));
+        // Stonegate (scene 29): the four bat-class actors only - the three
+        // Shadow Lord slots, the daemon, and the Sceptre stay visible.
+        for slot in 5..=8 {
+            assert!(npc_hidden_sprite_slot(SCENE_STONEGATE, slot), "slot {slot}");
+        }
+        for slot in [1usize, 2, 3, 4, 9] {
+            assert!(!npc_hidden_sprite_slot(SCENE_STONEGATE, slot), "slot {slot}");
+        }
 
-        assert!(npc_hidden_sprite_slot(SCENE_THE_LYCAEUM, 5));
-        assert!(npc_hidden_sprite_slot(SCENE_THE_LYCAEUM, 8));
-        assert!(!npc_hidden_sprite_slot(SCENE_THE_LYCAEUM, 9));
+        // The retracted zero-based reading claimed Moonglow, Trinsic and the
+        // Lycaeum hid slots. §11: "No shipped scene hides a talkable named
+        // NPC except Minoc's single row."
+        for slot in 0..32 {
+            assert!(!npc_hidden_sprite_slot(SCENE_MOONGLOW, slot), "slot {slot}");
+            assert!(!npc_hidden_sprite_slot(SCENE_TRINSIC, slot), "slot {slot}");
+            assert!(
+                !npc_hidden_sprite_slot(SCENE_THE_LYCAEUM, slot),
+                "slot {slot}"
+            );
+        }
     }
 
     #[test]
     fn hidden_npc_allocates_logical_object_with_transparent_tile() {
+        // npc-schedules.md §11: Windemere (public scene 28) hides roster
+        // slots 3..=9.
         let mut state = test_state(open_grid(), 3, 5);
         state.area = Area::Town {
-            scene: Scene::new(SCENE_MOONGLOW).unwrap(),
+            scene: Scene::new(SCENE_WINDEMERE).unwrap(),
             floor: 0,
         };
         state.player.facing = Direction::North;

@@ -8,6 +8,7 @@
 use std::io;
 use std::path::Path;
 
+use crate::audio::SoundEffect;
 use crate::{AnimationClock, STATIC_TILE_ANIMATION_PERIOD_TICKS};
 use crate::{
     MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_ROW_STRIDE,
@@ -113,6 +114,47 @@ pub const RTV_CAPTION_CENTRE_COLUMN: usize = 18;
 /// key aborts the preview immediately", restoring the saved title/menu
 /// image. There is no uninterruptible phase and no ESC special case.
 pub const RTV_WAIT_EXITS_ON_KEYPRESS: bool = true;
+
+/// `audio.md §8.6` / `systems/intro.md §12`: the strip index also selects the
+/// preview's ambient sound. Strips `0` ("The Summoning") and `1` ("The
+/// Journey") are silent; strip `2` ("The Arrival") emits a random-pitch
+/// percussive effect on every preview tick; strip `3` ("The Welcoming") emits
+/// a two-tone chime on an eight-tick cycle.
+pub const RTV_PERCUSSIVE_SOUND_STRIP: u8 = 2;
+pub const RTV_CHIME_SOUND_STRIP: u8 = 3;
+/// `audio.md §8.6`: strip 3 sounds "at local phase 0" and "at phase 4" of an
+/// eight-tick cycle.
+pub const RTV_CHIME_CYCLE_TICKS: u32 = 8;
+
+/// The cue one scheduled preview tick of `strip` carries.
+///
+/// `ticks_since_strip_load` is the module's existing chapter-local tick
+/// counter, which the first painted tick of a chapter reaches as `1`. The
+/// eight-tick chime cycle is therefore anchored on that first tick: phase
+/// `(ticks_since_strip_load - 1) % 8`. `audio.md §8.6` publishes the two
+/// sounding phases but not what the cycle counts from; anchoring it on the
+/// strip load is the only chapter-local origin the published data gives.
+///
+/// Only phases 0 and 4 are emitted. `SoundEffect::ReturnToViewStrip3` lowers
+/// the other six to a stop-only program, so emitting them would be harmless,
+/// but `None` states "this tick has no cue" directly.
+pub fn return_to_view_tick_sound(
+    strip: Option<u8>,
+    ticks_since_strip_load: u32,
+) -> Option<SoundEffect> {
+    if ticks_since_strip_load == 0 {
+        return None;
+    }
+    match strip? {
+        RTV_PERCUSSIVE_SOUND_STRIP => Some(SoundEffect::ReturnToViewStrip2),
+        RTV_CHIME_SOUND_STRIP => {
+            let phase = ((ticks_since_strip_load - 1) % RTV_CHIME_CYCLE_TICKS) as u8;
+            crate::audio::return_to_view_strip3_frequency(phase)
+                .map(|_| SoundEffect::ReturnToViewStrip3 { phase })
+        }
+        _ => None,
+    }
+}
 
 /// `#54` / `systems/intro.md §12.1`: the caption's start column for a
 /// caption of `len` cells.
@@ -720,6 +762,11 @@ pub struct ReturnToViewPlaybackFrame {
     pub kind: ReturnToViewFrameKind,
     pub state: ReturnToViewPreviewState,
     pub actor_draw: Option<ReturnToViewActorDraw>,
+    /// `audio.md §8.6`: the ambient cue this scheduled preview tick carries.
+    /// `None` on strips 0 and 1, on strip 3's six silent phases, and on the
+    /// fixed-wipe actor draw, which shares its predecessor's tick rather than
+    /// scheduling one of its own.
+    pub sound: Option<SoundEffect>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1315,12 +1362,16 @@ fn push_return_to_view_cell_effect_frame(
     state.backing[index] = tile;
     state.cached_effect_cell = Some((x, y));
     state.set_playback_tick(elapsed_title_ticks, strip_load_tick);
+    // audio.md §8.6: a cell-effect raster step is a scheduled preview tick and
+    // carries the current strip's ambient cue.
+    let sound = return_to_view_tick_sound(state.current_strip, state.ticks_since_strip_load);
     frames.push(ReturnToViewPlaybackFrame {
         command_index,
         elapsed_title_ticks,
         kind,
         state,
         actor_draw: None,
+        sound,
     });
 }
 
@@ -1334,12 +1385,16 @@ fn push_return_to_view_frame(
 ) {
     let mut state = state.clone();
     state.set_playback_tick(elapsed_title_ticks, strip_load_tick);
+    // audio.md §8.6: every scheduled preview tick — preview, fixed-wipe
+    // rectangle, trailing and move-actor alike — carries the strip's cue.
+    let sound = return_to_view_tick_sound(state.current_strip, state.ticks_since_strip_load);
     frames.push(ReturnToViewPlaybackFrame {
         command_index,
         elapsed_title_ticks,
         kind,
         state,
         actor_draw: None,
+        sound,
     });
 }
 
@@ -1371,6 +1426,18 @@ fn push_return_to_view_actor_draw_frames(
         frame_state.terrain[backing_index] = 0;
         frame_state.overlay[backing_index] = RTV_TEMPORARY_ACTOR_TILE;
         frame_state.set_playback_tick(elapsed_title_ticks, strip_load_tick);
+        // `u5-spec#117`: input is checked through a full preview tick after
+        // every eight writes *except the final group*, so group 32 shares
+        // group 31's tick and schedules none of its own. audio.md §8.6 ties
+        // the cue to the scheduled tick, so the final group is silent.
+        let sound = if group <= u16::from(RTV_SINGLE_CELL_CHECKPOINTS) {
+            return_to_view_tick_sound(
+                frame_state.current_strip,
+                frame_state.ticks_since_strip_load,
+            )
+        } else {
+            None
+        };
         let (kind, source, tile, control) = match control_source {
             ReturnToViewActorDrawControlSource::OriginalActorTile => (
                 ReturnToViewFrameKind::TemporaryActorDraw { completed_writes },
@@ -1399,6 +1466,7 @@ fn push_return_to_view_actor_draw_frames(
                 source,
                 control,
             }),
+            sound,
         });
     }
 }
@@ -1431,6 +1499,9 @@ fn push_return_to_view_fixed_actor_draw_frame(
             source: ReturnToViewActorDrawSource::CurrentActorTile,
             control: ReturnToViewActorDrawControl::Zero,
         }),
+        // audio.md §8.6: this draw reuses the wipe's last tick rather than
+        // scheduling one, so it carries no ambient cue of its own.
+        sound: None,
     });
 }
 

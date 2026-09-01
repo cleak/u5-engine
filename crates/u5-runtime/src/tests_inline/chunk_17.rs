@@ -117,11 +117,25 @@
                 .map(|session| (session.selected_party_index, session.page)),
             Some((1, ZStatsPage::Equipment))
         );
-        assert!(state.message.contains("Nothing equipped."));
+        // `inventory.md §4.7`: "if all six slots are empty the page prints
+        // the `(None ready)` placeholder rather than a blank list."
+        assert!(state.message.contains(Z_STATS_NONE_READY_PLACEHOLDER));
     }
 
+    /// `inventory.md §4.7`: "Long pages **do not paginate**: the navigator
+    /// scans forward or backward for the next slot with a non-zero count, so
+    /// empty slots are skipped rather than shown as blank rows", and "The row
+    /// scanner walks a caller-supplied counter band forward or backward from a
+    /// mutable cursor, skipping zero-count rows for ordinary inventory
+    /// browsing."
+    ///
+    /// This test previously pinned the opposite behaviour under the name
+    /// `z_stats_magic_inventory_pages_show_zero_rows`: an invented
+    /// `Rows 1-8 of 48` page counter, `Ginseng: 0` reagent rows and
+    /// `GP Magic Missile: 0 (zero)` spell rows, with `]` jumping a whole
+    /// eight-row panel. All three contradict §4.7 and are now asserted absent.
     #[test]
-    fn z_stats_magic_inventory_pages_show_zero_rows() {
+    fn z_stats_inventory_pages_skip_zero_slots_and_never_paginate() {
         let mut state = test_state(open_grid(), 1, 1);
         state.reagents = [3, 0, 0, 0, 0, 0, 0, 0];
         state.spell_charges = [0; SPELL_COUNT];
@@ -133,10 +147,17 @@
         state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
         state.scroll_stock[SCROLL_LIGHT_INDEX] = 1;
         state.potion_stock[POTION_BLUE_INDEX] = 4;
+        state.equipment_stock = [0; EQUIPMENT_COUNT];
         state.equipment_stock[EQUIPMENT_ID_BOW] = 2;
 
+        // `inventory.md §4`: "The first two pages are character-specific:
+        // page 1 is the primary stat page and page 2 is the equipment page.
+        // Later inventory pages walk shared counter bands for reagents, spell
+        // charges, special/use items, and the weapons/armour stash." Reagents
+        // is therefore the **third** page, two forward steps from the stats
+        // page. The engine's spell-book page is not one of the six published
+        // pages (`§4.7`), so it does not sit between them.
         assert_eq!(state.z_stats(), MoveOutcome::Observed);
-        assert!(state.step_active_z_stats('>', ""));
         assert!(state.step_active_z_stats('>', ""));
         assert!(state.step_active_z_stats('>', ""));
 
@@ -145,19 +166,90 @@
             Some(ZStatsPage::Reagents)
         );
         assert!(state.message.contains("Sulfur Ash: 3"));
-        assert!(state.message.contains("Ginseng: 0"));
+        // The seven empty reagent slots are skipped, not drawn as blank or
+        // zero rows.
+        assert!(
+            !state.message.contains("Ginseng"),
+            "reagents page message was {:?}",
+            state.message
+        );
+        assert!(!state.message.contains(": 0"));
 
         assert!(state.step_active_z_stats('>', ""));
-        assert!(state.message.contains("Rows 1-8 of 48"));
+        assert_eq!(
+            state.active_z_stats.as_ref().map(|session| session.page),
+            Some(ZStatsPage::Spells)
+        );
         assert!(state.message.contains("IL Light: 2"));
-        assert!(state.message.contains("GP Magic Missile: 0 (zero)"));
+        // No page counter, and none of the forty-seven zero-charge slots.
+        assert!(
+            !state.message.contains("Rows"),
+            "spells page message was {:?}",
+            state.message
+        );
+        assert!(!state.message.contains("Magic Missile"));
+        assert!(!state.message.contains("(zero)"));
+
+        // One displayable slot, so a forward scan finds no next non-zero slot
+        // and the band stays where it is.
+        assert!(state.step_active_z_stats(']', ""));
+        assert!(state.message.contains("IL Light: 2"));
+        assert!(!state.message.contains("Rows"));
+
+        // Ten displayable slots on a forty-eight-slot band: the panel holds
+        // eight, and each key moves the scan by **one** non-zero slot rather
+        // than by a panel of eight.
+        for index in 1..10 {
+            state.spell_charges[index] = 1;
+        }
+        let rows: Vec<String> = (0..10)
+            .map(|index| {
+                format!(
+                    "{} {}: {}",
+                    SPELL_CODES[index],
+                    spell_common_name(index).unwrap(),
+                    if index == 0 { 2 } else { 1 }
+                )
+            })
+            .collect();
+
+        assert!(state.step_active_z_stats('Z', ""));
+        assert!(state.message.contains(&rows[0]));
+        assert!(state.message.contains(&rows[7]));
+        assert!(!state.message.contains(&rows[8]));
 
         assert!(state.step_active_z_stats(']', ""));
-        assert!(state.message.contains("Rows 9-16 of 48"));
-        assert!(state.message.contains("HR Wind Change: 0 (zero)"));
-        assert!(!state.message.contains("IL Light: 2"));
+        assert!(
+            !state.message.contains(&rows[0]),
+            "one forward scan should drop exactly the first slot: {:?}",
+            state.message
+        );
+        assert!(state.message.contains(&rows[1]));
+        assert!(state.message.contains(&rows[8]));
+        assert!(!state.message.contains(&rows[9]));
+
+        assert!(state.step_active_z_stats(']', ""));
+        assert!(state.message.contains(&rows[2]));
+        assert!(state.message.contains(&rows[9]));
+        assert!(!state.message.contains(&rows[1]));
+
+        // §4.7 publishes the scan but not what happens past the end of a
+        // band; the engine's conservative reading is that a scan with no
+        // further non-zero slot leaves the cursor alone, and in particular
+        // never wraps back to the top of the band.
+        assert!(state.step_active_z_stats(']', ""));
+        assert!(state.message.contains(&rows[9]));
+        assert!(!state.message.contains(&rows[1]));
+
+        assert!(state.step_active_z_stats('[', ""));
+        assert!(state.message.contains(&rows[1]));
+        assert!(!state.message.contains(&rows[9]));
 
         assert!(state.step_active_z_stats('>', ""));
+        assert_eq!(
+            state.active_z_stats.as_ref().map(|session| session.page),
+            Some(ZStatsPage::SpecialUse)
+        );
         assert!(state.message.contains("Gems: 2"));
         assert!(state.message.contains("Grapple: 1"));
         assert!(state.message.contains("Sextant: 1"));
@@ -171,6 +263,52 @@
             equipment_name(EQUIPMENT_ID_BOW)
         )));
         assert!(!state.message.contains(equipment_name(EQUIPMENT_ID_CROSSBOW)));
+    }
+
+    /// `inventory.md §4.7`: "`(None owned!)` | An inventory page has no slot
+    /// with a non-zero count", and "When no displayable row exists, the panel
+    /// prints the none placeholder and waits for a key before returning to
+    /// the page loop."
+    ///
+    /// All four published inventory pages - Reagents, Spells, Items and
+    /// Armaments - skip zero-count slots, so all four can run out of
+    /// displayable rows. Before this batch the Reagents and Spells pages
+    /// rendered their empty slots as rows and the placeholder was unreachable
+    /// on both.
+    #[test]
+    fn every_z_stats_inventory_page_reaches_the_none_owned_placeholder() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.reagents = [0; REAGENT_COUNT];
+        state.spell_charges = [0; SPELL_COUNT];
+        state.keys = 0;
+        state.gems = 0;
+        state.torches = 0;
+        state.climbing_gear = 0;
+        state.special_items = [0; SPECIAL_ITEM_COUNT];
+        state.scroll_stock = [0; SCROLL_COUNT];
+        state.potion_stock = [0; POTION_COUNT];
+        state.equipment_stock = [0; EQUIPMENT_COUNT];
+
+        assert_eq!(state.z_stats(), MoveOutcome::Observed);
+        assert!(state.step_active_z_stats('>', ""));
+
+        for page in [
+            ZStatsPage::Reagents,
+            ZStatsPage::Spells,
+            ZStatsPage::SpecialUse,
+            ZStatsPage::EquipmentStock,
+        ] {
+            assert!(state.step_active_z_stats('>', ""));
+            assert_eq!(
+                state.active_z_stats.as_ref().map(|session| session.page),
+                Some(page)
+            );
+            assert!(
+                state.message.contains(Z_STATS_NONE_OWNED_PLACEHOLDER),
+                "{page:?} page message was {:?}",
+                state.message
+            );
+        }
     }
 
     #[test]
@@ -200,14 +338,29 @@
         ];
         state.spell_charges = [0; SPELL_COUNT];
 
+        // `magic.md §11` publishes the spell-book panel's contract: "A
+        // per-character spell-book panel lists the spells the character can
+        // attempt to cast ... The list is filtered by the character's class
+        // and level (Mages and Druids have full access; other classes see a
+        // smaller subset). The list does *not* depend on charges."
+        //
+        // It is **not**, however, one of the six pages the Z-stats page loop
+        // cycles through: `inventory.md §4.7` publishes six pages - attributes,
+        // equipment, and four inventory pages - and no spell-book page is
+        // among them. So the panel is rendered directly here rather than
+        // navigated to. This test used to assert two forward steps land on it,
+        // which the published page sequence rules out.
         assert_eq!(state.z_stats(), MoveOutcome::Observed);
-        assert!(state.step_active_z_stats('>', ""));
-        assert!(state.step_active_z_stats('>', ""));
-
-        assert_eq!(
-            state.active_z_stats.as_ref().map(|session| session.page),
-            Some(ZStatsPage::SpellBook)
+        let session = ZStatsSession {
+            selected_party_index: 0,
+            page: ZStatsPage::SpellBook,
+            inventory_cursor: 0,
+        };
+        assert!(
+            !ZStatsPage::ORDERED.contains(&ZStatsPage::SpellBook),
+            "inventory.md §4.7 publishes six pages and no spell-book page"
         );
+        state.message = state.render_z_stats_session(&session);
         assert!(state.message.contains("Z-stats: Spell Book page"));
         assert!(state.message.contains("C1 MP1 IL"));
         assert!(state.message.contains("In Lor / Light"));
@@ -215,7 +368,17 @@
         assert!(!state.message.contains("C3 LV"));
         assert!(!state.message.contains("IL Light: 0"));
 
-        assert!(state.step_active_z_stats('2', ""));
+        // The Fighter in slot 2 is one of the classes that "see a smaller
+        // subset" - here, none at all. Rendered directly for the same reason:
+        // `inventory.md §4` says a number-key jump preserves "whether the
+        // current character page is the stats page or the equipment page",
+        // which are the only two character-specific pages it publishes.
+        let fighter = ZStatsSession {
+            selected_party_index: 1,
+            page: ZStatsPage::SpellBook,
+            inventory_cursor: 0,
+        };
+        state.message = state.render_z_stats_session(&fighter);
         assert!(state.message.contains("No spell access."));
     }
 
@@ -282,7 +445,9 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_cast.is_some());
-        assert!(state.message.contains("Spell name: IL"));
+        // `magic.md §5` Step 2: "each letter prints its associated rune
+        // word followed by a space" - `IL` echoes as `In Lor `.
+        assert!(state.message.contains("Spell name: In Lor "));
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
 
         assert_eq!(
@@ -483,6 +648,15 @@
         assert_eq!(state.message, "Gate Travel phase 1 is not set.");
     }
 
+    /// `magic.md §6` Step 6: "The handler prints `Mixing...`, pauses
+    /// briefly, then subtracts the requested quantity from each selected
+    /// raw reagent counter", and Step 7 prints the completion message only
+    /// afterwards. `text-output.md` §11 owns how the two land in one
+    /// transcript: "**Both lines are emitted, in the order they occur**",
+    /// because "Text output is a *stream* into a windowed grid" with no
+    /// current-message slot to overwrite. So the mix transcript is the
+    /// pause line followed by the completion line, not the completion line
+    /// alone. An earlier revision of this test omitted the pause line.
     #[test]
     fn active_mix_prompt_collects_spell_reagent_and_quantity() {
         let mut state = test_state(open_grid(), 5, 5);
@@ -530,7 +704,8 @@
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Mixed 1 IL charge; stock is 1.");
+        assert_eq!(state.message, "Mixing...
+Mixed 1 IL charge; stock is 1.");
     }
 
     #[test]
@@ -1034,29 +1209,39 @@
         assert!(state.active_use.is_none());
         assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
         assert_eq!(state.turn, 1);
+        // `quest-graph.md §5` "Presentation order": the heading and the aloft
+        // line completed by the shard's own virtue word print "before any gate
+        // is evaluated", and then "only the **position** gate produces the
+        // shared no-effect result". The party is nowhere near a published
+        // destruction row, so that is the gate that speaks. The old single-line
+        // per-gate refusal this test used to pin is one of the two divergences
+        // §5 names explicitly.
         assert_eq!(
             state.message,
-            "Shard of Falsehood: no matching Eternal Flame is here."
+            "Shard of Falsehood!\nThou dost hold the evil shard aloft: Falsehood!\nNo effect!"
         );
     }
 
     #[test]
     fn inline_use_routes_shadowlord_shard_names_to_handler() {
         let cases = [
+            // `quest-graph.md §5`: each shard's prologue is completed by its
+            // own virtue word - Falsehood, Hatred, or Cowardice - and the
+            // off-position refusal is the one shared no-effect result.
             (
                 "Falsehood",
                 SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-                "Shard of Falsehood: no matching Eternal Flame is here.",
+                "Shard of Falsehood!\nThou dost hold the evil shard aloft: Falsehood!\nNo effect!",
             ),
             (
                 "Shard Hatred",
                 SPECIAL_ITEM_SHARD_HATRED_INDEX,
-                "Shard of Hatred: no matching Eternal Flame is here.",
+                "Shard of Hatred!\nThou dost hold the evil shard aloft: Hatred!\nNo effect!",
             ),
             (
                 "CW",
                 SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-                "Shard of Cowardice: no matching Eternal Flame is here.",
+                "Shard of Cowardice!\nThou dost hold the evil shard aloft: Cowardice!\nNo effect!",
             ),
         ];
 
@@ -1110,7 +1295,24 @@
         assert_eq!(missing.message, "No Shard of Hatred!");
         assert_eq!(missing.turn, 0);
 
-        let mut vanquished = test_state(open_grid(), 5, 5);
+        // The vanquished case is only actually exercised **on** the shard's
+        // published destruction row: off-position the handler refuses at the
+        // position gate and never reaches the Shadowlord tests at all.
+        // `quest-graph.md §5` fixes Cowardice's row as Serpent's Hold,
+        // basement floor `0xFF`, party at `(15, 16)`.
+        //
+        // A vanquished Shadowlord can never be the active named encounter,
+        // because the Yell path "checks whether that Shadowlord is still alive
+        // before creating the summoned encounter state". The handshake gate
+        // therefore fails, and §5 phase 5 makes that failure silent: "the
+        // handler simply returns. It prints no refusal line, so from the
+        // player's side the sequence stops after the cast-into-the-flame line
+        // with nothing further happening."
+        let mut vanquished = test_state(open_grid(), 15, 16);
+        vanquished.area = Area::Town {
+            scene: Scene::new(SCENE_SERPENTS_HOLD).unwrap(),
+            floor: -1,
+        };
         vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX] = 1;
         vanquished.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX] = SHADOWLORD_VANQUISHED;
         assert_eq!(
@@ -1119,10 +1321,12 @@
                 .unwrap(),
             MoveOutcome::Blocked
         );
+        // §5: "a refused attempt ... leaves the shard in the party's
+        // possession."
         assert_eq!(vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX], 1);
         assert_eq!(
             vanquished.message,
-            "Shard of Cowardice: matching Shadowlord is already vanquished."
+            "Shard of Cowardice!\nThou dost hold the evil shard aloft: Cowardice!\nThou dost cast it into the Flame of Courage!"
         );
         assert_eq!(vanquished.turn, 0);
     }
@@ -1162,7 +1366,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
-            "Shard of Falsehood: cast into Flame of Truth; Falsehood vanquished; cleared 1 encounter(s)."
+            "Shard of Falsehood!\nThou dost hold the evil shard aloft: Falsehood!\nThou dost cast it into the Flame of Truth!\nFAULINEI is vanquished! Cleared 1 encounter(s)."
         );
     }
 
@@ -1178,7 +1382,7 @@
                 15,
                 9,
                 EternalFlame::Truth,
-                "Shard of Falsehood: cast into Flame of Truth; Falsehood vanquished; cleared 1 encounter(s).",
+                "Shard of Falsehood!\nThou dost hold the evil shard aloft: Falsehood!\nThou dost cast it into the Flame of Truth!\nFAULINEI is vanquished! Cleared 1 encounter(s).",
             ),
             (
                 SHADOWLORD_HATRED_INDEX,
@@ -1188,7 +1392,7 @@
                 15,
                 3,
                 EternalFlame::Love,
-                "Shard of Hatred: cast into Flame of Love; Hatred vanquished; cleared 1 encounter(s).",
+                "Shard of Hatred!\nThou dost hold the evil shard aloft: Hatred!\nThou dost cast it into the Flame of Love!\nASTAROTH is vanquished! Cleared 1 encounter(s).",
             ),
             (
                 SHADOWLORD_COWARDICE_INDEX,
@@ -1198,7 +1402,7 @@
                 15,
                 16,
                 EternalFlame::Courage,
-                "Shard of Cowardice: cast into Flame of Courage; Cowardice vanquished; cleared 1 encounter(s).",
+                "Shard of Cowardice!\nThou dost hold the evil shard aloft: Cowardice!\nThou dost cast it into the Flame of Courage!\nNOSFENTOR is vanquished! Cleared 1 encounter(s).",
             ),
         ];
 
@@ -1234,6 +1438,13 @@
             assert_eq!(state.special_items[item], 0);
             assert!(state.shadowlord_vanquished(shadowlord));
             assert_eq!(state.turn, 1);
+            // `quest-graph.md §5` "Presentation order" on a successful
+            // destruction: the heading plus the aloft line completed by the
+            // shard's own virtue word (phase 1), the cast-into-the-flame line
+            // completed by the **opposed** principle's word - Truth, Love or
+            // Courage (phase 4), and a closing line "naming the destroyed
+            // Shadowlord" (phase 6). The three shard rows differ in exactly
+            // those three words and in nothing else.
             assert_eq!(state.message, message);
         }
     }
@@ -1307,9 +1518,13 @@
 
         assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
         assert!(state.shadowlord_alive(SHADOWLORD_FALSEHOOD_INDEX));
+        // `quest-graph.md §5`: the position gate requires the party's "X, Y,
+        // scene, and floor" to equal the shard's row, and it is the only gate
+        // that "produces the shared no-effect result" - after the
+        // unconditional heading and aloft line.
         assert_eq!(
             state.message,
-            "Shard of Falsehood: no matching Eternal Flame is here."
+            "Shard of Falsehood!\nThou dost hold the evil shard aloft: Falsehood!\nNo effect!"
         );
     }
 
@@ -1333,9 +1548,15 @@
         assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
         assert!(!state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(state.turn, 0);
+        // `quest-graph.md §5` phase 4: the cast-into-the-flame line, completed
+        // by the opposed principle's word, prints "**before** testing whether
+        // a Shadowlord is on the flame and whether the handshake matches".
+        // Phase 5: "If either of those two gates fails, the handler simply
+        // returns. It prints no refusal line." Printing one is the second
+        // divergence §5 names explicitly.
         assert_eq!(
             state.message,
-            "Shard of Falsehood: matching Shadowlord is not present."
+            "Shard of Falsehood!\nThou dost hold the evil shard aloft: Falsehood!\nThou dost cast it into the Flame of Truth!"
         );
     }
 
@@ -1365,9 +1586,13 @@
 
         assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
         assert!(state.shadowlord_alive(SHADOWLORD_FALSEHOOD_INDEX));
+        // `quest-graph.md §5`: the position gate requires the party's "X, Y,
+        // scene, and floor" to equal the shard's row, and it is the only gate
+        // that "produces the shared no-effect result" - after the
+        // unconditional heading and aloft line.
         assert_eq!(
             state.message,
-            "Shard of Falsehood: no matching Eternal Flame is here."
+            "Shard of Falsehood!\nThou dost hold the evil shard aloft: Falsehood!\nNo effect!"
         );
     }
 
@@ -1397,9 +1622,14 @@
         assert!(state.shadowlord_alive(SHADOWLORD_FALSEHOOD_INDEX));
         assert!(state.shadowlord_name_encounter_present(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(state.turn, 0);
+        // `quest-graph.md §5`: the position gate is per-shard - "The party's
+        // X, Y, scene, and floor must all equal the row for the shard's index"
+        // - so standing on a Flame of Love with the Shard of Falsehood is a
+        // position mismatch, not a distinct mismatched-flame refusal. §5
+        // publishes exactly one refusal result here.
         assert_eq!(
             state.message,
-            "Shard of Falsehood: Flame of Love does not oppose this Shadowlord."
+            "Shard of Falsehood!\nThou dost hold the evil shard aloft: Falsehood!\nNo effect!"
         );
     }
 
@@ -1515,23 +1745,15 @@
         ));
     }
 
-    #[test]
-    fn shadowlord_reroll_uses_plain_uniform_slots_without_current_rejection() {
-        let mut state = world_state(open_world_grid(), 5, 5);
-        state.shadowlord_hideouts = [1, 2, SHADOWLORD_VANQUISHED];
-        state.prng_state = 0x0002;
-        let (expected_hideouts, expected_prng_state) =
-            expected_shadowlord_prng_reroll(state.shadowlord_hideouts, state.prng_state, Some(3));
-
-        assert_eq!(state.reroll_shadowlord_hideouts_excluding(Some(3)), 2);
-
-        assert_eq!(state.shadowlord_hideouts, expected_hideouts);
-        assert_eq!(state.prng_state, expected_prng_state);
-        assert_eq!(
-            state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX],
-            SHADOWLORD_VANQUISHED
-        );
-    }
+    // `shadowlord_reroll_uses_plain_uniform_slots_without_current_rejection`
+    // was removed here. It asserted that the midnight walker draws plainly and
+    // uniformly with no reject-and-redraw, which `time.md §7` contradicts
+    // directly: the pass "rejects it when either of these holds, then draws
+    // again", one of the two conditions being "the candidate equals the
+    // party's current scene byte". Nothing in `time.md` or
+    // `catalogs/quest-graph.md` retracts that rule. The published contract is
+    // pinned by `shadowlord_reroll_rejects_the_party_scene_and_redraws` in
+    // `tests_inline/recovered_chunk_17.rs`.
 
     #[test]
     fn shadowlord_current_hideout_id_uses_virtue_town_scene_ids_only() {
@@ -1561,21 +1783,46 @@
         assert_eq!(state.current_shadowlord_hideout_id(), None);
     }
 
+    /// `time.md §7`: "For each slot whose high bit is clear, the midnight
+    /// pass draws a candidate id uniformly from `1..8` inclusive and rejects
+    /// it when either of these holds, then draws again: the candidate equals
+    /// the party's current scene byte, or the candidate equals the value
+    /// currently stored in **any** of the three slots, including the slot
+    /// being rerolled and any slot already rewritten earlier in the same
+    /// pass."
+    ///
+    /// The rejection set is read live from the running array rather than from
+    /// a pre-pass snapshot, which is what makes §7's two stated consequences
+    /// true: "a living Shadowlord never stays in the same town two days
+    /// running, and no two living Shadowlords share a town". Because each
+    /// rejection consumes a draw, a model without the rejection also predicts
+    /// the wrong final PRNG state, not merely the wrong ids.
+    ///
+    /// The walker's own gate is the high bit, not liveness: §7 says a `0`
+    /// slot means "not yet placed" and "the reroll walker rewrites it on the
+    /// first day rollover".
     fn expected_shadowlord_prng_reroll(
         previous: [u8; SHADOWLORD_COUNT],
         mut prng_state: u16,
-        _current: Option<u8>,
+        current: Option<u8>,
     ) -> ([u8; SHADOWLORD_COUNT], u16) {
         let mut hideouts = previous;
         for slot in 0..SHADOWLORD_COUNT {
-            if !PlayState::shadowlord_slot_is_living(previous[slot]) {
+            if !PlayState::shadowlord_slot_is_rerollable(hideouts[slot]) {
                 continue;
             }
-            hideouts[slot] = u5_prng_range_u16(
-                &mut prng_state,
-                u16::from(SHADOWLORD_HIDEOUT_MIN),
-                u16::from(SHADOWLORD_HIDEOUT_MAX),
-            ) as u8;
+            loop {
+                let candidate = u5_prng_range_u16(
+                    &mut prng_state,
+                    u16::from(SHADOWLORD_HIDEOUT_MIN),
+                    u16::from(SHADOWLORD_HIDEOUT_MAX),
+                ) as u8;
+                if Some(candidate) == current || hideouts.contains(&candidate) {
+                    continue;
+                }
+                hideouts[slot] = candidate;
+                break;
+            }
         }
         (hideouts, prng_state)
     }
@@ -2019,7 +2266,15 @@
         assert_eq!(saved[third + SAVE_CHARACTER_DEX_OFFSET], 10);
         assert_eq!(saved[third + SAVE_CHARACTER_INT_OFFSET], 13);
         assert_eq!(saved[third + SAVE_CHARACTER_MANA_OFFSET], 2);
-        assert_eq!(u16_at(&saved, third + SAVE_CHARACTER_HP_OFFSET), 11);
+        // `time.md` §5, unconditional part: "A member whose status is
+        // exactly Poisoned loses **exactly 1 current hit point** ... This is
+        // per member per turn, independently, not a shared roll and not an
+        // hourly effect." New Order consumes a turn, so this Poisoned
+        // record's seeded 11 hit points are exported as 10. The Sleeping
+        // record above is "skipped entirely" and keeps its 12. An earlier
+        // revision of this test expected 11 here, from before the per-turn
+        // poison tick existed.
+        assert_eq!(u16_at(&saved, third + SAVE_CHARACTER_HP_OFFSET), 10);
         assert_eq!(u16_at(&saved, third + SAVE_CHARACTER_MAX_HP_OFFSET), 21);
         assert_eq!(u16_at(&saved, third + SAVE_CHARACTER_EXPERIENCE_OFFSET), 200);
         assert_eq!(saved[third + SAVE_CHARACTER_STAY_COUNTER_OFFSET], 2);
@@ -2866,7 +3121,7 @@
         );
         assert_eq!(
             state.message,
-            "Cause Fear affected 2 combat actor(s).\nDaemon missed party member 1 with ranged attack."
+            "Cause Fear affected 2 combat actor(s).\nDaemon missed!\n"
         );
     }
 
@@ -3399,12 +3654,28 @@
         assert_eq!(resurrect_living.message, "Failed!");
     }
 
+    /// `lighting.md §8`: "Great Light, *Vas Lor*, sets the same counter
+    /// to 255 counter units"; `catalogs/spell-list.md` agrees - "`Vas Lor`
+    /// starts or refreshes the same counter at 255 units."
+    ///
+    /// The clock is moved to a night hour so §4's light-spell floor of 18
+    /// is the value actually under test. `lighting.md` §3 withdraws the
+    /// dungeon-depth forced-dark reading - "a dungeon level index counts
+    /// upward from zero at the top of the stack, so it never sets the high
+    /// bit, and the ambient value computed while the party is inside a
+    /// dungeon is simply whatever the clock produces" - so at noon this
+    /// dungeon recomputes to the full-daylight 50 and the floor is a no-op
+    /// ("In daylight, where the ambient value is already 50, lighting a
+    /// torch or casting a light spell changes nothing at all"). An earlier
+    /// revision of this test read noon-in-a-dungeon as forced dark; that
+    /// reading is retracted.
     #[test]
     fn cast_vas_lor_sets_great_light_counter() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.spell_charges[VAS_LOR_SPELL_INDEX] = 1;
         state.party[0].mana = 3;
         state.party[0].level = 3;
+        state.clock = GameClock::new(22, 0).unwrap();
         state.ambient_light = FULL_DARKNESS;
 
         assert_eq!(
@@ -3415,6 +3686,7 @@
         assert_eq!(state.spell_charges[VAS_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.light_spell_counter, VAS_LOR_LIGHT_DURATION);
+        assert_eq!(VAS_LOR_LIGHT_DURATION, 255);
         assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Light!");
@@ -4225,4 +4497,3 @@
             assert_eq!(state.message, expected_message);
         }
     }
-

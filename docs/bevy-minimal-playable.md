@@ -18,6 +18,13 @@ cargo run --features visual -- --visual-playable C:\Games\U5-Clean
 - `J` loads `SAVED.GAM`/`SAVED.OOL` and enters Bevy gameplay.
 - `Esc` exits the intro shell, or exits gameplay only when no modal prompt is active.
 
+The launcher treats the supplied game directory as a read-only asset source.
+For the default `C:\Games\U5-Clean` install, and for any install whose mutable
+save files are read-only, interactive play uses a persistent writable mirror in
+`%LOCALAPPDATA%\u5-engine\runtime`. `U5_ENGINE_RUNTIME_DIR` overrides that
+parent directory. This keeps Journey Onward, character creation, plane-overlay
+mirroring, and later saves writable without changing the clean source assets.
+
 ## Play Scope
 
 The v0 scope is ordinary playability, not frame-perfect DOS presentation:
@@ -59,11 +66,16 @@ cargo run -p u5-tui --features visual -- --visual-route-suite target\visual-rout
 
 - The game uses the supplied asset/save directory directly. Use a copied clean
   asset directory when testing destructive save flows.
-- The published effect boundaries have generated PC-speaker-style audio. The
-  dungeon-decoration sweep retains its published discrete frequencies and
-  pacing ratio; exact historical timings for calibrated waits, other
-  unpublished envelopes, original modal pacing, and historical display-driver
-  deltas remain outside this v0 target.
+- PC-speaker audio follows `systems/audio.md` (spec commit `86bee4d`) exactly:
+  one voice, the published trigger inventory, the four sound families, the
+  divisor rule, and the `§3` mute rule that suppresses output without changing
+  cadence. Effects are synthesized per invocation from their operation list, so
+  jitter-driven and PRNG-driven pitch sequences are reproduced rather than
+  approximated with fixed waves. Wall-clock pacing comes from the single
+  calibrated-delay-unit anchor `cleak/u5-spec#146` publishes (0.88 ms +/- 10%,
+  a static derivation with a modelling band), so the residual timing
+  uncertainty is the spec's own band. Original modal pacing and historical
+  display-driver deltas remain outside this v0 target.
 - Remaining public-spec parity gaps are tracked in `docs/completion-audit.md`
   and the open `cleak/u5-spec` issues; they do not block this playable Bevy
   shell unless they surface as crashes, trapped prompts, or impossible ordinary

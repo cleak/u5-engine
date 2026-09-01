@@ -4,8 +4,9 @@ use std::io;
 use std::path::Path;
 
 use crate::{
-    GraphicImage, GraphicImageDirectory, TileGraphicsDepth, input_case_fold,
-    load_graphic_image_directory, read_optional_disk_file,
+    GraphicImage, GraphicImageDirectory, INPUT_CODE_EAST, INPUT_CODE_NORTH, INPUT_CODE_SOUTH,
+    INPUT_CODE_WEST, TileGraphicsDepth, input_case_fold, load_graphic_image_directory,
+    read_optional_disk_file,
 };
 
 /// `intro.md §3` title-screen surface dimensions. The title flow
@@ -428,13 +429,44 @@ pub const INTRO_MENU_FRAME_INTERIOR_RIGHT_X: u16 = INTRO_MENU_FRAME_OUTLINE_RIGH
 /// label.
 pub const INTRO_MENU_SELECT_CAPTION_PREFIX: &str = ">Select:";
 pub const INTRO_MENU_SELECT_CAPTION_SUFFIX: &str = "<";
-/// The caption's cursor cell is `IBM.CH` glyph 8 (a diagonal hatch),
-/// measured directly from the capture's cell 23 of text row 15. The
-/// engine's gameplay prompt cursor (`PROMPT_CURSOR_GLYPH`) is a
-/// different glyph, so this caption names its own code rather than
-/// reusing it.
+/// One sample of the caption's cursor cell: `IBM.CH` glyph 8, measured
+/// directly from the capture's cell 23 of text row 15.
+///
+/// It is **one phase of a four-phase cycle**, not a fixed glyph.
+/// `intro.md §6.1` "The cursor cell": "The cell parked at row 15,
+/// column 23 is not an on/off blink. It cycles the same four
+/// consecutive fixed-cell glyph codes `0x05` through `0x08` that the
+/// gameplay message window's input cursor uses (`text-output.md`
+/// section 10.6), one phase per menu poll pass." Resolve the live cell
+/// with [`intro_menu_select_caption_cursor_glyph`]; this constant
+/// remains only as the measured sample.
 pub const INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH: u8 =
     crate::gameplay_chrome::PROMPT_CURSOR_FRAME_GLYPHS[3];
+
+/// `intro.md §6.1` "The cursor cell": the caption's cursor cell cycles
+/// the four consecutive fixed-cell glyph codes `0x05..=0x08` - "the
+/// same four ... that the gameplay message window's input cursor uses"
+/// - advancing **one phase per menu poll pass**. Each of the four is a
+/// diagonal hatch of two-pixel steps shifted two pixels along, so the
+/// cell reads as a diagonal pattern marching across it.
+///
+/// Because the cycle is shared with the gameplay prompt this delegates
+/// to [`crate::gameplay_chrome::prompt_cursor_glyph`] rather than
+/// restating the table.
+///
+/// The spec publishes the four codes, their order and the cadence, but
+/// **not** which phase the menu's very first poll pass shows; pass `0`
+/// is taken as `0x05`, the first code of the published run. The
+/// measured [`INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH`] sample is
+/// consistent with any origin, since a capture catches an arbitrary
+/// pass.
+pub fn intro_menu_select_caption_cursor_glyph(pass: u64) -> u8 {
+    crate::gameplay_chrome::prompt_cursor_glyph(pass)
+}
+
+/// `intro.md §6.1` "The cursor cell": "The instant a poll returns a key
+/// the cell is overwritten with a space."
+pub const INTRO_MENU_SELECT_CAPTION_CURSOR_BLANK: u8 = b' ';
 pub const INTRO_MENU_SELECT_CAPTION_COLUMN: u8 = 15;
 pub const INTRO_MENU_SELECT_CAPTION_ROW: u8 = 15;
 pub const INTRO_MENU_COPYRIGHT_CAPTION: &str = ">Copyright 1988 Lord British<";
@@ -736,12 +768,20 @@ pub fn placeholder_title_tick_frames() -> TitleTickFrameSet {
 }
 
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
-/// four records are shown as 4-by-19 map strips, followed by a
-/// 655-byte command stream driving preview actors and animation beats.
+/// four records are the preview map strips, followed by a 655-byte
+/// command stream driving preview actors and animation beats.
+///
+/// `formats/location-dat.md §11`: "Each record is **four 32-byte
+/// rows**; within a row the first nineteen bytes carry tile data and
+/// the trailing thirteen bytes are unused padding. The strip is
+/// therefore wide and short, which is also what the preview displays:
+/// nineteen tiles across by four tiles down." At sixteen pixels per
+/// tile the strip is 304 x 64 pixels. The earlier 4-columns-by-19-rows
+/// reading is transposed and withdrawn; the strip geometry lives in
+/// [`crate::return_to_view`] as `RTV_STRIP_VISIBLE_COLUMNS` (19) and
+/// `RTV_STRIP_VISIBLE_ROWS` (4), which are the single source of truth.
 pub const MISCMAPS_DAT_FILE: &str = "MISCMAPS.DAT";
 pub const RTV_STRIP_COUNT: usize = 4;
-pub const RTV_STRIP_ROWS: usize = 19;
-pub const RTV_STRIP_COLUMNS: usize = 4;
 pub const RTV_COMMAND_STREAM_BYTES: usize = 655;
 
 /// `formats/location-dat.md §11` MISCMAPS section offsets. The file
@@ -881,7 +921,31 @@ pub fn require_graphical_acknowledgements_surface() -> ! {
     )
 }
 
-/// `intro.md §6`: the six accepted intro-menu actions.
+/// `intro.md §6.2`: the menu's six rows, and the fixed row-to-letter
+/// table through which Enter, Space and the idle timeout resolve.
+///
+/// "What exists is a fixed six-entry row-to-letter table: rows `0`
+/// through `5` map to `J`, `C`, `T`, `U`, `A`, `R`."
+pub const INTRO_MENU_ROW_COUNT: usize = 6;
+pub const INTRO_MENU_ROW_LETTERS: [u8; INTRO_MENU_ROW_COUNT] = [b'J', b'C', b'T', b'U', b'A', b'R'];
+
+/// `intro.md §6.2`: "The initial highlight is row 0, `Journey
+/// Onward`, and the highlight index survives across poll passes."
+pub const INTRO_MENU_INITIAL_HIGHLIGHT_ROW: u8 = 0;
+
+/// `intro.md §6.2`: "Two hundred consecutive no-key passes | Commit
+/// `Return to the View` exactly as though `R` had been pressed."
+pub const INTRO_MENU_IDLE_TIMEOUT_PASSES: u16 = 200;
+
+/// `intro.md §6`: the accepted intro-menu actions.
+///
+/// §6.2's input model is a highlight index plus letter hotkeys, not a
+/// pure key dispatch: "An earlier revision of this section said
+/// dispatch was purely by key and that 'the row number only controls
+/// presentation'; that is withdrawn — the row index is load-bearing,
+/// because Enter, Space and the idle timeout all resolve through it.
+/// The claim that the menu keeps a 'recent-selection cache' that Enter
+/// replays is withdrawn as well; there is no such cache."
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IntroMenuAction {
     /// `J` — load the active save and return to the main loop on success.
@@ -897,16 +961,45 @@ pub enum IntroMenuAction {
     Acknowledgements,
     /// `R` — run the non-interactive Return-to-View preview and return.
     ReturnToView,
-    /// Repeat the most-recent cached selection (Enter when a cache is
-    /// present); caller maintains the cache and resolves it back to one
-    /// of the six actions above. This variant signals the intent rather
-    /// than the resolved action.
-    RepeatCachedSelection,
+    /// Up arrow or left arrow: "Move the highlight one row toward row
+    /// 0, wrapping from row 0 to row 5; repaint the labels; keep
+    /// polling."
+    MoveHighlightUp,
+    /// Down arrow or right arrow: "Move the highlight one row toward
+    /// row 5, wrapping from row 5 to row 0; repaint the labels; keep
+    /// polling."
+    MoveHighlightDown,
+    /// Enter or Space: "Commit whichever row is currently highlighted,
+    /// resolved through the row-to-letter table."
+    CommitHighlight,
 }
 
-/// `intro.md §6`: classify a raw key byte into an intro-menu action.
+impl IntroMenuAction {
+    /// The row this action selects, for the six letter hotkeys.
+    /// `None` for the highlight-motion and commit actions, which
+    /// resolve against the menu's own highlight index instead.
+    pub fn letter_row(self) -> Option<u8> {
+        let letter = match self {
+            IntroMenuAction::JourneyOnward => b'J',
+            IntroMenuAction::CreateNewCharacter => b'C',
+            IntroMenuAction::TransferFromUltimaIv => b'T',
+            IntroMenuAction::UltimaVIntroduction => b'U',
+            IntroMenuAction::Acknowledgements => b'A',
+            IntroMenuAction::ReturnToView => b'R',
+            IntroMenuAction::MoveHighlightUp
+            | IntroMenuAction::MoveHighlightDown
+            | IntroMenuAction::CommitHighlight => return None,
+        };
+        INTRO_MENU_ROW_LETTERS
+            .iter()
+            .position(|candidate| *candidate == letter)
+            .map(|row| row as u8)
+    }
+}
+
+/// `intro.md §6.2`: classify a raw key byte into an intro-menu action.
 /// Keys are case-folded before dispatch (matching `input.md §6`).
-/// Returns `None` for invalid keys, which the menu silently ignores.
+/// Returns `None` for invalid keys — "Any other key | Discarded."
 pub fn intro_menu_action(byte: u8) -> Option<IntroMenuAction> {
     let folded = input_case_fold(byte);
     Some(match folded {
@@ -916,8 +1009,11 @@ pub fn intro_menu_action(byte: u8) -> Option<IntroMenuAction> {
         b'U' => IntroMenuAction::UltimaVIntroduction,
         b'A' => IntroMenuAction::Acknowledgements,
         b'R' => IntroMenuAction::ReturnToView,
-        // Enter (CR or LF) reuses the cached selection if any.
-        b'\r' | b'\n' => IntroMenuAction::RepeatCachedSelection,
+        // "Enter, Space | Commit whichever row is currently
+        // highlighted, resolved through the row-to-letter table."
+        b'\r' | b'\n' | b' ' => IntroMenuAction::CommitHighlight,
+        INPUT_CODE_NORTH | INPUT_CODE_WEST => IntroMenuAction::MoveHighlightUp,
+        INPUT_CODE_SOUTH | INPUT_CODE_EAST => IntroMenuAction::MoveHighlightDown,
         _ => return None,
     })
 }

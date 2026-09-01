@@ -935,6 +935,25 @@
         unreachable!("PRNG range cycle must hit a nonzero value")
     }
 
+    /// `town-mode.md §17` "Underfoot-effect cadence is fixed": "The underfoot
+    /// handler is a per-turn post-action pass, not a step-commit hook. Any
+    /// earlier statement that the poison-gas effect 'fires from the step path'
+    /// is retracted". A test that wants an underfoot effect therefore has to
+    /// run the post-action pass the dispatcher runs, after the command's own
+    /// clock advance - the step alone no longer produces one.
+    fn step_then_post_turn(
+        state: &mut PlayState,
+        direction: Direction,
+        dir: &std::path::Path,
+    ) -> MoveOutcome {
+        let turn_before = state.turn;
+        let outcome = state.step_with_game_dir(direction, Some(dir)).unwrap();
+        state
+            .apply_post_turn_effects_after_outcome(turn_before, dir, outcome)
+            .unwrap()
+            .unwrap_or(outcome)
+    }
+
     #[test]
     fn town_movement_onto_native_poison_gas_tile_poisons_eligible_member() {
         // `cleak/u5-spec#51`: every eligible member rolls
@@ -951,9 +970,7 @@
         state.party[0].hp = 10;
 
         assert_eq!(
-            state
-                .step_with_game_dir(Direction::East, Some(&dir))
-                .unwrap(),
+            step_then_post_turn(&mut state, Direction::East, &dir),
             MoveOutcome::Moved
         );
 
@@ -1063,9 +1080,7 @@
         });
 
         assert_eq!(
-            state
-                .step_with_game_dir(Direction::East, Some(&dir))
-                .unwrap(),
+            step_then_post_turn(&mut state, Direction::East, &dir),
             MoveOutcome::Moved
         );
 
@@ -1108,8 +1123,17 @@
         assert_eq!(report, "Party member 1 is poisoned!");
     }
 
+    /// `town-mode.md §17` "Underfoot-effect cadence is fixed": "The underfoot
+    /// handler is a per-turn post-action pass, not a step-commit hook. Any
+    /// earlier statement that the poison-gas effect 'fires from the step path'
+    /// is retracted: it fires once per turn-consuming action while the party
+    /// occupies the tile, including turns spent passing in place, and it fires
+    /// **after that turn's clock advance**."
+    ///
+    /// This test previously pinned the retracted step-commit cadence under the
+    /// name `town_poison_gas_step_rolls_before_turn_clock_tick`.
     #[test]
-    fn town_poison_gas_step_rolls_before_turn_clock_tick() {
+    fn town_poison_gas_step_rolls_after_turn_clock_tick() {
         let dir = debug_game_dir();
         let mut grid = open_grid();
         grid[32 + 1] = TOWN_POISON_GAS_LIVE_TILE;
@@ -1121,26 +1145,49 @@
         state.party[0].climb_stat = 0;
         state.party[0].hp = 10;
 
+        // The bare step commits the move and this turn's clock advance but
+        // produces no underfoot effect: the gas arm is not a step-commit hook
+        // any more.
         assert_eq!(
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
             MoveOutcome::Moved
         );
+        assert_eq!(state.clock.hour, 9);
+        assert_eq!(state.party[0].status, b'G');
+
+        // The post-action pass is what rolls, and it runs after that advance.
+        state
+            .apply_post_turn_effects_after_outcome(0, &dir, MoveOutcome::Moved)
+            .unwrap();
 
         assert_eq!(state.clock.hour, 9);
         assert_eq!(state.party[0].status, b'P');
-        assert_eq!(state.party[0].hp, 9);
+        assert_eq!(
+            state.party[0].hp, 9,
+            "the trailing status pass damages a member poisoned this turn",
+        );
     }
 
+    /// `town-mode.md §17`: the poison-gas effect "fires once per turn-consuming
+    /// action while the party occupies the tile, **including turns spent
+    /// passing in place**". §10 says the same thing from the other side:
+    /// "standing on a gas tile is not safe: every turn spent on it is a fresh
+    /// save for every eligible member, so a party that lingers will eventually
+    /// be poisoned."
+    ///
+    /// This test previously pinned the retracted step-only reading under the
+    /// name `pass_turn_on_native_poison_gas_tile_does_not_reroll_underfoot`.
     #[test]
-    fn pass_turn_on_native_poison_gas_tile_does_not_reroll_underfoot() {
+    fn pass_turn_on_native_poison_gas_tile_rerolls_underfoot() {
         let dir = debug_game_dir();
         let mut grid = open_grid();
         grid[32 + 1] = TOWN_POISON_GAS_LIVE_TILE;
         let mut state = test_state(grid, 1, 1);
         state.prng_state = poison_gas_first_poison_seed();
         state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
         state.party[0].hp = 10;
 
         assert_eq!(
@@ -1148,9 +1195,26 @@
             MoveOutcome::Passed
         );
 
-        assert_eq!(state.party[0].status, b'G');
-        assert_eq!(state.prng_state, poison_gas_first_poison_seed());
-        assert_eq!(state.message, "Passed.");
+        assert_eq!(
+            state.party[0].status,
+            b'P',
+            "a passed turn on the gas tile is a fresh save",
+        );
+        assert_ne!(
+            state.prng_state,
+            poison_gas_first_poison_seed(),
+            "the passed turn consumed a save roll",
+        );
+        assert!(
+            state.message.starts_with("Passed."),
+            "the pass line is kept and the gas report appended: {}",
+            state.message,
+        );
+        assert!(
+            state.message.contains("is poisoned!"),
+            "the gas report is appended to the pass line: {}",
+            state.message,
+        );
     }
 
     #[test]
@@ -1230,8 +1294,16 @@
         assert_eq!((state.player.x, state.player.y), (0, 0));
     }
 
+    /// `commands.md §5.3` lists Klimb among the commands whose trailing
+    /// hyphen awaits a direction, so `Klimb-` is the shared adjacent-tile
+    /// prompt of `commands.md §5.4`: "The prompt loop accepts only the
+    /// four directions and Space ... Escape does not reach a cancellation
+    /// arm: it emits nothing and the prompt reads again. An earlier
+    /// revision of this table listed `Space` **or** `Esc` as producing
+    /// `Pass` and a cancelled result ... both are retracted." This test
+    /// used to press Escape and expect `Pass` plus a spent turn.
     #[test]
-    fn town_k_adjacent_invalid_target_is_free_and_cancel_costs_action() {
+    fn town_k_adjacent_invalid_target_is_free_and_pass_costs_action() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 1, 1);
 
@@ -1244,10 +1316,22 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Observed);
+        // Escape emits nothing and the prompt reads again: no `Pass`, no
+        // turn, and the session is still waiting for a direction.
         assert_eq!(
             handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.message, "Klimb-");
+        assert_eq!(state.turn, 0);
+
+        // Space is the one pass key, and it is what spends the action.
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_none());
         assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
         assert_eq!(state.turn, 1);
     }
@@ -1717,4 +1801,3 @@
         assert!(state.message.contains("F-A-L-L-S"));
         let _ = fs::remove_dir_all(dir);
     }
-

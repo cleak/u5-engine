@@ -1,8 +1,14 @@
 //! Final input-layer direction codes per `input.md` §5. The keyboard
 //! peek translates numpad cardinals/diagonals, extended arrow keys, and
-//! shifted top-row digits into the eight high-byte direction codes used
-//! by the upper layers; gameplay mode loops handle these inline before
-//! the central command dispatcher sees ordinary letter keys.
+//! shifted top-row digits into the eight direction codes used by the
+//! upper layers; gameplay mode loops handle these inline before the
+//! central command dispatcher sees ordinary letter keys.
+//!
+//! `input.md §5`: "The four cardinals land in a low code block and the
+//! four diagonals in a high one, and neither collides with printable
+//! ASCII." §14 lists the corrected cardinal assignments as a settled
+//! revision, so the cardinals are `0x01..=0x04` and not the high tail
+//! an earlier revision of this module recorded.
 
 /// `input.md §10,§11` cardinal-direction prompt outcome. The shared
 /// adjacent-tile and spell-direction prompts both block on one
@@ -130,22 +136,25 @@ pub const INPUT_CODE_NORTHWEST: u8 = 0xD3;
 pub const INPUT_CODE_SOUTHWEST: u8 = 0xD4;
 pub const INPUT_CODE_NORTHEAST: u8 = 0xD5;
 pub const INPUT_CODE_SOUTHEAST: u8 = 0xD6;
-pub const INPUT_CODE_WEST: u8 = 0xFB;
-pub const INPUT_CODE_EAST: u8 = 0xFC;
-pub const INPUT_CODE_NORTH: u8 = 0xFD;
-pub const INPUT_CODE_SOUTH: u8 = 0xFE;
+pub const INPUT_CODE_WEST: u8 = 0x01;
+pub const INPUT_CODE_EAST: u8 = 0x02;
+pub const INPUT_CODE_NORTH: u8 = 0x03;
+pub const INPUT_CODE_SOUTH: u8 = 0x04;
 
 /// `input.md §5` first byte of the contiguous diagonal-direction range
-/// (`0xD3..=0xD6`). Diagonals sit between the function-key remap range
-/// and the cardinal range so a single byte unambiguously distinguishes
-/// the three families.
+/// (`0xD3..=0xD6`). Diagonals sit just above the function-key remap
+/// range so a single byte unambiguously distinguishes the three
+/// families.
 pub const INPUT_CODE_DIAGONAL_FIRST: u8 = INPUT_CODE_NORTHWEST;
 /// `input.md §5` last byte of the diagonal-direction range.
 pub const INPUT_CODE_DIAGONAL_LAST: u8 = INPUT_CODE_SOUTHEAST;
 /// `input.md §5` first byte of the contiguous cardinal-direction
-/// range (`0xFB..=0xFE`). Cardinals occupy the high tail of the byte
-/// space just below `0xFF` and are accepted by every movement
-/// consumer.
+/// range (`0x01..=0x04`). Cardinals occupy the low code block —
+/// disjoint from printable ASCII and from the diagonal/function-key
+/// high blocks — and are accepted by every movement consumer. A typed
+/// Control character that reaches this range is biased into a high
+/// pseudo-code by the keyboard peek, so a scancode-sourced direction
+/// and a typed control byte never collide.
 pub const INPUT_CODE_CARDINAL_FIRST: u8 = INPUT_CODE_WEST;
 /// `input.md §5` last byte of the cardinal-direction range.
 pub const INPUT_CODE_CARDINAL_LAST: u8 = INPUT_CODE_SOUTH;
@@ -243,7 +252,7 @@ pub enum InputByteClass {
     /// the direction codes.
     FunctionKey,
     /// One of the eight direction codes `0xD3..=0xD6` (diagonals) or
-    /// `0xFB..=0xFE` (cardinals). World/town/dungeon/combat movement
+    /// `0x01..=0x04` (cardinals). World/town/dungeon/combat movement
     /// consumes only the cardinal subset; diagonals reach specialised
     /// prompts and otherwise fall through as non-movement input.
     Direction,
@@ -261,9 +270,9 @@ pub const fn input_byte_class(byte: u8) -> InputByteClass {
     match byte {
         0x08 | 0x0D | 0x1B => InputByteClass::RegularAscii,
         0x20..=0x7E => InputByteClass::RegularAscii,
+        INPUT_CODE_CARDINAL_FIRST..=INPUT_CODE_CARDINAL_LAST => InputByteClass::Direction,
         0xC9..=0xD2 => InputByteClass::FunctionKey,
-        0xD3..=0xD6 => InputByteClass::Direction,
-        0xFB..=0xFE => InputByteClass::Direction,
+        INPUT_CODE_DIAGONAL_FIRST..=INPUT_CODE_DIAGONAL_LAST => InputByteClass::Direction,
         _ => InputByteClass::None,
     }
 }
@@ -439,5 +448,90 @@ pub const fn input_case_fold(byte: u8) -> u8 {
         byte - (b'a' - b'A')
     } else {
         byte
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cardinal_direction_codes_occupy_the_published_low_block() {
+        // `input.md §5`: "The four cardinals land in a low code block
+        // and the four diagonals in a high one" with the final table
+        // West `0x01`, East `0x02`, North `0x03`, South `0x04`. §14
+        // lists this cardinal renumbering as a settled revision, so
+        // the high tail `0xFB..=0xFE` an earlier revision published is
+        // no longer a direction code at all.
+        assert_eq!(INPUT_CODE_WEST, 0x01);
+        assert_eq!(INPUT_CODE_EAST, 0x02);
+        assert_eq!(INPUT_CODE_NORTH, 0x03);
+        assert_eq!(INPUT_CODE_SOUTH, 0x04);
+        assert_eq!(INPUT_CODE_CARDINAL_FIRST, 0x01);
+        assert_eq!(INPUT_CODE_CARDINAL_LAST, 0x04);
+        for byte in 0xFBu8..=0xFE {
+            assert_eq!(input_code_direction(byte), None, "{byte:#04x}");
+            assert_eq!(input_byte_class(byte), InputByteClass::None, "{byte:#04x}");
+        }
+    }
+
+    #[test]
+    fn low_cardinal_block_classifies_as_direction() {
+        // `input.md §4`: the direction codes are one of the three
+        // non-overlapping return families. A test vector written
+        // against the published table (`0x01` = West) must not be
+        // dropped as "no key".
+        for (byte, direction) in [
+            (INPUT_CODE_WEST, InputDirection::West),
+            (INPUT_CODE_EAST, InputDirection::East),
+            (INPUT_CODE_NORTH, InputDirection::North),
+            (INPUT_CODE_SOUTH, InputDirection::South),
+        ] {
+            assert_eq!(input_byte_class(byte), InputByteClass::Direction);
+            assert_eq!(input_code_direction(byte), Some(direction));
+            assert!(input_code_direction(byte).unwrap().is_cardinal());
+            assert_eq!(input_direction_code(direction), byte);
+        }
+        // The bytes either side of the block stay unbound, and the
+        // accepted control trio keeps its regular-ASCII classification.
+        assert_eq!(input_byte_class(0x00), InputByteClass::None);
+        assert_eq!(input_byte_class(0x05), InputByteClass::None);
+        assert_eq!(input_byte_class(0x08), InputByteClass::RegularAscii);
+        assert_eq!(input_byte_class(0x0D), InputByteClass::RegularAscii);
+        assert_eq!(input_byte_class(0x1B), InputByteClass::RegularAscii);
+    }
+
+    #[test]
+    fn low_cardinal_block_does_not_collide_with_the_engine_control_keys() {
+        // `input.md §5`: the cardinal block must not collide with any
+        // byte another layer already binds. The play-loop control keys
+        // are the only low-range bytes this engine reserves.
+        for reserved in [
+            crate::PLAY_IGNORED_INPUT_KEY,
+            crate::PLAY_TYPEAHEAD_TOGGLE_KEY,
+            crate::PLAY_MUSIC_TOGGLE_KEY,
+        ] {
+            let byte = reserved as u32;
+            assert!(
+                byte < INPUT_CODE_CARDINAL_FIRST as u32 || byte > INPUT_CODE_CARDINAL_LAST as u32,
+                "{reserved:?} collides with the cardinal block"
+            );
+        }
+    }
+
+    #[test]
+    fn keypad_digits_translate_into_the_published_direction_vocabulary() {
+        // `input.md §5` numpad table: 4/6/8/2 are the cardinals and
+        // 7/9/1/3 the diagonals; 0 and 5 are not directions.
+        assert_eq!(input_keypad_digit_direction_code(4), Some(0x01));
+        assert_eq!(input_keypad_digit_direction_code(6), Some(0x02));
+        assert_eq!(input_keypad_digit_direction_code(8), Some(0x03));
+        assert_eq!(input_keypad_digit_direction_code(2), Some(0x04));
+        assert_eq!(input_keypad_digit_direction_code(7), Some(0xD3));
+        assert_eq!(input_keypad_digit_direction_code(1), Some(0xD4));
+        assert_eq!(input_keypad_digit_direction_code(9), Some(0xD5));
+        assert_eq!(input_keypad_digit_direction_code(3), Some(0xD6));
+        assert_eq!(input_keypad_digit_direction_code(5), None);
+        assert_eq!(input_keypad_digit_direction_code(0), None);
     }
 }

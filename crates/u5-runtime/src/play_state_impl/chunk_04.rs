@@ -16,7 +16,141 @@ struct UseItemPickerRow {
 /// prompt, printed on the line after the `Use item` verb echo.
 pub const USE_ITEM_PROMPT_MESSAGE: &str = ITEM_SELECTION_PROMPT;
 
+/// `shops.md §2`: "If the party's transport marker is either of the two horse
+/// values, the dispatcher prints a fixed two-line refusal and returns without
+/// entering any shop". The two lines are published verbatim; the horse-trader
+/// trigger (`0x83`) is exempt. This is a fixed merchant refusal, not a
+/// per-shop-role line.
+pub const SHOP_MOUNTED_REFUSAL: &str = "A merchant says:\n\"GET THAT HORSE OUT OF HERE!\"";
+
+/// `shops.md §8.0`: the **vendor** column of the two resident name tables that
+/// are indexed by the shop-instance row. The row is the index of the active
+/// scene byte inside the shop kind's own scene list, so a scene-byte lookup
+/// per kind resolves the same row the spec's tables are keyed by.
+///
+/// "Two resident name tables are indexed by the same row ...: the shop's
+/// display name, which fills the `#` substitution, and the vendor's name,
+/// which fills the `$` substitution and the `says <shopkeeper>.` /
+/// `yells <shopkeeper>.` attribution tails. ... Neither name is read from the
+/// NPC roster or the conversation blob, so the shopkeeper an implementation
+/// names in shop text is a property of the location, not of the NPC the player
+/// happened to talk to."
+///
+/// The shipped horse-trader table holds a fourth row for scene `30` whose
+/// vendor is `Simplon`; the spec records that no `0x83` trigger exists for
+/// scene `30`, so the row is unreachable and is deliberately not listed here.
+/// Returns `None` when the kind's table does not list the active scene — the
+/// spec's error case, where a clean implementation "should reject the trigger
+/// and leave the conversation alone".
+pub const fn shop_vendor_name_for_scene(dialog_id: u8, scene_byte: u8) -> Option<&'static str> {
+    let table: &[(u8, &'static str)] = match dialog_id {
+        // Arms shops (9 rows).
+        0x81 => &[
+            (2, "Gwenneth"),
+            (3, "Nomaan"),
+            (4, "Ronan"),
+            (5, "Shenstone"),
+            (6, "Paul"),
+            (17, "Max"),
+            (24, "Kitiara"),
+            (26, "Steve"),
+            (32, "Thol"),
+        ],
+        // Taverns / meal counters (9 rows).
+        0x82 => &[
+            (1, "Sam"),
+            (2, "Tika"),
+            (3, "Nicole"),
+            (4, "Duclas"),
+            (8, "Felicity"),
+            (19, "Jaymes"),
+            (22, "Dr. Cat"),
+            (24, "Nikki"),
+            (30, "Rob"),
+        ],
+        // Horse traders (3 reachable rows).
+        0x83 => &[(6, "Hettar"), (20, "Theoan"), (22, "Ferru")],
+        // Shipwrights (4 rows).
+        0x84 => &[
+            (3, "Bantral"),
+            (5, "Captain Blyth"),
+            (21, "Master Hawkins"),
+            (24, "Jones"),
+        ],
+        // Reagent vendors (5 rows).
+        0x85 => &[
+            (1, "Nilrem"),
+            (4, "Madam Pendra"),
+            (7, "Toama"),
+            (23, "Enlor"),
+            (30, "Virden"),
+        ],
+        // Guildmasters (3 rows).
+        0x86 => &[(8, "Braunam"), (22, "Danfits"), (24, "Daem")],
+        // Healers / sanctums (7 rows).
+        0x87 => &[
+            (5, "Regina"),
+            (6, "Leila"),
+            (7, "Temptious"),
+            (21, "Milan"),
+            (23, "Jessica"),
+            (30, "Faye"),
+            (31, "Jessip"),
+        ],
+        // Inns (6 rows).
+        0x88 => &[
+            (2, "Donya"),
+            (3, "Gremnor"),
+            (7, "Rogi"),
+            (20, "Terbor"),
+            (22, "Lorien"),
+            (24, "Ransack"),
+        ],
+        _ => return None,
+    };
+    let mut index = 0;
+    while index < table.len() {
+        if table[index].0 == scene_byte {
+            return Some(table[index].1);
+        }
+        index += 1;
+    }
+    None
+}
+
 impl PlayState {
+    /// Apply the primary tavern round's north-first table-setting rewrite.
+    /// At either vertical edge the out-of-range lookup uses the town-grid
+    /// southeast fallback cell, matching the shared location-grid accessor.
+    pub fn rewrite_tavern_round_table_setting(&mut self) -> bool {
+        let north_index = self
+            .player
+            .y
+            .checked_sub(1)
+            .map(|y| y * TOWN_GRID_SIDE + self.player.x)
+            .unwrap_or(TOWN_GRID_BYTES - 1);
+        if self.grid[north_index] == TAVERN_BARE_TABLE_SETTING_TILE {
+            self.grid[north_index] = TAVERN_NORTH_FOOD_SETTING_TILE;
+            self.mark_visibility_dirty();
+            return true;
+        }
+
+        let south_index = self
+            .player
+            .y
+            .checked_add(1)
+            .filter(|y| *y < TOWN_GRID_SIDE)
+            .map(|y| y * TOWN_GRID_SIDE + self.player.x)
+            .unwrap_or(TOWN_GRID_BYTES - 1);
+        if self.grid[south_index] == TAVERN_BARE_TABLE_SETTING_TILE {
+            self.grid[south_index] = TAVERN_SOUTH_FOOD_SETTING_TILE;
+            self.mark_visibility_dirty();
+            return true;
+        }
+
+        false
+    }
+
     pub fn cast_rel_hur(
         &mut self,
         caster_index: usize,
@@ -56,11 +190,49 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
+    /// `audio.md §7.3` accepted wind change cast as the **spell** `Rel Hur`:
+    /// play variant 2, then commit and announce the new wind.
     pub fn apply_wind_state(&mut self, wind: WindState) -> bool {
+        self.apply_wind_state_from_caller(wind, Some(audio::WindChangeCaller::Spell))
+    }
+
+    /// `audio.md §7.3` accepted wind change reached through the **scroll**
+    /// (scroll index 1): the same sequence at variant 1.
+    ///
+    /// "The scroll variant disagrees with the corresponding spell's variant in
+    /// six of the eight cases: ... Wind Change 1 against 2."
+    pub fn apply_wind_state_from_scroll(&mut self, wind: WindState) -> bool {
+        self.apply_wind_state_from_caller(wind, Some(audio::WindChangeCaller::Scroll))
+    }
+
+    /// Commit a wind transition **without** the `audio.md §7.3` cue.
+    ///
+    /// `§7.3`: "The sound belongs to the spell and scroll handlers, never to
+    /// the setter"; the autonomous drift "has no sound call, no wrapper, and
+    /// no ambient hook", and `§11` lists it in the wind-change sequence's
+    /// explicitly-not-produced-by column. The drift therefore commits through
+    /// this entry point.
+    pub fn apply_wind_state_without_sound(&mut self, wind: WindState) -> bool {
+        self.apply_wind_state_from_caller(wind, None)
+    }
+
+    fn apply_wind_state_from_caller(
+        &mut self,
+        wind: WindState,
+        caller: Option<audio::WindChangeCaller>,
+    ) -> bool {
         if self.wind == WindState::Calm && wind == WindState::Calm {
             return false;
         }
-        self.emit_sound_effect(PlaySoundEffect::WindChange);
+        // `audio.md §7.3`: "**The variant is chosen by the caller tag, not by
+        // the wind.**" The old wind and the requested compass direction do not
+        // participate, so requesting the already-active direction still sounds.
+        // The earlier previous-wind matrix is withdrawn (`RETRACTIONS.md`).
+        let variant =
+            caller.and_then(|caller| audio::wind_change_variant(caller, wind == WindState::Calm));
+        if let Some(variant) = variant {
+            self.emit_sound_effect(SoundEffect::SharedVariant { variant });
+        }
         let changed = self.wind != wind;
         self.wind = wind;
         self.wind_save_byte = wind.save_byte();
@@ -79,14 +251,35 @@ impl PlayState {
         slot_index: usize,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
-        if matches!(self.player.transport, TransportState::Ship { .. }) {
-            self.message = "Cannot Gate Travel shipboard.".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, GATE_TRAVEL_SPELL_INDEX, GATE_TRAVEL_COST)
         {
             return Ok(outcome);
+        }
+
+        // `magic.md §5` steps 4-7: the dispatcher spends the premixed charge
+        // and debits mana *before* it computes the dispatch index and calls
+        // the effect handler, and `magic.md §8` puts the shipboard test inside
+        // the handler — "Gate Travel ... requires the party not to be
+        // shipboard, prompts `To phase:`". So a shipboard attempt is a
+        // committed cast: the charge and the eight magic points are already
+        // gone and nothing is refunded, exactly as with the Doom refusal in
+        // `cast_dungeon_level_spell`. Only the scene gate (inside
+        // `cast_spell_resource_gate`) spends nothing.
+        //
+        // Boundary: the spec publishes no refusal text for this case, so the
+        // engine-voice line below is unpublished and awaits a spec update.
+        if matches!(self.player.transport, TransportState::Ship { .. }) {
+            self.advance_turn();
+            self.message = "Cannot Gate Travel shipboard.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
+
+        // `audio.md §6.1` id 46: the variant (circle 8) plays "only after the
+        // player types a digit `1`..`8` at the moongate prompt; any other key
+        // is silent". The shipboard refusal above never reaches that prompt.
+        if let Some(variant) = audio::spell_shared_variant(GATE_TRAVEL_SPELL_INDEX) {
+            self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }
 
         let phase = slot_index + 1;
@@ -599,6 +792,36 @@ impl PlayState {
         MoveOutcome::PromptDeclined
     }
 
+    /// `quest-graph.md §5` "Presentation order": the shard-use handler is a
+    /// five-phase theatrical sequence, not a chain of diagnostic gates.
+    ///
+    /// 1. It "first prints a heading naming the shard family and a line
+    ///    describing the party holding the evil shard aloft, completed by the
+    ///    shard's own virtue word (Falsehood, Hatred, or Cowardice). This
+    ///    happens before any gate is evaluated."
+    /// 2. "It then plays a rising pitch sweep, followed by a falling one,
+    ///    again unconditionally."
+    /// 3. "Only the **position** gate produces the shared no-effect result."
+    /// 4. "Once the position matches, it pauses, prints a line describing the
+    ///    shard being cast into the Eternal Flame completed by the opposed
+    ///    principle's word (Truth, Love, or Courage), and pauses again —
+    ///    **before** testing whether a Shadowlord is on the flame and whether
+    ///    the handshake matches."
+    /// 5. "If either of those two gates fails, the handler simply returns. It
+    ///    prints no refusal line."
+    ///
+    /// The spec names the two divergences to avoid explicitly: "evaluating the
+    /// gates before any output ... and printing a refusal for the
+    /// actor/handshake failures (in the original those are silent)". Both were
+    /// present here and are corrected below.
+    ///
+    /// Boundary: the exact heading, aloft, cast and destruction strings are
+    /// not published — only their order, their completing words, and which of
+    /// them are unconditional — so the literals below are engine voice. The
+    /// rising/falling pitch sweep of phase 2 has no published `audio.md §8`
+    /// row and no [`SoundEffect`] variant, so it is not emitted rather than
+    /// borrowing a neighbouring cue; the `§8.4` destruction flash below is
+    /// published and is preserved at its own boundary.
     pub fn use_shadowlord_shard(
         &mut self,
         index: usize,
@@ -609,47 +832,67 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         let name = special_item_name(item_index);
+        // Not a gate: the U-Use picker only offers a carried shard, so this is
+        // the picker precondition and it keeps its own refusal.
         if self.special_items[item_index] == 0 {
             self.message = format!("No {name}!");
             return Ok(MoveOutcome::Blocked);
         }
-        if !self.shadowlord_alive(index) {
-            self.message = format!("{name}: matching Shadowlord is already vanquished.");
-            return Ok(MoveOutcome::Blocked);
-        }
 
+        // Phase 1: unconditional heading plus the aloft line, completed by the
+        // shard's own virtue word.
+        let virtue = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
+        self.message = format!("{name}!\nThou dost hold the evil shard aloft: {virtue}!");
+
+        // Phase 3: the position gate is the only one that speaks. The
+        // published destruction rows (Lycaeum floor 2 (15,9); Empath Abbey
+        // floor 1 (15,3); Serpent's Hold floor 0xFF (15,16)) already carry
+        // their opposed flame, so "am I on this shard's row?" is one test and
+        // it produces the shared no-effect result on any mismatch.
         let required_flame = eternal_flame_for_shadowlord(index).expect("valid shard index");
         let flame_entry = if let Some(game_dir) = game_dir {
             self.eternal_flame_at_current_position(game_dir)?
         } else {
-            None
+            self.published_eternal_flame_at_current_position()
         };
-        let Some(flame_entry) = flame_entry else {
-            self.message = format!("{name}: no matching Eternal Flame is here.");
-            return Ok(MoveOutcome::Blocked);
-        };
-        if flame_entry.flame != required_flame {
-            self.message = format!(
-                "{name}: {} does not oppose this Shadowlord.",
-                flame_entry.flame.label()
-            );
+        let on_position = flame_entry.is_some_and(|entry| entry.flame == required_flame);
+        if !on_position {
+            self.message.push_str("\nNo effect!");
             return Ok(MoveOutcome::Blocked);
         }
-        if !self.matching_shadowlord_name_encounter_north(index) {
-            self.message = format!("{name}: matching Shadowlord is not present.");
+
+        // Phase 4: the cast-into-the-flame line, completed by the opposed
+        // principle's word, printed *before* the remaining two gates.
+        self.message.push_str(&format!(
+            "\nThou dost cast it into the {}!",
+            required_flame.label()
+        ));
+
+        // Phase 5: the Shadowlord-on-flame and handshake gates are silent.
+        // `self.message` is left as the cast line and nothing new is printed.
+        // A shard whose Shadowlord slot is already vanquished can have no live
+        // matching encounter, so it belongs with these silent tests rather
+        // than with the position gate.
+        if !self.shadowlord_alive(index) || !self.matching_shadowlord_name_encounter_north(index) {
             return Ok(MoveOutcome::Blocked);
         }
 
         self.special_items[item_index] = 0;
         self.vanquish_shadowlord(index);
+        // `audio.md §8.4`: Shadowlord destruction shares the turbulent
+        // full-viewport flash. It runs at the destruction boundary — after the
+        // shard is consumed and the hideout slot flips to vanquished, before
+        // the encounter clearing, redraw, and turn advance — and it draws all
+        // 1,856 gameplay-PRNG bands there whether or not sound is audible.
+        self.emit_major_flash();
         let cleared = self.clear_shadowlord_name_encounters(index);
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "{name}: cast into {}; {} vanquished; cleared {cleared} encounter(s).",
-            required_flame.label(),
-            Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord")
-        );
+        // Phase 6 closes with a line naming the destroyed Shadowlord.
+        self.message.push_str(&format!(
+            "\n{} is vanquished! Cleared {cleared} encounter(s).",
+            shadowlord_name_for_slot(index).unwrap_or("The Shadowlord")
+        ));
         Ok(MoveOutcome::Used)
     }
 
@@ -931,13 +1174,16 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let y = sextant_coordinate(self.player.y);
-        let x = sextant_coordinate(self.player.x);
         self.advance_turn();
-        // magic.md §8 / inventory.md §7: the label is followed by the
-        // formatter's leading newline, then Y and X each carry their own
-        // closing quote and are separated by comma-space.
-        self.message = format!("Sextant:\n{y}\", {x}\"");
+        // `magic.md §8` / `inventory.md §7`: the Sextant shares Locate's
+        // coordinate printer, so both callers go through the one helper.
+        // The label is followed by the printer's leading newline, then Y
+        // and X each carry their own closing quote separated by
+        // comma-space, then a further line break.
+        self.message = format!(
+            "Sextant:{}",
+            sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8)
+        );
         MoveOutcome::Used
     }
 
@@ -1068,12 +1314,20 @@ impl PlayState {
             SCROLL_LIGHT_INDEX => {
                 self.light_spell_counter = SCROLL_LIGHT_DURATION;
                 self.recompute_daylight();
+                // `audio.md §6.1`: "Sets a torch radius, then calls the
+                // dispatcher directly." The scroll supplies its scroll index,
+                // so this is variant 0 - the one variant no spell reaches, and
+                // emphatically not In Lor's variant 1.
+                self.emit_scroll_shared_variant(SCROLL_LIGHT_INDEX);
                 self.advance_turn();
                 self.message = "Light!".to_string();
                 MoveOutcome::Used
             }
             SCROLL_WIND_CHANGE_INDEX => self.use_wind_change_scroll(direction),
             SCROLL_PROTECTION_INDEX => {
+                // `audio.md §6.1`: "Through the scene-flag helper", at the
+                // scroll's own index 2 - not the Protection spell's variant 4.
+                self.emit_scroll_shared_variant(SCROLL_PROTECTION_INDEX);
                 self.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
                 self.active_effect_counter = SCROLL_PROTECTION_DURATION;
                 self.advance_turn();
@@ -1081,6 +1335,9 @@ impl PlayState {
                 MoveOutcome::Used
             }
             SCROLL_NEGATE_MAGIC_INDEX => {
+                // `audio.md §6.1`: scene-flag helper at scroll index 3, where
+                // the Negate Magic spell is variant 6.
+                self.emit_scroll_shared_variant(SCROLL_NEGATE_MAGIC_INDEX);
                 self.active_effect_tag = Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG);
                 self.active_effect_counter = SCROLL_NEGATE_MAGIC_DURATION;
                 self.advance_turn();
@@ -1089,9 +1346,16 @@ impl PlayState {
             }
             SCROLL_VIEW_INDEX => {
                 if self.combat_active {
+                    // `audio.md §6.1`: "Refused with `Not here!` and **no
+                    // sound** outside the permitted scene class." `§9` lists
+                    // this refusal among the explicit silence boundaries.
                     self.message = "Not here!".to_string();
                     return MoveOutcome::Blocked;
                 }
+                // `audio.md §6.1`: "Dispatcher, then the look helper" - and
+                // "Both look helpers are silent", so the variant is all this
+                // scroll plays.
+                self.emit_scroll_shared_variant(SCROLL_VIEW_INDEX);
                 self.advance_turn();
                 let _ = self.activate_peer_view_overlay();
                 self.message = "View!".to_string();
@@ -1099,6 +1363,8 @@ impl PlayState {
             }
             SCROLL_SUMMON_DAEMON_INDEX => {
                 if !self.combat_active {
+                    // `audio.md §6.1`: "only in the permitted scene class, else
+                    // `Not here!` and silence" (§9).
                     self.message = "Not here!".to_string();
                     return MoveOutcome::Blocked;
                 }
@@ -1110,6 +1376,11 @@ impl PlayState {
                     self.message = "Who uses?".to_string();
                     return MoveOutcome::Blocked;
                 }
+                // `audio.md §6.1`: "Through the placement helper", which
+                // sounds unconditionally at entry, before the eight-try cell
+                // probe. Variant 5 is the scroll index; the Summon Daemon
+                // *spell* is variant 8.
+                self.emit_scroll_shared_variant(SCROLL_SUMMON_DAEMON_INDEX);
                 let legal_cells = self.combat_legal_cell_mask();
                 let applied = self.apply_combat_summon_daemon_with_random_attempts(
                     self.combat_actor_z(0),
@@ -1151,7 +1422,9 @@ impl PlayState {
         let previous = self.wind.status_message();
         let next = WindState::rel_hur_target(direction)
             .expect("inline wind scroll parser returns cardinal directions only");
-        self.apply_wind_state(next);
+        // `audio.md §7.3`: the scroll carries its own caller tag and plays
+        // variant 1, not the spell's variant 2.
+        self.apply_wind_state_from_scroll(next);
         self.advance_turn();
         self.message = format!(
             "Wind change! {} -> {}.",
@@ -1180,6 +1453,11 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
+        // `audio.md §6.1`: "Through the resurrect helper; only in the permitted
+        // scene class and only if the target is dead." Variant 6 is the scroll
+        // index; the Resurrect spell is variant 8.
+        self.emit_scroll_shared_variant(SCROLL_RESURRECTION_INDEX);
+
         let max_hp = self
             .resurrect_party_member_to_hp(target_index, 1)
             .expect("target status checked before scroll resurrection");
@@ -1201,9 +1479,14 @@ impl PlayState {
         ) {
             self.advance_turn();
             self.message = "No effect!".to_string();
+            // `audio.md §6.1`: "In two specific scenes it instead prints
+            // `No effect!` and plays the 50-update cast-failure glissando."
+            self.emit_sound_effect(SoundEffect::CastFailure);
             return MoveOutcome::Blocked;
         }
 
+        // `audio.md §6.1`: "Through the scene-flag helper" at scroll index 7.
+        self.emit_scroll_shared_variant(SCROLL_NEGATE_TIME_INDEX);
         self.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
         self.active_effect_counter = SCROLL_NEGATE_TIME_DURATION;
         self.advance_turn();
@@ -1248,6 +1531,21 @@ impl PlayState {
         // gameplay effect. The frontend consumes this pending event before it
         // displays the resulting gameplay state.
         self.pending_potion_flash = potion_flash_playback(selected_index);
+        // `audio.md §7.2`: the shared presentation begins only once the
+        // bottle is decremented (`use_potion`) and a party-member target is
+        // accepted, and "the selected bottle id, not the later variation roll,
+        // chooses variant 0 through 7 from Section 6". The published flash
+        // playback already keys on the selected bottle — its rumble target is
+        // `8000 + 1600 * selected_index` and its sweep length
+        // `10000 + 4000 * selected_index`, which are exactly §6's target and
+        // iteration columns for variant `selected_index` — so the bottle id is
+        // the variant, with no remapping. An out-of-range bottle yields no
+        // playback and no cue.
+        if let Some(playback) = self.pending_potion_flash {
+            self.emit_sound_effect(SoundEffect::SharedVariant {
+                variant: playback.selected_index as u8,
+            });
+        }
         let selected_label = potion_label(selected_index);
         let effect_label = potion_label(effect_index);
         let prefix = if selected_index == effect_index {
@@ -1693,7 +1991,6 @@ impl PlayState {
             rare_reagent_harvest_days: self.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: self.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: self.fixed_hidden_treasure_daily_day,
-            fixed_hidden_treasure_single_use_cookie: self.fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: self.dungeon_room_clear_bitmap,
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
@@ -1726,10 +2023,10 @@ impl PlayState {
             combat_interference_sources: self.combat_interference_sources,
             transport: TransportState::Foot,
             facing: Some(self.player.facing),
+            door_tracker: None,
             pending_vehicle: None,
             pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),
-            blackthorn_story: self.blackthorn_story,
             initial_britannia_overlay: self.world_overlays.get(WorldPlane::Britannia),
             debug_enter: self.debug_enter,
             saved_active_objects: None,
@@ -1756,9 +2053,18 @@ impl PlayState {
             start.0,
             start.1
         );
+        // `audio.md §2` keeps one serial speaker, and the frontend reads it
+        // through a monotonic serial. A scene rebuild constructs `next` from
+        // scratch, so its history is numbered from 1 and collides with this
+        // state's early serials. Carry the outgoing history across and
+        // re-serialize the destination's own entry effects on top of it:
+        // clearing here used to drop every cue emitted before the transition
+        // — the transit envelope among them — while the serial kept counting,
+        // so the frontend advanced past serials that had no history entry and
+        // the cue was silently lost.
         let entry_effects = next.sound_effects_after(0);
         next.sound_effect_serial = prior_sound_serial;
-        next.sound_effect_history.clear();
+        next.sound_effect_history = std::mem::take(&mut self.sound_effect_history);
         for effect in entry_effects {
             next.emit_sound_effect(effect);
         }
@@ -2090,11 +2396,16 @@ impl PlayState {
         self.render_dungeon_view_overlay_for_mode(level, depth, ViewOverlayMode::GemView)
     }
 
+    /// `view.md §6.3`: "the value being read is the display adapter
+    /// identifier, not a peer-spell flag. The dungeon map renderer has no
+    /// peer-spell branch." The mode is accepted so callers can stay uniform
+    /// with the surface overlay, but every mode paints the same dungeon map
+    /// for a given adapter `depth`.
     pub fn render_dungeon_view_overlay_for_mode(
         &self,
         level: u8,
         depth: TileGraphicsDepth,
-        mode: ViewOverlayMode,
+        _mode: ViewOverlayMode,
     ) -> TileViewport {
         let cells = DUNGEON_GEM_VIEW_GRID_SIDE;
         let scale = DUNGEON_GEM_VIEW_CELL_PIXELS;
@@ -2111,16 +2422,19 @@ impl PlayState {
         for cell_y in 0..cells {
             for cell_x in 0..cells {
                 let index = cell_y * cells + cell_x;
-                draw_dungeon_view_glyph(&mut viewport, cell_x, cell_y, scale, glyphs[index], mode);
+                draw_dungeon_view_glyph(&mut viewport, cell_x, cell_y, scale, glyphs[index]);
             }
         }
         viewport
     }
 
+    /// See [`PlayState::render_dungeon_view_overlay_for_mode`]: the dungeon
+    /// map renderer has no peer-spell branch, so `_mode` does not select a
+    /// pen.
     pub fn render_dungeon_view_glyph_cell_for_mode(
         depth: TileGraphicsDepth,
         glyph: Option<DungeonMinimapGlyph>,
-        mode: ViewOverlayMode,
+        _mode: ViewOverlayMode,
     ) -> TileViewport {
         let scale = DUNGEON_GEM_VIEW_CELL_PIXELS;
         let mut viewport = TileViewport {
@@ -2131,7 +2445,7 @@ impl PlayState {
             height: scale,
             pixels: vec![0; scale * scale],
         };
-        draw_dungeon_view_glyph(&mut viewport, 0, 0, scale, glyph, mode);
+        draw_dungeon_view_glyph(&mut viewport, 0, 0, scale, glyph);
         viewport
     }
 
@@ -2401,10 +2715,17 @@ impl PlayState {
                 }
                 let x = x as usize;
                 let y = y as usize;
+                // `view.md §3` entry-dispatch row 2: "Live tile `0x29`
+                // (the crystal-sphere tile)" is tested immediately after
+                // the row-1 visibility gate and before the row-3 shared
+                // preamble and the row-4 per-map object lookup, because
+                // "the vision case is decided before anything is
+                // printed". The tested byte is the **live terrain
+                // layer**, never an active-object descriptor.
+                if death_vision_look_tile(self.grid[y * 32 + x]) {
+                    return Ok(self.start_surface_death_vision_prompt(x, y));
+                }
                 if let Some(object) = self.blocking_object_at(x, y) {
-                    if death_vision_object_class(object.type_byte) {
-                        return Ok(self.start_surface_death_vision_prompt(x, y));
-                    }
                     if sign_or_wanted_poster_object_class(object.type_byte) {
                         self.message = self
                             .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
@@ -2430,6 +2751,18 @@ impl PlayState {
                     }
                 }
                 let tile = self.grid[y * 32 + x];
+                // `view.md §3` terrain-description path row 2: live tile
+                // `0x59` is a **telescope** and enters the §4.2 sky renderer
+                // instead of printing any description text. The row sits
+                // above the wishing well (row 3) and the fountains (row 4),
+                // and the table is not scene-scoped: "Only three telescopes
+                // are placed in shipped data, all indoors: in Moonglow, in
+                // Skara Brae, and in West Britanny", so the town-family arm
+                // is the only arm that can ever reach it in ordinary play.
+                if tile == TELESCOPE_LOOK_TRIGGER_TILE {
+                    self.look_through_telescope();
+                    return Ok(MoveOutcome::Observed);
+                }
                 if surface_wishing_well_look_tile(tile) {
                     return Ok(self.start_wishing_well_prompt(direction));
                 }
@@ -2452,10 +2785,13 @@ impl PlayState {
                 }
                 let x = raw_x.rem_euclid(WORLD_SIDE as isize) as usize;
                 let y = raw_y.rem_euclid(WORLD_SIDE as isize) as usize;
+                // `view.md §3` entry-dispatch row 2 — see the town arm
+                // above. The live terrain byte is tested ahead of the
+                // per-map object row.
+                if death_vision_look_tile(self.grid[world_cell_index(x, y)]) {
+                    return Ok(self.start_surface_death_vision_prompt(x, y));
+                }
                 if let Some(object) = self.world_object_at(x, y) {
-                    if death_vision_object_class(object.type_byte) {
-                        return Ok(self.start_surface_death_vision_prompt(x, y));
-                    }
                     if sign_or_wanted_poster_object_class(object.type_byte) {
                         self.message = self
                             .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
@@ -2714,6 +3050,22 @@ impl PlayState {
                 self.clock.minute,
                 self.clock.am_pm_suffix()
             )
+        } else if tile == ETERNAL_FLAME_LOOK_TILE {
+            // `view.md §3` terrain-description row 5b: "Live tile
+            // `0xDE` | Append a virtue word chosen by the current
+            // scene: scene `30` appends Truth, scene `31` appends Love,
+            // scene `32` appends Courage. In any other scene the base
+            // description is printed with no appended word." The row is
+            // an appender row even when it appends nothing, so it
+            // returns here rather than falling through.
+            let scene_byte = match self.area {
+                Area::Town { scene, .. } => scene.byte,
+                _ => SCENE_OVERWORLD,
+            };
+            match eternal_flame_word_for_scene(scene_byte) {
+                Some(word) => format!("{base} {word}"),
+                None => base,
+            }
         } else if let Some(virtue) = shrine_virtue_for_altar_tile(tile) {
             format!("{base} (Shrine of {})", virtue.name())
         } else {
@@ -2906,8 +3258,8 @@ impl PlayState {
                 TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
             )
         {
-            if let Some(tile) = self.npc_live_tile_at(target_x, target_y)
-                && let Some(refusal) = talk_status_tile_refusal(tile)
+            if let Some(refusal) =
+                talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
             {
                 self.message = refusal.to_string();
                 return Ok(self.consume_ordinary_town_talk());
@@ -2933,6 +3285,24 @@ impl PlayState {
 
     pub fn facing_talk_target(&self) -> Option<(u8, usize, usize)> {
         self.talk_target_in_direction(self.player.facing)
+    }
+
+    /// `conversation.md §2` step 4: the byte the Talk status-tile gate
+    /// compares against `0x9D` (mirror) and `0xAB` (bed).
+    ///
+    /// "The test object is a map tile, not an NPC sprite. Both ids are
+    /// furniture ids in the terrain-description domain of `LOOK2.DAT`, and the
+    /// byte comes from the same live-map tile query that movement and Look
+    /// use. The gate fires because the NPC's schedule has parked it on a bed
+    /// cell or a mirror cell, not because the NPC has a distinct sleeping or
+    /// praying appearance. An implementation that stores a per-NPC 'asleep'
+    /// flag and tests that instead will diverge."
+    ///
+    /// The cell is the *resolved* cell — the faced cell, or the cell one step
+    /// further along the same direction when the faced cell was talk-through —
+    /// which is exactly what [`PlayState::talk_target_in_direction`] returns.
+    pub fn talk_status_tile_at(&self, x: usize, y: usize) -> u8 {
+        self.grid[y * 32 + x]
     }
 
     pub fn talk_target_in_direction(&self, direction: Direction) -> Option<(u8, usize, usize)> {
@@ -3006,24 +3376,22 @@ impl PlayState {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
             return self.consume_ordinary_town_talk();
         };
-        // `conversation.md §2` status-tile filter (`cleak/u5-spec#44`):
-        // a candidate NPC whose live tile byte is the published sleeping
-        // (`0xAB`) or praying (`0x9D`) form aborts before shop or dialog
-        // dispatch with the matching refusal message.
-        if let Some(tile) = self.npc_live_tile_at(target_x, target_y) {
-            if let Some(refusal) = talk_status_tile_refusal(tile) {
-                self.message = refusal.to_string();
-                return self.consume_ordinary_town_talk();
-            }
+        // `conversation.md §2` step 4 status-tile filter: the mirror
+        // (`0x9D`) and bed (`0xAB`) gate reads the **live map tile occupying
+        // the resolved cell**, not a per-NPC sprite or asleep value.
+        if let Some(refusal) =
+            talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
+        {
+            self.message = refusal.to_string();
+            return self.consume_ordinary_town_talk();
         }
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
             return outcome;
         }
 
-        if let Some((role, _family)) = talk_shop_trigger(dialog_id) {
+        if let Some((_role, _family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
-                self.message =
-                    format!("{role} refuses thee on horseback; dismount before commerce.");
+                self.message = SHOP_MOUNTED_REFUSAL.to_string();
                 return self.consume_ordinary_town_talk();
             }
             let scene_byte = match self.area {
@@ -3033,6 +3401,9 @@ impl PlayState {
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
+                if matches!(&session, crate::shop_session::ActiveShopSession::Tavern(_)) {
+                    self.tavern_secondary_drink_count = 0;
+                }
                 if matches!(
                     &session,
                     crate::shop_session::ActiveShopSession::Innkeeper(_)
@@ -3159,20 +3530,21 @@ impl PlayState {
             .npc_at_current_floor(target_x, target_y)
             .map(|npc| npc.slot);
 
-        if let Some(tile) = self.npc_live_tile_at(target_x, target_y) {
-            if let Some(refusal) = talk_status_tile_refusal(tile) {
-                self.message = refusal.to_string();
-                return self.consume_ordinary_town_talk();
-            }
+        // `conversation.md §2` step 4: the status-tile gate reads the live map
+        // tile at the resolved cell, the same query movement and Look use.
+        if let Some(refusal) =
+            talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
+        {
+            self.message = refusal.to_string();
+            return self.consume_ordinary_town_talk();
         }
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
             return outcome;
         }
 
-        if let Some((role, family)) = talk_shop_trigger(dialog_id) {
+        if let Some((_role, family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
-                self.message =
-                    format!("{role} refuses thee on horseback; dismount before commerce.");
+                self.message = SHOP_MOUNTED_REFUSAL.to_string();
                 return self.consume_ordinary_town_talk();
             }
             let scene_byte = match self.area {
@@ -3182,6 +3554,9 @@ impl PlayState {
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
+                if matches!(&session, crate::shop_session::ActiveShopSession::Tavern(_)) {
+                    self.tavern_secondary_drink_count = 0;
+                }
                 if matches!(
                     &session,
                     crate::shop_session::ActiveShopSession::Innkeeper(_)
@@ -3249,6 +3624,13 @@ impl PlayState {
                 );
                 self.active_conversation = Some(Box::new(session));
                 self.active_conversation_npc_slot = conversation_npc_slot;
+                // `conversation.md §7.6` / §10: the branch-flag bit `0x8C`
+                // tests and `0x88` sets is the speaking NPC's roster slot,
+                // supplied by the engine and never by the script.
+                let npc_slot = self.active_conversation_npc_slot.map(|slot| slot as u8);
+                if let Some(session) = self.active_conversation.as_mut() {
+                    session.set_npc_slot(npc_slot);
+                }
                 let greeting = self.active_conversation_greeting_rendered();
                 let opening = conversation_opening_rendered(&description_text, &greeting);
                 self.emit_tlk_message(opening);
@@ -3279,7 +3661,7 @@ impl PlayState {
             dictionary: Some(&dictionary_refs),
             curse_seen: false,
             gold_available: Some(self.gold),
-            ask_party_name_response: 0,
+            npc_slot: self.active_conversation_npc_slot.map(|slot| slot as u8),
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
@@ -3400,9 +3782,21 @@ impl PlayState {
                     crate::shoppe_records::SharedShopBarkKind::Preamble,
                     ordinal,
                 ) {
+                    // `shops.md §4.1` / `§8.0`: `#` takes the shop's display
+                    // name and `$` takes the *vendor's* name. They are two
+                    // different resident tables sharing one shop-instance
+                    // row, so the shop label must not stand in for the
+                    // shopkeeper.
                     let label = session.shop_label();
+                    let scene_byte = match self.area {
+                        Area::Town { scene, .. } => Some(scene.byte),
+                        _ => None,
+                    };
+                    let vendor = scene_byte
+                        .and_then(|scene| shop_vendor_name_for_scene(dialog_id, scene))
+                        .unwrap_or(label);
                     let ctx = crate::shoppe_bark::ShoppeBarkContext {
-                        vendor_name: label,
+                        vendor_name: vendor,
                         shop_name: label,
                         hour: self.clock.hour,
                         ..Default::default()
@@ -3572,7 +3966,7 @@ impl PlayState {
             dictionary: Some(&dictionary_refs),
             curse_seen: false,
             gold_available: Some(self.gold),
-            ask_party_name_response: 0,
+            npc_slot: self.active_conversation_npc_slot.map(|slot| slot as u8),
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
@@ -3658,6 +4052,13 @@ impl PlayState {
         self.active_conversation_npc_slot = self
             .npc_at_current_floor(target_x, target_y)
             .map(|npc| npc.slot);
+        // `conversation.md §7.6` / §10: the branch-flag bit `0x8C`
+        // tests and `0x88` sets is the speaking NPC's roster slot,
+        // supplied by the engine and never by the script.
+        let npc_slot = self.active_conversation_npc_slot.map(|slot| slot as u8);
+        if let Some(session) = self.active_conversation.as_mut() {
+            session.set_npc_slot(npc_slot);
+        }
         let greeting = self.active_conversation_greeting_rendered();
         let opening = conversation_opening_rendered(&description_text, &greeting);
         let text = opening.text.clone();
@@ -3880,6 +4281,15 @@ impl PlayState {
                     level: 1,
                 },
                 name: [0; SAVE_CHARACTER_NAME_LEN],
+                // `formats/saved-gam.md §3.1` publishes only two gender
+                // byte values (`0x0B` male, `0x0C` female) and says nothing
+                // about a record the engine synthesises with no save byte
+                // behind it. Defaulting to the male value is an unpublished
+                // engine choice, not a spec contract; `systems/shops.md
+                // §8.1` puts it on the "otherwise" branch of the arms tail
+                // either way. A record that came from a save keeps its own
+                // byte via the re-sync arm below.
+                gender: SAVE_GENDER_MALE_BYTE,
                 experience: 0,
                 stay_counter: 0,
                 strength: AVATAR_STAT_MAX,
@@ -3897,6 +4307,18 @@ impl PlayState {
             let previous = roster.get(index).cloned();
             roster[index] = PartyRosterRecord {
                 member,
+                // `formats/saved-gam.md §3.1`: the gender byte has no parallel
+                // active-party vector to be overlaid from, so it is carried by
+                // member identity rather than by slot index — the inn's
+                // leave/pick-up helpers and New Order shift `party_names` and
+                // friends without shifting `party_roster`, and a slot-indexed
+                // carry would hand a departed member's byte to whoever moved
+                // up into the slot. See `party_roster_carried_gender`.
+                gender: crate::party::party_roster_carried_gender(
+                    &self.party_roster,
+                    index,
+                    self.party_names.get(index),
+                ),
                 name: self
                     .party_names
                     .get(index)
@@ -3986,6 +4408,31 @@ impl PlayState {
         }
     }
 
+    /// `conversation.md §7.6` (table row `0x84` RECRUIT-SPEAKER): "The engine
+    /// takes the speaker's *own* name from the Name entry of the loaded blob,
+    /// and matches its opening characters — case-insensitively, with bit 7
+    /// stripped — against the reserve portion of the sixteen-slot character
+    /// roster, **scanned from the last slot downwards**. On a match the matched
+    /// roster record is swapped into the active-party insertion slot, that
+    /// record's inn-lodging marker is cleared, and the party-size byte is
+    /// incremented; the engine then removes the NPC from the live scene."
+    ///
+    /// Only the reserve portion (`active_len ..` up to the sixteen-slot roster
+    /// bound) is eligible, and the scan runs downwards from the last slot, so a
+    /// duplicate name resolves to the *highest* reserve slot rather than the
+    /// first one encountered.
+    ///
+    /// Boundary: `conversation.md §7.6` also says "If no reserve record matches
+    /// the speaker's name the engine prints its no-match diagnostic", but the
+    /// text of that diagnostic is not published for this path (§6 step 7's
+    /// `I cannot help thee with that.` is the *keyword*-scan diagnostic), so no
+    /// line is emitted here rather than inventing one.
+    ///
+    /// The `asked_party_name` swap arm below is withdrawn behaviour — §7.6 now
+    /// refuses at the cap and ejects nobody, and
+    /// `ConversationSession::absorb_recruit_speaker` already refuses before
+    /// reaching this helper — but it is still pinned by a test outside this
+    /// file, so it is left unreachable-from-play rather than deleted here.
     pub fn apply_conversation_join_candidate(
         &mut self,
         candidate_name: &str,
@@ -3993,20 +4440,27 @@ impl PlayState {
     ) -> Option<String> {
         let active_len = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize);
         self.party_roster = self.synced_party_roster();
-        let target_index = self
-            .party_roster
-            .iter()
-            .position(|record| party_roster_name_matches(record, candidate_name))?;
-        if target_index < active_len {
-            return None;
-        }
+        let reserve_end = self.party_roster.len().min(SAVE_ROSTER_SLOT_COUNT);
+        let target_index = (active_len..reserve_end)
+            .rev()
+            .find(|index| party_roster_name_matches(&self.party_roster[*index], candidate_name))?;
 
         let joined_name = party_name_to_string(&self.party_roster[target_index].name)
             .unwrap_or_else(|| candidate_name.trim().to_string());
         if active_len < SAVE_PARTY_SIZE_MAX as usize {
             let joining = self.party_roster.remove(target_index);
+            let joining_name = joining.name;
             self.party_roster.insert(active_len, joining);
+            // §7.6: "that record's inn-lodging marker is cleared". This engine
+            // keeps the shifted inn-guest view of `formats/saved-gam.md` §9 as
+            // its own registry, so the marker to clear is the scene marker of
+            // the guest slot holding this character — the same clear that
+            // `systems/shops.md` §8.4 pickup performs when a lodged companion
+            // returns to the active roster.
+            self.clear_inn_lodging_marker_for_name(&joining_name);
             self.sync_active_party_from_roster_len(active_len + 1);
+            // §7.6: "the engine then removes the NPC from the live scene."
+            self.remove_recruited_speaker_from_scene();
             return Some(format!("{joined_name} joined."));
         }
 
@@ -4032,6 +4486,40 @@ impl PlayState {
         self.party_roster
             .iter()
             .any(|record| party_roster_name_matches(record, candidate_name))
+    }
+
+    /// `conversation.md §7.6`: a `0x84` recruit clears the joined record's
+    /// inn-lodging marker. `formats/saved-gam.md` §9 describes the inn-guest
+    /// registry as a shifted view over the same sixteen character records whose
+    /// "leading byte of each registry slot is an inn-scene marker"; clearing it
+    /// to zero is the same de-lodging write `systems/shops.md` §8.4 pickup
+    /// performs ("clears the returned slot's marker to zero after moving the
+    /// guest back into the active roster"). Nothing else about the guest slot
+    /// is touched here.
+    fn clear_inn_lodging_marker_for_name(&mut self, name: &[u8; SAVE_CHARACTER_NAME_LEN]) {
+        for guest in self.inn_registry.iter_mut() {
+            if guest.name == *name {
+                guest.scene_marker = 0;
+            }
+        }
+    }
+
+    /// `conversation.md §7.6`: "the engine then removes the NPC from the live
+    /// scene." Live removal only — §7.6 says nothing about recording the slot
+    /// in the per-scene permanent removal mask of `town-mode.md` §4, so the
+    /// slot is freed without marking it permanently gone.
+    fn remove_recruited_speaker_from_scene(&mut self) {
+        let Some(npc_slot) = self.active_conversation_npc_slot else {
+            return;
+        };
+        let Some(index) = self.npcs.iter().position(|npc| npc.slot == npc_slot) else {
+            return;
+        };
+        if let Some(object_slot) = self.npcs[index].active_object {
+            self.free_active_object_slot(object_slot);
+        }
+        self.npcs.remove(index);
+        self.mark_visibility_dirty();
     }
 
     /// Return the active scene's shared conversation cleanup sentinel.
@@ -4068,7 +4556,7 @@ impl PlayState {
         if self.resident_shadowlord != Some(SHADOWLORD_FALSEHOOD_INDEX) {
             return None;
         }
-        self.emit_sound_effect(PlaySoundEffect::StolenWarning);
+        self.emit_sound_effect(SoundEffect::ActionSnap);
 
         // `prng.md §3`: this sample precedes inventory inspection even when
         // the selected branch below is a deterministic high-to-low scan.
@@ -4316,11 +4804,53 @@ fn yew_wanted_poster_name_row(name: Option<&[u8; SAVE_CHARACTER_NAME_LEN]>) -> S
     String::from_utf8(row.to_vec()).expect("poster rows are ASCII")
 }
 
+/// `conversation.md §7.6`: the `0x84` RECRUIT-SPEAKER compare matches the
+/// speaker's "opening characters — case-insensitively, with bit 7 stripped —
+/// against the reserve portion of the sixteen-slot character roster". §11's
+/// derivation note names it as "the case-insensitive bit-7-stripping
+/// string-equality routine used by the JOIN-name compare", which is the same
+/// routine §6 step 5 uses for keywords: "The compare strips bit 7 from both
+/// sides ... and folds both sides to upper case. A match requires the keyword
+/// to end cleanly and the typed input either to end at the same point or to
+/// have a literal space there; there is no substring search or fuzzy matching."
+///
+/// Here the speaker's name plays the keyword's role: it supplies the opening
+/// characters, and the roster record must either end at that point or carry a
+/// literal space there. So `LORD` matches a roster `LORD BRITISH` but `GWEN`
+/// does not match `GWENNO`.
 fn party_roster_name_matches(record: &PartyRosterRecord, needle: &str) -> bool {
-    let Some(name) = party_name_to_string(&record.name) else {
+    let speaker = conversation_name_compare_bytes(needle.as_bytes());
+    if speaker.is_empty() {
         return false;
-    };
-    name.eq_ignore_ascii_case(needle.trim())
+    }
+    let roster = conversation_name_compare_bytes(&record.name);
+    if roster.len() < speaker.len() || roster[..speaker.len()] != speaker[..] {
+        return false;
+    }
+    matches!(roster.get(speaker.len()), None | Some(b' '))
+}
+
+/// Normalise one side of the §7.6 JOIN-name compare: stop at the record's NUL
+/// terminator (obfuscated or plain), strip bit 7, fold to upper case, and drop
+/// surrounding padding spaces.
+fn conversation_name_compare_bytes(raw: &[u8]) -> Vec<u8> {
+    let end = raw
+        .iter()
+        .position(|byte| byte & 0x7f == 0)
+        .unwrap_or(raw.len());
+    let folded: Vec<u8> = raw[..end]
+        .iter()
+        .map(|byte| (byte & 0x7f).to_ascii_uppercase())
+        .collect();
+    let start = folded
+        .iter()
+        .position(|byte| *byte != b' ')
+        .unwrap_or(folded.len());
+    let stop = folded
+        .iter()
+        .rposition(|byte| *byte != b' ')
+        .map_or(start, |index| index + 1);
+    folded[start..stop].to_vec()
 }
 
 pub fn decrement_stock_high_to_low(stock: &mut [u8]) -> Option<usize> {
@@ -4331,13 +4861,6 @@ pub fn decrement_stock_high_to_low(stock: &mut [u8]) -> Option<usize> {
         }
     }
     None
-}
-
-pub fn sextant_coordinate(coordinate: usize) -> String {
-    let value = (coordinate & 0xff) as u8;
-    let high = b'A' + ((value >> 4) & 0x0f);
-    let low = b'A' + (value & 0x0f);
-    format!("{}'{}", high as char, low as char)
 }
 
 pub fn scroll_label(index: usize) -> &'static str {
@@ -4474,30 +4997,36 @@ fn draw_surface_view_cell(
     }
 }
 
+/// `view.md §6.3`: "Earlier revisions of this section described a magic
+/// peer-view tint branch inside the dungeon map renderer, and an alternate
+/// tinted tile source for some wall classes. Both are withdrawn: the value
+/// being read is the display adapter identifier, not a peer-spell flag. The
+/// dungeon map renderer has no peer-spell branch."
+///
+/// So this painter takes no [`ViewOverlayMode`]: V-View, the gem map, the
+/// peer spell and the X-Ray spell all paint the identical dungeon map. The
+/// only thing the original varied here is the display adapter, which this
+/// engine models as [`TileGraphicsDepth`] on the viewport, and only the
+/// high-colour (EGA/Tandy) pens are in the v1 target.
 fn draw_dungeon_view_glyph(
     viewport: &mut TileViewport,
     cell_x: usize,
     cell_y: usize,
     scale: usize,
     glyph: Option<DungeonMinimapGlyph>,
-    mode: ViewOverlayMode,
 ) {
     let Some(glyph) = glyph else {
         return;
     };
-    let door_color = dungeon_view_door_color(mode);
-    let wall_color = dungeon_view_wall_color(mode);
-    let highlight = if mode.uses_alternate_view_bank() {
-        14
-    } else {
-        15
-    };
+    let door_color = dungeon_view_door_color();
+    let wall_color = dungeon_view_wall_color();
+    let highlight = DUNGEON_VIEW_HIGHLIGHT_COLOR;
     // `dungeon-mode.md §12.3`: two classes "are not font characters at
     // all but small vector drawings". Their geometry is §12.5's and is
     // drawn directly rather than through a glyph index.
     let glyph = match glyph {
         DungeonMinimapGlyph::Fountain => {
-            draw_dungeon_fountain_glyph(viewport, cell_x, cell_y, scale, mode);
+            draw_dungeon_fountain_glyph(viewport, cell_x, cell_y, scale);
             return;
         }
         DungeonMinimapGlyph::EnergyField => {
@@ -4508,7 +5037,19 @@ fn draw_dungeon_view_glyph(
     };
     match glyph {
         // §12.4 party marker: arrowhead glyph 0x60 at the centre cell.
-        0x60 => draw_surface_view_cell(viewport, cell_x, cell_y, scale, 0, 0, true, mode),
+        // The player-marker branch of `draw_surface_view_cell` returns
+        // before any mode-dependent colour lookup, so the mode passed
+        // here is inert; the dungeon map has no peer-spell branch.
+        0x60 => draw_surface_view_cell(
+            viewport,
+            cell_x,
+            cell_y,
+            scale,
+            0,
+            0,
+            true,
+            ViewOverlayMode::GemView,
+        ),
         0x18 => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, 7),
         0x2e => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, true, false, highlight),
         0x2d => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, false, true, highlight),
@@ -4536,7 +5077,7 @@ fn draw_dungeon_view_glyph(
                 cell_x,
                 cell_y,
                 scale,
-                dungeon_view_extra_wall_color(mode),
+                dungeon_view_extra_wall_color(),
             );
             set_view_overlay_pixel(
                 viewport,
@@ -4588,28 +5129,32 @@ fn render_dungeon_minimap_glyph_code(glyph: Option<DungeonMinimapGlyph>) -> char
     }
 }
 
-fn dungeon_view_door_color(mode: ViewOverlayMode) -> u8 {
-    if mode.uses_alternate_view_bank() {
-        14
-    } else {
-        11
-    }
+/// `dungeon-mode.md §12.5`: the fountain basin is drawn in "the bright
+/// foreground pen", which is also the pen the ladder, pit, chest-box and
+/// wall-centre highlights use.
+const DUNGEON_VIEW_HIGHLIGHT_COLOR: u8 = 15;
+
+/// The dungeon minimap pens below take no [`ViewOverlayMode`]. `view.md
+/// §6.3` and `dungeon-mode.md §12.4` both withdraw the peer-spell tint
+/// branch that used to select them: "the value they were reading is the
+/// **display-adapter identifier**, not a peer-spell flag ... V-View has no
+/// peer-spell branch of its own." Any surviving variation belongs to the
+/// display adapter ([`TileGraphicsDepth`]), and CGA/Hercules raster output
+/// is outside the v1 clean-recreation target, so one high-colour pen set
+/// serves every mode.
+fn dungeon_view_door_color() -> u8 {
+    11
 }
 
-fn dungeon_view_wall_color(mode: ViewOverlayMode) -> u8 {
-    if mode.uses_alternate_view_bank() {
-        13
-    } else {
-        8
-    }
+fn dungeon_view_wall_color() -> u8 {
+    8
 }
 
-fn dungeon_view_extra_wall_color(mode: ViewOverlayMode) -> u8 {
-    if mode.uses_alternate_view_bank() {
-        5
-    } else {
-        13
-    }
+/// `dungeon-mode.md §12.4`: the `0xD?` arch wall is "drawn with a
+/// background pen; which pen depends on the display adapter" - the adapter,
+/// not the view mode.
+fn dungeon_view_extra_wall_color() -> u8 {
+    13
 }
 
 fn draw_dungeon_ladder_glyph(
@@ -4637,23 +5182,17 @@ fn draw_dungeon_ladder_glyph(
 /// down first in the bright foreground pen, then the pen switches to a
 /// brighter blue for the jet and the four spray dots. All ranges are
 /// inclusive and relative to the cell's pixel origin.
+///
+/// There is no view-mode branch: `view.md §6.3` withdraws the peer-view
+/// tint that used to pick a second basin/jet pair here.
 fn draw_dungeon_fountain_glyph(
     viewport: &mut TileViewport,
     cell_x: usize,
     cell_y: usize,
     scale: usize,
-    mode: ViewOverlayMode,
 ) {
-    let basin = if mode.uses_alternate_view_bank() {
-        14
-    } else {
-        15
-    };
-    let jet = if mode.uses_alternate_view_bank() {
-        11
-    } else {
-        9
-    };
+    let basin = DUNGEON_VIEW_HIGHLIGHT_COLOR;
+    let jet = 9;
     let mut plot = |x: usize, y: usize, color: u8| {
         set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
     };
@@ -4783,7 +5322,7 @@ fn draw_dungeon_door_glyph(
 }
 
 fn surface_view_class_color(class: u8, mode: ViewOverlayMode) -> u8 {
-    if mode.uses_alternate_view_bank() {
+    if mode.uses_alternate_surface_view_bank() {
         match class {
             0x0A => return 3,
             0x0B => return 11,
@@ -5035,4 +5574,95 @@ fn append_shop_opening_prompt(mut rendered: String, prompt: &str) -> String {
         rendered.push_str(prompt);
     }
     rendered
+}
+
+#[cfg(test)]
+mod shop_vendor_name_tests {
+    use super::shop_vendor_name_for_scene;
+
+    /// `shops.md §8.0` publishes 46 reachable vendor names across the eight
+    /// per-kind tables. The vendor column is a *second* resident table sharing
+    /// the shop-instance row with the display-name column, so it must never be
+    /// derived from the shop's own name.
+    #[test]
+    fn published_vendor_names_cover_all_forty_six_reachable_shop_rows() {
+        let published: [(u8, u8, &str); 46] = [
+            (0x81, 2, "Gwenneth"),
+            (0x81, 3, "Nomaan"),
+            (0x81, 4, "Ronan"),
+            (0x81, 5, "Shenstone"),
+            (0x81, 6, "Paul"),
+            (0x81, 17, "Max"),
+            (0x81, 24, "Kitiara"),
+            (0x81, 26, "Steve"),
+            (0x81, 32, "Thol"),
+            (0x82, 1, "Sam"),
+            (0x82, 2, "Tika"),
+            (0x82, 3, "Nicole"),
+            (0x82, 4, "Duclas"),
+            (0x82, 8, "Felicity"),
+            (0x82, 19, "Jaymes"),
+            (0x82, 22, "Dr. Cat"),
+            (0x82, 24, "Nikki"),
+            (0x82, 30, "Rob"),
+            (0x83, 6, "Hettar"),
+            (0x83, 20, "Theoan"),
+            (0x83, 22, "Ferru"),
+            (0x84, 3, "Bantral"),
+            (0x84, 5, "Captain Blyth"),
+            (0x84, 21, "Master Hawkins"),
+            (0x84, 24, "Jones"),
+            (0x85, 1, "Nilrem"),
+            (0x85, 4, "Madam Pendra"),
+            (0x85, 7, "Toama"),
+            (0x85, 23, "Enlor"),
+            (0x85, 30, "Virden"),
+            (0x86, 8, "Braunam"),
+            (0x86, 22, "Danfits"),
+            (0x86, 24, "Daem"),
+            (0x87, 5, "Regina"),
+            (0x87, 6, "Leila"),
+            (0x87, 7, "Temptious"),
+            (0x87, 21, "Milan"),
+            (0x87, 23, "Jessica"),
+            (0x87, 30, "Faye"),
+            (0x87, 31, "Jessip"),
+            (0x88, 2, "Donya"),
+            (0x88, 3, "Gremnor"),
+            (0x88, 7, "Rogi"),
+            (0x88, 20, "Terbor"),
+            (0x88, 22, "Lorien"),
+            (0x88, 24, "Ransack"),
+        ];
+
+        for (dialog_id, scene, vendor) in published {
+            assert_eq!(
+                shop_vendor_name_for_scene(dialog_id, scene),
+                Some(vendor),
+                "shops.md §8.0 vendor for trigger {dialog_id:#04x} scene {scene}"
+            );
+        }
+    }
+
+    #[test]
+    fn horse_trader_scene_thirty_row_stays_unreachable() {
+        // `shops.md §8.0`: the shipped horse-trader table holds a fourth row
+        // for The Lycaeum whose vendor is Simplon, but "no `0x83` trigger
+        // exists anywhere in the shipped rosters for scene `30`, so the row is
+        // unreachable in ordinary play ... implementations should publish and
+        // reach the three rows above and must not treat scene `30` as a fourth
+        // stable."
+        assert_eq!(shop_vendor_name_for_scene(0x83, 30), None);
+    }
+
+    #[test]
+    fn a_scene_absent_from_a_kinds_table_resolves_to_no_vendor() {
+        // `shops.md §8.0`: the shipped search leaves the row one past the end
+        // and reads a neighbouring kind's data; "a clean implementation should
+        // reject the trigger and leave the conversation alone", so this
+        // lookup must not fall back to row zero.
+        assert_eq!(shop_vendor_name_for_scene(0x81, 1), None);
+        assert_eq!(shop_vendor_name_for_scene(0x88, 32), None);
+        assert_eq!(shop_vendor_name_for_scene(0x89, 2), None);
+    }
 }

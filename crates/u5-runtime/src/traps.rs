@@ -23,15 +23,44 @@ pub fn shared_trap_effect_family_from_index(index: u8, combat_active: bool) -> T
     }
 }
 
+/// `traps.md §3` uniform trap damage draw. Used by the Bomb family,
+/// which rolls `1..=8` independently for each living member. Acid does
+/// **not** use this shape — see [`shared_trap_acid_damage_from_index`].
 pub fn shared_trap_damage_from_index(index: u8, max_damage: u8) -> u8 {
     1 + (index % max_damage)
+}
+
+/// `traps.md §3` inclusive raw-roll ceiling the Acid family draws
+/// before halving: "The roll is an inclusive `0..60` roll halved with
+/// truncation and floored to one".
+pub const TRAP_ACID_RAW_ROLL_MAX: u8 = 60;
+
+/// `traps.md §3` effect id 0 (Acid) damage draw.
+///
+/// "The roll is an inclusive `0..60` roll halved with truncation and
+/// floored to one - the same shape `systems/magic.md` publishes for
+/// Mani - so it is **not** uniform over `1..30`: low values are
+/// markedly more likely."
+///
+/// The halve-and-floor step is [`crate::combat_skewed_roll_1_to_30`]
+/// (`combat.md §9.1`), reused rather than duplicated so the two shapes
+/// cannot drift. The caller-supplied `index` is folded into the
+/// published inclusive `0..=60` input domain first; the result is
+/// always inside the `1..=30` bound the same paragraph states.
+pub fn shared_trap_acid_damage_from_index(index: u8) -> u8 {
+    let raw = index % (TRAP_ACID_RAW_ROLL_MAX + 1);
+    let damage = crate::combat_skewed_roll_1_to_30(raw);
+    debug_assert!(damage >= 1 && damage <= TRAP_ACID_DAMAGE_MAX);
+    damage
 }
 
 /// `traps.md §3` shared trap-effect family for one resolved id.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrapEffect {
-    /// Effect id 0 — acid sting; rolls `1..=30` damage on the triggering
-    /// slot only.
+    /// Effect id 0 — acid sting; rolls damage on the triggering slot
+    /// only. The draw is bounded by `1..30` but is the skewed
+    /// halve-and-floor shape, not a uniform draw — see
+    /// [`shared_trap_acid_damage_from_index`].
     Acid,
     /// Effect id 1 — poison label; runs the shared poison-status helper
     /// for the triggering slot.
@@ -133,6 +162,20 @@ pub const fn trap_poison_accepts(status: crate::CharacterStatus) -> bool {
 /// rather than a decoded [`crate::CharacterStatus`].
 pub const fn trap_poison_accepts_status_byte(status: u8) -> bool {
     status != crate::CharacterStatus::Dead.save_byte()
+}
+
+/// `traps.md §3` effect id 2 (Bomb): "rolls an inclusive `1..8` damage
+/// separately for each in-party member of the six-slot band that is not
+/// marked Dead - the only status excluded is Dead… The sweep applies the
+/// same two gates the status helper applies: an unsigned party-count check,
+/// then a Dead skip."
+///
+/// Named separately from [`trap_poison_accepts_status_byte`] because the
+/// bomb sweep deals damage rather than poison, but the predicate is
+/// deliberately the same single-value test: Ashes (`'A'`) is a distinct
+/// status from Dead (`'D'`) and must fall through into the sweep.
+pub const fn trap_party_sweep_accepts_status_byte(status: u8) -> bool {
+    trap_poison_accepts_status_byte(status)
 }
 
 /// `traps.md §2.1` outcome of the shared acting-member selection — the

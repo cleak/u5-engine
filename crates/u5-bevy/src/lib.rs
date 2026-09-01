@@ -17,7 +17,10 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
+use u5_runtime::SubtitleIgnitionPublish;
 use u5_runtime::TITLE_TICK_FRAME_Y;
+use u5_runtime::audio::{RumbleJitter, SoundEffect, SpeakerProgram};
+use u5_runtime::audio_render::{RenderedSpeaker, render_program};
 #[cfg(test)]
 use u5_runtime::placeholder_title_tick_frames;
 use u5_runtime::{
@@ -31,13 +34,14 @@ use u5_runtime::{
     COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
     COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE, COMBAT_VANISH_DEATH_MARKER_TILE,
     CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, ChargenSession,
-    ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS,
+    ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_LOOK_TILE,
     DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
     DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
     DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES, Direction,
-    DisplayDriverFamily, DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB, ENDGAME_GATE_CELL,
-    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
-    EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
+    DisplayDriverFamily, DungeonRoomCombatSetup, DungeonScene,
+    EGA_PALETTE_RGB as ENHANCED_EGA_PALETTE_RGB, ENDGAME_GATE_CELL, ENDGAME_TABLEAU_HEIGHT,
+    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING,
+    EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, ExplorationTurnGateOutcome, FIELD_SPELL_COST,
     FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
     FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FULL_SCREEN_TEXT_WINDOW_INDEX, FixedCellFont,
@@ -52,24 +56,24 @@ use u5_runtime::{
     INTRO_MENU_FRAME_OUTLINE_COLOR, INTRO_MENU_FRAME_OUTLINE_LEFT_X,
     INTRO_MENU_FRAME_OUTLINE_RIGHT_X, INTRO_MENU_FRAME_RULE_X0, INTRO_MENU_FRAME_RULE_X1,
     INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_TOP_Y, INTRO_MENU_SELECT_CAPTION_COLUMN,
-    INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH, INTRO_MENU_SELECT_CAPTION_PREFIX,
-    INTRO_MENU_SELECT_CAPTION_ROW, INTRO_MENU_SELECT_CAPTION_SUFFIX, INTRO_STEP_1_EXTRA_ART_X,
-    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
-    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
-    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots,
-    IntroStoryArtPlacement, JIMMY_MANACLES_TILE, JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE,
-    JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2,
-    LOAD_EMPTY_SAVE_LINE_3, LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y,
-    MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    INTRO_MENU_SELECT_CAPTION_PREFIX, INTRO_MENU_SELECT_CAPTION_ROW,
+    INTRO_MENU_SELECT_CAPTION_SUFFIX, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
+    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
+    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
+    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroFontSlots, IntroStoryArtPlacement,
+    JIMMY_MANACLES_TILE, JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE, JOURNEY_ONWARD_SHORTCUT_BANNER,
+    LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3,
+    LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y, MAGIC_LOCK_COST,
+    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
     MOONGATE_PHASE_ENDGAME_GROUND_TILE, MOONGATE_PHASE_SCRATCH_TILE, MORAL_STANDING_MAX,
-    MonochromeBitmap, MoongatePhaseDraw, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
-    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NPC_DIALOG_ID_NONE,
-    NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS,
-    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
-    PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
-    POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST,
-    PROTECTION_SPELL_INDEX, PartyCapability, PartyMember, PlayInputDisposition, PlayOptions,
-    PlaySoundEffect, PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome,
+    MonitorModel, MonochromeBitmap, MoongatePhaseDraw, MoonstoneGateSlot, NARRATIVE_GATE_X,
+    NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
+    NPC_DIALOG_ID_NONE, NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot,
+    OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
+    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, POISON_FIELD_SPELL_INDEX,
+    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE,
+    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyCapability, PartyMember, PlayInputDisposition,
+    PlayOptions, PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome,
     ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
     REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
     RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
@@ -78,31 +82,31 @@ use u5_runtime::{
     SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
     SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
-    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
-    SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
-    TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
-    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_CTRL_CLEAR_WINDOW, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_SOURCE_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
-    TITLE_FLOURISH_FRAME_COUNT, TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT,
-    TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK,
-    TOWN_DOOR_MAGIC_PLAIN_TILE, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, TOWN_TRAPDOOR_LIVE_TILE, Tavern, TerrainCombatSetup,
-    TextWindowDescriptor, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport,
-    TitleBitAsset, TitleBitImages, TitleBitPlacement, TitleTickFrameSet, TransportState,
-    ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, UNDER_OOL_FILENAME,
-    UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST,
-    VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, ViewOverlayMode,
-    WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SIDE,
-    WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, YELL_NOTHING_SAID_MESSAGE,
-    YELL_SAILS_HOISTED_MESSAGE, blit_tile_id_to_viewport, blit_tile_pixels_to_viewport,
-    combat_actor_is_active_not_dead, combat_class_stats, combat_party_actor_byte,
+    SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING, SHIPPED_PALETTE_REGISTERS,
+    SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
+    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
+    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
+    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable,
+    StoryRecords, TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TEXT_CTRL_CLEAR_WINDOW, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_FLOURISH_FRAME_COUNT,
+    TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TLK_TEXT_XOR_MASK, TOWN_DOOR_MAGIC_PLAIN_TILE,
+    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, TOWN_TRAPDOOR_LIVE_TILE,
+    Tavern, TerrainCombatSetup, TextWindowDescriptor, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TitleTickFrameSet, TransportState, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH,
+    ULTIMA_PANEL_STEM, UNDER_OOL_FILENAME, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
+    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    ViewOverlayMode, WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES,
+    WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, advance_paced_combat_presentation,
+    blit_tile_id_to_viewport, blit_tile_pixels_to_viewport, combat_actor_is_active_not_dead,
+    combat_class_companion, combat_class_sprite_byte, combat_class_stats, combat_party_actor_byte,
     commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
@@ -126,18 +130,19 @@ use u5_runtime::{
     paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
     published_world_location_entries, read_save_image_file, render_play_text_window_system,
     render_return_to_view_playback_frame_over, render_text_panel_rgba, render_text_window_rgba,
-    return_to_view_caption_start_column, return_to_view_fixed_wipe_rectangles,
-    run_intro_pre_flourish_phase, run_potion_flash_soundless_timing,
-    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
+    resolve_palette_register, return_to_view_caption_start_column,
+    return_to_view_fixed_wipe_rectangles, run_intro_pre_flourish_phase,
+    run_potion_flash_soundless_timing, run_return_to_view_playback_until_restart,
+    save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
-    spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_visible,
+    spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_resets,
     summarize_return_to_view_preview, summoned_active_object_record,
-    terrain_combat_instance_from_setup, terrain_combat_raw_replacement_tile_for_arena,
-    terrain_combat_setup_from_record_at_arena, terrain_combat_tile_for_spawn_index,
+    terrain_combat_class_for_spawn_index, terrain_combat_instance_from_setup,
+    terrain_combat_party_entry_positions, terrain_combat_setup_from_record_at_arena,
     title_flourish_band, title_flourish_content_row, title_flourish_step_state,
     title_flourish_total_steps, title_flourish_visible_rows, title_tick_next_frame,
     town_resident_name, u5_prng_advance_state, u5_prng_range_u16, with_moongate_phase_scratch_tile,
@@ -174,6 +179,34 @@ const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
 const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
+/// IBM PC/AT default typematic timing: a 500 ms initial delay and roughly
+/// ten make codes per second thereafter. U5 consumes those through the BIOS
+/// buffer and flushes queued type-ahead after each accepted action.
+const HELD_DIRECTION_INITIAL_DELAY: Duration = Duration::from_millis(500);
+const HELD_DIRECTION_REPEAT_INTERVAL: Duration = Duration::from_millis(100);
+/// Post-action combat redraws are brisk, but each automatic action must reach
+/// at least one host frame instead of collapsing into the final state.
+const PACED_COMBAT_PRESENTATION_INTERVAL_SECS: f32 = 0.08;
+
+/// The visual shell models the period 200-line EGA display seen in surviving
+/// DOS captures. The clean runtime keeps the specification's enhanced-display
+/// palette as its headless baseline; this frontend resolves the same shipped
+/// register values through the alternate display model that turns register
+/// value `0x06` brown. Every other palette entry is identical.
+const EGA_PALETTE_RGB: [[u8; 3]; 16] = period_200_line_ega_palette();
+
+const fn period_200_line_ega_palette() -> [[u8; 3]; 16] {
+    let mut palette = ENHANCED_EGA_PALETTE_RGB;
+    let mut index = 0;
+    while index < palette.len() {
+        palette[index] = resolve_palette_register(
+            SHIPPED_PALETTE_REGISTERS[index],
+            MonitorModel::Period200Line,
+        );
+        index += 1;
+    }
+    palette
+}
 const SURFACE_VIEW_CLASS_GALLERY_TILES: [u8; 17] = [
     0x00, 0x05, 0x09, 0x70, 0x1D, 0x10, 0x0D, 0x0C, 0x0B, 0x06, 0x60, 0xD4, 0x01, 0x04, 0xE0, 0xD8,
     0x20,
@@ -199,38 +232,109 @@ const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = BIOS_USER_TICK_INTERVAL_SECS;
 /// group" reading was retracted upstream.
 const INTRO_FLOURISH_STEP_INTERVAL_SECS: f32 = 0.014;
 
-/// Generated single-channel tones used by the visual shell. The analyzed DOS
-/// baseline ships no external music resources (`EXTRACTION.md`), so the Bevy
-/// frontend models the published PC-speaker feedback boundaries with short
-/// procedural envelopes instead of importing or inventing a soundtrack.
-#[derive(Event, Clone, Copy, Debug, PartialEq, Eq)]
-enum VisualSoundCue {
-    CombatBlocked,
-    CombatEscape,
-    CombatPossession,
-    CombatSummon,
-    DungeonDecorationSweep0,
-    DungeonDecorationSweep1,
-    DungeonDecorationSweep2,
-    PotionFlash,
-    RingVanish,
-    ShrineWordRumble,
-    StonegateTone,
-    StolenWarning,
-    TrapSting,
-    WindChange,
-    SubtitleIgnition,
+/// One published PC-speaker effect, queued for the single-channel voice.
+///
+/// `systems/audio.md` (spec commit `86bee4d`) owns the whole model: the trigger
+/// inventory, the four sound families, the calibrated holds, and the mute rule.
+/// The runtime lowers each trigger to a [`SpeakerProgram`]; this shell only
+/// renders that program and owns the one voice `audio.md §2` allows.
+///
+/// `audible` is the frontend half of `audio.md §3`. Ctrl-S "changes output, not
+/// command or animation cadence", so a muted effect is still queued, still
+/// advances the jitter stream, and still occupies the voice for the program's
+/// own duration - it simply spawns no [`AudioPlayer`].
+#[derive(Event, Clone, Debug, PartialEq, Eq)]
+struct SpeakerEffect {
+    source: SpeakerSource,
+    audible: bool,
 }
+
+/// What the voice should play.
+///
+/// Almost every trigger arrives as a [`SoundEffect`] and is lowered against the
+/// `§5.3` jitter stream when it reaches the voice. The exception is the gated
+/// start/menu dissolve: `audio.md §8.6.1` makes a whole run *one* enabled
+/// speaker retuned per click, with a single stop at the shared exit, so the
+/// caller lowers the run with [`u5_runtime::audio::dissolve_click_run`] and
+/// hands over the finished program. Queuing its hundreds of clicks as separate
+/// effects would be wrong twice over: `§2` allows only one voice, so all but
+/// the last would be discarded, and `RETRACTIONS.md` R230 withdrew the
+/// per-click stop that a train of separate effects implies.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum SpeakerSource {
+    Effect(SoundEffect),
+    Program(SpeakerProgram),
+}
+
+impl SpeakerEffect {
+    /// An effect that ignores the Ctrl-S boolean.
+    ///
+    /// `audio.md §7.1`: the start-screen subtitle ignition "cannot be muted
+    /// through Ctrl-S because it occurs before that gameplay command is
+    /// available".
+    fn always_audible(effect: SoundEffect) -> Self {
+        Self {
+            source: SpeakerSource::Effect(effect),
+            audible: true,
+        }
+    }
+
+    /// An already-lowered program that ignores the Ctrl-S boolean.
+    fn always_audible_program(program: SpeakerProgram) -> Self {
+        Self {
+            source: SpeakerSource::Program(program),
+            audible: true,
+        }
+    }
+
+    /// A published trigger, resolved against the current sound setting.
+    fn new(effect: SoundEffect, audible: bool) -> Self {
+        Self {
+            source: SpeakerSource::Effect(effect),
+            audible,
+        }
+    }
+}
+
+/// `audio.md §5.3` private sound-only jitter stream.
+///
+/// It "starts from the same fixed nonzero value on each program run and is not
+/// the gameplay PRNG". This resource is the frontend's copy of that stream: it
+/// is constructed from [`RumbleJitter::new`] and is never seeded from, nor
+/// written back into, `PlayState`'s gameplay PRNG.
+#[derive(Resource, Debug, Default)]
+struct SpeakerJitter(RumbleJitter);
+
+/// Playback volume for every rendered effect.
+///
+/// `audio.md` publishes no per-effect loudness - the historical speaker has
+/// exactly one amplitude - so this is a single constant rather than a per-cue
+/// table. The old table's differing volumes were invented.
+///
+/// One constant is also enough because the renders are already level-matched:
+/// measured across the whole rendered suite, RMS spans only 4.8 dB, from
+/// -14.7 dBFS (a Return-to-View strip-3 blip) to -9.9 dBFS (the square-wave
+/// families). The envelope families read ~1 dB quieter in RMS despite peaking
+/// higher, which is crest factor, not loudness.
+///
+/// Note that `audio_render::PEAK_AMPLITUDE` (0.32) is *not* the output
+/// ceiling: the 10 Hz DC blocker overshoots to nearly twice that on every
+/// low-frequency transition, so the true suite-wide peak is 0.637 - 47% of
+/// `blocked-step`'s samples sit above 0.32. At this volume that lands at 0.573
+/// of full scale, so there is headroom and nothing clips.
+const SPEAKER_VOLUME: f32 = 0.9;
 
 #[derive(Asset, Clone, Debug, TypePath)]
 struct VisualSoundWave {
     samples: Arc<[f32]>,
+    sample_rate: u32,
     duration: Duration,
 }
 
 struct VisualSoundDecoder {
     samples: Arc<[f32]>,
     index: usize,
+    sample_rate: u32,
     duration: Duration,
 }
 
@@ -254,7 +358,7 @@ impl Source for VisualSoundDecoder {
     }
 
     fn sample_rate(&self) -> u32 {
-        VISUAL_SOUND_SAMPLE_RATE
+        self.sample_rate
     }
 
     fn total_duration(&self) -> Option<Duration> {
@@ -270,246 +374,51 @@ impl Decodable for VisualSoundWave {
         VisualSoundDecoder {
             samples: self.samples.clone(),
             index: 0,
+            sample_rate: self.sample_rate,
             duration: self.duration,
         }
     }
 }
 
-#[derive(Resource)]
-struct VisualSoundBank {
-    combat_blocked: Handle<VisualSoundWave>,
-    combat_escape: Handle<VisualSoundWave>,
-    combat_possession: Handle<VisualSoundWave>,
-    combat_summon: Handle<VisualSoundWave>,
-    dungeon_decoration_sweep_0: Handle<VisualSoundWave>,
-    dungeon_decoration_sweep_1: Handle<VisualSoundWave>,
-    dungeon_decoration_sweep_2: Handle<VisualSoundWave>,
-    potion_flash: Handle<VisualSoundWave>,
-    ring_vanish: Handle<VisualSoundWave>,
-    shrine_word_rumble: Handle<VisualSoundWave>,
-    stonegate_tone: Handle<VisualSoundWave>,
-    stolen_warning: Handle<VisualSoundWave>,
-    trap_sting: Handle<VisualSoundWave>,
-    wind_change: Handle<VisualSoundWave>,
-    subtitle_ignition: Handle<VisualSoundWave>,
-}
-
+/// The single speaker voice of `audio.md §2`.
+///
+/// At most one entity carries this marker. It exists even while muted, because
+/// a silent effect still owns the channel for its calibrated duration.
 #[derive(Component)]
-struct VisualSoundLifetime(Timer);
+struct SpeakerVoice;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct VisualSoundSpec {
-    start_frequency_hz: f32,
-    end_frequency_hz: f32,
-    jitter_hz: f32,
-    duration: Duration,
-    volume: f32,
-}
+/// How long the voice owns the channel: exactly [`SpeakerProgram::duration`].
+///
+/// `audio.md §2` requires the speaker to stop "at every specified effect end",
+/// so this timer is never padded. The previous shell added 100 ms of slack,
+/// which is precisely how a stale tone bled into the next scene.
+#[derive(Component)]
+struct SpeakerVoiceLifetime(Timer);
 
-const VISUAL_SOUND_SAMPLE_RATE: u32 = 44_100;
-
-const fn visual_sound_cue_for_play_effect(effect: PlaySoundEffect) -> VisualSoundCue {
-    match effect {
-        PlaySoundEffect::CombatBlocked => VisualSoundCue::CombatBlocked,
-        PlaySoundEffect::CombatEscape => VisualSoundCue::CombatEscape,
-        PlaySoundEffect::CombatPossession => VisualSoundCue::CombatPossession,
-        PlaySoundEffect::CombatSummon => VisualSoundCue::CombatSummon,
-        PlaySoundEffect::DungeonDecorationSweep0 => VisualSoundCue::DungeonDecorationSweep0,
-        PlaySoundEffect::DungeonDecorationSweep1 => VisualSoundCue::DungeonDecorationSweep1,
-        PlaySoundEffect::DungeonDecorationSweep2 => VisualSoundCue::DungeonDecorationSweep2,
-        PlaySoundEffect::RingVanish => VisualSoundCue::RingVanish,
-        PlaySoundEffect::ShrineWordRumble => VisualSoundCue::ShrineWordRumble,
-        PlaySoundEffect::StonegateTone => VisualSoundCue::StonegateTone,
-        PlaySoundEffect::StolenWarning => VisualSoundCue::StolenWarning,
-        PlaySoundEffect::TrapSting => VisualSoundCue::TrapSting,
-        PlaySoundEffect::WindChange => VisualSoundCue::WindChange,
+/// Turn a rendered program into a decodable Bevy audio asset.
+fn speaker_wave(rendered: &RenderedSpeaker) -> VisualSoundWave {
+    VisualSoundWave {
+        samples: rendered.samples.as_slice().into(),
+        sample_rate: rendered.sample_rate,
+        duration: Duration::from_secs_f64(rendered.duration_secs()),
     }
 }
 
-fn visual_sound_cues_after(
+/// Drain the runtime's published effect boundaries into queued speaker events.
+///
+/// `sound_enabled` is `PlayState::music_enabled`. The runtime records effects
+/// unconditionally; muting is resolved here, at the output, exactly as
+/// `audio.md §3` requires.
+fn speaker_effects_after(
     serial: u64,
     sound_enabled: bool,
     state: &PlayState,
-) -> Vec<VisualSoundCue> {
-    if !sound_enabled {
-        return Vec::new();
-    }
+) -> Vec<SpeakerEffect> {
     state
         .sound_effects_after(serial)
         .into_iter()
-        .map(visual_sound_cue_for_play_effect)
+        .map(|effect| SpeakerEffect::new(effect, sound_enabled))
         .collect()
-}
-
-const fn visual_sound_spec(cue: VisualSoundCue) -> VisualSoundSpec {
-    match cue {
-        VisualSoundCue::CombatBlocked => VisualSoundSpec {
-            start_frequency_hz: 185.0,
-            end_frequency_hz: 92.5,
-            jitter_hz: 0.0,
-            duration: Duration::from_millis(125),
-            volume: 0.42,
-        },
-        VisualSoundCue::CombatEscape => VisualSoundSpec {
-            start_frequency_hz: 164.81,
-            end_frequency_hz: 659.25,
-            jitter_hz: 0.0,
-            duration: Duration::from_millis(240),
-            volume: 0.40,
-        },
-        VisualSoundCue::CombatPossession => VisualSoundSpec {
-            start_frequency_hz: 196.0,
-            end_frequency_hz: 73.42,
-            jitter_hz: 5.0,
-            duration: Duration::from_millis(260),
-            volume: 0.38,
-        },
-        VisualSoundCue::CombatSummon => VisualSoundSpec {
-            start_frequency_hz: 82.41,
-            end_frequency_hz: 329.63,
-            jitter_hz: 8.0,
-            duration: Duration::from_millis(280),
-            volume: 0.40,
-        },
-        VisualSoundCue::DungeonDecorationSweep0 => VisualSoundSpec {
-            // The calibrated busy-wait unit has no portable wall-clock value;
-            // use 1 ms per unit while retaining the exact update count,
-            // frequencies, and 400:144:16 total-unit pacing ratio.
-            start_frequency_hz: 3_200.0,
-            end_frequency_hz: 3_485.0,
-            jitter_hz: 0.0,
-            duration: Duration::from_millis(400),
-            volume: 0.34,
-        },
-        VisualSoundCue::DungeonDecorationSweep1 => VisualSoundSpec {
-            start_frequency_hz: 3_200.0,
-            end_frequency_hz: 3_475.0,
-            jitter_hz: 0.0,
-            duration: Duration::from_millis(144),
-            volume: 0.34,
-        },
-        VisualSoundCue::DungeonDecorationSweep2 => VisualSoundSpec {
-            start_frequency_hz: 3_200.0,
-            end_frequency_hz: 3_425.0,
-            jitter_hz: 0.0,
-            duration: Duration::from_millis(16),
-            volume: 0.34,
-        },
-        VisualSoundCue::PotionFlash => VisualSoundSpec {
-            start_frequency_hz: 123.47,
-            end_frequency_hz: 61.74,
-            jitter_hz: 12.0,
-            duration: Duration::from_millis(220),
-            volume: 0.40,
-        },
-        VisualSoundCue::RingVanish => VisualSoundSpec {
-            start_frequency_hz: 783.99,
-            end_frequency_hz: 1_318.51,
-            jitter_hz: 0.0,
-            duration: Duration::from_millis(180),
-            volume: 0.36,
-        },
-        VisualSoundCue::ShrineWordRumble => VisualSoundSpec {
-            start_frequency_hz: 92.5,
-            end_frequency_hz: 55.0,
-            jitter_hz: 18.0,
-            duration: Duration::from_millis(340),
-            volume: 0.48,
-        },
-        VisualSoundCue::StonegateTone => VisualSoundSpec {
-            start_frequency_hz: 146.83,
-            end_frequency_hz: 110.0,
-            jitter_hz: 3.0,
-            duration: Duration::from_millis(260),
-            volume: 0.38,
-        },
-        VisualSoundCue::StolenWarning => VisualSoundSpec {
-            start_frequency_hz: 880.0,
-            end_frequency_hz: 110.0,
-            jitter_hz: 0.0,
-            duration: Duration::from_millis(320),
-            volume: 0.40,
-        },
-        VisualSoundCue::TrapSting => VisualSoundSpec {
-            start_frequency_hz: 1_046.5,
-            end_frequency_hz: 130.81,
-            jitter_hz: 7.0,
-            duration: Duration::from_millis(180),
-            volume: 0.46,
-        },
-        VisualSoundCue::WindChange => VisualSoundSpec {
-            start_frequency_hz: 220.0,
-            end_frequency_hz: 110.0,
-            jitter_hz: 10.0,
-            duration: Duration::from_millis(240),
-            volume: 0.36,
-        },
-        VisualSoundCue::SubtitleIgnition => VisualSoundSpec {
-            start_frequency_hz: 440.0,
-            end_frequency_hz: 220.0,
-            jitter_hz: 0.0,
-            duration: Duration::from_millis(8),
-            volume: 0.24,
-        },
-    }
-}
-
-const fn visual_sound_frequency_steps(cue: VisualSoundCue) -> u8 {
-    match cue {
-        VisualSoundCue::DungeonDecorationSweep0 => 20,
-        VisualSoundCue::DungeonDecorationSweep1 => 12,
-        VisualSoundCue::DungeonDecorationSweep2 => 4,
-        _ => 0,
-    }
-}
-
-fn visual_sound_wave(cue: VisualSoundCue, mut jitter_seed: u32) -> VisualSoundWave {
-    let spec = visual_sound_spec(cue);
-    let sample_count = ((spec.duration.as_secs_f64() * f64::from(VISUAL_SOUND_SAMPLE_RATE)).ceil()
-        as usize)
-        .max(1);
-    let mut samples = Vec::with_capacity(sample_count);
-    let mut phase = 0.0_f32;
-    let envelope_cap = (sample_count / 4).max(1);
-    let attack_samples = (VISUAL_SOUND_SAMPLE_RATE as usize / 200)
-        .min(envelope_cap)
-        .max(1);
-    let release_samples = (VISUAL_SOUND_SAMPLE_RATE as usize / 100)
-        .min(envelope_cap)
-        .max(1);
-    let denominator = sample_count.saturating_sub(1).max(1) as f32;
-    let mut jitter = 0.0_f32;
-    for index in 0..sample_count {
-        if index % 64 == 0 {
-            jitter_seed = jitter_seed
-                .wrapping_mul(1_664_525)
-                .wrapping_add(1_013_904_223);
-            let unit = ((jitter_seed >> 16) as f32 / 65_535.0) * 2.0 - 1.0;
-            jitter = unit * spec.jitter_hz;
-        }
-        let frequency_steps = visual_sound_frequency_steps(cue);
-        let progress = if frequency_steps > 1 {
-            let step = (index * usize::from(frequency_steps) / sample_count)
-                .min(usize::from(frequency_steps) - 1);
-            step as f32 / f32::from(frequency_steps - 1)
-        } else {
-            index as f32 / denominator
-        };
-        let frequency = (spec.start_frequency_hz
-            + (spec.end_frequency_hz - spec.start_frequency_hz) * progress
-            + jitter)
-            .max(20.0);
-        phase += std::f32::consts::TAU * frequency / VISUAL_SOUND_SAMPLE_RATE as f32;
-        let attack = (index as f32 / attack_samples as f32).min(1.0);
-        let remaining = sample_count - index;
-        let release = (remaining as f32 / release_samples as f32).min(1.0);
-        let square = if phase.sin() >= 0.0 { 1.0 } else { -1.0 };
-        samples.push(square * attack * release);
-    }
-    VisualSoundWave {
-        samples: samples.into(),
-        duration: spec.duration,
-    }
 }
 
 /// Modern-host scale for a silent 50-unit subtitle-ignition publication.
@@ -553,10 +462,15 @@ struct IntroDisplayBuffer {
     pixels: Vec<u8>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct DissolveTransferReport {
     copied_pixels: usize,
     aborted_after: Option<(usize, usize)>,
+    /// `audio.md §8.6` / `display-driver-abi.md §9.6`: while the driver-local
+    /// gate is armed, every checked visit emits one percussive click. The
+    /// progress value each carries widens the range the pitch is drawn from;
+    /// it is not the pitch itself, a reading §9.6 withdrew.
+    clicks: Vec<SoundEffect>,
 }
 
 impl IntroDisplayBuffer {
@@ -868,7 +782,7 @@ impl IntroDisplayBuffer {
         &mut self,
         source: &IntroDisplayBuffer,
         rect: (u16, u16, u16, u16),
-        gate: u5_runtime::DissolveAbortGate,
+        mut gate: u5_runtime::DissolveAbortGate,
         key_pending: bool,
     ) -> DissolveTransferReport {
         assert_eq!(
@@ -894,6 +808,7 @@ impl IntroDisplayBuffer {
             y1: usize::from(y1),
         });
         let mut copied = 0;
+        let mut clicks: Vec<SoundEffect> = Vec::new();
         // The exact first visit is newly public only for the first gated
         // start/menu rectangle. Keep the otherwise contract-compatible
         // generic scattered walk, but lead with `(1, 0)` and suppress the
@@ -903,10 +818,18 @@ impl IntroDisplayBuffer {
             let index = y * self.width + x;
             self.pixels[index] = source.pixels[index];
             copied = 1;
+            // §9.6: "The four-plane copy of the checked pixel happens before
+            // its click and status test", and an abort "completes the current
+            // copied pixel and any publication it caused" — so the click is
+            // collected before the abort returns.
+            if let Some(click) = gate.click_after_copy(copied as u32) {
+                clicks.push(click);
+            }
             if key_pending && gate.samples_input_after_copy(copied as u32) {
                 return DissolveTransferReport {
                     copied_pixels: copied,
                     aborted_after: Some((x, y)),
+                    clicks,
                 };
             }
         }
@@ -917,16 +840,21 @@ impl IntroDisplayBuffer {
             let index = y * self.width + x;
             self.pixels[index] = source.pixels[index];
             copied += 1;
+            if let Some(click) = gate.click_after_copy(copied as u32) {
+                clicks.push(click);
+            }
             if key_pending && gate.samples_input_after_copy(copied as u32) {
                 return DissolveTransferReport {
                     copied_pixels: copied,
                     aborted_after: Some((x, y)),
+                    clicks,
                 };
             }
         }
         DissolveTransferReport {
             copied_pixels: copied,
             aborted_after: None,
+            clicks,
         }
     }
 
@@ -969,7 +897,10 @@ impl IntroDisplayBuffer {
 /// `cleak/u5-spec#72` is closed and fully answered; the phase list,
 /// step counts, band arithmetic and pacing all live in `u5-runtime` so
 /// this crate only has to composite pixels.
-use u5_runtime::intro::TITLE_TICK_STAGING_BACKGROUND;
+use u5_runtime::intro::{
+    INTRO_MENU_SELECT_CAPTION_CURSOR_BLANK, TITLE_TICK_STAGING_BACKGROUND,
+    intro_menu_select_caption_cursor_glyph,
+};
 use u5_runtime::intro_acknowledgements::{
     ACK_BAND_BOTTOM_Y, ACK_BAND_TOP_Y, ACK_CLOSE_STEP_COUNT, ACK_CREDITS_ORIGIN_X,
     ACK_CREDITS_RECORD, ACK_CREDITS_WIDTH, ACK_LEFT_PILLAR_RECORD,
@@ -1080,15 +1011,18 @@ const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
     (IntroSubflow::ReturnToView, 10, 22, " Return to the View "),
 ];
 
-/// `systems/intro.md §6.2` default highlight. A black-box capture of
-/// the original shows row 0 in inverse video the moment the menu is
-/// presented, before any key is pressed (`cleak/u5-spec#78`).
-const INTRO_MENU_DEFAULT_HIGHLIGHT: IntroSubflow = IntroSubflow::JourneyOnward;
+/// `systems/intro.md §6.2`: "**The initial highlight is row 0,
+/// `Journey Onward`**, and the highlight index survives across poll
+/// passes." The row index itself lives in the shared runtime menu
+/// model; this names the label row it selects.
+#[cfg(test)]
+const INTRO_MENU_DEFAULT_HIGHLIGHT: IntroSubflow =
+    INTRO_MENU_LABELS[u5_runtime::INTRO_MENU_INITIAL_HIGHLIGHT_ROW as usize].0;
 
-/// `systems/intro.md §6.2`: after two hundred consecutive no-key
-/// menu poll passes the intro enters the Return-to-View preview as if
-/// `R` had been pressed. This counts *poll passes*, not BIOS ticks.
-const INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES: u16 = 200;
+/// `systems/intro.md §6.2`: "Two hundred consecutive no-key passes |
+/// Commit `Return to the View` exactly as though `R` had been
+/// pressed." This counts *poll passes*, not BIOS ticks.
+const INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES: u16 = u5_runtime::INTRO_MENU_IDLE_TIMEOUT_PASSES;
 /// `cleak/u5-spec#78`: one no-key menu idle poll pass costs two DOS
 /// BIOS user-ticks (~110 ms) — the title-tick helper carries a
 /// one-tick wait in its own body (`cleak/u5-spec#68`) and the rest of
@@ -1226,40 +1160,39 @@ pub fn run_visual_loop(
     // Optional pre-screenshot keystrokes (single chars), e.g.
     // `U5_BEVY_PRESS=dddss` to step east 3 then south 2 before the shot.
     let preset_keys: Vec<char> = preset_keys_from_env();
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Ultima V".into(),
-                resolution: (display_w, display_h).into(),
-                resizable: true,
-                ..default()
-            }),
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Ultima V".into(),
+            resolution: (display_w, display_h).into(),
+            resizable: true,
             ..default()
-        }))
-        .add_audio_source::<VisualSoundWave>()
-        .add_event::<VisualSoundCue>()
-        .insert_resource(ClearColor(Color::BLACK))
-        .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
-        .insert_resource(ScreenshotConfig {
-            path: screenshot_path,
-            frame_delay: screenshot_delay,
-            preset_keys,
-        })
-        .insert_resource(ScreenshotState::default())
-        .add_systems(Startup, (setup, setup_visual_sound_bank))
-        .insert_resource(AnimationPump::default())
-        .add_systems(
-            Update,
-            (
-                drive_visual,
-                animate_static_tiles,
-                play_visual_sound_cues,
-                cleanup_visual_sound_cues,
-                screenshot_system,
-            )
-                .chain(),
+        }),
+        ..default()
+    }))
+    .insert_resource(ClearColor(Color::BLACK))
+    .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
+    .insert_resource(ScreenshotConfig {
+        path: screenshot_path,
+        frame_delay: screenshot_delay,
+        preset_keys,
+    })
+    .insert_resource(ScreenshotState::default())
+    .add_systems(Startup, setup)
+    .insert_resource(AnimationPump::default())
+    .add_systems(
+        Update,
+        (
+            drive_visual,
+            animate_static_tiles,
+            play_speaker_effects,
+            expire_speaker_voice,
+            screenshot_system,
         )
-        .run();
+            .chain(),
+    );
+    add_speaker_audio(&mut app);
+    app.run();
 
     Ok(())
 }
@@ -1619,7 +1552,16 @@ pub fn visual_route_suite(
         reports.push(initial);
 
         for (index, command) in case.script.iter().enumerate() {
-            apply_visual_route_command(&mut state, command, command_game_dir)?;
+            apply_visual_route_command(&mut state, command, command_game_dir).map_err(|err| {
+                io::Error::new(
+                    err.kind(),
+                    format!(
+                        "visual route `{}` step {} command `{command}`: {err}",
+                        case.label,
+                        index + 1
+                    ),
+                )
+            })?;
             if reload_checkpoints.contains(&(index + 1)) {
                 let Some(save_dir) = reload_save_dir.as_deref() else {
                     return Err(io::Error::other(format!(
@@ -1641,8 +1583,10 @@ pub fn visual_route_suite(
                 && !visual_route_allows_unchanged_step(case.label, index + 1)
             {
                 return Err(io::Error::other(format!(
-                    "visual route suite `{}` command `{}` did not change the frame",
-                    case.label, command
+                    "visual route suite `{}` step {} command `{}` did not change the frame",
+                    case.label,
+                    index + 1,
+                    command
                 )));
             }
             previous_hash = report.byte_hash;
@@ -2370,8 +2314,8 @@ fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
         | "route-reload-dungeon-ladder-down-up-route"
         | "route-reload-dungeon-surface-exit-return-world" => &[1],
         "route-reload-underworld-fixed-hidden-stack-search-get-search"
-        | "route-reload-horse-trader-horse-and-rider-buy-pass"
-        | "route-reload-castle-jimmy-prisoner-release" => &[2],
+        | "route-reload-horse-trader-horse-and-rider-buy-pass" => &[2],
+        "route-reload-castle-jimmy-prisoner-release" => &[3],
         _ => &[],
     }
 }
@@ -2781,12 +2725,19 @@ fn seed_visual_suite_combat(state: &mut PlayState, game_dir: &Path) -> io::Resul
         ARENA_INDEX,
         record,
     )?;
-    let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(ARENA_INDEX);
+    // `combat.md` places the terrain-combat replacement roll behind the base
+    // class's *companion*, not behind a per-arena replacement tile. The
+    // conformance audit deleted the old per-arena table; derive the companion
+    // exactly the way the production path does so the galleries exercise the
+    // same placement the game does.
+    let companion_class = setup
+        .base_class
+        .and_then(|stats| combat_class_companion(stats.class));
     let replacement_rolls = vec![0; usize::from(REQUESTED_MONSTERS)];
     let mut instance = terrain_combat_instance_from_setup(
         &setup,
         REQUESTED_MONSTERS,
-        replacement_tile,
+        companion_class,
         &replacement_rolls,
     )?;
     if instance.placed_count == 0 {
@@ -2797,12 +2748,14 @@ fn seed_visual_suite_combat(state: &mut PlayState, game_dir: &Path) -> io::Resul
             ),
         ));
     }
-    state.populate_combat_party_at_placement_slots(
+    // `cbt.md §5` + `combat.md §5`: party seats come from the per-arena entry
+    // table (X from column 11 + i, Y from column 17 + i), never from the
+    // monster placement slots.
+    state.populate_combat_party_with_positions(
         &mut instance.active_objects,
         &mut instance.actors,
         trigger.z,
-        &setup.placement_slots,
-        usize::from(instance.placed_count),
+        &terrain_combat_party_entry_positions(&setup),
     );
     state.enter_combat_frame_with_terrain(
         instance.active_objects,
@@ -2954,10 +2907,12 @@ fn push_visual_combat_gallery_reports(
             arena_index,
             record,
         )?;
-        let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(arena_index);
+        let companion_class = setup
+            .base_class
+            .and_then(|stats| combat_class_companion(stats.class));
         let replacement_rolls = vec![0; 16];
         let mut instance =
-            terrain_combat_instance_from_setup(&setup, 16, replacement_tile, &replacement_rolls)?;
+            terrain_combat_instance_from_setup(&setup, 16, companion_class, &replacement_rolls)?;
 
         let mut state = PlayState::load_scene(
             game_dir,
@@ -2966,12 +2921,11 @@ fn push_visual_combat_gallery_reports(
                 ..PlayOptions::default()
             },
         )?;
-        state.populate_combat_party_at_placement_slots(
+        state.populate_combat_party_with_positions(
             &mut instance.active_objects,
             &mut instance.actors,
             trigger.z,
-            &setup.placement_slots,
-            usize::from(instance.placed_count),
+            &terrain_combat_party_entry_positions(&setup),
         );
         state.enter_combat_frame_with_terrain(
             instance.active_objects,
@@ -3078,14 +3032,22 @@ fn validate_visual_outdoor_combat_gallery_state(
             format!("outdoor arena {arena_index:02} setup metadata mismatch"),
         ));
     }
+    // `cbt.md §5` + `combat.md §5`: ordinary terrain combat seats the party
+    // from the selected arena record's OWN party entry coordinates — X from
+    // column 11 + i, Y from column 17 + i — so the seats differ per arena.
+    // `TERRAIN_COMBAT_PARTY_POSITIONS` is the `encounters.md §6` sleep-ambush
+    // fallback, used only by the entry that loads no arena record; validating
+    // every arena against it pinned one arena's seats onto all sixteen.
     validate_visual_combat_party_slots(
         state,
         WorldPlane::Britannia.save_floor(),
-        &TERRAIN_COMBAT_PARTY_POSITIONS,
+        &terrain_combat_party_entry_positions(setup),
         &format!("outdoor arena {arena_index:02} party"),
     )?;
 
-    let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(arena_index);
+    let companion_class = setup
+        .base_class
+        .and_then(|stats| combat_class_companion(stats.class));
     for spawn_index in 0..16 {
         let actor_slot = COMBAT_PARTY_ACTOR_SLOTS + spawn_index;
         let Some(placement) = setup.placement_slots.get(spawn_index).copied() else {
@@ -3106,13 +3068,26 @@ fn validate_visual_outdoor_combat_gallery_state(
                 ),
             ));
         }
-        let expected_tile = terrain_combat_tile_for_spawn_index(
+        // The spawn helper was renamed and its return type changed with the
+        // conformance audit: it yields a combat *class* now, not a tile.
+        // `combat_class_sprite_byte` is the published class-to-sprite mapping.
+        // The third argument is the base *class*, not the base tile — the
+        // helper's rename came with a type change, and passing `base_tile`
+        // silently produced a class number 128 away from the real one.
+        let base_class = setup.base_class.map(|stats| stats.class).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("outdoor arena {arena_index:02} has no base monster class"),
+            )
+        })?;
+        let expected_class = terrain_combat_class_for_spawn_index(
             spawn_index as u8,
             16,
-            setup.base_tile,
-            replacement_tile,
+            base_class,
+            companion_class,
             0,
         );
+        let expected_tile = combat_class_sprite_byte(expected_class);
         validate_visual_combat_actor_slot(
             state,
             actor_slot,
@@ -4149,28 +4124,28 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-castle-jimmy-magic-lock-no-picker",
             frame_kind: "visual route town frame",
             options: town_jimmy_no_roll.clone(),
-            script: &["J"],
+            script: &["J", "6"],
             configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-castle-jimmy-empty-restraint-no-picker",
             frame_kind: "visual route town frame",
             options: town_jimmy_no_roll,
-            script: &["J"],
+            script: &["J", "6"],
             configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-castle-jimmy-prisoner-release",
             frame_kind: "visual route town frame",
             options: town_jimmy_release.clone(),
-            script: &["J", "1"],
+            script: &["J", "6", "1"],
             configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-reload-castle-jimmy-prisoner-release",
             frame_kind: "visual route town frame",
             options: town_jimmy_release,
-            script: &["J", "1", "empty"],
+            script: &["J", "6", "1", "empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -8599,6 +8574,20 @@ fn seed_visual_route_jimmy_unoccupied_target(state: &mut PlayState, tile: u8) {
     let floor = state.current_floor().unwrap_or(0);
     let target_x = 2;
     let target_y = 1;
+    // Dropping the roster must drop the sprites the roster owned. An
+    // orphaned NPC record keeps its roster tag, and `town-mode.md §16`
+    // only skips *linked* NPC sprite classes from the free-roaming
+    // walker - so leaving a castle stable horse (`catalogs/npc-roster.md
+    // §4` tags `10`/`11`) behind here turns this Jimmy fixture into a
+    // horse-wander fixture that spends PRNG draws the route is trying to
+    // prove the Jimmy path never makes.
+    for npc in &state.npcs {
+        if let Some(slot) = npc.active_object {
+            if let Some(object) = state.active_objects.get_mut(slot) {
+                *object = ActiveObject::empty();
+            }
+        }
+    }
     state.npcs.clear();
     for object in &mut state.active_objects {
         if !object.is_empty() && object.x == target_x && object.y == target_y && object.z == floor {
@@ -8688,17 +8677,9 @@ fn seed_visual_route_wishing_well(state: &mut PlayState) {
 }
 
 fn seed_visual_route_death_vision(state: &mut PlayState) {
-    stamp_visual_route_look_tile(state, 0x00);
-    state.active_objects.push(ActiveObject {
-        type_byte: DEATH_VISION_OBJECT_CLASS,
-        tile: DEATH_VISION_OBJECT_CLASS,
-        x: state.player.x + 1,
-        y: state.player.y,
-        z: state.current_floor().unwrap_or(0),
-        phase: 0,
-        aux1: 0,
-        aux3: 0,
-    });
+    // `view.md §3` entry-dispatch row 2 tests the live terrain-layer
+    // byte, not an active-object descriptor.
+    stamp_visual_route_look_tile(state, DEATH_VISION_LOOK_TILE);
 }
 
 fn seed_visual_route_shadowlord_shard(state: &mut PlayState, index: usize, x: usize, y: usize) {
@@ -8769,22 +8750,30 @@ fn seed_visual_route_ruined_honesty_shrine(state: &mut PlayState) {
     state.mark_visibility_dirty();
 }
 
-/// `Y`, `Y`, then keystrokes enough to run the victory ending to its
-/// end: the rite beats, the tableau exit, the `endgame.md §7.1` fade to
-/// black, all six `END.DAT` narrative windows, the certificate and the
-/// elapsed-time report, finishing in the `§9.5` terminal hold.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 59] = {
-    let mut script = [""; 59];
+/// `Y`, `Y`, then display frames and keystrokes enough to run the victory
+/// ending to its end: the rite lead-in and beats, the tableau exit, the
+/// `endgame.md §7.1` fade to black, all six `END.DAT` narrative windows,
+/// the certificate and elapsed-time report, finishing in the `§9.5`
+/// terminal hold.
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 98] = {
+    let mut script = [""; 98];
     script[0] = "Y";
     script[1] = "Y";
-    // Seven message-dismissal keys occupy 2..=8. The next display
-    // frame publishes the Orb, index 10 acknowledges it, and the
-    // 40 automatic frames cover the 15-phase rise, four full-height
-    // ticks, one-member/Lord-British exits, 15-phase sink, floor
-    // restore, and fade. The remaining eight keys reach terminal hold.
-    script[9] = "endgame:frame";
-    let mut index = 11;
-    while index < 51 {
+    // Forty display frames occupy 2..=41 for the rite lead-in, whose last
+    // tick advances to "He says". Six dismissal keys occupy 42..=47. The
+    // next display frame publishes the Orb, index 49 acknowledges it, and
+    // the 40 automatic
+    // frames cover the 15-phase rise, four full-height ticks,
+    // one-member/Lord-British exits, 15-phase sink, floor restore, and
+    // fade. The remaining eight keys reach terminal hold.
+    let mut index = 2;
+    while index < 42 {
+        script[index] = "endgame:frame";
+        index += 1;
+    }
+    script[48] = "endgame:frame";
+    index = 50;
+    while index < 90 {
         script[index] = "endgame:frame";
         index += 1;
     }
@@ -9078,7 +9067,7 @@ fn visual_route_frame_is_intentionally_black(label: &str) -> bool {
 /// `§7.1` fade. Pinned so a change in the beat ordering fails the suite
 /// rather than silently moving the black frame somewhere else.
 const ENDGAME_FADE_TO_BLACK_FRAME_LABEL: &str =
-    "route-endgame-box-full-victory-cinematic-50-endgame_frame";
+    "route-endgame-box-full-victory-cinematic-89-endgame_frame";
 
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // `endgame.md §4`: the restoration beat is a held frame - a short
@@ -9088,7 +9077,7 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // is pixel-identical to the tableau's authored floor tile. Those
     // steps therefore produce byte-identical frames today.
     (route_label == "route-endgame-tableau-walk-in")
-        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=59).contains(&step))
+        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=98).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
         || (route_label == "route-castle-light-decay-route" && (1..=2).contains(&step))
         || (route_label.starts_with("route-shop-arms-")
@@ -9133,8 +9122,6 @@ fn run_visual_intro_menu_app(
         }),
         ..default()
     }))
-    .add_audio_source::<VisualSoundWave>()
-    .add_event::<VisualSoundCue>()
     .insert_resource(ClearColor(Color::BLACK))
     .insert_resource(VisualIntroState {
         game_dir,
@@ -9153,6 +9140,8 @@ fn run_visual_intro_menu_app(
         modal_backing: None,
         menu_idle_ticks: 0,
         menu_idle_bios_ticks: 0,
+        menu_cursor_pass: 0,
+        menu_cursor_blanked: false,
         message_waiting_for_key: false,
         message: String::new(),
         panel: VisualIntroPanel::Menu,
@@ -9162,15 +9151,20 @@ fn run_visual_intro_menu_app(
         text_windows,
         pending_pre_flourish_outcome: Some(pre_flourish_outcome),
         title_tick_frames: None,
+        pending_reveal_clicks: Vec::new(),
     })
     .insert_resource(VisualIntroAnimationPump::default())
+    // Journey Onward reuses this App. Keep the gameplay wait-loop clock alive
+    // from startup so it can begin on the first full `VisualState` frame.
+    .insert_resource(AnimationPump::default())
     .insert_resource(ScreenshotConfig {
         path: screenshot_path,
         frame_delay: screenshot_delay,
         preset_keys,
     })
     .insert_resource(ScreenshotState::default())
-    .add_systems(Startup, (setup_intro, setup_visual_sound_bank));
+    .add_systems(Startup, setup_intro);
+    add_speaker_audio(&mut app);
     add_visual_intro_update_systems(&mut app);
     app.run();
 }
@@ -9187,89 +9181,106 @@ fn add_visual_intro_update_systems(app: &mut App) {
             drive_visual,
             drive_visual_intro,
             animate_visual_intro_title_effects,
-            play_visual_sound_cues,
-            cleanup_visual_sound_cues,
+            // Inert while the intro owns the framebuffer; after Journey
+            // Onward this is the resident idle wait-loop redraw tick.
+            animate_static_tiles,
+            play_speaker_effects,
+            expire_speaker_voice,
             screenshot_system,
         )
             .chain(),
     );
 }
 
-fn setup_visual_sound_bank(mut commands: Commands, mut sounds: ResMut<Assets<VisualSoundWave>>) {
-    let elapsed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(Duration::ZERO);
-    let mut jitter_seed = elapsed.subsec_nanos() ^ elapsed.as_secs() as u32;
-    let mut add = |cue| {
-        jitter_seed = jitter_seed.wrapping_add(0x9e37_79b9);
-        sounds.add(visual_sound_wave(cue, jitter_seed))
-    };
-    commands.insert_resource(VisualSoundBank {
-        combat_blocked: add(VisualSoundCue::CombatBlocked),
-        combat_escape: add(VisualSoundCue::CombatEscape),
-        combat_possession: add(VisualSoundCue::CombatPossession),
-        combat_summon: add(VisualSoundCue::CombatSummon),
-        dungeon_decoration_sweep_0: add(VisualSoundCue::DungeonDecorationSweep0),
-        dungeon_decoration_sweep_1: add(VisualSoundCue::DungeonDecorationSweep1),
-        dungeon_decoration_sweep_2: add(VisualSoundCue::DungeonDecorationSweep2),
-        potion_flash: add(VisualSoundCue::PotionFlash),
-        ring_vanish: add(VisualSoundCue::RingVanish),
-        shrine_word_rumble: add(VisualSoundCue::ShrineWordRumble),
-        stonegate_tone: add(VisualSoundCue::StonegateTone),
-        stolen_warning: add(VisualSoundCue::StolenWarning),
-        trap_sting: add(VisualSoundCue::TrapSting),
-        wind_change: add(VisualSoundCue::WindChange),
-        subtitle_ignition: add(VisualSoundCue::SubtitleIgnition),
-    });
+/// Register the PC-speaker backend on an app.
+///
+/// Both shells - `run_visual_app` and the intro app - call this so the single
+/// voice, the jitter stream, and the effect channel exist on either path. The
+/// intro needs it too: `audio.md §7.1`'s subtitle-ignition burst fires while
+/// `VisualIntroState`, not `VisualState`, owns the frame.
+fn add_speaker_audio(app: &mut App) {
+    app.add_audio_source::<VisualSoundWave>()
+        .add_event::<SpeakerEffect>()
+        .init_resource::<SpeakerJitter>();
 }
 
-fn play_visual_sound_cues(
+/// Play queued effects on the one speaker voice.
+///
+/// `audio.md §2`: "The speaker is a single mono, one-bit channel. There is no
+/// mixing. Starting a new tone replaces the previous timer divisor." So this
+/// system despawns any live voice before spawning the next one, and never lets
+/// two rendered effects overlap.
+///
+/// Every queued effect is lowered through [`SoundEffect::program`], which is
+/// what advances the `§5.3` jitter stream - so a superseded or muted effect
+/// still performs its state advance. Only the surviving effect is rendered,
+/// because only it reaches the speaker.
+fn play_speaker_effects(
     mut commands: Commands,
-    bank: Res<VisualSoundBank>,
-    mut cues: EventReader<VisualSoundCue>,
+    mut jitter: ResMut<SpeakerJitter>,
+    mut waves: ResMut<Assets<VisualSoundWave>>,
+    mut queued: EventReader<SpeakerEffect>,
+    voices: Query<Entity, With<SpeakerVoice>>,
 ) {
-    for cue in cues.read().copied() {
-        let handle = match cue {
-            VisualSoundCue::CombatBlocked => &bank.combat_blocked,
-            VisualSoundCue::CombatEscape => &bank.combat_escape,
-            VisualSoundCue::CombatPossession => &bank.combat_possession,
-            VisualSoundCue::CombatSummon => &bank.combat_summon,
-            VisualSoundCue::DungeonDecorationSweep0 => &bank.dungeon_decoration_sweep_0,
-            VisualSoundCue::DungeonDecorationSweep1 => &bank.dungeon_decoration_sweep_1,
-            VisualSoundCue::DungeonDecorationSweep2 => &bank.dungeon_decoration_sweep_2,
-            VisualSoundCue::PotionFlash => &bank.potion_flash,
-            VisualSoundCue::RingVanish => &bank.ring_vanish,
-            VisualSoundCue::ShrineWordRumble => &bank.shrine_word_rumble,
-            VisualSoundCue::StonegateTone => &bank.stonegate_tone,
-            VisualSoundCue::StolenWarning => &bank.stolen_warning,
-            VisualSoundCue::TrapSting => &bank.trap_sting,
-            VisualSoundCue::WindChange => &bank.wind_change,
-            VisualSoundCue::SubtitleIgnition => &bank.subtitle_ignition,
+    let mut current: Option<(SpeakerProgram, bool)> = None;
+    for queued_effect in queued.read() {
+        // `audio.md §3`: muting "changes output, not command or animation
+        // cadence", so the program is built - and the jitter stream advanced -
+        // for every effect, audible or not.
+        let program = match &queued_effect.source {
+            SpeakerSource::Effect(effect) => {
+                debug!(
+                    ?effect,
+                    audible = queued_effect.audible,
+                    "queued PC-speaker effect"
+                );
+                effect.program(&mut jitter.0)
+            }
+            SpeakerSource::Program(program) => program.clone(),
         };
-        let spec = visual_sound_spec(cue);
-        if cue == VisualSoundCue::SubtitleIgnition {
-            debug!(?cue, "queued visual PC-speaker cue");
-        } else {
-            info!(?cue, "queued visual PC-speaker cue");
-        }
-        commands.spawn((
-            AudioPlayer(handle.clone()),
-            PlaybackSettings::ONCE.with_volume(Volume::Linear(spec.volume)),
-            VisualSoundLifetime(Timer::new(
-                spec.duration + Duration::from_millis(100),
-                TimerMode::Once,
-            )),
-        ));
+        current = Some((program, queued_effect.audible));
     }
+    let Some((program, audible)) = current else {
+        return;
+    };
+
+    // One channel: whatever was sounding stops here.
+    for entity in &voices {
+        commands.entity(entity).despawn();
+    }
+
+    // `audio.md §2` stops the speaker at the specified end, so the voice lives
+    // for exactly the program's own duration with no padding. The duration is a
+    // function of the sound setting because `cleak/u5-spec#146` withdrew mute
+    // invariance for the software envelope: its silent arm runs faster.
+    let mut voice = commands.spawn((
+        SpeakerVoice,
+        SpeakerVoiceLifetime(Timer::new(program.duration(audible), TimerMode::Once)),
+    ));
+    if !audible {
+        return;
+    }
+    let rendered = render_program(&program, true);
+    if rendered.samples.is_empty() {
+        // `audio.md §5.2`: a negative-span glissando emits no tone update and
+        // performs only the final stop. It still owns the voice; it just has
+        // nothing to play.
+        return;
+    }
+    voice.insert((
+        AudioPlayer(waves.add(speaker_wave(&rendered))),
+        PlaybackSettings::ONCE.with_volume(Volume::Linear(SPEAKER_VOLUME)),
+    ));
 }
 
-fn cleanup_visual_sound_cues(
+/// Retire the voice when its program's duration has elapsed.
+fn expire_speaker_voice(
     time: Res<Time>,
     mut commands: Commands,
-    mut sounds: Query<(Entity, &mut VisualSoundLifetime)>,
+    mut voices: Query<(Entity, &mut SpeakerVoiceLifetime)>,
 ) {
-    for (entity, mut lifetime) in &mut sounds {
-        if lifetime.0.tick(time.delta()).just_finished() {
+    for (entity, mut lifetime) in &mut voices {
+        if lifetime.0.tick(time.delta()).finished() {
             commands.entity(entity).despawn();
         }
     }
@@ -9492,6 +9503,47 @@ struct VisualState {
     /// White owns one ordinary idle redraw immediately after its twentieth
     /// frozen-visibility repaint.
     white_idle_redraw_pending: bool,
+    /// Host-side typematic state for physical movement keys. The original
+    /// input loop flushes queued type-ahead after every action, so this emits
+    /// at most one fresh direction at a time after an initial hold delay.
+    held_direction_repeat: HeldDirectionRepeat,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct HeldDirectionRepeat {
+    key: Option<KeyCode>,
+    elapsed: Duration,
+    repeating: bool,
+}
+
+impl HeldDirectionRepeat {
+    fn press(&mut self, key: KeyCode) {
+        self.key = Some(key);
+        self.elapsed = Duration::ZERO;
+        self.repeating = false;
+    }
+
+    fn release(&mut self) {
+        *self = Self::default();
+    }
+
+    fn advance(&mut self, delta: Duration) -> bool {
+        if self.key.is_none() {
+            return false;
+        }
+        self.elapsed = self.elapsed.saturating_add(delta);
+        let threshold = if self.repeating {
+            HELD_DIRECTION_REPEAT_INTERVAL
+        } else {
+            HELD_DIRECTION_INITIAL_DELAY
+        };
+        if self.elapsed < threshold {
+            return false;
+        }
+        self.elapsed = self.elapsed.saturating_sub(threshold);
+        self.repeating = true;
+        true
+    }
 }
 
 #[derive(Resource)]
@@ -9528,6 +9580,18 @@ struct VisualIntroState {
     /// poll pass; a pass completes every
     /// [`INTRO_MENU_IDLE_POLL_BIOS_TICKS`] ticks.
     menu_idle_bios_ticks: u16,
+    /// `systems/intro.md §6.1` "The cursor cell": completed menu poll
+    /// passes, which is the phase of the four-glyph `0x05..=0x08`
+    /// cursor cycle parked at row 15, column 23. One phase per pass.
+    ///
+    /// Unlike [`Self::menu_idle_ticks`] this is not an idle *timeout*
+    /// counter: it is never reset by reaching the Return-to-View
+    /// threshold, so the hatch keeps marching across the cell.
+    menu_cursor_pass: u64,
+    /// `systems/intro.md §6.1`: "The instant a poll returns a key the
+    /// cell is overwritten with a space." Set when a key is dispatched
+    /// to the menu, cleared by the next no-key poll pass.
+    menu_cursor_blanked: bool,
     message_waiting_for_key: bool,
     message: String,
     panel: VisualIntroPanel,
@@ -9552,6 +9616,14 @@ struct VisualIntroState {
     /// (`cleak/u5-spec#78`). Left `None` until the first menu render,
     /// which decodes the directory once.
     title_tick_frames: Option<TitleTickFrameSet>,
+    /// `audio.md §8.6`: clicks the gated start/menu reveal produced, waiting
+    /// for the speaker system to drain them.
+    ///
+    /// The reveal runs inside a display-buffer helper with no access to the
+    /// speaker queue, and its callers are plain state transitions, so the
+    /// clicks are parked here and drained by the same system that queues the
+    /// §7.1 ignition bursts.
+    pending_reveal_clicks: Vec<SoundEffect>,
 }
 
 #[derive(Debug, Default)]
@@ -9714,7 +9786,15 @@ impl AcknowledgementsPanelState {
         self.hidden.clear(0);
         self.hidden
             .draw_title_tick(ACK_MENU_REBUILD_TITLE_TICK_FRAME, &self.title_tick_frames);
-        draw_visual_intro_menu_text_window_frame(&mut self.hidden, &self.menu_font);
+        // The credits page is on screen through this rebuild and the
+        // menu is not being polled, so the §6.1 cursor cell is composed
+        // at its first phase; the live cycle resumes from the menu's
+        // own pass counter once the close phase publishes the page.
+        draw_visual_intro_menu_text_window_frame(
+            &mut self.hidden,
+            &self.menu_font,
+            intro_menu_select_caption_cursor_glyph(0),
+        );
         draw_visual_intro_menu_labels(
             &mut self.hidden,
             &self.menu_font,
@@ -9827,9 +9907,13 @@ fn open_visual_acknowledgements_panel(intro: &mut VisualIntroState) -> VisualInt
 /// The part and close phases ask for exactly one hardware timer tick per
 /// step, which is the pump's own cadence, so they consume one call per
 /// step. The rise and sink phases carry no wait at all and therefore run
-/// as one unpaced burst — the same treatment `cleak/u5-spec#53` gave the
-/// story reveal, where no wall-clock duration is published and there is
-/// no rate to spread the steps over frames with.
+/// as one unpaced burst — `timing.md §5.1`: "The pillar slide phases are
+/// unpaced: 137 rise steps and 136 sink steps run back to back at draw
+/// speed." That is the same treatment `cleak/u5-spec#53` gave the story
+/// reveal, which is an *ungated* dissolve and so has no published
+/// wall-clock duration to spread over frames. It is not the treatment the
+/// gated start/menu reveal gets: §5.1 publishes a per-visit calibrated
+/// hold for that one call.
 fn advance_visual_intro_acknowledgements(intro: &mut VisualIntroState) -> bool {
     let VisualIntroPanel::Acknowledgements(panel) = &mut intro.panel else {
         return false;
@@ -9845,10 +9929,19 @@ fn advance_visual_intro_acknowledgements(intro: &mut VisualIntroState) -> bool {
     if let VisualIntroPanel::Acknowledgements(panel) = finished {
         intro.surface = panel.visible;
     }
-    // Step 6 published title-tick frame 0 (`ULTIMA` record 1) and step
-    // 11 restaged the atlas, so the menu resumes its flame cycle there.
+    // `systems/intro.md §5` "Slot-to-frame order and starting frame":
+    // the title-tick index is **free-running driver state** - "nothing in
+    // the intro resets it", and an engine "must model the index as a
+    // single long-lived counter, not as 'restart at zero for each
+    // screen'". The return from Acknowledgements is the one place the
+    // band's *contents* are decoupled from the counter: step 6 repainted
+    // the band statically from `ULTIMA` record 1 (frame 0), "while the
+    // counter keeps its own position (section 11.2, step 6)".
+    //
+    // So the visible band is pinned to the step-6 repaint and the counter
+    // is deliberately left alone; the next tick resumes the cycle from
+    // wherever it had reached before the credits page.
     intro.title_tick_visible_frame = ACK_MENU_REBUILD_TITLE_TICK_FRAME;
-    intro.title_tick_frame = title_tick_next_frame(ACK_MENU_REBUILD_TITLE_TICK_FRAME);
     intro.dispatch.complete_subflow(
         IntroSubflow::Acknowledgements,
         IntroSubflowResult::ReturnedToMenu,
@@ -9875,10 +9968,9 @@ struct VisualReturnToViewFrameMeta {
     caption: Option<&'static str>,
 }
 
-/// Drives the static-tile animator (water cycle) at a fixed wall-clock
-/// cadence so the world looks alive even when the player isn't moving.
-/// Original U5 advances frames on every render tick; we use ~3 Hz which
-/// roughly matches the EGA waterfall pacing the user sees in DOSBox.
+/// Drives the five published static-tile families at a stable simulation
+/// cadence so the world remains animated while input is idle. The cadence is
+/// intentionally independent of host render FPS (`animation.md §2`).
 #[derive(Resource)]
 struct AnimationPump {
     accumulator: f32,
@@ -9910,14 +10002,27 @@ impl Default for VisualIntroAnimationPump {
 }
 
 fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> (bool, f32) {
-    state
-        .white_potion_sweep
-        .map_or((false, ordinary_interval), |sweep| {
+    state.white_potion_sweep.map_or_else(
+        || {
+            let paced_combat_waiting = state.combat_active
+                && state.pace_combat_presentations
+                && state.pending_combat_actor_slot.is_none();
+            (
+                false,
+                if paced_combat_waiting {
+                    PACED_COMBAT_PRESENTATION_INTERVAL_SECS
+                } else {
+                    ordinary_interval
+                },
+            )
+        },
+        |sweep| {
             (
                 true,
                 BIOS_USER_TICK_INTERVAL_SECS * f32::from(sweep.pause_bios_ticks_per_frame.max(1)),
             )
-        })
+        },
+    )
 }
 
 fn animate_static_tiles(
@@ -9975,6 +10080,19 @@ fn animate_static_tiles(
             pump.accumulator -= interval;
         }
         let mut prompt_cursor_visible = visual.prompt_cursor_visible;
+        if visual.state.combat_active
+            && visual.state.pace_combat_presentations
+            && visual.state.pending_combat_actor_slot.is_none()
+        {
+            advance_paced_combat_presentation(&mut visual.state);
+            visual.prompt_cursor_visible = false;
+            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            // One automatic action owns one visible host frame. A slow frame
+            // must never collapse several combat actions into one redraw.
+            pump.accumulator = 0.0;
+            advanced = true;
+            break;
+        }
         let gate_outcome = if visual_modal_prompt_active(&visual.state) {
             None
         } else {
@@ -10054,6 +10172,7 @@ fn setup(
         text_font,
         rune_font,
     } = bootstrap;
+    state.pace_combat_presentations = true;
 
     let rgba = render_visual_play_frame_with_input(
         &mut state,
@@ -10107,6 +10226,7 @@ fn setup(
         potion_flash_restore_pending: None,
         skip_animation_pump_once: false,
         white_idle_redraw_pending: false,
+        held_direction_repeat: HeldDirectionRepeat::default(),
     });
     commands.remove_resource::<PendingBootstrap>();
 }
@@ -10226,6 +10346,7 @@ fn transition_visual_intro_to_gameplay(
     });
     let (mut state, atlas, text_font, rune_font) =
         launch.unwrap_or_else(|err| panic!("Journey Onward launch failed: {err}"));
+    state.pace_combat_presentations = true;
     let image_handle = intro
         .image_handle
         .clone()
@@ -10272,8 +10393,93 @@ fn transition_visual_intro_to_gameplay(
         potion_flash_restore_pending: None,
         skip_animation_pump_once: false,
         white_idle_redraw_pending: false,
+        held_direction_repeat: HeldDirectionRepeat::default(),
     });
     commands.remove_resource::<VisualIntroState>();
+}
+
+/// `audio.md §7.1`: the speaker effect one subtitle-ignition publication owns.
+///
+/// "An admitted burst emits 25 successive frequencies", and `intro.md §5`
+/// publishes the exact recurrence, which the runtime has already evaluated into
+/// this publication's own `burst_pitches`. A publication whose gate did not
+/// admit a burst "emit[s] no burst and perform[s] no audio wait", so it yields
+/// nothing.
+///
+/// The burst ignores `PlayState::music_enabled`: `audio.md §7.1` states the
+/// transition "cannot be muted through Ctrl-S because it occurs before that
+/// gameplay command is available".
+fn subtitle_ignition_burst(publish: &SubtitleIgnitionPublish) -> Option<SpeakerEffect> {
+    if !publish.speaker_burst {
+        return None;
+    }
+    Some(SpeakerEffect::always_audible(
+        SoundEffect::SubtitleIgnitionBurst {
+            pitches: publish.burst_pitches.as_slice().into(),
+        },
+    ))
+}
+
+/// Queue the burst of the publication that is currently on screen, exactly
+/// once. `sounded_publish` remembers which publication has already burst, so a
+/// frame that does not advance the ignition re-queues nothing.
+/// `audio.md §8.6` / `display-driver-abi.md §9.6`: drain the clicks the gated
+/// start/menu reveal produced.
+///
+/// §7.1's note that the ignition "cannot be muted through Ctrl-S because it
+/// occurs before that gameplay command is available" applies here for the same
+/// reason — this reveal runs before gameplay accepts Ctrl-S — so the clicks are
+/// always audible.
+fn queue_start_menu_reveal_clicks(
+    intro: &mut VisualIntroState,
+    speaker: &mut EventWriter<SpeakerEffect>,
+) {
+    if intro.pending_reveal_clicks.is_empty() {
+        return;
+    }
+    // `§8.6.1`: the run is one enabled speaker retuned per click, ending in a
+    // single stop at the shared exit - not a train of separate effects. `§2`
+    // allows one voice, so the clicks have to reach it as one program or all
+    // but the last would be discarded.
+    let pitches: Vec<u16> = intro
+        .pending_reveal_clicks
+        .drain(..)
+        .filter_map(|effect| match effect {
+            SoundEffect::DissolveClick { frequency_hz } => Some(frequency_hz),
+            _ => None,
+        })
+        .collect();
+    if pitches.is_empty() {
+        return;
+    }
+    speaker.write(SpeakerEffect::always_audible_program(
+        u5_runtime::audio::dissolve_click_run(&pitches),
+    ));
+}
+
+fn queue_subtitle_ignition_burst(
+    intro: &VisualIntroState,
+    speaker: &mut EventWriter<SpeakerEffect>,
+    sounded_publish: &mut Option<usize>,
+) {
+    let VisualIntroPanel::SubtitleIgnition {
+        playback,
+        publish_index,
+    } = &intro.panel
+    else {
+        *sounded_publish = None;
+        return;
+    };
+    if *sounded_publish == Some(*publish_index) {
+        return;
+    }
+    *sounded_publish = Some(*publish_index);
+    let Some(publish) = playback.publishes.get(*publish_index) else {
+        return;
+    };
+    if let Some(burst) = subtitle_ignition_burst(publish) {
+        speaker.write(burst);
+    }
 }
 
 fn animate_visual_intro_title_effects(
@@ -10281,9 +10487,11 @@ fn animate_visual_intro_title_effects(
     mut pump: ResMut<VisualIntroAnimationPump>,
     intro: Option<ResMut<VisualIntroState>>,
     mut images: ResMut<Assets<Image>>,
-    mut sound_cues: EventWriter<VisualSoundCue>,
+    mut speaker: EventWriter<SpeakerEffect>,
+    mut sounded_publish: Local<Option<usize>>,
 ) {
     let Some(mut intro) = intro else {
+        *sounded_publish = None;
         return;
     };
 
@@ -10302,16 +10510,17 @@ fn animate_visual_intro_title_effects(
     // paced (`cleak/u5-spec#68`, `cleak/u5-spec#77`).
     pump.interval = visual_intro_animation_interval(&intro);
 
-    let subtitle_ignition_active = matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. });
     let mut advanced = false;
     if advance_intro_animation_pump(&mut pump, time.delta_secs()) {
         advanced = advance_visual_intro_animation_tick(&mut intro);
     }
+    // Sound the publication that is current *now*, whether the panel was just
+    // entered or the tick above advanced it. `sounded_publish` makes this
+    // idempotent, so each publication bursts exactly once.
+    queue_subtitle_ignition_burst(&intro, &mut speaker, &mut sounded_publish);
+    queue_start_menu_reveal_clicks(&mut intro, &mut speaker);
     if !advanced {
         return;
-    }
-    if subtitle_ignition_active {
-        sound_cues.write(VisualSoundCue::SubtitleIgnition);
     }
 
     let rgba = render_intro_frame(&mut intro);
@@ -10593,10 +10802,21 @@ fn abort_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) -> bool {
 ///   Return-to-View preview once, before the menu is polled for the
 ///   first time. Only this first automatic showing is conditional;
 ///   the idle timeout and the explicit `R` command are unaffected.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct StartMenuLoaderOutcome {
     animated_after_reveal: bool,
     reveal_abort_key_consumed: bool,
+    /// `audio.md §8.6` / `display-driver-abi.md §9.6`: the percussive clicks
+    /// the gated start/menu reveal emitted, in visit order.
+    ///
+    /// §9.6 makes this the **only** dissolve in a normal session that clicks:
+    /// the driver-local gate is cleared permanently by the first fixed-cell
+    /// glyph draw and nothing re-enables it, so every later dissolve — the
+    /// intro story step-1 transition, the endgame fade, all three map-viewport
+    /// sites — is silent and uninterruptible. The clicks are carried out here
+    /// rather than emitted inside the transfer because the transfer runs on a
+    /// display buffer with no access to the speaker queue.
+    reveal_clicks: Vec<SoundEffect>,
 }
 
 fn run_visual_intro_start_menu_loader(
@@ -10614,6 +10834,7 @@ fn run_visual_intro_start_menu_loader(
     draw_visual_intro_start_menu_art_to_buffer(&mut source, &intro.game_dir, intro.raster_depth);
     let mut animated = !intro.title_sequence_skipped;
     let mut reveal_abort_key_consumed = false;
+    let mut reveal_clicks: Vec<SoundEffect> = Vec::new();
     if animated {
         let report = intro.surface.dissolve_rect_from_with_pending_key(
             &source,
@@ -10621,6 +10842,7 @@ fn run_visual_intro_start_menu_loader(
             u5_runtime::DissolveAbortGate::on_driver_load(),
             reveal_key_pending,
         );
+        reveal_clicks = report.clicks;
         if report.aborted_after.is_some() {
             reveal_abort_key_consumed = true;
             animated = false;
@@ -10671,6 +10893,7 @@ fn run_visual_intro_start_menu_loader(
     StartMenuLoaderOutcome {
         animated_after_reveal: animated,
         reveal_abort_key_consumed,
+        reveal_clicks,
     }
 }
 
@@ -10680,6 +10903,9 @@ fn finish_visual_intro_title_to_menu(
 ) -> StartMenuLoaderOutcome {
     intro.title_presents_hold_ticks = 0;
     let outcome = run_visual_intro_start_menu_loader(intro, reveal_key_pending);
+    intro
+        .pending_reveal_clicks
+        .extend(outcome.reveal_clicks.iter().cloned());
     if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
         return outcome;
     }
@@ -10833,8 +11059,15 @@ fn advance_visual_intro_story_auto_step(panel: &mut VisualIntroPanel) -> bool {
 /// it is complete by the time the frame that carries it has been presented and
 /// the loop moves straight on to step 2. It is deliberately not paced by the
 /// title tick - the withdrawn contract's per-column tick schedule was the only
-/// thing that ever paced it, and no wall-clock duration is published for any
-/// rectangle, so there is no rate to spread it over frames with.
+/// thing that ever paced it.
+///
+/// This dissolve runs after the driver's sound/abort gate has been cleared, so
+/// `timing.md §5.1`'s ungated row applies to it: "Self-paced inside one driver
+/// call ... It is not a per-column, per-tick loop". No wall-clock duration is
+/// published for an *ungated* rectangle, so there is no rate to spread this one
+/// over frames with. That is a statement about the ungated case alone: §5.1
+/// does publish a per-visit calibrated hold for the one gated dissolve, the
+/// first start/menu logo reveal - see `u5_runtime::GATED_DISSOLVE_CLICK_HOLD_NANOS`.
 fn advance_visual_intro_story_dissolve(panel: &mut VisualIntroPanel) -> bool {
     let VisualIntroPanel::Story {
         step, transition, ..
@@ -10920,6 +11153,12 @@ fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool
     {
         return false;
     }
+    // `systems/intro.md §6.1`: the cursor cell advances one phase per
+    // menu poll pass and stops being a space as soon as a pass runs
+    // without returning a key. Unlike the idle timeout below, the phase
+    // is never reset - it is a free-running four-glyph cycle.
+    intro.menu_cursor_pass = intro.menu_cursor_pass.wrapping_add(1);
+    intro.menu_cursor_blanked = false;
     intro.menu_idle_ticks = intro
         .menu_idle_ticks
         .checked_add(1)
@@ -10938,37 +11177,48 @@ fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool
     false
 }
 
-/// `systems/intro.md §6.2` + `cleak/u5-spec#78`: the row drawn in
-/// inverse video. The original enters the menu with row 0 ("Journey
-/// Onward") highlighted before any key is pressed, and thereafter the
-/// highlight tracks the recent-selection cache the §6.2
-/// repeat-by-Enter behaviour already maintains.
-fn visual_intro_menu_highlight(intro: &VisualIntroState) -> IntroSubflow {
-    intro
-        .dispatch
-        .intro
-        .cached_selection
-        .unwrap_or(INTRO_MENU_DEFAULT_HIGHLIGHT)
+/// `systems/intro.md §6.1` "The cursor cell": resolve cell 23 of row 15
+/// for the frame about to be drawn.
+///
+/// "It cycles the same four consecutive fixed-cell glyph codes `0x05`
+/// through `0x08` that the gameplay message window's input cursor uses
+/// ..., one phase per menu poll pass. ... The instant a poll returns a
+/// key the cell is overwritten with a space."
+fn visual_intro_menu_cursor_glyph(intro: &VisualIntroState) -> u8 {
+    if intro.menu_cursor_blanked {
+        INTRO_MENU_SELECT_CAPTION_CURSOR_BLANK
+    } else {
+        intro_menu_select_caption_cursor_glyph(intro.menu_cursor_pass)
+    }
 }
 
-/// `cleak/u5-spec#78`: step the highlight one row down (or up),
-/// wrapping around the six published rows.
-fn move_visual_intro_menu_highlight(intro: &mut VisualIntroState, down: bool) {
-    let current = visual_intro_menu_highlight(intro);
-    let count = INTRO_MENU_LABELS.len();
-    let index = INTRO_MENU_LABELS
+/// `systems/intro.md §6.2`: the row drawn in inverse video. "**The
+/// initial highlight is row 0, `Journey Onward`**, and the highlight
+/// index survives across poll passes."
+///
+/// The highlight index lives in the shared runtime menu model, so this
+/// is a straight read of `IntroMenu::highlight_row` resolved through
+/// §6.2's row-to-letter table. There is no recent-selection cache to
+/// consult; that reading is withdrawn.
+fn visual_intro_menu_highlight(intro: &VisualIntroState) -> IntroSubflow {
+    intro.dispatch.intro.highlight()
+}
+
+/// Move the highlight to the published row that names `subflow`.
+fn set_visual_intro_menu_highlight(intro: &mut VisualIntroState, subflow: IntroSubflow) {
+    let row = INTRO_MENU_LABELS
         .iter()
-        .position(|(subflow, _, _, _)| *subflow == current)
+        .position(|(candidate, _, _, _)| *candidate == subflow)
         .expect("menu highlight always names a published row");
-    let next = if down {
-        (index + 1) % count
-    } else {
-        (index + count - 1) % count
-    };
-    intro.dispatch.intro.cached_selection = Some(INTRO_MENU_LABELS[next].0);
+    intro.dispatch.intro.highlight_row = row as u8;
 }
 
 fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
+    // `systems/intro.md §6.1` "The cursor cell": "The instant a poll
+    // returns a key the cell is overwritten with a space." This is that
+    // poll returning a key; the cell stays blank until the next pass
+    // completes with no key.
+    intro.menu_cursor_blanked = true;
     if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
         // `systems/intro.md §5`: the driver's per-state status poll aborts
         // without consuming the pending key. The loader completes its normal
@@ -11055,19 +11305,10 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     // key has been read the one-shot is spent.
     intro.pending_auto_return_to_view = false;
     let key = if ch == '\r' { b'\r' } else { ch as u8 };
-    // `cleak/u5-spec#78`: besides the published letter hotkeys, the
-    // original moves the inverse-video highlight with the arrow keys
-    // and activates the highlighted row with Space or Enter.
-    if key == u5_runtime::INPUT_CODE_NORTH || key == u5_runtime::INPUT_CODE_SOUTH {
-        move_visual_intro_menu_highlight(intro, key == u5_runtime::INPUT_CODE_SOUTH);
-        return true;
-    }
-    let key = if key == b' ' { b'\r' } else { key };
-    if key == b'\r' && intro.dispatch.intro.cached_selection.is_none() {
-        // The menu is always presented with a highlighted row, so
-        // Enter always has a row to activate.
-        intro.dispatch.intro.cached_selection = Some(INTRO_MENU_DEFAULT_HIGHLIGHT);
-    }
+    // `systems/intro.md §6.2`: the arrow keys move the inverse-video
+    // highlight and Enter/Space commit whichever row it is on. All
+    // three resolve through the shared runtime menu model's highlight
+    // index, so nothing is rewritten or pre-seeded here.
     match intro.dispatch.submit_menu_key(key) {
         UnifiedMenuStep::EnteredSubflow(subflow) => resolve_visual_intro_subflow(intro, subflow),
         UnifiedMenuStep::Ignored => true,
@@ -11168,7 +11409,7 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             // visible highlight to Journey Onward; otherwise Enter immediately
             // starts chargen again. Do not replace the menu labels with an
             // engine-authored completion notice.
-            intro.dispatch.intro.cached_selection = Some(IntroSubflow::JourneyOnward);
+            set_visual_intro_menu_highlight(intro, IntroSubflow::JourneyOnward);
             intro.modal_backing = None;
             intro.menu_idle_ticks = 0;
             intro.message_waiting_for_key = false;
@@ -11179,6 +11420,10 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
 }
 
 fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
+    // `systems/intro.md §6.1` "The cursor cell": the poll returned a
+    // key, so the cell is blanked even though `Esc` is one of the keys
+    // the menu's §6.2 dispatch ignores.
+    intro.menu_cursor_blanked = true;
     if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
         // Escape reaches the same non-consuming ignition status poll as every
         // other key, so let the ordinary step finish the loader and offer the
@@ -11444,28 +11689,29 @@ fn visual_intro_empty_save_message() -> String {
     .join("\n")
 }
 
-fn queue_pending_visual_sound_cues(
+fn queue_pending_speaker_effects(
     visual: &mut VisualState,
-    sound_cues: &mut EventWriter<VisualSoundCue>,
+    speaker: &mut EventWriter<SpeakerEffect>,
 ) {
     let serial = visual.sound_effect_cursor;
     visual.sound_effect_cursor = visual.state.sound_effect_serial;
-    for cue in visual_sound_cues_after(serial, visual.state.music_enabled, &visual.state) {
-        sound_cues.write(cue);
+    for queued in speaker_effects_after(serial, visual.state.music_enabled, &visual.state) {
+        speaker.write(queued);
     }
 }
 
 fn drive_visual(
+    time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
     visual: Option<ResMut<VisualState>>,
     mut images: ResMut<Assets<Image>>,
     mut exit: EventWriter<AppExit>,
-    mut sound_cues: EventWriter<VisualSoundCue>,
+    mut speaker: EventWriter<SpeakerEffect>,
 ) {
     let Some(mut visual) = visual else {
         return;
     };
-    queue_pending_visual_sound_cues(&mut visual, &mut sound_cues);
+    queue_pending_speaker_effects(&mut visual, &mut speaker);
     if let Some(playback) = visual.potion_flash_restore_pending.take() {
         let v: &mut VisualState = visual.as_mut();
         v.skip_animation_pump_once = true;
@@ -11511,6 +11757,15 @@ fn drive_visual(
             PartyCapability::Sleeping | PartyCapability::Defeated => return,
         }
     }
+    if visual.state.combat_active
+        && visual.state.pace_combat_presentations
+        && visual.state.pending_combat_actor_slot.is_none()
+    {
+        // The animation pump presents automatic actors one at a time. Do not
+        // let a queued key become a player action before that walk reaches a
+        // ready party slot.
+        return;
+    }
     if keyboard.just_pressed(KeyCode::Escape) && should_escape_quit_visual(&visual.state) {
         exit.write(AppExit::Success);
         return;
@@ -11520,6 +11775,16 @@ fn drive_visual(
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     let control_pressed =
         keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
+    let modal_prompt_active =
+        visual_line_prompt_active(&visual.state) || visual_modal_prompt_active(&visual.state);
+    let repeat_command = held_direction_repeat_command(
+        &keyboard,
+        time.delta(),
+        &mut visual.held_direction_repeat,
+        shift_pressed,
+        control_pressed,
+        modal_prompt_active,
+    );
     for key in keyboard.get_just_pressed() {
         if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
@@ -11552,7 +11817,7 @@ fn drive_visual(
                 }
             }
         }
-        let Some(ch) = key_code_to_char(*key, shift_pressed, control_pressed) else {
+        let Some(ch) = key_code_to_command_char(*key, shift_pressed, control_pressed) else {
             continue;
         };
         let game_dir = visual.game_dir.clone();
@@ -11573,7 +11838,21 @@ fn drive_visual(
             }
         }
     }
-    queue_pending_visual_sound_cues(&mut visual, &mut sound_cues);
+    if !handled && let Some(ch) = repeat_command {
+        let game_dir = visual.game_dir.clone();
+        match handle_play_key_input(&mut visual.state, ch, "", &game_dir) {
+            Ok(PlayInputDisposition::Quit) => {
+                exit.write(AppExit::Success);
+                return;
+            }
+            Ok(PlayInputDisposition::Continue) => handled = true,
+            Err(err) => {
+                visual.state.message = format!("Input error: {err}");
+                handled = true;
+            }
+        }
+    }
+    queue_pending_speaker_effects(&mut visual, &mut speaker);
     if !handled {
         return;
     }
@@ -11581,11 +11860,11 @@ fn drive_visual(
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
     if let Some(playback) = v.state.take_pending_potion_flash() {
-        if v.state.music_enabled {
-            // `catalogs/item-list.md §7.2`: the accepted potion owns one
-            // blocking rumble/envelope presentation before its effect lands.
-            sound_cues.write(VisualSoundCue::PotionFlash);
-        }
+        // `audio.md §7.2` / `catalogs/item-list.md §7.2`: the accepted potion's
+        // blocking presentation is a `§6` shared variant, and the runtime
+        // already recorded it on `sound_effect_serial` when the bottle was
+        // decremented. The shell does not queue a second cue here; that is what
+        // made the potion sound twice.
         let mut rgba = images
             .get(&v.image_handle)
             .and_then(|image| image.data.clone())
@@ -11615,7 +11894,56 @@ fn drive_visual(
         v.prompt_cursor_visible,
     );
     replace_visual_image_data(&mut images, &v.image_handle, rgba, "play input redraw");
-    queue_pending_visual_sound_cues(v, &mut sound_cues);
+    queue_pending_speaker_effects(v, &mut speaker);
+}
+
+fn held_direction_key_to_command_char(
+    key: KeyCode,
+    shift_pressed: bool,
+    control_pressed: bool,
+) -> Option<char> {
+    use KeyCode::*;
+    let physical_direction = matches!(
+        key,
+        ArrowLeft | ArrowRight | ArrowUp | ArrowDown | Numpad2 | Numpad4 | Numpad6 | Numpad8
+    ) || (shift_pressed
+        && matches!(key, Digit2 | Digit4 | Digit6 | Digit8));
+    physical_direction
+        .then(|| key_code_to_command_char(key, shift_pressed, control_pressed))
+        .flatten()
+}
+
+fn held_direction_repeat_command(
+    keyboard: &ButtonInput<KeyCode>,
+    delta: Duration,
+    repeat: &mut HeldDirectionRepeat,
+    shift_pressed: bool,
+    control_pressed: bool,
+    modal_prompt_active: bool,
+) -> Option<char> {
+    if modal_prompt_active {
+        repeat.release();
+        return None;
+    }
+
+    if let Some(key) = keyboard.get_just_pressed().copied().find(|key| {
+        held_direction_key_to_command_char(*key, shift_pressed, control_pressed).is_some()
+    }) {
+        repeat.press(key);
+        return None;
+    }
+
+    let Some(key) = repeat.key else {
+        return None;
+    };
+    if !keyboard.pressed(key) {
+        repeat.release();
+        return None;
+    }
+    repeat
+        .advance(delta)
+        .then(|| held_direction_key_to_command_char(key, shift_pressed, control_pressed))
+        .flatten()
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
@@ -11862,7 +12190,8 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             // Source the title-tick strip once at first render so the
             // ULTIMA directory decode doesn't run every frame.
             let title_tick_frame = intro.title_tick_visible_frame;
-            let cached_selection = Some(visual_intro_menu_highlight(intro));
+            let highlighted = Some(visual_intro_menu_highlight(intro));
+            let cursor_glyph = visual_intro_menu_cursor_glyph(intro);
             let game_dir = intro.game_dir.clone();
             let raster_depth = intro.raster_depth;
             let frames = ensure_title_tick_frames(&mut *intro).clone();
@@ -11877,7 +12206,8 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
                 title_tick_frame,
                 &frames,
                 font.as_ref(),
-                cached_selection,
+                highlighted,
+                cursor_glyph,
             );
         }
 
@@ -11927,6 +12257,7 @@ fn draw_visual_intro_start_menu_to_buffer(
     title_tick_frames: &TitleTickFrameSet,
     font: Option<&FixedCellFont>,
     highlighted: Option<IntroSubflow>,
+    cursor_glyph: u8,
 ) {
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
     buffer.draw_title_tick(title_tick_frame, title_tick_frames);
@@ -11938,7 +12269,7 @@ fn draw_visual_intro_start_menu_to_buffer(
     let font = font.expect(
         "intro menu render requires the pre-flourish font-slot table; drawing the start/menu screen without its §6.1 frame and §6.2 labels is a forbidden fallback",
     );
-    draw_visual_intro_menu_text_window_frame(buffer, font);
+    draw_visual_intro_menu_text_window_frame(buffer, font, cursor_glyph);
     draw_visual_intro_menu_labels(buffer, font, highlighted);
 }
 
@@ -11986,7 +12317,11 @@ fn draw_visual_intro_menu_labels(
 /// still holds: the interior clear happens here at frame
 /// construction, and the label pass runs afterwards. Message text is
 /// overlaid on the finished RGBA frame, not through this pass.
-fn draw_visual_intro_menu_text_window_frame(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont) {
+fn draw_visual_intro_menu_text_window_frame(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    cursor_glyph: u8,
+) {
     let top = usize::from(INTRO_MENU_FRAME_TOP_Y);
     let bottom = usize::from(INTRO_MENU_FRAME_BOTTOM_Y);
     assert!(
@@ -12042,9 +12377,14 @@ fn draw_visual_intro_menu_text_window_frame(buffer: &mut IntroDisplayBuffer, fon
         font,
         usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN),
         usize::from(INTRO_MENU_SELECT_CAPTION_ROW),
+        // `systems/intro.md §6.1` "The cursor cell": cell 23 of row 15
+        // is not a fixed glyph and not an on/off blink - it cycles
+        // `0x05..=0x08`, one phase per menu poll pass, and is a space
+        // the instant a poll returns a key. The caller resolves the
+        // live phase; see `visual_intro_menu_cursor_glyph`.
         INTRO_MENU_SELECT_CAPTION_PREFIX
             .bytes()
-            .chain(std::iter::once(INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH))
+            .chain(std::iter::once(cursor_glyph))
             .chain(INTRO_MENU_SELECT_CAPTION_SUFFIX.bytes()),
     );
     draw_visual_intro_menu_border_caption(
@@ -12355,6 +12695,7 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
 /// window frame, but not the menu labels the prompts replace.
 fn redraw_chargen_prompt_backdrop(intro: &mut VisualIntroState) {
     let title_tick_frame = intro.title_tick_visible_frame;
+    let cursor_glyph = visual_intro_menu_cursor_glyph(intro);
     let game_dir = intro.game_dir.clone();
     let raster_depth = intro.raster_depth;
     let frames = ensure_title_tick_frames(&mut *intro).clone();
@@ -12365,7 +12706,7 @@ fn redraw_chargen_prompt_backdrop(intro: &mut VisualIntroState) {
     draw_visual_intro_start_menu_art_to_buffer(&mut intro.surface, &game_dir, raster_depth);
     intro.surface.draw_title_tick(title_tick_frame, &frames);
     if let Some(font) = menu_font.as_ref() {
-        draw_visual_intro_menu_text_window_frame(&mut intro.surface, font);
+        draw_visual_intro_menu_text_window_frame(&mut intro.surface, font, cursor_glyph);
     }
 }
 
@@ -14342,7 +14683,11 @@ fn write_visual_chargen_prompt_report(
     let font_slots = u5_runtime::load_intro_font_slots(game_dir, DisplayDriverFamily::Ega)?;
     let mut buffer = new_intro_display_buffer();
     draw_visual_intro_start_menu_art_to_buffer(&mut buffer, game_dir, raster_depth);
-    draw_visual_intro_menu_text_window_frame(&mut buffer, font_slots.active_font());
+    draw_visual_intro_menu_text_window_frame(
+        &mut buffer,
+        font_slots.active_font(),
+        intro_menu_select_caption_cursor_glyph(0),
+    );
     let font = load_ibm_ch_font(game_dir)?;
     paint_chargen_prompt_screen(&mut buffer, &font, session, input_line);
     write_visual_report(
@@ -14484,6 +14829,8 @@ fn visual_intro_suite_state(
         modal_backing: None,
         menu_idle_ticks: 0,
         menu_idle_bios_ticks: 0,
+        menu_cursor_pass: 0,
+        menu_cursor_blanked: false,
         message_waiting_for_key: false,
         message: String::new(),
         panel,
@@ -14493,6 +14840,7 @@ fn visual_intro_suite_state(
         text_windows,
         pending_pre_flourish_outcome: None,
         title_tick_frames: None,
+        pending_reveal_clicks: Vec::new(),
     };
     if title_dismissed {
         intro.dispatch.dismiss_title();
@@ -14703,6 +15051,8 @@ fn render_visual_play_frame_with_input_and_cursor(
     // completed record in order; retaining them would only grow transient
     // state across later frames.
     let _ = state.take_pending_map_viewport_dissolves();
+    let _ = state.take_pending_blackthorn_rescue_playbacks();
+    let _ = state.take_pending_combat_terrain_reveals();
     let _ = state.take_pending_stonegate_trapdoor_playback();
     rgba
 }
@@ -14753,9 +15103,11 @@ fn render_visual_play_frame_over_viewport(
     // last, preserving the visible layer order documented for this function.
     let viewport = match which {
         EndgameViewport::World => render_base_framebuffer(state, atlas),
-        EndgameViewport::Tableau => render_endgame_tableau_viewport(state, atlas)
-            .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"))
-            .to_rgba(),
+        EndgameViewport::Tableau => {
+            let viewport = render_endgame_tableau_viewport(state, atlas)
+                .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"));
+            tile_viewport_to_visual_rgba(&viewport)
+        }
     };
 
     let surface = render_integrated_status_framebuffer(
@@ -14944,6 +15296,144 @@ fn render_endgame_certificate_framebuffer(
     buffer.to_rgba()
 }
 
+/// `endgame.md §8.2`: the six narrative windows are laid out by the
+/// proportional paragraph renderer, and the endgame never writes the
+/// space advance. The prose ink itself is not published in `§8`, so the
+/// windows use the same white the intro slides' proportional text does.
+const ENDGAME_NARRATIVE_TEXT_COLOR: u8 = INTRO_STORY_TEXT_COLOR;
+
+/// Draw one record of an endgame archive opaquely into the composition
+/// buffer (`endgame.md §8.3` steps 4 and 5).
+///
+/// `expected_size` is `Some` for the six `§8.1` panels, whose sizes the
+/// spec publishes, and `None` for the `§8.2` `TEXT` title strips, whose
+/// sizes it does not - those are taken from the archive record.
+fn draw_endgame_archive_record(
+    buffer: &mut IntroDisplayBuffer,
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
+    stem: &str,
+    subimage: u8,
+    top_left_x: u16,
+    top_left_y: u16,
+    expected_size: Option<(usize, usize)>,
+) {
+    let directory = load_graphic_image_directory(game_dir, stem, depth)
+        .unwrap_or_else(|err| panic!("endgame narrative window requires {stem}: {err}"));
+    let image = directory
+        .images
+        .get(usize::from(subimage))
+        .and_then(Option::as_ref)
+        .unwrap_or_else(|| panic!("endgame archive {stem} is missing slot {subimage}"));
+    if let Some((width, height)) = expected_size {
+        assert_eq!(
+            (image.width, image.height),
+            (width, height),
+            "endgame panel {stem} slot {subimage} is {}x{}, but `endgame.md §8.1` publishes {width}x{height}",
+            image.width,
+            image.height
+        );
+    }
+    let rgba = graphic_image_to_rgba(image, depth);
+    let x = usize::from(top_left_x);
+    let y = usize::from(top_left_y);
+    assert!(
+        x + image.width <= buffer.width && y + image.height <= buffer.height,
+        "endgame archive {stem} slot {subimage} at ({x}, {y}) sized {}x{} exceeds the {}x{} page",
+        image.width,
+        image.height,
+        buffer.width,
+        buffer.height
+    );
+    buffer.blit_rgba(&rgba, image.width, image.height, x, y);
+}
+
+/// `endgame.md §8.1`/`§8.2`/`§8.3`: compose one of the six fixed final
+/// narrative windows.
+///
+/// `§8.3` "Presentation model" gives the per-window order, and this is
+/// the composition half of it (the hidden-surface selection and the
+/// single full-page copy of steps 2 and 9 collapse into composing one
+/// framebuffer here, and step 8's blocking key read is the cinematic
+/// walker's `advance`):
+///
+/// 3. clear the page - the active window is the full-screen one;
+/// 4. draw the decorative title strips, if this window has any;
+/// 5. draw the panel - opaque, no border, no shadow, no frame;
+/// 6. install the window's layout descriptor values;
+/// 7. lay out the window's `END.DAT` record with the proportional
+///    renderer.
+///
+/// Retraction R272 fixes steps 4 and 5 in this order: strips first, then
+/// the opaque panel over them. Window 1's second strip overlaps the panel
+/// at columns 152..166, so reversing the calls is observably wrong.
+///
+/// There is no per-window page-in transition: `§8.3`'s retraction of
+/// the "exactly one full-screen rectangle" reading leaves the `§7.1`
+/// rectangle dissolve as the one unique event on this path, and it
+/// happens once, before window one.
+fn render_endgame_narrative_window_framebuffer(
+    display_state: &PlayState,
+    window_index: usize,
+    ctx: PlayFrameContext<'_>,
+) -> Vec<u8> {
+    let panel =
+        u5_runtime::story_layout::endgame_narrative_panel(window_index).unwrap_or_else(|| {
+            panic!("endgame narrative window {window_index} is outside the published six")
+        });
+    let descriptor = u5_runtime::story_layout::endgame_narrative_paragraph_box(window_index)
+        .unwrap_or_else(|| {
+            panic!("endgame narrative window {window_index} has no published paragraph rectangle")
+        });
+    let depth = TileGraphicsDepth::Ega16;
+
+    let mut buffer = new_intro_display_buffer();
+    // Step 3: the text system's clear control over the full-screen
+    // window blanks the entire page.
+    buffer.clear(0);
+    // Step 4.
+    for strip in u5_runtime::story_layout::endgame_narrative_title_strips(window_index) {
+        draw_endgame_archive_record(
+            &mut buffer,
+            ctx.game_dir,
+            depth,
+            u5_runtime::story_layout::ENDGAME_TITLE_STRIP_ARCHIVE,
+            strip.slot,
+            strip.x,
+            strip.y,
+            None,
+        );
+    }
+    // Step 5.
+    draw_endgame_archive_record(
+        &mut buffer,
+        ctx.game_dir,
+        depth,
+        panel.archive,
+        panel.slot,
+        panel.top_left_x,
+        panel.top_left_y,
+        Some((usize::from(panel.width), usize::from(panel.height))),
+    );
+    // Steps 6 and 7. The prose is the window's `END.DAT` record, which
+    // the cinematic driver has already resolved into the message slot
+    // (`endgame.md §8.1` binds window N to record N).
+    draw_proportional_paragraph_to_buffer(
+        &mut buffer,
+        ctx.game_dir,
+        &descriptor,
+        &display_state.message,
+        ENDGAME_NARRATIVE_TEXT_COLOR,
+    )
+    .unwrap_or_else(|err| {
+        panic!("endgame narrative window {window_index} paragraph layout failed: {err}")
+    });
+
+    let mut rgba = buffer.to_rgba();
+    apply_endgame_fade_to_black_mask(&mut rgba, display_state);
+    rgba
+}
+
 /// `endgame.md §8`/`§9`: the narrative windows and the certificate own
 /// the full-screen window on a page the caller has cleared. Nothing of
 /// the gameplay layout survives onto them.
@@ -14952,6 +15442,9 @@ fn render_endgame_full_screen_framebuffer(
     ctx: PlayFrameContext<'_>,
 ) -> Vec<u8> {
     let display_state = state.clone();
+    if let Some(window_index) = endgame_frame_narrative_window(&display_state) {
+        return render_endgame_narrative_window_framebuffer(&display_state, window_index, ctx);
+    }
     let mut system = TextWindowSystem::new();
     system.set_window_rect(
         FULL_SCREEN_TEXT_WINDOW_INDEX,
@@ -14968,6 +15461,17 @@ fn render_endgame_full_screen_framebuffer(
         .unwrap_or_else(|err| panic!("visual endgame text window render failed: {err}"));
     apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
     rgba
+}
+
+/// Zero-based index of the `endgame.md §8` narrative window on screen,
+/// or `None` when this frame is not one of the six.
+fn endgame_frame_narrative_window(state: &PlayState) -> Option<usize> {
+    match state.endgame.as_ref()?.cinematic.step {
+        u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(index) => {
+            Some(usize::from(index))
+        }
+        _ => None,
+    }
 }
 
 /// `endgame.md §9`: the certificate screen owns the page from the
@@ -15081,6 +15585,87 @@ fn render_endgame_tableau_viewport(
         blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;
     }
     Ok(viewport)
+}
+
+/// `blackthorn.md §6.1`: the audience owns the same eleven-by-eleven
+/// gameplay viewport while its temporary MISCMAPS scene is active. Terrain
+/// bytes address the lower atlas bank; cinematic actor bytes address the
+/// upper bank, except `0x16`, which is the draw-nothing sentinel.
+fn render_blackthorn_audience_viewport(
+    state: &PlayState,
+    atlas: &TileAtlas,
+) -> io::Result<Option<TileViewport>> {
+    let Some(map) = state.blackthorn_audience_map.as_ref() else {
+        return Ok(None);
+    };
+    let cells = u5_runtime::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS;
+    let rows = u5_runtime::MISCMAPS_CUTSCENE_ROWS;
+    let width = cells * TILE_ATLAS_SIDE;
+    let height = rows * TILE_ATLAS_SIDE;
+    let mut viewport = TileViewport {
+        depth: atlas.depth,
+        cells_wide: cells,
+        cells_high: rows,
+        width,
+        height,
+        pixels: vec![0; width * height],
+    };
+
+    for y in 0..rows {
+        for x in 0..cells {
+            let tile = map.tile(x, y).unwrap_or(0);
+            blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), x, y)?;
+        }
+    }
+
+    for (slot, object) in state.active_objects.iter().copied().enumerate().rev() {
+        if object.aux3 != u5_runtime::BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
+            || u5_runtime::blackthorn_cutscene_actor(slot as u8).is_none()
+            || object.x >= cells
+            || object.y >= rows
+        {
+            continue;
+        }
+        let Some(tile) = u5_runtime::actor_tile_for_byte(object.tile) else {
+            continue;
+        };
+        blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;
+    }
+    Ok(Some(viewport))
+}
+
+/// `blackthorn.md §7.1` step 6: the second rescue dissolve publishes a black
+/// viewport with exactly the full party-on-foot tile `0x11C` at `(5,5)`.
+/// Preserve that completed blocking-call result for the first frontend frame;
+/// Lord British's Castle is the following ordinary redraw, not the dissolve
+/// source.
+fn render_pending_blackthorn_rescue_viewport(
+    state: &PlayState,
+    atlas: &TileAtlas,
+) -> io::Result<Option<TileViewport>> {
+    let Some(playback) = state.pending_blackthorn_rescue_playbacks.first() else {
+        return Ok(None);
+    };
+    let cells = u5_runtime::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS;
+    let rows = u5_runtime::MISCMAPS_CUTSCENE_ROWS;
+    let width = cells * TILE_ATLAS_SIDE;
+    let height = rows * TILE_ATLAS_SIDE;
+    let mut viewport = TileViewport {
+        depth: atlas.depth,
+        cells_wide: cells,
+        cells_high: rows,
+        width,
+        height,
+        pixels: vec![0; width * height],
+    };
+    blit_tile_id_to_viewport(
+        &mut viewport,
+        atlas,
+        usize::from(playback.party_atlas_index),
+        usize::from(playback.party_cell.0),
+        usize::from(playback.party_cell.1),
+    )?;
+    Ok(Some(viewport))
 }
 
 fn write_visual_report(
@@ -15257,11 +15842,12 @@ fn visual_review_coverage_reports(reports: &[VisualFrameReport]) -> Vec<VisualRe
 
 fn visual_review_metadata(report: &VisualFrameReport) -> String {
     if let Some(index) = parse_visual_index(&report.label, "combat-arena-", 2) {
-        let replacement = terrain_combat_raw_replacement_tile_for_arena(index)
-            .map(|tile| format!("0x{tile:02x}"))
-            .unwrap_or_else(|| "none".to_string());
+        // The per-arena replacement-tile table was withdrawn by the
+        // conformance audit; the replacement is now chosen by the base class's
+        // companion, which is a property of the spawn rather than the arena, so
+        // there is nothing arena-scoped left to report here.
         return format!(
-            "file={}.png review=gallery/combat/outdoor source=BRIT.CBT arena={index:02} replacement_tile={replacement}",
+            "file={}.png review=gallery/combat/outdoor source=BRIT.CBT arena={index:02}",
             report.label
         );
     }
@@ -15354,9 +15940,19 @@ fn display_name_bytes(name: &[u8]) -> String {
 
 #[cfg(test)]
 fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
+    if let Some(viewport) = render_pending_blackthorn_rescue_viewport(state, atlas)
+        .unwrap_or_else(|err| panic!("Blackthorn rescue render failed: {err}"))
+    {
+        return tile_viewport_to_visual_rgba(&viewport);
+    }
+    if let Some(viewport) = render_blackthorn_audience_viewport(state, atlas)
+        .unwrap_or_else(|err| panic!("Blackthorn audience render failed: {err}"))
+    {
+        return tile_viewport_to_visual_rgba(&viewport);
+    }
     match state.render_top_down_frame(VIEWPORT_RADIUS, atlas) {
         Ok(Some(viewport)) => {
-            let rgba = viewport.to_rgba();
+            let rgba = tile_viewport_to_visual_rgba(&viewport);
             if viewport.width as u32 == VIEWPORT_SIZE_PX
                 && viewport.height as u32 == VIEWPORT_SIZE_PX
             {
@@ -15376,9 +15972,19 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
 }
 
 fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
+    if let Some(viewport) = render_pending_blackthorn_rescue_viewport(state, atlas)
+        .unwrap_or_else(|err| panic!("Blackthorn rescue render failed: {err}"))
+    {
+        return tile_viewport_to_visual_rgba(&viewport);
+    }
+    if let Some(viewport) = render_blackthorn_audience_viewport(state, atlas)
+        .unwrap_or_else(|err| panic!("Blackthorn audience render failed: {err}"))
+    {
+        return tile_viewport_to_visual_rgba(&viewport);
+    }
     match state.render_top_down_base_frame(VIEWPORT_RADIUS, atlas) {
         Ok(Some(viewport)) => {
-            let rgba = viewport.to_rgba();
+            let rgba = tile_viewport_to_visual_rgba(&viewport);
             if viewport.width as u32 == VIEWPORT_SIZE_PX
                 && viewport.height as u32 == VIEWPORT_SIZE_PX
             {
@@ -15395,6 +16001,19 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
         .unwrap_or_else(|err| panic!("visual base text panel render failed: {err}")),
         Err(err) => panic!("visual base top-down frame render failed: {err}"),
     }
+}
+
+fn tile_viewport_to_visual_rgba(viewport: &TileViewport) -> Vec<u8> {
+    let palette: &[[u8; 3]] = match viewport.depth {
+        TileGraphicsDepth::Ega16 => &EGA_PALETTE_RGB,
+        TileGraphicsDepth::Cga4 => &CGA_PALETTE_RGB,
+    };
+    let mut rgba = Vec::with_capacity(viewport.pixels.len() * 4);
+    for &index in &viewport.pixels {
+        let rgb = palette[usize::from(index) % palette.len()];
+        rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+    }
+    rgba
 }
 
 fn blit_active_view_overlay_rgba(
@@ -15488,7 +16107,13 @@ fn render_status_framebuffer(
         None
     };
     let system = render_play_text_window_system(&display_state, active_cursor, input_echo);
-    if stats_panel_active_cursor_visible(state, active_cursor) {
+    // `stats-panel.md §4.1` / §11: the marker is **persistent**. It
+    // survives any number of refreshes; the selector is cleared only by
+    // an explicit selection change or when the selected member's status
+    // byte is `'D'`/`'S'` - the branch that draws a space instead of the
+    // marker is the branch that resets the selector. The earlier
+    // consume-on-refresh reading is withdrawn (RETRACTIONS R134).
+    if stats_panel_active_cursor_resets(state, active_cursor) {
         state.active_player = None;
     }
     let mut rgba = render_text_window_rgba(&system, font)
@@ -15574,7 +16199,10 @@ fn render_integrated_status_framebuffer(
     } else {
         system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
     }
-    if stats_panel_active_cursor_visible(state, active_cursor) {
+    // `stats-panel.md §4.1` / §11, as above: only a dead or sleeping
+    // selected member resets the selector; drawing the marker never
+    // consumes it.
+    if stats_panel_active_cursor_resets(state, active_cursor) {
         state.active_player = None;
     }
     let mut rgba = render_text_window_rgba(&system, ctx.ibm)
@@ -15859,6 +16487,19 @@ fn key_code_to_char(key: KeyCode, shift_pressed: bool, control_pressed: bool) ->
     key_code_to_input_byte(key, shift_pressed, control_pressed).map(char::from)
 }
 
+/// `input.md §6`: gameplay input folds ASCII letters to uppercase before
+/// movement or A-Z dispatch. Free-text and character-name entry use
+/// [`key_code_to_line_input_byte`] instead, preserving typed case there.
+fn key_code_to_command_char(
+    key: KeyCode,
+    shift_pressed: bool,
+    control_pressed: bool,
+) -> Option<char> {
+    key_code_to_input_byte(key, shift_pressed, control_pressed)
+        .map(|byte| byte.to_ascii_uppercase())
+        .map(char::from)
+}
+
 fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bool) -> Option<u8> {
     use KeyCode::*;
     if control_pressed {
@@ -15978,15 +16619,50 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         KeyZ => line_letter_for_shift(b'z', shift_pressed),
         _ => return None,
     };
-    // Preserve the physical Shift state here. The runtime owns context-specific
-    // folding: lowercase `wasd`/vi keys are movement before command dispatch,
-    // while command and menu classifiers fold letters when appropriate. Early
-    // folding made every name uppercase and made lowercase movement impossible.
+    // Preserve physical Shift at the raw keyboard boundary. Gameplay command
+    // mode folds through `key_code_to_command_char`; line editors deliberately
+    // keep the typed case represented here.
     Some(byte)
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn held_direction_repeat_waits_then_emits_one_step_per_interval() {
+        let mut repeat = HeldDirectionRepeat::default();
+        repeat.press(KeyCode::ArrowRight);
+
+        assert!(!repeat.advance(Duration::from_millis(499)));
+        assert!(repeat.advance(Duration::from_millis(1)));
+        assert!(!repeat.advance(Duration::from_millis(99)));
+        assert!(repeat.advance(Duration::from_millis(1)));
+        assert_eq!(repeat.key, Some(KeyCode::ArrowRight));
+
+        repeat.release();
+        assert!(!repeat.advance(Duration::from_secs(1)));
+        assert_eq!(repeat, HeldDirectionRepeat::default());
+    }
+
+    #[test]
+    fn held_direction_repeat_accepts_only_physical_cardinal_movement_keys() {
+        assert_eq!(
+            held_direction_key_to_command_char(KeyCode::ArrowUp, false, false),
+            Some(u5_runtime::INPUT_CODE_NORTH as char)
+        );
+        assert_eq!(
+            held_direction_key_to_command_char(KeyCode::Numpad4, false, false),
+            Some(u5_runtime::INPUT_CODE_WEST as char)
+        );
+        assert_eq!(
+            held_direction_key_to_command_char(KeyCode::Digit6, true, false),
+            Some(u5_runtime::INPUT_CODE_EAST as char)
+        );
+        assert_eq!(
+            held_direction_key_to_command_char(KeyCode::KeyA, false, false),
+            None,
+            "command letters must never acquire typematic movement"
+        );
+    }
 
     /// Frame context for tests: the synthetic fixed-cell font stands in
     /// for both alphabets.
@@ -16020,7 +16696,7 @@ mod tests {
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
         Area, ArmsShop, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR, Direction,
-        EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME,
+        GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME,
         INTRO_START_MENU_REVEAL_RECT, INTRO_STEP_1_RECT_TRANSITION, OOL_PLANE_LEN, PenStroke,
         ProportionalFont, ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT,
         REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
@@ -16028,8 +16704,8 @@ mod tests {
         SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN, SAVED_OOL_FILENAME,
         SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
         SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth, TlkRenderedGlyph, WorldPlane,
-        dungeon_cell_index, parse_british_bit, parse_ch_font, parse_legacy_lzw_british_bit,
-        parse_legacy_lzw_title_bit, parse_title_bit, world_cell_index, wrap_text_panel_lines,
+        dungeon_cell_index, parse_british_bit, parse_ch_font, parse_title_bit, world_cell_index,
+        wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -16161,35 +16837,31 @@ mod tests {
                 let _ = u5_runtime::test_fixtures::clear_readonly(&dst);
             }
         }
-        install_canonical_intro_bit_asset(
-            source_dir,
-            dir,
-            "TITLE.BIT",
-            |bytes| parse_title_bit(bytes).map(|title| title.blocks),
-            parse_legacy_lzw_title_bit,
-        );
-        install_canonical_intro_bit_asset(
-            source_dir,
-            dir,
-            "BRITISH.BIT",
-            |bytes| parse_british_bit(bytes).map(|bitmap| vec![bitmap]),
-            parse_legacy_lzw_british_bit,
-        );
+        install_canonical_intro_bit_asset(source_dir, dir, "TITLE.BIT", |bytes| {
+            parse_title_bit(bytes).map(|title| title.blocks)
+        });
+        install_canonical_intro_bit_asset(source_dir, dir, "BRITISH.BIT", |bytes| {
+            parse_british_bit(bytes).map(|bitmap| vec![bitmap])
+        });
     }
 
-    /// Drops the read-only flag `fs::copy` inherits from the source.
+    /// Re-encodes one shipped `.BIT` resource into the test game dir as
+    /// the raw `formats/bit.md §3` sub-image list.
     ///
-    /// The clean local asset folder is kept read-only so nothing can write
-    fn install_canonical_intro_bit_asset<T, FC, FV>(
+    /// There is one reading of the file: `formats/bit.md §2.1` says
+    /// "There is no known 'pre-decoded' packaging variant of these
+    /// files. Earlier guidance in this document described one; that
+    /// guidance was mistaken and has been removed." The parser
+    /// classifies raw versus enveloped structurally, so a single parse
+    /// covers the shipped enveloped file and this raw re-encoding
+    /// alike.
+    fn install_canonical_intro_bit_asset<F>(
         source_dir: &Path,
         dir: &Path,
         file_name: &str,
-        parse_canonical: FC,
-        parse_local_variant: FV,
+        parse_resource: F,
     ) where
-        T: IntoCanonicalBitmaps,
-        FC: Fn(&[u8]) -> std::io::Result<Vec<MonochromeBitmap>>,
-        FV: Fn(&[u8]) -> std::io::Result<T>,
+        F: Fn(&[u8]) -> std::io::Result<Vec<MonochromeBitmap>>,
     {
         // This one writes unconditionally, so guard it directly too
         // rather than trusting every future caller to go through
@@ -16200,47 +16872,34 @@ mod tests {
         );
         let bytes = fs::read(source_dir.join(file_name))
             .unwrap_or_else(|err| panic!("failed to read intro test asset {file_name}: {err}"));
-        let bitmaps = parse_canonical(&bytes).unwrap_or_else(|canonical_err| {
-            parse_local_variant(&bytes)
-                .map(IntoCanonicalBitmaps::into_bitmaps)
-                .unwrap_or_else(|variant_err| {
-                    panic!(
-                        "{file_name} is neither canonical sparse BIT data ({canonical_err}) nor an explicit local test variant ({variant_err})"
-                    )
-                })
+        let bitmaps = parse_resource(&bytes).unwrap_or_else(|err| {
+            panic!("{file_name} is not a well-formed BIT sub-image list: {err}")
         });
         let destination = dir.join(file_name);
         let _ = u5_runtime::test_fixtures::clear_readonly(&destination);
-        fs::write(&destination, encode_sparse_bit_resource(&bitmaps)).unwrap_or_else(|err| {
+        fs::write(&destination, encode_bit_sub_image_list(&bitmaps)).unwrap_or_else(|err| {
             panic!("failed to write canonical intro test asset {file_name}: {err}")
         });
     }
 
-    trait IntoCanonicalBitmaps {
-        fn into_bitmaps(self) -> Vec<MonochromeBitmap>;
-    }
-
-    impl IntoCanonicalBitmaps for u5_runtime::TitleBitImages {
-        fn into_bitmaps(self) -> Vec<MonochromeBitmap> {
-            self.blocks
-        }
-    }
-
-    impl IntoCanonicalBitmaps for MonochromeBitmap {
-        fn into_bitmaps(self) -> Vec<MonochromeBitmap> {
-            vec![self]
-        }
-    }
-
-    fn encode_sparse_bit_resource(bitmaps: &[MonochromeBitmap]) -> Vec<u8> {
+    /// `formats/bit.md §3`: "a directory followed by contiguous
+    /// sub-images" — a two-byte count, `count * 2` bytes of two-byte
+    /// offsets "measured from the start of the decoded image", then the
+    /// records "stored back to back, in offset order", each of
+    /// `4 + max(1, ceil(width / 8)) * height` bytes.
+    ///
+    /// The four-byte pointer/metadata entry this fixture used to emit
+    /// belonged to the withdrawn "sparse strip" reading; §1: "Nothing in
+    /// the family is a display-driver 'sparse strip' table."
+    fn encode_bit_sub_image_list(bitmaps: &[MonochromeBitmap]) -> Vec<u8> {
         assert!(
             bitmaps.len() <= usize::from(u16::MAX),
-            "test sparse BIT resource has too many entries"
+            "test BIT resource has too many sub-images"
         );
-        let header_len = 2 + bitmaps.len() * 4;
+        let header_len = 2 + bitmaps.len() * 2;
         assert!(
             header_len <= usize::from(u16::MAX),
-            "test sparse BIT pointer table is too large"
+            "test BIT offset table is too large"
         );
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&(bitmaps.len() as u16).to_le_bytes());
@@ -16248,10 +16907,9 @@ mod tests {
         for bitmap in bitmaps {
             assert!(
                 body_offset <= usize::from(u16::MAX),
-                "test sparse BIT body offset exceeds u16 pointer range"
+                "test BIT sub-image offset exceeds u16 range"
             );
             bytes.extend_from_slice(&(body_offset as u16).to_le_bytes());
-            bytes.extend_from_slice(&0u16.to_le_bytes());
             body_offset += encoded_monochrome_bitmap_len(bitmap);
         }
         for bitmap in bitmaps {
@@ -16260,8 +16918,12 @@ mod tests {
         bytes
     }
 
+    fn monochrome_row_stride(width: usize) -> usize {
+        ((width + 7) / 8).max(1)
+    }
+
     fn encoded_monochrome_bitmap_len(bitmap: &MonochromeBitmap) -> usize {
-        4 + ((bitmap.width * bitmap.height + 7) / 8)
+        4 + monochrome_row_stride(bitmap.width) * bitmap.height
     }
 
     fn encode_monochrome_bitmap(bitmap: &MonochromeBitmap, bytes: &mut Vec<u8>) {
@@ -16270,10 +16932,16 @@ mod tests {
         assert_eq!(bitmap.pixels.len(), bitmap.width * bitmap.height);
         bytes.extend_from_slice(&(bitmap.width as u16).to_le_bytes());
         bytes.extend_from_slice(&(bitmap.height as u16).to_le_bytes());
-        let mut packed = vec![0u8; (bitmap.pixels.len() + 7) / 8];
-        for (index, pixel) in bitmap.pixels.iter().enumerate() {
-            assert!(*pixel <= 1, "test monochrome bitmap contains pixel {pixel}");
-            packed[index / 8] |= *pixel << (7 - (index % 8));
+        // "Each row starts on a byte boundary, so a width that is not a
+        // multiple of eight leaves padding bits at the end of the row."
+        let row_stride = monochrome_row_stride(bitmap.width);
+        let mut packed = vec![0u8; row_stride * bitmap.height];
+        for row in 0..bitmap.height {
+            for column in 0..bitmap.width {
+                let pixel = bitmap.pixels[row * bitmap.width + column];
+                assert!(pixel <= 1, "test monochrome bitmap contains pixel {pixel}");
+                packed[row * row_stride + column / 8] |= pixel << (7 - (column % 8));
+            }
         }
         bytes.extend_from_slice(&packed);
     }
@@ -16677,7 +17345,11 @@ mod tests {
             rgba.chunks_exact(4)
                 .any(|pixel| pixel == [0xff, 0xff, 0xff, 0xff])
         );
-        assert_eq!(state.active_player, None);
+        // `stats-panel.md §4.1`/`§11`: the marker is persistent. The
+        // refresh that draws it does **not** consume the selector; that
+        // reading is withdrawn (RETRACTIONS R134). Only an explicit
+        // selection change or a dead/sleeping member clears it.
+        assert_eq!(state.active_player, Some(0));
     }
 
     #[test]
@@ -16709,7 +17381,7 @@ mod tests {
     }
 
     #[test]
-    fn intro_runtime_keeps_gameplay_input_driver_after_journey_handoff() {
+    fn intro_runtime_keeps_gameplay_drivers_after_journey_handoff() {
         let mut app = App::new();
         add_visual_intro_update_systems(&mut app);
 
@@ -16722,8 +17394,8 @@ mod tests {
             .expect("intro runtime must install an Update schedule");
         assert_eq!(
             update.systems_len(),
-            6,
-            "intro runtime needs both input drivers plus animation, sound playback, sound cleanup, and screenshots"
+            7,
+            "intro runtime needs both input drivers, both animation pumps, sound playback, sound cleanup, and screenshots"
         );
     }
 
@@ -16780,7 +17452,7 @@ mod tests {
         app.insert_resource(Assets::<Image>::default());
         app.insert_resource(intro);
         app.insert_resource(pump);
-        app.add_event::<VisualSoundCue>();
+        app.add_event::<SpeakerEffect>();
         app.add_systems(Update, animate_visual_intro_title_effects);
 
         app.update();
@@ -16816,6 +17488,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: "Intro menu smoke".to_string(),
             panel: VisualIntroPanel::Menu,
@@ -16825,6 +17499,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         let frame = render_intro_frame(&mut intro);
@@ -16935,6 +17610,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -16944,6 +17621,7 @@ mod tests {
             text_windows,
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
         intro.dispatch.dismiss_title();
 
@@ -16998,7 +17676,11 @@ mod tests {
             0x03,
         );
 
-        draw_visual_intro_menu_text_window_frame(&mut buffer, &font);
+        draw_visual_intro_menu_text_window_frame(
+            &mut buffer,
+            &font,
+            intro_menu_select_caption_cursor_glyph(0),
+        );
 
         let at = |x: usize, y: usize| buffer.pixels[y * buffer.width + x];
 
@@ -17221,6 +17903,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -17230,6 +17914,7 @@ mod tests {
             text_windows,
             pending_pre_flourish_outcome: Some(PreFlourishOutcome::JourneyOnwardShortcut),
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         apply_pre_flourish_outcome(&mut intro);
@@ -17280,6 +17965,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -17289,6 +17976,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: Some(PreFlourishOutcome::ContinueToFlourish),
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
         let baseline_surface = intro.surface.clone();
 
@@ -17728,6 +18416,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
@@ -17743,6 +18433,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         assert!(step_visual_intro_panel(&mut intro, ' '));
@@ -17805,6 +18496,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
@@ -17820,6 +18513,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         assert!(!step_visual_intro_panel(&mut intro, ' '));
@@ -17840,8 +18534,12 @@ mod tests {
     fn intro_story_step_one_dissolve_completes_then_enters_step_two() {
         // `cleak/u5-spec#53`: the dissolve is one blocking call, so the step
         // advances as soon as the frame carrying it has been presented. There
-        // is no per-column tick schedule any more, and no published duration
-        // to pace it with.
+        // is no per-column tick schedule any more.
+        //
+        // `timing.md §5.1` publishes no duration for this one because it is
+        // *ungated* - "Self-paced inside one driver call". The gated
+        // start/menu reveal is the exception the same section corrects, and it
+        // is not this call.
         let mut panel = VisualIntroPanel::Story {
             records: StoryRecords {
                 records: (0..20).map(|i| format!("Story record {i}")).collect(),
@@ -17883,6 +18581,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -17892,6 +18592,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
         assert!(visual_intro_title_surface_visible(&intro));
         assert!(matches!(
@@ -17960,6 +18661,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -17969,17 +18672,19 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         let outcome = finish_visual_intro_title_to_menu(&mut intro, true);
 
-        assert_eq!(
-            outcome,
-            StartMenuLoaderOutcome {
-                animated_after_reveal: false,
-                reveal_abort_key_consumed: true,
-            }
-        );
+        assert_eq!(outcome.animated_after_reveal, false);
+        assert!(outcome.reveal_abort_key_consumed);
+        // `display-driver-abi.md §9.6`: "a key already pending when the first
+        // start/menu dissolve begins leaves exactly one pixel transferred
+        // before abort: the first visit, `(1,0)`" — and the abort "completes
+        // the current copied pixel and any publication it caused", so that one
+        // visit still clicks.
+        assert_eq!(outcome.reveal_clicks.len(), 1);
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(!intro.title_sequence_skipped);
         assert!(intro.pending_auto_return_to_view);
@@ -18087,6 +18792,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -18096,6 +18803,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -18147,6 +18855,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -18156,6 +18866,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         // `cleak/u5-spec#67`: a keystroke during the flourish does not
@@ -18206,6 +18917,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 9,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: "stale".to_string(),
             panel: VisualIntroPanel::Menu,
@@ -18215,6 +18928,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         // `systems/intro.md §3` step 4: a key during the strokes
@@ -18269,6 +18983,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -18278,6 +18994,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
@@ -18311,6 +19028,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 17,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: "stale title message".to_string(),
             panel: VisualIntroPanel::Menu,
@@ -18323,6 +19042,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
@@ -18424,6 +19144,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -18433,6 +19155,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         let advanced = advance_visual_intro_animation_tick(&mut intro);
@@ -18464,6 +19187,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -18473,6 +19198,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         let frame = render_intro_frame(&mut intro);
@@ -18685,8 +19411,8 @@ mod tests {
         );
         assert!(!intro.pending_auto_return_to_view);
         assert_eq!(
-            intro.dispatch.intro.cached_selection,
-            Some(IntroSubflow::ReturnToView)
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::ReturnToView
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -18710,21 +19436,24 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `systems/intro.md §6.2`: "**The initial highlight is row 0,
+    /// `Journey Onward`**, and the highlight index survives across poll
+    /// passes." A letter hotkey "both moves the bar and activates the
+    /// row, so the bar always reflects the last selection made" — the
+    /// bar follows the highlight index, not a withdrawn
+    /// recent-selection cache.
     #[test]
     fn intro_menu_enters_with_journey_onward_highlighted() {
-        // `cleak/u5-spec#78`: the original presents the menu with row 0
-        // in inverse video before any key is pressed.
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
-        assert_eq!(intro.dispatch.intro.cached_selection, None);
+        assert_eq!(intro.dispatch.intro.highlight_row, 0);
 
         assert_eq!(
             visual_intro_menu_highlight(&intro),
             IntroSubflow::JourneyOnward
         );
 
-        // After a selection the highlight follows §6.2's recent-
-        // selection cache.
-        intro.dispatch.intro.cached_selection = Some(IntroSubflow::StorySlides);
+        set_visual_intro_menu_highlight(&mut intro, IntroSubflow::StorySlides);
+        assert_eq!(intro.dispatch.intro.highlight_row, 3);
         assert_eq!(
             visual_intro_menu_highlight(&intro),
             IntroSubflow::StorySlides
@@ -18790,35 +19519,41 @@ mod tests {
             "space must enter the highlighted row's subflow"
         );
         assert_eq!(
-            intro.dispatch.intro.cached_selection,
-            Some(IntroSubflow::Acknowledgements)
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::Acknowledgements
         );
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `systems/intro.md §6.2`: "**The initial highlight is row 0,
+    /// `Journey Onward`**", and "Enter, Space | Commit whichever row is
+    /// currently highlighted, resolved through the row-to-letter
+    /// table." Enter on a freshly presented menu therefore commits
+    /// Journey Onward, which surfaces the missing-save path rather than
+    /// being silently ignored.
     #[test]
     fn intro_menu_enter_without_a_prior_selection_takes_the_default_row() {
-        // With no cached selection the menu still shows row 0
-        // highlighted, so Enter has a row to activate: Journey Onward,
-        // which surfaces the missing-save path rather than being
-        // silently ignored.
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
-        assert_eq!(intro.dispatch.intro.cached_selection, None);
+        assert_eq!(intro.dispatch.intro.highlight_row, 0);
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = step_visual_intro(&mut intro, '\r');
         }));
 
         assert!(
-            result.is_err() || intro.dispatch.intro.cached_selection.is_some(),
+            result.is_err()
+                || !matches!(
+                    intro.dispatch.intro.phase,
+                    u5_runtime::intro_menu::IntroMenuPhase::AwaitingSelection
+                ),
             "Enter must activate the default highlighted row"
         );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn intro_menu_cached_selection_renders_inverse_highlight() {
+    fn intro_menu_highlighted_row_renders_inverse_video() {
         let font = parse_ch_font(&vec![0x00; CH_FONT_LEN], IBM_CH_FILE).unwrap();
         let mut frame =
             vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
@@ -19610,7 +20345,24 @@ mod tests {
         ));
         assert!(!endgame_frame_should_show_tableau(&state));
 
-        let rgba = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        // `endgame.md §8.3` step 5: the window composes a real panel out
+        // of `END1`/`END2`, and `§8.2`'s title strips come out of `TEXT`,
+        // so this half of the test needs the shipped archives.
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join("END1.16").exists() {
+            eprintln!("skipping the composed-frame half: local clean assets are not installed");
+            return;
+        }
+        let rgba = render_visual_play_frame(
+            &mut state,
+            &atlas,
+            PlayFrameContext {
+                ibm: &font,
+                runes: &font,
+                game_dir,
+                cursor_frame: 0,
+            },
+        );
 
         // With the tableau dropped the endgame text owns the full
         // width, and the gameplay stats panel is still absent.
@@ -19789,6 +20541,73 @@ mod tests {
     }
 
     #[test]
+    fn blackthorn_audience_viewport_uses_miscmap_actor_bank_and_draw_nothing_sentinel() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        state.blackthorn_audience_map = Some(u5_runtime::MiscmapsCutsceneMap {
+            record_index: u5_runtime::BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
+            tiles: vec![
+                0x44;
+                u5_runtime::MISCMAPS_CUTSCENE_ROWS
+                    * u5_runtime::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
+            ],
+        });
+        state
+            .active_objects
+            .resize(u5_runtime::OOL_SLOTS, ActiveObject::empty());
+        state.active_objects[8] = ActiveObject {
+            type_byte: u5_runtime::BLACKTHORN_SUPPRESSED_ACTOR_BYTE,
+            tile: u5_runtime::BLACKTHORN_SUPPRESSED_ACTOR_BYTE,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0,
+            aux1: 8,
+            aux3: u5_runtime::BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
+        };
+
+        let suppressed = render_blackthorn_audience_viewport(&state, &atlas)
+            .unwrap()
+            .unwrap();
+        let pixel = 5 * TILE_ATLAS_SIDE * suppressed.width + 5 * TILE_ATLAS_SIDE;
+        assert_eq!(
+            suppressed.pixels[pixel],
+            0x44 % 16,
+            "actor byte 0x16 must expose the terrain, not atlas tile 0x116"
+        );
+
+        state.active_objects[8].type_byte = u5_runtime::BLACKTHORN_SEATED_ACTOR_BYTE;
+        state.active_objects[8].tile = u5_runtime::BLACKTHORN_SEATED_ACTOR_BYTE;
+        let revealed = render_blackthorn_audience_viewport(&state, &atlas)
+            .unwrap()
+            .unwrap();
+        assert_eq!(revealed.pixels[pixel], 0x78 % 16);
+    }
+
+    #[test]
+    fn blackthorn_rescue_completed_frame_is_black_plus_centered_party_tile() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        state
+            .pending_blackthorn_rescue_playbacks
+            .push(u5_runtime::blackthorn_rescue_playback());
+
+        let viewport = render_pending_blackthorn_rescue_viewport(&state, &atlas)
+            .unwrap()
+            .unwrap();
+        let center = 5 * TILE_ATLAS_SIDE * viewport.width + 5 * TILE_ATLAS_SIDE;
+        assert_eq!(viewport.pixels[center], (0x11c_u16 % 16) as u8);
+        assert_eq!(viewport.pixels[0], 0);
+        assert!(
+            viewport
+                .pixels
+                .iter()
+                .enumerate()
+                .any(|(index, value)| index != center && *value == 0)
+        );
+    }
+
+    #[test]
     fn white_potion_animation_interval_reads_typed_playback_cadence() {
         let mut state = world_state(open_world_grid(), 10, 20);
         let ordinary_interval = 0.25;
@@ -19808,6 +20627,22 @@ mod tests {
 
         assert!(active);
         assert_eq!(interval, 3.0 * BIOS_USER_TICK_INTERVAL_SECS);
+    }
+
+    #[test]
+    fn automatic_combat_actions_use_the_brisk_presentation_interval() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.pace_combat_presentations = true;
+        state.pending_combat_actor_slot = None;
+
+        assert_eq!(
+            visual_animation_pump_interval(&state, 0.33),
+            (false, PACED_COMBAT_PRESENTATION_INTERVAL_SECS)
+        );
+
+        state.pending_combat_actor_slot = Some(0);
+        assert_eq!(visual_animation_pump_interval(&state, 0.33), (false, 0.33));
     }
 
     #[test]
@@ -20200,7 +21035,8 @@ mod tests {
         let preview = dir.join("intro-return-to-view.png");
         assert!(
             preview.exists(),
-            "the suite stopped before the Return-to-View frame"
+            "the suite stopped before the Return-to-View frame: {:?}",
+            result.as_ref().err().map(ToString::to_string),
         );
         assert!(
             fs::metadata(&preview)
@@ -21110,7 +21946,7 @@ mod tests {
 
         // route-endgame-tableau-walk-in adds 29 (endgame.md §4 walk-in);
         // the full-victory cinematic now runs to the §9.5 terminal hold.
-        assert_eq!(reports.len(), 1910);
+        assert_eq!(reports.len(), 1953);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -21125,7 +21961,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1910"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1953"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -21156,8 +21992,8 @@ mod tests {
         assert!(manifest.contains("route-castle-pass-and-idle-01-empty"));
         assert!(manifest.contains("route-castle-jimmy-magic-lock-no-picker-01-j"));
         assert!(manifest.contains("route-castle-jimmy-empty-restraint-no-picker-01-j"));
-        assert!(manifest.contains("route-castle-jimmy-prisoner-release-02-1"));
-        assert!(manifest.contains("route-reload-castle-jimmy-prisoner-release-03-empty"));
+        assert!(manifest.contains("route-castle-jimmy-prisoner-release-03-1"));
+        assert!(manifest.contains("route-reload-castle-jimmy-prisoner-release-04-empty"));
         assert!(manifest.contains("route-town-status-modal-01-z"));
         assert!(manifest.contains("route-castle-z-stats-modal-01-z"));
         assert!(manifest.contains("route-town-view-overlay-01-v"));
@@ -21431,7 +22267,7 @@ mod tests {
         assert!(manifest.contains("route-endgame-missing-box-confirmation-02-y"));
         assert!(manifest.contains("route-endgame-box-victory-confirmation-02-y"));
         assert!(manifest.contains(ENDGAME_FADE_TO_BLACK_FRAME_LABEL));
-        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-59-empty"));
+        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-98-empty"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-room-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-combat-pass-02-empty"));
@@ -21524,172 +22360,636 @@ mod tests {
     }
 
     #[test]
-    fn visual_unshifted_wasd_reaches_top_down_movement() {
-        let mut state = test_state(open_grid(), 4, 4);
-        let key = key_code_to_char(KeyCode::KeyD, false, false)
-            .expect("unshifted D key must map to lowercase movement input");
+    fn visual_unshifted_letters_reach_original_command_dispatch() {
+        for (physical_key, expected_key, expected_message) in [
+            (KeyCode::KeyA, 'A', "Attack where?"),
+            (KeyCode::KeyG, 'G', "Get-"),
+            (KeyCode::KeyJ, 'J', "Jimmy-"),
+            (KeyCode::KeyL, 'L', "Look-"),
+            (KeyCode::KeyO, 'O', "Open-"),
+            (KeyCode::KeyP, 'P', "Push-"),
+            (KeyCode::KeyS, 'S', "Search-"),
+            (KeyCode::KeyT, 'T', "Talk-"),
+            (KeyCode::KeyD, 'D', "D-What?"),
+        ] {
+            let mut state = test_state(open_grid(), 4, 4);
+            let key = key_code_to_command_char(physical_key, false, false)
+                .expect("unshifted gameplay letter must map to a command byte");
 
-        assert_eq!(key, 'd');
-        assert!(matches!(
-            handle_play_key_input(&mut state, key, "", Path::new("")),
-            Ok(PlayInputDisposition::Continue)
-        ));
-        assert_eq!((state.player.x, state.player.y), (5, 4));
-        assert_eq!(state.turn, 1);
+            assert_eq!(key, expected_key);
+            assert!(matches!(
+                handle_play_key_input(&mut state, key, "", Path::new("")),
+                Ok(PlayInputDisposition::Continue)
+            ));
+            assert_eq!((state.player.x, state.player.y), (4, 4));
+            assert_eq!(state.turn, 0);
+            assert_eq!(state.message, expected_message);
+        }
     }
 
     #[test]
-    fn visual_sound_cues_cover_only_published_effect_boundaries() {
-        for cue in [
-            VisualSoundCue::CombatBlocked,
-            VisualSoundCue::CombatEscape,
-            VisualSoundCue::CombatPossession,
-            VisualSoundCue::CombatSummon,
-            VisualSoundCue::DungeonDecorationSweep0,
-            VisualSoundCue::DungeonDecorationSweep1,
-            VisualSoundCue::DungeonDecorationSweep2,
-            VisualSoundCue::PotionFlash,
-            VisualSoundCue::RingVanish,
-            VisualSoundCue::ShrineWordRumble,
-            VisualSoundCue::StonegateTone,
-            VisualSoundCue::StolenWarning,
-            VisualSoundCue::TrapSting,
-            VisualSoundCue::WindChange,
-            VisualSoundCue::SubtitleIgnition,
-        ] {
-            let spec = visual_sound_spec(cue);
-            assert!(spec.start_frequency_hz.is_finite() && spec.start_frequency_hz > 0.0);
-            assert!(spec.end_frequency_hz.is_finite() && spec.end_frequency_hz > 0.0);
-            assert!(spec.jitter_hz.is_finite() && spec.jitter_hz >= 0.0);
-            assert!(!spec.duration.is_zero());
-            assert!((0.0..=1.0).contains(&spec.volume));
-            let wave = visual_sound_wave(cue, 0x1234_5678);
-            assert_eq!(wave.duration, spec.duration);
-            assert!(!wave.samples.is_empty());
-            assert!(
-                wave.samples
-                    .iter()
-                    .all(|sample| sample.is_finite() && (-1.0..=1.0).contains(sample))
+    fn visual_period_display_palette_only_changes_shipped_slot_six() {
+        for index in 0..EGA_PALETTE_RGB.len() {
+            let expected = resolve_palette_register(
+                SHIPPED_PALETTE_REGISTERS[index],
+                MonitorModel::Period200Line,
             );
+            assert_eq!(EGA_PALETTE_RGB[index], expected, "palette index {index}");
+            if index != u5_runtime::SHIPPED_PALETTE_DEVIATING_INDEX {
+                assert_eq!(EGA_PALETTE_RGB[index], ENHANCED_EGA_PALETTE_RGB[index]);
+            }
         }
+        assert_eq!(
+            EGA_PALETTE_RGB[u5_runtime::SHIPPED_PALETTE_DEVIATING_INDEX],
+            u5_runtime::STOCK_EGA_BROWN
+        );
+    }
 
-        for (band, cue) in [
-            (0, VisualSoundCue::DungeonDecorationSweep0),
-            (1, VisualSoundCue::DungeonDecorationSweep1),
-            (2, VisualSoundCue::DungeonDecorationSweep2),
-        ] {
-            let sweep = u5_runtime::dungeon_decoration_tone_sweep(band).unwrap();
-            let spec = visual_sound_spec(cue);
-            assert_eq!(visual_sound_frequency_steps(cue), sweep.updates);
-            assert_eq!(spec.start_frequency_hz, f32::from(sweep.start_hz));
-            assert_eq!(
-                spec.end_frequency_hz,
-                f32::from(sweep.frequency(sweep.updates - 1).unwrap())
-            );
-            assert_eq!(
-                spec.duration.as_millis(),
-                u128::from(sweep.updates) * u128::from(sweep.delay_units),
-                "the modern host maps one calibrated delay unit to one millisecond while preserving the published pacing ratio"
-            );
+    /// A minimal app carrying just the speaker backend: the voice system, the
+    /// rendered-wave assets, the `audio.md §5.3` jitter stream, and the effect
+    /// channel. No audio device is involved; the assertions are about the ECS
+    /// state the backend owns.
+    fn speaker_test_app() -> App {
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default())
+            .init_resource::<Assets<VisualSoundWave>>()
+            .init_resource::<SpeakerJitter>()
+            .add_event::<SpeakerEffect>()
+            .add_systems(Update, play_speaker_effects);
+        app
+    }
+
+    fn queue_speaker_effect(app: &mut App, effect: SoundEffect, audible: bool) {
+        app.world_mut()
+            .resource_mut::<Events<SpeakerEffect>>()
+            .send(SpeakerEffect::new(effect, audible));
+        app.update();
+    }
+
+    fn speaker_voices(app: &mut App) -> Vec<Entity> {
+        app.world_mut()
+            .query_filtered::<Entity, With<SpeakerVoice>>()
+            .iter(app.world())
+            .collect()
+    }
+
+    fn audible_voices(app: &mut App) -> usize {
+        app.world_mut()
+            .query::<&AudioPlayer<VisualSoundWave>>()
+            .iter(app.world())
+            .count()
+    }
+
+    fn voice_lifetime(app: &mut App) -> Duration {
+        app.world_mut()
+            .query::<&SpeakerVoiceLifetime>()
+            .iter(app.world())
+            .map(|lifetime| lifetime.0.duration())
+            .next()
+            .expect("the speaker must own a voice")
+    }
+
+    /// Every published trigger, one instance per enum variant, plus every
+    /// dungeon-drip depth band so the `audio.md §5.2` silent band is covered.
+    fn every_sound_effect() -> Vec<(String, SoundEffect)> {
+        let mut effects: Vec<(String, SoundEffect)> = vec![
+            ("blocked-step".into(), SoundEffect::BlockedStep),
+            ("action-snap".into(), SoundEffect::ActionSnap),
+            ("cast-failure".into(), SoundEffect::CastFailure),
+            ("trap-rumble".into(), SoundEffect::TrapRumble),
+            ("damage-rumble".into(), SoundEffect::DamageRumble),
+            ("possession".into(), SoundEffect::Possession),
+            ("monster-summon".into(), SoundEffect::MonsterSummon),
+            ("player-summon".into(), SoundEffect::PlayerSummon),
+            ("moongate-transit".into(), SoundEffect::MoongateTransit),
+            ("stonegate-descent".into(), SoundEffect::StonegateDescent),
+            (
+                "stonegate-member-death".into(),
+                SoundEffect::StonegateMemberDeath,
+            ),
+            (
+                "return-to-view-strip2".into(),
+                SoundEffect::ReturnToViewStrip2,
+            ),
+            (
+                "return-to-view-strip3".into(),
+                SoundEffect::ReturnToViewStrip3 { phase: 0 },
+            ),
+            (
+                "dissolve-click".into(),
+                // `audio.md §8.6.1`: the pitch comes from the driver-global
+                // recurrence, so take the shipped image's first click.
+                SoundEffect::DissolveClick {
+                    frequency_hz: u5_runtime::audio::DissolveToneState::on_driver_load()
+                        .next_click_hz(),
+                },
+            ),
+            (
+                "harpsichord-note".into(),
+                SoundEffect::HarpsichordNote { digit: 1 },
+            ),
+            (
+                "endgame-restoration".into(),
+                SoundEffect::EndgameRestoration,
+            ),
+            ("endgame-tableau".into(), SoundEffect::EndgameTableau),
+            (
+                // audio.md §8.8: 220 Hz then 150 Hz, 150 calibrated units each.
+                "combat-command-refused".into(),
+                SoundEffect::CombatCommandRefused,
+            ),
+            (
+                // audio.md §8.9: 195 updates, 660 Hz falling. At ~6.9 s this is
+                // by far the longest published effect and dominates this test's
+                // render time.
+                "long-descent".into(),
+                SoundEffect::LongDescent,
+            ),
+            (
+                // audio.md §8.6.1: the dissolve run's shared exit. Stop-only, so
+                // it is the second effect that renders no samples by contract.
+                "dissolve-exit".into(),
+                SoundEffect::DissolveExit,
+            ),
+            (
+                "subtitle-ignition-burst".into(),
+                SoundEffect::SubtitleIgnitionBurst {
+                    pitches: sample_ignition_pitches().into(),
+                },
+            ),
+        ];
+        for band in 0..u5_runtime::audio::DUNGEON_DRIP_SPANS.len() as u8 {
+            effects.push((
+                format!("dungeon-wall-drip-band-{band}"),
+                SoundEffect::DungeonWallDrip { band },
+            ));
         }
+        // The nine `§6` variants share one lowering; the endpoints exercise the
+        // shortest and the longest envelope pair.
+        for variant in [0u8, u5_runtime::audio::SHARED_VARIANT_COUNT as u8 - 1] {
+            effects.push((
+                format!("shared-variant-{variant}"),
+                SoundEffect::SharedVariant { variant },
+            ));
+        }
+        // `§8.4` bands are gameplay-PRNG draws, so this pins a fixed seed
+        // rather than a live game state.
+        let mut prng = u5_runtime::prng::U5Prng::new(0x1234);
+        effects.push((
+            "major-flash".into(),
+            SoundEffect::MajorFlash {
+                bands: u5_runtime::audio::draw_major_flash_bands(&mut prng),
+            },
+        ));
+        effects
+    }
 
+    /// Twenty-five pitches inside the published `100..1500` Hz ignition range.
+    fn sample_ignition_pitches() -> Vec<u16> {
+        (0..u5_runtime::audio::IGNITION_BURST_PITCHES as u16)
+            .map(|index| 100 + index * 56)
+            .collect()
+    }
+
+    fn ignition_publish(speaker_burst: bool, burst_pitches: Vec<u16>) -> SubtitleIgnitionPublish {
+        SubtitleIgnitionPublish {
+            frame: 0,
+            pass: u5_runtime::SubtitleIgnitionPass::Lettering,
+            in_bounds_positions_in_pass: 0,
+            restored_positions: 0,
+            keyboard_poll_after_state: 0,
+            lfsr_state: 0,
+            gate_state: 0,
+            speaker_burst,
+            burst_pitches,
+            wait_units: if speaker_burst { 45 } else { 50 },
+            pixels: Vec::new(),
+        }
+    }
+
+    /// `audio.md §8.6` and `display-driver-abi.md §9.6`: the first start/menu
+    /// rectangle dissolve emits a percussive click on every checked visit while
+    /// its driver-local gate is armed.
+    ///
+    /// This is a wiring regression, not a model one. The runtime modelled the
+    /// clicks correctly for a long time while **nothing in production called
+    /// the gated transfer**, so the effect did not exist in the shipped shell
+    /// and no test noticed — the model's own tests passed by exercising the
+    /// primitive directly. The assertion that matters here is therefore simply
+    /// that the production reveal produces clicks at all.
+    #[test]
+    fn the_gated_start_menu_reveal_produces_clicks_in_production() {
+        let mut source = new_intro_display_buffer();
+        for (index, pixel) in source.pixels.iter_mut().enumerate() {
+            *pixel = (index % 15) as u8;
+        }
+        let mut destination = new_intro_display_buffer();
+        let report = destination.dissolve_rect_from_with_pending_key(
+            &source,
+            (0, 0, 319, 100),
+            u5_runtime::DissolveAbortGate::on_driver_load(),
+            false,
+        );
+
+        assert!(
+            !report.clicks.is_empty(),
+            "an armed start/menu reveal must click; an empty run means the \
+             production path bypassed the gated transfer again",
+        );
+        assert!(
+            report
+                .clicks
+                .iter()
+                .all(|effect| matches!(effect, SoundEffect::DissolveClick { .. })),
+            "every collected effect is a dissolve click",
+        );
+        // §9.6: the extra work runs on alternating visits, so roughly half the
+        // transferred pixels click — never all of them.
+        assert!(
+            report.clicks.len() < report.copied_pixels,
+            "the click cadence is alternating, not per pixel: {} clicks for {} pixels",
+            report.clicks.len(),
+            report.copied_pixels,
+        );
+    }
+
+    /// `display-driver-abi.md §9.6`: the gate "is cleared permanently the first
+    /// time any character is drawn through the driver's fixed-cell glyph entry.
+    /// Nothing ever re-enables it." A disarmed dissolve is silent, so every
+    /// later reveal in the run produces no clicks.
+    #[test]
+    fn a_disarmed_reveal_is_silent() {
+        let source = new_intro_display_buffer();
+        let mut destination = new_intro_display_buffer();
+        let report = destination.dissolve_rect_from_with_pending_key(
+            &source,
+            (0, 0, 319, 100),
+            {
+                let mut gate = u5_runtime::DissolveAbortGate::on_driver_load();
+                gate.note_fixed_cell_glyph_drawn();
+                gate
+            },
+            false,
+        );
+        assert!(
+            report.clicks.is_empty(),
+            "a cleared gate makes the dissolve silent",
+        );
+    }
+
+    #[test]
+    fn speaker_effects_come_only_from_published_runtime_boundaries() {
         let mut state = test_state(open_grid(), 4, 4);
         let before = state.sound_effect_serial;
         state.player.x += 1;
         state.turn += 1;
-        assert_eq!(
-            visual_sound_cues_after(before, true, &state),
-            Vec::<VisualSoundCue>::new(),
-            "ordinary movement has no published sound boundary"
+        assert!(
+            speaker_effects_after(before, true, &state).is_empty(),
+            "audio.md §9: ordinary movement has no published sound boundary"
         );
 
         let before = state.sound_effect_serial;
         assert!(state.apply_wind_state(WindState::North));
         let _ = state.apply_shared_trap_effect_to_slot(0);
-        assert_eq!(
-            visual_sound_cues_after(before, true, &state),
-            vec![VisualSoundCue::WindChange, VisualSoundCue::TrapSting],
-            "typed runtime effects preserve ordering when one input emits multiple cues"
+        let queued: Vec<SoundEffect> = speaker_effects_after(before, true, &state)
+            .into_iter()
+            .filter_map(|queued| match queued.source {
+                SpeakerSource::Effect(effect) => Some(effect),
+                SpeakerSource::Program(_) => None,
+            })
+            .collect();
+        assert!(
+            queued.starts_with(&[
+                // `audio.md §7.3`: "The variant is chosen by the caller tag,
+                // not by the wind." A spell-driven change is variant 2; the
+                // scroll is variant 1. The earlier previous-wind matrix — which
+                // this test used to encode — is withdrawn (`RETRACTIONS.md`).
+                SoundEffect::SharedVariant { variant: 2 },
+                // audio.md §8.2: the shared trap resolver's 75-update rumble,
+                // recorded on entry, before trap-class selection.
+                SoundEffect::TrapRumble,
+            ]),
+            "typed runtime effects preserve ordering when one input emits several, got {queued:?}"
         );
 
+        // `audio.md §3`: muting changes output, not cadence. The effect is
+        // still delivered, only flagged inaudible.
+        //
+        // Still variant 2: this is the same spell caller, and §7.3's caller-tag
+        // rule means the previous wind (North) and the requested direction
+        // (South) do not participate. Requesting the already-active direction
+        // would sound too.
         state.music_enabled = false;
         let before = state.sound_effect_serial;
         assert!(state.apply_wind_state(WindState::South));
         assert_eq!(
-            visual_sound_cues_after(before, false, &state),
-            Vec::<VisualSoundCue>::new()
+            speaker_effects_after(before, false, &state),
+            vec![SpeakerEffect::new(
+                SoundEffect::SharedVariant { variant: 2 },
+                false
+            )],
+            "a muted effect is still queued so its calibrated hold is performed"
+        );
+    }
+
+    #[test]
+    fn a_gated_reveal_run_reaches_the_voice_as_one_continuous_program() {
+        // audio.md §8.6.1: the whole gated dissolve is "one continuous waveform
+        // whose frequency is randomised at the retune cadence, not a train of
+        // discrete clicks", ending in a single stop at the shared exit. Queued
+        // as separate effects, §2's one-voice rule would discard all but the
+        // last click.
+        let mut source = new_intro_display_buffer();
+        for (index, pixel) in source.pixels.iter_mut().enumerate() {
+            *pixel = (index % 15) as u8;
+        }
+        let mut destination = new_intro_display_buffer();
+        let report = destination.dissolve_rect_from_with_pending_key(
+            &source,
+            (0, 0, 319, 100),
+            u5_runtime::DissolveAbortGate::on_driver_load(),
+            false,
+        );
+        assert!(report.clicks.len() > 1, "the fixture must produce a run");
+
+        let pitches: Vec<u16> = report
+            .clicks
+            .iter()
+            .filter_map(|effect| match effect {
+                SoundEffect::DissolveClick { frequency_hz } => Some(*frequency_hz),
+                _ => None,
+            })
+            .collect();
+        let program = u5_runtime::audio::dissolve_click_run(&pitches);
+        assert_eq!(
+            program.tone_count(),
+            pitches.len(),
+            "every click retunes the one running speaker"
+        );
+        assert!(
+            program.ends_with_stop(),
+            "the run stops once, at the shared exit"
         );
 
-        for (effect, cue) in [
-            (
-                PlaySoundEffect::CombatBlocked,
-                VisualSoundCue::CombatBlocked,
-            ),
-            (PlaySoundEffect::CombatEscape, VisualSoundCue::CombatEscape),
-            (
-                PlaySoundEffect::CombatPossession,
-                VisualSoundCue::CombatPossession,
-            ),
-            (PlaySoundEffect::CombatSummon, VisualSoundCue::CombatSummon),
-            (
-                PlaySoundEffect::DungeonDecorationSweep0,
-                VisualSoundCue::DungeonDecorationSweep0,
-            ),
-            (
-                PlaySoundEffect::DungeonDecorationSweep1,
-                VisualSoundCue::DungeonDecorationSweep1,
-            ),
-            (
-                PlaySoundEffect::DungeonDecorationSweep2,
-                VisualSoundCue::DungeonDecorationSweep2,
-            ),
-            (PlaySoundEffect::RingVanish, VisualSoundCue::RingVanish),
-            (
-                PlaySoundEffect::ShrineWordRumble,
-                VisualSoundCue::ShrineWordRumble,
-            ),
-            (
-                PlaySoundEffect::StonegateTone,
-                VisualSoundCue::StonegateTone,
-            ),
-            (
-                PlaySoundEffect::StolenWarning,
-                VisualSoundCue::StolenWarning,
-            ),
-            (PlaySoundEffect::TrapSting, VisualSoundCue::TrapSting),
-            (PlaySoundEffect::WindChange, VisualSoundCue::WindChange),
+        // One queued event, one voice, and its duration is the whole run's -
+        // not one click's.
+        let mut app = speaker_test_app();
+        app.world_mut()
+            .resource_mut::<Events<SpeakerEffect>>()
+            .send(SpeakerEffect::always_audible_program(program.clone()));
+        app.update();
+        assert_eq!(speaker_voices(&mut app).len(), 1);
+        assert_eq!(audible_voices(&mut app), 1);
+        assert_eq!(voice_lifetime(&mut app), program.duration(true));
+        assert!(
+            voice_lifetime(&mut app)
+                > SoundEffect::DissolveClick {
+                    frequency_hz: pitches[0],
+                }
+                .program(&mut RumbleJitter::new())
+                .duration(true),
+            "the voice must own the whole run, not a single click"
+        );
+    }
+
+    #[test]
+    fn a_new_speaker_effect_replaces_the_previous_voice() {
+        // audio.md §2: "The speaker is a single mono, one-bit channel. There is
+        // no mixing. Starting a new tone replaces the previous timer divisor."
+        let mut app = speaker_test_app();
+        queue_speaker_effect(&mut app, SoundEffect::StonegateDescent, true);
+        let first = speaker_voices(&mut app);
+        assert_eq!(first.len(), 1, "one effect owns exactly one voice");
+
+        queue_speaker_effect(&mut app, SoundEffect::ActionSnap, true);
+        let second = speaker_voices(&mut app);
+        assert_eq!(
+            second.len(),
+            1,
+            "a second effect must not overlap the first"
+        );
+        assert_ne!(
+            second[0], first[0],
+            "the previous voice must be despawned, not left sounding"
+        );
+        assert_eq!(audible_voices(&mut app), 1);
+    }
+
+    #[test]
+    fn several_effects_in_one_frame_still_leave_one_voice() {
+        let mut app = speaker_test_app();
+        {
+            let mut events = app.world_mut().resource_mut::<Events<SpeakerEffect>>();
+            events.send(SpeakerEffect::new(SoundEffect::TrapRumble, true));
+            events.send(SpeakerEffect::new(SoundEffect::DamageRumble, true));
+        }
+        app.update();
+        assert_eq!(speaker_voices(&mut app).len(), 1);
+        assert_eq!(audible_voices(&mut app), 1);
+
+        // Both effects still advanced the §5.3 jitter stream, because a
+        // superseded effect still performs its state advance.
+        let mut expected = RumbleJitter::new();
+        let _ = SoundEffect::TrapRumble.program(&mut expected);
+        let _ = SoundEffect::DamageRumble.program(&mut expected);
+        assert_eq!(app.world().resource::<SpeakerJitter>().0, expected);
+    }
+
+    #[test]
+    fn a_muted_effect_holds_the_voice_without_playing_it() {
+        // audio.md §3: Ctrl-S "changes output, not command or animation
+        // cadence"; a blocking tone "still performs its calibrated hold".
+        let mut app = speaker_test_app();
+        queue_speaker_effect(&mut app, SoundEffect::BlockedStep, false);
+        assert_eq!(
+            speaker_voices(&mut app).len(),
+            1,
+            "a muted effect still owns the channel for its calibrated hold"
+        );
+        assert_eq!(
+            audible_voices(&mut app),
+            0,
+            "a muted effect must spawn no AudioPlayer"
+        );
+        assert!(
+            app.world()
+                .resource::<Assets<VisualSoundWave>>()
+                .iter()
+                .next()
+                .is_none(),
+            "a muted effect must not render or store samples"
+        );
+        assert_eq!(
+            voice_lifetime(&mut app),
+            SoundEffect::BlockedStep
+                .program(&mut RumbleJitter::new())
+                .duration(false),
+            "the silent hold is the program's own muted duration"
+        );
+    }
+
+    #[test]
+    fn the_voice_lifetime_is_the_program_duration_with_no_padding() {
+        // audio.md §2 requires the stop at the specified effect end; padding is
+        // what let a stale tone bleed into the next scene.
+        for effect in [
+            SoundEffect::BlockedStep,
+            SoundEffect::ActionSnap,
+            SoundEffect::CastFailure,
+            SoundEffect::HarpsichordNote { digit: 4 },
+            SoundEffect::EndgameTableau,
         ] {
-            assert_eq!(visual_sound_cue_for_play_effect(effect), cue);
+            let mut app = speaker_test_app();
+            let expected = effect.program(&mut RumbleJitter::new()).duration(true);
+            queue_speaker_effect(&mut app, effect.clone(), true);
+            assert_eq!(
+                voice_lifetime(&mut app),
+                expected,
+                "{effect:?} lifetime must equal its program duration exactly"
+            );
         }
     }
 
     #[test]
-    fn visual_sound_event_queues_a_decodable_audio_player() {
-        let mut app = App::new();
-        app.init_resource::<Assets<VisualSoundWave>>()
-            .add_event::<VisualSoundCue>()
-            .add_systems(Startup, setup_visual_sound_bank)
-            .add_systems(Update, play_visual_sound_cues);
-        app.update();
-        app.world_mut()
-            .resource_mut::<Events<VisualSoundCue>>()
-            .send(VisualSoundCue::TrapSting);
-        app.update();
+    fn the_voice_is_retired_when_its_program_ends() {
+        let mut app = speaker_test_app();
+        app.add_systems(Update, expire_speaker_voice.after(play_speaker_effects));
+        queue_speaker_effect(&mut app, SoundEffect::ActionSnap, true);
+        let lifetime = voice_lifetime(&mut app);
+        assert!(!lifetime.is_zero());
 
-        let bank = app.world().resource::<VisualSoundBank>();
-        let wave = app
-            .world()
-            .resource::<Assets<VisualSoundWave>>()
-            .get(&bank.trap_sting)
-            .expect("the trap cue must resolve to generated waveform samples");
-        assert!(wave.decoder().next().is_some());
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(lifetime / 2);
+        app.update();
+        assert_eq!(speaker_voices(&mut app).len(), 1, "still inside the hold");
+
+        app.world_mut().resource_mut::<Time>().advance_by(lifetime);
+        app.update();
+        assert!(
+            speaker_voices(&mut app).is_empty(),
+            "the speaker must stop at the specified effect end"
+        );
+    }
+
+    #[test]
+    fn the_speaker_jitter_never_touches_the_gameplay_prng() {
+        // audio.md §5.3: the rumble jitter is "a private sound-only jitter
+        // state ... not the gameplay PRNG", starting "from the same fixed
+        // nonzero value on each program run".
+        assert_eq!(SpeakerJitter::default().0, RumbleJitter::new());
+
+        let state = test_state(open_grid(), 4, 4);
+        let gameplay_prng_before = state.prng_state;
+
+        let mut app = speaker_test_app();
+        queue_speaker_effect(&mut app, SoundEffect::TrapRumble, true);
+        queue_speaker_effect(&mut app, SoundEffect::DamageRumble, false);
+
+        let mut expected = RumbleJitter::new();
+        let _ = SoundEffect::TrapRumble.program(&mut expected);
+        let _ = SoundEffect::DamageRumble.program(&mut expected);
+        assert_ne!(
+            expected,
+            RumbleJitter::new(),
+            "a rumble must advance the private stream"
+        );
         assert_eq!(
-            app.world_mut()
-                .query::<(&AudioPlayer<VisualSoundWave>, &VisualSoundLifetime)>()
-                .iter(app.world())
-                .count(),
+            app.world().resource::<SpeakerJitter>().0,
+            expected,
+            "the frontend stream must be the private one, unseeded by gameplay"
+        );
+        assert_eq!(
+            state.prng_state, gameplay_prng_before,
+            "no speaker work may read or perturb gameplay randomness"
+        );
+    }
+
+    #[test]
+    fn every_published_effect_renders_audible_samples() {
+        // audio.md §5.2: the far dungeon-drip band's negative span "produces no
+        // tone update and only performs the final stop". It is the one
+        // published effect that is silent by contract.
+        let mut jitter = RumbleJitter::new();
+        for (name, effect) in every_sound_effect() {
+            let program = effect.program(&mut jitter);
+            // audio.md §8.6.1 / RETRACTIONS.md R230: a dissolve click is a
+            // retune *inside* a running effect, not an effect end. It is the one
+            // published lowering that deliberately carries no stop; the run's
+            // shared exit (`DissolveExit`) carries it instead.
+            if name != "dissolve-click" {
+                assert!(
+                    program.ends_with_stop(),
+                    "{name} must stop the speaker at its end"
+                );
+            }
+            let rendered = render_program(&program, true);
+            // audio.md §5.2's negative-span drip band and §8.6.1's exit are the
+            // only two published effects that produce no tone at all.
+            if name == "dungeon-wall-drip-band-3" || name == "dissolve-exit" {
+                assert!(
+                    rendered.samples.is_empty(),
+                    "{name} is silent by contract, so it renders no samples"
+                );
+                continue;
+            }
+            assert!(
+                !rendered.samples.is_empty(),
+                "{name} must render a non-empty sample buffer"
+            );
+            assert!(
+                !rendered.is_silent(),
+                "{name} must render audible, non-zero samples"
+            );
+            assert!(
+                rendered
+                    .samples
+                    .iter()
+                    .all(|sample| sample.is_finite() && (-1.0..=1.0).contains(sample)),
+                "{name} must render finite in-range samples"
+            );
+            let wave = speaker_wave(&rendered);
+            assert_eq!(wave.sample_rate, u5_runtime::audio_render::SAMPLE_RATE);
+            assert!(
+                wave.decoder().next().is_some(),
+                "{name} must decode for Bevy playback"
+            );
+        }
+    }
+
+    #[test]
+    fn a_silent_by_contract_effect_owns_the_voice_without_an_audio_player() {
+        let mut app = speaker_test_app();
+        queue_speaker_effect(&mut app, SoundEffect::DungeonWallDrip { band: 3 }, true);
+        assert_eq!(
+            speaker_voices(&mut app).len(),
             1,
-            "a cue event must spawn one owned Bevy audio player"
+            "audio.md §5.2: the no-tone band still performs the final stop"
+        );
+        assert_eq!(audible_voices(&mut app), 0);
+    }
+
+    #[test]
+    fn an_admitted_ignition_publication_bursts_its_own_pitches() {
+        // audio.md §7.1: "An admitted burst emits 25 successive frequencies",
+        // and the pitches are the publication's own `intro.md §5` recurrence.
+        let pitches = sample_ignition_pitches();
+        let sounded = subtitle_ignition_burst(&ignition_publish(true, pitches.clone()));
+        assert_eq!(
+            sounded,
+            // §7.1: the transition "cannot be muted through Ctrl-S because it
+            // occurs before that gameplay command is available".
+            Some(SpeakerEffect::always_audible(
+                SoundEffect::SubtitleIgnitionBurst {
+                    pitches: pitches.as_slice().into(),
+                }
+            ))
+        );
+
+        // "ordinary visited positions emit no burst and perform no audio wait".
+        assert_eq!(
+            subtitle_ignition_burst(&ignition_publish(false, Vec::new())),
+            None
         );
     }
 
@@ -22085,7 +23385,9 @@ mod tests {
 
         assert_eq!(input_line, "ahm");
         assert!(state.active_blackthorn.is_some());
-        assert!(!state.blackthorn_story.is_party_slot_jailed(0));
+        // blackthorn.md §4: the answer is not submitted until Enter, so
+        // no shrine is ruined yet.
+        assert_eq!(state.shrine_ruin_flags[0], 0);
 
         handle_visual_line_key(
             &mut state,
@@ -22099,7 +23401,11 @@ mod tests {
 
         assert!(input_line.is_empty());
         assert!(state.active_blackthorn.is_none());
-        assert!(state.blackthorn_story.is_party_slot_jailed(0));
+        // blackthorn.md §4: "A correct answer ruins that shrine and
+        // costs five points of moral standing." The withdrawn reading
+        // set a durable per-member Blackthorn-jail flag instead; §3 and
+        // §8 both state there is no such flag.
+        assert_ne!(state.shrine_ruin_flags[0], 0);
         assert!(
             state
                 .message
@@ -22263,6 +23569,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -22272,6 +23580,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -22592,6 +23901,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
@@ -22607,6 +23918,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
         intro.dispatch.dismiss_title();
         intro.dispatch.submit_menu_key(b'U');
@@ -22656,6 +23968,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel,
@@ -22665,6 +23979,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         }
     }
 
@@ -22694,6 +24009,8 @@ mod tests {
             modal_backing: None,
             menu_idle_ticks: 0,
             menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
             message_waiting_for_key: false,
             message: String::new(),
             panel,
@@ -22703,6 +24020,7 @@ mod tests {
             text_windows: TextWindowSystem::new(),
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
         };
         if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
             intro.modal_backing = Some(visual_intro_title_art_buffer(&intro.game_dir, None, None));
@@ -23035,7 +24353,11 @@ mod tests {
         let mut expected = new_intro_display_buffer();
         expected.clear(0);
         expected.draw_title_tick(ACK_MENU_REBUILD_TITLE_TICK_FRAME, &frames);
-        draw_visual_intro_menu_text_window_frame(&mut expected, &font);
+        draw_visual_intro_menu_text_window_frame(
+            &mut expected,
+            &font,
+            intro_menu_select_caption_cursor_glyph(0),
+        );
         draw_visual_intro_menu_labels(&mut expected, &font, Some(IntroSubflow::Acknowledgements));
 
         assert_eq!(acknowledgements_panel(&intro).hidden, expected);
@@ -23253,8 +24575,8 @@ mod tests {
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert_eq!(
-            intro.dispatch.intro.cached_selection,
-            Some(IntroSubflow::ReturnToView)
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::ReturnToView
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -23315,7 +24637,11 @@ mod tests {
         let mut buffer = new_intro_display_buffer();
         // Seed the row with the menu frame's copyright caption so the
         // erase has something to remove.
-        draw_visual_intro_menu_text_window_frame(&mut buffer, &font);
+        draw_visual_intro_menu_text_window_frame(
+            &mut buffer,
+            &font,
+            intro_menu_select_caption_cursor_glyph(0),
+        );
 
         let caption = "The Summoning";
         draw_return_to_view_caption(&mut buffer, &font, caption);
@@ -23596,5 +24922,485 @@ mod tests {
                 .any(|frame| frame.pixels.iter().any(|pixel| *pixel != 0)),
             "no Return-to-View frame painted any pixels"
         );
+    }
+
+    // =================================================================
+    // Presentation gap batch: intro title tick, intro menu cursor cell,
+    // stats-panel active-player marker, endgame narrative windows.
+    // =================================================================
+
+    /// `systems/intro.md §5` "Slot-to-frame order and starting frame":
+    /// "The counter is **free-running driver state**: nothing in the
+    /// intro resets it ... The one place the band's contents are
+    /// decoupled from the counter is the return from Acknowledgements,
+    /// which repaints the band statically from record `1` while the
+    /// counter keeps its own position (section 11.2, step 6)."
+    #[test]
+    fn acknowledgements_return_leaves_the_title_tick_counter_alone() {
+        let dir = debug_game_dir();
+        let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
+        // Seed a counter position the Acknowledgements path must not
+        // touch. Frame 3 is the last of the published four.
+        intro.title_tick_frame = 3;
+
+        for _ in 0..ACK_PART_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+        }
+        assert!(step_visual_intro_panel(&mut intro, ' '));
+        for _ in 0..=ACK_CLOSE_STEP_COUNT {
+            advance_visual_intro_acknowledgements(&mut intro);
+        }
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+
+        // The band's *contents* are decoupled: step 6 repainted it from
+        // `ULTIMA` record 1, i.e. frame 0.
+        assert_eq!(
+            intro.title_tick_visible_frame, ACK_MENU_REBUILD_TITLE_TICK_FRAME,
+            "the returned menu shows the static step-6 repaint"
+        );
+        // The counter itself keeps its own position.
+        assert_eq!(
+            intro.title_tick_frame, 3,
+            "nothing in the intro resets the free-running title-tick counter"
+        );
+
+        // ... and the next tick resumes the cycle from there rather
+        // than from record 1.
+        clear_carry_visual_intro_title_tick(&mut intro);
+        assert_eq!(intro.title_tick_visible_frame, 3);
+        assert_eq!(intro.title_tick_frame, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §6.1` "The cursor cell": the cell parked at row
+    /// 15, column 23 "is not an on/off blink. It cycles the same four
+    /// consecutive fixed-cell glyph codes `0x05` through `0x08` ... one
+    /// phase per menu poll pass. ... The instant a poll returns a key
+    /// the cell is overwritten with a space."
+    #[test]
+    fn intro_menu_cursor_cell_cycles_one_phase_per_poll_pass() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+
+        let mut phases = Vec::new();
+        for pass in 0..4 {
+            assert!(
+                !advance_visual_intro_finished_menu_idle(&mut intro),
+                "four idle passes are far short of the {INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES}-pass timeout (pass {pass})"
+            );
+            phases.push(visual_intro_menu_cursor_glyph(&intro));
+        }
+
+        for glyph in &phases {
+            assert!(
+                u5_runtime::gameplay_chrome::PROMPT_CURSOR_FRAME_GLYPHS.contains(glyph),
+                "cursor phase {glyph:#04x} is outside the published 0x05..=0x08 run"
+            );
+        }
+        let mut distinct = phases.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(
+            distinct.len(),
+            4,
+            "four consecutive poll passes must show all four phases, got {phases:?}"
+        );
+
+        // The instant a poll returns a key the cell is a space.
+        step_visual_intro(&mut intro, 'x');
+        assert_eq!(
+            visual_intro_menu_cursor_glyph(&intro),
+            b' ',
+            "a poll that returns a key overwrites the cursor cell with a space"
+        );
+
+        // The next no-key pass resumes the cycle - it does not restart
+        // it, because the pass counter is not the idle-timeout counter.
+        assert!(!advance_visual_intro_finished_menu_idle(&mut intro));
+        let resumed = visual_intro_menu_cursor_glyph(&intro);
+        assert!(u5_runtime::gameplay_chrome::PROMPT_CURSOR_FRAME_GLYPHS.contains(&resumed));
+        assert_ne!(resumed, b' ');
+        assert_eq!(
+            resumed,
+            u5_runtime::gameplay_chrome::prompt_cursor_glyph(intro.menu_cursor_pass)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The §6.1 cursor cell reaches the drawn frame: two different
+    /// phases paint two different cells at row 15, column 23. A fixed
+    /// compile-time glyph cannot pass this.
+    #[test]
+    fn intro_menu_cursor_cell_phase_reaches_the_drawn_caption() {
+        // A font whose every glyph bitmap differs, so a changed glyph
+        // code is a changed cell.
+        let mut bytes = vec![0u8; CH_FONT_LEN];
+        for (code, chunk) in bytes.chunks_exact_mut(CH_CELL_SIDE).enumerate() {
+            chunk[0] = code as u8;
+            chunk[1] = !(code as u8);
+        }
+        let font = parse_ch_font(&bytes, IBM_CH_FILE).unwrap();
+
+        let cell_x =
+            usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN) + INTRO_MENU_SELECT_CAPTION_PREFIX.len();
+        let cell_y = usize::from(INTRO_MENU_SELECT_CAPTION_ROW);
+        let read_cell = |glyph: u8| {
+            let mut buffer = new_intro_display_buffer();
+            draw_visual_intro_menu_text_window_frame(&mut buffer, &font, glyph);
+            let mut cell = Vec::new();
+            for row in 0..CH_CELL_SIDE {
+                let y = cell_y * CH_CELL_SIDE + row;
+                let x = cell_x * CH_CELL_SIDE;
+                cell.extend_from_slice(&buffer.pixels[y * buffer.width + x..][..CH_CELL_SIDE]);
+            }
+            cell
+        };
+
+        let phase_0 = read_cell(intro_menu_select_caption_cursor_glyph(0));
+        let phase_1 = read_cell(intro_menu_select_caption_cursor_glyph(1));
+        let blanked = read_cell(INTRO_MENU_SELECT_CAPTION_CURSOR_BLANK);
+        assert_ne!(
+            phase_0, phase_1,
+            "consecutive poll passes must draw different cursor cells"
+        );
+        assert_ne!(phase_0, blanked, "the blanked cell is not a cursor phase");
+    }
+
+    fn blank_fixed_cell_font() -> FixedCellFont {
+        parse_ch_font(&vec![0x00; CH_FONT_LEN], IBM_CH_FILE).unwrap()
+    }
+
+    /// `systems/stats-panel.md §4.1` / §11: "The marker is persistent:
+    /// it survives any number of refreshes and is cleared only by an
+    /// explicit selection change or by the dead/sleeping rule." The
+    /// earlier consume-on-refresh reading is withdrawn (RETRACTIONS
+    /// R134).
+    #[test]
+    fn visual_status_refresh_keeps_the_active_player_marker() {
+        let font = blank_fixed_cell_font();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_player = Some(0);
+
+        for refresh in 0..4 {
+            let _ =
+                render_integrated_status_framebuffer(&mut state, "", "", play_ctx(&font), false);
+            assert_eq!(
+                state.active_player,
+                Some(0),
+                "refresh {refresh} must not consume the selector"
+            );
+        }
+
+        // The dead/sleeping branch - the one that draws a space instead
+        // of the marker - is the branch that resets the selector.
+        state.party[0].status = b'S';
+        let _ = render_integrated_status_framebuffer(&mut state, "", "", play_ctx(&font), false);
+        assert_eq!(state.active_player, None);
+
+        state.active_player = Some(0);
+        state.party[0].status = b'D';
+        let _ = render_integrated_status_framebuffer(&mut state, "", "", play_ctx(&font), false);
+        assert_eq!(state.active_player, None);
+    }
+
+    /// The same two rules on the non-integrated status renderer.
+    #[test]
+    fn visual_status_framebuffer_keeps_the_active_player_marker() {
+        let font = blank_fixed_cell_font();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_player = Some(0);
+
+        for _ in 0..3 {
+            let _ = render_status_framebuffer(&mut state, "", "", &font);
+            assert_eq!(state.active_player, Some(0));
+        }
+        state.party[0].status = b'D';
+        let _ = render_status_framebuffer(&mut state, "", "", &font);
+        assert_eq!(state.active_player, None);
+    }
+
+    /// `systems/stats-panel.md §4`, party-row field table, column 33:
+    /// "Active-player marker | The fixed-cell font's right-pointing
+    /// arrow, glyph code `0x1A`, or a space."
+    #[test]
+    fn stats_panel_active_marker_cell_carries_glyph_0x1a() {
+        use u5_runtime::gameplay_chrome::STATS_ROSTER_TOP;
+        use u5_runtime::stats_panel::{
+            STATS_PANEL_ACTIVE_MARKER_COLUMN, STATS_PANEL_ACTIVE_MARKER_GLYPH,
+        };
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_player = Some(0);
+
+        let marker_cell = |state: &PlayState| {
+            let mut system = TextWindowSystem::new();
+            configure_play_text_windows(&mut system);
+            paint_stats_panel_text_window(&mut system, state, state.active_player);
+            system
+                .cell(STATS_PANEL_ACTIVE_MARKER_COLUMN, STATS_ROSTER_TOP)
+                .expect("the marker cell is inside the screen")
+                .byte
+        };
+
+        assert_eq!(
+            marker_cell(&state),
+            STATS_PANEL_ACTIVE_MARKER_GLYPH,
+            "column 33 must carry the fixed-cell arrow glyph 0x1A, not ASCII '>'"
+        );
+        assert_eq!(STATS_PANEL_ACTIVE_MARKER_GLYPH, 0x1A);
+
+        // Every unselected row - and a dead selected row - gets a space.
+        let mut unselected = state.clone();
+        unselected.active_player = None;
+        assert_eq!(marker_cell(&unselected), b' ');
+        let mut dead = state.clone();
+        dead.party[0].status = b'D';
+        assert_eq!(marker_cell(&dead), b' ');
+    }
+
+    /// The Bevy shell renders the **emitted cell stream** - every status
+    /// frame goes `paint_stats_panel_text_window` -> `TextWindowSystem`
+    /// -> `render_text_window_rgba`, which looks each cell byte up in
+    /// `IBM.CH`. So the byte the panel emits for column 33 is the glyph
+    /// the player sees, and `stats-panel.md §4` requires that to be the
+    /// font's right-pointing arrow, glyph code `0x1A` - not ASCII `>`.
+    ///
+    /// Asserted against the real pixels rather than the cell byte, so a
+    /// regression anywhere along that path is caught.
+    #[test]
+    fn visual_status_frame_paints_the_marker_with_font_glyph_0x1a() {
+        use u5_runtime::gameplay_chrome::STATS_ROSTER_TOP;
+        use u5_runtime::graphics::TEXT_WINDOW_RENDER_WIDTH;
+        use u5_runtime::stats_panel::{
+            STATS_PANEL_ACTIVE_MARKER_COLUMN, STATS_PANEL_ACTIVE_MARKER_GLYPH,
+        };
+
+        // A font whose every glyph bitmap is distinct, so the painted
+        // cell identifies the glyph code that reached it.
+        let mut bytes = vec![0u8; CH_FONT_LEN];
+        for (code, chunk) in bytes.chunks_exact_mut(CH_CELL_SIDE).enumerate() {
+            chunk[0] = code as u8;
+            chunk[1] = !(code as u8);
+            chunk[2] = (code as u8).rotate_left(3);
+        }
+        let font = parse_ch_font(&bytes, IBM_CH_FILE).unwrap();
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_player = Some(0);
+        let rgba = render_status_framebuffer(&mut state, "", "", &font);
+
+        let cell_x = usize::from(STATS_PANEL_ACTIVE_MARKER_COLUMN);
+        let cell_y = usize::from(STATS_ROSTER_TOP);
+        let painted: Vec<u8> = (0..CH_CELL_SIDE)
+            .map(|glyph_y| {
+                let mut bits = 0u8;
+                for glyph_x in 0..CH_CELL_SIDE {
+                    let px = cell_x * CH_CELL_SIDE + glyph_x;
+                    let py = cell_y * CH_CELL_SIDE + glyph_y;
+                    let offset = (py * TEXT_WINDOW_RENDER_WIDTH + px) * 4;
+                    if rgba[offset..offset + 3] != [0, 0, 0] {
+                        bits |= 1 << (7 - glyph_x);
+                    }
+                }
+                bits
+            })
+            .collect();
+
+        let rows_for = |code: u8| -> Vec<u8> {
+            (0..CH_CELL_SIDE)
+                .map(|row| font.glyph_row(code, row).unwrap())
+                .collect()
+        };
+        assert_eq!(
+            painted,
+            rows_for(STATS_PANEL_ACTIVE_MARKER_GLYPH),
+            "the marker cell must be painted from IBM.CH glyph 0x1A"
+        );
+        assert_ne!(
+            painted,
+            rows_for(b'>'),
+            "the ASCII arrow is the plain-text stand-in, never the painted glyph"
+        );
+    }
+
+    /// `systems/endgame.md §8.1` "Per-window bindings" and `§8.2`
+    /// "Per-window paragraph rectangles": every one of the six windows
+    /// binds a published panel and a published layout descriptor, and
+    /// windows 1 and 4 - and only those - draw `TEXT` title strips.
+    #[test]
+    fn endgame_narrative_window_tables_match_the_published_rows() {
+        use u5_runtime::story_layout::{
+            ENDGAME_NARRATIVE_WINDOWS, endgame_narrative_panel, endgame_narrative_paragraph_box,
+            endgame_narrative_title_strips,
+        };
+
+        // §8.1: archive, slot, size, top-left, END.DAT record.
+        let bindings = [
+            ("END1", 0u8, 167u16, 124u16, 0u16, 0u16, 1u8),
+            ("END1", 1, 191, 90, 64, 0, 2),
+            ("END1", 2, 192, 95, 0, 52, 3),
+            ("END2", 0, 173, 98, 0, 0, 4),
+            ("END2", 1, 157, 90, 0, 92, 5),
+            ("END2", 2, 153, 110, 160, 0, 6),
+        ];
+        for (index, (archive, slot, width, height, x, y, record)) in
+            bindings.into_iter().enumerate()
+        {
+            let panel = endgame_narrative_panel(index).expect("published window");
+            assert_eq!(panel.archive, archive, "window {} archive", index + 1);
+            assert_eq!(panel.slot, slot, "window {} slot", index + 1);
+            assert_eq!(
+                (panel.width, panel.height),
+                (width, height),
+                "window {} panel size",
+                index + 1
+            );
+            assert_eq!(
+                (panel.top_left_x, panel.top_left_y),
+                (x, y),
+                "window {} panel top-left",
+                index + 1
+            );
+            assert_eq!(
+                panel.end_dat_record,
+                record,
+                "window {} END.DAT record",
+                index + 1
+            );
+        }
+
+        // §8.2: pen start, the two margin pairs, the band bounds.
+        let rectangles = [
+            (172u16, 66u16, 172u16, 320u16, 0u16, 320u16, 126u16, 200u16),
+            (0, 92, 0, 320, 0, 320, 126, 200),
+            (0, 9, 0, 320, 196, 320, 42, 148),
+            (179, 38, 179, 320, 0, 320, 100, 200),
+            (0, 9, 0, 320, 161, 320, 82, 200),
+            (0, 0, 0, 154, 0, 320, 112, 200),
+        ];
+        for (index, (pen_x, pen_y, left_a, right_a, left_b, right_b, low, high)) in
+            rectangles.into_iter().enumerate()
+        {
+            let d = endgame_narrative_paragraph_box(index).expect("published window");
+            assert_eq!((d.pen_x, d.pen_y), (pen_x, pen_y), "window {}", index + 1);
+            assert_eq!(
+                (d.left_a, d.right_a),
+                (left_a, right_a),
+                "window {}",
+                index + 1
+            );
+            assert_eq!(
+                (d.left_b, d.right_b),
+                (left_b, right_b),
+                "window {}",
+                index + 1
+            );
+            assert_eq!(
+                (d.band_low, d.band_high),
+                (low, high),
+                "window {}",
+                index + 1
+            );
+            // "The endgame never writes the space advance, so all six
+            // windows lay out with the shipped default of five."
+            assert_eq!(d.space_advance, 5, "window {}", index + 1);
+        }
+
+        // §8.2 title strips: window 1 and window 4 only.
+        let strips_1 = endgame_narrative_title_strips(0);
+        assert_eq!(strips_1.len(), 2);
+        assert_eq!(
+            (strips_1[0].slot, strips_1[0].x, strips_1[0].y),
+            (0, 216, 0)
+        );
+        assert_eq!(
+            (strips_1[1].slot, strips_1[1].x, strips_1[1].y),
+            (4, 152, 28)
+        );
+        let strips_4 = endgame_narrative_title_strips(3);
+        assert_eq!(strips_4.len(), 2);
+        assert_eq!(
+            (strips_4[0].slot, strips_4[0].x, strips_4[0].y),
+            (5, 224, 0)
+        );
+        assert_eq!(
+            (strips_4[1].slot, strips_4[1].x, strips_4[1].y),
+            (0, 176, 0)
+        );
+        for window in [1usize, 2, 4, 5] {
+            assert!(
+                endgame_narrative_title_strips(window).is_empty(),
+                "window {} draws no title strip",
+                window + 1
+            );
+        }
+        assert_eq!(ENDGAME_NARRATIVE_WINDOWS, 6);
+    }
+
+    /// `systems/endgame.md §8.3`: each narrative window composes its
+    /// panel and prose onto a cleared page. The old renderer emitted the
+    /// text through the full-screen fixed-cell window and drew no panel
+    /// at all, so a frame with the panel present cannot match one.
+    #[test]
+    fn endgame_narrative_window_frame_composes_its_published_panel() {
+        use u5_runtime::story_layout::endgame_narrative_panel;
+
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join("END1.16").exists() {
+            eprintln!("skipping: local clean assets are not installed");
+            return;
+        }
+        let font = blank_fixed_cell_font();
+        let ctx = PlayFrameContext {
+            ibm: &font,
+            runes: &font,
+            game_dir,
+            cursor_frame: 0,
+        };
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = "The Avatar returns.".to_string();
+
+        for window_index in 0..6usize {
+            let rgba = render_endgame_narrative_window_framebuffer(
+                &state,
+                window_index,
+                PlayFrameContext {
+                    ibm: ctx.ibm,
+                    runes: ctx.runes,
+                    game_dir: ctx.game_dir,
+                    cursor_frame: 0,
+                },
+            );
+            assert_eq!(
+                rgba.len(),
+                INTRO_FRAMEBUFFER_WIDTH as usize * INTRO_FRAMEBUFFER_HEIGHT as usize * 4
+            );
+
+            // The panel's own rectangle is not the cleared page any
+            // more: the §8.1 record was drawn opaquely into it.
+            let panel = endgame_narrative_panel(window_index).expect("published window");
+            let width = INTRO_FRAMEBUFFER_WIDTH as usize;
+            let mut painted = 0usize;
+            for y in usize::from(panel.top_left_y)
+                ..usize::from(panel.top_left_y) + usize::from(panel.height)
+            {
+                for x in usize::from(panel.top_left_x)
+                    ..usize::from(panel.top_left_x) + usize::from(panel.width)
+                {
+                    let pixel = (y * width + x) * 4;
+                    if rgba[pixel..pixel + 3] != [0, 0, 0] {
+                        painted += 1;
+                    }
+                }
+            }
+            assert!(
+                painted > 0,
+                "window {} drew no panel pixels from {} slot {}",
+                window_index + 1,
+                panel.archive,
+                panel.slot
+            );
+        }
     }
 }

@@ -769,7 +769,7 @@
 
     #[test]
     fn negate_time_t_tag_freezes_minutes_npcs_and_active_objects_while_counter_decays() {
-        let mut state = test_state(open_grid(), 1, 1);
+        let mut state = test_state(npc_open_grid(), 1, 1);
         state.clock = GameClock::new(17, 59).unwrap();
         state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
         state.active_effect_counter = 2;
@@ -804,6 +804,8 @@
         });
 
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!(state.clock, GameClock::new(17, 59).unwrap());
         assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
@@ -815,6 +817,8 @@
         assert_eq!(state.active_objects[2].tile, 168);
 
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!(state.clock, GameClock::new(17, 59).unwrap());
         assert_eq!(state.active_effect_tag, None);
@@ -826,6 +830,8 @@
         assert_eq!(state.active_objects[2].tile, 168);
 
         state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+        state.apply_pending_town_object_epilogue();
 
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!(state.torch_counter, 4);
@@ -1004,7 +1010,13 @@
     }
 
     #[test]
-    fn cast_gate_travel_shipboard_refuses_before_charge_consumption() {
+    fn cast_gate_travel_shipboard_refusal_spends_the_charge_and_the_mana() {
+        // magic.md §5 steps 4-7: the dispatcher decrements the premixed charge
+        // "immediately, before any further checks" and debits mana before it
+        // "computes the spell's index (0..47) into a forty-eight-entry
+        // dispatch table and calls the matching handler". magic.md §8 puts the
+        // shipboard test inside the Gate Travel handler, so a shipboard
+        // attempt is a committed cast that refunds nothing.
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
         state.party[0].mana = 9;
@@ -1028,16 +1040,12 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, 9);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 9 - GATE_TRAVEL_COST);
+        // "A spell cast costs one turn regardless of the spell's power."
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Cannot Gate Travel shipboard.");
+        // The party has not moved: the refusal is inside the handler, above
+        // the moonstone-slot teleport.
+        assert_eq!((state.player.x, state.player.y), (5, 5));
     }
-
-
-
-
-
-
-
-

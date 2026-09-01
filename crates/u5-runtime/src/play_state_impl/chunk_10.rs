@@ -9,6 +9,12 @@ impl PlayState {
         let Some(mut tracker) = self.door_tracker else {
             return;
         };
+        // A loaded town clears only the previous-tile/active byte. Preserve
+        // the other three save bytes exactly; they are inert and must not
+        // restore a tile or count down during this visit.
+        if tracker.previous_tile == 0 {
+            return;
+        }
         tracker.turns_remaining = tracker.turns_remaining.saturating_sub(1);
         if tracker.turns_remaining == 0 {
             self.grid[tracker.y * 32 + tracker.x] = tracker.previous_tile;
@@ -172,9 +178,13 @@ impl PlayState {
                 sails_hoisted: false,
                 ..
             } => nearby_support,
-            TransportState::Balloon { .. } => {
-                nearby_support || self.player_can_land_on_foot(game_dir, current.0, current.1)?
-            }
+            // `vehicles.md §11`: balloon is "catalog assets only"; the
+            // X-Xit landing rule this arm carried is one of the three
+            // things §11 names explicitly -- "Do not invent boarding,
+            // landing, or wind-driven balloon movement" -- so it is
+            // deleted rather than given to another family. §5's X-Xit
+            // acceptances for horse, carpet, skiff and furled ship are
+            // unchanged.
             TransportState::Foot
             | TransportState::SpriteSuppressed
             | TransportState::Ship {
@@ -382,11 +392,16 @@ impl PlayState {
         let removed = self.removed_town_npc_mask_for_current_scene();
         self.npcs = effective_npc_slots(slots)
             .filter(|slot| {
+                // town-mode.md §4: "a set bit means 'this slot is
+                // permanently gone from this location; do not place it'.
+                // It is read once per slot on entry." The sprite-class
+                // filter governs the write path only; the read path
+                // honours whatever bit the mask carries, including the
+                // two hard-wired bypass writes.
                 slot.type_byte != 0
-                    && !(town_npc_activation_mask_eligible(slot.type_byte)
-                        && 1u32
-                            .checked_shl(slot.slot as u32)
-                            .is_some_and(|bit| removed & bit != 0))
+                    && !1u32
+                        .checked_shl(slot.slot as u32)
+                        .is_some_and(|bit| removed & bit != 0)
             })
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
@@ -398,11 +413,16 @@ impl PlayState {
         let removed = self.removed_town_npc_mask_for_current_scene();
         self.npcs = effective_npc_slots(slots)
             .filter(|slot| {
+                // town-mode.md §4: "a set bit means 'this slot is
+                // permanently gone from this location; do not place it'.
+                // It is read once per slot on entry." The sprite-class
+                // filter governs the write path only; the read path
+                // honours whatever bit the mask carries, including the
+                // two hard-wired bypass writes.
                 slot.type_byte != 0
-                    && !(town_npc_activation_mask_eligible(slot.type_byte)
-                        && 1u32
-                            .checked_shl(slot.slot as u32)
-                            .is_some_and(|bit| removed & bit != 0))
+                    && !1u32
+                        .checked_shl(slot.slot as u32)
+                        .is_some_and(|bit| removed & bit != 0)
             })
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
@@ -626,6 +646,12 @@ impl PlayState {
         };
         let floor = floor as u8;
         let mut moved = false;
+        // npc-schedules.md §7: "At most one NPC per tick may start a fresh
+        // search. The walker latches a 'someone already moved' flag on the
+        // first slot that enters a search arm, and every later slot in the
+        // same tick that would have searched is skipped until the next
+        // tick. Queue replay is not affected by the latch."
+        let mut searched = false;
         for index in 0..self.npcs.len() {
             let wp = waypoint_for_hour(&self.npcs[index].schedule, self.clock.hour);
             let (tx, ty, tz) = self.npcs[index].waypoint_position(wp);
@@ -697,27 +723,57 @@ impl PlayState {
 
             match self.npcs[index].state {
                 NPC_STATE_REPLAY_QUEUE => {
-                    if self.advance_npc_replay_queue_step(index, wp, tx, ty, tz, floor) {
-                        moved = true;
+                    match self.advance_npc_replay_queue_step(index, wp, tx, ty, tz, floor) {
+                        NpcScheduleStepOutcome::Moved => moved = true,
+                        NpcScheduleStepOutcome::Stalled => {}
+                        // npc-schedules.md §7: the queue-drain re-entry into
+                        // state 6/7 "also ends the tick... every slot after
+                        // the one that triggered it is skipped for that tick".
+                        // It is the only path in the walker that leaves the
+                        // per-slot loop early.
+                        NpcScheduleStepOutcome::EndTick => break,
                     }
                 }
                 NPC_STATE_INPLANE_MOVE => {
-                    if self.advance_npc_in_plane_schedule_step(index, wp, tx, ty, tz, floor) {
-                        moved = true;
+                    match self.advance_npc_in_plane_schedule_step(
+                        index,
+                        wp,
+                        tx,
+                        ty,
+                        tz,
+                        floor,
+                        &mut searched,
+                    ) {
+                        NpcScheduleStepOutcome::Moved => moved = true,
+                        NpcScheduleStepOutcome::Stalled => {}
+                        NpcScheduleStepOutcome::EndTick => break,
                     }
                 }
                 NPC_STATE_DESCEND_TOWARD_TARGET
                 | NPC_STATE_ASCEND_TOWARD_TARGET
                 | NPC_STATE_CLIMB_UP_OFF_FLOOR
                 | NPC_STATE_CLIMB_DOWN_OFF_FLOOR => {
-                    if self.advance_npc_floor_transition_step(index, wp, tx, ty, tz, floor) {
+                    if self.advance_npc_floor_transition_step(
+                        index,
+                        wp,
+                        tx,
+                        ty,
+                        tz,
+                        floor,
+                        &mut searched,
+                    ) {
                         moved = true;
                     }
                 }
-                NPC_STATE_PARKED_OFF_FLOOR => {
-                    self.npcs[index].note_failed_progress();
+                // npc-schedules.md §7: state 8 is *not* a parked state - the
+                // walker resolves it immediately with the ungated placement,
+                // and "the same ungated placement is what happens if any
+                // unexpected state value reaches the floor-transition arm".
+                _ => {
+                    if self.place_npc_at_waypoint_ungated(index, wp, tx, ty, tz, floor) {
+                        moved = true;
+                    }
                 }
-                _ => {}
             }
         }
         if moved {
@@ -725,6 +781,8 @@ impl PlayState {
         }
     }
 
+    /// `npc-schedules.md §7` state 2. The cardinal probe is not a search;
+    /// only the flood fill is, so `searched` gates the route call alone.
     pub fn advance_npc_in_plane_schedule_step(
         &mut self,
         npc_index: usize,
@@ -733,26 +791,38 @@ impl PlayState {
         target_y: usize,
         target_z: u8,
         floor: u8,
-    ) -> bool {
+        searched: &mut bool,
+    ) -> NpcScheduleStepOutcome {
         let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
         let target = (target_x, target_y);
         let direct_step = step_toward(start, target).filter(|(nx, ny)| {
             self.npc_can_step_toward(npc_index, *nx, *ny, floor, target_x, target_y)
         });
         if let Some((nx, ny)) = direct_step {
-            return self.commit_npc_schedule_position(
+            return NpcScheduleStepOutcome::from_moved(self.commit_npc_schedule_position(
                 npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, target_z,
-            );
+            ));
         }
+        if *searched {
+            self.npcs[npc_index].note_failed_progress();
+            return NpcScheduleStepOutcome::Stalled;
+        }
+        *searched = true;
         let Some(route) = self.npc_path_route(npc_index, start, target, floor) else {
             self.npcs[npc_index].note_failed_progress();
-            return false;
+            return NpcScheduleStepOutcome::Stalled;
         };
         self.npcs[npc_index].set_move_queue(route);
         self.advance_npc_replay_queue_step(npc_index, waypoint, target_x, target_y, target_z, floor)
     }
 
-    pub fn advance_npc_replay_queue_step(
+    /// `npc-schedules.md §7` state 8 and the unexpected-state default:
+    /// "the walker resolves it immediately by writing the active
+    /// waypoint's `(x, y, z)` straight into the NPC's runtime position,
+    /// caching the waypoint, deactivating the move queue and returning
+    /// the state to idle." No gate and no search; the world-mutation
+    /// primitive still gets its chance to free or allocate a sprite.
+    pub fn place_npc_at_waypoint_ungated(
         &mut self,
         npc_index: usize,
         waypoint: usize,
@@ -761,18 +831,50 @@ impl PlayState {
         target_z: u8,
         floor: u8,
     ) -> bool {
+        self.npcs[npc_index].x = target_x;
+        self.npcs[npc_index].y = target_y;
+        self.npcs[npc_index].z = target_z;
+        self.npcs[npc_index].set_settled_at_waypoint(waypoint);
+        // §7: when neither end is on the displayed floor "no sprite is
+        // allocated and nothing is visible", so only an actual sprite-layer
+        // change counts as movement for the pass's repaint flag.
+        self.sync_npc_active_object(npc_index, floor)
+    }
+
+    /// `npc-schedules.md §7` state 3. Queue replay is exempt from the
+    /// per-tick search latch; it performs no search of its own.
+    pub fn advance_npc_replay_queue_step(
+        &mut self,
+        npc_index: usize,
+        waypoint: usize,
+        target_x: usize,
+        target_y: usize,
+        target_z: u8,
+        floor: u8,
+    ) -> NpcScheduleStepOutcome {
         let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
         let Some(code) = self.npcs[npc_index].peek_move_queue_direction() else {
+            // npc-schedules.md §7: "when a queued route drains while the NPC
+            // is still in state 3, the walker re-reads the active waypoint
+            // and re-enters state 6 or 7 according to whether that
+            // waypoint's floor is above or below the displayed floor" - and
+            // that transition also ends the tick.
+            if target_z != floor {
+                self.npcs[npc_index].state =
+                    schedule_floor_state(self.npcs[npc_index].z, target_z, floor);
+                self.npcs[npc_index].reset_move_queue();
+                return NpcScheduleStepOutcome::EndTick;
+            }
             self.npcs[npc_index].set_idle();
-            return false;
+            return NpcScheduleStepOutcome::Stalled;
         };
         let Some((nx, ny)) = npc_step_from_direction_code(start, code) else {
             self.npcs[npc_index].note_failed_progress();
-            return false;
+            return NpcScheduleStepOutcome::Stalled;
         };
         if !self.npc_can_step_toward(npc_index, nx, ny, floor, target_x, target_y) {
             self.npcs[npc_index].note_failed_progress();
-            return false;
+            return NpcScheduleStepOutcome::Stalled;
         }
         self.npcs[npc_index].advance_move_queue_direction();
         let moved = self.commit_npc_schedule_position(
@@ -781,7 +883,7 @@ impl PlayState {
         if (nx, ny) != (target_x, target_y) && !self.npcs[npc_index].move_queue.is_empty() {
             self.npcs[npc_index].state = NPC_STATE_REPLAY_QUEUE;
         }
-        moved
+        NpcScheduleStepOutcome::from_moved(moved)
     }
 
     pub fn commit_npc_schedule_position(
@@ -1007,6 +1109,10 @@ impl PlayState {
         None
     }
 
+    /// `npc-schedules.md §7` states 4/5/6/7. Both halves of the pass run
+    /// a search, so both are gated by the per-tick search latch; the
+    /// on-floor gate-accept fast path performs no search and stays
+    /// unlatched.
     pub fn advance_npc_floor_transition_step(
         &mut self,
         npc_index: usize,
@@ -1015,27 +1121,35 @@ impl PlayState {
         target_y: usize,
         target_z: u8,
         floor: u8,
+        searched: &mut bool,
     ) -> bool {
         let npc_z = self.npcs[npc_index].z;
         if npc_z == floor {
             if target_z == floor {
                 return false;
             }
-            let marker = npc_floor_link_marker_for_delta(npc_z, target_z);
+            // npc-schedules.md §8.5: states 6/7 hunt the link that points
+            // toward the waypoint's floor, the one that is not displayed.
+            let marker = npc_floor_link_marker_toward(floor, target_z);
             let current = (self.npcs[npc_index].x, self.npcs[npc_index].y);
-            if self.grid[current.1 * 32 + current.0] == marker {
-                let next_z = next_floor_toward(npc_z, target_z);
-                self.npcs[npc_index].z = next_z;
-                if (self.npcs[npc_index].x, self.npcs[npc_index].y, next_z)
-                    == (target_x, target_y, target_z)
-                {
-                    self.npcs[npc_index].set_settled_at_waypoint(waypoint);
-                } else {
-                    self.npcs[npc_index].state = schedule_floor_state(next_z, target_z, floor);
-                    self.npcs[npc_index].stuck_counter = 0;
-                }
-                return self.sync_npc_active_object(npc_index, floor);
+            if npc_floor_link_gate_accepts(self.grid[current.1 * 32 + current.0], marker) {
+                // npc-schedules.md §8.5, states 6/7: "When the gate accepts,
+                // the walker writes the NPC's position directly to the active
+                // waypoint's own `(x, y, z)`, caches the waypoint, deactivates
+                // the move queue and returns the state to idle; the NPC leaves
+                // the displayed floor and its sprite is released." There is no
+                // paired link cell on the destination floor and no one-floor-
+                // at-a-time climb: "an on-floor NPC lands on its schedule
+                // waypoint's own coordinates, wherever they are."
+                return self.place_npc_at_waypoint_ungated(
+                    npc_index, waypoint, target_x, target_y, target_z, floor,
+                );
             }
+            if *searched {
+                self.npcs[npc_index].note_failed_progress();
+                return false;
+            }
+            *searched = true;
             if let Some((nx, ny)) =
                 self.npc_path_step_to_floor_link(npc_index, marker, target_x, target_y, floor)
             {
@@ -1051,7 +1165,15 @@ impl PlayState {
         }
 
         if target_z == floor {
-            let marker = npc_floor_link_marker_for_delta(npc_z, target_z);
+            // npc-schedules.md §8.5: for states 4/5 the floor that is not
+            // displayed is the NPC's own, so the marker points toward it —
+            // `0xC8` for an NPC above, `0xC9` for one below.
+            let marker = npc_floor_link_marker_toward(floor, npc_z);
+            if *searched {
+                self.npcs[npc_index].note_failed_progress();
+                return false;
+            }
+            *searched = true;
             let Some((x, y)) = self.nearest_npc_floor_link_to(marker, target_x, target_y) else {
                 self.npcs[npc_index].note_failed_progress();
                 return false;
@@ -1068,13 +1190,9 @@ impl PlayState {
             return self.sync_npc_active_object(npc_index, floor);
         }
 
-        if (self.npcs[npc_index].x, self.npcs[npc_index].y, npc_z) == (target_x, target_y, target_z)
-        {
-            self.npcs[npc_index].set_settled_at_waypoint(waypoint);
-        } else {
-            self.npcs[npc_index].note_failed_progress();
-        }
-        false
+        // npc-schedules.md §7: neither end is on the displayed floor, so
+        // this is the state-8 case - the ungated placement, not a stall.
+        self.place_npc_at_waypoint_ungated(npc_index, waypoint, target_x, target_y, target_z, floor)
     }
 
     pub fn npc_path_step_to_floor_link(
@@ -1132,7 +1250,7 @@ impl PlayState {
                 }
                 seen[idx] = true;
                 prev[idx] = Some((x, y));
-                if self.grid[idx] == marker {
+                if npc_floor_link_arrival_accepts(self.grid[idx], marker) {
                     let mut cells = vec![(nx, ny)];
                     let mut current = (nx, ny);
                     while let Some(parent) = prev[current.1 * 32 + current.0] {
@@ -1171,8 +1289,11 @@ impl PlayState {
         if x >= 32 || y >= 32 {
             return false;
         }
+        // npc-schedules.md §8.5: the arrival/route cells accept the
+        // state's own link marker or the visible stairway family; every
+        // other cell falls back to the §10 obstacle test.
         let tile = self.grid[y * 32 + x];
-        if tile != marker && !npc_path_tile_open(tile) {
+        if !npc_floor_link_arrival_accepts(tile, marker) && npc_path_tile_obstacle(tile) {
             return false;
         }
 
@@ -1216,9 +1337,9 @@ impl PlayState {
             .chunks_exact(32)
             .enumerate()
             .flat_map(|(y, row)| {
-                row.iter()
-                    .enumerate()
-                    .filter_map(move |(x, tile)| (*tile == marker).then_some((x, y)))
+                row.iter().enumerate().filter_map(move |(x, tile)| {
+                    npc_floor_link_arrival_accepts(*tile, marker).then_some((x, y))
+                })
             })
             .collect()
     }
@@ -1240,24 +1361,6 @@ fn cardinal_direction_from_sign(dx: isize, dy: isize) -> Option<Direction> {
         (0, -1) => Some(Direction::North),
         (0, 1) => Some(Direction::South),
         _ => None,
-    }
-}
-
-fn npc_floor_link_marker_for_delta(from_z: u8, to_z: u8) -> u8 {
-    if to_z < from_z {
-        NPC_FLOOR_LINK_TILE_C8
-    } else {
-        NPC_FLOOR_LINK_TILE_C9
-    }
-}
-
-fn next_floor_toward(from_z: u8, to_z: u8) -> u8 {
-    if to_z < from_z {
-        from_z.saturating_sub(1)
-    } else if to_z > from_z {
-        from_z.saturating_add(1)
-    } else {
-        from_z
     }
 }
 

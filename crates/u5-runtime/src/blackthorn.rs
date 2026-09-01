@@ -1,9 +1,5 @@
 //! Blackthorn cutscene helpers per `blackthorn.md` section 7.
 
-use std::fs;
-use std::io;
-use std::path::Path;
-
 /// `conversation.md §2.1` / `blackthorn.md §7a`: the roster dialog
 /// marker that bypasses `.TLK` loading and enters the regime guard
 /// demand handler.
@@ -126,111 +122,6 @@ fn yes_no_demand_input(input: &str) -> Option<bool> {
     }
 }
 
-/// Clean-engine companion save file for Blackthorn story state whose
-/// exact original `SAVED.GAM` byte offsets are not yet public. The
-/// main save image remains byte-preserving for unknown fields; this
-/// sidecar carries only clean semantic state named by
-/// `systems/blackthorn.md` section 8.
-pub const BLACKTHORN_STORY_STATE_FILE: &str = "SAVED.BTH";
-pub const BLACKTHORN_STORY_STATE_MAGIC: [u8; 4] = *b"BTH1";
-pub const BLACKTHORN_STORY_STATE_LEN: usize = 8;
-pub const BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN: usize = 9;
-pub const BLACKTHORN_CAPTURE_CONTEXT_NONE: u8 = 0;
-
-/// `blackthorn.md` section 8 durable capture/rescue state. Jailed or handled
-/// party-member flags are represented as roster-slot bits so the state
-/// survives mode changes and save/load without depending on current
-/// marching order.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct BlackthornStoryState {
-    pub jailed_slots_mask: u16,
-    pub captive_cell_counter: u8,
-    pub capture_context: u8,
-}
-
-impl BlackthornStoryState {
-    pub const fn is_party_slot_jailed(self, slot: u8) -> bool {
-        if slot >= crate::SAVE_ROSTER_SLOT_COUNT as u8 {
-            false
-        } else {
-            (self.jailed_slots_mask & (1u16 << slot)) != 0
-        }
-    }
-
-    pub fn mark_party_slot_jailed(&mut self, slot: u8) -> bool {
-        if slot >= crate::SAVE_ROSTER_SLOT_COUNT as u8 {
-            return false;
-        }
-        let bit = 1u16 << slot;
-        let was_clear = (self.jailed_slots_mask & bit) == 0;
-        self.jailed_slots_mask |= bit;
-        was_clear
-    }
-
-    pub fn clear_jailed_party_slots(&mut self) {
-        self.jailed_slots_mask = 0;
-    }
-
-    pub fn jailed_party_slots(self) -> Vec<u8> {
-        (0..crate::SAVE_ROSTER_SLOT_COUNT as u8)
-            .filter(|slot| self.is_party_slot_jailed(*slot))
-            .collect()
-    }
-
-    pub fn encoded(self) -> [u8; BLACKTHORN_STORY_STATE_LEN] {
-        let mut bytes = [0; BLACKTHORN_STORY_STATE_LEN];
-        bytes[0..4].copy_from_slice(&BLACKTHORN_STORY_STATE_MAGIC);
-        bytes[4..6].copy_from_slice(&self.jailed_slots_mask.to_le_bytes());
-        bytes[6] = self.captive_cell_counter;
-        bytes[7] = self.capture_context;
-        bytes
-    }
-
-    pub fn decode(bytes: &[u8]) -> io::Result<Self> {
-        if bytes.len() != BLACKTHORN_STORY_STATE_LEN
-            && bytes.len() != BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "{BLACKTHORN_STORY_STATE_FILE} must be {BLACKTHORN_STORY_STATE_LEN} bytes, got {}",
-                    bytes.len()
-                ),
-            ));
-        }
-        if bytes[0..4] != BLACKTHORN_STORY_STATE_MAGIC[..] {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{BLACKTHORN_STORY_STATE_FILE} has an invalid signature"),
-            ));
-        }
-        Ok(Self {
-            jailed_slots_mask: u16::from_le_bytes([bytes[4], bytes[5]]),
-            captive_cell_counter: bytes[6],
-            capture_context: if bytes.len() == BLACKTHORN_STORY_STATE_LEN {
-                bytes[7]
-            } else {
-                bytes[8]
-            },
-        })
-    }
-}
-
-pub fn load_blackthorn_story_state(game_dir: &Path) -> io::Result<BlackthornStoryState> {
-    match fs::read(game_dir.join(BLACKTHORN_STORY_STATE_FILE)) {
-        Ok(bytes) => BlackthornStoryState::decode(&bytes),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(BlackthornStoryState::default()),
-        Err(err) => Err(err),
-    }
-}
-
-pub fn write_blackthorn_story_state(
-    game_dir: &Path,
-    state: BlackthornStoryState,
-) -> io::Result<()> {
-    fs::write(game_dir.join(BLACKTHORN_STORY_STATE_FILE), state.encoded())
-}
-
 /// `blackthorn.md` section 7: scene byte the rescue/refuge path hands control
 /// to (`CASTLE:0`, Lord British's Castle, scene byte 17). Anchored
 /// to [`crate::SCENE_LORD_BRITISHS_CASTLE`] so the rescue handoff
@@ -246,6 +137,76 @@ pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;
 
+pub const BLACKTHORN_RESCUE_LEFT_GUARDIAN_CELL: (u8, u8) = (2, 7);
+pub const BLACKTHORN_RESCUE_RIGHT_GUARDIAN_CELL: (u8, u8) = (8, 7);
+pub const BLACKTHORN_RESCUE_SPECTRAL_CELL: (u8, u8) = (5, 2);
+pub const BLACKTHORN_RESCUE_SOFTWARE_ENVELOPE_COUNT: u8 = 6;
+pub const BLACKTHORN_RESCUE_FLASH_COUNT: u8 = 2;
+pub const BLACKTHORN_RESCUE_FLASH_PRNG_DRAWS_PER_INVOCATION: u16 = 1_856;
+
+/// Completed, blocking rescue tableau between the two viewport dissolves.
+/// The runtime records direct-screen operations so frontends do not have to
+/// infer them from the final Lord British's Castle handoff state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlackthornRescuePlayback {
+    pub party_cell: (u8, u8),
+    pub party_atlas_index: u16,
+    pub software_envelope_count: u8,
+    pub guardian_reveals: Vec<BlackthornCellRevealPlayback>,
+    pub spectral_reveal: BlackthornCellRevealPlayback,
+    pub redraw_count: u8,
+    pub bios_waits: Vec<u8>,
+    pub flash_count: u8,
+    pub flash_prng_draws: u16,
+    pub persistent_terrain: Vec<((u8, u8), u8)>,
+    pub persistent_actors: Vec<((u8, u8), u8)>,
+}
+
+pub fn blackthorn_rescue_playback() -> BlackthornRescuePlayback {
+    BlackthornRescuePlayback {
+        party_cell: crate::BLACKTHORN_RESCUE_PARTY_CELL,
+        party_atlas_index: BLACKTHORN_RESCUE_PARTY_ATLAS_INDEX,
+        software_envelope_count: BLACKTHORN_RESCUE_SOFTWARE_ENVELOPE_COUNT,
+        guardian_reveals: vec![
+            blackthorn_cell_reveal_playback(
+                BLACKTHORN_RESCUE_LEFT_GUARDIAN_CELL,
+                u16::from(BLACKTHORN_RESCUE_LEFT_GUARDIAN_TILE),
+            ),
+            blackthorn_cell_reveal_playback(
+                BLACKTHORN_RESCUE_RIGHT_GUARDIAN_CELL,
+                u16::from(BLACKTHORN_RESCUE_RIGHT_GUARDIAN_TILE),
+            ),
+        ],
+        spectral_reveal: blackthorn_cell_reveal_playback(
+            BLACKTHORN_RESCUE_SPECTRAL_CELL,
+            BLACKTHORN_RESCUE_SPECTRAL_ATLAS_INDEX,
+        ),
+        // Party tableau, two Guardian commits, and the spectral commit.
+        redraw_count: 4,
+        bios_waits: vec![4, 4],
+        flash_count: BLACKTHORN_RESCUE_FLASH_COUNT,
+        flash_prng_draws: BLACKTHORN_RESCUE_FLASH_PRNG_DRAWS_PER_INVOCATION
+            * u16::from(BLACKTHORN_RESCUE_FLASH_COUNT),
+        persistent_terrain: vec![
+            (
+                BLACKTHORN_RESCUE_LEFT_GUARDIAN_CELL,
+                BLACKTHORN_RESCUE_LEFT_GUARDIAN_TILE,
+            ),
+            (
+                BLACKTHORN_RESCUE_RIGHT_GUARDIAN_CELL,
+                BLACKTHORN_RESCUE_RIGHT_GUARDIAN_TILE,
+            ),
+        ],
+        persistent_actors: vec![
+            (crate::BLACKTHORN_RESCUE_PARTY_CELL, crate::PLAYER_TILE),
+            (
+                BLACKTHORN_RESCUE_SPECTRAL_CELL,
+                BLACKTHORN_RESCUE_SPECTRAL_ACTOR_BYTE,
+            ),
+        ],
+    }
+}
+
 /// `blackthorn.md` section 6 cutscene-VM actor families. The audience and
 /// failure beats reference these slots by index when emitting
 /// movement descriptors.
@@ -256,12 +217,12 @@ pub enum BlackthornCutsceneActor {
     /// Slot 1: second party member; dragged-away victim of the
     /// failed-challenge punishment beat.
     SecondPartyMember,
-    /// Slot 6: Blackthorn.
-    Blackthorn,
-    /// Slot 7: attendant or guard.
-    Attendant,
-    /// Slot 8: throne or throne-marker tile.
-    Throne,
+    /// Slot 6: left/acting guard.
+    LeftGuard,
+    /// Slot 7: right/secondary guard.
+    RightGuard,
+    /// Slot 8: seated Blackthorn and throne tableau.
+    SeatedBlackthorn,
 }
 
 impl BlackthornCutsceneActor {
@@ -271,9 +232,9 @@ impl BlackthornCutsceneActor {
         match self {
             Self::Avatar => 0,
             Self::SecondPartyMember => 1,
-            Self::Blackthorn => 6,
-            Self::Attendant => 7,
-            Self::Throne => 8,
+            Self::LeftGuard => 6,
+            Self::RightGuard => 7,
+            Self::SeatedBlackthorn => 8,
         }
     }
 }
@@ -288,15 +249,24 @@ pub struct BlackthornCutsceneActorPlacement {
 }
 
 pub const BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER: u8 = 0xb7;
-pub const BLACKTHORN_CUTSCENE_SECOND_PARTY_TYPE: u8 = 0xf1;
-pub const BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE: u8 = 0xf2;
-pub const BLACKTHORN_CUTSCENE_ATTENDANT_TYPE: u8 = 0xf3;
-pub const BLACKTHORN_CUTSCENE_THRONE_TYPE: u8 = 0xf4;
+pub const BLACKTHORN_GUARD_ACTOR_BYTE: u8 = 0x70;
+pub const BLACKTHORN_SUPPRESSED_ACTOR_BYTE: u8 = 0x16;
+pub const BLACKTHORN_SEATED_ACTOR_BYTE: u8 = 0x78;
+pub const BLACKTHORN_SEATED_ATLAS_INDEX: u16 = 0x178;
+pub const BLACKTHORN_COBBLE_TILE: u8 = 0x44;
+pub const BLACKTHORN_LOCKED_DOOR_TILE: u8 = 0xbb;
+pub const BLACKTHORN_PENDULUM_TILE: u8 = 0x82;
+pub const BLACKTHORN_HOURGLASS_TILE: u8 = 0xe9;
+pub const BLACKTHORN_RESCUE_LEFT_GUARDIAN_TILE: u8 = 0x5e;
+pub const BLACKTHORN_RESCUE_RIGHT_GUARDIAN_TILE: u8 = 0x5f;
+pub const BLACKTHORN_RESCUE_SPECTRAL_ACTOR_BYTE: u8 = 0x74;
+pub const BLACKTHORN_RESCUE_SPECTRAL_ATLAS_INDEX: u16 = 0x174;
+pub const BLACKTHORN_RESCUE_PARTY_ATLAS_INDEX: u16 = 0x11c;
 
 /// `blackthorn.md` section 6: clean semantic placements for the named
-/// cutscene-VM actor slots. Exact tile art and byte-script pixel
-/// parity remain visual work, so non-Avatar roles use hidden tiles
-/// with distinct nonzero type tags instead of claiming final art ids.
+/// cutscene-VM actor slots. Actor bytes index the upper atlas bank;
+/// `0x16` is the actor-storage draw-nothing sentinel, not atlas tile
+/// `0x116`.
 pub const BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS: [BlackthornCutsceneActorPlacement; 5] = [
     BlackthornCutsceneActorPlacement {
         actor: BlackthornCutsceneActor::Avatar,
@@ -307,31 +277,31 @@ pub const BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS: [BlackthornCutsceneActorPlacemen
     },
     BlackthornCutsceneActorPlacement {
         actor: BlackthornCutsceneActor::SecondPartyMember,
-        type_byte: BLACKTHORN_CUTSCENE_SECOND_PARTY_TYPE,
-        tile: crate::NPC_HIDDEN_SPRITE_TILE,
+        type_byte: crate::PLAYER_TILE,
+        tile: crate::PLAYER_TILE,
         x: 6,
         y: 9,
     },
     BlackthornCutsceneActorPlacement {
-        actor: BlackthornCutsceneActor::Blackthorn,
-        type_byte: BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE,
-        tile: crate::NPC_HIDDEN_SPRITE_TILE,
-        x: 5,
-        y: 3,
+        actor: BlackthornCutsceneActor::LeftGuard,
+        type_byte: BLACKTHORN_GUARD_ACTOR_BYTE,
+        tile: BLACKTHORN_GUARD_ACTOR_BYTE,
+        x: 4,
+        y: 10,
     },
     BlackthornCutsceneActorPlacement {
-        actor: BlackthornCutsceneActor::Attendant,
-        type_byte: BLACKTHORN_CUTSCENE_ATTENDANT_TYPE,
-        tile: crate::NPC_HIDDEN_SPRITE_TILE,
+        actor: BlackthornCutsceneActor::RightGuard,
+        type_byte: BLACKTHORN_GUARD_ACTOR_BYTE,
+        tile: BLACKTHORN_GUARD_ACTOR_BYTE,
         x: 6,
-        y: 3,
+        y: 10,
     },
     BlackthornCutsceneActorPlacement {
-        actor: BlackthornCutsceneActor::Throne,
-        type_byte: BLACKTHORN_CUTSCENE_THRONE_TYPE,
-        tile: crate::NPC_HIDDEN_SPRITE_TILE,
+        actor: BlackthornCutsceneActor::SeatedBlackthorn,
+        type_byte: BLACKTHORN_SUPPRESSED_ACTOR_BYTE,
+        tile: BLACKTHORN_SUPPRESSED_ACTOR_BYTE,
         x: 5,
-        y: 2,
+        y: 5,
     },
 ];
 
@@ -339,7 +309,57 @@ pub const BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS: [BlackthornCutsceneActorPlacemen
 pub struct BlackthornCutsceneActorState {
     pub x: usize,
     pub y: usize,
-    pub visible: bool,
+    pub actor_byte: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornCutscenePresentationEvent {
+    WorldTick,
+    BiosTick,
+    Stinger,
+    TerrainBuffered {
+        x: usize,
+        y: usize,
+        tile: u8,
+    },
+    ActorMoved {
+        actor: BlackthornCutsceneActor,
+        x: usize,
+        y: usize,
+    },
+    ActorCleared(BlackthornCutsceneActor),
+    CellReveal {
+        actor: BlackthornCutsceneActor,
+        x: usize,
+        y: usize,
+        atlas_index: u16,
+    },
+    ActorByteAssigned {
+        actor: BlackthornCutsceneActor,
+        actor_byte: u8,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlackthornCellRevealPlayback {
+    pub cell: (u8, u8),
+    pub atlas_index: u16,
+    pub pixel_order: Vec<(u8, u8)>,
+    pub world_tick_after_operations: Vec<u16>,
+}
+
+pub fn blackthorn_cell_reveal_playback(
+    cell: (u8, u8),
+    atlas_index: u16,
+) -> BlackthornCellRevealPlayback {
+    BlackthornCellRevealPlayback {
+        cell,
+        atlas_index,
+        pixel_order: crate::combat_terrain_reveal_pixel_order(),
+        world_tick_after_operations: (1..=crate::COMBAT_TERRAIN_REVEAL_WORLD_TICKS)
+            .map(|tick| u16::from(tick) * 8)
+            .collect(),
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -351,14 +371,21 @@ pub enum BlackthornCutsceneCommand {
         direction: crate::Direction,
     },
     SetPerStepPause(bool),
-    OutputByte(u8),
-    WriteTile {
+    QuietRedrawPause(u8),
+    WriteTerrain {
         x: usize,
         y: usize,
         tile: u8,
     },
-    ClearScreen,
-    TimedPause(u8),
+    ExplicitRedraw,
+    StingerPause,
+    RevealActor {
+        actor: BlackthornCutsceneActor,
+        x: usize,
+        y: usize,
+        atlas_index: u16,
+        actor_byte: u8,
+    },
     ClearActor(BlackthornCutsceneActor),
     MoveActor {
         actor: BlackthornCutsceneActor,
@@ -371,117 +398,172 @@ pub enum BlackthornCutsceneBeat {
     PerQuestionIntermission,
     FailedChallengeReaction,
     AudienceThroneApproach,
-    BlackthornRises,
+    GuardReleaseRoute,
     ConditionalThroneCleanup,
 }
 
-pub const BLACKTHORN_CUTSCENE_TEMP_TILE_A: u8 = 0x01;
-pub const BLACKTHORN_CUTSCENE_TEMP_TILE_B: u8 = 0x02;
-pub const BLACKTHORN_CUTSCENE_FORMAT_OUTPUT: u8 = 0x0d;
-
-pub const BLACKTHORN_CUTSCENE_PER_QUESTION_INTERMISSION: [BlackthornCutsceneCommand; 10] = [
-    BlackthornCutsceneCommand::WriteTile {
-        x: 5,
-        y: 5,
-        tile: BLACKTHORN_CUTSCENE_TEMP_TILE_A,
+pub const BLACKTHORN_CUTSCENE_PER_QUESTION_INTERMISSION: [BlackthornCutsceneCommand; 18] = [
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::West,
     },
+    BlackthornCutsceneCommand::WriteTerrain {
+        x: 0,
+        y: 4,
+        tile: BLACKTHORN_COBBLE_TILE,
+    },
+    BlackthornCutsceneCommand::ExplicitRedraw,
     BlackthornCutsceneCommand::SetRepeat(2),
     BlackthornCutsceneCommand::SetPairedMovement {
         actor: BlackthornCutsceneActor::Avatar,
         direction: crate::Direction::North,
     },
-    BlackthornCutsceneCommand::SetPerStepPause(true),
     BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
+        actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::South,
     },
+    BlackthornCutsceneCommand::WriteTerrain {
+        x: 0,
+        y: 4,
+        tile: BLACKTHORN_LOCKED_DOOR_TILE,
+    },
+    BlackthornCutsceneCommand::StingerPause,
     BlackthornCutsceneCommand::SetRepeat(2),
     BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Throne,
+        actor: BlackthornCutsceneActor::SeatedBlackthorn,
         direction: crate::Direction::North,
     },
-    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Throne),
-    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Blackthorn),
-    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Attendant),
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SeatedBlackthorn),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::South,
+    },
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::LeftGuard),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::RightGuard,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::RightGuard),
+    BlackthornCutsceneCommand::SetRepeat(6),
+    BlackthornCutsceneCommand::StingerPause,
+    BlackthornCutsceneCommand::End,
 ];
 
-pub const BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION: [BlackthornCutsceneCommand; 12] = [
-    BlackthornCutsceneCommand::OutputByte(BLACKTHORN_CUTSCENE_FORMAT_OUTPUT),
-    BlackthornCutsceneCommand::SetRepeat(3),
+pub const BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION: [BlackthornCutsceneCommand; 21] = [
+    BlackthornCutsceneCommand::QuietRedrawPause(22),
+    BlackthornCutsceneCommand::SetRepeat(5),
     BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
-        direction: crate::Direction::South,
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::East,
     },
     BlackthornCutsceneCommand::SetRepeat(3),
     BlackthornCutsceneCommand::SetPairedMovement {
         actor: BlackthornCutsceneActor::SecondPartyMember,
-        direction: crate::Direction::East,
+        direction: crate::Direction::South,
     },
-    BlackthornCutsceneCommand::SetPerStepPause(true),
     BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
-        direction: crate::Direction::East,
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::South,
+    },
+    BlackthornCutsceneCommand::QuietRedrawPause(3),
+    BlackthornCutsceneCommand::WriteTerrain {
+        x: 5,
+        y: 7,
+        tile: BLACKTHORN_PENDULUM_TILE,
     },
     BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SecondPartyMember),
+    BlackthornCutsceneCommand::ExplicitRedraw,
     BlackthornCutsceneCommand::SetRepeat(3),
     BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::SetRepeat(5),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::West,
     },
-    BlackthornCutsceneCommand::WriteTile {
-        x: 4,
-        y: 8,
-        tile: BLACKTHORN_CUTSCENE_TEMP_TILE_A,
+    BlackthornCutsceneCommand::QuietRedrawPause(12),
+    BlackthornCutsceneCommand::SetRepeat(3),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::RightGuard,
+        direction: crate::Direction::West,
     },
-    BlackthornCutsceneCommand::WriteTile {
+    BlackthornCutsceneCommand::WriteTerrain {
         x: 5,
-        y: 8,
-        tile: BLACKTHORN_CUTSCENE_TEMP_TILE_B,
+        y: 9,
+        tile: BLACKTHORN_HOURGLASS_TILE,
     },
-];
-
-pub const BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH: [BlackthornCutsceneCommand; 8] = [
-    BlackthornCutsceneCommand::TimedPause(2),
-    BlackthornCutsceneCommand::SetRepeat(2),
-    BlackthornCutsceneCommand::SetPairedMovement {
-        actor: BlackthornCutsceneActor::Attendant,
-        direction: crate::Direction::North,
-    },
-    BlackthornCutsceneCommand::SetPerStepPause(true),
+    BlackthornCutsceneCommand::SetRepeat(3),
     BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
-        direction: crate::Direction::North,
-    },
-    BlackthornCutsceneCommand::SetRepeat(2),
-    BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
-        direction: crate::Direction::West,
-    },
-    BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Attendant,
+        actor: BlackthornCutsceneActor::RightGuard,
         direction: crate::Direction::East,
-    },
-];
-
-pub const BLACKTHORN_CUTSCENE_BLACKTHORN_RISES: [BlackthornCutsceneCommand; 4] = [
-    BlackthornCutsceneCommand::OutputByte(BLACKTHORN_CUTSCENE_FORMAT_OUTPUT),
-    BlackthornCutsceneCommand::SetPerStepPause(true),
-    BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Blackthorn,
-        direction: crate::Direction::North,
     },
     BlackthornCutsceneCommand::End,
 ];
 
-pub const BLACKTHORN_CUTSCENE_CONDITIONAL_THRONE_CLEANUP: [BlackthornCutsceneCommand; 6] = [
-    BlackthornCutsceneCommand::OutputByte(BLACKTHORN_CUTSCENE_FORMAT_OUTPUT),
-    BlackthornCutsceneCommand::SetRepeat(3),
+pub const BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH: [BlackthornCutsceneCommand; 10] = [
+    BlackthornCutsceneCommand::StingerPause,
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::RightGuard,
+        direction: crate::Direction::North,
+    },
     BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::Throne,
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::SetRepeat(3),
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::RightGuard,
         direction: crate::Direction::East,
     },
-    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Throne),
-    BlackthornCutsceneCommand::ClearScreen,
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::West,
+    },
+    BlackthornCutsceneCommand::QuietRedrawPause(8),
+    BlackthornCutsceneCommand::RevealActor {
+        actor: BlackthornCutsceneActor::SeatedBlackthorn,
+        x: 5,
+        y: 5,
+        atlas_index: BLACKTHORN_SEATED_ATLAS_INDEX,
+        actor_byte: BLACKTHORN_SEATED_ACTOR_BYTE,
+    },
+    BlackthornCutsceneCommand::QuietRedrawPause(8),
+    BlackthornCutsceneCommand::End,
+];
+
+pub const BLACKTHORN_CUTSCENE_GUARD_RELEASE_ROUTE: [BlackthornCutsceneCommand; 6] = [
+    BlackthornCutsceneCommand::QuietRedrawPause(11),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::West,
+    },
+    BlackthornCutsceneCommand::SetRepeat(4),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::East,
+    },
+    BlackthornCutsceneCommand::End,
+];
+
+pub const BLACKTHORN_CUTSCENE_CONDITIONAL_THRONE_CLEANUP: [BlackthornCutsceneCommand; 7] = [
+    BlackthornCutsceneCommand::QuietRedrawPause(4),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::SeatedBlackthorn,
+        direction: crate::Direction::East,
+    },
+    BlackthornCutsceneCommand::SetRepeat(5),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::SeatedBlackthorn,
+        direction: crate::Direction::South,
+    },
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SeatedBlackthorn),
+    BlackthornCutsceneCommand::ExplicitRedraw,
     BlackthornCutsceneCommand::End,
 ];
 
@@ -498,7 +580,7 @@ pub const fn blackthorn_cutscene_beat_commands(
         BlackthornCutsceneBeat::AudienceThroneApproach => {
             &BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH
         }
-        BlackthornCutsceneBeat::BlackthornRises => &BLACKTHORN_CUTSCENE_BLACKTHORN_RISES,
+        BlackthornCutsceneBeat::GuardReleaseRoute => &BLACKTHORN_CUTSCENE_GUARD_RELEASE_ROUTE,
         BlackthornCutsceneBeat::ConditionalThroneCleanup => {
             &BLACKTHORN_CUTSCENE_CONDITIONAL_THRONE_CLEANUP
         }
@@ -508,30 +590,42 @@ pub const fn blackthorn_cutscene_beat_commands(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlackthornCutsceneVm {
     pub actors: [Option<BlackthornCutsceneActorState>; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
+    pub visible_actors:
+        [Option<BlackthornCutsceneActorState>; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
     pub tile_buffer: Vec<u8>,
-    pub output_bytes: Vec<u8>,
-    pub pause_ticks: u16,
-    pub screen_cleared: bool,
+    pub visible_tile_buffer: Vec<u8>,
+    pub presentation_events: Vec<BlackthornCutscenePresentationEvent>,
+    pub cell_reveals: Vec<BlackthornCellRevealPlayback>,
+    pub world_ticks: u16,
+    pub bios_ticks: u16,
+    pub stinger_count: u16,
     pub ended: bool,
     repeat_count: u8,
     paired_movement: Option<(BlackthornCutsceneActor, crate::Direction)>,
     per_step_pause: bool,
+    cinematic_animation_enabled: bool,
 }
 
 pub const BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT: usize = 9;
 
 impl BlackthornCutsceneVm {
     pub fn new(tile_buffer: Vec<u8>) -> Self {
+        let visible_tile_buffer = tile_buffer.clone();
         Self {
             actors: [None; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
+            visible_actors: [None; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
             tile_buffer,
-            output_bytes: Vec::new(),
-            pause_ticks: 0,
-            screen_cleared: false,
+            visible_tile_buffer,
+            presentation_events: Vec::new(),
+            cell_reveals: Vec::new(),
+            world_ticks: 0,
+            bios_ticks: 0,
+            stinger_count: 0,
             ended: false,
             repeat_count: 1,
             paired_movement: None,
-            per_step_pause: false,
+            per_step_pause: true,
+            cinematic_animation_enabled: true,
         }
     }
 
@@ -543,10 +637,11 @@ impl BlackthornCutsceneVm {
                 BlackthornCutsceneActorState {
                     x: placement.x,
                     y: placement.y,
-                    visible: true,
+                    actor_byte: placement.tile,
                 },
             );
         }
+        vm.visible_actors = vm.actors;
         vm
     }
 
@@ -586,28 +681,39 @@ impl BlackthornCutsceneVm {
             BlackthornCutsceneCommand::SetPerStepPause(enabled) => {
                 self.per_step_pause = enabled;
             }
-            BlackthornCutsceneCommand::OutputByte(byte) => {
-                self.output_bytes.push(byte);
+            BlackthornCutsceneCommand::QuietRedrawPause(ticks) => {
+                self.quiet_redraw_pause(ticks);
+                self.repeat_count = 1;
             }
-            BlackthornCutsceneCommand::WriteTile { x, y, tile } => {
+            BlackthornCutsceneCommand::WriteTerrain { x, y, tile } => {
                 if let Some(index) = blackthorn_cutscene_tile_index(x, y) {
                     if let Some(cell) = self.tile_buffer.get_mut(index) {
                         *cell = tile;
+                        self.presentation_events.push(
+                            BlackthornCutscenePresentationEvent::TerrainBuffered { x, y, tile },
+                        );
                     }
                 }
             }
-            BlackthornCutsceneCommand::ClearScreen => {
-                self.screen_cleared = true;
-                self.tile_buffer.fill(0);
+            BlackthornCutsceneCommand::ExplicitRedraw => {
+                self.redraw_world_tick();
             }
-            BlackthornCutsceneCommand::TimedPause(ticks) => {
-                self.pause_ticks = self
-                    .pause_ticks
-                    .saturating_add(u16::from(ticks) * u16::from(self.repeat_count));
-                self.repeat_count = 1;
+            BlackthornCutsceneCommand::StingerPause => {
+                self.stinger_pause();
+            }
+            BlackthornCutsceneCommand::RevealActor {
+                actor,
+                x,
+                y,
+                atlas_index,
+                actor_byte,
+            } => {
+                self.reveal_actor(actor, x, y, atlas_index, actor_byte);
             }
             BlackthornCutsceneCommand::ClearActor(actor) => {
                 self.actors[actor.slot_index() as usize] = None;
+                self.presentation_events
+                    .push(BlackthornCutscenePresentationEvent::ActorCleared(actor));
             }
             BlackthornCutsceneCommand::MoveActor { actor, direction } => {
                 let repeat_count = self.repeat_count;
@@ -618,7 +724,10 @@ impl BlackthornCutsceneVm {
                         self.move_actor_one_step(second_actor, second_direction);
                     }
                     if self.per_step_pause {
-                        self.pause_ticks = self.pause_ticks.saturating_add(1);
+                        let saved_repeat = self.repeat_count;
+                        self.repeat_count = 1;
+                        self.stinger_pause();
+                        self.repeat_count = saved_repeat;
                     }
                 }
                 self.repeat_count = 1;
@@ -647,6 +756,81 @@ impl BlackthornCutsceneVm {
             _ => return,
         }
         self.set_actor(actor, state);
+        self.presentation_events
+            .push(BlackthornCutscenePresentationEvent::ActorMoved {
+                actor,
+                x: state.x,
+                y: state.y,
+            });
+    }
+
+    fn redraw_world_tick(&mut self) {
+        self.world_ticks = self.world_ticks.saturating_add(1);
+        self.visible_tile_buffer.clone_from(&self.tile_buffer);
+        self.visible_actors = self.actors;
+        self.presentation_events
+            .push(BlackthornCutscenePresentationEvent::WorldTick);
+    }
+
+    fn quiet_redraw_pause(&mut self, ticks: u8) {
+        if !self.cinematic_animation_enabled {
+            return;
+        }
+        for _ in 0..ticks {
+            self.redraw_world_tick();
+            self.bios_ticks = self.bios_ticks.saturating_add(1);
+            self.presentation_events
+                .push(BlackthornCutscenePresentationEvent::BiosTick);
+        }
+    }
+
+    fn stinger_pause(&mut self) {
+        let repeat = self.repeat_count;
+        for _ in 0..repeat {
+            self.stinger_count = self.stinger_count.saturating_add(1);
+            self.presentation_events
+                .push(BlackthornCutscenePresentationEvent::Stinger);
+            self.quiet_redraw_pause(2);
+        }
+        self.repeat_count = 1;
+    }
+
+    fn reveal_actor(
+        &mut self,
+        actor: BlackthornCutsceneActor,
+        x: usize,
+        y: usize,
+        atlas_index: u16,
+        actor_byte: u8,
+    ) {
+        self.set_actor(
+            actor,
+            BlackthornCutsceneActorState {
+                x,
+                y,
+                actor_byte: BLACKTHORN_SUPPRESSED_ACTOR_BYTE,
+            },
+        );
+        self.visible_actors[actor.slot_index() as usize] = None;
+        self.cell_reveals.push(blackthorn_cell_reveal_playback(
+            (x as u8, y as u8),
+            atlas_index,
+        ));
+        self.presentation_events
+            .push(BlackthornCutscenePresentationEvent::CellReveal {
+                actor,
+                x,
+                y,
+                atlas_index,
+            });
+        self.world_ticks = self
+            .world_ticks
+            .saturating_add(u16::from(crate::COMBAT_TERRAIN_REVEAL_WORLD_TICKS));
+        let state = BlackthornCutsceneActorState { x, y, actor_byte };
+        self.set_actor(actor, state);
+        self.visible_actors[actor.slot_index() as usize] = Some(state);
+        self.presentation_events
+            .push(BlackthornCutscenePresentationEvent::ActorByteAssigned { actor, actor_byte });
     }
 }
 
@@ -663,9 +847,9 @@ pub const fn blackthorn_cutscene_actor(slot: u8) -> Option<BlackthornCutsceneAct
     Some(match slot {
         0 => BlackthornCutsceneActor::Avatar,
         1 => BlackthornCutsceneActor::SecondPartyMember,
-        6 => BlackthornCutsceneActor::Blackthorn,
-        7 => BlackthornCutsceneActor::Attendant,
-        8 => BlackthornCutsceneActor::Throne,
+        6 => BlackthornCutsceneActor::LeftGuard,
+        7 => BlackthornCutsceneActor::RightGuard,
+        8 => BlackthornCutsceneActor::SeatedBlackthorn,
         _ => return None,
     })
 }
@@ -713,37 +897,81 @@ pub const BLACKTHORN_FAILURE_VICTIM_SLOT: usize = 1;
 
 /// `blackthorn.md §4`: Blackthorn challenge prompt input limit.
 pub const BLACKTHORN_CHALLENGE_INPUT_LIMIT: usize = 14;
-/// `blackthorn.md §4`: number of fixed prompt ordinals the challenge
-/// loop iterates (the first four virtue/mantra pairs).
+/// `blackthorn.md §4`: number of prompt ordinals the challenge loop
+/// can ask. "It can ask up to four prompts", and "**The loop asks
+/// about ONE shrine, up to four times.** ... The four prompt ordinals
+/// change only the *wording*". The ordinal is therefore a wording
+/// selector, never an answer selector.
 pub const BLACKTHORN_CHALLENGE_PROMPT_COUNT: usize = 4;
 
 /// `blackthorn.md §4`: case-insensitive substring match of the
 /// player's typed answer against the expected mantra. The expected
 /// word may appear anywhere in the typed buffer rather than being the
 /// entire input.
-/// `blackthorn.md §4` per-prompt accepted-answer table. The
-/// challenge loop iterates the first four virtue/mantra ordinals;
-/// the prompt word and the expected answer are paired in order.
-/// Index `0` is the Honesty/Ahm pair and index `3` is the
-/// Justice/Beh pair.
-pub const BLACKTHORN_CHALLENGE_PROMPT_TABLE: [(&str, &str); 4] = [
+/// `blackthorn.md §4` shrine virtue/mantra table, in shrine order.
+///
+/// "**The expected answer is the selected shrine's mantra, and it is
+/// the same on all four prompts.** All eight virtue/mantra pairs are
+/// live". The withdrawal box in the same section retires the earlier
+/// readings that the answer lookup was "indexed by prompt ordinal
+/// rather than by party slot" and that "this traced challenge loop
+/// only iterates the first four ordinals": the answer is indexed by
+/// shrine, and the four ordinals are four wordings of one question.
+///
+/// The shrine order is the one `blackthorn.md §3` step 2 scans when it
+/// selects the interrogated shrine from the eight shrine ruin flags.
+pub const BLACKTHORN_SHRINE_MANTRAS: [(&str, &str); 8] = [
     ("Honesty", "Ahm"),
     ("Compassion", "Mu"),
     ("Valour", "Ra"),
     ("Justice", "Beh"),
+    ("Sacrifice", "Cah"),
+    ("Honor", "Summ"),
+    ("Spirituality", "Om"),
+    ("Humility", "Lum"),
 ];
 
-/// `blackthorn.md §4`: returns the (prompt-word, expected-answer)
-/// pair for ordinals `0..=3`. Returns `None` for ordinals outside
-/// the live four-prompt range; the resident tables carry later
-/// virtue/mantra pairs but the traced challenge loop only iterates
-/// these four.
-pub const fn blackthorn_challenge_prompt(ordinal: u8) -> Option<(&'static str, &'static str)> {
-    if (ordinal as usize) >= BLACKTHORN_CHALLENGE_PROMPT_TABLE.len() {
+/// `blackthorn.md §3,§4` number of shrines the eight-slot scan selects
+/// from, and therefore the length of [`BLACKTHORN_SHRINE_MANTRAS`].
+pub const BLACKTHORN_SHRINE_COUNT: usize = BLACKTHORN_SHRINE_MANTRAS.len();
+
+/// `blackthorn.md §4`: returns the (virtue, accepted-answer) pair for
+/// a shrine index `0..=7`, or `None` for an out-of-range index.
+pub const fn blackthorn_shrine_mantra(shrine_index: u8) -> Option<(&'static str, &'static str)> {
+    if (shrine_index as usize) >= BLACKTHORN_SHRINE_COUNT {
         None
     } else {
-        Some(BLACKTHORN_CHALLENGE_PROMPT_TABLE[ordinal as usize])
+        Some(BLACKTHORN_SHRINE_MANTRAS[shrine_index as usize])
     }
+}
+
+/// `blackthorn.md §4` escalating wording of the one repeated question.
+/// "The four prompt ordinals change only the *wording*, which escalates
+/// from a plain question, to a repeat, to an impatient demand, to a
+/// shouted final demand." The wording text itself is data-owned
+/// (`MISCMSG.DAT`), so only the escalation step is modelled here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornChallengeWording {
+    /// Ordinal 0 — the plain question.
+    Plain,
+    /// Ordinal 1 — the repeat.
+    Repeat,
+    /// Ordinal 2 — the impatient demand.
+    ImpatientDemand,
+    /// Ordinal 3 — the shouted final demand.
+    ShoutedFinalDemand,
+}
+
+/// `blackthorn.md §4`: the wording for one prompt ordinal `0..=3`.
+/// Returns `None` past the fourth prompt, which is where the loop ends.
+pub const fn blackthorn_challenge_wording(ordinal: u8) -> Option<BlackthornChallengeWording> {
+    Some(match ordinal {
+        0 => BlackthornChallengeWording::Plain,
+        1 => BlackthornChallengeWording::Repeat,
+        2 => BlackthornChallengeWording::ImpatientDemand,
+        3 => BlackthornChallengeWording::ShoutedFinalDemand,
+        _ => return None,
+    })
 }
 
 pub fn blackthorn_challenge_answer_matches(typed: &str, expected_mantra: &str) -> bool {

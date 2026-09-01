@@ -75,12 +75,21 @@ impl PlayState {
         inline_look_focus: Option<DungeonLookFocus>,
     ) -> io::Result<bool> {
         let inline_rest = inline_rest.into();
+        // `dungeon-mode.md §15`: "The single call site sits at the head of
+        // each iteration, ahead of the render-and-poll step and the command
+        // dispatch, so a command the dispatcher reports as \"no action\" …
+        // still costs a minute underground." The room-trigger resolution below
+        // is part of the iteration and therefore sits behind it.
+        self.advance_dungeon_loop_minute();
         if self
             .resolve_current_dungeon_room_trigger(Some(game_dir))?
             .is_some()
         {
             return Ok(true);
         }
+        // `§10`: "Only the dungeon post-action pass is gated on the status
+        // word." The snapshot is taken after the loop-head minute so the pass
+        // still keys on whether the command itself consumed a turn.
         let turn_before = self.turn;
         macro_rules! handled {
             ($outcome:expr) => {{
@@ -399,7 +408,15 @@ impl PlayState {
                     handled!(self.ignite_torch());
                 }
                 'J' => {
-                    handled!(self.jimmy_facing_with_game_dir(Some(game_dir))?);
+                    if let Some(direction) = inline_direction {
+                        handled!(self.jimmy_direction_with_game_dir_and_member(
+                            direction,
+                            Some(game_dir),
+                            None,
+                        )?);
+                    } else {
+                        handled!(self.start_jimmy_direction_prompt());
+                    }
                 }
                 'K' => {
                     handled!(self.klimb_command(game_dir)?);
@@ -428,10 +445,8 @@ impl PlayState {
                 'O' => {
                     if let Some(direction) = inline_direction {
                         handled!(self.open_direction_with_game_dir(direction, Some(game_dir))?);
-                    } else if matches!(self.area, Area::Town { .. }) {
-                        handled!(self.start_open_direction_prompt());
                     } else {
-                        handled!(self.open_facing_with_game_dir(Some(game_dir))?);
+                        handled!(self.start_open_direction_prompt());
                     }
                 }
                 'P' => {
@@ -463,10 +478,10 @@ impl PlayState {
                     }
                 }
                 'T' => {
-                    if matches!(self.area, Area::Town { .. }) {
-                        handled!(self.start_talk_direction_prompt());
+                    if let Some(direction) = inline_direction {
+                        handled!(self.talk_direction_with_game_dir(direction, game_dir)?);
                     } else {
-                        handled!(self.talk_facing_with_game_dir(game_dir)?);
+                        handled!(self.start_talk_direction_prompt());
                     }
                 }
                 'U' => {
@@ -495,7 +510,15 @@ impl PlayState {
             }
         }
 
-        if let Some(direction) = Direction::from_play_key(key) {
+        // `movement.md §2`: "World and town movement consume the four
+        // cardinal directions only. Diagonal codes exist in the input
+        // vocabulary, but the only consumer that treats one as a movement is
+        // the combat targeting cursor; elsewhere they page full-screen lists
+        // or are refused. No mode steps diagonally." A diagonal key therefore
+        // falls through to the resident A-Z command dispatcher below.
+        if let Some(direction) =
+            Direction::from_play_key(key).filter(|direction| direction.is_cardinal())
+        {
             let town_mode = matches!(self.area, Area::Town { .. });
             let outcome = self.step_with_game_dir(direction, Some(game_dir))?;
             // World movement already owns its landing effects inside
@@ -581,6 +604,12 @@ impl PlayState {
             }
             'z' => self.z_stats_command(),
             'c' => self.start_cast_spell_prompt(),
+            // `commands.md §2`: "Lowercase letters should already have been
+            // folded to uppercase by the input system." `b` is no longer
+            // claimed by the movement layer above — `movement.md §2`: "No
+            // mode steps diagonally" — so it reaches the same `B` Board
+            // handler its uppercase twin does.
+            'b' => self.board_vehicle(),
             'n' => self.start_new_order_prompt(),
             'r' => self.start_ready_equipment(),
             'u' => {
@@ -1325,6 +1354,15 @@ impl PlayState {
             }
         }
 
+        // `magic.md §6` Step 6: "The handler prints `Mixing...`, pauses
+        // briefly, then subtracts the requested quantity from each selected
+        // raw reagent counter." The line precedes the Step-7 recipe
+        // comparison, so it is emitted on the success, wrong-recipe and
+        // unknown-spell outcomes alike. The pause itself is presentation
+        // only — "Neither branch advances the clock" — and this crate has no
+        // frontend delay channel to drive, so only the printed beat is
+        // modelled here; mixing still costs no game time.
+        self.message = MMIX_MIXING_MESSAGE.to_string();
         for index in selected_reagent_indices(request.reagent_mask) {
             self.reagents[index] -= request.amount;
         }
@@ -1336,7 +1374,7 @@ impl PlayState {
                     .min(99);
                 let gained = self.spell_charges[spell_index].saturating_sub(before);
                 self.message = format!(
-                    "Mixed {} {} charge{}; stock is {}.",
+                    "{MMIX_MIXING_MESSAGE}\nMixed {} {} charge{}; stock is {}.",
                     gained,
                     SPELL_CODES[spell_index],
                     if gained == 1 { "" } else { "s" },
@@ -1361,10 +1399,18 @@ impl PlayState {
         }
     }
 
+    /// `magic.md §6` Step 6/7: the `Mixing...` beat is printed before the
+    /// recipe comparison, so it stays on the wrong-mix line too, ahead of
+    /// the trap resolver's own text.
     pub fn wrong_mix_trap_message(&mut self, base: String) -> String {
-        let target_slot = self.mixer_trap_target_slot();
+        // A normally dispatched Mix always finds a Good-or-Poisoned member.
+        // For a forced/corrupt state, use an out-of-range value only as the
+        // resolver's deterministic selector seed. Acid and Poison already
+        // bounds-check that value and therefore become safe no-ops, while the
+        // party-wide Bomb and Gas families retain their published effects.
+        let target_slot = self.mixer_trap_target_slot().unwrap_or(usize::MAX);
         let trap = self.apply_shared_trap_effect_to_slot(target_slot);
-        format!("{base}\n{trap}")
+        format!("{MMIX_MIXING_MESSAGE}\n{base}\n{trap}")
     }
 
     /// `traps.md §4` (M-Mix): the mixer supplies its own victim slot and
@@ -1372,23 +1418,20 @@ impl PlayState {
     /// the trap-effect resolver it refreshes its target to the **first**
     /// travelling member currently marked Good or Poisoned.
     ///
-    /// When no such member exists the original leaves the target holding
-    /// whatever it last held and the trap lands on that stale value;
-    /// `traps.md` §4 names that undefined behaviour and tells a port to
-    /// decide deliberately rather than invent a fallback. The
-    /// `.or(active)/0` tail is that deliberate choice, not published
-    /// behaviour. `cleak/u5-spec#89` re-confirmed the case is explicitly
-    /// undefined, so the choice stays as it is.
+    /// `cleak/u5-spec#174` closes the forced-call edge: no normally dispatched
+    /// Mix can miss this scan. A forced call with no match leaves an unrelated
+    /// transient word stale in the original; a safe port must not turn that
+    /// into an arbitrary roster fallback. `None` preserves that distinction
+    /// and lets the caller make single-target Acid/Poison safe no-ops while
+    /// retaining party-wide Bomb/Gas.
     ///
     /// The two container call sites do **not** share this helper: §2.1
     /// publishes a real selection rule for them, implemented in
     /// [`Self::shared_acting_member_selection`].
-    pub fn mixer_trap_target_slot(&self) -> usize {
+    pub fn mixer_trap_target_slot(&self) -> Option<usize> {
         self.party
             .iter()
             .position(|member| matches!(member.status, b'G' | b'P'))
-            .or(self.active_player)
-            .unwrap_or(0)
     }
 
     /// `traps.md §2.1`: the shared acting-member selection, in priority
@@ -1466,7 +1509,7 @@ impl PlayState {
     /// apart; this match is exhaustive over [`TrapEffect`] rather than
     /// falling through a catch-all arm.
     pub fn apply_shared_trap_effect_to_slot(&mut self, triggering_slot: usize) -> String {
-        self.emit_sound_effect(PlaySoundEffect::TrapSting);
+        self.emit_sound_effect(SoundEffect::TrapRumble);
         match self.shared_trap_effect_family(triggering_slot) {
             TrapEffect::Acid => self.apply_acid_trap_effect(triggering_slot),
             TrapEffect::Poison => self.apply_poison_trap_effect(triggering_slot),
@@ -1509,12 +1552,20 @@ impl PlayState {
     }
 
     pub fn apply_acid_trap_effect(&mut self, triggering_slot: usize) -> String {
-        let damage =
-            self.shared_trap_damage_roll(triggering_slot, triggering_slot, TRAP_ACID_DAMAGE_MAX, 3);
+        // `traps.md §3` effect id 0: "The roll is an inclusive `0..60`
+        // roll halved with truncation and floored to one - the same
+        // shape `systems/magic.md` publishes for Mani - so it is **not**
+        // uniform over `1..30`". The seed is derived exactly as
+        // `shared_trap_damage_roll` derives it (salt 3, target slot ==
+        // triggering slot); only the shaping differs.
+        let seed = self
+            .shared_trap_seed(triggering_slot, 3)
+            .wrapping_add((triggering_slot as u8).wrapping_mul(13));
+        let damage = shared_trap_acid_damage_from_index(seed);
         let Some(member) = self.party.get_mut(triggering_slot) else {
             return format!(
                 "Acid trap found no party member in slot {}.",
-                triggering_slot + 1
+                triggering_slot.saturating_add(1)
             );
         };
 
@@ -1524,7 +1575,7 @@ impl PlayState {
         }
         format!(
             "Acid trap hit party member {} for {applied} HP.",
-            triggering_slot + 1
+            triggering_slot.saturating_add(1)
         )
     }
 
@@ -1533,21 +1584,31 @@ impl PlayState {
     /// Dead is skipped and left Dead.
     pub fn apply_poison_trap_effect(&mut self, triggering_slot: usize) -> String {
         if self.apply_trap_poison_status_to_slot(triggering_slot) {
-            format!("Poison trap poisoned party member {}.", triggering_slot + 1)
+            format!(
+                "Poison trap poisoned party member {}.",
+                triggering_slot.saturating_add(1)
+            )
         } else {
             format!(
                 "Poison trap had no effect on party member {}.",
-                triggering_slot + 1
+                triggering_slot.saturating_add(1)
             )
         }
     }
 
+    /// `traps.md §3` effect id 2: roll an inclusive `1..8` damage separately
+    /// for each in-party member of the six-slot band "that is not marked Dead
+    /// - the only status excluded is Dead". The sweep applies exactly the two
+    /// gates the poison helper applies: an unsigned party-count check, then a
+    /// Dead skip. Ashes (`'A'`) is a distinct value from Dead and falls
+    /// through, so [`PartyMember::living`] is deliberately *not* the predicate
+    /// here.
     pub fn apply_bomb_trap_effect(&mut self, triggering_slot: usize) -> String {
         let mut affected = 0usize;
         let mut total_applied = 0u16;
         let limit = self.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
         for target_slot in 0..limit {
-            if !self.party[target_slot].living() {
+            if !crate::traps::trap_party_sweep_accepts_status_byte(self.party[target_slot].status) {
                 continue;
             }
             let damage = self.shared_trap_damage_roll(
@@ -1897,6 +1958,19 @@ impl PlayState {
         }))
     }
 
+    /// `karma.md §7`: meditation matches the party position against the
+    /// single eight-row shrine coordinate table. "The match has one
+    /// deliberate fall-through that an implementation must reproduce.
+    /// Spirituality's row is a `(0, 0)` sentinel rather than a real position
+    /// … so no party can ever match it by position. When the scan of all
+    /// eight rows finds no match, the handler resolves the meditation to
+    /// **Spirituality**. Meditating at a shrine that is not one of the seven
+    /// mapped ones *is* the test for Spirituality, and \"no row matched\" must
+    /// not be treated as an error."
+    ///
+    /// `Ok(None)` is reserved for "this `M` press is not a meditation at
+    /// all" — wrong plane, or not standing on a shrine altar tile — so `M`
+    /// still routes to Mix Reagents on ordinary terrain.
     pub fn current_shrine_entry(&self, game_dir: &Path) -> io::Result<Option<ShrineEntry>> {
         let Area::World { plane } = self.area else {
             return Ok(None);
@@ -1916,7 +1990,24 @@ impl PlayState {
             }) {
                 return Ok(Some(entry));
             }
+            // §7 fall-through: the scan of the coordinate table found no row,
+            // which resolves the meditation to Spirituality rather than
+            // failing. Gated on the altar-tile family so an ordinary surface
+            // tile keeps routing `M` to Mix Reagents.
+            if shrine_virtue_for_altar_tile(tile).is_some() {
+                return Ok(Some(ShrineEntry {
+                    plane,
+                    x: self.player.x,
+                    y: self.player.y,
+                    virtue: ShrineVirtue::Spirituality,
+                    expected_tile: Some(tile),
+                }));
+            }
+            return Ok(None);
         }
+        // No shrine coordinate table is published in this game directory, so
+        // there is no eight-row scan to fall through from; keep deriving the
+        // virtue from the altar tile the party is standing on.
         Ok(
             shrine_virtue_for_altar_tile(tile).map(|virtue| ShrineEntry {
                 plane,
@@ -1996,5 +2087,260 @@ pub(crate) fn high_byte_direction_from_key(key: char) -> Option<Direction> {
         InputDirection::Northeast => Some(Direction::NorthEast),
         InputDirection::Southwest => Some(Direction::SouthWest),
         InputDirection::Southeast => Some(Direction::SouthEast),
+    }
+}
+
+#[cfg(test)]
+mod movement_magic_karma_traps_spec_tests {
+    use crate::test_fixtures::{
+        debug_game_dir, dungeon_state, open_dungeon_record, open_grid, open_world_grid, test_state,
+        world_state,
+    };
+    use crate::*;
+
+    /// `movement.md §2`: "World and town movement consume the four cardinal
+    /// directions only. Diagonal codes exist in the input vocabulary, but the
+    /// only consumer that treats one as a movement is the combat targeting
+    /// cursor … No mode steps diagonally."
+    #[test]
+    fn town_movement_refuses_every_diagonal_direction() {
+        for direction in [
+            Direction::NorthWest,
+            Direction::NorthEast,
+            Direction::SouthWest,
+            Direction::SouthEast,
+        ] {
+            let mut state = test_state(open_grid(), 10, 10);
+            let facing_before = state.player.facing;
+            let transport_before = state.player.transport;
+
+            assert_eq!(state.step(direction), MoveOutcome::Blocked);
+
+            assert_eq!((state.player.x, state.player.y), (10, 10));
+            assert_eq!(state.player.facing, facing_before);
+            assert_eq!(state.player.transport, transport_before);
+            assert_eq!(state.turn, 0);
+        }
+    }
+
+    /// `movement.md §2`: the same rule on the overworld plane.
+    #[test]
+    fn world_movement_refuses_every_diagonal_direction() {
+        for direction in [
+            Direction::NorthWest,
+            Direction::NorthEast,
+            Direction::SouthWest,
+            Direction::SouthEast,
+        ] {
+            let mut state = world_state(open_world_grid(), 40, 40);
+            let facing_before = state.player.facing;
+
+            assert_eq!(state.step(direction), MoveOutcome::Blocked);
+
+            assert_eq!((state.player.x, state.player.y), (40, 40));
+            assert_eq!(state.player.facing, facing_before);
+            assert_eq!(state.turn, 0);
+        }
+    }
+
+    /// `movement.md §2`: a cardinal step is untouched by the diagonal gate.
+    #[test]
+    fn town_movement_still_accepts_a_cardinal_step() {
+        let mut state = test_state(open_grid(), 10, 10);
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!((state.player.x, state.player.y), (11, 10));
+        assert_eq!(state.player.facing, Direction::East);
+    }
+
+    /// `magic.md §6` Step 6: "The handler prints `Mixing...`, pauses briefly,
+    /// then subtracts the requested quantity from each selected raw reagent
+    /// counter." Step 7 compares the recipe only afterwards, so the line is
+    /// emitted on the success outcome too.
+    #[test]
+    fn mmix_prints_the_mixing_beat_before_the_success_line() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.reagents = [0; REAGENT_COUNT];
+        state.reagents[REAGENT_SULFUR_ASH] = 5;
+
+        assert_eq!(
+            state.mix_reagents_from_suffix("IL/0x80/1"),
+            MoveOutcome::Cast
+        );
+
+        let (beat, body) = state
+            .message
+            .split_once('\n')
+            .expect("the mixing beat is its own line");
+        assert_eq!(beat, MMIX_MIXING_MESSAGE);
+        assert!(body.starts_with("Mixed 1 IL charge"), "body was {body:?}");
+        assert_eq!(state.turn, 0, "magic.md §6: mixing costs no game time");
+    }
+
+    /// `magic.md §6` Step 6: "Because the line precedes the recipe
+    /// comparison, it is emitted on both the success and the
+    /// wrong-recipe/trap outcomes."
+    #[test]
+    fn mmix_prints_the_mixing_beat_before_the_wrong_recipe_trap() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.reagents = [0; REAGENT_COUNT];
+        state.reagents[REAGENT_SULFUR_ASH] = 1;
+        state.reagents[REAGENT_BLOOD_MOSS] = 1;
+
+        assert_eq!(
+            state.mix_reagents_from_suffix("AS/0x80/1"),
+            MoveOutcome::Blocked
+        );
+
+        let mut lines = state.message.lines();
+        assert_eq!(lines.next(), Some(MMIX_MIXING_MESSAGE));
+        assert!(
+            lines
+                .next()
+                .is_some_and(|line| line.starts_with("Mixed wrong reagents")),
+            "wrong-mix body missing from {:?}",
+            state.message
+        );
+        assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 0);
+    }
+
+    /// `traps.md §3` effect id 2 (Bomb): the sweep rolls damage "for each
+    /// in-party member of the six-slot band that is not marked Dead - the
+    /// only status excluded is Dead". Ashes (`'A'`) is a distinct value and
+    /// must fall through into the sweep.
+    #[test]
+    fn bomb_trap_damages_an_ashes_member_and_skips_only_dead() {
+        let mut state = test_state(open_grid(), 1, 1);
+        while state.party.len() < 3 {
+            let mut extra = state.party[0];
+            extra.slot = state.party.len() as u8;
+            state.party.push(extra);
+        }
+        state.party[0].status = b'G';
+        state.party[1].status = b'A';
+        state.party[2].status = b'D';
+        for index in 0..3 {
+            state.party[index].hp = DEFAULT_PARTY_HP;
+        }
+
+        let report = state.apply_bomb_trap_effect(0);
+
+        assert!(
+            state.party[1].hp < DEFAULT_PARTY_HP,
+            "Ashes member must take bomb damage; report was {report:?}"
+        );
+        assert_eq!(
+            state.party[2].hp, DEFAULT_PARTY_HP,
+            "Dead is the only status the bomb sweep skips"
+        );
+    }
+
+    /// `karma.md §7`: "When the scan of all eight rows finds no match, the
+    /// handler resolves the meditation to **Spirituality**. Meditating at a
+    /// shrine that is not one of the seven mapped ones *is* the test for
+    /// Spirituality, and \"no row matched\" must not be treated as an error."
+    #[test]
+    fn unmapped_shrine_altar_meditation_falls_through_to_spirituality() {
+        let dir = debug_game_dir();
+        std::fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 3 4 HONESTY\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = SHRINE_ALTAR_TILE_FIRST;
+        let mut state = world_state(grid, 10, 20);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+
+        let entry = state
+            .current_shrine_entry(&dir)
+            .unwrap()
+            .expect("an altar tile off the coordinate table is still a meditation");
+        assert_eq!(entry.virtue, ShrineVirtue::Spirituality);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §7`: the fall-through is gated on the shrine altar family, so
+    /// an ordinary surface tile still routes `M` to Mix Reagents rather than
+    /// silently becoming a meditation.
+    #[test]
+    fn ordinary_surface_tile_is_not_a_meditation() {
+        let dir = debug_game_dir();
+        std::fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 3 4 HONESTY\n").unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+
+        assert!(state.current_shrine_entry(&dir).unwrap().is_none());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// `dungeon-mode.md §15`: "it does **not** gate that call on whether the
+    /// command consumed a turn … so a command the dispatcher reports as \"no
+    /// action\" (a digit solo-select, a refused Push, the typeahead toggle)
+    /// still costs a minute underground. Only the dungeon post-action pass is
+    /// gated on the status word."
+    #[test]
+    fn refused_dungeon_commands_still_cost_a_minute_but_no_action_turn() {
+        let dir = debug_game_dir();
+        for key in ['B', 'E', 'X', 'F', 'P'] {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            let minute_before = state.clock.minute;
+
+            assert!(state.handle_dungeon_key(key, &dir).unwrap());
+
+            assert_eq!(
+                state.turn, 0,
+                "`{key}` reports no action, so the action counter must not move"
+            );
+            assert_eq!(
+                state.clock.minute,
+                minute_before + 1,
+                "`{key}` must still cost the loop-head minute"
+            );
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// `dungeon-mode.md §15`: "Dungeon turns advance the world clock at the
+    /// indoor rate: one minute per loop iteration." The loop-head minute is
+    /// charged once per iteration, so a turn-consuming dungeon command must
+    /// not be billed twice for the same iteration.
+    ///
+    /// The probe is a forward step rather than `A` Attack: `commands.md §3`
+    /// forwards the dungeon attack status verbatim and its row reads "`A`
+    /// dungeon | Always \"no action\"", so `A` never bumps the action
+    /// counter underground.
+    #[test]
+    fn a_turn_consuming_dungeon_command_is_charged_exactly_one_minute() {
+        let dir = debug_game_dir();
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let minute_before = state.clock.minute;
+
+        assert!(state.handle_dungeon_key('w', &dir).unwrap());
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock.minute, minute_before + 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// `commands.md §3` forwarded-route table: "`A` dungeon | Always \"no
+    /// action\"." Combined with `dungeon-mode.md §15` — "a command the
+    /// dispatcher reports as \"no action\" … still costs a minute
+    /// underground" — the dungeon attack spends the iteration's minute
+    /// without spending an action.
+    #[test]
+    fn dungeon_attack_reports_no_action_but_still_costs_the_loop_head_minute() {
+        let dir = debug_game_dir();
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let minute_before = state.clock.minute;
+
+        assert!(state.handle_dungeon_key('A', &dir).unwrap());
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock.minute, minute_before + 1);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

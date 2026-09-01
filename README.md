@@ -73,21 +73,52 @@ press Enter to load the new save. Journey Onward deliberately loads directly
 into Iolo's Hut. Select `U` / `Ultima V Introduction` on the intro menu to play
 the separate story sequence.
 
-In top-down play, use the arrow keys, numeric keypad, or unshifted lowercase
-`wasd`/vi keys to move. Hold Shift for uppercase game commands such as `A`
-(Attack), `L` (Look), `S` (Search), and `U` (Use). Name and free-text entry
-preserve the Shift state instead of forcing uppercase.
+Interactive modes never write into the pristine asset directory. When the
+supplied install is the default `C:\Games\U5-Clean` path or contains read-only
+save/overlay files, the launcher creates a persistent writable mirror below
+`%LOCALAPPDATA%\u5-engine\runtime` (or `$XDG_DATA_HOME/u5-engine/runtime`).
+Existing saves are copied into that mirror on first use and later launches
+preserve the played copy. Set `U5_ENGINE_RUNTIME_DIR` to choose another parent
+directory for the mirror.
 
-The analyzed DOS asset set contains no external music tracks. The visual shell
-therefore generates short PC-speaker-style envelopes at the currently
-published effect boundaries: intro subtitle ignition, potion flash/rumble,
-wind changes, blocked combat steps, accepted combat escape, possession and
-daemon-summon effects, shared traps, Words of Power, ring vanish, Stonegate
-entry, stolen-goods warnings, and the exact published dungeon-decoration
-frequency steps. Press `Ctrl+S` during play to disable or re-enable these sound
-effects. Exact original timings and otherwise unpublished envelopes remain
-upstream specification work; ordinary menu input and movement stay silent
-rather than inventing unverified effects.
+In terminal top-down play, use the arrow keys, numeric keypad, or unshifted
+lowercase `wasd`/vi keys to move; Shift selects the conflicting uppercase game
+commands. In Bevy gameplay, letter keys always enter the original A-Z command
+dispatcher, while movement uses the arrow keys or numeric keypad. Name and
+free-text entry preserve typed case in both frontends.
+
+The analyzed DOS baseline has one audio backend, the IBM PC speaker, and ships
+no external music tracks. `systems/audio.md` (spec commit `86bee4d`) publishes
+that contract in full, and the engine implements it exactly: the single mono
+one-bit channel, the timer-divisor rule, the four sound families (blocking
+tone, linear glissando, random rumble, software envelope), the shared
+potion/wind/spell variant table, and the confirmed trigger inventory. The Bevy
+shell owns one voice - starting a new effect stops the previous one - and
+synthesizes each effect from its published operation list rather than from a
+pre-baked sample bank, because a rumble's pitches come from the private
+sound-only jitter stream, the major full-viewport flash's 1,856 bands come from
+the gameplay PRNG, and each intro ignition burst carries its own 25 pitches.
+
+Press `Ctrl+S` during play to toggle the sound setting. Per `audio.md §3` this
+changes output, not cadence: a muted effect still performs its calibrated hold
+and its state advances, still consumes the same random draws, and still stops
+the speaker at the published end. The Bevy shell therefore holds its one voice
+silently for a muted effect rather than dropping it. The single exception is
+the software envelope, whose silent arm `cleak/u5-spec#146` measured as
+genuinely faster; the engine models that asymmetry instead of assuming mute
+invariance. The intro subtitle-ignition burst is exempt from the toggle
+entirely, because it runs before that command is available. Ordinary menu
+input, walking, and generic successful commands are silent by contract
+(`audio.md §9`), not by omission.
+
+Wall-clock pacing derives from one anchor, the calibrated delay unit.
+`cleak/u5-spec#146` answers it as 0.88 ms +/- 10%, notes that the calibration
+count and the inner-step cost very nearly cancel across machines from a
+4.77 MHz PC through a 486, and is explicit that its figures are static
+derivations with modelling bands rather than measurements. The engine takes
+that published value as its single anchor and derives every hold from it, so
+the residual uncertainty is the spec's own band, not an engine guess. Step
+counts, frequencies, divisors, iteration counts, and event ordering are exact.
 Presentation is still v0: shops, conversations, and other text-heavy flows use
 the shared fixed-cell status/modal surface while exact original window pacing
 continues to be tracked as parity work.
@@ -123,15 +154,16 @@ Input map (visual mode):
 
 | Key                                                 | Action            |
 |-----------------------------------------------------|-------------------|
-| `W`/`A`/`S`/`D`, arrow keys, numpad 8/4/2/6         | Cardinal movement |
-| Numpad 7/9/1/3                                      | Diagonal movement |
+| Arrow keys, numpad 8/4/2/6                          | Cardinal movement |
+| Numpad 7/9/1/3                                      | Diagonal direction input where accepted |
 | `E`                                                 | Enter             |
 | `O`                                                 | Open              |
 | `K`                                                 | Klimb             |
 | `,` / `.`                                           | `<` / `>` floor   |
 | `Space`                                             | Pass              |
-| `B`, `C`, `F`-`J`, `L`-`R`, `T`-`V`, `X`-`Z`        | Command letters   |
-| `Shift+A` / `Shift+S`                               | Attack / Search   |
+| `A`-`Z`                                             | Command letters   |
+| `A`                                                 | Attack, then direction |
+| `G`, `J`, `L`, `O`, `P`, `S`, `T`                  | Adjacent direction commands |
 | `Ctrl+S`                                            | Toggle music      |
 | number row `0`-`9`                                  | Modal selections  |
 | text + `Backspace` + `Enter`                        | Text prompts      |

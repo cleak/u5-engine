@@ -102,6 +102,15 @@ pub const DUNGEON_FIELD_SLEEP_BASE: u8 = 0x80;
 pub const DUNGEON_FIELD_POISON_GAS_BASE: u8 = 0x81;
 pub const DUNGEON_FIELD_FIRE_BASE: u8 = 0x82;
 pub const DUNGEON_FIELD_ELECTRIC_BASE: u8 = 0x83;
+pub const DUNGEON_FIELD_STATUS_ROLL_LOW: u8 = 1;
+pub const DUNGEON_FIELD_STATUS_ROLL_HIGH: u8 = 30;
+
+/// `dungeon-mode.md §8`: sleep/poison status applies when the inclusive
+/// `1..30` roll is equal to or greater than current Dexterity. Dexterity is
+/// not clamped, so values above 30 always save.
+pub const fn dungeon_field_status_applies(dexterity: u8, roll: u8) -> bool {
+    roll >= dexterity
+}
 
 pub fn dungeon_field_effect(tile: u8) -> Option<DungeonFieldEffect> {
     match tile {
@@ -169,13 +178,104 @@ pub fn dungeon_room_slot(tile: u8) -> u8 {
     tile & DUNGEON_ROOM_SLOT_MASK
 }
 
-pub fn dungeon_room_arena_index(scene: DungeonScene, tile: u8) -> usize {
-    let bank = if scene.record <= DUNGEON_ARENA_BANK_SHARED_RECORD_MAX {
+/// `dungeon-mode.md §14`: collapse a raw dungeon record into the
+/// `DUNGEON.CBT` arena bank.
+///
+/// ```text
+/// arena_bank = 0 if dungeon_record <= 1 else dungeon_record - 1
+/// ```
+///
+/// "Despise shares the bank-zero arithmetic path, but the stock
+/// Despise dungeon record has no `0xF?` room-trigger cells", which is
+/// why records `0..=1` collapse onto one bank and every later record
+/// shifts down by one. The seven resulting banks are Deceit `0`,
+/// Destard `1`, Wrong `2`, Covetous `3`, Shame `4`, Hythloth `5`, and
+/// Doom `6`.
+pub const fn dungeon_arena_bank(record: usize) -> usize {
+    if record <= DUNGEON_ARENA_BANK_SHARED_RECORD_MAX {
         0
     } else {
-        scene.record - 1
-    };
-    bank * DUNGEON_ROOM_SLOTS_PER_BANK + dungeon_room_slot(tile) as usize
+        record - 1
+    }
+}
+
+/// `dungeon-mode.md §5,§14` number of `DUNGEON.CBT` arena banks. §14's
+/// bank listing runs Deceit `0..15` through Doom `96..111`, and §5
+/// makes the same count explicit for the save-image bitmap: "one bit
+/// per dungeon-room arena record - one hundred twelve bits, which
+/// occupy the first fourteen bytes of the sixteen-byte save-image
+/// field ... (the two trailing bytes are never addressed)".
+pub const DUNGEON_ARENA_BANK_COUNT: usize = 7;
+
+/// `dungeon-mode.md §5` addressed width of the room-clear bitmap:
+/// `DUNGEON_ARENA_BANK_COUNT * DUNGEON_ROOM_SLOTS_PER_BANK / 8` = 14
+/// bytes. The save field stays sixteen bytes wide
+/// ([`SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN`]); the final two bytes are
+/// never addressed by either the reader or the writer.
+pub const DUNGEON_ROOM_CLEAR_ADDRESSED_BYTES: usize =
+    DUNGEON_ARENA_BANK_COUNT * DUNGEON_ROOM_SLOTS_PER_BANK / 8;
+
+/// `dungeon-mode.md §14` raw dungeon record for Wrong (arena bank
+/// `2`, arena records `32..47`).
+pub const WRONG_DUNGEON_RECORD: u8 = 3;
+/// `dungeon-mode.md §14` raw dungeon record for Covetous (arena bank
+/// `3`, arena records `48..63`).
+pub const COVETOUS_DUNGEON_RECORD: u8 = 4;
+
+/// `dungeon-mode.md §5` resident room-clear writer deny-list: "The
+/// list holds six `(dungeon, room)` pairs; when the room being
+/// resolved matches one of them, the writer returns without setting
+/// anything. In shipped data the deny-listed rooms are rooms one, six,
+/// eleven, and twelve of the Wrong bank and rooms zero and eleven of
+/// the Covetous bank ... Those six rooms therefore never persist as
+/// cleared and re-arm on every visit."
+///
+/// The key is deliberately the **raw dungeon record**, not the
+/// collapsed [`dungeon_arena_bank`] the bit index uses: §5 states "the
+/// deny-list is keyed by the raw dungeon record number, while the bit
+/// index uses the collapsed arena bank, so an implementation must not
+/// reuse one for the other."
+pub const DUNGEON_ROOM_CLEAR_DENY_LIST: [(u8, u8); 6] = [
+    (WRONG_DUNGEON_RECORD, 1),
+    (WRONG_DUNGEON_RECORD, 6),
+    (WRONG_DUNGEON_RECORD, 11),
+    (WRONG_DUNGEON_RECORD, 12),
+    (COVETOUS_DUNGEON_RECORD, 0),
+    (COVETOUS_DUNGEON_RECORD, 11),
+];
+
+/// `dungeon-mode.md §5`: whether the room-clear bitmap **writer** must
+/// return without setting anything for this `(raw dungeon record,
+/// room id)` pair. The **reader** applies no deny-list, so it simply
+/// always reports these rooms as not cleared.
+pub const fn dungeon_room_clear_is_denied(record: u8, room_id: u8) -> bool {
+    let mut index = 0;
+    while index < DUNGEON_ROOM_CLEAR_DENY_LIST.len() {
+        let (denied_record, denied_room) = DUNGEON_ROOM_CLEAR_DENY_LIST[index];
+        if denied_record == record && denied_room == room_id {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+pub fn dungeon_room_arena_index(scene: DungeonScene, tile: u8) -> usize {
+    dungeon_arena_bank(scene.record) * DUNGEON_ROOM_SLOTS_PER_BANK
+        + dungeon_room_slot(tile) as usize
+}
+
+/// `dungeon-mode.md §5`: locate the room-clear bit for one
+/// `(scene, room id)` pair. "The bit index is the same
+/// `arena_bank * 16 + room_id` value used to select the `DUNGEON.CBT`
+/// record (§ 14)", so the position is derived from the collapsed
+/// [`dungeon_arena_bank`] and never from the raw record.
+fn dungeon_room_clear_bit_slot(scene: DungeonScene, room_id: u8) -> Option<(usize, u8)> {
+    let bank = dungeon_arena_bank(scene.record);
+    if bank >= DUNGEON_ARENA_BANK_COUNT {
+        return None;
+    }
+    dungeon_room_clear_bit_position(bank as u8, room_id)
 }
 
 pub fn dungeon_room_clear_bit_is_set(
@@ -183,8 +283,10 @@ pub fn dungeon_room_clear_bit_is_set(
     scene: DungeonScene,
     room_id: u8,
 ) -> bool {
-    dungeon_room_clear_bit_position(scene.record as u8, room_id)
-        .is_some_and(|(byte, mask)| bitmap[byte] & mask != 0)
+    // `dungeon-mode.md §5`: "The bitmap **reader** applies no
+    // deny-list, so it simply always reports those rooms as not
+    // cleared" — the writer's guard is what keeps them clear.
+    dungeon_room_clear_bit_slot(scene, room_id).is_some_and(|(byte, mask)| bitmap[byte] & mask != 0)
 }
 
 pub fn set_dungeon_room_clear_bit(
@@ -192,7 +294,15 @@ pub fn set_dungeon_room_clear_bit(
     scene: DungeonScene,
     room_id: u8,
 ) -> bool {
-    let Some((byte, mask)) = dungeon_room_clear_bit_position(scene.record as u8, room_id) else {
+    // `dungeon-mode.md §5`: "The bitmap **writer** consults a small
+    // resident deny-list before setting a bit ... when the room being
+    // resolved matches one of them, the writer returns without setting
+    // anything." The guard lives in the helper rather than at the
+    // single post-combat call site so any future writer is covered.
+    if dungeon_room_clear_is_denied(scene.record as u8, room_id) {
+        return false;
+    }
+    let Some((byte, mask)) = dungeon_room_clear_bit_slot(scene, room_id) else {
         return false;
     };
     let was_clear = bitmap[byte] & mask == 0;
@@ -345,7 +455,7 @@ pub fn render_glyph(tile: u8) -> char {
         64..=79 => 'f',
         80..=87 => '<',
         88..=95 => '?',
-        96..=103 => '+',
+        96..=103 => '~',
         104..=127 => '*',
         128..=159 => '^',
         160..=191 => 'v',
@@ -394,18 +504,52 @@ pub fn render_dungeon_glyph(tile: u8) -> char {
     }
 }
 
+/// `formats/npc.md §6`: a roster slot's type byte "supplies the NPC's
+/// sprite/tile classifier", and "the runtime sprite tile is derived by
+/// adding the byte to the NPC sprite page". The NPC sprite page is the
+/// actor bank base - `catalogs/tile-catalog.md §3.1`: "An actor's
+/// stored byte is a value in `0..255` and the renderer adds **256** to
+/// it before indexing this catalogue" - which this engine applies in
+/// [`actor_tile_for_byte`]. So an ordinary roster tag *is* the actor
+/// byte and needs no remapping at all.
+///
+/// `catalogs/npc-roster.md §4` confirms the identity from the art side:
+/// tag `B8` is `a gargoyle`, tag `D8` `a daemon`, tag `90` `a rodent of
+/// unusual size`, tag `94` `a bat`, tag `FC` `a shadow lord`
+/// ("`catalogs/monster-bestiary.md`, class 47"). Those are bestiary
+/// classes 30, 38, 20, 21 and 47, and `class * 4 + 0x40` reproduces
+/// every one of the five tags exactly - the same relation
+/// [`crate::combat_class_sprite_byte`] implements for combat classes.
+/// The roster tag therefore lives in the same actor-byte domain, and
+/// the person classes below `0x80` (`40` wizard, `44`/`5C` minstrel,
+/// `48` fighter, `50` villager, `54` merchant, `58` jester, `68`
+/// child, `6C` beggar, `70` guard, `78` Blackthorn) resolve the same
+/// way.
+///
+/// Tag `0x01` is the one published exception: "the sprite-link helper
+/// forces the standard person tile instead of using the tag as a direct
+/// sprite class" (`catalogs/npc-roster.md §4`, `formats/npc.md §6`
+/// row `1`). See [`NPC_DEFAULT_PERSON_SPRITE_TILE`].
+///
+/// The withdrawn implementation clamped every byte outside `192..=255`
+/// to the literal `192`, which is bestiary class 32 in the actor bank -
+/// so all three hundred and twenty-two ordinary roster slots in the
+/// shipped `.NPC` files drew one single monster sprite.
 pub fn npc_tile(type_byte: u8) -> u8 {
-    if (192..=255).contains(&type_byte) {
-        type_byte
-    } else {
-        192
+    match npc_type_byte_class(type_byte) {
+        NpcTypeByteClass::DefaultHumanSprite => NPC_DEFAULT_PERSON_SPRITE_TILE,
+        _ => type_byte,
     }
 }
 
+/// `npc-schedules.md §11`: the world-mutation primitive fills a freshly
+/// allocated active-object slot "with the NPC's tile, type, and new
+/// coordinates" - the roster type byte and the derived sprite tile are
+/// two separate fields, and they differ for the tag-`0x01` sentinel.
 pub fn npc_active_object(type_byte: u8, x: usize, y: usize, z: u8) -> ActiveObject {
     let tile = npc_tile(type_byte);
     ActiveObject {
-        type_byte: tile,
+        type_byte,
         tile,
         x,
         y,
@@ -429,7 +573,7 @@ pub fn active_object_matches_runtime_npc(
     {
         return false;
     }
-    object.type_byte == npc_tile(npc.type_byte)
+    object.type_byte == npc.type_byte
 }
 
 pub fn step_toward(from: (usize, usize), to: (usize, usize)) -> Option<(usize, usize)> {
@@ -461,7 +605,7 @@ pub fn tile_class(tile: u8) -> &'static str {
         16..=23 => "path",
         24..=63 => "wall",
         64..=95 => "furniture",
-        96..=103 => "door",
+        96..=103 => "river",
         104..=127 => "decoration",
         128..=159 => "special",
         160..=191 => "vehicle",
@@ -1147,13 +1291,18 @@ pub const fn dungeon_minimap_glyph(tile: u8) -> Option<DungeonMinimapGlyph> {
 }
 
 /// `dungeon-mode.md §10` post-combat Z-axis intent the dungeon
-/// A-Attack handler honours after combat returns. Result code 5
-/// requests one level deeper; code 6 requests one level shallower;
-/// every other code keeps the party on the current level.
+/// A-Attack handler honours after combat returns: "result code five
+/// moves the party one level **up** — it decrements the level byte
+/// ... result code six moves the party one level **down** — it
+/// increments the level byte". Every other code keeps the party on
+/// the current level. This is the same polarity as K-Klimb in §13: a
+/// smaller level byte is nearer the surface. When the step reaches a
+/// level edge the surface-exit path of §13.2 runs — off the top onto
+/// Britannia, off the bottom into the Underworld.
 pub const fn dungeon_attack_post_combat_z_intent(result_code: u8) -> Option<i8> {
     match result_code {
-        5 => Some(1),
-        6 => Some(-1),
+        5 => Some(-1),
+        6 => Some(1),
         _ => None,
     }
 }
@@ -1442,7 +1591,7 @@ pub fn render_class_byte(tile: u8) -> u8 {
         16..=23 => b'.',
         24..=63 => b'#',
         64..=95 => b'f',
-        96..=103 => b'D',
+        96..=103 => b'R',
         104..=127 => b'd',
         128..=159 => b's',
         160..=191 => b'v',
@@ -1602,4 +1751,253 @@ pub const fn actor_tile_for_byte(actor_byte: u8) -> Option<usize> {
         return None;
     }
     Some(ACTOR_TILE_BANK_BASE + actor_byte as usize)
+}
+
+#[cfg(test)]
+mod dungeon_room_clear_tests {
+    use super::*;
+
+    fn scene_for_record(record: u8) -> DungeonScene {
+        DungeonScene::from_record(record).unwrap()
+    }
+
+    #[test]
+    fn arena_bank_collapse_matches_the_published_bank_listing() {
+        // `dungeon-mode.md §14`: "arena_bank = 0 if dungeon_record <= 1
+        // else dungeon_record - 1", giving "Deceit records 0..15,
+        // Destard 16..31, Wrong 32..47, Covetous 48..63, Shame 64..79,
+        // Hythloth 80..95, and Doom 96..111".
+        assert_eq!(dungeon_arena_bank(0), 0);
+        assert_eq!(dungeon_arena_bank(1), 0);
+        assert_eq!(dungeon_arena_bank(2), 1);
+        assert_eq!(dungeon_arena_bank(WRONG_DUNGEON_RECORD as usize), 2);
+        assert_eq!(dungeon_arena_bank(COVETOUS_DUNGEON_RECORD as usize), 3);
+        assert_eq!(dungeon_arena_bank(7), 6);
+        assert_eq!(DUNGEON_ARENA_BANK_COUNT, 7);
+        assert_eq!(
+            DUNGEON_ARENA_BANK_COUNT * DUNGEON_ROOM_SLOTS_PER_BANK,
+            112,
+            "§5: one hundred twelve bits"
+        );
+        assert_eq!(DUNGEON_ROOM_CLEAR_ADDRESSED_BYTES, 14);
+        assert!(DUNGEON_ROOM_CLEAR_ADDRESSED_BYTES < SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN);
+    }
+
+    #[test]
+    fn clear_bit_index_is_the_same_value_as_the_arena_index() {
+        // `dungeon-mode.md §5`: "the bit index is the same
+        // `arena_bank * 16 + room_id` value used to select the
+        // DUNGEON.CBT record (§ 14)". Reading the bit index back out of
+        // (byte, mask) must reproduce `dungeon_room_arena_index`.
+        for record in 0u8..=7 {
+            let scene = scene_for_record(record);
+            for room in 0u8..16 {
+                let mut bitmap = [0u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN];
+                if dungeon_room_clear_is_denied(record, room) {
+                    continue;
+                }
+                assert!(set_dungeon_room_clear_bit(&mut bitmap, scene, room));
+                let set_bits: Vec<usize> = (0..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN * 8)
+                    .filter(|bit| bitmap[bit / 8] & (1 << (bit % 8)) != 0)
+                    .collect();
+                let arena_index = dungeon_room_arena_index(scene, 0xF0 | room);
+                assert_eq!(
+                    set_bits,
+                    vec![arena_index],
+                    "record {record} room {room} must set bit {arena_index}"
+                );
+                assert!(arena_index < DUNGEON_ARENA_BANK_COUNT * DUNGEON_ROOM_SLOTS_PER_BANK);
+                // The two trailing bytes of the sixteen-byte field are
+                // never addressed.
+                assert_eq!(bitmap[DUNGEON_ROOM_CLEAR_ADDRESSED_BYTES..], [0, 0]);
+            }
+        }
+    }
+
+    #[test]
+    fn clear_bit_uses_the_collapsed_bank_not_the_raw_record() {
+        // Destard is raw record 2 but arena bank 1, so its room 0 bit
+        // is bit 16 (byte 2), not bit 32 (byte 4).
+        let destard = scene_for_record(2);
+        let mut bitmap = [0u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN];
+        assert!(set_dungeon_room_clear_bit(&mut bitmap, destard, 0));
+        assert_eq!(bitmap[2], 0x01);
+        assert_eq!(bitmap[4], 0x00);
+        // Deceit (record 0) and Despise (record 1) share bank zero.
+        let mut shared = [0u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN];
+        assert!(set_dungeon_room_clear_bit(
+            &mut shared,
+            scene_for_record(0),
+            3
+        ));
+        assert!(dungeon_room_clear_bit_is_set(
+            &shared,
+            scene_for_record(1),
+            3
+        ));
+        // Doom (record 7 / bank 6) lands in the last addressed byte
+        // pair, never in the two trailing bytes.
+        let mut doom = [0u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN];
+        assert!(set_dungeon_room_clear_bit(
+            &mut doom,
+            scene_for_record(7),
+            15
+        ));
+        assert_eq!(doom[13], 0x80);
+        assert_eq!(doom[14], 0x00);
+        assert_eq!(doom[15], 0x00);
+    }
+
+    #[test]
+    fn writer_deny_list_holds_the_six_published_pairs() {
+        // `dungeon-mode.md §5`: "the deny-listed rooms are rooms one,
+        // six, eleven, and twelve of the Wrong bank and rooms zero and
+        // eleven of the Covetous bank".
+        assert_eq!(DUNGEON_ROOM_CLEAR_DENY_LIST.len(), 6);
+        for room in [1u8, 6, 11, 12] {
+            assert!(dungeon_room_clear_is_denied(WRONG_DUNGEON_RECORD, room));
+        }
+        for room in [0u8, 11] {
+            assert!(dungeon_room_clear_is_denied(COVETOUS_DUNGEON_RECORD, room));
+        }
+        // Neighbouring rooms in the same banks are not denied.
+        assert!(!dungeon_room_clear_is_denied(WRONG_DUNGEON_RECORD, 0));
+        assert!(!dungeon_room_clear_is_denied(COVETOUS_DUNGEON_RECORD, 1));
+        // The key is the RAW record, never the collapsed bank: Wrong's
+        // bank number is 2, which is Destard's raw record.
+        assert!(!dungeon_room_clear_is_denied(2, 1));
+    }
+
+    #[test]
+    fn denied_rooms_never_persist_and_the_reader_applies_no_deny_list() {
+        // `dungeon-mode.md §5`: denied rooms "never persist as cleared
+        // and re-arm on every visit", while "the bitmap reader applies
+        // no deny-list, so it simply always reports those rooms as not
+        // cleared".
+        let wrong = scene_for_record(WRONG_DUNGEON_RECORD);
+        let mut bitmap = [0u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN];
+        assert!(!set_dungeon_room_clear_bit(&mut bitmap, wrong, 6));
+        assert_eq!(bitmap, [0u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN]);
+        assert!(!dungeon_room_clear_bit_is_set(&bitmap, wrong, 6));
+
+        // A denied room's trigger cell is therefore never demoted on
+        // reload; an allowed room in the same bank still is.
+        assert!(set_dungeon_room_clear_bit(&mut bitmap, wrong, 7));
+        let mut grid = vec![0u8; DUNGEON_RECORD_LEN];
+        grid[0] = 0xF6;
+        grid[1] = 0xF7;
+        apply_dungeon_room_clear_bitmap(&mut grid, wrong, &bitmap);
+        assert_eq!(grid[0], 0xF6);
+        assert_eq!(grid[1], 0xA7);
+    }
+}
+
+#[cfg(test)]
+mod npc_sprite_tests {
+    use super::*;
+    use crate::{
+        NPC_DEFAULT_PERSON_SPRITE_TILE, NPC_TYPE_DEFAULT_HUMAN_SPRITE, NPC_TYPE_EMPTY,
+        NPC_TYPE_SHADOWLORD_ACTOR, combat_class_sprite_byte,
+    };
+
+    /// `catalogs/npc-roster.md §4` publishes the whole shipped tag
+    /// alphabet; every one of these appears on at least one occupied
+    /// roster slot in the four `.NPC` files.
+    const SHIPPED_ROSTER_TAGS: [u8; 25] = [
+        0x01, 0x0E, 0x10, 0x11, 0x1B, 0x1E, 0x28, 0x40, 0x44, 0x48, 0x50, 0x54, 0x58, 0x5C, 0x68,
+        0x6C, 0x70, 0x78, 0x90, 0x94, 0xB5, 0xB6, 0xB8, 0xD8, 0xFC,
+    ];
+
+    #[test]
+    fn ordinary_roster_tag_is_the_actor_byte_itself() {
+        // `formats/npc.md §6`: "the runtime sprite tile is derived by
+        // adding the byte to the NPC sprite page"; the sprite page is
+        // the actor bank base, applied by `actor_tile_for_byte`.
+        for tag in SHIPPED_ROSTER_TAGS {
+            if tag == NPC_TYPE_DEFAULT_HUMAN_SPRITE {
+                continue;
+            }
+            assert_eq!(npc_tile(tag), tag, "roster tag {tag:#04x}");
+            assert_eq!(
+                actor_tile_for_byte(npc_tile(tag)),
+                Some(ACTOR_TILE_BANK_BASE + tag as usize),
+                "roster tag {tag:#04x}"
+            );
+        }
+    }
+
+    #[test]
+    fn creature_roster_tags_match_the_published_class_sprite_relation() {
+        // `catalogs/npc-roster.md §4` names these tags, and
+        // `catalogs/tile-catalog.md §7` + `catalogs/monster-bestiary.md`
+        // put the same creatures at `class * 4 + 0x40`.
+        for (tag, class) in [
+            (0x90u8, 20u8), // a rodent of unusual size
+            (0x94, 21),     // a bat
+            (0xB8, 30),     // a gargoyle
+            (0xD8, 38),     // a daemon
+            (0xFC, 47),     // a shadow lord
+        ] {
+            assert_eq!(combat_class_sprite_byte(class), tag);
+            assert_eq!(npc_tile(tag), tag);
+        }
+        assert_eq!(
+            npc_tile(NPC_TYPE_SHADOWLORD_ACTOR),
+            NPC_TYPE_SHADOWLORD_ACTOR
+        );
+    }
+
+    #[test]
+    fn default_person_sentinel_forces_the_person_tile() {
+        // `catalogs/npc-roster.md §4` row `01`: "the sprite-link helper
+        // forces the standard person tile instead of using the tag as a
+        // direct sprite class".
+        assert_eq!(
+            npc_tile(NPC_TYPE_DEFAULT_HUMAN_SPRITE),
+            NPC_DEFAULT_PERSON_SPRITE_TILE
+        );
+        assert_ne!(
+            NPC_DEFAULT_PERSON_SPRITE_TILE,
+            NPC_TYPE_DEFAULT_HUMAN_SPRITE
+        );
+    }
+
+    #[test]
+    fn shipped_roster_tags_do_not_collapse_onto_one_sprite() {
+        // Regression for the withdrawn clamp, which mapped every tag
+        // outside `192..=255` to the single tile `192`.
+        let mut tiles: Vec<u8> = SHIPPED_ROSTER_TAGS.iter().map(|&t| npc_tile(t)).collect();
+        tiles.sort_unstable();
+        tiles.dedup();
+        assert_eq!(
+            tiles.len(),
+            SHIPPED_ROSTER_TAGS.len() - 1,
+            "tag 01 shares the villager tile; every other tag is distinct"
+        );
+        assert!(!SHIPPED_ROSTER_TAGS.iter().any(|&t| npc_tile(t) == 192));
+    }
+
+    #[test]
+    fn active_object_keeps_the_roster_type_and_derives_the_tile() {
+        // `npc-schedules.md §11`: the slot is filled "with the NPC's
+        // tile, type, and new coordinates" - two separate fields.
+        let object = npc_active_object(NPC_TYPE_DEFAULT_HUMAN_SPRITE, 4, 5, 0);
+        assert_eq!(object.type_byte, NPC_TYPE_DEFAULT_HUMAN_SPRITE);
+        assert_eq!(object.tile, NPC_DEFAULT_PERSON_SPRITE_TILE);
+
+        let guard = npc_active_object(0x70, 4, 5, 0);
+        assert_eq!(guard.type_byte, 0x70);
+        assert_eq!(guard.tile, 0x70);
+        assert_eq!(npc_tile(NPC_TYPE_EMPTY), NPC_TYPE_EMPTY);
+    }
+
+    #[test]
+    fn hidden_sprite_tile_is_the_reserved_transparent_actor_byte() {
+        // `npc-schedules.md §11` suppresses only presentation, and
+        // `catalogs/tile-catalog.md §3.1` names `0x16` as "the sole
+        // reserved actor byte ... draw nothing". Actor byte `0` is a
+        // drawable tile, so it never suppressed anything.
+        assert_eq!(crate::NPC_HIDDEN_SPRITE_TILE, ACTOR_TILE_TRANSPARENT_BYTE);
+        assert_eq!(actor_tile_for_byte(crate::NPC_HIDDEN_SPRITE_TILE), None);
+    }
 }

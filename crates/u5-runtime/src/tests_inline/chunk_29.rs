@@ -1,17 +1,11 @@
     // ------------------------------------------------------------------
     // `systems/animation.md` Section 6 — global tile animation.
     //
-    // Provenance for every test in this block: `animation.md §6` at spec
-    // HEAD `c00bf63`, corroborated by `catalogs/tile-catalog.md §3.1`
-    // and `§4` at the same HEAD.
-    //
-    // §6 retracts the family list this engine previously implemented:
-    // "no water, lava, brazier or torch tile animates through this pass
-    // at all." The five families below are the complete list.
+    // Provenance for every test in this block: current `animation.md §6`,
+    // and `catalogs/tile-catalog.md §4`.
     // ------------------------------------------------------------------
 
-    /// `animation.md §6` (spec HEAD `c00bf63`) publishes exactly five
-    /// families with these id ranges and cycle lengths:
+    /// The published selector table.
     ///
     /// | Tile ids | Family | Behaviour |
     /// |---|---|---|
@@ -30,7 +24,7 @@
         assert_eq!(
             STATIC_TILE_ANIMATION_FAMILIES.len(),
             5,
-            "animation.md §6: 'There are exactly five such families'"
+            "only the five published selector families"
         );
 
         let expected: [(StaticTileAnimationFamily, u8, u8, u8); 5] = [
@@ -231,24 +225,20 @@
         }
     }
 
-    /// `animation.md §6` (spec HEAD `c00bf63`) retraction: "**no water,
-    /// lava, brazier or torch tile animates through this pass at all.**"
-    /// `catalogs/tile-catalog.md §4` withdraws the same list plus a
-    /// "wind / gust visuals" row.
-    ///
-    /// Withdrawn ids checked here: water `0x01..0x03` and swamp `0x04`
+    /// Families without a public exact selector run remain unchanged.
+    /// Checked here: water `0x01..0x03` and swamp `0x04`
     /// (`tile-catalog.md §3`), the wells/brazier/fireplace band
     /// `0x5C..0x5F` (§3 row "92..95"), the fire-effect / poison / sleep
     /// band `0x98..0x9F` (§3 row "152..159"), and molten lava `0x8F`.
     #[test]
-    fn withdrawn_water_lava_brazier_and_torch_ids_resolve_to_themselves() {
-        let withdrawn: Vec<u8> = (0x01u8..=0x04)
+    fn unclassified_water_lava_and_effect_ids_resolve_to_themselves() {
+        let unclassified: Vec<u8> = (0x01u8..=0x04)
             .chain(0x5C..=0x5F)
             .chain(std::iter::once(0x8F))
             .chain(0x98..=0x9F)
             .collect();
 
-        for tile in withdrawn {
+        for tile in unclassified {
             assert_eq!(
                 static_tile_animation_family(tile),
                 None,

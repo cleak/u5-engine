@@ -5,6 +5,8 @@
 
 pub mod active_object_io;
 pub mod animation;
+pub mod audio;
+pub mod audio_render;
 pub mod blackthorn;
 pub mod blackthorn_session;
 pub mod boot;
@@ -43,6 +45,7 @@ pub mod fonts_io;
 pub mod gameplay_chrome;
 pub mod graphics;
 pub mod graphics_io;
+pub mod harpsichord;
 pub mod hidden_treasures;
 pub mod inline_parsers;
 pub mod input_codes;
@@ -145,29 +148,33 @@ pub use animation::{
 pub use blackthorn::{
     ActiveBlackthornGuardDemand, BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS,
     BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD, BLACKTHORN_CAPTIVE_CELL_SCENE,
-    BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y, BLACKTHORN_CAPTURE_CONTEXT_NONE,
-    BLACKTHORN_CHALLENGE_INPUT_LIMIT, BLACKTHORN_CHALLENGE_PROMPT_COUNT,
-    BLACKTHORN_CHALLENGE_PROMPT_TABLE, BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT,
-    BLACKTHORN_CUTSCENE_ATTENDANT_TYPE, BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
-    BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE, BLACKTHORN_CUTSCENE_FORMAT_OUTPUT,
-    BLACKTHORN_CUTSCENE_SECOND_PARTY_TYPE, BLACKTHORN_CUTSCENE_TEMP_TILE_A,
-    BLACKTHORN_CUTSCENE_TEMP_TILE_B, BLACKTHORN_CUTSCENE_THRONE_TYPE,
-    BLACKTHORN_FAILURE_VICTIM_SLOT, BLACKTHORN_GUARD_DEMAND_DIALOG_ID, BLACKTHORN_GUARD_PASSWORD,
-    BLACKTHORN_GUARD_PASSWORD_COMPARE_LEN, BLACKTHORN_GUARD_PASSWORD_INPUT_MAX,
-    BLACKTHORN_GUARD_TRIBUTE_PER_LIVING_MEMBER, BLACKTHORN_RESCUE_HANDOFF_SCENE,
-    BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y, BLACKTHORN_RESCUE_STANDING_FLOOR,
-    BLACKTHORN_STORY_STATE_FILE, BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN,
-    BLACKTHORN_STORY_STATE_LEN, BLACKTHORN_STORY_STATE_MAGIC, BlackthornCutsceneActor,
-    BlackthornCutsceneActorPlacement, BlackthornCutsceneActorState, BlackthornCutsceneBeat,
-    BlackthornCutsceneCommand, BlackthornCutsceneVm, BlackthornEntryFamily,
+    BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y, BLACKTHORN_CHALLENGE_INPUT_LIMIT,
+    BLACKTHORN_CHALLENGE_PROMPT_COUNT, BLACKTHORN_COBBLE_TILE,
+    BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT, BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
+    BLACKTHORN_FAILURE_VICTIM_SLOT, BLACKTHORN_GUARD_ACTOR_BYTE, BLACKTHORN_GUARD_DEMAND_DIALOG_ID,
+    BLACKTHORN_GUARD_PASSWORD, BLACKTHORN_GUARD_PASSWORD_COMPARE_LEN,
+    BLACKTHORN_GUARD_PASSWORD_INPUT_MAX, BLACKTHORN_GUARD_TRIBUTE_PER_LIVING_MEMBER,
+    BLACKTHORN_HOURGLASS_TILE, BLACKTHORN_LOCKED_DOOR_TILE, BLACKTHORN_PENDULUM_TILE,
+    BLACKTHORN_RESCUE_FLASH_COUNT, BLACKTHORN_RESCUE_FLASH_PRNG_DRAWS_PER_INVOCATION,
+    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y,
+    BLACKTHORN_RESCUE_LEFT_GUARDIAN_CELL, BLACKTHORN_RESCUE_LEFT_GUARDIAN_TILE,
+    BLACKTHORN_RESCUE_PARTY_ATLAS_INDEX, BLACKTHORN_RESCUE_RIGHT_GUARDIAN_CELL,
+    BLACKTHORN_RESCUE_RIGHT_GUARDIAN_TILE, BLACKTHORN_RESCUE_SOFTWARE_ENVELOPE_COUNT,
+    BLACKTHORN_RESCUE_SPECTRAL_ACTOR_BYTE, BLACKTHORN_RESCUE_SPECTRAL_ATLAS_INDEX,
+    BLACKTHORN_RESCUE_SPECTRAL_CELL, BLACKTHORN_RESCUE_STANDING_FLOOR,
+    BLACKTHORN_SEATED_ACTOR_BYTE, BLACKTHORN_SEATED_ATLAS_INDEX, BLACKTHORN_SHRINE_COUNT,
+    BLACKTHORN_SHRINE_MANTRAS, BLACKTHORN_SUPPRESSED_ACTOR_BYTE, BlackthornCellRevealPlayback,
+    BlackthornChallengeWording, BlackthornCutsceneActor, BlackthornCutsceneActorPlacement,
+    BlackthornCutsceneActorState, BlackthornCutsceneBeat, BlackthornCutsceneCommand,
+    BlackthornCutscenePresentationEvent, BlackthornCutsceneVm, BlackthornEntryFamily,
     BlackthornGuardDemandPrompt, BlackthornGuardDemandResolution, BlackthornGuardDemandStart,
-    BlackthornStoryState, KARMA_DAT_BAND_WIDTH, KarmaDatTier, begin_blackthorn_guard_demand,
-    blackthorn_challenge_answer_matches, blackthorn_challenge_limited_input,
-    blackthorn_challenge_prompt, blackthorn_cutscene_actor, blackthorn_cutscene_beat_commands,
-    blackthorn_cutscene_tile_index, blackthorn_rescue_post_print_standing,
-    blackthorn_rescue_verdict_record, karma_dat_tier, load_blackthorn_story_state,
-    lord_british_camp_verdict_record, resolve_blackthorn_guard_demand,
-    write_blackthorn_story_state,
+    BlackthornRescuePlayback, KARMA_DAT_BAND_WIDTH, KarmaDatTier, begin_blackthorn_guard_demand,
+    blackthorn_cell_reveal_playback, blackthorn_challenge_answer_matches,
+    blackthorn_challenge_limited_input, blackthorn_challenge_wording, blackthorn_cutscene_actor,
+    blackthorn_cutscene_beat_commands, blackthorn_cutscene_tile_index, blackthorn_rescue_playback,
+    blackthorn_rescue_post_print_standing, blackthorn_rescue_verdict_record,
+    blackthorn_shrine_mantra, karma_dat_tier, lord_british_camp_verdict_record,
+    resolve_blackthorn_guard_demand,
 };
 pub use boot::{
     DATA_OVL_FILENAME, DRIVER_SELECTOR_CGA, DRIVER_SELECTOR_EGA, DRIVER_SELECTOR_HERCULES,
@@ -216,7 +223,7 @@ pub use combat_frame::*;
 pub use combat_setup::*;
 pub use combat_stats::*;
 pub use commands::{
-    Command, CommandEcho, CommandEchoJoin, CommandEchoMode, DEATH_VISION_OBJECT_CLASS,
+    Command, CommandEcho, CommandEchoJoin, CommandEchoMode, DEATH_VISION_LOOK_TILE,
     DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW, DIRECTION_PROMPT_CANCEL_LITERAL,
     DUNGEON_EXIT_TO_BRITANNIA_NARRATION, DUNGEON_EXIT_TO_UNDERWORLD_NARRATION,
     DUNGEON_MOVEMENT_BLOCKED_REFUSAL, DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL,
@@ -225,17 +232,18 @@ pub use commands::{
     LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome, PARTY_SELECTION_PROMPT,
     PULLED_SUCCESS, PUSH_NOT_HERE_REFUSAL, PUSH_WONT_BUDGE_EMPHATIC, PUSH_WONT_BUDGE_SHORT,
     PUSHABLE_CANNON_FLOOR_STAMP, PUSHABLE_GENERIC_FLOOR_STAMP, PUSHED_SUCCESS, PushableTileFamily,
-    SELECTION_CANCELLED_LITERAL, TOWN_CANNON_TILE_FIRST, TOWN_CANNON_TILE_LAST,
-    VIEW_NO_GEM_REFUSAL, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
+    REST_HOURS_PROMPT, REST_NO_WATCH_LITERAL, REST_WATCH_MEMBER_PROMPT, REST_WATCH_NO_LITERAL,
+    REST_WATCH_PROMPT, REST_WATCH_YES_LITERAL, SELECTION_CANCELLED_LITERAL, TOWN_CANNON_TILE_FIRST,
+    TOWN_CANNON_TILE_LAST, VIEW_NO_GEM_REFUSAL, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
     WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE,
     YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_echo,
-    command_for_letter, death_vision_object_class, dungeon_display_level,
-    local_view_class_for_tile, movement_echo, new_order_outcome, new_order_swap_accepted,
-    pushable_facing_index, pushable_oriented_tile, pushable_tile_family,
-    sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
-    surface_wishing_well_look_tile, town_cannon_tile_fire_direction, town_fountain_drink_accepts,
-    unassigned_refusal_echo, view_command_outcome, wishing_well_grant_scene, wishing_well_wish,
-    wishing_well_wish_accepted, yell_input_context, yell_routes_to_ship_sails,
+    command_for_letter, death_vision_look_tile, dungeon_display_level, local_view_class_for_tile,
+    movement_echo, new_order_outcome, new_order_swap_accepted, pushable_facing_index,
+    pushable_oriented_tile, pushable_tile_family, sign_or_wanted_poster_object_class,
+    surface_town_fountain_look_tile, surface_wishing_well_look_tile,
+    town_cannon_tile_fire_direction, town_fountain_drink_accepts, unassigned_refusal_echo,
+    view_command_outcome, wishing_well_grant_scene, wishing_well_wish, wishing_well_wish_accepted,
+    yell_input_context, yell_routes_to_ship_sails,
 };
 pub use common_words_io::{
     COMMON_WORD_DICTIONARY_FILE, CommonWordDictionary, CommonWordDictionaryError,
@@ -279,8 +287,9 @@ pub use disk_io::*;
 pub use disk_prompt::*;
 pub use display_driver::*;
 pub use dissolve::{
-    DissolveAbortGate, DissolveVisitOrder, RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL,
-    RectangleDissolve,
+    DissolveAbortGate, DissolveControl, DissolveOutcome, DissolveVisit, DissolveVisitOrder,
+    GATED_DISSOLVE_CLICK_HOLD_NANOS, RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL, RectangleDissolve,
+    gated_dissolve_hold_nanos,
 };
 pub use dungeon_tables::*;
 pub use dungeon_tables_io::*;
@@ -304,6 +313,10 @@ pub use fonts_io::*;
 pub use gameplay_chrome::*;
 pub use graphics::*;
 pub use graphics_io::*;
+pub use harpsichord::{
+    HARPSICHORD_FLOOR, HARPSICHORD_PASSAGE_CELLS_NORTH, HARPSICHORD_PASSAGE_CLEARED_TILE,
+    HARPSICHORD_TILE, harpsichord_passage_cell,
+};
 pub use hidden_treasures::{
     HIDDEN_TREASURE_RECORD_DAILY_CACHE, HIDDEN_TREASURE_RECORD_KEY_NPC_GATED,
     HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED, HIDDEN_TREASURE_UNDERWORLD_STACK_ARMOUR_STATE,
@@ -331,7 +344,9 @@ pub use input_codes::{
     input_prompt_mode_active, numeric_prompt_action, numeric_prompt_apply,
     party_target_selector_action, party_target_selector_result,
 };
-pub use input_dispatch::{PlayInputDisposition, handle_play_key_input};
+pub use input_dispatch::{
+    PlayInputDisposition, advance_paced_combat_presentation, handle_play_key_input,
+};
 pub use intro::{
     BRITISH_PTH_PEN_ORIGINS, INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,
     INTRO_MENU_COPYRIGHT_CAPTION_ROW, INTRO_MENU_FRAME_ANCHOR_COLUMN, INTRO_MENU_FRAME_ANCHOR_ROW,
@@ -342,7 +357,8 @@ pub use intro::{
     INTRO_MENU_FRAME_INTERIOR_TOP_Y, INTRO_MENU_FRAME_OUTLINE_COLOR,
     INTRO_MENU_FRAME_OUTLINE_LEFT_X, INTRO_MENU_FRAME_OUTLINE_RIGHT_X, INTRO_MENU_FRAME_RULE_X0,
     INTRO_MENU_FRAME_RULE_X1, INTRO_MENU_FRAME_RULE_Y, INTRO_MENU_FRAME_TOP_Y,
-    INTRO_MENU_FRAME_WIDTH_CELLS, INTRO_MENU_SELECT_CAPTION_COLUMN,
+    INTRO_MENU_FRAME_WIDTH_CELLS, INTRO_MENU_IDLE_TIMEOUT_PASSES, INTRO_MENU_INITIAL_HIGHLIGHT_ROW,
+    INTRO_MENU_ROW_COUNT, INTRO_MENU_ROW_LETTERS, INTRO_MENU_SELECT_CAPTION_COLUMN,
     INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH, INTRO_MENU_SELECT_CAPTION_PREFIX,
     INTRO_MENU_SELECT_CAPTION_ROW, INTRO_MENU_SELECT_CAPTION_SUFFIX, IntroMenuAction,
     MISCMAPS_CUTSCENE_RECORD_BYTES, MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE,
@@ -350,16 +366,15 @@ pub use intro::{
     MISCMAPS_CUTSCENE_VISIBLE_COLUMNS, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
     MISCMAPS_RTV_STRIP_ROW_STRIDE, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MiscmapsCutsceneMap, RTV_COMMAND_COUNT,
-    RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COLUMNS, RTV_STRIP_COUNT, RTV_STRIP_ROWS,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_FLOURISH_ERASE_STEPS_PER_FRAME,
-    TITLE_FLOURISH_FRAME_COUNT, TITLE_FLOURISH_REVEAL_SETS, TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME,
-    TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT,
-    TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS, TITLE_TICK_FRAME_SET_BYTES,
-    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TITLE_TICK_SOURCE_MAX_HEIGHT,
-    TITLE_TICK_SOURCE_WIDTH, TITLE_TICK_SOURCE_X, TitleBitAsset, TitleBitPlacement,
-    TitleFlourishStep, TitleTickFrameSet, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT, ULTIMA_LOGO_WIDTH,
-    ULTIMA_PANEL_STEM, ULTIMA_TITLE_TICK_FIRST_SLOT, intro_menu_action,
+    RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COUNT, TITLE_BIT_INITIAL_PLACEMENTS,
+    TITLE_BIT_INITIAL_SOURCE_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
+    TITLE_FLOURISH_ERASE_STEPS_PER_FRAME, TITLE_FLOURISH_FRAME_COUNT, TITLE_FLOURISH_REVEAL_SETS,
+    TITLE_FLOURISH_REVEAL_STEPS_PER_FRAME, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_PIXELS,
+    TITLE_TICK_FRAME_SET_BYTES, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y,
+    TITLE_TICK_SOURCE_MAX_HEIGHT, TITLE_TICK_SOURCE_WIDTH, TITLE_TICK_SOURCE_X, TitleBitAsset,
+    TitleBitPlacement, TitleFlourishStep, TitleTickFrameSet, ULTIMA_LOGO_HEIGHT, ULTIMA_LOGO_SLOT,
+    ULTIMA_LOGO_WIDTH, ULTIMA_PANEL_STEM, ULTIMA_TITLE_TICK_FIRST_SLOT, intro_menu_action,
     intro_menu_frame_border_start_column, load_miscmaps_cutscene_map, load_ultima_logo_panel,
     load_ultima_title_tick_frames, parse_miscmaps_cutscene_map_file,
     parse_ultima_title_tick_frames, placeholder_title_tick_frames,
@@ -396,12 +411,12 @@ pub use jimmy::{
     OUTDOOR_KLIMB_FALL_DIE_LOW, OverworldKlimbEntryGate, TOWN_DOOR_CLEARED_TILE,
     TOWN_DOOR_MAGIC_PLAIN_TILE, TOWN_DOOR_MAGIC_WINDOWED_TILE, TOWN_DOOR_PLAIN_LOCKED_TILE,
     TOWN_DOOR_PLAIN_UNLOCKED_TILE, TOWN_DOOR_WINDOWED_LOCKED_TILE,
-    TOWN_DOOR_WINDOWED_UNLOCKED_TILE, TOWN_OPEN_ALREADY_OPEN_TILE, door_auto_close_tick,
-    dungeon_chest_jimmy_succeeds, dungeon_chest_jimmy_threshold, dungeon_open_chest_rewrite,
-    jimmy_door_succeeds, jimmy_locked_door_rewrite, jimmy_magic_locked_door, jimmy_restraint_tile,
-    magic_unlock_door_rewrite, object_chest_jimmy_succeeds, object_chest_jimmy_threshold,
-    openable_town_door, outdoor_klimb_member_falls, overworld_klimb_entry_gate,
-    town_command_door_tile,
+    TOWN_DOOR_WINDOWED_UNLOCKED_TILE, TOWN_OPEN_ALREADY_OPEN_TILE, TOWN_OPEN_TOO_HEAVY_TILE,
+    door_auto_close_tick, dungeon_chest_jimmy_succeeds, dungeon_chest_jimmy_threshold,
+    dungeon_open_chest_rewrite, jimmy_door_succeeds, jimmy_locked_door_rewrite,
+    jimmy_magic_locked_door, jimmy_restraint_tile, magic_unlock_door_rewrite,
+    object_chest_jimmy_succeeds, object_chest_jimmy_threshold, openable_town_door,
+    outdoor_klimb_member_falls, overworld_klimb_entry_gate, town_command_door_tile,
 };
 pub use karma::{
     CODEX_TURNIN_STAT_CAP, CODEX_TURNIN_STAT_INCREMENT, KARMA_CROP_OR_TABLE_FOOD_DEBIT,
@@ -423,12 +438,12 @@ pub use light_beacon::{
 };
 pub use lighting::{
     DAWN_DUSK_LAST_INDEX, DAWN_DUSK_STEP_MINUTES, DAWN_HOUR, DUNGEON_TORCH_INCREMENT_MAX,
-    DUNGEON_TORCH_INCREMENT_MIN, DUSK_HOUR, GREAT_LIGHT_SPELL_DURATION, LAST_IN_HOUR_MINUTE,
-    LIGHT_SPELL_DURATION, LightDecayCadence, OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG,
-    OVERWORLD_UNDERFOOT_BLACKOUT_TILE, ambient_is_sentinel, apply_personal_light,
-    daylight_base_value, decay_light_counter, dungeon_blackout, ignite_torch_dungeon,
-    ignite_torch_surface, light_counter_increment, light_counter_spend_with_tag,
-    overworld_underfoot_forces_dark,
+    DUNGEON_TORCH_INCREMENT_MIN, DUSK_HOUR, FORCED_DARK_MIN_DEPTH_Z, FORCED_DARK_SCENE,
+    GREAT_LIGHT_SPELL_DURATION, LAST_IN_HOUR_MINUTE, LIGHT_SPELL_DURATION, LightDecayCadence,
+    OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG, OVERWORLD_UNDERFOOT_BLACKOUT_TILE,
+    ambient_is_sentinel, apply_personal_light, daylight_base_value, daylight_base_value_for_scene,
+    decay_light_counter, dungeon_blackout, ignite_torch_dungeon, ignite_torch_surface,
+    light_counter_increment, light_counter_spend_with_tag, overworld_underfoot_forces_dark,
 };
 pub use location_audit::*;
 pub use lord_british_camp::{
@@ -451,10 +466,10 @@ pub use magic::{
     active_effect_tag_for_byte, cast_dispatcher_gate, combat_interference_blocks,
     conjure_summon_for_roll, directed_utility_tile_rewrite, field_spell_kind_for_dungeon_byte,
     heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable, sextant_coordinate_letters,
-    spell_allowed_in_scene, spell_charge_add_capped, spell_circle_for, spell_combat_field_kind,
-    spell_common_name, spell_field_placement_byte, spell_indoor_absorbs, spell_mana_cost,
-    spell_min_caster_level, spell_route_family, spell_rune_name, spell_scene_class_for_scene_byte,
-    spell_selector_is_ignored,
+    sextant_coordinate_pair_line, spell_allowed_in_scene, spell_charge_add_capped,
+    spell_circle_for, spell_combat_field_kind, spell_common_name, spell_field_placement_byte,
+    spell_indoor_absorbs, spell_mana_cost, spell_min_caster_level, spell_route_family,
+    spell_rune_name, spell_scene_class_for_scene_byte, spell_selector_is_ignored,
 };
 pub use main_loop::{
     CommandDispatchStatus, DUNGEON_DOOM_SCENE_BYTE, DUNGEON_ENTRY_SURFACE_X,
@@ -488,16 +503,17 @@ pub use miscmsg_io::{
     render_miscmsg_tile_glyph_text, tile_glyph_digraph,
 };
 pub use moongate::{
-    FELUCCA_GLYPH_BY_HOUR, FELUCCA_OFF_HORIZON_SENTINEL, MOONSTONE_BURIAL_BAND_FIRST,
-    MOONSTONE_BURIAL_BAND_LAST, MOONSTONE_BURIAL_TILE_EXTRA_A, MOONSTONE_BURIAL_TILE_EXTRA_B,
-    MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE,
+    FELUCCA_GLYPH_BY_DAY, FELUCCA_OFF_HORIZON_SENTINEL, MOON_GLYPH_CACHE_NO_GATE,
+    MOON_GLYPH_DAYS_PER_MONTH, MOONSTONE_BURIAL_BAND_FIRST, MOONSTONE_BURIAL_BAND_LAST,
+    MOONSTONE_BURIAL_TILE_EXTRA_A, MOONSTONE_BURIAL_TILE_EXTRA_B, MOONSTONE_GATE_INVALID_SCENE,
+    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE,
     NATURAL_MOONGATE_UNDERLYING_TILE, NaturalMoongateCounterStep, SURFACE_CHASM_X, SURFACE_CHASM_Y,
-    TRAMMEL_GLYPH_BY_HOUR, TRAMMEL_OFF_HORIZON_SENTINEL, WORLD_PLANE_FALL_SAVE_ROLL_MAX,
-    cached_moon_glyph_bytes_for_hour, felucca_moonstone_slot_for_hour, is_surface_chasm_cell,
+    TRAMMEL_GLYPH_BY_DAY, TRAMMEL_OFF_HORIZON_SENTINEL, WORLD_PLANE_FALL_SAVE_ROLL_MAX,
+    cached_moon_glyph_bytes_for_day, felucca_moonstone_slot_for_day, is_surface_chasm_cell,
     moonstone_burial_tile_accepted, moonstone_slot_from_glyph_byte,
     natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,
     natural_moongate_counter_step, natural_moongate_dispatches_meditate,
-    natural_moongate_slot_eligible, trammel_moonstone_slot_for_hour,
+    natural_moongate_slot_eligible, trammel_moonstone_slot_for_day,
 };
 pub use moongate_phase::{
     MOONGATE_PHASE_ENDGAME_GROUND_TILE, MOONGATE_PHASE_FULL, MOONGATE_PHASE_GROUND_TILE,
@@ -518,23 +534,25 @@ pub use moongate_transit::{
     run_moongate_transit_presentation,
 };
 pub use npc_runtime::{
-    DoorTracker, LocationNpcStartMarkers, NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST,
-    NPC_DIALOG_ID_HIGH_LAST, NPC_DIALOG_ID_NONE, NPC_DIALOG_ID_TLK_SENTINEL,
-    NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS, NPC_FLOOR_LINK_TILE_C8, NPC_FLOOR_LINK_TILE_C9,
-    NPC_HIDDEN_SPRITE_TILE, NPC_PATH_DIR_EAST, NPC_PATH_DIR_NORTH, NPC_PATH_DIR_SOUTH,
-    NPC_PATH_DIR_WEST, NPC_PATHFIND_DIRECTION_SHIFT, NPC_PATHFIND_QUEUE_CAPACITY,
-    NPC_PATHFIND_START_SEED, NPC_PATHFIND_WORKSPACE_LEN, NPC_PATHFIND_WORKSPACE_SIDE,
-    NPC_RUNTIME_DESCRIPTOR_BYTES, NPC_STATE_ASCEND_TOWARD_TARGET, NPC_STATE_CLIMB_DOWN_OFF_FLOOR,
-    NPC_STATE_CLIMB_UP_OFF_FLOOR, NPC_STATE_DESCEND_TOWARD_TARGET, NPC_STATE_EMPTY, NPC_STATE_IDLE,
-    NPC_STATE_INPLANE_MOVE, NPC_STATE_PARKED_OFF_FLOOR, NPC_STATE_REPLAY_QUEUE,
-    NPC_STUCK_REPLAN_THRESHOLD, NPC_TYPE_DEFAULT_HUMAN_SPRITE, NPC_TYPE_EMPTY,
-    NPC_TYPE_SHADOWLORD_ACTOR, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction, NpcScheduleState,
-    NpcShopTrigger, NpcTypeByteClass, RuntimeNpc, npc_ai_behavior, npc_dialog_id_kind,
-    npc_dynamic_obstacle_blocks, npc_hidden_sprite_slot, npc_link_action,
-    npc_path_direction_offset, npc_path_direction_opposite, npc_path_tile_open,
-    npc_pathfind_visit_stamp, npc_schedule_state_classify, npc_schedule_state_for_floor_transition,
-    npc_shop_trigger, npc_state_off_floor_or_empty, npc_stuck_counter_forces_replan,
-    npc_type_byte_class, npc_type_byte_occupied, schedule_floor_state,
+    DoorTracker, LocationNpcStartMarkers, NPC_DEFAULT_PERSON_SPRITE_TILE,
+    NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST, NPC_DIALOG_ID_HIGH_LAST,
+    NPC_DIALOG_ID_NONE, NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS, NPC_FLOOR_LINK_TILE_C8,
+    NPC_FLOOR_LINK_TILE_C9, NPC_HIDDEN_SPRITE_TILE, NPC_PATH_DIR_EAST, NPC_PATH_DIR_NORTH,
+    NPC_PATH_DIR_SOUTH, NPC_PATH_DIR_WEST, NPC_PATHFIND_DIRECTION_SHIFT,
+    NPC_PATHFIND_QUEUE_CAPACITY, NPC_PATHFIND_START_SEED, NPC_PATHFIND_WORKSPACE_LEN,
+    NPC_PATHFIND_WORKSPACE_SIDE, NPC_RUNTIME_DESCRIPTOR_BYTES, NPC_STATE_ASCEND_TOWARD_TARGET,
+    NPC_STATE_CLIMB_DOWN_OFF_FLOOR, NPC_STATE_CLIMB_UP_OFF_FLOOR, NPC_STATE_DESCEND_TOWARD_TARGET,
+    NPC_STATE_EMPTY, NPC_STATE_IDLE, NPC_STATE_INPLANE_MOVE, NPC_STATE_PARKED_OFF_FLOOR,
+    NPC_STATE_REPLAY_QUEUE, NPC_STUCK_REPLAN_THRESHOLD, NPC_TYPE_DEFAULT_HUMAN_SPRITE,
+    NPC_TYPE_EMPTY, NPC_TYPE_SHADOWLORD_ACTOR, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction,
+    NpcScheduleState, NpcScheduleStepOutcome, NpcShopTrigger, NpcTypeByteClass, RuntimeNpc,
+    npc_ai_behavior, npc_dialog_id_kind, npc_dynamic_obstacle_blocks, npc_floor_is_above,
+    npc_floor_link_arrival_accepts, npc_floor_link_gate_accepts, npc_floor_link_marker_toward,
+    npc_hidden_sprite_slot, npc_link_action, npc_path_direction_offset,
+    npc_path_direction_opposite, npc_path_tile_obstacle, npc_pathfind_visit_stamp,
+    npc_schedule_state_classify, npc_schedule_state_for_floor_transition, npc_shop_trigger,
+    npc_state_off_floor_or_empty, npc_stuck_counter_forces_replan, npc_type_byte_class,
+    npc_type_byte_occupied, schedule_floor_state,
 };
 pub use ool_audit::*;
 pub use outdoor_ranged_attack::{
@@ -553,10 +571,11 @@ pub use outdoor_ranged_attack::{
     bestiary_sprite_run_first_frame, generate_outdoor_ranged_attack_run,
     outdoor_breath_attack_in_range, outdoor_breath_attacker_class,
     outdoor_broadside_attacker_class, outdoor_impact_absorbed_by_hull,
-    outdoor_impact_damages_member, outdoor_impact_hull_outcome, outdoor_ranged_attack_samples,
-    outdoor_ranged_attacker_figure, outdoor_ranged_attacker_viewport_cell, outdoor_sand_trap_class,
-    subtile_endpoint, subtile_in_band, subtile_to_cell, trace_outdoor_ranged_attack,
-    wrapped_axis_delta, wrapped_deltas_to_player,
+    outdoor_impact_damages_member, outdoor_impact_hull_outcome, outdoor_projectile_tile_blocks,
+    outdoor_ranged_attack_samples, outdoor_ranged_attacker_figure,
+    outdoor_ranged_attacker_viewport_cell, outdoor_sand_trap_class, subtile_endpoint,
+    subtile_in_band, subtile_to_cell, trace_outdoor_ranged_attack, wrapped_axis_delta,
+    wrapped_deltas_to_player,
 };
 pub use party::{
     Area, AvatarStats, LEVEL_FROM_EXPERIENCE_BASE_DIVISOR, LEVEL_FROM_EXPERIENCE_HALVING_STEP,
@@ -578,8 +597,9 @@ pub use play_state_impl::{
     town_free_roaming_pen_tile_blocks,
 };
 pub use play_state_struct::{
-    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, PlaySoundEffect, PlayState, ViewOverlay,
-    ViewOverlayKind, ViewOverlayMode, WhitePotionSweep, WorldOverlayCache, WorldReturn,
+    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, PlayState, SOUND_EFFECT_HISTORY_CAPACITY,
+    SoundEffect, ViewOverlay, ViewOverlayKind, ViewOverlayMode, WhitePotionSweep,
+    WorldOverlayCache, WorldReturn,
 };
 pub use predicates::*;
 pub use prng::*;
@@ -647,9 +667,10 @@ pub use ship_broadside::{
 };
 pub use shops::*;
 pub use shrine_virtue::{
-    CodexUrnReadOutcome, SHRINE_ALTAR_TILE_FIRST, SHRINE_ALTAR_TILE_LAST, ShrineMeditationOutcome,
-    ShrineQuestState, ShrineVirtue, all_virtues_complete, read_codex_urn,
-    shrine_meditation_outcome, shrine_virtue_for_altar_tile,
+    CodexUrnReadOutcome, ETERNAL_FLAME_LOOK_TILE, SHRINE_ALTAR_TILE_FIRST, SHRINE_ALTAR_TILE_LAST,
+    ShrineMeditationOutcome, ShrineQuestState, ShrineVirtue, all_virtues_complete,
+    eternal_flame_word_for_scene, read_codex_urn, shrine_meditation_outcome,
+    shrine_virtue_for_altar_tile,
 };
 pub use signs_io::{
     SIGN_BODY_CHARACTER_MASK, SIGN_BODY_END_OF_RECORD, SIGN_BODY_MACRO_FIRST, SIGN_BODY_MACRO_LAST,
@@ -675,16 +696,19 @@ pub use stats_panel::{
     INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX, INN_PICKUP_REGISTER_TOP, MAIN_TEXT_WINDOW_INDEX,
     MESSAGE_TEXT_WINDOW_INDEX, MESSAGE_TEXT_WINDOW_RIGHT, PROMPT_TEXT_WINDOW_INDEX,
     SHOP_SIDE_PANEL_LEFT_BORDER_COLUMN, SHOP_SIDE_PANEL_RIGHT_BORDER_COLUMN, STATS_PANEL_HP_CELLS,
-    STATS_PANEL_NAME_CELLS, STATS_PANEL_PARTY_ROWS, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
-    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_TOP, STATS_PANEL_TEXT_WINDOW_INDEX, STATS_PANEL_WIDTH,
-    StatsPanelCombatRowOverlay, TALK_SHOP_TEXT_WINDOW_INDEX, UNUSED_TEXT_WINDOW_INDEX,
-    active_arms_sell_browser, active_arms_sell_page_indicator, active_shop_side_panel_border_rows,
-    arms_sell_browser_row, arms_sell_page_indicator_bytes, configure_play_text_windows,
-    configure_talk_shop_text_window, paint_arms_sell_browser_text_window,
-    paint_inn_pickup_register_text_window, paint_message_text_window, paint_prompt_text_window,
-    paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
-    paint_talk_shop_text_window, render_play_text_window_ascii, render_play_text_window_system,
-    render_stats_panel, stats_panel_active_cursor_visible, stats_panel_combat_row_overlay,
+    STATS_PANEL_MIDDLE_COUNTER_COLUMN, STATS_PANEL_NAME_CELLS, STATS_PANEL_PARTY_ROWS,
+    STATS_PANEL_SHIP_HULL_LABEL, STATS_PANEL_SHIP_HULL_PAD_BELOW, STATS_PANEL_TEXT_BOTTOM,
+    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_TOP,
+    STATS_PANEL_TEXT_WINDOW_INDEX, STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN,
+    STATS_PANEL_TIMED_EFFECT_LOCAL_ROW, STATS_PANEL_WIDTH, StatsPanelCombatRowOverlay,
+    TALK_SHOP_TEXT_WINDOW_INDEX, UNUSED_TEXT_WINDOW_INDEX, active_arms_sell_browser,
+    active_arms_sell_page_indicator, active_shop_side_panel_border_rows, arms_sell_browser_row,
+    arms_sell_page_indicator_bytes, configure_play_text_windows, configure_talk_shop_text_window,
+    paint_arms_sell_browser_text_window, paint_inn_pickup_register_text_window,
+    paint_message_text_window, paint_prompt_text_window, paint_prompt_text_window_with_cursor,
+    paint_stats_panel_text_window, paint_talk_shop_text_window, render_play_text_window_ascii,
+    render_play_text_window_system, render_stats_panel, stats_panel_active_cursor_resets,
+    stats_panel_active_cursor_visible, stats_panel_combat_row_overlay,
 };
 pub use stonegate_trapdoor::*;
 pub use story_io::{
@@ -721,13 +745,13 @@ pub use text_wrap::{
     WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine, format_signed_number, paragraph_byte_kind,
     proportional_renderer_byte_kind, text_color_background, text_color_foreground,
     text_control_byte, text_emitter_byte_kind, text_window_centred_start_column,
-    text_window_clamp_rectangle, text_window_default_color_byte, text_window_inner_width,
-    wrap_byte_kind, wrap_text,
+    text_window_centred_start_column_from_cursor, text_window_clamp_rectangle,
+    text_window_default_color_byte, text_window_inner_width, wrap_byte_kind, wrap_text,
 };
 pub use tile_classes::{
     TILE_BARRIER_FIRST, TILE_BARRIER_LAST, TILE_DECORATION_FIRST, TILE_DECORATION_LAST,
-    TILE_DOOR_FIRST, TILE_DOOR_LAST, TILE_FURNITURE_FIRST, TILE_FURNITURE_LAST, TILE_NPC_FIRST,
-    TILE_NPC_LAST, TILE_PATH_FIRST, TILE_PATH_LAST, TILE_SPECIAL_FIRST, TILE_SPECIAL_LAST,
+    TILE_FURNITURE_FIRST, TILE_FURNITURE_LAST, TILE_NPC_FIRST, TILE_NPC_LAST, TILE_PATH_FIRST,
+    TILE_PATH_LAST, TILE_RIVER_FIRST, TILE_RIVER_LAST, TILE_SPECIAL_FIRST, TILE_SPECIAL_LAST,
     TILE_TERRAIN_FIRST, TILE_TERRAIN_LAST, TILE_VEHICLE_ART_FIRST, TILE_VEHICLE_ART_LAST,
     TILE_VEHICLE_FIRST, TILE_VEHICLE_LAST, TILE_WALL_FIRST, TILE_WALL_LAST, TILE_WATER_FIRST,
     TILE_WATER_LAST, TileAnimationFamily, TileClass, TileSuperCategory, coarse_tile_class,
@@ -743,30 +767,35 @@ pub use tlk_control_codes::{
     RESERVED_KEYWORD_REBUKE_WORDS, RESERVED_KEYWORD_TABLE_ENTRIES, ReservedKeywordEffect,
     SHOPPE_PHRASE_TOKEN_FIRST, SHOPPE_PHRASE_TOKEN_LAST, TALK_NO_RESPONSE_MESSAGE,
     TALK_NOBODY_HERE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
-    TALK_STATUS_TILE_SLEEPING, TLK_BLOB_FIXED_WINDOW, TLK_CODE_ACTION_DISPATCH,
-    TLK_CODE_ASK_PARTY_NAME, TLK_CODE_ASK_WHO, TLK_CODE_CURSE_CHECK, TLK_CODE_END_OF_RESPONSE,
+    TALK_STATUS_TILE_SLEEPING, TLK_ASK_WHO_NAME_PREFIX_LEN, TLK_BLOB_FIXED_WINDOW,
+    TLK_CODE_ACTION_DISPATCH, TLK_CODE_ASK_WHO, TLK_CODE_CURSE_CHECK, TLK_CODE_END_OF_RESPONSE,
     TLK_CODE_END_STREAM, TLK_CODE_GOLD_PAYMENT, TLK_CODE_IF_ELSE, TLK_CODE_IF_ELSE_ALT,
-    TLK_CODE_LABEL_RECORD, TLK_CODE_LITERAL_NEWLINE, TLK_CODE_PAUSE, TLK_CODE_PRINT_AVATAR_NAME,
-    TLK_CODE_PROTECT_RUN, TLK_CODE_SET_FLAG, TLK_CODE_STANDING_DOWN, TLK_CODE_STANDING_UP,
-    TLK_CODE_WAIT_KEY, TLK_CONTROL_CODE_FIRST, TLK_CONTROL_CODE_LAST, TLK_DICTIONARY_TOKEN_FIRST,
-    TLK_DICTIONARY_TOKEN_LAST, TLK_DOUBLE_QUOTE_ENCODED, TLK_EMPTY_INPUT_BYE_MESSAGE,
-    TLK_GENERIC_SIGNAL_CAP, TLK_GENERIC_SIGNAL_COUNT, TLK_GOLD_PAYMENT_ARGUMENT_BYTES,
-    TLK_GOLD_PAYMENT_REFUSAL_MESSAGE, TLK_HEADER_ENTRY_LEN, TLK_HEADER_FIXED_READ,
-    TLK_IF_ELSE_ALT_ARGUMENT_BYTES, TLK_INPUT_MAX_LEN, TLK_KEYWORD_PROMPT, TLK_LABEL_BYTE_COUNT,
-    TLK_LABEL_FIRST, TLK_LABEL_LAST, TLK_LEADING_ENTRY_COUNT, TLK_NO_KEYWORD_MATCH_MESSAGE,
-    TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES, TLK_OPENING_DESCRIPTION_PREFIX,
-    TLK_PRINTABLE_TEXT_FIRST, TLK_PRINTABLE_TEXT_LAST, TLK_RESERVED_REBUKE_MESSAGE,
+    TLK_CODE_KEYWORD_ALIAS, TLK_CODE_LABEL_RECORD, TLK_CODE_LITERAL_NEWLINE, TLK_CODE_PAUSE,
+    TLK_CODE_PRINT_AVATAR_NAME, TLK_CODE_PROTECT_RUN, TLK_CODE_RECRUIT_SPEAKER,
+    TLK_CODE_STANDING_DOWN, TLK_CODE_STANDING_UP, TLK_CODE_WAIT_KEY, TLK_CONTROL_CODE_FIRST,
+    TLK_CONTROL_CODE_LAST, TLK_DICTIONARY_TOKEN_FIRST, TLK_DICTIONARY_TOKEN_LAST,
+    TLK_DOUBLE_QUOTE_ENCODED, TLK_EMPTY_INPUT_BYE_MESSAGE, TLK_GENERIC_SIGNAL_CAP,
+    TLK_GENERIC_SIGNAL_COUNT, TLK_GOLD_PAYMENT_ARGUMENT_BYTES, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE,
+    TLK_HEADER_ENTRY_LEN, TLK_HEADER_FIXED_READ, TLK_IF_ELSE_ALT_ARGUMENT_BYTES,
+    TLK_IF_ELSE_END_RESPONSE_ARGUMENT, TLK_INPUT_MAX_LEN, TLK_KEYWORD_ALIAS_RECORD_SKIP,
+    TLK_KEYWORD_PROMPT, TLK_LABEL_BYTE_COUNT, TLK_LABEL_FIRST, TLK_LABEL_LAST,
+    TLK_LEADING_ENTRY_COUNT, TLK_NO_KEYWORD_MATCH_MESSAGE, TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES,
+    TLK_OPENING_DESCRIPTION_PREFIX, TLK_PRINTABLE_TEXT_FIRST, TLK_PRINTABLE_TEXT_LAST,
+    TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL, TLK_RESERVED_REBUKE_MESSAGE,
     TLK_RESERVED_REBUKE_PAUSE_LIMIT, TLK_SENTINEL_NPC_ID, TLK_TEXT_XOR_MASK, TOWNE_TLK_NPCS,
     TalkRefusal, TlkActionDispatchVerb, TlkByteKind, TlkByteRunnerClass, TlkFileClass,
     TlkLeadingEntry, TlkPlayerInputKind, TlkPrintMaskState, classify_tlk_byte, is_tlk_label_byte,
     reserved_functional_keyword_index, reserved_keyword_effect, reserved_rebuke_keyword_index,
     shoppe_dictionary_index, talk_liveness_refusal, talk_status_tile_refusal,
-    tlk_action_dispatch_is_signal_flag, tlk_action_dispatch_verb, tlk_ask_party_name_match,
+    tlk_action_dispatch_is_signal_flag, tlk_action_dispatch_verb, tlk_ask_who_match,
     tlk_byte_runner_class, tlk_class_for_scene, tlk_dictionary_index, tlk_gold_payment_amount,
     tlk_if_else_alt_branches, tlk_introducer_argument_count, tlk_keyword_matches, tlk_label_index,
     tlk_leading_entry_index, tlk_player_input_kind,
 };
-pub use tlk_runner::{TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText};
+pub use tlk_runner::{
+    TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText, glyphs_from_engine_text,
+    ordinary_glyphs_from_engine_text,
+};
 pub use town_mode::{
     CASTLE_NPC_FILENAME, CASTLE_TLK_FILENAME, DWELLING_NPC_FILENAME, DWELLING_TLK_FILENAME,
     KEEP_NPC_FILENAME, KEEP_TLK_FILENAME, LOCATION_DAT_BLOCK_LEN, LOCATION_DAT_BLOCKS_PER_FILE,
@@ -777,17 +806,17 @@ pub use town_mode::{
     NPC_SCHEDULE_WAYPOINT_COUNT, NPC_SCHEDULE_X_OFFSET, NPC_SCHEDULE_Y_OFFSET,
     NPC_SCHEDULE_Z_OFFSET, NPC_SENTINEL_SLOT, NPC_SLOTS_PER_SUB_MAP, NPC_SUB_MAP_LEN,
     NPC_SUB_MAPS_PER_FILE, NPC_TYPE_ARRAY_LEN, NPC_TYPE_ARRAY_OFFSET, NPC_WORLD_ROSTER_MAX,
-    SCENE_ARARAT, SCENE_BORDERMARCH, SCENE_BRITAIN, SCENE_BUCCANEERS_DEN, SCENE_COVE,
-    SCENE_EAST_BRITANNY, SCENE_EMPATH_ABBEY, SCENE_FARTHING, SCENE_FOGSBANE, SCENE_GREYHAVEN,
-    SCENE_IOLOS_HUT, SCENE_JHELOM, SCENE_LORD_BLACKTHORNS_CASTLE, SCENE_LORD_BRITISHS_CASTLE,
-    SCENE_MINOC, SCENE_MOONGLOW, SCENE_NEW_MAGINCIA, SCENE_NORTH_BRITANNY, SCENE_PAWS,
-    SCENE_SERPENTS_HOLD, SCENE_SKARA_BRAE, SCENE_STONEGATE, SCENE_STORMCROW, SCENE_THE_LYCAEUM,
-    SCENE_TRINSIC, SCENE_WAVEGUIDE, SCENE_WEST_BRITANNY, SCENE_WINDEMERE, SCENE_YEW,
-    SHADOWLORD_BLIGHT_FRUIT_TREE_TILE, SHADOWLORD_BLIGHT_HOLLOW_STUMP_TILE,
-    SHADOWLORD_BLIGHT_PLOWED_PATCH_TILE, SHADOWLORD_BLIGHT_ROLL_HIGH,
-    SHADOWLORD_BLIGHT_STANDING_CROP_TILE, SHADOWLORD_TOWN_ENTRY_SKIP_Y,
-    SHADOWLORD_TOWN_INSTALL_ROWS, SHADOWLORD_TOWN_INSTALL_X, TOWN_ARREST_JAIL_FLOOR,
-    TOWN_ARREST_JAIL_SCENE, TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y,
+    PendingTownConflict, SCENE_ARARAT, SCENE_BORDERMARCH, SCENE_BRITAIN, SCENE_BUCCANEERS_DEN,
+    SCENE_COVE, SCENE_EAST_BRITANNY, SCENE_EMPATH_ABBEY, SCENE_FARTHING, SCENE_FOGSBANE,
+    SCENE_GREYHAVEN, SCENE_IOLOS_HUT, SCENE_JHELOM, SCENE_LORD_BLACKTHORNS_CASTLE,
+    SCENE_LORD_BRITISHS_CASTLE, SCENE_MINOC, SCENE_MOONGLOW, SCENE_NEW_MAGINCIA,
+    SCENE_NORTH_BRITANNY, SCENE_PAWS, SCENE_SERPENTS_HOLD, SCENE_SKARA_BRAE, SCENE_STONEGATE,
+    SCENE_STORMCROW, SCENE_THE_LYCAEUM, SCENE_TRINSIC, SCENE_WAVEGUIDE, SCENE_WEST_BRITANNY,
+    SCENE_WINDEMERE, SCENE_YEW, SHADOWLORD_BLIGHT_FRUIT_TREE_TILE,
+    SHADOWLORD_BLIGHT_HOLLOW_STUMP_TILE, SHADOWLORD_BLIGHT_PLOWED_PATCH_TILE,
+    SHADOWLORD_BLIGHT_ROLL_HIGH, SHADOWLORD_BLIGHT_STANDING_CROP_TILE,
+    SHADOWLORD_TOWN_ENTRY_SKIP_Y, SHADOWLORD_TOWN_INSTALL_ROWS, SHADOWLORD_TOWN_INSTALL_X,
+    TOWN_ARREST_JAIL_FLOOR, TOWN_ARREST_JAIL_SCENE, TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y,
     TOWN_DAWN_DUSK_GATE_CLOSED_TILE, TOWN_DAWN_DUSK_GATE_MARKER_TILE,
     TOWN_DAWN_DUSK_GATE_OPEN_TILE, TOWN_DAWN_DUSK_GATE_TOGGLE_XOR, TOWN_EXIT_UNDERWORLD_SCENE,
     TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NIGHT_BAND_DAWN_HOUR, TOWN_NIGHT_BAND_DUSK_HOUR,
@@ -795,20 +824,22 @@ pub use town_mode::{
     TOWN_NPC_BRUSHOFF_DIALOG_ID, TOWN_NPC_BRUSHOFF_RESPONSE, TOWN_NPC_COWERING_DIALOG_ID,
     TOWN_NPC_COWERING_RESPONSE, TOWN_NPC_FORCED_FLIGHT_AI, TOWN_NPC_FORCED_PURSUIT_NEAR_AI,
     TOWN_NPC_FORCED_PURSUIT_NEAR_TYPE_CUTOFF, TOWN_NPC_FORCED_PURSUIT_RANDOM_AI,
-    TOWN_NPC_ORDINARY_TYPE_FIRST, TOWN_NPC_ORDINARY_TYPE_LAST, TOWN_NPC_ROSTER_SLOTS,
-    TOWN_STAIR_TILE_FIRST, TOWN_STAIR_TILE_LAST, TOWN_TILE_BEACON_LIGHT_SOURCE,
-    TOWN_TILE_FRUIT_TREE, TOWN_TILE_NPC_START_A, TOWN_TILE_NPC_START_B, TOWN_TILE_STANDING_CROP,
-    TOWNE_NPC_FILENAME, TOWNE_TLK_FILENAME, TownArrestPrompt, TownLocationClass,
-    TownNpcAttackResolution, TownStairIntent, TownTileMarker, WORLD_LOCATION_TABLE_DUNGEON_ROWS,
-    WORLD_LOCATION_TABLE_TOTAL_ROWS, WORLD_LOCATION_TABLE_TOWN_ROWS, apply_shadowlord_blight,
-    location_dat_filename, npc_dialog_index_offset, npc_roster_filename,
-    npc_schedule_hour_at_boundary, npc_schedule_record_offset, npc_schedule_waypoint_for_hour,
-    npc_sub_map_offset, npc_tlk_filename, npc_type_byte_offset, shadowlord_town_install_row,
+    TOWN_NPC_ORDINARY_TYPE_FIRST, TOWN_NPC_ORDINARY_TYPE_LAST, TOWN_NPC_REGALIA_TYPE_FIRST,
+    TOWN_NPC_REGALIA_TYPE_LAST, TOWN_NPC_ROSTER_SLOTS, TOWN_STAIR_TILE_FIRST, TOWN_STAIR_TILE_LAST,
+    TOWN_TILE_BEACON_LIGHT_SOURCE, TOWN_TILE_FRUIT_TREE, TOWN_TILE_NPC_START_A,
+    TOWN_TILE_NPC_START_B, TOWN_TILE_STANDING_CROP, TOWNE_NPC_FILENAME, TOWNE_TLK_FILENAME,
+    TownArrestPrompt, TownLocationClass, TownNpcAttackResolution, TownStairIntent, TownTileMarker,
+    WORLD_LOCATION_TABLE_DUNGEON_ROWS, WORLD_LOCATION_TABLE_TOTAL_ROWS,
+    WORLD_LOCATION_TABLE_TOWN_ROWS, apply_shadowlord_blight, location_dat_filename,
+    npc_dialog_index_offset, npc_roster_filename, npc_schedule_hour_at_boundary,
+    npc_schedule_record_offset, npc_schedule_waypoint_for_hour, npc_sub_map_offset,
+    npc_tlk_filename, npc_type_byte_offset, shadowlord_town_install_row,
     town_dawn_dusk_gate_pass_fires_at_hour, town_dawn_dusk_gate_toggle,
     town_dawn_dusk_substitution_active, town_entry_is_jail_wakeup, town_exit_lands_underworld,
     town_floor_offset, town_location_class, town_npc_activation_mask_eligible,
-    town_npc_attack_resolution, town_npc_type_guard_like, town_per_class_index, town_resident_name,
-    town_stair_intent, town_tile_marker, world_location_table_scene_for_row,
+    town_npc_attack_enters_conflict, town_npc_attack_resolution, town_npc_removal_recorded,
+    town_npc_type_guard_like, town_per_class_index, town_resident_name, town_stair_intent,
+    town_tile_marker, world_location_table_scene_for_row,
 };
 pub use town_npc_mutations::{
     TOWN_NPC_MUTATIONS_FILENAME, TownNpcMutation, load_town_npc_mutations,
@@ -818,12 +849,12 @@ pub use town_tables::*;
 pub use town_tables_io::*;
 pub use town_tables_io_movement::*;
 pub use transport::{
-    BoardVehicleCandidate, BoardableFamily, CARPET_BOARDING_EAST_MARKER,
+    ABANDON_SHIP_MESSAGE, BoardVehicleCandidate, BoardableFamily, CARPET_BOARDING_EAST_MARKER,
     CARPET_BOARDING_NORTH_MARKER, CARPET_MARKER_FRAMES, CARPET_MOUNTED, CARPET_PARKED,
-    FRIGATE_PURCHASE_HULL, FRIGATE_PURCHASE_SKIFFS, HORSE_MOUNTED_FIRST, HORSE_MOUNTED_LAST,
-    HORSE_PARKED_FIRST, HORSE_PARKED_LAST, PendingVehicleAcquisition, PendingVehicleSaveState,
-    SHIP_BOARDING_HULL_WARNING_THRESHOLD, SHIP_LOSS_DROWNING_ITERATION_GUARD, SHIP_PARKED_FIRST,
-    SHIP_PARKED_LAST, SHIP_SUNK_MESSAGE, SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST,
+    DROWNING_MESSAGE, FRIGATE_PURCHASE_HULL, FRIGATE_PURCHASE_SKIFFS, HORSE_MOUNTED_FIRST,
+    HORSE_MOUNTED_LAST, HORSE_PARKED_FIRST, HORSE_PARKED_LAST, OVERWORLD_PIER_TILE,
+    PendingVehicleAcquisition, PendingVehicleSaveState, SHIP_BOARDING_HULL_WARNING_THRESHOLD,
+    SHIP_PARKED_FIRST, SHIP_PARKED_LAST, SHIP_SUNK_MESSAGE, SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST,
     ShipBoardingWarnings, ShipLossFallback, TRANSPORT_MARKER_SPRITE_SUPPRESSED, TransportState,
     boardable_family, mount_horse_marker, party_member_counts_as_living,
     ship_boarding_precondition_accepts, ship_boarding_stows_carpet, ship_boarding_warnings,
@@ -841,8 +872,9 @@ pub use visibility::{
     VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
     VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY,
     VISIBILITY_GRID_LEN, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION, VisibilityMarker,
-    active_object_composite, active_object_compositor_branch, active_object_compositor_variant,
-    active_object_default_composite, active_object_default_tile_is_terrain_aware,
+    active_object_composite, active_object_composite_for_player, active_object_compositor_branch,
+    active_object_compositor_variant, active_object_default_composite,
+    active_object_default_tile_is_terrain_aware, composite_active_object_slot,
     fog_refine_folded_coord, fog_refine_inside_clear_core, fog_refine_squared_distance,
     is_local_light_source_tile, light_radius_branch, terrain_band_active_index,
     visibility_cheap_path_needs_refill, visibility_grid_active_index, visibility_in_radius,
@@ -908,4 +940,18 @@ mod tests {
     include!("tests_inline/chunk_30.rs");
     include!("tests_inline/chunk_31.rs");
     include!("tests_inline/chunk_32.rs");
+    include!("tests_inline/chunk_33.rs");
+    include!("tests_inline/audio_spells_noncombat.rs");
+    include!("tests_inline/audio_jimmy_get.rs");
+    include!("tests_inline/audio_stonegate_shrine.rs");
+    include!("tests_inline/audio_spells_combat.rs");
+    include!("tests_inline/audio_potions_shard.rs");
+    include!("tests_inline/audio_moongate_damage.rs");
+    include!("tests_inline/audio_presentation.rs");
+    include!("tests_inline/audio_blocked_step.rs");
+    include!("tests_inline/audio_sea_and_refusal.rs");
+    include!("tests_inline/recovered_chunk_17.rs");
+    include!("tests_inline/npc_schedules_conformance.rs");
+    include!("tests_inline/spec_conformance_chunk_07.rs");
+    include!("tests_inline/combat_frame_conformance.rs");
 }

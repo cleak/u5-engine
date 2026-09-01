@@ -4,345 +4,298 @@ use std::{io, path::Path};
 
 use crate::*;
 
+// ---------------------------------------------------------------------
+// `formats/bit.md`: the standalone one-bit-per-pixel bitmap family.
+//
+// §1: "A `.BIT` file is a small list of one-bit-per-pixel sub-images.
+// Three of the four shipped files carry that list inside the same LZW
+// envelope the paired `.16`/`.4` graphics archives use
+// (`formats/lzw.md`); the fourth stores the list raw. Nothing in the
+// family is a display-driver 'sparse strip' table, and the leading
+// value is never an entry count for such a table."
+//
+// `formats/lzw.md §1`: "This envelope applies to the paired `.16` and
+// `.4` graphics archive family and to the standalone bitmap family:
+// `TITLE.BIT`, `BRITISH.BIT`, and `PROPORT.PCS`. The one documented
+// exception is `WD.BIT`, which stores its payload raw with no
+// envelope. Earlier revisions of this document excluded the whole
+// `.BIT` and `.PCS` family from the envelope; that exclusion was
+// wrong."
+//
+// `formats/bit.md §5`: "There is no driver dispatch entry that
+// decompresses a `.BIT` file ... The dispatch slot that earlier
+// revisions of this document assigned the decode role (`0x42`) belongs
+// to the packed-to-planar preparation step for the `.16`/`.4` archives
+// and never touches this family."
+// ---------------------------------------------------------------------
+
 pub fn load_title_bit(game_dir: &Path) -> io::Result<TitleBitImages> {
-    parse_title_bit_loaded_resource(&read_disk_file(&game_dir.join(TITLE_BIT_FILE))?)
+    parse_title_bit(&read_disk_file(&game_dir.join(TITLE_BIT_FILE))?)
 }
 
+/// `formats/bit.md §4.1`: `TITLE.BIT` holds ten sub-images, carried in
+/// the shared LZW envelope.
 pub fn parse_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
-    parse_sparse_bit_images(bytes, TITLE_BIT_FILE)
-}
-
-pub fn parse_title_bit_loaded_resource(bytes: &[u8]) -> io::Result<TitleBitImages> {
-    let sparse = parse_title_bit(bytes);
-    let packaged = parse_legacy_lzw_title_bit(bytes);
-    match (sparse, packaged) {
-        (Ok(title), Err(_)) => Ok(title),
-        (Err(_), Ok(title)) => Ok(title),
-        (Ok(_), Ok(_)) => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{TITLE_BIT_FILE} matches both sparse and local packaged BIT encodings"),
-        )),
-        (Err(sparse_err), Err(packaged_err)) => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{TITLE_BIT_FILE} is neither sparse BIT data ({sparse_err}) nor local packaged BIT data ({packaged_err})"
-            ),
-        )),
-    }
-}
-
-/// Compatibility parser for local preprocessed asset sets. The public
-/// `.BIT` format is the sparse-strip resource parsed by [`parse_title_bit`].
-pub fn parse_legacy_lzw_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
-    let body = decode_lzw_envelope(bytes, TITLE_BIT_FILE)?;
-    parse_title_bit_body(&body, TITLE_BIT_FILE)
-}
-
-pub fn parse_sparse_bit_images(bytes: &[u8], resource_name: &str) -> io::Result<TitleBitImages> {
     Ok(TitleBitImages {
-        blocks: parse_sparse_strip_resource(bytes, resource_name)?,
+        blocks: parse_bit_family_resource(bytes, TITLE_BIT_FILE)?,
     })
 }
 
-pub fn parse_title_bit_body(body: &[u8], resource_name: &str) -> io::Result<TitleBitImages> {
-    if body.len() < 2 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} bitmap directory is shorter than its count word"),
-        ));
-    }
-    let count = u16_at(body, 0) as usize;
-    let header_len = 2usize
-        .checked_add(count.checked_mul(2).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{resource_name} bitmap directory count overflows"),
-            )
-        })?)
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{resource_name} bitmap directory header overflows"),
-            )
-        })?;
-    if header_len > body.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} bitmap directory header exceeds body length"),
-        ));
-    }
+/// Alias kept for callers that read the whole resource off disk. The
+/// file has exactly one reading, so this is [`parse_title_bit`].
+pub fn parse_title_bit_loaded_resource(bytes: &[u8]) -> io::Result<TitleBitImages> {
+    parse_title_bit(bytes)
+}
 
-    let mut blocks = Vec::with_capacity(count);
-    for slot in 0..count {
-        let offset = u16_at(body, 2 + slot * 2) as usize;
-        if offset == 0 || offset < header_len || offset >= body.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{resource_name} bitmap slot {slot} has invalid offset {offset}"),
-            ));
-        }
-        blocks.push(parse_monochrome_bitmap_block(body, offset, resource_name)?);
-    }
-    Ok(TitleBitImages { blocks })
+/// Parse an already-decoded image (envelope removed) as the
+/// `formats/bit.md §3` sub-image list.
+pub fn parse_title_bit_body(body: &[u8], resource_name: &str) -> io::Result<TitleBitImages> {
+    Ok(TitleBitImages {
+        blocks: parse_bit_sub_image_list(body, resource_name)?,
+    })
 }
 
 pub fn load_british_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
-    parse_british_bit_loaded_resource(&read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?)
+    parse_british_bit(&read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?)
 }
 
+/// `formats/bit.md §4.2`: "`BRITISH.BIT` holds a single 272x62
+/// sub-image", carried in the shared LZW envelope.
 pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
-    parse_single_sparse_bit_image(bytes, BRITISH_BIT_FILE)
+    single_bit_sub_image(
+        parse_bit_family_resource(bytes, BRITISH_BIT_FILE)?,
+        BRITISH_BIT_FILE,
+    )
 }
 
+/// Alias kept for callers that read the whole resource off disk.
 pub fn parse_british_bit_loaded_resource(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
-    let sparse = parse_british_bit(bytes);
-    let packaged = parse_legacy_lzw_british_bit(bytes);
-    match (sparse, packaged) {
-        (Ok(british), Err(_)) => Ok(british),
-        (Err(_), Ok(british)) => Ok(british),
-        (Ok(_), Ok(_)) => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{BRITISH_BIT_FILE} matches both sparse and local packaged BIT encodings"),
-        )),
-        (Err(sparse_err), Err(packaged_err)) => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{BRITISH_BIT_FILE} is neither sparse BIT data ({sparse_err}) nor local packaged BIT data ({packaged_err})"
-            ),
-        )),
-    }
-}
-
-/// Compatibility parser for local preprocessed asset sets. The public
-/// `.BIT` format is the sparse-strip resource parsed by [`parse_british_bit`].
-pub fn parse_legacy_lzw_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
-    let body = decode_lzw_envelope(bytes, BRITISH_BIT_FILE)?;
-    parse_single_image_bit_body(&body, BRITISH_BIT_FILE)
+    parse_british_bit(bytes)
 }
 
 pub fn load_wd_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
     parse_wd_bit(&read_disk_file(&game_dir.join(WD_BIT_FILE))?)
 }
 
+/// `formats/bit.md §4.3`: "`WD.BIT` is the one shipped member stored
+/// without the LZW envelope. Parsed directly it is a one-sub-image
+/// resource: count `1`, single offset `4`, then a 288x49 image whose
+/// rows occupy 36 bytes each." The earlier sparse-strip-table reading
+/// of those four leading words is withdrawn: "the four leading words
+/// are simply the count, the single offset, the width, and the height."
 pub fn parse_wd_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
-    parse_single_sparse_bit_image(bytes, WD_BIT_FILE)
+    single_bit_sub_image(parse_bit_family_resource(bytes, WD_BIT_FILE)?, WD_BIT_FILE)
 }
 
-pub fn parse_single_sparse_bit_image(
-    bytes: &[u8],
-    resource_name: &str,
-) -> io::Result<MonochromeBitmap> {
-    let mut strips = parse_sparse_strip_resource(bytes, resource_name)?;
-    if strips.len() != 1 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{resource_name} sparse strip resource must contain exactly one populated strip, got {}",
-                strips.len()
-            ),
-        ));
-    }
-    Ok(strips.remove(0))
-}
-
-pub fn parse_sparse_strip_resource(
-    bytes: &[u8],
-    resource_name: &str,
-) -> io::Result<Vec<MonochromeBitmap>> {
-    if bytes.len() < BIT_ENTRY_COUNT_WORD_LEN {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} sparse strip resource is shorter than its count word"),
-        ));
-    }
-    let entry_count = u16_at(bytes, 0) as usize;
-    let mut strips = Vec::new();
-    for slot in 0..entry_count {
-        let entry_offset = BIT_ENTRY_COUNT_WORD_LEN
-            .checked_add(
-                slot.checked_mul(BIT_POINTER_TABLE_ENTRY_LEN)
-                    .ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!(
-                                "{resource_name} sparse strip table slot {slot} offset overflows"
-                            ),
-                        )
-                    })?,
-            )
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("{resource_name} sparse strip table slot {slot} offset overflows"),
-                )
-            })?;
-        if entry_offset >= bytes.len() {
-            break;
-        }
-        if entry_offset + BIT_POINTER_TABLE_ENTRY_LEN > bytes.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{resource_name} sparse strip table slot {slot} is truncated"),
-            ));
-        }
-        let pointer = u16_at(bytes, entry_offset);
-        if pointer == BIT_STRIP_POINTER_NONE {
-            continue;
-        }
-        strips.push(parse_sparse_strip_body(
-            bytes,
-            pointer as usize,
-            resource_name,
-            slot,
-        )?);
-    }
-    if strips.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} sparse strip resource has no populated strips"),
-        ));
-    }
-    Ok(strips)
-}
-
-pub fn parse_sparse_strip_body(
-    bytes: &[u8],
-    offset: usize,
-    resource_name: &str,
-    slot: usize,
-) -> io::Result<MonochromeBitmap> {
-    if offset + BIT_STRIP_HEADER_LEN > bytes.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} sparse strip slot {slot} header at {offset} is truncated"),
-        ));
-    }
-    parse_monochrome_bitmap_payload(bytes, offset, resource_name)
-}
-
-pub fn parse_single_image_bit_body(
+/// Parse an already-decoded single-sub-image resource body.
+pub fn parse_single_bit_sub_image(
     body: &[u8],
     resource_name: &str,
 ) -> io::Result<MonochromeBitmap> {
-    if body.len() < 8 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} single-image bitmap is shorter than its header"),
-        ));
-    }
-    let format_marker = u16_at(body, 0);
-    let mode_marker = u16_at(body, 2);
-    if format_marker != SINGLE_IMAGE_BIT_FORMAT_MARKER
-        || mode_marker != SINGLE_IMAGE_BIT_MODE_MARKER
-    {
+    single_bit_sub_image(
+        parse_bit_sub_image_list(body, resource_name)?,
+        resource_name,
+    )
+}
+
+fn single_bit_sub_image(
+    mut images: Vec<MonochromeBitmap>,
+    resource_name: &str,
+) -> io::Result<MonochromeBitmap> {
+    if images.len() != 1 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "{resource_name} bitmap markers must be {SINGLE_IMAGE_BIT_FORMAT_MARKER}/{SINGLE_IMAGE_BIT_MODE_MARKER}, got {format_marker}/{mode_marker}"
+                "{resource_name} must hold exactly one sub-image, got {}",
+                images.len()
             ),
         ));
     }
-    let bitmap = parse_monochrome_bitmap_payload(body, 4, resource_name)?;
-    let expected_len = 8usize
-        .checked_add(monochrome_bitmap_payload_len(bitmap.width, bitmap.height)?)
+    Ok(images.remove(0))
+}
+
+/// `formats/bit.md §2.1`, "Deciding whether a file is enveloped":
+///
+/// 1. "Try to parse the file directly as the sub-image list of Section
+///    3, starting at byte 0."
+/// 2. "If the walk stays inside the file and consumes it exactly to the
+///    last byte, the file is stored raw. This succeeds only for
+///    `WD.BIT`."
+/// 3. "Otherwise treat the first four bytes as the LZW decoded length,
+///    decode the remainder per `formats/lzw.md`, and parse the decoded
+///    image as the sub-image list. The decoded byte count must equal
+///    the declared length and the code stream must end with a proper
+///    end code."
+///
+/// "There is no known 'pre-decoded' packaging variant of these files.
+/// Earlier guidance in this document described one; that guidance was
+/// mistaken and has been removed." This is therefore a structural
+/// classification, not a fallback for a second packaging: the raw walk
+/// is exact, so at most one of the two shapes can hold, and "the
+/// structural test exists so that a validator can reject a corrupt or
+/// substituted file rather than mis-parsing it."
+pub fn parse_bit_family_resource(
+    bytes: &[u8],
+    resource_name: &str,
+) -> io::Result<Vec<MonochromeBitmap>> {
+    match parse_bit_sub_image_list(bytes, resource_name) {
+        Ok(images) => Ok(images),
+        Err(raw_err) => {
+            let body = decode_lzw_envelope(bytes, resource_name).map_err(|envelope_err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{resource_name} is not a raw sub-image list ({raw_err}) and its LZW envelope does not decode ({envelope_err})"
+                    ),
+                )
+            })?;
+            parse_bit_sub_image_list(&body, resource_name)
+        }
+    }
+}
+
+/// `formats/bit.md §3`: "After the envelope is removed (or immediately,
+/// for a raw file), the image is a directory followed by contiguous
+/// sub-images" — a two-byte sub-image count, `count * 2` bytes of
+/// two-byte offsets measured from the start of the decoded image, then
+/// the sub-images "stored back to back, in offset order".
+///
+/// §6: "There are no sparse or skipped entries and no over-allocated
+/// table; every entry in the directory names a real sub-image."
+///
+/// §3 also names the invariant that "pins the whole reading":
+/// "consecutive offsets differ by exactly
+/// `4 + max(1, ceil(width / 8)) * height` of the earlier record — the
+/// four header bytes plus its row data, with nothing between records. A
+/// candidate parse that satisfies that relation for every adjacent pair
+/// and consumes the image exactly is the correct one." That is what
+/// makes the §2.1 raw-versus-enveloped test exact, so it is enforced
+/// here rather than left to a validator.
+pub fn parse_bit_sub_image_list(
+    body: &[u8],
+    resource_name: &str,
+) -> io::Result<Vec<MonochromeBitmap>> {
+    if body.len() < BIT_SUB_IMAGE_COUNT_WORD_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{resource_name} sub-image directory is shorter than its count word"),
+        ));
+    }
+    let count = u16_at(body, 0) as usize;
+    if count == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{resource_name} sub-image directory declares no sub-images"),
+        ));
+    }
+    let header_len = count
+        .checked_mul(BIT_OFFSET_TABLE_ENTRY_LEN)
+        .and_then(|table| table.checked_add(BIT_SUB_IMAGE_COUNT_WORD_LEN))
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("{resource_name} single-image bitmap length overflows"),
+                format!("{resource_name} sub-image directory header overflows"),
             )
         })?;
-    if body.len() != expected_len {
+    if header_len > body.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{resource_name} sub-image offset table exceeds the image"),
+        ));
+    }
+
+    let mut images = Vec::with_capacity(count);
+    let mut expected_offset = header_len;
+    for slot in 0..count {
+        let offset = u16_at(
+            body,
+            BIT_SUB_IMAGE_COUNT_WORD_LEN + slot * BIT_OFFSET_TABLE_ENTRY_LEN,
+        ) as usize;
+        // "The first offset in the table always equals `2 + count * 2`",
+        // and each later record starts where the previous one ended.
+        if offset != expected_offset {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{resource_name} sub-image {slot} starts at {offset}, but the contiguous layout puts it at {expected_offset}"
+                ),
+            ));
+        }
+        if offset + BIT_SUB_IMAGE_HEADER_LEN > body.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{resource_name} sub-image {slot} header at {offset} is truncated"),
+            ));
+        }
+        let width = u16_at(body, offset) as usize;
+        let height = u16_at(body, offset + BIT_SUB_IMAGE_WIDTH_WORD_LEN) as usize;
+        let row_stride = bit_sub_image_row_stride(width)?;
+        let record_len = row_stride
+            .checked_mul(height)
+            .and_then(|rows| rows.checked_add(BIT_SUB_IMAGE_HEADER_LEN))
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("{resource_name} sub-image {slot} record length overflows"),
+                )
+            })?;
+        let record_end = offset.checked_add(record_len).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{resource_name} sub-image {slot} record end overflows"),
+            )
+        })?;
+        if record_end > body.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{resource_name} sub-image {slot} row data exceeds the image"),
+            ));
+        }
+        let rows_start = offset + BIT_SUB_IMAGE_HEADER_LEN;
+        images.push(MonochromeBitmap {
+            width,
+            height,
+            pixels: unpack_monochrome_rows(
+                &body[rows_start..record_end],
+                width,
+                height,
+                row_stride,
+                width * height,
+            ),
+        });
+        expected_offset = record_end;
+    }
+    // "the last sub-image ends exactly at the end of the decoded image"
+    if expected_offset != body.len() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "{resource_name} single-image bitmap must be {expected_len} bytes, got {}",
+                "{resource_name} sub-images end at {expected_offset}, not at the image end {}",
                 body.len()
             ),
         ));
     }
-    Ok(bitmap)
+    Ok(images)
 }
 
-pub fn parse_monochrome_bitmap_block(
-    body: &[u8],
-    offset: usize,
-    resource_name: &str,
-) -> io::Result<MonochromeBitmap> {
-    if offset + 4 > body.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} bitmap block at {offset} is shorter than its header"),
-        ));
-    }
-    parse_monochrome_bitmap_payload(body, offset, resource_name)
+/// `formats/bit.md §3`: "The row stride is `max(1, ceil(width / 8))`
+/// bytes. ... The `max(1, ...)` clause covers the one shipped record
+/// whose width is zero — glyph index 0 of `PROPORT.PCS`, the space —
+/// which still reserves one byte per row, all of it padding."
+pub fn bit_sub_image_row_stride(width: usize) -> io::Result<usize> {
+    Ok(monochrome_row_stride(width)?.max(1))
 }
 
-pub fn parse_monochrome_bitmap_payload(
-    body: &[u8],
-    offset: usize,
-    resource_name: &str,
-) -> io::Result<MonochromeBitmap> {
-    let width = u16_at(body, offset) as usize;
-    let height = u16_at(body, offset + 2) as usize;
-    if width == 0 || height == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} bitmap at {offset} has zero dimensions"),
-        ));
-    }
-    let pixel_count = width.checked_mul(height).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} bitmap at {offset} pixel count overflows"),
-        )
-    })?;
-    let payload_len = monochrome_bitmap_payload_len(width, height)?;
-    let payload_start = offset.checked_add(4).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} bitmap payload offset overflows"),
-        )
-    })?;
-    let payload_end = payload_start.checked_add(payload_len).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} bitmap payload end overflows"),
-        )
-    })?;
-    if payload_end > body.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{resource_name} bitmap at {offset} exceeds body length"),
-        ));
-    }
-    Ok(MonochromeBitmap {
-        width,
-        height,
-        pixels: unpack_monochrome_bits(&body[payload_start..payload_end], pixel_count),
-    })
-}
-
-pub fn monochrome_bitmap_payload_len(width: usize, height: usize) -> io::Result<usize> {
-    width
-        .checked_mul(height)
-        .and_then(|pixels| pixels.checked_add(7))
-        .map(|bits| bits / 8)
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "monochrome bitmap payload length overflows",
-            )
-        })
-}
-
-pub fn unpack_monochrome_bits(bytes: &[u8], pixel_count: usize) -> Vec<u8> {
-    let mut pixels = Vec::with_capacity(pixel_count);
-    for pixel in 0..pixel_count {
-        let byte = bytes[pixel / 8];
-        pixels.push((byte >> (7 - (pixel % 8))) & 1);
-    }
-    pixels
-}
+// `formats/bit.md §3`: the earlier bitmap helpers here sized a record's row
+// data as `(width * height + 7) / 8` and unpacked it as one unbroken bit run.
+// That is only ever right when the width is a multiple of eight, and §3 is
+// explicit that it is not the layout: "The row stride is
+// `max(1, ceil(width / 8))` bytes ... Each row starts on a byte boundary, so a
+// width that is not a multiple of eight leaves padding bits at the end of the
+// row; those padding bits are not pixels." They had no callers left once
+// `parse_bit_sub_image_list` became the one reading, so they are gone rather
+// than left as a plausible-looking hook. Use `bit_sub_image_row_stride` and
+// `unpack_monochrome_rows`.
 
 pub fn load_ch_font(game_dir: &Path, file_name: &str) -> io::Result<FixedFont> {
     parse_fixed_font_body(
@@ -433,22 +386,29 @@ pub fn load_proportional_font(game_dir: &Path) -> io::Result<ProportionalFont> {
 
 /// Loads the glyph directory a proportional paragraph renderer needs.
 ///
-/// `formats/font-pcs.md §3` describes the canonical on-disk envelope as a
-/// driver-compressed sparse strip resource and explicitly leaves
-/// "pre-decoded local packaging variants" outside the v1 contract. The
-/// shipped local asset set carries the LZW-enveloped glyph-directory
-/// packaging, which is the only form that exposes per-glyph widths and
-/// bitmaps, so this accepts the LZW envelope first and falls back to a raw
-/// glyph directory.
+/// `formats/font-pcs.md §1`: "It uses exactly the container documented
+/// in `formats/bit.md`: the shared LZW envelope of `formats/lzw.md`
+/// wrapping a one-bit-per-pixel sub-image list. Earlier revisions of
+/// this document described a 'driver-compressed sparse strip resource'
+/// and told readers not to feed the file to the LZW decoder. That was
+/// wrong in both directions and has been replaced."
+///
+/// `formats/font-pcs.md §3`: "Take the first four bytes as the
+/// little-endian decoded length and decode the remainder with the
+/// shared LZW decoder ... The shipped file is 802 bytes on disk and
+/// declares, and produces, 1276 decoded bytes."
 pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
     match decode_lzw_envelope(bytes, PROPORT_PCS_FILE) {
         Ok(body) => parse_proportional_font_body(&body, PROPORT_PCS_FILE),
+        // `formats/bit.md §2.1` allows a member of this family to be stored
+        // raw — `WD.BIT` is — and the envelope check is exact, so this is the
+        // remaining classification rather than a second packaging variant.
         Err(envelope_err) => parse_proportional_font_body(bytes, PROPORT_PCS_FILE).map_err(
             |raw_err| {
                 io::Error::new(
                     raw_err.kind(),
                     format!(
-                        "{PROPORT_PCS_FILE} is neither an LZW-enveloped glyph directory ({envelope_err}) nor a raw glyph directory ({raw_err})"
+                        "{PROPORT_PCS_FILE} is neither an LZW-enveloped glyph directory ({envelope_err}) nor a raw one ({raw_err})"
                     ),
                 )
             },
@@ -456,51 +416,24 @@ pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
     }
 }
 
-pub fn parse_legacy_lzw_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
-    let body = decode_lzw_envelope(bytes, PROPORT_PCS_FILE)?;
-    parse_proportional_font_body(&body, PROPORT_PCS_FILE)
-}
-
 pub fn load_proportional_font_resource(game_dir: &Path) -> io::Result<ProportionalFontResource> {
     parse_proportional_font_resource(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
 }
 
+/// `formats/font-pcs.md §7`: a strict loader must "Treat the first four
+/// bytes as the LZW decoded length, not as a resource entry count, and
+/// require the decoded byte count to match it", then "Require the
+/// decoded image's sub-image count, offset table, and record sizes to
+/// satisfy the checks in `formats/bit.md` Section 6".
+///
+/// The shipped file is enveloped, so the §2.1 classification in
+/// [`parse_bit_family_resource`] takes the envelope branch; the raw
+/// branch stays available for a replacement font stored the way
+/// `WD.BIT` is.
 pub fn parse_proportional_font_resource(bytes: &[u8]) -> io::Result<ProportionalFontResource> {
-    parse_sparse_proportional_font_resource(bytes)
-}
-
-/// Compatibility parser for local preprocessed `PROPORT.PCS` assets. The
-/// canonical parser intentionally does not unwrap this form.
-pub fn parse_legacy_lzw_proportional_font_resource(
-    bytes: &[u8],
-) -> io::Result<ProportionalFontResource> {
-    let body = decode_lzw_envelope(bytes, PROPORT_PCS_FILE)?;
-    parse_sparse_proportional_font_resource(&body).or_else(|sparse_err| {
-        parse_proportional_font_body(&body, PROPORT_PCS_FILE)
-            .map(legacy_proportional_font_as_resource)
-            .map_err(|legacy_err| {
-                io::Error::new(
-                    legacy_err.kind(),
-                    format!(
-                        "{PROPORT_PCS_FILE} decoded body is neither a sparse strip resource ({sparse_err}) nor the legacy glyph-directory shape ({legacy_err})"
-                    ),
-                )
-            })
-    })
-}
-
-pub fn parse_sparse_proportional_font_resource(
-    bytes: &[u8],
-) -> io::Result<ProportionalFontResource> {
     Ok(ProportionalFontResource {
-        strips: parse_sparse_strip_resource(bytes, PROPORT_PCS_FILE)?,
+        strips: parse_bit_family_resource(bytes, PROPORT_PCS_FILE)?,
     })
-}
-
-fn legacy_proportional_font_as_resource(font: ProportionalFont) -> ProportionalFontResource {
-    ProportionalFontResource {
-        strips: font.glyphs.into_iter().map(|glyph| glyph.bitmap).collect(),
-    }
 }
 
 pub fn parse_proportional_font_body(

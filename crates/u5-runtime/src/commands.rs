@@ -250,14 +250,28 @@ pub const fn wishing_well_grant_scene(scene: u8) -> bool {
     matches!(scene, 0x16 | 0x1f)
 }
 
-/// Public issue #43: active-object class that routes Look to the
-/// death-vision/oracle branch.
-pub const DEATH_VISION_OBJECT_CLASS: u8 = 0x29;
+/// `view.md §3` entry-dispatch row 2: the **live terrain-layer** tile
+/// that routes Look to the death-vision branch — the crystal-sphere
+/// tile `0x29`.
+///
+/// §3 is explicit that the tested byte is "a single terrain-layer byte
+/// ... never an active-object or creature descriptor", and it warns
+/// about exactly this two-domain confusion for the `0xD8..0xDB`
+/// fountain/Daemon band: "Same four numbers, two different lookup
+/// domains, no relationship between them." An active object whose type
+/// byte happens to be `0x29` must therefore *not* trigger the vision.
+///
+/// The row is also ordered ahead of the per-map object row 4 and ahead
+/// of the shared "thou dost see" preamble: "the vision case is decided
+/// before anything is printed".
+pub const DEATH_VISION_LOOK_TILE: u8 = 0x29;
 pub const DEATH_VISION_ROLL_LOW: u8 = 1;
 pub const DEATH_VISION_ROLL_HIGH: u8 = 30;
 
-pub const fn death_vision_object_class(type_byte: u8) -> bool {
-    type_byte == DEATH_VISION_OBJECT_CLASS
+/// `view.md §3` entry-dispatch row 2 predicate on the live terrain
+/// tile at the Look target cell.
+pub const fn death_vision_look_tile(tile: u8) -> bool {
+    tile == DEATH_VISION_LOOK_TILE
 }
 
 /// Public issue #43: active-object classes that share the sign/poster
@@ -766,6 +780,15 @@ pub const PARTY_SELECTION_PROMPT: &str = "Player: ";
 pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
 /// The cancel result appended to an open selection prompt line.
 pub const SELECTION_CANCELLED_LITERAL: &str = "None!";
+
+/// `commands.md §5.7`: the rest/hole-up input sequence uses these exact
+/// message-window literals in both outdoor and town contexts.
+pub const REST_HOURS_PROMPT: &str = "For how many hours? (1-9) ";
+pub const REST_WATCH_PROMPT: &str = "\nWilt thou set a watch? ";
+pub const REST_WATCH_MEMBER_PROMPT: &str = "Who will stand guard? ";
+pub const REST_WATCH_YES_LITERAL: &str = "Yes\n\n";
+pub const REST_WATCH_NO_LITERAL: &str = "No\n\n";
+pub const REST_NO_WATCH_LITERAL: &str = "None posted!\n\n";
 
 /// `commands.md §5.5` (`#81`) dungeon narration. The engine's old
 /// `Entered <name> level N at (x, y).` has no counterpart in the

@@ -108,6 +108,27 @@ pub const EQUIPMENT_SHORT_LABELS: [&str; EQUIPMENT_COUNT] = [
 
 /// `inventory.md §3` empty-slot sentinel for the six readied
 /// equipment bytes inside a character record.
+/// `combat.md §6.1a` Writers #4, the Sword of Chaos compulsion: "if
+/// the slot is party-side and its character has item id 35 (Sword of
+/// Chaos) readied in either the weapon-hand or shield-hand slot, the
+/// engine sets this bit on that party descriptor, clears the
+/// active-player sentinel, and runs the turn through the automatic
+/// actor driver instead of reading a command from the player. Any
+/// other readied equipment takes the ordinary interactive path and
+/// never sets the bit."
+///
+/// The index is anchored to [`EQUIPMENT_NAMES`]; a catalog reshuffle is
+/// caught by the accompanying unit test rather than silently changing
+/// which weapon compels.
+pub const EQUIPMENT_SWORD_OF_CHAOS: usize = 35;
+
+/// `combat.md §6.1a` Writers #4: whether a readied weapon-hand or
+/// shield-hand equipment id takes the compulsion branch on the
+/// player-driven command path. Only the Sword of Chaos does.
+pub const fn equipment_compels_automatic_turn(item_id: usize) -> bool {
+    item_id == EQUIPMENT_SWORD_OF_CHAOS
+}
+
 pub const EQUIPMENT_EMPTY_SLOT_SENTINEL: u8 = 0xFF;
 
 /// `inventory.md §6`: returns `true` when an R-Ready unequip should
@@ -814,4 +835,38 @@ pub fn is_magic_vanish_ring(item_id: usize) -> bool {
         item_id,
         EQUIPMENT_ID_RING_INVISIBILITY | EQUIPMENT_ID_RING_REGENERATION
     )
+}
+
+#[cfg(test)]
+mod sword_of_chaos_tests {
+    use super::*;
+
+    #[test]
+    fn sword_of_chaos_index_is_anchored_to_the_catalog_name() {
+        // `combat.md §6.1a` Writers #4 names the compelling weapon by
+        // catalog id: "item id 35 (Sword of Chaos)". Assert the name so
+        // a catalog reshuffle cannot silently move the compulsion onto
+        // a different weapon.
+        assert_eq!(EQUIPMENT_SWORD_OF_CHAOS, 35);
+        assert_eq!(EQUIPMENT_NAMES[EQUIPMENT_SWORD_OF_CHAOS], "Sword of Chaos");
+        assert_eq!(
+            EQUIPMENT_SHORT_LABELS[EQUIPMENT_SWORD_OF_CHAOS],
+            "Chaos Swrd"
+        );
+    }
+
+    #[test]
+    fn only_the_sword_of_chaos_compels_an_automatic_turn() {
+        // §6.1a: "Any other readied equipment takes the ordinary
+        // interactive path and never sets the bit."
+        assert!(equipment_compels_automatic_turn(EQUIPMENT_SWORD_OF_CHAOS));
+        for item_id in 0..EQUIPMENT_COUNT {
+            assert_eq!(
+                equipment_compels_automatic_turn(item_id),
+                item_id == EQUIPMENT_SWORD_OF_CHAOS,
+                "{}",
+                EQUIPMENT_NAMES[item_id]
+            );
+        }
+    }
 }

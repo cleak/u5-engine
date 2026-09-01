@@ -147,29 +147,12 @@ impl PlayState {
         Some(MoveOutcome::SailStalled)
     }
 
-    pub fn resolve_balloon_wind_step(
-        &mut self,
-        direction: &mut Direction,
-        nx: &mut isize,
-        ny: &mut isize,
-    ) -> Option<MoveOutcome> {
-        if !self.player.transport.is_balloon() {
-            return None;
-        }
-
-        let Some(wind_direction) = self.wind.direction() else {
-            self.advance_turn();
-            self.message = "Balloon hangs motionless in calm wind.".to_string();
-            return Some(MoveOutcome::SailStalled);
-        };
-
-        let (dx, dy) = wind_direction.delta();
-        *direction = wind_direction;
-        *nx = self.player.x as isize + dx;
-        *ny = self.player.y as isize + dy;
-        self.player.facing = wind_direction;
-        None
-    }
+    // `vehicles.md §11` "Balloon boundary": "Settled, not merely
+    // untraced. Balloon sprites are catalog assets only... Do not invent
+    // boarding, landing, or wind-driven balloon movement." The
+    // `resolve_balloon_wind_step` helper that used to live here invented
+    // exactly that (wind-driven drift plus a calm-wind stall message) and
+    // is removed with the family.
 
     #[cfg(test)]
     pub fn open_facing(&mut self) -> MoveOutcome {
@@ -228,6 +211,11 @@ impl PlayState {
             self.advance_turn_without_door_tick();
             self.message = "It's open!".to_string();
             return Ok(MoveOutcome::DoorOpened);
+        }
+        if tile == TOWN_OPEN_TOO_HEAVY_TILE {
+            self.advance_turn_without_door_tick();
+            self.message = "Too heavy!".to_string();
+            return Ok(MoveOutcome::Blocked);
         }
         let revealed_secret_door =
             openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty);
@@ -296,11 +284,7 @@ impl PlayState {
     }
 
     pub fn render_active_jimmy(&self) -> String {
-        let last = self.party.len().min(6);
-        let _ = last;
-        // cleak/u5-spec#81: the party-member prompt literal is unpublished;
-        // the invented instructional suffix is removed until it is.
-        "Who picks? _".to_string()
+        PARTY_SELECTION_PROMPT.to_string()
     }
 
     pub fn step_active_jimmy(
@@ -384,11 +368,7 @@ impl PlayState {
     }
 
     pub fn render_active_surface_chest(&self) -> String {
-        let last = self.party.len().min(6);
-        let _ = last;
-        // cleak/u5-spec#81: the party-member prompt literal is unpublished;
-        // the invented instructional suffix is removed until it is.
-        "Who opens? _".to_string()
+        PARTY_SELECTION_PROMPT.to_string()
     }
 
     pub fn step_active_surface_chest(
@@ -439,6 +419,12 @@ impl PlayState {
                     dungeon.tile,
                     member_index,
                 )
+            } else if session.verb == SurfaceChestVerb::Search {
+                self.finish_moldy_corpse_search_at(session.x, session.y, member_index)
+                    .unwrap_or_else(|| {
+                        self.message = "Nothing to search!".to_string();
+                        MoveOutcome::Blocked
+                    })
             } else {
                 self.consume_surface_object_chest_at(
                     session.x,
@@ -664,9 +650,12 @@ impl PlayState {
         if jimmy_magic_locked_door(tile)
             || sidecar_lock.is_some_and(|entry| entry.kind == TownLockKind::Magic)
         {
-            self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
             self.message = "Key broke!".to_string();
+            // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+            // then the 40-update action snap, then the key decrement.
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+            self.keys = self.keys.saturating_sub(1);
             return Ok(MoveOutcome::LockTried);
         }
 
@@ -697,7 +686,7 @@ impl PlayState {
 
     pub fn resolve_jimmy_member_index(&mut self, member_index: Option<usize>) -> Option<usize> {
         let Some(member_index) = member_index else {
-            self.message = "Who picks? Use J<party>.".to_string();
+            self.message = PARTY_SELECTION_PROMPT.to_string();
             return None;
         };
         if !self
@@ -746,22 +735,31 @@ impl PlayState {
             return Ok(MoveOutcome::LockTried);
         }
         if jimmy_magic_locked_door(tile) {
-            self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
             self.message = "Key broke!".to_string();
+            // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+            // then the 40-update action snap, then the key decrement.
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+            self.keys = self.keys.saturating_sub(1);
             return Ok(MoveOutcome::LockTried);
         }
         if let Some(entry) = self.town_lock_at(game_dir, scene, floor, tx, ty, tile)? {
             if entry.kind == TownLockKind::Magic {
-                self.keys = self.keys.saturating_sub(1);
                 self.advance_turn();
                 self.message = "Key broke!".to_string();
+                // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+                // then the 40-update action snap, then the key decrement.
+                self.emit_sound_effect(SoundEffect::ActionSnap);
+                self.keys = self.keys.saturating_sub(1);
                 return Ok(MoveOutcome::LockTried);
             }
             if !self.jimmy_lock_pick_succeeds(member_index) {
-                self.keys = self.keys.saturating_sub(1);
                 self.advance_turn();
                 self.message = "Key broke!".to_string();
+                // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+                // then the 40-update action snap, then the key decrement.
+                self.emit_sound_effect(SoundEffect::ActionSnap);
+                self.keys = self.keys.saturating_sub(1);
                 return Ok(MoveOutcome::LockTried);
             }
             self.grid[idx] = entry.unlocked_tile;
@@ -772,9 +770,12 @@ impl PlayState {
         }
         if let Some(unlocked_tile) = Self::visible_jimmy_unlock_tile(tile) {
             if !self.jimmy_lock_pick_succeeds(member_index) {
-                self.keys = self.keys.saturating_sub(1);
                 self.advance_turn();
                 self.message = "Key broke!".to_string();
+                // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+                // then the 40-update action snap, then the key decrement.
+                self.emit_sound_effect(SoundEffect::ActionSnap);
+                self.keys = self.keys.saturating_sub(1);
                 return Ok(MoveOutcome::LockTried);
             }
             self.grid[idx] = unlocked_tile;
@@ -810,9 +811,12 @@ impl PlayState {
             return MoveOutcome::LockTried;
         };
         if !self.jimmy_lock_pick_succeeds(member_index) {
-            self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
             self.message = "Key broke!".to_string();
+            // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+            // then the 40-update action snap, then the key decrement.
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+            self.keys = self.keys.saturating_sub(1);
             return MoveOutcome::LockTried;
         }
         let Some(npc_index) = self
@@ -886,9 +890,12 @@ impl PlayState {
         let Some(threshold) =
             object_chest_jimmy_threshold(stat, self.party[member_index].climb_stat)
         else {
-            self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
             self.message = "Key broke!".to_string();
+            // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+            // then the 40-update action snap, then the key decrement.
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+            self.keys = self.keys.saturating_sub(1);
             return Some(MoveOutcome::LockTried);
         };
         let roll = self.surface_object_chest_jimmy_roll();
@@ -899,9 +906,12 @@ impl PlayState {
             self.advance_turn();
             self.message = "Unlocked!".to_string();
         } else {
-            self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
             self.message = "Key broke!".to_string();
+            // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+            // then the 40-update action snap, then the key decrement.
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+            self.keys = self.keys.saturating_sub(1);
         }
         Some(MoveOutcome::LockTried)
     }
@@ -936,6 +946,22 @@ impl PlayState {
         let chest_class = stat & 0x7f;
         let trap_note =
             (stat & 0x80 != 0).then(|| self.apply_shared_trap_effect_to_slot(member_index));
+        // `traps.md §4`: "The surface/town site alone performs a
+        // combat-scene cleanup after the resolver returns: if the chosen
+        // member is then Dead, it (a) finds that member's live combatant
+        // record and **sets a marker bit on it**, (b) **stamps a fixed
+        // non-zero marker value into the leading bytes of the world-object
+        // entry that record points at**, and (c) clears the active-character
+        // hint when that hint named the member. The dungeon chest site has
+        // no such step."
+        //
+        // §4's fourth difference pins the gate: the `O` Open dispatcher
+        // "routes every other scene - combat-class scenes included - to the
+        // surface/town handler", so this cleanup is reachable only while a
+        // combat-class scene is live.
+        if trap_note.is_some() && self.combat_active {
+            self.apply_surface_container_trap_combat_cleanup(member_index);
+        }
         let content_note = self.generate_surface_object_chest_content(slot, x, y, chest_class);
         self.clear_consumed_active_object_slot(slot);
         self.rewrite_surface_object_chest_cell(x, y);
@@ -953,6 +979,50 @@ impl PlayState {
             None => format!("{verb} object chest at ({x}, {y}); {content_note}."),
         };
         Some(MoveOutcome::ContainerOpened)
+    }
+
+    /// `traps.md §4` surface/town container combat-scene cleanup. See the
+    /// three-step citation at the call site in
+    /// [`Self::consume_surface_object_chest_at`]. Deliberately **not**
+    /// reachable from `finish_open_dungeon_chest`: "The dungeon chest site
+    /// has no such step."
+    ///
+    /// Two earlier readings are withdrawn by §4 and must not be
+    /// reintroduced: the combatant record is "**not** removed, cleared, or
+    /// freed - it stays in place with one additional bit set", and the
+    /// world-object entry is "**not** blanked: a specific constant is
+    /// written into it".
+    ///
+    /// That constant is closed in §4: "the value is **decimal thirty**,
+    /// written as two separate byte stores of the same value into **both
+    /// leading bytes** of the record, and it is a **corpse**" - and "a port
+    /// should write the value **as a corpse-class object**, not as an opaque
+    /// stamp and not as a tile", which is why this uses the combat
+    /// party-corpse *object* id rather than routing through any terrain/tile
+    /// classifier.
+    pub fn apply_surface_container_trap_combat_cleanup(&mut self, member_index: usize) {
+        if !self
+            .party
+            .get(member_index)
+            .is_some_and(|member| member.hp == 0)
+        {
+            return;
+        }
+        if let Some(actor) = self.combat_actors.get_mut(member_index) {
+            // (a) marker bit only; the record keeps its slot and contents.
+            actor.mark_dead();
+            let object_slot = actor.active_object_slot as usize;
+            // (b) decimal thirty into both leading bytes of the linked
+            // world-object entry, as a corpse-class object id.
+            if let Some(object) = self.active_objects.get_mut(object_slot) {
+                object.type_byte = COMBAT_PARTY_CORPSE_TILE;
+                object.tile = COMBAT_PARTY_CORPSE_TILE;
+            }
+        }
+        // (c) clear the active-character hint when it named this member.
+        if self.active_player == Some(member_index) {
+            self.active_player = None;
+        }
     }
 
     pub fn rewrite_surface_object_chest_cell(&mut self, x: usize, y: usize) {
@@ -1172,9 +1242,12 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 if Self::is_plain_closed_dungeon_chest(tile) {
-                    self.keys = self.keys.saturating_sub(1);
                     self.advance_turn();
                     self.message = "Key broke!".to_string();
+                    // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+                    // then the 40-update action snap, then the key decrement.
+                    self.emit_sound_effect(SoundEffect::ActionSnap);
+                    self.keys = self.keys.saturating_sub(1);
                     return Ok(MoveOutcome::LockTried);
                 }
 
@@ -1186,9 +1259,12 @@ impl PlayState {
                 let threshold = Self::dungeon_chest_pick_threshold(level, dexterity);
                 let roll = self.random_range_u8(JIMMY_OBJECT_DIE_LOW, JIMMY_OBJECT_DIE_HIGH);
                 if !dungeon_chest_jimmy_succeeds(threshold, roll) {
-                    self.keys = self.keys.saturating_sub(1);
                     self.advance_turn();
                     self.message = "Key broke!".to_string();
+                    // audio.md §8.1 Jimmy key breaks: failure only — the break line,
+                    // then the 40-update action snap, then the key decrement.
+                    self.emit_sound_effect(SoundEffect::ActionSnap);
+                    self.keys = self.keys.saturating_sub(1);
                     return Ok(MoveOutcome::LockTried);
                 }
 
@@ -1642,7 +1718,60 @@ impl PlayState {
             entry.replacement_tile,
             entry.grant,
         );
+        self.apply_borrowed_lit_fixture_light(tile);
+        // audio.md §8.1 borrowed fixed object: after the live tile is
+        // rewritten and the borrowing line is printed, play the 40-update
+        // action snap. A Food grant is the crop branch — it takes the
+        // karma.md §4 crop/table-food debit, and audio.md §8.1 forbids
+        // reusing the borrowing sound for crop pickup.
+        if !matches!(
+            entry.grant.map(|grant| grant.kind),
+            Some(ObjectPickupKind::Food)
+        ) {
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+        }
         Ok(MoveOutcome::Got)
+    }
+
+    /// `lighting.md §8`: "The G-Get "borrow" branch, which lifts a lit
+    /// fixture out of a town or castle cell, sets the torch counter to 100
+    /// counter units and consumes no carried torch". `containers.md §7`
+    /// adds the rest of the branch's contract: "the party's torch counter
+    /// is set to 100 counter units - borrowing a lit fixture is a light
+    /// source, not an inventory item, and it consumes no carried torch",
+    /// and "The traced branch does not debit the shared moral-standing
+    /// selector". Accordingly this touches neither `self.torches` nor
+    /// `self.moral_standing`.
+    ///
+    /// `lighting.md §8` also fixes the writer census: with I-Ignite and the
+    /// Blackthorn restoration these are "the only three torch-counter
+    /// writers besides decay", so the value comes from the shared
+    /// [`BORROWED_FIXTURE_TORCH_DURATION`] anchor rather than a local
+    /// literal.
+    ///
+    /// **Tile-set caveat.** Neither `lighting.md §8` nor `containers.md §7`
+    /// enumerates the borrowable lit-fixture tile ids - §7 says only
+    /// "Certain furniture/lit-fixture cells can be 'borrowed'". The one
+    /// published enumeration of lit fixtures in the tile domain is the
+    /// local-light source set of `visibility.md §12`
+    /// ([`is_local_light_source_tile`]), so the branch is keyed on that
+    /// rather than on invented ids. A Get-tile row whose source tile is not
+    /// a published light source stays ordinary furniture/crop handling and
+    /// leaves both counters alone.
+    pub fn apply_borrowed_lit_fixture_light(&mut self, source_tile: u8) {
+        if !is_local_light_source_tile(source_tile) {
+            return;
+        }
+        self.torch_counter = BORROWED_FIXTURE_TORCH_DURATION;
+        // `lighting.md §4`: a non-zero torch counter floors the ambient
+        // value, so the recompute has to run on the same turn the counter
+        // is written - exactly as the I-Ignite writers do.
+        self.recompute_daylight();
+        // Engine-authored narration: the borrow line's original wording is
+        // not published, so this states the observable effect only.
+        self.message.push_str(&format!(
+            " Borrowed a lit fixture; light counter is {BORROWED_FIXTURE_TORCH_DURATION}."
+        ));
     }
 
     pub fn get_town_facing(
@@ -1729,6 +1858,18 @@ impl PlayState {
             entry.replacement_tile,
             entry.grant,
         );
+        self.apply_borrowed_lit_fixture_light(tile);
+        // audio.md §8.1 borrowed fixed object: after the live tile is
+        // rewritten and the borrowing line is printed, play the 40-update
+        // action snap. A Food grant is the crop branch — it takes the
+        // karma.md §4 crop/table-food debit, and audio.md §8.1 forbids
+        // reusing the borrowing sound for crop pickup.
+        if !matches!(
+            entry.grant.map(|grant| grant.kind),
+            Some(ObjectPickupKind::Food)
+        ) {
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+        }
         Ok(MoveOutcome::Got)
     }
 
@@ -2242,9 +2383,20 @@ impl PlayState {
                     && !self.fixed_hidden_treasure_target_has_npc(x, y)
             }
             HiddenTreasureRule::Daily => self.fixed_hidden_treasure_daily_day != self.clock.day,
+            // `hidden-treasures.md §2` record 15: the gate field is "the
+            // equipment-inventory counter for the item it grants" — record
+            // 15 grants the Glass Sword, equipment item id 39. "Stages only
+            // when that counter is zero and the searched tile is not occupied
+            // by an NPC. The skip condition is therefore \"counter non-zero
+            // **or** an NPC is present\"." The record has no persistence field
+            // of its own: "an implementation must alias the existing field
+            // rather than allocate a private cookie", and "An engine that
+            // models the gate as a separate flag the scan never sets will
+            // hand out an unlimited supply of Glass Swords."
             HiddenTreasureRule::SingleUseNpcGated => {
-                self.fixed_hidden_treasure_single_use_cookie
-                    == FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR
+                self.equipment_stock
+                    .get(entry.state as usize)
+                    .is_some_and(|carried| *carried == 0)
                     && !self.fixed_hidden_treasure_target_has_npc(x, y)
             }
         }
@@ -2253,6 +2405,11 @@ impl PlayState {
     pub fn mark_fixed_hidden_treasure_found(&mut self, entry: FixedHiddenTreasureEntry) {
         match entry.rule {
             HiddenTreasureRule::Daily => self.fixed_hidden_treasure_daily_day = self.clock.day,
+            // `hidden-treasures.md §2` record 15: "The scan never writes the
+            // counter; the ordinary inventory grant for the item does, and
+            // that is exactly what makes the record single-use." The aliased
+            // field is `equipment_stock[entry.state]`, which the Get
+            // inventory transfer increments.
             HiddenTreasureRule::SingleUseNpcGated => {}
             _ => self.set_fixed_hidden_treasure_found(entry.record),
         }
@@ -2321,10 +2478,51 @@ impl PlayState {
                 object
                     .fixed_hidden_treasure_record()
                     .or_else(|| {
+                        // Native fixed-treasure class records carry their
+                        // actual pickup visual in byte 1 and the record in
+                        // aux1. A live moldy corpse instead has `0x1F` in both
+                        // leading bytes and is handled by the sibling lookup.
                         let record = object.aux1 as usize;
-                        (record < FIXED_HIDDEN_TREASURE_COUNT).then_some(record)
+                        (object.tile != FIXED_HIDDEN_TREASURE_OBJECT_TILE
+                            && record < FIXED_HIDDEN_TREASURE_COUNT)
+                            .then_some(record)
                     })
                     .map(|record| (object_slot, record))
+            })
+    }
+
+    /// `containers.md §9`: locate either a native moldy-corpse object or a
+    /// fixed-hidden-treasure staging record whose published pickup class is a
+    /// moldy corpse. The `aux3` distinction is essential: every fixed treasure
+    /// uses the same `0x1F` visual, while combat-created moldy corpses carry no
+    /// fixed-record marker.
+    pub fn moldy_corpse_search_slot_at(&self, x: usize, y: usize) -> Option<usize> {
+        self.active_objects
+            .iter()
+            .copied()
+            .enumerate()
+            .skip(1)
+            .rev()
+            .find_map(|(object_slot, object)| {
+                if !self.object_occupies(object, x, y) {
+                    return None;
+                }
+                let native_moldy = object.type_byte == FIXED_HIDDEN_TREASURE_OBJECT_TILE
+                    && object.tile == FIXED_HIDDEN_TREASURE_OBJECT_TILE
+                    && object.fixed_hidden_treasure_record().is_none();
+                let staged_record = object.fixed_hidden_treasure_record().or_else(|| {
+                    let record = object.aux1 as usize;
+                    (object.type_byte == FIXED_HIDDEN_TREASURE_OBJECT_TILE
+                        && object.tile != FIXED_HIDDEN_TREASURE_OBJECT_TILE
+                        && record < FIXED_HIDDEN_TREASURE_COUNT)
+                        .then_some(record)
+                });
+                let staged_moldy = staged_record.is_some_and(|record| {
+                    FIXED_HIDDEN_TREASURES
+                        .iter()
+                        .any(|entry| entry.record == record && corpse_search_pickup(entry.pickup))
+                });
+                (native_moldy || staged_moldy).then_some(object_slot)
             })
     }
 
@@ -2333,6 +2531,20 @@ impl PlayState {
         x: usize,
         y: usize,
     ) -> Option<MoveOutcome> {
+        if self.moldy_corpse_search_slot_at(x, y).is_some() {
+            return Some(match self.shared_acting_member_selection(true) {
+                ActingMemberSelection::Selected(member_index) => self
+                    .finish_moldy_corpse_search_at(x, y, member_index)
+                    .unwrap_or(MoveOutcome::Blocked),
+                ActingMemberSelection::Prompt => {
+                    self.start_surface_object_chest_prompt(x, y, SurfaceChestVerb::Search)
+                }
+                ActingMemberSelection::NoneAble => {
+                    self.message = "No party members are available.".to_string();
+                    MoveOutcome::Blocked
+                }
+            });
+        }
         let (object_slot, record) = self.active_object_treasure_marker_at(x, y)?;
         let Some(entry) = FIXED_HIDDEN_TREASURES
             .iter()
@@ -2343,11 +2555,29 @@ impl PlayState {
             return Some(MoveOutcome::Blocked);
         };
 
+        // `containers.md §9` / cleak/u5-spec#175: only a surface/town Search
+        // of a moldy corpse enters the special branch. It chooses the Plague
+        // victim through the shared acting-member selection before consuming
+        // any corpse PRNG draw. A multi-member party reuses the established
+        // picker and resumes this coordinate after confirmation.
         self.clear_consumed_active_object_slot(object_slot);
         let grant = self.apply_fixed_hidden_treasure_pickup(entry.pickup, entry.state);
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = format!("Found {}{}.", entry.pickup.label(), grant);
+        Some(MoveOutcome::Searched)
+    }
+
+    fn finish_moldy_corpse_search_at(
+        &mut self,
+        x: usize,
+        y: usize,
+        searching_member: usize,
+    ) -> Option<MoveOutcome> {
+        let object_slot = self.moldy_corpse_search_slot_at(x, y)?;
+        self.resolve_corpse_search(object_slot, searching_member);
+        self.mark_visibility_dirty();
+        self.advance_turn();
         Some(MoveOutcome::Searched)
     }
 
@@ -2365,12 +2595,98 @@ impl PlayState {
             self.message = "Unknown hidden treasure pickup.".to_string();
             return Some(MoveOutcome::Blocked);
         };
+        // `containers.md §9`: Get never enters the moldy-corpse Search
+        // branch. It follows the ordinary object-table consumption path.
         self.clear_consumed_active_object_slot(object_slot);
         let grant = self.apply_fixed_hidden_treasure_pickup(entry.pickup, entry.state);
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = format!("Got {}{}.", entry.pickup.label(), grant);
         Some(MoveOutcome::Got)
+    }
+
+    /// `containers.md §9` "Corpse searches" + "Corpse-search odds".
+    ///
+    /// "A corpse search splits on a single roll before anything is narrated,
+    /// and the fate of the corpse slot follows that split, not the
+    /// narration." The split is rolled first, here, ahead of every message
+    /// decision.
+    ///
+    /// "The majority arm -- seven outcomes in eight -- **clears the corpse
+    /// slot first**, and only then rolls for what the search is said to have
+    /// turned up. Plague is one rare result inside that already-cleared arm,
+    /// and the several "nothing"-style results are the rest of it, so plague
+    /// and every "nothing"-style narration alike leave the slot cleared and
+    /// stage neither food nor gold. Only the minority arm -- one outcome in
+    /// eight -- leaves the slot in place and rewrites it into a later
+    /// food/gold pickup; the eventual pickup then follows the ordinary
+    /// object-table grant rule above."
+    ///
+    /// `RETRACTIONS.md` R200 reverses the older reading (plague clearing the
+    /// slot, every non-plague search staging a pickup); do not reinstate it.
+    ///
+    /// Every roll below is over a **closed** range - "both bounds are
+    /// attainable - which is the detail most likely to be mis-implemented as
+    /// an exclusive upper bound" - so each uses
+    /// [`PlayState::random_range_u8`], which is inclusive at both ends.
+    ///
+    /// `cleak/u5-spec#175` publishes the previously missing staged quantity,
+    /// exact selector tree, transcript, Plague victim, sound, and repaint
+    /// boundaries.
+    pub fn resolve_corpse_search(&mut self, slot: usize, searching_member: usize) {
+        // The arm split, before any narration: "1 in 8 takes the minority
+        // arm and stages a pickup; the other 7 in 8 clear the slot."
+        let arm = self.random_range_u8(0, CORPSE_SEARCH_ARM_DENOMINATOR - 1);
+        if arm == 0 {
+            // Minority arm: the slot is *not* cleared. "Inside the minority
+            // arm: 1 in 4 food, 3 in 4 gold."
+            let food = self.random_range_u8(0, CORPSE_SEARCH_FOOD_DENOMINATOR - 1) == 0;
+            let class = if food {
+                INVENTORY_ADD_CLASS_CODE_FOOD
+            } else {
+                INVENTORY_ADD_CLASS_CODE_GOLD
+            };
+            let quantity = self.random_range_u8(1, 3);
+            if let Some(object) = self.active_objects.get_mut(slot) {
+                // Rewrite in place into a later food/gold pickup routed
+                // through the ordinary `containers.md §8` inventory-add
+                // class dispatcher (`0x02` Gold / `0x0F` Food), so the
+                // eventual transfer is owned by the ordinary object-table
+                // grant path and not by this helper. The pickup visual is
+                // left as the body art already in the slot, which the §3
+                // Get visual filter already accepts.
+                object.type_byte = class;
+                object.aux1 = quantity;
+                // Drop the fixed-hidden-treasure record marker so the slot
+                // no longer re-enters this corpse path.
+                object.aux3 = 0;
+            }
+            self.message = format!("Thou dost find\n{}!\n", if food { "food" } else { "gold" });
+            self.mark_visibility_dirty();
+            return;
+        }
+
+        // Majority arm: clear the corpse slot FIRST, then narrate.
+        self.clear_consumed_active_object_slot(slot);
+        if self.random_range_u8(0, CORPSE_SEARCH_PLAGUE_DENOMINATOR - 1)
+            == CORPSE_SEARCH_PLAGUE_VALUE
+        {
+            // The line is visible before the blocking rumble; status changes
+            // only after the effect returns.
+            self.message = "Thou dost find\nPlague!\n".to_string();
+            self.emit_sound_effect(SoundEffect::CorpsePlagueRumble);
+            if let Some(member) = self.party.get_mut(searching_member) {
+                member.status = b'P';
+            }
+            self.mark_visibility_dirty();
+            return;
+        }
+        let upper_bound = self.random_range_u8(0, 3);
+        let selector = self.random_range_u8(0, upper_bound);
+        self.message = format!(
+            "Thou dost find\n{}\n",
+            CORPSE_SEARCH_NOTHING_MESSAGES[usize::from(selector)]
+        );
     }
 
     pub fn apply_fixed_hidden_treasure_pickup(
@@ -2429,8 +2745,10 @@ impl PlayState {
                     "; no compatible inventory slot".to_string()
                 }
             }
+            // Corpse/body classes are not ordinary inventory grants. Only a
+            // Search of MoldyCorpse is intercepted by the special branch.
             HiddenTreasurePickup::MoldyCorpse | HiddenTreasurePickup::RottingBody => {
-                "; found no usable inventory".to_string()
+                "; no inventory grant".to_string()
             }
         }
     }
@@ -2823,6 +3141,41 @@ pub const RARE_REAGENT_HARVEST_POINTS: [RareReagentHarvestPoint; RARE_REAGENT_HA
 pub enum HiddenTreasureTarget {
     World(WorldPlane),
     Town(u8),
+}
+
+/// `containers.md §9` "Corpse-search odds": "**1 in 8** takes the minority
+/// arm and stages a pickup; the other **7 in 8** clear the slot." The range
+/// is closed, so the roll is an inclusive `0..=7`.
+pub const CORPSE_SEARCH_ARM_DENOMINATOR: u8 = 8;
+
+/// `containers.md §9` "Corpse-search odds": "Inside the minority arm:
+/// **1 in 4 food, 3 in 4 gold.**" An earlier revision published one third
+/// against two thirds; that figure is withdrawn.
+pub const CORPSE_SEARCH_FOOD_DENOMINATOR: u8 = 4;
+
+/// `containers.md §9` "Corpse-search odds": "Inside the cleared arm: Plague
+/// on **1 in 32**." An earlier revision published one in thirty-one; that
+/// figure is withdrawn as an inclusive/exclusive off-by-one.
+pub const CORPSE_SEARCH_PLAGUE_DENOMINATOR: u8 = 32;
+/// `containers.md §9`: exactly this value, not zero, selects Plague.
+pub const CORPSE_SEARCH_PLAGUE_VALUE: u8 = 19;
+
+/// `containers.md §8` inventory-add class codes for the two families the
+/// corpse minority arm can stage: "`0x02` | Gold" and "`0x0F` | Food /
+/// grain".
+pub const INVENTORY_ADD_CLASS_CODE_GOLD: u8 = 0x02;
+pub const INVENTORY_ADD_CLASS_CODE_FOOD: u8 = 0x0f;
+
+/// `containers.md §9` exact ordinary narration selector table. The selector
+/// is an inclusive draw `0..upper`, after an inclusive `upper` draw `0..3`.
+const CORPSE_SEARCH_NOTHING_MESSAGES: [&str; 4] = ["nothing!", "worms!", "guts!", "a bloody pulp!"];
+
+/// `containers.md §9`: the sole pickup class whose slot fate is
+/// decided by [`PlayState::resolve_corpse_search`] rather than by the
+/// ordinary "clear the consumed object-table slot" rule. A rotting body does
+/// not enter this branch.
+pub const fn corpse_search_pickup(pickup: HiddenTreasurePickup) -> bool {
+    matches!(pickup, HiddenTreasurePickup::MoldyCorpse)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4102,5 +4455,56 @@ pub fn town_search_live_tile_miss_message(tile: u8) -> Option<&'static str> {
         0xb2 => Some("Searched brazier; nothing found."),
         0xbc => Some("Searched fireplace; nothing found."),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod hidden_treasure_record_15_spec_tests {
+    use super::{FIXED_HIDDEN_TREASURES, FixedHiddenTreasureEntry, HiddenTreasurePickup};
+    use crate::test_fixtures::{open_world_grid, world_state};
+    use crate::*;
+
+    fn record_15() -> FixedHiddenTreasureEntry {
+        *FIXED_HIDDEN_TREASURES
+            .iter()
+            .find(|entry| entry.record == 15)
+            .expect("record 15 is published in hidden-treasures.md §3")
+    }
+
+    /// `hidden-treasures.md §2` record 15: "Record 15's granted item is the
+    /// Glass Sword (equipment item id `39` …), and its gate is that same
+    /// item's carried counter."
+    #[test]
+    fn record_15_grants_the_glass_sword_equipment_id() {
+        let entry = record_15();
+        assert_eq!(entry.pickup, HiddenTreasurePickup::Weapon);
+        assert_eq!(entry.state as usize, EQUIPMENT_ID_GLASS_SWORD);
+        assert_eq!(EQUIPMENT_NAMES[EQUIPMENT_ID_GLASS_SWORD], "Glass Sword");
+    }
+
+    /// `hidden-treasures.md §2` record 15: "Stages only when that counter is
+    /// zero … An engine that models the gate as a separate flag the scan never
+    /// sets will hand out an unlimited supply of Glass Swords."
+    #[test]
+    fn record_15_closes_once_the_party_carries_a_glass_sword() {
+        let entry = record_15();
+        let mut state = world_state(open_world_grid(), entry.x, entry.y);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.equipment_stock[EQUIPMENT_ID_GLASS_SWORD] = 0;
+
+        assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
+
+        state.equipment_stock[EQUIPMENT_ID_GLASS_SWORD] = 1;
+        assert!(
+            !state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y),
+            "a carried Glass Sword must close record 15"
+        );
+
+        // "a party that discards or loses its Glass Sword makes the record
+        // available again - that is original behaviour, not a defect."
+        state.equipment_stock[EQUIPMENT_ID_GLASS_SWORD] = 0;
+        assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
     }
 }

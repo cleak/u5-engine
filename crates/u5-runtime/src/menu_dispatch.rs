@@ -234,35 +234,37 @@ mod tests {
     }
 
     #[test]
-    fn blackthorn_four_correct_answers_marks_survived() {
+    fn blackthorn_one_correct_answer_marks_survived() {
+        // `blackthorn.md §4`: "**The loop asks about ONE shrine, up to
+        // four times.**" One correct answer resolves the interrogation;
+        // this test previously demanded four different mantras, which
+        // §4's withdrawal box retires.
         let mut d = UnifiedMenuDispatch::new();
         d.open_blackthorn();
         assert_eq!(
             d.submit_blackthorn_answer("Ahm"),
-            UnifiedMenuStep::BlackthornAdvanced
-        );
-        assert_eq!(
-            d.submit_blackthorn_answer("Mu"),
-            UnifiedMenuStep::BlackthornAdvanced
-        );
-        assert_eq!(
-            d.submit_blackthorn_answer("Ra"),
-            UnifiedMenuStep::BlackthornAdvanced
-        );
-        assert_eq!(
-            d.submit_blackthorn_answer("Beh"),
             UnifiedMenuStep::BlackthornEnded { survived: true }
         );
+        // The loop is over: further submissions do not re-open it.
+        assert_eq!(d.submit_blackthorn_answer("Ahm"), UnifiedMenuStep::Ignored);
     }
 
     #[test]
-    fn blackthorn_wrong_answer_marks_punished() {
+    fn blackthorn_wrong_answers_escalate_before_punishing() {
+        // `blackthorn.md §4`: "The first wrong answer produces a threat
+        // naming the companion at risk. Later wrong answers stamp a
+        // tile into the cutscene map, and the fourth wrong answer
+        // **kills** the named companion." This test previously ended
+        // the interrogation on the first wrong answer.
         let mut d = UnifiedMenuDispatch::new();
         d.open_blackthorn();
-        assert_eq!(
-            d.submit_blackthorn_answer("wrong"),
-            UnifiedMenuStep::BlackthornEnded { survived: false }
-        );
+        for _ in 0..4 {
+            assert_eq!(
+                d.submit_blackthorn_answer("wrong"),
+                UnifiedMenuStep::BlackthornEnded { survived: false }
+            );
+        }
+        assert_eq!(d.blackthorn.as_ref().map(|c| c.is_punished()), Some(true));
     }
 
     #[test]

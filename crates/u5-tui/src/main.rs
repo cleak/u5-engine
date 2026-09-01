@@ -5,16 +5,20 @@ use std::path::Path;
 
 use u5_runtime::{audit_location_dat_files, location_audit_report_text, run_report};
 use u5_tui::{
-    CLI_USAGE, CliArgs, compare_manifest_files, parse_cli_args, run_create_character_command,
-    run_interactive_create_character, run_intro_menu_loop, run_play_loop, run_route_smoke,
-    run_save_frame, run_save_frame_suite, run_save_screen,
+    CLI_USAGE, CliArgs, compare_manifest_files, parse_cli_args, prepare_writable_game_dir,
+    run_audio_suite, run_create_character_command, run_interactive_create_character,
+    run_intro_menu_loop, run_play_loop, run_route_smoke, run_save_frame, run_save_frame_suite,
+    run_save_screen,
 };
 
 fn main() -> io::Result<()> {
-    let args = parse_cli_args(env::args().skip(1))?;
+    let mut args = parse_cli_args(env::args().skip(1))?;
     if args.help {
         print!("{CLI_USAGE}");
         return Ok(());
+    }
+    if needs_writable_game_dir(&args) {
+        args.game_dir = prepare_writable_game_dir(&args.game_dir)?;
     }
     if args.intro && args.visual {
         return run_visual_intro(args);
@@ -37,6 +41,9 @@ fn main() -> io::Result<()> {
     if args.create_character_interactive {
         run_interactive_create_character(&args.game_dir)?;
         return Ok(());
+    }
+    if let Some(out) = args.audio_suite.as_deref() {
+        return run_audio_suite(out);
     }
     if let Some(out) = args.location_audit.as_deref() {
         return run_location_audit(&args.game_dir, out);
@@ -99,6 +106,14 @@ fn main() -> io::Result<()> {
         );
     }
     run_report(&args.game_dir)
+}
+
+fn needs_writable_game_dir(args: &CliArgs) -> bool {
+    args.intro
+        || args.play
+        || args.visual
+        || args.create_character.is_some()
+        || args.create_character_interactive
 }
 
 fn run_location_audit(game_dir: &Path, out: &Path) -> io::Result<()> {

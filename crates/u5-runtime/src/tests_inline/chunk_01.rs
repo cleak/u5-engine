@@ -434,65 +434,63 @@
         }
     }
 
+    /// `formats/bit.md §3`: a sub-image list is "a 2-byte count,
+    /// `count` 2-byte offsets, then contiguous sub-images of `width`,
+    /// `height`, and `max(1, ceil(width / 8)) * height` bytes of
+    /// one-bit-per-pixel rows, most-significant-bit leftmost".
+    ///
+    /// The one-record shape is `WD.BIT`'s: "count `1`, single offset
+    /// `4`". The earlier reading of those words as a strip-table entry
+    /// count and a pointer into a metadata word is withdrawn.
     #[test]
     fn bit_graphics_parses_single_image_bitmap_body() {
-        let mut body = Vec::new();
-        body.extend_from_slice(&SINGLE_IMAGE_BIT_FORMAT_MARKER.to_le_bytes());
-        body.extend_from_slice(&SINGLE_IMAGE_BIT_MODE_MARKER.to_le_bytes());
-        body.extend_from_slice(&9u16.to_le_bytes());
-        body.extend_from_slice(&2u16.to_le_bytes());
-        body.extend_from_slice(&[0b1010_1010, 0b1100_0011, 0b1000_0000]);
-
-        let bitmap = parse_single_image_bit_body(&body, "fixture").unwrap();
-
-        assert_eq!((bitmap.width, bitmap.height), (9, 2));
-        assert_eq!(bitmap.pixels.len(), 18);
-        assert_eq!(&bitmap.pixels[..10], &[1, 0, 1, 0, 1, 0, 1, 0, 1, 1]);
-        assert_eq!(&bitmap.pixels[16..], &[1, 0]);
-    }
-
-    #[test]
-    fn bit_graphics_parses_sparse_strip_resource_body() {
-        // formats/bit.md section 3: a sparse resource starts with an entry
-        // count, then four-byte pointer/metadata entries. WD.BIT's one-entry
-        // layout is valid because its pointer targets the metadata word, which
-        // then doubles as the strip width word.
         let mut body = Vec::new();
         body.extend_from_slice(&1u16.to_le_bytes());
         body.extend_from_slice(&4u16.to_le_bytes());
         body.extend_from_slice(&9u16.to_le_bytes());
         body.extend_from_slice(&2u16.to_le_bytes());
-        body.extend_from_slice(&[0b1010_1010, 0b1100_0011, 0b1000_0000]);
+        // Row stride is ceil(9 / 8) = 2 bytes, so each row starts on a
+        // byte boundary and the trailing seven bits are padding.
+        body.extend_from_slice(&[0b1010_1010, 0b1000_0000, 0b1100_0011, 0b0000_0000]);
 
-        let images = parse_sparse_bit_images(&body, "fixture.bit").unwrap();
+        let bitmap = parse_single_bit_sub_image(&body, "fixture").unwrap();
 
-        assert_eq!(images.blocks.len(), 1);
-        let bitmap = &images.blocks[0];
         assert_eq!((bitmap.width, bitmap.height), (9, 2));
         assert_eq!(bitmap.pixels.len(), 18);
-        assert_eq!(&bitmap.pixels[..10], &[1, 0, 1, 0, 1, 0, 1, 0, 1, 1]);
-        assert_eq!(&bitmap.pixels[16..], &[1, 0]);
+        assert_eq!(&bitmap.pixels[..9], &[1, 0, 1, 0, 1, 0, 1, 0, 1]);
+        assert_eq!(&bitmap.pixels[9..], &[1, 1, 0, 0, 0, 0, 1, 1, 0]);
     }
 
+    /// `formats/bit.md §1`: "Nothing in the family is a display-driver
+    /// 'sparse strip' table, and the leading value is never an entry
+    /// count for such a table."
+    ///
+    /// §6: "There are no sparse or skipped entries and no
+    /// over-allocated table; every entry in the directory names a real
+    /// sub-image." A directory whose first offset is the withdrawn
+    /// zero-pointer sentinel is therefore rejected, not silently
+    /// skipped.
     #[test]
-    fn bit_graphics_parse_title_accepts_raw_sparse_resource() {
+    fn bit_graphics_rejects_skipped_directory_slots() {
         let mut body = Vec::new();
         body.extend_from_slice(&2u16.to_le_bytes());
         body.extend_from_slice(&0u16.to_le_bytes());
-        body.extend_from_slice(&123u16.to_le_bytes());
-        body.extend_from_slice(&10u16.to_le_bytes());
-        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(&8u16.to_le_bytes());
         body.extend_from_slice(&8u16.to_le_bytes());
         body.extend_from_slice(&1u16.to_le_bytes());
         body.push(0b1010_0000);
 
-        let title = parse_title_bit(&body).unwrap();
-
-        assert_eq!(title.blocks.len(), 1);
-        assert_eq!((title.blocks[0].width, title.blocks[0].height), (8, 1));
-        assert_eq!(title.blocks[0].pixels, vec![1, 0, 1, 0, 0, 0, 0, 0]);
+        let err = parse_bit_sub_image_list(&body, "fixture.bit").unwrap_err();
+        assert!(
+            err.to_string().contains("contiguous layout"),
+            "a zero offset must be rejected as a broken directory: {err}"
+        );
     }
 
+    /// `formats/bit.md §3`: "The first offset in the table always
+    /// equals `2 + count * 2`", records are "stored back to back, in
+    /// offset order", and "the last sub-image ends exactly at the end
+    /// of the decoded image".
     #[test]
     fn bit_graphics_parses_title_bitmap_directory_body() {
         let mut body = Vec::new();
@@ -515,63 +513,103 @@
         assert_eq!(title.blocks[1].pixels, vec![1, 1, 1, 1, 0, 0, 0, 0, 1]);
     }
 
+    /// `formats/bit.md §2.1` structural test: "Try to parse the file
+    /// directly as the sub-image list of Section 3, starting at byte 0.
+    /// If the walk stays inside the file and consumes it exactly to the
+    /// last byte, the file is stored raw. This succeeds only for
+    /// `WD.BIT`. Otherwise treat the first four bytes as the LZW
+    /// decoded length, decode the remainder per `formats/lzw.md`, and
+    /// parse the decoded image as the sub-image list."
+    ///
+    /// `formats/lzw.md §1`: "This envelope applies to ... `TITLE.BIT`,
+    /// `BRITISH.BIT`, and `PROPORT.PCS`. The one documented exception
+    /// is `WD.BIT`. ... Earlier revisions of this document excluded the
+    /// whole `.BIT` and `.PCS` family from the envelope; that exclusion
+    /// was wrong." There is no separate "local pre-decoded" packaging:
+    /// `formats/bit.md §2.1` says "There is no known 'pre-decoded'
+    /// packaging variant of these files."
     #[test]
-    fn bit_graphics_canonical_parsers_do_not_decode_lzw_wrappers() {
+    fn bit_graphics_classify_raw_versus_enveloped_per_spec() {
         let mut title_body = Vec::new();
         title_body.extend_from_slice(&1u16.to_le_bytes());
         title_body.extend_from_slice(&4u16.to_le_bytes());
         title_body.extend_from_slice(&8u16.to_le_bytes());
         title_body.extend_from_slice(&1u16.to_le_bytes());
         title_body.push(0b1010_0000);
-        let wrapped_title = lzw_envelope_with_literal_body(&title_body);
 
-        assert!(parse_title_bit(&wrapped_title).is_err());
-        let legacy_title = parse_legacy_lzw_title_bit(&wrapped_title).unwrap();
-        assert_eq!(legacy_title.blocks.len(), 1);
-        assert_eq!(legacy_title.blocks[0].pixels, vec![1, 0, 1, 0, 0, 0, 0, 0]);
+        // Raw: the walk consumes the file exactly, so it is accepted
+        // without ever touching the LZW decoder.
+        let raw_title = parse_title_bit(&title_body).unwrap();
+        assert_eq!(raw_title.blocks.len(), 1);
+        assert_eq!(raw_title.blocks[0].pixels, vec![1, 0, 1, 0, 0, 0, 0, 0]);
+
+        // Enveloped: the same list behind the shared LZW envelope is the
+        // shipped form of TITLE.BIT and BRITISH.BIT, and it decodes
+        // through the same entry point.
+        let wrapped_title = lzw_envelope_with_literal_body(&title_body);
+        let enveloped_title = parse_title_bit(&wrapped_title).unwrap();
+        assert_eq!(enveloped_title.blocks[0].pixels, raw_title.blocks[0].pixels);
         let loaded_title = parse_title_bit_loaded_resource(&wrapped_title).unwrap();
-        assert_eq!(loaded_title.blocks[0].pixels, legacy_title.blocks[0].pixels);
+        assert_eq!(loaded_title.blocks[0].pixels, raw_title.blocks[0].pixels);
 
         let mut british_body = Vec::new();
-        british_body.extend_from_slice(&SINGLE_IMAGE_BIT_FORMAT_MARKER.to_le_bytes());
-        british_body.extend_from_slice(&SINGLE_IMAGE_BIT_MODE_MARKER.to_le_bytes());
+        british_body.extend_from_slice(&1u16.to_le_bytes());
+        british_body.extend_from_slice(&4u16.to_le_bytes());
         british_body.extend_from_slice(&8u16.to_le_bytes());
         british_body.extend_from_slice(&1u16.to_le_bytes());
         british_body.push(0b1100_0000);
         let wrapped_british = lzw_envelope_with_literal_body(&british_body);
 
-        assert!(parse_british_bit(&wrapped_british).is_err());
-        let legacy_british = parse_legacy_lzw_british_bit(&wrapped_british).unwrap();
-        assert_eq!(legacy_british.pixels, vec![1, 1, 0, 0, 0, 0, 0, 0]);
+        let british = parse_british_bit(&wrapped_british).unwrap();
+        assert_eq!(british.pixels, vec![1, 1, 0, 0, 0, 0, 0, 0]);
         let loaded_british = parse_british_bit_loaded_resource(&wrapped_british).unwrap();
-        assert_eq!(loaded_british.pixels, legacy_british.pixels);
+        assert_eq!(loaded_british.pixels, british.pixels);
+
+        // `WD.BIT` is the one raw member and reads through the same
+        // classification without an envelope.
+        let wd = parse_wd_bit(&british_body).unwrap();
+        assert_eq!(wd.pixels, british.pixels);
     }
 
+    /// `formats/bit.md §6`: a strict loader must "Require the first
+    /// offset to equal `2 + count * 2`", "Require each sub-image's row
+    /// data ... to stay inside the image", and "Require the sub-images
+    /// to tile the remainder of the image without gaps and to end
+    /// exactly at the end of the image".
     #[test]
-    fn bit_graphics_rejects_bad_markers_and_lengths() {
-        let mut bad_marker = Vec::new();
-        bad_marker.extend_from_slice(&2u16.to_le_bytes());
-        bad_marker.extend_from_slice(&SINGLE_IMAGE_BIT_MODE_MARKER.to_le_bytes());
-        bad_marker.extend_from_slice(&8u16.to_le_bytes());
-        bad_marker.extend_from_slice(&1u16.to_le_bytes());
-        bad_marker.push(0);
+    fn bit_graphics_rejects_bad_directories_and_lengths() {
+        // Count word only.
+        assert!(parse_bit_sub_image_list(&[0], "fixture.bit").is_err());
+        // Declared count of zero.
+        assert!(parse_bit_sub_image_list(&[0, 0], "fixture.bit").is_err());
 
-        assert!(parse_single_image_bit_body(&bad_marker, "fixture").is_err());
+        // First offset is not `2 + count * 2`.
+        let mut wrong_first_offset = Vec::new();
+        wrong_first_offset.extend_from_slice(&1u16.to_le_bytes());
+        wrong_first_offset.extend_from_slice(&6u16.to_le_bytes());
+        wrong_first_offset.extend_from_slice(&8u16.to_le_bytes());
+        wrong_first_offset.extend_from_slice(&1u16.to_le_bytes());
+        wrong_first_offset.push(0);
+        assert!(parse_bit_sub_image_list(&wrong_first_offset, "fixture.bit").is_err());
 
-        let mut bad_length = Vec::new();
-        bad_length.extend_from_slice(&SINGLE_IMAGE_BIT_FORMAT_MARKER.to_le_bytes());
-        bad_length.extend_from_slice(&SINGLE_IMAGE_BIT_MODE_MARKER.to_le_bytes());
-        bad_length.extend_from_slice(&8u16.to_le_bytes());
-        bad_length.extend_from_slice(&1u16.to_le_bytes());
+        // Row data runs past the end of the image.
+        let mut truncated_rows = Vec::new();
+        truncated_rows.extend_from_slice(&1u16.to_le_bytes());
+        truncated_rows.extend_from_slice(&4u16.to_le_bytes());
+        truncated_rows.extend_from_slice(&8u16.to_le_bytes());
+        truncated_rows.extend_from_slice(&1u16.to_le_bytes());
+        assert!(parse_bit_sub_image_list(&truncated_rows, "fixture.bit").is_err());
 
-        assert!(parse_single_image_bit_body(&bad_length, "fixture").is_err());
-        assert!(parse_sparse_bit_images(&[0], "fixture.bit").is_err());
-
-        let mut bad_sparse_pointer = Vec::new();
-        bad_sparse_pointer.extend_from_slice(&1u16.to_le_bytes());
-        bad_sparse_pointer.extend_from_slice(&99u16.to_le_bytes());
-        bad_sparse_pointer.extend_from_slice(&0u16.to_le_bytes());
-        assert!(parse_sparse_bit_images(&bad_sparse_pointer, "fixture.bit").is_err());
+        // Trailing bytes after the last record: the walk must not stop
+        // short of the end of the image.
+        let mut trailing = Vec::new();
+        trailing.extend_from_slice(&1u16.to_le_bytes());
+        trailing.extend_from_slice(&4u16.to_le_bytes());
+        trailing.extend_from_slice(&8u16.to_le_bytes());
+        trailing.extend_from_slice(&1u16.to_le_bytes());
+        trailing.push(0);
+        trailing.push(0);
+        assert!(parse_bit_sub_image_list(&trailing, "fixture.bit").is_err());
     }
 
     #[test]
@@ -831,56 +869,89 @@
         );
     }
 
+    /// `formats/font-pcs.md §3`: `PROPORT.PCS` is parsed as "the
+    /// sub-image list of `formats/bit.md` Section 3: a 2-byte count,
+    /// `count` 2-byte offsets, then contiguous sub-images of `width`,
+    /// `height`, and `max(1, ceil(width / 8)) * height` bytes of
+    /// one-bit-per-pixel rows".
+    ///
+    /// §7: "There are no sparse entries, no skipped pointers, and no
+    /// over-allocated table." The withdrawn four-byte strip-table
+    /// reading is gone, and index 0's zero width is still a full-stride
+    /// record: "a reader that sizes it as four bytes will lose
+    /// alignment for the whole rest of the file."
     #[test]
-    fn font_graphics_parses_sparse_proportional_font_resource() {
+    fn font_graphics_parses_proportional_font_resource_sub_image_list() {
         let mut body = Vec::new();
         body.extend_from_slice(&3u16.to_le_bytes());
+        body.extend_from_slice(&8u16.to_le_bytes());
+        body.extend_from_slice(&12u16.to_le_bytes());
+        body.extend_from_slice(&18u16.to_le_bytes());
+        // Record 0: the zero-width space still reserves one byte per row.
         body.extend_from_slice(&0u16.to_le_bytes());
-        body.extend_from_slice(&0xaaaa_u16.to_le_bytes());
-        body.extend_from_slice(&14u16.to_le_bytes());
-        body.extend_from_slice(&0xbbbb_u16.to_le_bytes());
-        body.extend_from_slice(&19u16.to_le_bytes());
-        body.extend_from_slice(&0xcccc_u16.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        // Record 1: 4 wide, 2 rows, one byte per row.
         body.extend_from_slice(&4u16.to_le_bytes());
         body.extend_from_slice(&2u16.to_le_bytes());
-        body.push(0b1011_0011);
+        body.extend_from_slice(&[0b1011_0000, 0b0011_0000]);
+        // Record 2: 2 wide, 1 row.
         body.extend_from_slice(&2u16.to_le_bytes());
         body.extend_from_slice(&1u16.to_le_bytes());
         body.push(0b1000_0000);
 
-        let resource = parse_sparse_proportional_font_resource(&body).unwrap();
+        let resource = parse_proportional_font_resource(&body).unwrap();
 
-        assert_eq!(resource.strips.len(), 2);
-        assert_eq!(resource.strip(0).map(|strip| (strip.width, strip.height)), Some((4, 2)));
-        assert_eq!(resource.strip(0).unwrap().pixels, vec![1, 0, 1, 1, 0, 0, 1, 1]);
-        assert_eq!(resource.strip(1).map(|strip| (strip.width, strip.height)), Some((2, 1)));
-        assert_eq!(resource.strip(2), None);
+        assert_eq!(resource.strips.len(), 3);
+        assert_eq!(
+            resource.strip(0).map(|strip| (strip.width, strip.height)),
+            Some((0, 0))
+        );
+        assert_eq!(
+            resource.strip(1).map(|strip| (strip.width, strip.height)),
+            Some((4, 2))
+        );
+        assert_eq!(resource.strip(1).unwrap().pixels, vec![1, 0, 1, 1, 0, 0, 1, 1]);
+        assert_eq!(
+            resource.strip(2).map(|strip| (strip.width, strip.height)),
+            Some((2, 1))
+        );
+        assert_eq!(resource.strip(3), None);
     }
 
+    /// `formats/font-pcs.md §1`: "It uses exactly the container
+    /// documented in `formats/bit.md`: the shared LZW envelope of
+    /// `formats/lzw.md` wrapping a one-bit-per-pixel sub-image list.
+    /// Earlier revisions of this document described a
+    /// 'driver-compressed sparse strip resource' and told readers not to
+    /// feed the file to the LZW decoder. That was wrong in both
+    /// directions and has been replaced."
+    ///
+    /// The resource loader therefore accepts the enveloped shipped file
+    /// instead of rejecting it.
     #[test]
-    fn font_graphics_canonical_resource_does_not_decode_lzw_wrappers() {
-        let mut legacy_body = Vec::new();
-        legacy_body.extend_from_slice(&1u16.to_le_bytes());
-        legacy_body.extend_from_slice(&4u16.to_le_bytes());
-        legacy_body.extend_from_slice(&3u16.to_le_bytes());
-        legacy_body.extend_from_slice(&(PCS_GLYPH_HEIGHT as u16).to_le_bytes());
-        legacy_body.extend_from_slice(&[0b1110_0000; PCS_GLYPH_HEIGHT]);
-        let wrapped = lzw_envelope_with_literal_body(&legacy_body);
+    fn font_graphics_resource_loader_decodes_the_lzw_envelope() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&1u16.to_le_bytes());
+        body.extend_from_slice(&4u16.to_le_bytes());
+        body.extend_from_slice(&3u16.to_le_bytes());
+        body.extend_from_slice(&(PCS_GLYPH_HEIGHT as u16).to_le_bytes());
+        body.extend_from_slice(&[0b1110_0000; PCS_GLYPH_HEIGHT]);
+        let wrapped = lzw_envelope_with_literal_body(&body);
 
-        assert!(parse_proportional_font_resource(&wrapped).is_err());
-        let legacy_resource = parse_legacy_lzw_proportional_font_resource(&wrapped).unwrap();
-        assert_eq!(legacy_resource.strips.len(), 1);
-        // The single-glyph fixture body is also a well-formed one-entry sparse
-        // strip, so the compatibility loader's sparse attempt wins and reports
-        // the glyph's ink width rather than the full 8-pixel bitmap cell.
+        let resource = parse_proportional_font_resource(&wrapped).unwrap();
+        assert_eq!(resource.strips.len(), 1);
         assert_eq!(
-            legacy_resource.strip(0).map(|strip| (strip.width, strip.height)),
+            resource.strip(0).map(|strip| (strip.width, strip.height)),
             Some((3, PCS_GLYPH_HEIGHT))
         );
 
-        let legacy_font = parse_legacy_lzw_proportional_font(&wrapped).unwrap();
-        assert_eq!(legacy_font.glyphs.len(), 1);
-        assert_eq!(legacy_font.glyph_for_code(PCS_FIRST_CODE).unwrap().advance_width, 3);
+        // The glyph-directory view of the same file agrees.
+        let font = parse_proportional_font(&wrapped).unwrap();
+        assert_eq!(font.glyphs.len(), 1);
+        assert_eq!(
+            font.glyph_for_code(PCS_FIRST_CODE).unwrap().advance_width,
+            3
+        );
     }
 
     #[test]
@@ -946,22 +1017,34 @@
             assert_eq!(line.pixels.len(), 32 * 12);
         }
         if game_dir.join(PROPORT_PCS_FILE).exists() {
-            match load_proportional_font_resource(game_dir) {
-                Ok(resource) => {
-                    assert!(resource.strips.iter().all(|strip| {
-                        strip.width > 0
-                            && strip.height > 0
-                            && strip.pixels.len() == strip.width * strip.height
-                            && strip.pixels.iter().all(|pixel| *pixel <= 1)
-                    }));
-                }
-                Err(err) => {
-                    assert!(
-                        err.to_string().contains("sparse strip"),
-                        "strict PROPORT.PCS loader must fail loudly on noncanonical assets: {err}"
-                    );
-                }
-            }
+            // `formats/font-pcs.md §1`: the shipped file is the shared
+            // LZW envelope wrapping a one-bit-per-pixel sub-image list,
+            // so the strict resource loader must accept it. "Earlier
+            // revisions of this document described a
+            // 'driver-compressed sparse strip resource' and told
+            // readers not to feed the file to the LZW decoder. That was
+            // wrong in both directions and has been replaced."
+            let resource = load_proportional_font_resource(game_dir)
+                .expect("shipped PROPORT.PCS is the LZW-enveloped sub-image list");
+            // §1: "The file holds **91** sub-images, one per glyph ...
+            // Every glyph is 8 rows tall and 0 to 8 pixels wide."
+            assert_eq!(resource.strips.len(), 91);
+            assert!(resource.strips.iter().all(|strip| {
+                strip.width <= PCS_GLYPH_BITMAP_WIDTH
+                    && strip.height == PCS_GLYPH_HEIGHT
+                    && strip.pixels.len() == strip.width * strip.height
+                    && strip.pixels.iter().all(|pixel| *pixel <= 1)
+            }));
+            // §3: "Index 0 is the only record with a width of zero, and
+            // it is still 12 bytes."
+            assert_eq!(resource.strip(0).map(|strip| strip.width), Some(0));
+            assert!(
+                resource
+                    .strips
+                    .iter()
+                    .skip(1)
+                    .all(|strip| strip.width > 0)
+            );
         }
     }
 

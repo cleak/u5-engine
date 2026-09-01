@@ -14,7 +14,7 @@
 //! out.
 
 use crate::karma::{KarmaAction, apply_karma_action};
-use crate::map_io::talk_branch_flag_is_set;
+use crate::map_io::{TALK_BRANCH_FLAG_BANK_BITS, talk_branch_flag_is_set, talk_branch_flag_mask};
 use crate::tlk_control_codes::*;
 
 /// Inputs the runner needs to interpret control codes that would otherwise
@@ -41,11 +41,14 @@ pub struct TlkRunInputs<'a> {
     /// demand above this value takes the refusal stop. `None` is useful for
     /// structural tools and treats the demand as affordable.
     pub gold_available: Option<u16>,
-    /// `0x84` ASK-PARTY-NAME response: 1-based party-slot index that
-    /// matched, or `0` for no match. The runner stores it for the caller
-    /// but does not branch on it directly (the shipped blobs gate the
-    /// follow-up text via separate flags).
-    pub ask_party_name_response: u8,
+    /// `conversation.md §7.6` / §10: roster slot of the NPC currently
+    /// speaking. This is the branch-flag bit index that `0x8C` IF-ELSE
+    /// tests and that `0x88` ASK-WHO sets — "The bit index is always
+    /// supplied by the engine ... so a script can neither choose nor
+    /// forge it." `None` means the caller could not name a slot; §10 asks
+    /// that such an index build a zero mask, so those tests read as clear
+    /// and those setters are no-ops.
+    pub npc_slot: Option<u8>,
     /// `0x88` ASK-WHO response: 1-based party-slot index, or `0` for
     /// cancel/no match. Recorded for the caller.
     pub ask_who_response: u8,
@@ -55,10 +58,11 @@ pub struct TlkRunInputs<'a> {
     /// resume. When `false`, the runner treats pauses as no-ops and
     /// wait-key as a single newline and keeps going.
     pub yield_on_pause: bool,
-    /// `0x84` ASK-PARTY-NAME / `0x88` ASK-WHO behaviour. When `true`,
-    /// the runner stops immediately after the ask code so the
-    /// interactive conversation wrapper can collect a free-text answer
-    /// and resume the same stream with the matched party slot.
+    /// `0x88` ASK-WHO behaviour. When `true`, the runner stops
+    /// immediately after the ask code so the interactive conversation
+    /// wrapper can collect a free-text answer and resume the same stream
+    /// with the matched party slot. `0x84` RECRUIT-SPEAKER is *not*
+    /// governed by this flag: §7.6 gives it no prompt and no input read.
     pub yield_on_ask: bool,
 }
 
@@ -78,8 +82,6 @@ pub enum TlkRunStop {
     PausedAt(usize),
     /// Stopped at `0x8F` WAIT-KEY (only when `yield_on_pause` is set).
     WaitingKey(usize),
-    /// Stopped at `0x84` ASK-PARTY-NAME (only when `yield_on_ask` is set).
-    AskingPartyName(usize),
     /// Stopped at `0x88` ASK-WHO (only when `yield_on_ask` is set).
     AskingWho(usize),
     /// `conversation.md §7.6`: an unaffordable `0x85` demand stops the
@@ -93,29 +95,27 @@ pub enum TlkRunStop {
     /// in the stream beyond the current cursor). The runner stops to
     /// avoid an infinite loop.
     UnresolvedGotoLabel(u8),
-    /// Hit `0x87` SET-FLAG / follow-up keyword scan. `cursor` points
-    /// just past the control byte; the conversation wrapper owns the
-    /// recursive keyword scan and then resumes this stream from there.
-    FollowUpKeywordScan(usize),
+    /// Hit `0x87` KEYWORD-ALIAS. `cursor` is the saved resume position,
+    /// just past the control byte.
+    ///
+    /// `conversation.md §7.6`: the code is **positional**. The wrapper
+    /// skips the remainder of this record, any run of terminators, and
+    /// the whole record that follows, then runs the record after that as
+    /// a nested stream; if the nested stream signals stop the outer
+    /// stream stops too, otherwise it resumes from `cursor`. The runner
+    /// itself cannot see record boundaries, so it surfaces the code and
+    /// lets the session — which holds the split records — do the skip.
+    ///
+    /// *Corrected:* this was `FollowUpKeywordScan`, and the session
+    /// re-scanned the player's typed remainder against later keyword
+    /// entries. §7.6 withdraws both that and the SET-FLAG mnemonic:
+    /// `0x87` "does no string comparison, reads no player input,
+    /// consumes no argument byte, and writes no flag."
+    KeywordAlias(usize),
     /// Encountered a `0x91..=0x9F` label byte through ordinary stream
     /// execution. The conversation session owns the labelled-record
     /// handler and any scoped prompt that follows.
     LabelTransfer(u8),
-    /// Ran into a `0x90 <label>` record-declaration marker
-    /// (`conversation.md` §7.7) while executing a stream. Both marker
-    /// bytes are consumed; the payload is the declared label.
-    ///
-    /// This is distinct from [`TlkRunStop::LabelTransfer`]: that is a
-    /// GOTO *to* a label, this is arriving at a label's *declaration*,
-    /// which means the current record ended without its own terminator.
-    ///
-    /// **Spec gap.** §7.7 publishes the marker's shape and its role in
-    /// the label scan, but not what the byte runner does on reaching one
-    /// through ordinary in-stream execution. Rather than guess between
-    /// "inert separator, keep running into the next record" and "the
-    /// record ended", the runner surfaces the marker and stops. Callers
-    /// that need the other reading should resume from `consumed`.
-    LabelRecordMarker(u8),
 }
 
 /// One side-effect emitted while running a stream.
@@ -127,8 +127,10 @@ pub enum TlkRunEvent {
     SignalFlag(u8),
     /// `0x85` GOLD-PAYMENT (amount, accepted).
     GoldPayment { amount: u16, accepted: bool },
-    /// `0x84` ASK-PARTY-NAME: 1-based slot match (0 = no match).
-    AskedPartyName(u8),
+    /// `0x84` RECRUIT-SPEAKER was reached. Carries no payload: §7.6
+    /// gives the code no arguments, no prompt and no input read. The
+    /// caller performs the reserve-roster recruitment.
+    RecruitSpeaker,
     /// `0x88` ASK-WHO: 1-based slot match (0 = cancel/no match).
     AskedWho(u8),
     /// `0x8B` CURSE-CHECK was reached.
@@ -137,9 +139,16 @@ pub enum TlkRunEvent {
     WaitKeyTreatedAsNewline,
     /// `0x83` PAUSE encountered (when `yield_on_pause` false).
     PauseSkipped,
-    /// `0x8C` IF/ELSE branch entered: `taken_else` reflects whether the
-    /// flag-bit was set (per §7.6 the *set* path is the ELSE arm).
-    IfElseBranchTaken { bit: u8, taken_else: bool },
+    /// `0x8C` IF-ELSE branch decision. `bit` is the engine-chosen branch
+    /// flag index (the speaking NPC's roster slot), `target_label` is the
+    /// code's argument byte, and `taken_else` reflects whether the bit was
+    /// set — the arm that transfers to `target_label` (or, for the
+    /// reserved `0xFF`, ends the response).
+    IfElseBranchTaken {
+        bit: u8,
+        target_label: u8,
+        taken_else: bool,
+    },
     /// `0xFE` IF-ELSE-ALT branch decision.
     IfElseAltDecision {
         threshold: u8,
@@ -199,6 +208,39 @@ impl TlkRenderedGlyph {
     }
 }
 
+/// Project engine-authored Rust text onto display cells in `font`.
+///
+/// `formats/font-ch.md §4`: "The format has no storage for high-bit
+/// character codes. The resident text emitter owns that caller-side
+/// policy: ordinary cell output ignores high-bit bytes unless an adjacent
+/// extended-control path has already consumed them." `text-output.md §5`
+/// says the same from the emitter's side — only "a byte with the high bit
+/// clear" renders a glyph, and "other high-bit bytes outside the confirmed
+/// control range have no public glyph meaning".
+///
+/// A Rust `&str` is UTF-8, so a character the font cannot address is one
+/// uncell-able character, never the two-or-more bytes `str::bytes` would
+/// yield. Iterating bytes here would hand the fixed-cell renderer a UTF-8
+/// lead byte — `0xC3` for anything in `U+00C0..=U+00FF` — which no `.CH`
+/// glyph slot covers and which the renderer rightly refuses to draw. So
+/// walk characters and drop the ones outside the font's seven-bit range:
+/// an ignored character occupies no cell, which keeps wrapping and column
+/// arithmetic aligned with what is actually painted.
+pub fn glyphs_from_engine_text(text: &str, font: TlkGlyphFont) -> Vec<TlkRenderedGlyph> {
+    text.chars()
+        .filter(char::is_ascii)
+        .map(|ch| TlkRenderedGlyph {
+            byte: ch as u8,
+            font,
+        })
+        .collect()
+}
+
+/// [`glyphs_from_engine_text`] in the resident text font.
+pub fn ordinary_glyphs_from_engine_text(text: &str) -> Vec<TlkRenderedGlyph> {
+    glyphs_from_engine_text(text, TlkGlyphFont::Ordinary)
+}
+
 /// Text plus its per-cell font selection. `text` remains the terminal and
 /// diagnostics view; `glyphs` is the authoritative graphical presentation.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -210,14 +252,13 @@ pub struct TlkRenderedText {
 impl TlkRenderedText {
     pub fn plain(text: impl Into<String>) -> Self {
         let text = text.into();
-        let glyphs = text.bytes().map(TlkRenderedGlyph::ordinary).collect();
+        let glyphs = ordinary_glyphs_from_engine_text(&text);
         Self { text, glyphs }
     }
 
     pub fn push_plain(&mut self, text: &str) {
         self.text.push_str(text);
-        self.glyphs
-            .extend(text.bytes().map(TlkRenderedGlyph::ordinary));
+        self.glyphs.extend(ordinary_glyphs_from_engine_text(text));
     }
 
     pub fn push_rendered(&mut self, rendered: &Self) {
@@ -266,9 +307,11 @@ pub struct TlkRunOutput {
     pub rendered_glyphs: Vec<TlkRenderedGlyph>,
     /// Mask of branch-flag bits the stream set.
     ///
-    /// Kept for conversation-session compatibility with callers that
-    /// merge branch effects, though the public `0x87` contract is a
-    /// follow-up keyword scan rather than a direct bit setter.
+    /// `conversation.md §7.6`: `0x88` ASK-WHO is the bank's in-stream
+    /// setter — "an implementation ... must not conclude that the bank
+    /// has no setter." A successful ASK-WHO raises the speaking NPC's own
+    /// roster-slot bit here; the caller merges it into the active scene's
+    /// durable branch-flag word.
     pub branch_flags_set: u32,
     /// Action-dispatch verbs encountered, in order.
     pub action_grants: Vec<TlkActionDispatchVerb>,
@@ -305,8 +348,8 @@ fn emit_rendered_glyph(out: &mut TlkRunOutput, glyph: TlkRenderedGlyph) {
 }
 
 fn emit_rendered_text(out: &mut TlkRunOutput, text: &str, font: TlkGlyphFont) {
-    for byte in text.bytes() {
-        emit_rendered_glyph(out, TlkRenderedGlyph { byte, font });
+    for glyph in glyphs_from_engine_text(text, font) {
+        emit_rendered_glyph(out, glyph);
     }
 }
 
@@ -448,19 +491,17 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 // was typed in the meantime.
                 curse_pending = false;
             }
-            TLK_CODE_SET_FLAG => {
-                out.stop = TlkRunStop::FollowUpKeywordScan(pos);
+            TLK_CODE_KEYWORD_ALIAS => {
+                out.stop = TlkRunStop::KeywordAlias(pos);
                 out.consumed = pos;
                 return out;
             }
-            TLK_CODE_ASK_PARTY_NAME => {
-                if inputs.yield_on_ask {
-                    out.stop = TlkRunStop::AskingPartyName(pos);
-                    out.consumed = pos;
-                    return out;
-                }
-                let slot = inputs.ask_party_name_response;
-                out.events.push(TlkRunEvent::AskedPartyName(slot));
+            TLK_CODE_RECRUIT_SPEAKER => {
+                // §7.6: "There is no player prompt and no input read."
+                // The code consumes no argument bytes and does not stop
+                // the stream; the caller matches the speaker's own name
+                // against the reserve roster when it sees the event.
+                out.events.push(TlkRunEvent::RecruitSpeaker);
             }
             TLK_CODE_ASK_WHO => {
                 if inputs.yield_on_ask {
@@ -469,6 +510,12 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     return out;
                 }
                 let slot = inputs.ask_who_response;
+                if slot != 0 {
+                    // §7.6: ASK-WHO is the in-stream setter for the bank
+                    // `0x8C` tests, and the bit is the speaking NPC's own
+                    // roster slot. An absent slot builds a zero mask (§10).
+                    out.branch_flags_set |= inputs.npc_slot.map_or(0, talk_branch_flag_mask);
+                }
                 out.events.push(TlkRunEvent::AskedWho(slot));
             }
             TLK_CODE_GOLD_PAYMENT => {
@@ -516,24 +563,56 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 }
             }
             TLK_CODE_IF_ELSE => {
-                let Some(&arg) = bytes.get(pos) else {
+                let arg_start = pos;
+                let Some(&target_label) = bytes.get(pos) else {
                     out.stop = TlkRunStop::MalformedIntroducer(pos);
                     out.consumed = pos;
                     return out;
                 };
                 pos += 1;
-                let bit = arg & 0x7F;
+                let arg_end = pos;
+                // §7.6: the argument byte is the **branch target label**,
+                // and "The tested bit is chosen by the engine, never by
+                // the script" — it is the roster slot of the NPC currently
+                // speaking. §7.6 closes: "a clean implementation must not
+                // model `0x8C`'s argument as a flag id".
+                //
+                // *Corrected:* this arm used to mask the argument to seven
+                // bits, test that as a flag index, and on a set bit scan
+                // forward to the next label byte. Both halves are
+                // withdrawn, and the fold also swallowed the reserved
+                // `0xFF` argument, which became bit index `0x7F` and so
+                // always read as clear.
+                let bit = inputs.npc_slot.unwrap_or(TALK_BRANCH_FLAG_BANK_BITS);
                 let flag_set = talk_branch_flag_is_set(inputs.branch_flags, bit);
                 out.events.push(TlkRunEvent::IfElseBranchTaken {
                     bit,
+                    target_label,
                     taken_else: flag_set,
                 });
-                // Per §7.6: if the flag bit is *set*, the runner jumps
-                // straight to the ELSE arm. Arms are delimited by GOTO
-                // label bytes (`0x91..=0x9F`); the not-taken arm is
-                // skipped by scanning forward to the next label byte.
+                // Bit clear: fall through in-stream with the byte after
+                // the argument, which `pos` already names.
                 if flag_set {
-                    pos = skip_to_next_label(bytes, pos);
+                    if target_label == TLK_IF_ELSE_END_RESPONSE_ARGUMENT {
+                        // The reserved argument ends the response and
+                        // returns to the keyword prompt. This is the guard
+                        // that fronts the shipped introduce-yourself idiom.
+                        out.stop = TlkRunStop::EndOfResponse;
+                        out.consumed = pos;
+                        return out;
+                    }
+                    let Some(target_pos) =
+                        find_label_position_excluding(bytes, target_label, arg_start, arg_end)
+                    else {
+                        out.stop = TlkRunStop::UnresolvedGotoLabel(target_label);
+                        out.consumed = pos;
+                        return out;
+                    };
+                    out.events.push(TlkRunEvent::GotoLabel {
+                        from: TLK_CODE_IF_ELSE,
+                        to: target_label,
+                    });
+                    pos = target_pos;
                 }
             }
             TLK_CODE_IF_ELSE_ALT => {
@@ -569,36 +648,6 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                         return out;
                     }
                 }
-            }
-            TLK_CODE_LABEL_RECORD => {
-                // `conversation.md` §7.7 / `tlk.md` §9: a label is
-                // *declared* by the two-byte record marker `0x90 <label>`,
-                // and `0x90` is "data structure, not ordinary printable
-                // text". Both bytes belong to the marker, so both are
-                // consumed here.
-                //
-                // Consuming only the `0x90` — which is what the silent
-                // catch-all did — left the declaration's label byte to be
-                // re-dispatched by the arm below, turning a record *header*
-                // into a [`TlkRunStop::LabelTransfer`], i.e. reading a
-                // declaration as a GOTO.
-                let Some(&label) = bytes.get(pos) else {
-                    out.stop = TlkRunStop::MalformedIntroducer(pos);
-                    out.consumed = pos;
-                    return out;
-                };
-                pos += 1;
-                // Reaching a record separator by falling through in-stream
-                // means the current record ran past its own terminator into
-                // the next record's header. §7.7 does not publish what the
-                // dispatcher does here, so the runner refuses to invent
-                // flow: it stops with a named reason and lets the
-                // conversation session, which owns labelled-block and
-                // scoped-prompt handling, decide. See the doc comment on
-                // [`TlkRunStop::LabelRecordMarker`].
-                out.stop = TlkRunStop::LabelRecordMarker(label);
-                out.consumed = pos;
-                return out;
             }
             _ => {
                 if is_tlk_label_byte(byte) {
@@ -641,7 +690,16 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                         last_emitted = Some(b']');
                         leading_space_pending = true;
                     }
-                } else if (TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST).contains(&byte) {
+                } else if byte == TLK_CODE_LABEL_RECORD
+                    || (TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST).contains(&byte)
+                {
+                    // `conversation.md §7.7`, corrected by public issue
+                    // #164 / retraction R278: `0x90` is structural only to
+                    // the label scanner. The ordinary runner has no control
+                    // case, so it follows this printable fall-through and
+                    // emits glyph `0x10`; the following `0x91..=0x9F` byte is
+                    // dispatched independently as an active GOTO. There is
+                    // no label-boundary flush or pending-space reset.
                     let glyph = byte ^ TLK_TEXT_XOR_MASK;
                     if byte == TLK_DOUBLE_QUOTE_ENCODED && last_emitted == Some(b'"') {
                         // §7.5 double-quote dedup: collapse adjacent ""
@@ -677,9 +735,8 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     // This arm used to skip the byte in silence, which made
                     // the first of those two undetectable: a missing case
                     // rendered as absent text with no event, no stop, and no
-                    // failing test. `0x90` LABEL-RECORD lived here unnoticed
-                    // for exactly that reason. The byte is now recorded as an
-                    // event so callers and tests can see it, and `debug_assert`
+                    // failing test. Missing bytes are recorded as an event so
+                    // callers and tests can see them, and `debug_assert`
                     // turns it into a hard failure in test and dev builds while
                     // leaving release builds able to survive a malformed
                     // third-party file mid-conversation.
@@ -699,19 +756,6 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
 
     out.consumed = pos;
     out
-}
-
-/// Skip past the next label byte (`0x91..=0x9F`). Used by the IF-ELSE
-/// taken-branch logic to jump over the not-taken arm.
-fn skip_to_next_label(bytes: &[u8], from: usize) -> usize {
-    let mut pos = from;
-    while pos < bytes.len() {
-        if is_tlk_label_byte(bytes[pos]) {
-            return pos + 1;
-        }
-        pos += 1;
-    }
-    pos
 }
 
 /// Scan forward from byte 0 for the supplied label byte after a label
@@ -976,12 +1020,15 @@ mod tests {
     }
 
     #[test]
-    fn set_flag_yields_follow_up_keyword_scan_without_consuming_next_byte() {
-        let mut bytes = vec![TLK_CODE_SET_FLAG];
+    fn keyword_alias_yields_the_saved_resume_cursor_and_consumes_no_argument() {
+        // §7.6: `0x87` "consumes no argument byte". The runner cannot see
+        // record boundaries, so it surfaces the code with the saved
+        // position and lets the session do the positional skip.
+        let mut bytes = vec![TLK_CODE_KEYWORD_ALIAS];
         bytes.extend_from_slice(&enc("tail"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = render(&bytes);
-        assert_eq!(out.stop, TlkRunStop::FollowUpKeywordScan(1));
+        assert_eq!(out.stop, TlkRunStop::KeywordAlias(1));
         assert_eq!(out.consumed, 1);
         assert!(out.text.is_empty());
 
@@ -989,36 +1036,111 @@ mod tests {
         assert_eq!(resumed.text, "tail");
     }
 
-    #[test]
-    fn if_else_falls_through_when_flag_clear() {
-        // 0x8C arg=2; "THEN" arm; label 0x91; "ELSE" arm; EOR.
-        let mut bytes = vec![TLK_CODE_IF_ELSE, 0x02];
+    /// `0x8C <label>`; fall-through arm; label `0x91`; target arm; EOR.
+    fn if_else_stream(target_label: u8) -> Vec<u8> {
+        let mut bytes = vec![TLK_CODE_IF_ELSE, target_label];
         bytes.extend_from_slice(&enc("then"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
         bytes.push(0x91);
         bytes.extend_from_slice(&enc("else"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
-        let out = render(&bytes);
-        assert!(out.text.starts_with("then"));
+        bytes
     }
 
     #[test]
-    fn if_else_jumps_past_label_when_flag_set() {
-        let mut bytes = vec![TLK_CODE_IF_ELSE, 0x02];
+    fn if_else_falls_through_when_the_speaking_npc_bit_is_clear() {
+        // §7.6: "If the bit is clear, fall through in-stream with the byte
+        // after the argument."
+        let bytes = if_else_stream(0x91);
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                npc_slot: Some(2),
+                branch_flags: 0,
+                ..Default::default()
+            },
+        );
+        assert!(out.text.starts_with("then"));
+        assert!(!out.text.contains("else"));
+    }
+
+    #[test]
+    fn if_else_transfers_to_the_record_its_argument_names() {
+        // §7.6: the argument byte "is the branch target label", and the
+        // tested bit is the speaking NPC's roster slot — never the
+        // argument. Here the argument names label 0x91 while the bit that
+        // decides is slot 2.
+        let bytes = if_else_stream(0x91);
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                npc_slot: Some(2),
+                branch_flags: 1u32 << 2,
+                ..Default::default()
+            },
+        );
+        assert!(!out.text.contains("then"));
+        assert!(out.text.contains("else"));
+        assert!(out.events.iter().any(|e| matches!(
+            e,
+            TlkRunEvent::GotoLabel {
+                from: TLK_CODE_IF_ELSE,
+                to: 0x91
+            }
+        )));
+    }
+
+    #[test]
+    fn if_else_tests_the_npc_slot_not_the_argument_byte() {
+        // The argument is 0x92 here. Under the withdrawn flag-id reading
+        // the runner would have tested bit 0x12; under the published one
+        // it tests the speaking NPC's slot, which is clear.
+        let mut bytes = vec![TLK_CODE_IF_ELSE, 0x92];
         bytes.extend_from_slice(&enc("then"));
-        bytes.push(0x91);
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        bytes.push(0x92);
         bytes.extend_from_slice(&enc("else"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = run_tlk_stream(
             &bytes,
             &TlkRunInputs {
-                branch_flags: 1u32 << 2,
+                npc_slot: Some(3),
+                branch_flags: 1u32 << 0x12,
                 ..Default::default()
             },
         );
-        // With the flag bit set, the runner skips to past 0x91 — the
-        // "else" arm — so "then" must not appear.
-        assert!(!out.text.contains("then"));
-        assert!(out.text.contains("else"));
+        assert!(out.text.starts_with("then"));
+    }
+
+    #[test]
+    fn if_else_reserved_ff_argument_ends_the_response() {
+        // §7.6: "or, for the reserved argument `0xFF`, end the response
+        // and return to the keyword prompt". This is the guard that fronts
+        // the shipped introduce-yourself idiom.
+        let mut bytes = vec![TLK_CODE_IF_ELSE, TLK_IF_ELSE_END_RESPONSE_ARGUMENT];
+        bytes.extend_from_slice(&enc("introduction"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let known = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                npc_slot: Some(4),
+                branch_flags: 1u32 << 4,
+                ..Default::default()
+            },
+        );
+        assert_eq!(known.stop, TlkRunStop::EndOfResponse);
+        assert!(known.text.is_empty());
+
+        // A stranger falls through and hears the introduction.
+        let stranger = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                npc_slot: Some(4),
+                branch_flags: 0,
+                ..Default::default()
+            },
+        );
+        assert_eq!(stranger.text, "introduction");
     }
 
     #[test]
@@ -1190,30 +1312,81 @@ mod tests {
     }
 
     #[test]
-    fn ask_party_name_and_ask_who_record_responses() {
-        let bytes = vec![
-            TLK_CODE_ASK_PARTY_NAME,
-            TLK_CODE_ASK_WHO,
-            TLK_CODE_END_OF_RESPONSE,
-        ];
+    fn recruit_speaker_neither_prompts_nor_stops_the_stream() {
+        // §7.6: `0x84` has "no player prompt and no input read", takes no
+        // argument bytes, and the response keeps emitting around it.
+        let mut bytes = enc("Aye. ");
+        bytes.push(TLK_CODE_RECRUIT_SPEAKER);
+        bytes.extend_from_slice(&enc("I come."));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = run_tlk_stream(
             &bytes,
             &TlkRunInputs {
-                ask_party_name_response: 2,
+                // Even with the interactive ask yield armed, RECRUIT-SPEAKER
+                // must not stop: `yield_on_ask` governs `0x88` alone.
+                yield_on_ask: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, "Aye. I come.");
+        assert_eq!(out.stop, TlkRunStop::EndOfResponse);
+        assert!(
+            out.events
+                .iter()
+                .any(|e| matches!(e, TlkRunEvent::RecruitSpeaker))
+        );
+    }
+
+    #[test]
+    fn ask_who_sets_the_speaking_npc_branch_bit_on_a_match() {
+        // §7.6: ASK-WHO "is the in-stream setter for the bank that `0x8C`
+        // tests", and the bit is the speaking NPC's own roster slot.
+        let bytes = vec![TLK_CODE_ASK_WHO, TLK_CODE_END_OF_RESPONSE];
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                npc_slot: Some(5),
                 ask_who_response: 3,
                 ..Default::default()
             },
         );
-        assert!(
-            out.events
-                .iter()
-                .any(|e| matches!(e, TlkRunEvent::AskedPartyName(2)))
-        );
+        assert_eq!(out.branch_flags_set, 1u32 << 5);
         assert!(
             out.events
                 .iter()
                 .any(|e| matches!(e, TlkRunEvent::AskedWho(3)))
         );
+    }
+
+    #[test]
+    fn ask_who_sets_nothing_on_empty_or_unmatched_input() {
+        let bytes = vec![TLK_CODE_ASK_WHO, TLK_CODE_END_OF_RESPONSE];
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                npc_slot: Some(5),
+                ask_who_response: 0,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.branch_flags_set, 0);
+    }
+
+    #[test]
+    fn ask_who_without_a_named_npc_slot_builds_a_zero_mask() {
+        // §10: an index the engine cannot name "should make it build a
+        // zero mask, so such tests read as clear and such setters are
+        // no-ops".
+        let bytes = vec![TLK_CODE_ASK_WHO, TLK_CODE_END_OF_RESPONSE];
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                npc_slot: None,
+                ask_who_response: 2,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.branch_flags_set, 0);
     }
 
     #[test]
@@ -1269,25 +1442,25 @@ mod tests {
     }
 
     #[test]
-    fn ask_codes_can_yield_and_resume_same_stream() {
+    fn ask_who_can_yield_and_resume_same_stream() {
         let mut inputs = TlkRunInputs {
             yield_on_ask: true,
             ..Default::default()
         };
-        let mut bytes = enc("Name:");
-        bytes.push(TLK_CODE_ASK_PARTY_NAME);
+        let mut bytes = enc("Who:");
+        bytes.push(TLK_CODE_ASK_WHO);
         bytes.extend_from_slice(&enc("Done"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
 
         let first = run_tlk_stream(&bytes, &inputs);
-        assert_eq!(first.text, "Name:");
+        assert_eq!(first.text, "Who:");
         assert!(matches!(
             first.stop,
-            TlkRunStop::AskingPartyName(cursor) if cursor == enc("Name:").len() + 1
+            TlkRunStop::AskingWho(cursor) if cursor == enc("Who:").len() + 1
         ));
 
         inputs.yield_on_ask = false;
-        inputs.ask_party_name_response = 2;
+        inputs.ask_who_response = 2;
         let resumed = run_tlk_stream_from(&bytes, first.consumed, &inputs);
         assert_eq!(resumed.text, "Done");
         assert_eq!(resumed.stop, TlkRunStop::EndOfResponse);
@@ -1693,30 +1866,19 @@ mod tests {
         );
     }
 
-    /// `conversation.md §7.7` / `tlk.md §9`: a label is declared by the
-    /// two-byte marker `0x90 <label>`. Both bytes belong to the marker.
-    ///
-    /// Before `0x90` had a dispatcher case it fell into the unclassified
-    /// arm and was skipped, leaving its label byte to be re-dispatched as
-    /// a GOTO — a record *declaration* read as a transfer. This asserts
-    /// the two outcomes are distinguishable.
+    /// `conversation.md §7.7`, public issue #164 / R278: `0x90` is a
+    /// declaration marker to the scanner but an accidental printable byte to
+    /// ordinary execution. Its successor is dispatched independently.
     #[test]
-    fn label_record_marker_consumes_its_label_and_is_not_a_goto_transfer() {
-        let mut bytes = enc("body");
+    fn ordinary_label_marker_prints_codepoint_10_then_dispatches_the_label() {
+        let mut bytes = enc("A");
         bytes.push(TLK_CODE_LABEL_RECORD);
-        bytes.push(0x93);
-        bytes.extend_from_slice(&enc("next record"));
+        bytes.push(0x91);
         let out = render(&bytes);
 
-        assert_eq!(out.text, "body");
-        assert_eq!(out.stop, TlkRunStop::LabelRecordMarker(0x93));
-        // Both marker bytes consumed: 4 text + 0x90 + 0x93.
-        assert_eq!(out.consumed, 6);
-        assert!(
-            !matches!(out.stop, TlkRunStop::LabelTransfer(_)),
-            "a declaration must not read as a transfer"
-        );
-        // And nothing reached the unclassified arm.
+        assert_eq!(out.text.as_bytes(), &[b'A', 0x10]);
+        assert_eq!(out.stop, TlkRunStop::LabelTransfer(0x91));
+        assert_eq!(out.consumed, 3);
         assert!(
             !out.events
                 .iter()
@@ -1724,14 +1886,14 @@ mod tests {
         );
     }
 
-    /// A bare `0x90` with no label byte after it is a truncated marker,
-    /// reported the same way as a short multi-byte introducer argument
-    /// span rather than silently ignored.
+    /// A bare `0x90` is printable, not a truncated multi-byte command.
     #[test]
-    fn truncated_label_record_marker_reports_malformed() {
+    fn bare_label_record_marker_prints_and_exhausts() {
         let bytes = vec![TLK_CODE_LABEL_RECORD];
         let out = render(&bytes);
-        assert_eq!(out.stop, TlkRunStop::MalformedIntroducer(1));
+        assert_eq!(out.text.as_bytes(), &[0x10]);
+        assert_eq!(out.stop, TlkRunStop::Exhausted);
+        assert_eq!(out.consumed, 1);
     }
 
     #[test]
@@ -1743,5 +1905,95 @@ mod tests {
 
         assert_eq!(out.text, "Ask");
         assert_eq!(out.stop, TlkRunStop::LabelTransfer(0x91));
+    }
+
+    /// `formats/font-ch.md` section 4: the `.CH` fonts store codes
+    /// `0x00..=0x7F` only, and "ordinary cell output ignores high-bit
+    /// bytes". A Rust `&str` is UTF-8, so walking bytes would split a
+    /// character such as `U+00D3` into `0xC3 0x93` and hand the fixed-cell
+    /// renderer a lead byte no glyph slot covers. Every emitted cell must
+    /// be addressable.
+    #[test]
+    fn engine_text_glyphs_drop_characters_the_ch_fonts_cannot_address() {
+        // `input.md` section 5: `0xD3` is the northwest direction code,
+        // which reaches the dispatcher's refusal line as `char::from`.
+        let leaked = char::from(0xD3);
+        let glyphs = ordinary_glyphs_from_engine_text(&format!("Unhandled command `{leaked}`."));
+
+        assert!(
+            glyphs.iter().all(|glyph| glyph.byte < 0x80),
+            "engine text must not emit a cell the `.CH` fonts cannot address: {:02x?}",
+            glyphs.iter().map(|glyph| glyph.byte).collect::<Vec<_>>()
+        );
+        assert!(
+            !glyphs.iter().any(|glyph| glyph.byte == 0xC3),
+            "the UTF-8 lead byte of the dropped character must not reach a cell"
+        );
+        assert_eq!(
+            glyphs
+                .iter()
+                .map(|glyph| char::from(glyph.byte))
+                .collect::<String>(),
+            "Unhandled command ``.",
+            "an ignored character occupies no cell, so the rest of the line closes up"
+        );
+        assert!(
+            glyphs
+                .iter()
+                .all(|glyph| glyph.font == TlkGlyphFont::Ordinary),
+            "the resident text font is unchanged by the drop"
+        );
+    }
+
+    /// The same rule on the runic side: the alternate font is the same
+    /// 128-slot geometry (`formats/font-ch.md` section 3), so it gets the
+    /// same filter rather than a wider range.
+    #[test]
+    fn engine_text_glyphs_apply_the_same_range_to_the_runic_font() {
+        let glyphs = glyphs_from_engine_text("Ver\u{e9}?", TlkGlyphFont::Runic);
+
+        assert!(glyphs.iter().all(|glyph| glyph.byte < 0x80));
+        assert!(glyphs.iter().all(|glyph| glyph.font == TlkGlyphFont::Runic));
+        assert_eq!(
+            glyphs
+                .iter()
+                .map(|glyph| char::from(glyph.byte))
+                .collect::<String>(),
+            "Ver?"
+        );
+    }
+
+    /// The leak that actually reached the renderer arrived through the
+    /// message window, whose rows are painted cell-by-cell straight from
+    /// `glyphs`. Guard that whole path, not just the helper.
+    #[test]
+    fn message_window_rows_never_carry_a_cell_outside_the_ch_font_range() {
+        let mut log = crate::GameplayMessageLog::new();
+        log.push_command("North");
+        log.push_output(&format!("Unhandled command `{}`.", char::from(0xD3)));
+        let layout = crate::layout_message_window(&log, Some(""));
+
+        assert!(
+            layout
+                .rows
+                .iter()
+                .flat_map(|row| row.glyphs.iter())
+                .all(|glyph| glyph.byte < 0x80),
+            "a message-window cell outside `0x00..=0x7F` would panic the fixed-cell renderer"
+        );
+        let placed = layout
+            .rows
+            .iter()
+            .map(|row| row.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            placed.contains("Unhandled") && placed.contains("command"),
+            "the refusal line is still placed, wrapped across the window: {placed:?}"
+        );
+        assert!(
+            !placed.chars().any(|ch| !ch.is_ascii()),
+            "the placed text view matches the placed cells: {placed:?}"
+        );
     }
 }

@@ -42,34 +42,36 @@ use u5_runtime::{
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
     COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMPLETED_LONG_CAMP_COOLDOWN_HOURS,
     CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
-    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST,
+    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_LOOK_TILE, DEATH_WIND_COST,
     DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX,
     DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
-    DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES, Direction, DungeonScene,
+    DUNGEON_AMBUSH_PARTY_ENTRY_X, DUNGEON_AMBUSH_PARTY_ENTRY_Y, DUNGEON_LEVEL_SPELL_COST,
+    DUNGEON_MONSTER_COMBAT_CLASSES, DUNGEON_ROOM_SOURCE_COUNT, Direction, DungeonScene,
     ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
     EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
     FLAME_WIND_SPELL_INDEX, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST,
-    GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST,
-    HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist, IN_LOR_COST,
-    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, JIMMY_MANACLES_TILE,
-    JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX,
-    MASS_CHARM_ACTIVE_EFFECT_DURATION, MASS_CHARM_ACTIVE_EFFECT_TAG, MORAL_STANDING_MAX,
-    MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE,
-    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
-    NEGATE_TIME_ACTIVE_EFFECT_TAG, NPC_DIALOG_ID_NONE, NPC_SCHEDULE_AI_OFFSET,
-    NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST,
-    OPEN_SPELL_INDEX, OUTDOOR_BROADSIDE_BOOM_MESSAGE, OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST,
-    PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PendingVehicleAcquisition, PlayOptions,
-    PlayState, PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST,
-    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, SAVE_QUEST_TILE_FLAG_HIGH_BIT,
-    SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
-    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
-    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
-    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
-    SHRINE_ALTAR_TILE_FIRST, SHRINE_RESTORATION_SUCCESS_BANNER, SLEEP_COST,
+    GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HARPSICHORD_FLOOR,
+    HARPSICHORD_PASSAGE_CELLS_NORTH, HARPSICHORD_PASSAGE_CLEARED_TILE, HARPSICHORD_TILE, HEAL_COST,
+    HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, HOURLY_STARVATION_DAMAGE_MAX,
+    HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX, IN_WIS_COST,
+    IN_WIS_SPELL_INDEX, Inn, JIMMY_MANACLES_TILE, JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE,
+    MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MASS_CHARM_ACTIVE_EFFECT_DURATION,
+    MASS_CHARM_ACTIVE_EFFECT_TAG, MORAL_STANDING_MAX, MoonstoneGateSlot, NARRATIVE_GATE_X,
+    NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, NATURAL_MOONGATE_TERRAIN_TILE,
+    NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NPC_DIALOG_ID_NONE,
+    NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS,
+    OPEN_SPELL_COST, OPEN_SPELL_INDEX, OUTDOOR_BROADSIDE_BOOM_MESSAGE,
+    OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX,
+    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
+    PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
+    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, SAVE_QUEST_TILE_FLAG_HIGH_BIT, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
+    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED,
+    SHIP_NO_SKIFFS_WARNING, SHRINE_ALTAR_TILE_FIRST, SHRINE_RESTORATION_SUCCESS_BANNER, SLEEP_COST,
     SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
     SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
     SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
@@ -87,13 +89,14 @@ use u5_runtime::{
     WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEALED_TILE, WORD_OF_POWER_SEALS,
     WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WORLD_SIDE, WindState,
     WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, combat_class_stats,
-    default_party_equipment, default_party_experience, default_party_intelligence,
-    default_party_names, default_party_roster, default_party_stay_counters,
-    default_party_strengths, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
-    hash_palette_indices, inn_base_room_rate, load_camp_result_messages,
-    load_play_options_from_save, load_tile_atlas, published_world_location_entries,
-    shipwright_delivery_coordinate, shipwright_price, shop_intelligence_adjusted_price,
+    YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, combat_class_sprite_byte,
+    combat_class_stats, combat_party_class_id, default_party_equipment, default_party_experience,
+    default_party_intelligence, default_party_names, default_party_roster,
+    default_party_stay_counters, default_party_strengths, dungeon_ambush_source_rows,
+    dungeon_cell_index, dungeon_room_entry_seed_for_direction, hash_palette_indices,
+    inn_base_room_rate, load_camp_result_messages, load_play_options_from_save, load_tile_atlas,
+    published_world_location_entries, shipwright_delivery_coordinate, shipwright_price,
+    shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -110,16 +113,55 @@ use crate::{
 
 const VIEWPORT_RADIUS: usize = 5;
 
-/// Full victory route: seven rite acknowledgements, one Orb presentation,
-/// one Orb acknowledgement, 40 automatic tableau frames, and eight ending
-/// acknowledgements through the terminal hold.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 59] = {
-    let mut script = ["empty"; 59];
+/// `town-mode.md §13` harpsichord placement in Lord British's Castle, read
+/// off the shipped `CASTLE.DAT` floor `+2` grid rather than assumed: the
+/// instrument tile `0x8D` sits at (17, 18), the chair the party plays from is
+/// the cell immediately north of it, and the cell five squares north of the
+/// instrument in the same column is a `catalogs/tile-catalog.md` wall variant
+/// with ordinary cobble already behind it. These routes exist to catch the
+/// shipped map drifting away from that description.
+const HARPSICHORD_ROUTE_X: usize = 17;
+const HARPSICHORD_ROUTE_Y: usize = 18;
+/// The chair immediately north of the instrument: the only cell the position-
+/// only arming test accepts.
+const HARPSICHORD_ROUTE_CHAIR_Y: usize = HARPSICHORD_ROUTE_Y - 1;
+/// The wall cell a finished tune rewrites to cobble.
+const HARPSICHORD_ROUTE_PASSAGE_Y: usize = HARPSICHORD_ROUTE_Y - HARPSICHORD_PASSAGE_CELLS_NORTH;
+/// `catalogs/tile-catalog.md`: wall variants are `0x4D..0x4F`, and the shipped
+/// passage cell is `0x4F`. Asserting the *starting* byte is what makes the
+/// "opened" assertion meaningful.
+const HARPSICHORD_ROUTE_WALL_TILE: u8 = 0x4F;
+/// Cobble two cells north of the chair, used by the away-from-the-chair route.
+const HARPSICHORD_ROUTE_OFF_CHAIR_Y: usize = 15;
+/// The floor `+2` ascend link, four cardinal steps from the chair. Klimbing up
+/// and straight back down is the round trip that proves the passage rewrite
+/// never reached the on-disk floor.
+const HARPSICHORD_ROUTE_KLIMB_X: usize = 15;
+const HARPSICHORD_ROUTE_KLIMB_Y: usize = 15;
+
+/// The reload checkpoint sits one command past the whole tune.
+const HARPSICHORD_RELOAD_CHECKPOINTS: &[usize] = &[HARPSICHORD_TUNE_SCRIPT.len()];
+
+/// `town-mode.md §13` the thirteen-note tune, as script keystrokes.
+const HARPSICHORD_TUNE_SCRIPT: [&str; 13] = [
+    "6", "7", "8", "9", "8", "7", "8", "7", "6", "7", "6", "5", "3",
+];
+
+/// Full victory route: the 40-tick rite lead-in, six rite acknowledgements,
+/// one Orb presentation, one Orb acknowledgement, 40 automatic tableau
+/// frames, and eight ending acknowledgements through the terminal hold.
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 98] = {
+    let mut script = ["empty"; 98];
     script[0] = "Y";
     script[1] = "Y";
-    script[9] = "endgame:frame";
-    let mut index = 11;
-    while index < 51 {
+    let mut index = 2;
+    while index < 42 {
+        script[index] = "endgame:frame";
+        index += 1;
+    }
+    script[48] = "endgame:frame";
+    index = 50;
+    while index < 90 {
         script[index] = "endgame:frame";
         index += 1;
     }
@@ -982,7 +1024,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-jimmy-magic-lock-no-picker",
             options: town_jimmy_no_roll.clone(),
-            script: &["J"],
+            script: &["J", "6"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -990,7 +1032,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-jimmy-empty-restraint-no-picker",
             options: town_jimmy_no_roll,
-            script: &["J"],
+            script: &["J", "6"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -998,7 +1040,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-jimmy-prisoner-release",
             options: town_jimmy_release.clone(),
-            script: &["J", "1"],
+            script: &["J", "6", "1"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1006,7 +1048,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "reload-castle-jimmy-prisoner-release",
             options: town_jimmy_release,
-            script: &["J", "1", "empty"],
+            script: &["J", "6", "1", "empty"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1469,12 +1511,16 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            // `town-mode.md §14`: A-Attack at a town NPC **does** call the
+            // combat framer and swap to a `.CBT` arena. The reading where it
+            // stayed inside town mode is withdrawn, so the frame this route
+            // ends on is the combat raster, not the town tile viewport.
             name: "castle-town-attack-guard-alarm",
             options: PlayOptions::default(),
             script: &["A6"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
-            expected_frame_kind: "tile viewport",
+            expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
             name: "castle-town-hostile-adjacent-alarm",
@@ -2767,7 +2813,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &["d"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 0,
-            expected_frame_kind: "tile viewport",
+            expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
             name: "doom-combat-search-prompt",
@@ -2828,7 +2874,130 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     append_asset_backed_conversation_route_smoke_cases(&mut cases);
     append_shrine_route_smoke_cases(&mut cases);
     append_public_location_route_smoke_cases(&mut cases);
+    append_harpsichord_route_smoke_cases(&mut cases, castle);
     cases
+}
+
+/// `town-mode.md §13` + `commands.md §3` harpsichord routes, replayed against
+/// the shipped Lord British's Castle floor `+2` map.
+///
+/// The unit tests in `u5-runtime` stamp the instrument into a synthetic grid,
+/// so they cannot notice the tile moving on the real map. These routes can:
+/// every one of them starts the party on the shipped chair coordinate and
+/// asserts the shipped wall byte before it asserts the rewrite.
+fn append_harpsichord_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>, castle: Scene) {
+    let seated = PlayOptions {
+        target: PlayTarget::Town(castle),
+        floor: HARPSICHORD_FLOOR,
+        start: Some((HARPSICHORD_ROUTE_X, HARPSICHORD_ROUTE_CHAIR_Y)),
+        ..PlayOptions::default()
+    };
+    let off_chair = PlayOptions {
+        target: PlayTarget::Town(castle),
+        floor: HARPSICHORD_FLOOR,
+        start: Some((HARPSICHORD_ROUTE_X, HARPSICHORD_ROUTE_OFF_CHAIR_Y)),
+        ..PlayOptions::default()
+    };
+
+    // The whole tune, keyed from the chair.
+    let full_tune: &'static [&'static str] =
+        Box::leak(HARPSICHORD_TUNE_SCRIPT.to_vec().into_boxed_slice());
+    // Twelve notes: one short of completion, so the wall must still stand.
+    let short_tune: &'static [&'static str] =
+        Box::leak(HARPSICHORD_TUNE_SCRIPT[..12].to_vec().into_boxed_slice());
+    // Ten correct notes, a stray `8`, then the tune from note three - the
+    // continuation only completes if the stray left the player three notes in
+    // rather than starting them over.
+    let resync_after_ten: &'static [&'static str] = Box::leak(
+        [
+            &HARPSICHORD_TUNE_SCRIPT[..10],
+            &["8"][..],
+            &HARPSICHORD_TUNE_SCRIPT[3..],
+        ]
+        .concat()
+        .into_boxed_slice(),
+    );
+    // Eleven correct notes, a stray `7`, then the tune from note two.
+    let resync_after_eleven: &'static [&'static str] = Box::leak(
+        [
+            &HARPSICHORD_TUNE_SCRIPT[..11],
+            &["7"][..],
+            &HARPSICHORD_TUNE_SCRIPT[2..],
+        ]
+        .concat()
+        .into_boxed_slice(),
+    );
+    // The whole tune, then four cardinal steps to the floor `+2` ascend link
+    // and a klimb up and straight back down. Movement uses letter keys because
+    // the digit keys belong to the instrument while the party is still seated.
+    let tune_then_floor_round_trip: &'static [&'static str] = Box::leak(
+        [
+            &HARPSICHORD_TUNE_SCRIPT[..],
+            &["w", "a", "a", "w", "K", "K"][..],
+        ]
+        .concat()
+        .into_boxed_slice(),
+    );
+    // The whole tune, then one command that carries the save/reload checkpoint.
+    let tune_then_reload: &'static [&'static str] = Box::leak(
+        [&HARPSICHORD_TUNE_SCRIPT[..], &["empty"][..]]
+            .concat()
+            .into_boxed_slice(),
+    );
+
+    for (name, options, script, min_turn) in [
+        (
+            "castle-harpsichord-tune-opens-passage",
+            seated.clone(),
+            full_tune,
+            0u64,
+        ),
+        (
+            "castle-harpsichord-digits-consume-no-turn",
+            seated.clone(),
+            short_tune,
+            0,
+        ),
+        (
+            "castle-harpsichord-resync-after-ten-notes-and-stray-eight",
+            seated.clone(),
+            resync_after_ten,
+            0,
+        ),
+        (
+            "castle-harpsichord-resync-after-eleven-notes-and-stray-seven",
+            seated.clone(),
+            resync_after_eleven,
+            0,
+        ),
+        (
+            "castle-harpsichord-digit-is-an-ordinary-command-off-the-chair",
+            off_chair,
+            &["8", "5"][..],
+            1,
+        ),
+        (
+            "castle-harpsichord-passage-lost-on-floor-round-trip",
+            seated.clone(),
+            tune_then_floor_round_trip,
+            2,
+        ),
+        (
+            "reload-castle-harpsichord-passage-lost-on-reload",
+            seated,
+            tune_then_reload,
+            0,
+        ),
+    ] {
+        cases.push(RouteSmokeCase {
+            name,
+            options,
+            script,
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn,
+            expected_frame_kind: "tile viewport",
+        });
+    }
 }
 
 fn append_directed_wind_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>, world: PlayOptions) {
@@ -3268,6 +3437,7 @@ fn capture_route_smoke_frame(
     // Dissolve records describe blocking calls that have already finished.
     // The captured caller-composed frame is this frontend's acknowledgement.
     let _ = state.take_pending_map_viewport_dissolves();
+    let _ = state.take_pending_blackthorn_rescue_playbacks();
     let _ = state.take_pending_stonegate_trapdoor_playback();
     Ok(report)
 }
@@ -3387,8 +3557,11 @@ fn route_reload_checkpoints(case_name: &str) -> &'static [usize] {
         | "reload-dungeon-surface-exit-return-world" => &[1],
         "reload-underworld-fixed-hidden-stack-search-get-search"
         | "reload-minoc-fixed-hidden-daily-search-get-repeat"
-        | "reload-horse-trader-horse-and-rider-buy-pass"
-        | "reload-castle-jimmy-prisoner-release" => &[2],
+        | "reload-horse-trader-horse-and-rider-buy-pass" => &[2],
+        "reload-castle-jimmy-prisoner-release" => &[3],
+        // The reload fires after the thirteenth note, so the checkpoint sits
+        // on the command that has just opened the passage.
+        "reload-castle-harpsichord-passage-lost-on-reload" => HARPSICHORD_RELOAD_CHECKPOINTS,
         _ => &[],
     }
 }
@@ -3698,17 +3871,9 @@ fn apply_route_smoke_case_setup(
             stamp_town_route_look_tile(state, 0xA1);
         }
         "castle-death-vision-look" => {
-            stamp_town_route_look_tile(state, 0x00);
-            state.active_objects.push(ActiveObject {
-                type_byte: DEATH_VISION_OBJECT_CLASS,
-                tile: DEATH_VISION_OBJECT_CLASS,
-                x: state.player.x + 1,
-                y: state.player.y,
-                z: state.current_floor().unwrap_or(0),
-                phase: 0,
-                aux1: 0,
-                aux3: 0,
-            });
+            // `view.md §3` entry-dispatch row 2 tests the live
+            // terrain-layer byte, not an active-object descriptor.
+            stamp_town_route_look_tile(state, DEATH_VISION_LOOK_TILE);
         }
         "castle-talk-status-sleeping-refusal" => {
             seed_town_talk_status_tile_route(state, TALK_STATUS_TILE_SLEEPING);
@@ -4145,10 +4310,18 @@ fn seed_town_talk_status_tile_route(state: &mut PlayState, status_tile: u8) {
             name: None,
         },
     ]);
+    // `conversation.md`: the sleeping/praying Talk refusal is decided by the
+    // live MAP tile the NPC stands on — a bed or an altar — not by the NPC's
+    // renderer sprite frame. The engine read the sprite byte until the
+    // conformance audit corrected it, so this fixture used to seed the sprite
+    // and would now seed a status the gate never looks at. Write the map cell
+    // the NPC's schedule puts it on, and leave the sprite an ordinary NPC.
+    let npc_x = 16usize;
+    let npc_y = 15usize;
+    state.grid[npc_y * 32 + npc_x] = status_tile;
     if let Some(slot) = state.npcs.first().and_then(|npc| npc.active_object) {
         if let Some(object) = state.active_objects.get_mut(slot) {
             object.type_byte = 1;
-            object.tile = status_tile;
         }
     }
     state.mark_visibility_dirty();
@@ -4406,6 +4579,20 @@ fn seed_town_jimmy_unoccupied_target(state: &mut PlayState, tile: u8) {
     let floor = state.current_floor().unwrap_or(0);
     let target_x = 2;
     let target_y = 1;
+    // Dropping the roster must drop the sprites the roster owned. An
+    // orphaned NPC record keeps its roster tag, and `town-mode.md §16`
+    // only skips *linked* NPC sprite classes from the free-roaming
+    // walker - so leaving a castle stable horse (`catalogs/npc-roster.md
+    // §4` tags `10`/`11`) behind here turns this Jimmy fixture into a
+    // horse-wander fixture that spends PRNG draws the route is trying to
+    // prove the Jimmy path never makes.
+    for npc in &state.npcs {
+        if let Some(slot) = npc.active_object {
+            if let Some(object) = state.active_objects.get_mut(slot) {
+                *object = ActiveObject::empty();
+            }
+        }
+    }
     state.npcs.clear();
     for object in &mut state.active_objects {
         if !object.is_empty() && object.x == target_x && object.y == target_y && object.z == floor {
@@ -4695,13 +4882,19 @@ fn seed_directed_wind_combat_route(
     if let Some(caster) = state.party.first_mut() {
         caster.mana = cost;
         caster.level = cost;
+        // The surviving reserve monster may receive its automatic action
+        // after a lethal wind cast. Keep the route's caster alive so this
+        // fixture observes the spell result in combat instead of sometimes
+        // falling through to the defeat/rescue path.
+        caster.hp = 99;
+        caster.max_hp = 99;
     }
     state.active_player = Some(0);
     state.spell_charges[spell_index] = 1;
 
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
     actors[0] =
-        CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        CombatActorDescriptor::from_row([99, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
     if let Some(target_slot) = target_party_slot {
         let (target_x, target_y) = directed_route_coordinate_from_caster(direction, 1);
         actors[target_slot] = CombatActorDescriptor::from_row([
@@ -4768,7 +4961,15 @@ fn seed_directed_wind_combat_route(
         .ok_or_else(|| io::Error::other("reserve giant rat active object is unavailable"))?;
     }
 
-    state.enter_combat_frame(active_objects, actors)?;
+    // `combat.md §6.3`: ordinary death markers are rejected on terrain
+    // bytes below four. Seed accepted arena terrain so the directed-wind
+    // routes exercise their intended death/status branch rather than the
+    // negative release form.
+    state.enter_combat_frame_with_terrain(
+        active_objects,
+        actors,
+        [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    )?;
     Ok(())
 }
 
@@ -5297,7 +5498,9 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-charm-target" => {
-            if !state.message.starts_with("Charm!") {
+            // `catalogs/spell-list.md` id 34: Charm prints `<name> charmed!`
+            // and suppresses the shared epilogue.
+            if !state.message.starts_with("Giant Rat charmed!") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not charm the targeted combat actor"
                 )));
@@ -5357,18 +5560,79 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-kill-gargoyle-lava-marker" => {
+            // `combat.md §6.3`: the Gargoyle branch writes the lava terrain
+            // byte, writes **no** tile byte into the active-object record,
+            // runs no drop rolls, and releases the slot. The earlier reading
+            // that it fell through to the ordinary drop check is withdrawn.
             if !state.message.starts_with("Kill!")
-                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
                 || state.combat_terrain[5][6] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
                 || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
-                    != COMBAT_DEFAULT_DEATH_DROP_TILE
+                    == COMBAT_DEFAULT_DEATH_DROP_TILE
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the Gargoyle lava/default death transition"
+                    "route smoke `{case_name}` did not apply the Gargoyle lava death transition"
                 )));
             }
         }
         _ => {}
+    }
+    Ok(())
+}
+
+/// The shipped floor `+2` cells every harpsichord route depends on.
+///
+/// `town-mode.md §13` describes the instrument, the chair immediately north of
+/// it, and the wall five cells north in the same column. If the shipped map
+/// ever stops matching that description, the rewrite assertions below would
+/// quietly become vacuous - so each route checks the map's own shape first and
+/// fails with the bytes it actually found.
+fn validate_harpsichord_route_map(state: &PlayState, case_name: &str) -> io::Result<()> {
+    if !matches!(
+        state.area,
+        Area::Town {
+            floor: HARPSICHORD_FLOOR,
+            ..
+        }
+    ) {
+        return Err(io::Error::other(format!(
+            "route smoke `{case_name}` left Lord British's Castle floor {HARPSICHORD_FLOOR}: {}",
+            state.current_area_label()
+        )));
+    }
+    let instrument = state.grid[HARPSICHORD_ROUTE_Y * TOWN_GRID_SIDE + HARPSICHORD_ROUTE_X];
+    let chair = state.grid[HARPSICHORD_ROUTE_CHAIR_Y * TOWN_GRID_SIDE + HARPSICHORD_ROUTE_X];
+    // `catalogs/tile-catalog.md`: the four-facing chair family is `0x90..0x93`.
+    if instrument != HARPSICHORD_TILE || !(0x90..=0x93).contains(&chair) {
+        return Err(io::Error::other(format!(
+            "route smoke `{case_name}`: shipped floor {HARPSICHORD_FLOOR} no longer matches town-mode.md §13;              ({HARPSICHORD_ROUTE_X}, {HARPSICHORD_ROUTE_Y}) is {instrument:#04x} (expected the harpsichord {HARPSICHORD_TILE:#04x})              and the cell north of it is {chair:#04x} (expected a chair 0x90..0x93)"
+        )));
+    }
+    Ok(())
+}
+
+/// The live byte of the cell a finished tune opens.
+fn harpsichord_route_passage_tile(state: &PlayState) -> u8 {
+    state.grid[HARPSICHORD_ROUTE_PASSAGE_Y * TOWN_GRID_SIDE + HARPSICHORD_ROUTE_X]
+}
+
+/// `commands.md §3`: the town digit handler at the instrument is the only
+/// producer of status `3` anywhere in the game, so no keystroke on any of
+/// these routes may advance the turn counter or the clock.
+fn validate_harpsichord_route_consumed_no_time(
+    state: &PlayState,
+    case_name: &str,
+) -> io::Result<()> {
+    let start_clock = PlayOptions::default().clock;
+    if state.turn != 0
+        || state.clock != start_clock
+        || state.player.x != HARPSICHORD_ROUTE_X
+        || state.player.y != HARPSICHORD_ROUTE_CHAIR_Y
+    {
+        return Err(io::Error::other(format!(
+            "route smoke `{case_name}` advanced the world while playing the instrument: turn={}, clock={:?} (expected {start_clock:?}), party at ({}, {})",
+            state.turn, state.clock, state.player.x, state.player.y
+        )));
     }
     Ok(())
 }
@@ -5593,7 +5857,7 @@ fn validate_route_smoke_case_state(
                 || state.player.y != 124
                 || state.spell_charges[IN_WIS_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state.message != "Locate: H'M,D'O\""
+                || state.message != "Locate:\nH'M\", D'O\"\n"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public Locate sextant output"
@@ -5886,7 +6150,16 @@ fn validate_route_smoke_case_state(
                 || state.message.contains("Starving!")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply meal-hour provisions plus poison"
+                    "route smoke `{case_name}` did not apply meal-hour provisions plus poison (clock {:02}:{:02}, food {}, party {:?}, message `{}`)",
+                    state.clock.hour,
+                    state.clock.minute,
+                    state.food,
+                    state
+                        .party
+                        .iter()
+                        .map(|member| (member.hp, member.status))
+                        .collect::<Vec<_>>(),
+                    state.message,
                 )));
             }
         }
@@ -6001,6 +6274,77 @@ fn validate_route_smoke_case_state(
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not reject the empty restraint before picker and PRNG"
+                )));
+            }
+        }
+        "castle-harpsichord-tune-opens-passage"
+        | "castle-harpsichord-resync-after-ten-notes-and-stray-eight"
+        | "castle-harpsichord-resync-after-eleven-notes-and-stray-seven" => {
+            validate_harpsichord_route_map(state, case_name)?;
+            validate_harpsichord_route_consumed_no_time(state, case_name)?;
+            // `town-mode.md §13` requires the completion to rewrite the wall
+            // cell and mark the view dirty, and `harpsichord.rs`'s unit tests
+            // pin both at the moment of the rewrite. This route asserts the
+            // durable half only: the route harness renders after every step,
+            // and a render legitimately consumes the dirty flag, so requiring
+            // it to survive to the end of a thirteen-keystroke replay would
+            // pin the harness rather than the contract.
+            let passage = harpsichord_route_passage_tile(state);
+            if passage != HARPSICHORD_PASSAGE_CLEARED_TILE || state.harpsichord_progress() != 0 {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not open the passage five cells north of the harpsichord:                      ({HARPSICHORD_ROUTE_X}, {HARPSICHORD_ROUTE_PASSAGE_Y}) is {passage:#04x}                      (expected cobble {HARPSICHORD_PASSAGE_CLEARED_TILE:#04x}), progress={}, view dirty={}",
+                    state.harpsichord_progress(),
+                    state.visibility_dirty,
+                )));
+            }
+        }
+        "castle-harpsichord-digits-consume-no-turn" => {
+            validate_harpsichord_route_map(state, case_name)?;
+            validate_harpsichord_route_consumed_no_time(state, case_name)?;
+            // Twelve of thirteen notes: the counter has advanced and the wall
+            // has not, which is what makes the no-turn assertion meaningful
+            // rather than a route that simply did nothing.
+            let passage = harpsichord_route_passage_tile(state);
+            if passage != HARPSICHORD_ROUTE_WALL_TILE
+                || state.harpsichord_progress() != HARPSICHORD_TUNE_SCRIPT.len() - 1
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` expected twelve notes counted behind an intact wall:                      passage tile {passage:#04x} (expected {HARPSICHORD_ROUTE_WALL_TILE:#04x}), progress={}",
+                    state.harpsichord_progress(),
+                )));
+            }
+        }
+        "castle-harpsichord-digit-is-an-ordinary-command-off-the-chair" => {
+            validate_harpsichord_route_map(state, case_name)?;
+            // `8` stepped north and `5` reached the ordinary dispatcher's
+            // refusal, exactly as both did before the instrument existed.
+            let passage = harpsichord_route_passage_tile(state);
+            if state.turn != 1
+                || state.player.x != HARPSICHORD_ROUTE_X
+                || state.player.y != HARPSICHORD_ROUTE_OFF_CHAIR_Y - 1
+                || state.harpsichord_progress() != 0
+                || passage != HARPSICHORD_ROUTE_WALL_TILE
+                || state.message != "Unhandled command `5`."
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not forward its digits to the ordinary dispatcher:                      turn={}, party at ({}, {}), progress={}, passage tile {passage:#04x}, message {:?}",
+                    state.turn,
+                    state.player.x,
+                    state.player.y,
+                    state.harpsichord_progress(),
+                    state.message,
+                )));
+            }
+        }
+        "castle-harpsichord-passage-lost-on-floor-round-trip"
+        | "reload-castle-harpsichord-passage-lost-on-reload" => {
+            validate_harpsichord_route_map(state, case_name)?;
+            // `town-mode.md §13`: the rewrite is a live tile-buffer edit, not
+            // a saved map change, so the floor comes back with its wall.
+            let passage = harpsichord_route_passage_tile(state);
+            if passage != HARPSICHORD_ROUTE_WALL_TILE {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` persisted the harpsichord passage across a floor reload:                      ({HARPSICHORD_ROUTE_X}, {HARPSICHORD_ROUTE_PASSAGE_Y}) is {passage:#04x}, expected the wall {HARPSICHORD_ROUTE_WALL_TILE:#04x}"
                 )));
             }
         }
@@ -6301,16 +6645,47 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-town-attack-guard-alarm" => {
-            if state.combat_active
-                || state
-                    .npcs
-                    .iter()
-                    .find(|npc| npc.slot == 1)
-                    .is_none_or(|npc| npc.schedule[..3] != [7, 7, 7])
-                || !state.message.contains("alarm raised")
+            // `town-mode.md §14`: the attack enters the terrain arena *and*
+            // raises the alarm. This used to assert `!state.combat_active`,
+            // which pinned the withdrawn "stays inside town mode" reading; the
+            // alarm assertions below are the part that always belonged here.
+            //
+            // The retraction publishes two more discriminators, and without
+            // them this case would only prove that *some* fight started.
+            // `encounters.md §7`: "The arena selector then resolves to the
+            // cobble arena for ordinary town ground, and the terrain setup's
+            // town-style override forces the monster count to one unless the
+            // target's class is Guard (whose stat row carries the sentinel
+            // count eight)." §5's arena table gives cobble as arena 8, and
+            // this route's NPC is `town-mode.md §15`'s exact type `0x70`
+            // Guard - so the requested count must be the sentinel eight
+            // rather than the town-style one.
+            let npc_schedule_swept = state
+                .npcs
+                .iter()
+                .find(|npc| npc.slot == 1)
+                .is_some_and(|npc| npc.schedule[..3] == [7, 7, 7]);
+            let placed_monsters = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS..]
+                .iter()
+                .filter(|actor| !actor.is_empty())
+                .count();
+            let is_cobble_arena = state
+                .combat_terrain
+                .iter()
+                .flatten()
+                .all(|tile| *tile == 0x44);
+            if !state.combat_active
+                || !npc_schedule_swept
+                || placed_monsters != 8
+                || !is_cobble_arena
+                || state.message != u5_runtime::COMBAT_BANNER
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not raise the town alarm after attacking a guard-like NPC"
+                    "route smoke `{case_name}` did not raise the town alarm and enter the cobble \
+                     arena after attacking a Guard-class town NPC: combat_active={} \
+                     npc_slot_1_schedule_swept={npc_schedule_swept} \
+                     placed_monsters={placed_monsters} is_cobble_arena={is_cobble_arena} msg={:?}",
+                    state.combat_active, state.message,
                 )));
             }
         }
@@ -6559,7 +6934,9 @@ fn validate_route_smoke_case_state(
                 case_name,
                 SHADOWLORD_FALSEHOOD_INDEX,
                 SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-                "Falsehood vanquished",
+                // `quest-graph.md §5` publishes the Shadowlord name; the
+                // sentence around it is not published, so pin the name.
+                "FAULINEI is vanquished!",
             )?;
         }
         "empath-shard-hatred-vanquish" => {
@@ -6568,7 +6945,7 @@ fn validate_route_smoke_case_state(
                 case_name,
                 SHADOWLORD_HATRED_INDEX,
                 SPECIAL_ITEM_SHARD_HATRED_INDEX,
-                "Hatred vanquished",
+                "ASTAROTH is vanquished!",
             )?;
         }
         "serpents-hold-shard-cowardice-vanquish" => {
@@ -6577,7 +6954,7 @@ fn validate_route_smoke_case_state(
                 case_name,
                 SHADOWLORD_COWARDICE_INDEX,
                 SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-                "Cowardice vanquished",
+                "NOSFENTOR is vanquished!",
             )?;
         }
         "shop-arms-local-buy-sell-route" => {
@@ -6678,11 +7055,7 @@ fn validate_route_smoke_case_state(
             }
         }
         "shop-tavern-drink-and-food-route" => {
-            if state.gold >= 999
-                || state.food == 0
-                || state.active_shop.is_some()
-                || !state.message.contains("Farewell")
-            {
+            if state.gold >= 999 || state.food == 0 || state.active_shop.is_some() {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not serve a drink round and provisions"
                 )));
@@ -6732,12 +7105,17 @@ fn validate_route_smoke_case_state(
             }
         }
         "shop-horse-trader-decline-route" => {
+            // Scoped to the delivery cell. `CASTLE:0` roster slots 15, 16
+            // and 17 are the castle's own stable horses and carry the
+            // shipped horse tags `0x10`/`0x11` (`catalogs/npc-roster.md
+            // §4`), so a table-wide "no parked horse anywhere" test says
+            // nothing about this sale - it only used to hold because every
+            // NPC sprite byte was being clamped to one monster tile.
             if state.gold != 999
                 || state.active_shop.is_none()
-                || state
-                    .active_objects
-                    .iter()
-                    .any(|object| object.type_byte == HORSE_PARKED_FIRST)
+                || state.active_objects.iter().any(|object| {
+                    object.type_byte == HORSE_PARKED_FIRST && (object.x, object.y) == (15, 16)
+                })
                 || !state.message.contains("As you wish")
             {
                 return Err(io::Error::other(format!(
@@ -6752,10 +7130,11 @@ fn validate_route_smoke_case_state(
             let raw = stable_horse_price(stable);
             let speaker_intelligence = state.party_intelligence.first().copied().unwrap_or(0);
             let expected_gold = 999 - shop_intelligence_adjusted_price(raw, speaker_intelligence);
-            let horse = state
-                .active_objects
-                .iter()
-                .find(|object| object.type_byte == HORSE_PARKED_FIRST);
+            // The castle's own stable horses share this object byte, so the
+            // sale's horse is identified by its delivery cell.
+            let horse = state.active_objects.iter().find(|object| {
+                object.type_byte == HORSE_PARKED_FIRST && (object.x, object.y) == (15, 16)
+            });
             let boardable = state.boardable_vehicle_slot_at(15, 16).is_some();
             if state.gold != expected_gold
                 || state.active_shop.is_some()
@@ -6773,14 +7152,16 @@ fn validate_route_smoke_case_state(
             let raw = stable_horse_price(stable);
             let speaker_intelligence = state.party_intelligence.first().copied().unwrap_or(0);
             let expected_gold = 999 - shop_intelligence_adjusted_price(raw, speaker_intelligence);
-            let horse = state
-                .active_objects
-                .iter()
-                .find(|object| object.type_byte == HORSE_PARKED_FIRST);
             // The post-reload Pass runs the town free-roaming object walker,
             // so the delivered horse may take one legal step. Its identity
             // and boardability, not its pre-turn sale coordinate, are the
-            // durable reload contract.
+            // durable reload contract - but it still has to be the horse
+            // this sale delivered rather than one of the castle's own
+            // stable horses, which carry the same object byte.
+            let horse = state.active_objects.iter().find(|object| {
+                object.type_byte == HORSE_PARKED_FIRST
+                    && object.x.abs_diff(15) + object.y.abs_diff(16) <= 1
+            });
             let boardable = horse.is_some_and(|object| {
                 state
                     .boardable_vehicle_slot_at(object.x, object.y)
@@ -6876,7 +7257,17 @@ fn validate_route_smoke_case_state(
                 || state.message != camp_messages.success
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not preserve no-direct-recovery rest behavior"
+                    "route smoke `{case_name}` did not preserve no-direct-recovery rest behavior:                      hour={} p0={:?}/{}/{} p1={:?}/{}/{} p2={:?}/{} msg={:?}",
+                    state.clock.hour,
+                    state.party.first().map(|m| m.status as char),
+                    state.party.first().map(|m| m.hp).unwrap_or(0),
+                    state.party.first().map(|m| m.mana).unwrap_or(0),
+                    state.party.get(1).map(|m| m.status as char),
+                    state.party.get(1).map(|m| m.hp).unwrap_or(0),
+                    state.party.get(1).map(|m| m.mana).unwrap_or(0),
+                    state.party.get(2).map(|m| m.status as char),
+                    state.party.get(2).map(|m| m.hp).unwrap_or(0),
+                    state.message,
                 )));
             }
         }
@@ -6896,18 +7287,38 @@ fn validate_route_smoke_case_state(
                 || state.party.get(3).is_none_or(|member| {
                     member.status != b'G' || member.hp != 5 || member.mana != 3
                 })
-                || state.party.get(4).is_none_or(|member| {
-                    member.status != b'P'
-                        || member.hp != 20 - u16::from(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE) * 6
-                        || member.mana != 4
-                })
+                // `rest-and-camp.md §5`: a member "already poisoned at entry"
+                // fails the recovery guard, so slot 4 gets neither the `1..63`
+                // hit points nor the class-keyed magic-point write, and
+                // "Poisoned members keep Poisoned status; rest does not cure
+                // poison." Its hit points are also *unchanged*: the camp
+                // elapse loop "never enters the shared party status/provision
+                // pass, so while a camp is elapsing no poison damage is taken,
+                // no provisions are spent, and no starvation damage is
+                // applied, regardless of how many hours the camp covers. Only
+                // the town-bed loop runs that pass." An earlier form of this
+                // assertion subtracted one point per camped hour, which is the
+                // per-hour poison reading `time.md §5` withdraws.
+                || state
+                    .party
+                    .get(4)
+                    .is_none_or(|member| member.status != b'P' || member.hp != 20 || member.mana != 4)
                 || state.party.get(5).is_none_or(|member| {
                     member.status != b'D' || member.hp != 0 || member.mana != 5
                 })
                 || state.message != camp_messages.success
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply public #47 completed long-camp recovery"
+                    "route smoke `{case_name}` did not apply public #47 completed long-camp                      recovery: hour={} active_rest={} msg_matches={} party={:?} msg={:?}",
+                    state.clock.hour,
+                    state.active_rest.is_some(),
+                    state.message == camp_messages.success,
+                    state
+                        .party
+                        .iter()
+                        .map(|m| (m.status as char, m.hp, m.mana))
+                        .collect::<Vec<_>>(),
+                    state.message,
                 )));
             }
         }
@@ -7040,27 +7451,90 @@ fn validate_route_smoke_case_state(
                         || object.y != state.player.y
                         || object.z != WorldPlane::Britannia.save_floor()
                 })
-                || !state.message.contains("Pass")
+                || state.message != "Rough seas!"
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not preserve launched skiff transport across save/reload"
+                    "route smoke `{case_name}` did not preserve launched skiff transport or run the published deep-water epilogue across save/reload"
                 )));
             }
         }
+        // `dungeon-mode.md §14.1`: the wandering-monster launch "is **not**
+        // the room-trigger `DUNGEON.CBT` path. No arena record is read from
+        // disk on this path." The arena is synthesised, the party takes the
+        // facing-selected entry row, and each nonzero source is "placed on the
+        // ordinary path, recovering the same class the painter encoded".
+        //
+        // Both routes seed the party facing East, so the party entry row is
+        // row two and the monster sources are the facing-east sixteen. The
+        // exact source slot is *not* fixed: the painter writes `count` copies
+        // of the source byte "into the first `count` permuted slots" of "a
+        // shuffled permutation of the sixteen slot indices", so this asserts
+        // membership in the published source set rather than one coordinate.
+        // An earlier form of this case pinned the monster to (6,5) and read
+        // the class out of the combat active-object's DEP1 byte; (6,5) is not
+        // a source coordinate under any facing, and the room-combat placement
+        // path carries the class in the object's tile byte, not DEP1.
         "dungeon-active-monster-attack-ambush" | "dungeon-active-monster-contact-ambush" => {
+            let facing_seed = dungeon_room_entry_seed_for_direction(Direction::East);
+            let (source_x, source_y) = dungeon_ambush_source_rows(facing_seed)
+                .expect("east is one of the four published ambush facings");
+            let party_row = usize::from(facing_seed);
+            let monster_actor = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS];
+            // Descriptors are scanned from index six, but the monster's
+            // active-object RECORD comes from the lowest record the
+            // seated party left free, so the two indexes diverge as
+            // soon as the party is not exactly six strong. Follow the
+            // descriptor's link byte, which `active-objects.md` section
+            // 7 calls authoritative in both directions, rather than
+            // assuming record index == descriptor index.
+            let monster_object =
+                state.active_objects[usize::from(monster_actor.active_object_slot)];
+            let expected_tile = combat_class_sprite_byte(DUNGEON_MONSTER_COMBAT_CLASSES[0]);
+            let monster_on_published_source = (0..DUNGEON_ROOM_SOURCE_COUNT)
+                .any(|slot| source_x[slot] == monster_actor.x && source_y[slot] == monster_actor.y);
+            let party_slots = state.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
+            let party_on_entry_row = state
+                .combat_actors
+                .iter()
+                .take(party_slots)
+                .enumerate()
+                .all(|(slot, actor)| {
+                    actor.x == DUNGEON_AMBUSH_PARTY_ENTRY_X[party_row][slot]
+                        && actor.y == DUNGEON_AMBUSH_PARTY_ENTRY_Y[party_row][slot]
+                });
             if !state.combat_active
                 || !state.message.contains("entered dungeon combat")
-                || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].aux1
-                    != DUNGEON_MONSTER_COMBAT_CLASSES[0]
-                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].x != 6
-                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].y != 5
+                || monster_object.tile != expected_tile
+                || !monster_on_published_source
+                || !party_on_entry_row
                 || !state.combat_terrain.iter().all(|row| {
                     row.iter()
                         .all(|tile| *tile == DUNGEON_AMBUSH_ARENA_FLOOR_TILE)
                 })
             {
+                let bad_terrain = state
+                    .combat_terrain
+                    .iter()
+                    .flat_map(|row| row.iter())
+                    .filter(|tile| **tile != DUNGEON_AMBUSH_ARENA_FLOOR_TILE)
+                    .count();
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not enter the public #21 dungeon ambush frame"
+                    "route smoke `{case_name}` did not enter the public #21 dungeon ambush frame: \
+                     combat_active={} msg={:?} monster_tile={:#04x} (want {expected_tile:#04x}) \
+                     monster_actor=({},{}) on_published_east_source={monster_on_published_source} \
+                     party_on_entry_row_{party_row}={party_on_entry_row} party_at={:?} \
+                     non_floor_terrain_cells={bad_terrain}",
+                    state.combat_active,
+                    state.message,
+                    monster_object.tile,
+                    monster_actor.x,
+                    monster_actor.y,
+                    state
+                        .combat_actors
+                        .iter()
+                        .take(party_slots)
+                        .map(|actor| (actor.x, actor.y))
+                        .collect::<Vec<_>>(),
                 )));
             }
         }
@@ -7192,12 +7666,17 @@ fn validate_route_smoke_case_state(
             }
         }
         "terrain-combat-out-of-arena-leave" => {
-            if state.combat_active
-                || !state.message.contains("Leaving combat")
-                || state.combat_frame_snapshot.is_some()
+            if !state.combat_active
+                || !state.message.contains("Escape!")
+                || state.combat_frame_snapshot.is_none()
+                || !state.combat_actors[0].is_empty()
+                || state
+                    .active_objects
+                    .first()
+                    .is_some_and(|object| !object.is_empty())
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not resolve an out-of-arena combat leave (combat_active={}, snapshot={}, message `{}`)",
+                    "route smoke `{case_name}` did not release only the acting combatant on an out-of-arena leave (combat_active={}, snapshot={}, message `{}`)",
                     state.combat_active,
                     state.combat_frame_snapshot.is_some(),
                     state.message
@@ -7280,7 +7759,8 @@ fn validate_combat_party_descriptor_links(state: &PlayState, case_name: &str) ->
                 "route smoke `{case_name}` did not seed party active-object slot {slot}"
             )));
         };
-        let expected_step = combat_class_stats(state.party[slot].class_byte)
+        let expected_step = combat_party_class_id(state.party[slot].class_byte)
+            .and_then(combat_class_stats)
             .map(|stats| stats.speed_seed)
             .unwrap_or(1);
         if actor.owner_target_class != slot as u8
@@ -7478,5 +7958,35 @@ mod tests {
             orphans.is_empty(),
             "route-smoke `match case_name` arms key on names no case carries: {orphans:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod scratch_run {
+    use super::*;
+    use u5_runtime::DEFAULT_GAME_DIR;
+
+    #[test]
+    fn scratch_run_harpsichord_routes() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join("CASTLE.DAT").exists() {
+            println!("no assets");
+            return;
+        }
+        let atlas = load_tile_atlas(game_dir, TileGraphicsDepth::Ega16).unwrap();
+        let mut failures = 0;
+        for case in route_smoke_cases()
+            .iter()
+            .filter(|case| case.name.contains("harpsichord"))
+        {
+            match run_route_smoke_case(game_dir, &atlas, case) {
+                Ok(report) => println!("OK   {}: {}", report.name, report.final_state_line),
+                Err(err) => {
+                    failures += 1;
+                    println!("FAIL {}: {err}", case.name);
+                }
+            }
+        }
+        assert_eq!(failures, 0, "harpsichord routes failed");
     }
 }

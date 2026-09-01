@@ -36,17 +36,57 @@ pub const fn text_window_inner_width(top_left_x: u8, bottom_right_x: u8) -> u8 {
     }
 }
 
-/// `text-output.md §5` centred-line starting column. When the
-/// active window's centre flag is set, the wrap-aware printer
-/// repositions the cursor to `(width - characters_in_line) / 2`
-/// before emitting. Returns 0 when the line is wider than the
-/// window (centring becomes a no-op rather than producing a
-/// negative column).
+/// `text-output.md §5` centred-line starting column for a line
+/// emitted with the cursor at the window's left edge:
+/// `(columns_in_window - characters_in_line) / 2`, truncating.
+///
+/// `window_width` here is the window's **column count**,
+/// `bottom_right_x - top_left_x + 1` — *not* the wrap width returned
+/// by [`text_window_inner_width`]. The spec is explicit that an
+/// implementation which drops the plus one and centres against
+/// `bottom_right_x - top_left_x` agrees on odd-length lines but
+/// shifts every even-length line one whole cell left. Use
+/// [`TextWindowDescriptor::column_count`] to obtain it.
+///
+/// Returns 0 when the line is wider than the window (centring
+/// becomes a no-op rather than producing a negative column).
 pub const fn text_window_centred_start_column(window_width: u8, line_chars: u8) -> u8 {
     if line_chars >= window_width {
         0
     } else {
         (window_width - line_chars) / 2
+    }
+}
+
+/// `text-output.md §5` centred-line starting column in the printer's
+/// exact published form, which also handles a mid-row cursor.
+///
+/// The computation works from two quantities: the columns still
+/// *available* on the current row, `(bottom_right_x - top_left_x)
+/// - cursor_x` as the printer was entered, and the **index of the
+/// last character** of the line about to be emitted, one less than
+/// its character count. The starting column is
+/// `(available - last_character_index) / 2`, truncated.
+///
+/// With the cursor at the window's left edge this reduces to
+/// `(columns_in_window - characters_in_line) / 2`, i.e.
+/// [`text_window_centred_start_column`] fed the window's column
+/// count. Returns 0 when the line cannot fit in what remains of the
+/// row, rather than producing a negative column.
+pub const fn text_window_centred_start_column_from_cursor(
+    inner_width: u8,
+    cursor_x: u8,
+    line_chars: u8,
+) -> u8 {
+    if line_chars == 0 {
+        return 0;
+    }
+    let available = inner_width.saturating_sub(cursor_x);
+    let last_character_index = line_chars - 1;
+    if last_character_index >= available {
+        0
+    } else {
+        (available - last_character_index) / 2
     }
 }
 
@@ -169,6 +209,14 @@ impl Default for TextWindowDescriptor {
 impl TextWindowDescriptor {
     pub const fn inner_width(self) -> u8 {
         text_window_inner_width(self.top_left_x, self.bottom_right_x)
+    }
+
+    /// `text-output.md §5` `columns_in_window`:
+    /// `bottom_right_x - top_left_x + 1`. This is the figure the
+    /// centre branch measures against, one more than the wrap width
+    /// returned by [`Self::inner_width`].
+    pub const fn column_count(self) -> u8 {
+        self.inner_width() + 1
     }
 
     pub const fn height(self) -> u8 {
@@ -346,12 +394,16 @@ impl TextWindowSystem {
         }
         let window = self.active_window();
         let width = usize::from(window.inner_width()).max(1);
+        // `text-output.md §5`: the centre branch measures the columns
+        // still available on the row *as the printer was entered*.
+        let entry_cursor_x = window.cursor_x;
         let lines = wrap_text(source, width, usize::from(window.cursor_x));
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
             if self.active_window().centre_enabled() {
-                let start = text_window_centred_start_column(
+                let start = text_window_centred_start_column_from_cursor(
                     self.active_window().inner_width(),
+                    entry_cursor_x,
                     line.len().min(u8::MAX as usize) as u8,
                 );
                 self.set_active_cursor(start, self.active_window().cursor_y);
@@ -555,7 +607,11 @@ pub const fn text_emitter_byte_kind(byte: u8) -> EmitterByteKind {
     match byte {
         0x0A => EmitterByteKind::LineFeed,
         0x0D => EmitterByteKind::CarriageReturn,
-        0x20..=0x7E => EmitterByteKind::Glyph(byte),
+        // `text-output.md §5`: every high-bit-clear byte except LF/CR is
+        // passed to the active fixed-cell font. That includes NUL and the
+        // low pictogram band; NUL terminates the higher-level string printer,
+        // but is still a glyph when handed directly to this primitive.
+        0x00..=0x7F => EmitterByteKind::Glyph(byte),
         TEXT_CTRL_RANGE_FIRST..=TEXT_CTRL_RANGE_LAST => match text_control_byte(byte) {
             Some(c) => EmitterByteKind::Control(c),
             None => EmitterByteKind::Other,

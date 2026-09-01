@@ -52,7 +52,7 @@ fn use_command_routes_inline_sextant_request_at_night() {
     );
 
     assert_eq!(world.turn, 1);
-    assert_eq!(world.message, "Sextant:\nK'P\", C'D\"");
+    assert_eq!(world.message, "Sextant:\nK'P\", C'D\"\n");
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn sextant_refuses_in_the_underworld_with_the_indoor_refusal() {
     surface.clock = GameClock::new(20, 0).unwrap();
     surface.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
     assert_eq!(surface.use_sextant(), MoveOutcome::Used);
-    assert_eq!(surface.message, "Sextant:\nK'P\", C'D\"");
+    assert_eq!(surface.message, "Sextant:\nK'P\", C'D\"\n");
 }
 
 #[test]

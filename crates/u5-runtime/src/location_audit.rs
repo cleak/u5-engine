@@ -26,7 +26,7 @@ pub enum LocationCellOwner {
     WalkOnStair,
     ClimbTransition,
     Door,
-    ChairTrigger,
+    LooseBrickTrapdoor,
     PoisonGas,
     Pushable,
     SearchInspectable,
@@ -48,7 +48,7 @@ impl LocationCellOwner {
             Self::WalkOnStair => 8,
             Self::ClimbTransition => 9,
             Self::Door => 10,
-            Self::ChairTrigger => 11,
+            Self::LooseBrickTrapdoor => 11,
             Self::PoisonGas => 12,
             Self::Pushable => 13,
             Self::SearchInspectable => 14,
@@ -70,7 +70,7 @@ impl LocationCellOwner {
             Self::WalkOnStair => "walk-on-stair",
             Self::ClimbTransition => "climb-transition",
             Self::Door => "door",
-            Self::ChairTrigger => "chair-trigger",
+            Self::LooseBrickTrapdoor => "loose-brick-trapdoor",
             Self::PoisonGas => "poison-gas",
             Self::Pushable => "pushable",
             Self::SearchInspectable => "search-inspectable",
@@ -91,7 +91,7 @@ impl LocationCellOwner {
         Self::WalkOnStair,
         Self::ClimbTransition,
         Self::Door,
-        Self::ChairTrigger,
+        Self::LooseBrickTrapdoor,
         Self::PoisonGas,
         Self::Pushable,
         Self::SearchInspectable,
@@ -169,8 +169,8 @@ pub fn classify_location_cell_owner(tile: u8) -> LocationCellOwner {
     if is_town_door_tile(tile) {
         return LocationCellOwner::Door;
     }
-    if tile == TOWN_CHAIR_TILE {
-        return LocationCellOwner::ChairTrigger;
+    if tile == TOWN_LOOSE_BRICK_TRAPDOOR_TILE {
+        return LocationCellOwner::LooseBrickTrapdoor;
     }
     if tile == TOWN_POISON_GAS_LIVE_TILE {
         return LocationCellOwner::PoisonGas;
@@ -360,7 +360,9 @@ fn audit_location_grid(
             let view_class =
                 usize::from(tile_view_class(tile)).min(LOCATION_AUDIT_VIEW_CLASS_COUNT - 1);
             audit.view_class_counts[view_class] += 1;
-            if npc_path_tile_open(tile) {
+            // npc-schedules.md §10: a clear bit is open, a set bit is an
+            // obstacle for NPC pathfinding.
+            if !npc_path_tile_obstacle(tile) {
                 audit.npc_path_open_count += 1;
             }
             if is_tile_walkable_for_transport(tile, None, TransportState::Foot) {
@@ -414,7 +416,7 @@ fn tile_class_index(class: TileClass) -> usize {
         TileClass::Path => 3,
         TileClass::Wall => 4,
         TileClass::Furniture => 5,
-        TileClass::Door => 6,
+        TileClass::River => 6,
         TileClass::Decoration => 7,
         TileClass::Barrier => 8,
         TileClass::Special => 9,
@@ -432,7 +434,7 @@ fn tile_class_label(index: usize) -> &'static str {
         3 => "path",
         4 => "wall",
         5 => "furniture",
-        6 => "door",
+        6 => "river",
         7 => "decoration",
         8 => "barrier",
         9 => "special",

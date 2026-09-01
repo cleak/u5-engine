@@ -39,17 +39,11 @@
 //! sites treat as a hit." Damage is the caller's next step, never the
 //! walker's.
 //!
-//! # Known divergence: the blocking tile-id set
+//! # Projectile obstruction bitmap
 //!
-//! §6.2.2 says the obstruction test consults "a fixed per-tile-id
-//! passability bitmap in which exactly **46** of the 256 tile ids block",
-//! and §6.2.5 names that set as an open gap: "The 46 blocking ids are
-//! established as a set of ids; they were not mapped to named terrain."
-//! This module therefore takes the predicate from its caller and does not
-//! own one. The tree's [`crate::surface_tile_blocks_projectile`] stands in
-//! at the two outdoor call sites and blocks considerably more than 46 ids;
-//! that is a known divergence from the published count, not a claim to
-//! reproduce it.
+//! §6.2.2 publishes the complete 46-id bitmap and makes it private to this
+//! walker. [`outdoor_projectile_tile_blocks`] owns that exact predicate; it
+//! must not be replaced by the broader surface-movement or town-Fire tests.
 
 use crate::transport::{ShipLossFallback, TransportState};
 use crate::{VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW, VIEWPORT_SIDE};
@@ -65,6 +59,26 @@ const WORLD_SIDE: i32 = crate::WORLD_SIDE as i32;
 /// inclusive on each axis", and the broadside requires "zero separation on
 /// one axis, separation below four on the other".
 pub const OUTDOOR_RANGED_ATTACK_RANGE_CELLS: i32 = 3;
+
+/// `overworld.md §6.2.2`: exact projectile-obstruction bitmap. Ranges are
+/// inclusive and every omitted id is passable. The walker samples the
+/// post-compositor primary viewport-grid byte, not raw world terrain.
+pub const fn outdoor_projectile_tile_blocks(tile: u8) -> bool {
+    matches!(
+        tile,
+        0x0C..=0x0D
+            | 0x12..=0x15
+            | 0x19..=0x1B
+            | 0x3A..=0x3F
+            | 0x42
+            | 0x46
+            | 0x4D..=0x55
+            | 0x5A
+            | 0x70..=0x7F
+            | 0xB8..=0xB9
+            | 0xDF
+    )
+}
 
 /// Signed shortest delta from `from` to `to` on the 256-cell overworld
 /// torus, in `-128..=127`.

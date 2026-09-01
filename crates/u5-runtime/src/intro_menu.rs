@@ -7,12 +7,23 @@
 //! to await the next selection.
 //!
 //! This module is the orchestrator: it owns the menu's current sub-
-//! flow phase, the most-recent cached selection (for Enter-repeat),
-//! and a thin enum of "what should the harness do next?" outputs. The
-//! sub-flows themselves live in [`crate::chargen`], [`crate::u4_transfer`],
-//! and [`crate::intro`]; the menu just sequences them.
+//! flow phase, the highlighted row index, the no-key idle-pass
+//! counter, and a thin enum of "what should the harness do next?"
+//! outputs. The sub-flows themselves live in [`crate::chargen`],
+//! [`crate::u4_transfer`], and [`crate::intro`]; the menu just
+//! sequences them.
+//!
+//! `intro.md §6.2`: "The menu has one input model with three entry
+//! points, all of which operate on that same highlight index. ... the
+//! row index is load-bearing, because Enter, Space and the idle
+//! timeout all resolve through it. The claim that the menu keeps a
+//! 'recent-selection cache' that Enter replays is withdrawn as well;
+//! there is no such cache."
 
-use crate::intro::{IntroMenuAction, intro_menu_action};
+use crate::intro::{
+    INTRO_MENU_IDLE_TIMEOUT_PASSES, INTRO_MENU_INITIAL_HIGHLIGHT_ROW, INTRO_MENU_ROW_COUNT,
+    INTRO_MENU_ROW_LETTERS, IntroMenuAction, intro_menu_action,
+};
 
 /// Where the intro menu currently sits.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -87,15 +98,52 @@ pub enum IntroSubflowResult {
 }
 
 /// Per-call state.
-#[derive(Clone, Copy, Debug, Default)]
+///
+/// `intro.md §6.2`: "**The initial highlight is row 0, `Journey
+/// Onward`**, and the highlight index survives across poll passes."
+#[derive(Clone, Copy, Debug)]
 pub struct IntroMenu {
     pub phase: IntroMenuPhase,
-    pub cached_selection: Option<IntroSubflow>,
+    /// Index of the row drawn in inverse video, `0..=5`.
+    pub highlight_row: u8,
+    /// Consecutive no-key menu poll passes seen so far; two hundred of
+    /// them commit `Return to the View`.
+    pub idle_passes: u16,
+}
+
+impl Default for IntroMenu {
+    fn default() -> Self {
+        Self {
+            phase: IntroMenuPhase::default(),
+            highlight_row: INTRO_MENU_INITIAL_HIGHLIGHT_ROW,
+            idle_passes: 0,
+        }
+    }
+}
+
+/// `intro.md §6.2`: resolve a row index through the fixed six-entry
+/// row-to-letter table (`J`, `C`, `T`, `U`, `A`, `R`).
+fn subflow_for_row(row: u8) -> IntroSubflow {
+    let letter = INTRO_MENU_ROW_LETTERS[usize::from(row) % INTRO_MENU_ROW_COUNT];
+    match intro_menu_action(letter) {
+        Some(IntroMenuAction::JourneyOnward) => IntroSubflow::JourneyOnward,
+        Some(IntroMenuAction::CreateNewCharacter) => IntroSubflow::CharacterCreation,
+        Some(IntroMenuAction::TransferFromUltimaIv) => IntroSubflow::UltimaIvTransfer,
+        Some(IntroMenuAction::UltimaVIntroduction) => IntroSubflow::StorySlides,
+        Some(IntroMenuAction::Acknowledgements) => IntroSubflow::Acknowledgements,
+        Some(IntroMenuAction::ReturnToView) => IntroSubflow::ReturnToView,
+        _ => unreachable!("every row-to-letter entry is a published menu letter"),
+    }
 }
 
 impl IntroMenu {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The sub-flow the currently highlighted row would commit.
+    pub fn highlight(&self) -> IntroSubflow {
+        subflow_for_row(self.highlight_row)
     }
 
     /// Title animation tick: the engine has presented one title-tick
@@ -121,6 +169,12 @@ impl IntroMenu {
     }
 
     /// Feed one menu keystroke. Returns the next harness action.
+    ///
+    /// `intro.md §6.2`: a letter hotkey "Move[s] the highlight to that
+    /// row **and** commit[s] it in the same pass"; the arrows move the
+    /// highlight and keep polling; Enter and Space "Commit whichever
+    /// row is currently highlighted, resolved through the row-to-letter
+    /// table"; any other key is discarded.
     pub fn step(&mut self, key: u8) -> IntroMenuOutput {
         if !matches!(self.phase, IntroMenuPhase::AwaitingSelection) {
             return IntroMenuOutput::IgnoredKey;
@@ -128,19 +182,44 @@ impl IntroMenu {
         let Some(action) = intro_menu_action(key) else {
             return IntroMenuOutput::IgnoredKey;
         };
-        let resolved = match action {
-            IntroMenuAction::RepeatCachedSelection => match self.cached_selection {
-                Some(sub) => sub,
-                None => return IntroMenuOutput::IgnoredKey,
-            },
-            IntroMenuAction::JourneyOnward => IntroSubflow::JourneyOnward,
-            IntroMenuAction::CreateNewCharacter => IntroSubflow::CharacterCreation,
-            IntroMenuAction::TransferFromUltimaIv => IntroSubflow::UltimaIvTransfer,
-            IntroMenuAction::UltimaVIntroduction => IntroSubflow::StorySlides,
-            IntroMenuAction::Acknowledgements => IntroSubflow::Acknowledgements,
-            IntroMenuAction::ReturnToView => IntroSubflow::ReturnToView,
+        self.idle_passes = 0;
+        let rows = INTRO_MENU_ROW_COUNT as u8;
+        let row = match action {
+            IntroMenuAction::MoveHighlightUp => {
+                self.highlight_row = (self.highlight_row + rows - 1) % rows;
+                return IntroMenuOutput::PresentMenu;
+            }
+            IntroMenuAction::MoveHighlightDown => {
+                self.highlight_row = (self.highlight_row + 1) % rows;
+                return IntroMenuOutput::PresentMenu;
+            }
+            IntroMenuAction::CommitHighlight => self.highlight_row,
+            letter => letter
+                .letter_row()
+                .expect("letter hotkeys always name a published row"),
         };
-        self.cached_selection = Some(resolved);
+        self.commit_row(row)
+    }
+
+    /// `intro.md §6.2`: "Two hundred consecutive no-key passes | Commit
+    /// `Return to the View` exactly as though `R` had been pressed."
+    /// Feed one no-key menu poll pass.
+    pub fn idle_pass(&mut self) -> IntroMenuOutput {
+        if !matches!(self.phase, IntroMenuPhase::AwaitingSelection) {
+            return IntroMenuOutput::IgnoredKey;
+        }
+        self.idle_passes = self.idle_passes.saturating_add(1);
+        if self.idle_passes < INTRO_MENU_IDLE_TIMEOUT_PASSES {
+            return IntroMenuOutput::PresentMenu;
+        }
+        self.idle_passes = 0;
+        self.commit_row((INTRO_MENU_ROW_COUNT - 1) as u8)
+    }
+
+    /// Move the highlight to `row` and commit it.
+    fn commit_row(&mut self, row: u8) -> IntroMenuOutput {
+        self.highlight_row = row % (INTRO_MENU_ROW_COUNT as u8);
+        let resolved = subflow_for_row(self.highlight_row);
         self.phase = match resolved {
             IntroSubflow::JourneyOnward => IntroMenuPhase::JourneyOnwardLoading,
             IntroSubflow::CharacterCreation => IntroMenuPhase::CharacterCreation,
@@ -158,6 +237,7 @@ impl IntroMenu {
         sub: IntroSubflow,
         result: IntroSubflowResult,
     ) -> IntroMenuOutput {
+        self.idle_passes = 0;
         match (sub, result) {
             (IntroSubflow::JourneyOnward, IntroSubflowResult::SaveReady) => {
                 self.phase = IntroMenuPhase::LaunchedGameplay;
@@ -211,7 +291,8 @@ mod tests {
             IntroMenuOutput::EnterSubflow(IntroSubflow::JourneyOnward)
         );
         assert_eq!(menu.phase, IntroMenuPhase::JourneyOnwardLoading);
-        assert_eq!(menu.cached_selection, Some(IntroSubflow::JourneyOnward));
+        assert_eq!(menu.highlight_row, 0);
+        assert_eq!(menu.highlight(), IntroSubflow::JourneyOnward);
     }
 
     #[test]
@@ -232,11 +313,21 @@ mod tests {
         assert_eq!(menu.phase, IntroMenuPhase::AwaitingSelection);
     }
 
+    /// `intro.md §6.2`: "Letter hotkeys and the highlight model
+    /// therefore coexist rather than competing: a letter both moves the
+    /// bar and activates the row, so the bar always reflects the last
+    /// selection made."
+    ///
+    /// Enter then re-commits whatever the bar shows — not because a
+    /// "recent-selection cache" is replayed (that reading is withdrawn:
+    /// "there is no such cache") but because Enter resolves the
+    /// highlight index through the row-to-letter table.
     #[test]
-    fn enter_key_repeats_cached_selection() {
+    fn enter_key_commits_the_highlighted_row() {
         let mut menu = IntroMenu::new();
         menu.dismiss_title();
         menu.step(b'A');
+        assert_eq!(menu.highlight_row, 4);
         menu.complete_subflow(
             IntroSubflow::Acknowledgements,
             IntroSubflowResult::ReturnedToMenu,
@@ -247,11 +338,116 @@ mod tests {
         );
     }
 
+    /// `intro.md §6.2`: "**The initial highlight is row 0, `Journey
+    /// Onward`**", and "Enter, Space | Commit whichever row is
+    /// currently highlighted, resolved through the row-to-letter
+    /// table."
+    ///
+    /// A freshly presented menu therefore always has a row to commit;
+    /// the withdrawn reading ignored Enter until a letter had been
+    /// pressed.
     #[test]
-    fn enter_key_without_cached_selection_is_ignored() {
+    fn enter_key_on_a_fresh_menu_commits_row_zero() {
         let mut menu = IntroMenu::new();
         menu.dismiss_title();
-        assert_eq!(menu.step(b'\r'), IntroMenuOutput::IgnoredKey);
+        assert_eq!(menu.highlight_row, 0);
+        assert_eq!(
+            menu.step(b'\r'),
+            IntroMenuOutput::EnterSubflow(IntroSubflow::JourneyOnward)
+        );
+    }
+
+    /// `intro.md §6.2`: "Enter, Space | Commit whichever row is
+    /// currently highlighted, resolved through the row-to-letter
+    /// table." Space is an accepted input, not a discarded key.
+    #[test]
+    fn space_commits_the_highlighted_row() {
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        assert_eq!(
+            menu.step(b' '),
+            IntroMenuOutput::EnterSubflow(IntroSubflow::JourneyOnward)
+        );
+    }
+
+    /// `intro.md §6.2`: "Up arrow, left arrow | Move the highlight one
+    /// row toward row 0, wrapping from row 0 to row 5; repaint the
+    /// labels; keep polling." and the mirrored down/right row.
+    #[test]
+    fn arrow_keys_move_the_highlight_with_wraparound() {
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        assert_eq!(
+            menu.step(crate::INPUT_CODE_SOUTH),
+            IntroMenuOutput::PresentMenu
+        );
+        assert_eq!(menu.highlight_row, 1);
+        assert_eq!(
+            menu.step(crate::INPUT_CODE_EAST),
+            IntroMenuOutput::PresentMenu
+        );
+        assert_eq!(menu.highlight_row, 2);
+        assert_eq!(
+            menu.step(crate::INPUT_CODE_NORTH),
+            IntroMenuOutput::PresentMenu
+        );
+        assert_eq!(menu.highlight_row, 1);
+        assert_eq!(
+            menu.step(crate::INPUT_CODE_WEST),
+            IntroMenuOutput::PresentMenu
+        );
+        assert_eq!(menu.highlight_row, 0);
+        // Wrap from row 0 back to row 5, and from row 5 forward to 0.
+        assert_eq!(
+            menu.step(crate::INPUT_CODE_NORTH),
+            IntroMenuOutput::PresentMenu
+        );
+        assert_eq!(menu.highlight_row, 5);
+        assert_eq!(menu.highlight(), IntroSubflow::ReturnToView);
+        assert_eq!(
+            menu.step(crate::INPUT_CODE_SOUTH),
+            IntroMenuOutput::PresentMenu
+        );
+        assert_eq!(menu.highlight_row, 0);
+        // Moving the highlight commits nothing.
+        assert_eq!(menu.phase, IntroMenuPhase::AwaitingSelection);
+    }
+
+    /// `intro.md §6.2`: "Two hundred consecutive no-key passes | Commit
+    /// `Return to the View` exactly as though `R` had been pressed."
+    #[test]
+    fn two_hundred_no_key_passes_commit_return_to_the_view() {
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        for pass in 1..crate::INTRO_MENU_IDLE_TIMEOUT_PASSES {
+            assert_eq!(
+                menu.idle_pass(),
+                IntroMenuOutput::PresentMenu,
+                "pass {pass}"
+            );
+        }
+        assert_eq!(
+            menu.idle_pass(),
+            IntroMenuOutput::EnterSubflow(IntroSubflow::ReturnToView)
+        );
+        assert_eq!(menu.highlight_row, 5);
+    }
+
+    /// `intro.md §6.2`: the timeout counts *consecutive* no-key passes,
+    /// so any accepted key restarts the count.
+    #[test]
+    fn a_keystroke_restarts_the_idle_pass_count() {
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        for _ in 0..(crate::INTRO_MENU_IDLE_TIMEOUT_PASSES - 1) {
+            menu.idle_pass();
+        }
+        assert_eq!(
+            menu.step(crate::INPUT_CODE_SOUTH),
+            IntroMenuOutput::PresentMenu
+        );
+        assert_eq!(menu.idle_passes, 0);
+        assert_eq!(menu.idle_pass(), IntroMenuOutput::PresentMenu);
     }
 
     #[test]

@@ -41,6 +41,10 @@ pub const SUBTITLE_IGNITION_DRIVER_STATE_SEED: u16 = 0x7664;
 pub const SUBTITLE_IGNITION_DRIVER_STATE_ADD: u16 = 0x9248;
 pub const SUBTITLE_IGNITION_DRIVER_STATE_FINAL_ADD: u16 = 0x0011;
 pub const SUBTITLE_IGNITION_SPEAKER_PITCHES_PER_BURST: usize = 25;
+/// `intro.md §5`: the requested frequency of one burst pitch is
+/// `100 + (pitch_state modulo 1401)`, i.e. 100 through 1500 Hz.
+pub const SUBTITLE_IGNITION_PITCH_BASE_HZ: u16 = 100;
+pub const SUBTITLE_IGNITION_PITCH_MODULUS: u16 = 1401;
 pub const SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS: u8 = 45;
 pub const SUBTITLE_IGNITION_SILENT_WAIT_UNITS: u8 = 50;
 
@@ -116,6 +120,9 @@ pub struct SubtitleIgnitionPublish {
     /// Current gate tested before the iteration's post-poll advance.
     pub gate_state: u16,
     pub speaker_burst: bool,
+    /// `intro.md §5`: the twenty-five successive frequencies this publication
+    /// programs, in order. Empty on a silent publication.
+    pub burst_pitches: Vec<u16>,
     pub wait_units: u8,
     /// Partially restored full-width `320 x 49` band.
     pub pixels: Vec<u8>,
@@ -181,6 +188,11 @@ const fn advance_subtitle_ignition_lfsr(state: u16) -> u16 {
         next ^= SUBTITLE_IGNITION_LFSR_TAP;
     }
     next & ((1 << SUBTITLE_IGNITION_LFSR_BITS) - 1) as u16
+}
+
+/// `intro.md §5`: map one advanced pitch state onto its requested frequency.
+pub const fn subtitle_ignition_burst_pitch(pitch_state: u16) -> u16 {
+    SUBTITLE_IGNITION_PITCH_BASE_HZ + pitch_state % SUBTITLE_IGNITION_PITCH_MODULUS
 }
 
 pub const fn advance_subtitle_ignition_driver_state(state: u16) -> u16 {
@@ -313,10 +325,13 @@ pub fn build_subtitle_ignition_playback_with_driver_state(
                     publication_in_pass += 1;
                     let threshold = 400usize - 3 * publication_in_pass;
                     let speaker_burst = usize::from(gate_state & 0x01ff) < threshold;
+                    let mut burst_pitches = Vec::new();
                     let wait_units = if speaker_burst {
                         speaker_bursts += 1;
+                        burst_pitches.reserve_exact(SUBTITLE_IGNITION_SPEAKER_PITCHES_PER_BURST);
                         for _ in 0..SUBTITLE_IGNITION_SPEAKER_PITCHES_PER_BURST {
                             pitch_state = advance_subtitle_ignition_driver_state(pitch_state);
+                            burst_pitches.push(subtitle_ignition_burst_pitch(pitch_state));
                         }
                         SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS
                     } else {
@@ -332,6 +347,7 @@ pub fn build_subtitle_ignition_playback_with_driver_state(
                         lfsr_state: state,
                         gate_state,
                         speaker_burst,
+                        burst_pitches,
                         wait_units,
                         pixels: staged[start..start + TITLE_TICK_FRAME_PIXELS].to_vec(),
                     });

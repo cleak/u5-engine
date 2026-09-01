@@ -9,6 +9,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::time::Duration;
 
+use u5_runtime::stats_panel::transcribe_cell_frame_for_plain_text;
 use u5_runtime::{
     Area, Direction, ExplorationTurnGateOutcome, INPUT_CODE_EAST, INPUT_CODE_NORTH,
     INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST, INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST,
@@ -64,7 +65,7 @@ pub fn run_play_loop(
             }
         }
         print_play_frame(&mut state, tile_atlas.as_ref())?;
-        if !play_state_accepts_typeahead(&state) {
+        if !play_state_honours_typeahead_queue(&state) {
             queued_input.clear();
         }
         let (key, suffix) = if let Some(key) = queued_input.pop_front() {
@@ -76,7 +77,7 @@ pub fn run_play_loop(
             if io::stdin().read_line(&mut input)? == 0 {
                 break;
             }
-            if state.typeahead_buffer_enabled && play_state_accepts_typeahead(&state) {
+            if play_state_typeahead_setting_in_force(&state) {
                 if let Some(keys) = play_input_typeahead_chars(&input) {
                     let mut keys = keys.into_iter();
                     let key = keys.next().expect("typeahead input is non-empty");
@@ -145,17 +146,39 @@ where
 }
 
 pub fn print_play_frame(state: &mut PlayState, tile_atlas: Option<&TileAtlas>) -> io::Result<()> {
+    write_play_frame(state, tile_atlas, &mut io::stdout())
+}
+
+/// Terminal body of [`print_play_frame`], writing to an arbitrary sink so
+/// the emitted bytes can be inspected.
+///
+/// `render_text_window_frame` transcribes the emitted CELL SURFACE, whose
+/// active-player marker is the fixed-cell font's glyph code `0x1A`
+/// (`stats-panel.md §4`, party-row column 33). A terminal has no glyph
+/// table, so that byte must be transcribed to the plain-text stand-in
+/// before it is printed; see
+/// [`transcribe_cell_frame_for_plain_text`].
+pub fn write_play_frame<W: Write>(
+    state: &mut PlayState,
+    tile_atlas: Option<&TileAtlas>,
+    out: &mut W,
+) -> io::Result<()> {
     complete_headless_blocking_presentations(state, tile_atlas)?;
-    println!();
-    println!("{}", state.render_text_frame(5));
-    println!("{}", state.render_text_window_frame(None));
+    writeln!(out)?;
+    writeln!(out, "{}", state.render_text_frame(5))?;
+    writeln!(
+        out,
+        "{}",
+        transcribe_cell_frame_for_plain_text(&state.render_text_window_frame(None))
+    )?;
     if let Some(atlas) = tile_atlas {
-        println!("{}", raster_diagnostic_line(state, 5, atlas)?);
+        writeln!(out, "{}", raster_diagnostic_line(state, 5, atlas)?)?;
     }
     // The dissolve is a completed blocking driver call. This frontend has no
     // intermediate pixel page, so printing the resulting state acknowledges
     // the pending completion records rather than retaining them forever.
     let _ = state.take_pending_map_viewport_dissolves();
+    let _ = state.take_pending_blackthorn_rescue_playbacks();
     let _ = state.take_pending_stonegate_trapdoor_playback();
     Ok(())
 }
@@ -164,13 +187,28 @@ pub fn print_play_script_snapshot(
     state: &mut PlayState,
     tile_atlas: Option<&TileAtlas>,
 ) -> io::Result<()> {
+    write_play_script_snapshot(state, tile_atlas, &mut io::stdout())
+}
+
+/// Terminal body of [`print_play_script_snapshot`]; same cell-surface to
+/// plain-text transcription as [`write_play_frame`].
+pub fn write_play_script_snapshot<W: Write>(
+    state: &mut PlayState,
+    tile_atlas: Option<&TileAtlas>,
+    out: &mut W,
+) -> io::Result<()> {
     complete_headless_blocking_presentations(state, tile_atlas)?;
-    println!("{}", play_script_state_line(state));
-    println!("{}", state.render_text_window_frame(None));
+    writeln!(out, "{}", play_script_state_line(state))?;
+    writeln!(
+        out,
+        "{}",
+        transcribe_cell_frame_for_plain_text(&state.render_text_window_frame(None))
+    )?;
     if let Some(atlas) = tile_atlas {
-        println!("{}", raster_diagnostic_line(state, 5, atlas)?);
+        writeln!(out, "{}", raster_diagnostic_line(state, 5, atlas)?)?;
     }
     let _ = state.take_pending_map_viewport_dissolves();
+    let _ = state.take_pending_blackthorn_rescue_playbacks();
     let _ = state.take_pending_stonegate_trapdoor_playback();
     Ok(())
 }
@@ -403,10 +441,10 @@ pub fn handle_play_script_command(
         }
         return Ok(PlayInputDisposition::Continue);
     }
-    if state.typeahead_buffer_enabled && play_state_accepts_typeahead(state) {
+    if play_state_typeahead_setting_in_force(state) {
         if let Some(keys) = play_input_typeahead_chars(command) {
             for key in keys {
-                if !play_state_accepts_typeahead(state) {
+                if !play_state_honours_typeahead_queue(state) {
                     break;
                 }
                 settle_play_script_exploration_gate(state, game_dir)?;
@@ -462,6 +500,52 @@ pub fn play_state_accepts_typeahead(state: &PlayState) -> bool {
         && state.active_wishing_well.is_none()
         && state.active_direction_prompt.is_none()
         && state.active_yes_no_prompt.is_none()
+}
+
+/// `systems/input.md §6`, third writer of the type-ahead setting:
+/// "the free-text line reader saves the setting, forces type-ahead on
+/// for the duration of a typed line, and restores it afterwards. That
+/// last one means typing a name, a keyword, or a word of power always
+/// honours the queue regardless of the player's choice."
+///
+/// `§8` step 2 states the same thing from the prompt's side: "Disable
+/// the buffer flush. The flush gate (Section 6) is cleared so the
+/// player can type ahead. The prompt restores it on exit."
+///
+/// The membership test is the session's accumulating line buffer: each
+/// of these sessions holds a `String` it appends typed characters to,
+/// which is what makes it the free-text line reader rather than one of
+/// §8's single-character prompts (Y/N, a digit, a target-slot letter),
+/// which run the loop exactly once and are not covered.
+pub fn play_state_free_text_line_reader(state: &PlayState) -> bool {
+    state.active_conversation.is_some()
+        || state.active_yell.is_some()
+        || state.active_shrine_restoration.is_some()
+        || state.active_cast.is_some()
+        || state.active_cast_followup.is_some()
+        || state.active_mix.is_some()
+}
+
+/// `systems/input.md §6`: whether a queued keystroke survives to the
+/// next read. The non-text modals still flush, but a free-text line
+/// reader forces the honour-the-queue state for the duration of the
+/// typed line, so the queue must not be cleared under one.
+///
+/// Save/restore of the underlying setting is implicit here: nothing in
+/// this path writes `typeahead_buffer_enabled`, so the player's own
+/// choice is exactly what is in force again once the session closes.
+pub fn play_state_honours_typeahead_queue(state: &PlayState) -> bool {
+    play_state_accepts_typeahead(state) || play_state_free_text_line_reader(state)
+}
+
+/// `systems/input.md §6`: the effective type-ahead setting for the
+/// current state — the player's toggle, forced on while a free-text
+/// line reader is open.
+pub fn play_state_typeahead_setting_in_force(state: &PlayState) -> bool {
+    if play_state_free_text_line_reader(state) {
+        return true;
+    }
+    state.typeahead_buffer_enabled && play_state_accepts_typeahead(state)
 }
 
 pub fn play_script_idle_tick_count(command: &str) -> io::Result<Option<usize>> {

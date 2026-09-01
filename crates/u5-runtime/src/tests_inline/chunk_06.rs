@@ -1718,16 +1718,31 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `hidden-treasures.md` §2, record 15: the gate is "The
+    /// equipment-inventory counter for the item it grants ... The scan
+    /// never writes the counter; the ordinary inventory grant for the item
+    /// does, and that is exactly what makes the record single-use."
+    /// `formats/saved-gam.md` §10 names the byte: "This is the
+    /// **equipment-inventory counter for item id `39` (Glass Sword)** ...
+    /// An engine that gives record 15 a separate never-written cookie
+    /// yields an infinitely repeatable Glass Sword."
+    ///
+    /// So the second Search after a successful Get is refused, because the
+    /// Get incremented the Glass Sword counter. An earlier revision of this
+    /// test searched, got, and searched again expecting a second stage -
+    /// the "infinitely repeatable" behaviour the spec names as the error -
+    /// and that expectation is retracted. Record 15 still never sets a
+    /// found-bitmap bit, which is what the remaining
+    /// `fixed_hidden_treasure_found(15)` assertions pin.
     #[test]
-    fn search_fixed_hidden_record_15_uses_cookie_not_found_bitmap() {
+    fn search_fixed_hidden_record_15_uses_glass_sword_counter_not_found_bitmap() {
         let dir = debug_game_dir();
         let mut state = world_state(open_world_grid(), 79, 64);
         state.area = Area::World {
             plane: WorldPlane::Britannia,
         };
         state.player.facing = Direction::East;
-        state.fixed_hidden_treasure_single_use_cookie =
-            FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR;
+        state.equipment_stock[EQUIPMENT_ID_GLASS_SWORD] = 0;
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
@@ -1739,24 +1754,26 @@
             Some(15)
         );
 
+        // The Get performs the inventory transfer, which increments the
+        // Glass Sword counter; the record is now closed even though no
+        // found-bitmap bit was ever set.
         assert_eq!(
             state.get_facing_with_game_dir(&dir).unwrap(),
             MoveOutcome::Got
         );
-        assert_eq!(
-            state.search_facing_with_game_dir(&dir).unwrap(),
-            MoveOutcome::Searched
-        );
-        assert!(!state.fixed_hidden_treasure_found(15));
-
-        assert_eq!(
-            state.get_facing_with_game_dir(&dir).unwrap(),
-            MoveOutcome::Got
-        );
-        state.fixed_hidden_treasure_single_use_cookie = 1;
+        assert!(state.equipment_stock[EQUIPMENT_ID_GLASS_SWORD] > 0);
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
             MoveOutcome::Blocked
+        );
+        assert!(!state.fixed_hidden_treasure_found(15));
+
+        // "a party that discards or loses its Glass Sword makes the record
+        // available again - that is original behaviour, not a defect."
+        state.equipment_stock[EQUIPMENT_ID_GLASS_SWORD] = 0;
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
         );
         assert!(!state.fixed_hidden_treasure_found(15));
         let _ = fs::remove_dir_all(dir);
@@ -1800,8 +1817,7 @@
             plane: WorldPlane::Britannia,
         };
         state.player.facing = Direction::East;
-        state.fixed_hidden_treasure_single_use_cookie =
-            FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR;
+        state.equipment_stock[EQUIPMENT_ID_GLASS_SWORD] = 0;
         state.active_objects.push(ActiveObject {
             type_byte: 0x10,
             tile: 0x10,
@@ -2194,10 +2210,14 @@
     }
 
     #[test]
-    fn natural_moongate_entry_treats_felucca_hour_19_as_phase_zero() {
-        // Public issue #38 corrected Felucca hour 19 to literal
-        // phase 0. A live natural-moongate cell clears and routes
-        // through Moonstone slot 0, even if that slot is unset.
+    fn natural_moongate_entry_uses_the_felucca_day_row_from_noon_onward() {
+        // `moons.md §2.2`: the glyph identity is "indexed by the
+        // calendar day of the month ... It is not indexed by the hour",
+        // and `overworld.md §9` / `moons.md §2.2` say the entry hook
+        // reads the *second* cached glyph from noon onward. The fixture
+        // clock is on day 5, whose Felucca row is `'3'` -> slot 3. This
+        // test previously pinned the retracted 24-entry hour table's
+        // hour-19 row.
         let origin_idx = world_cell_index(5, 5);
         let mut grid = open_world_grid();
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
@@ -2216,13 +2236,13 @@
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.natural_moongate_live_cells.is_empty());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Natural moongate phase 1 is not set.");
+        assert_eq!(state.message, "Natural moongate phase 4 is not set.");
     }
 
     #[test]
-    fn natural_moongate_entry_uses_published_hour_table_for_empty_slot() {
-        // `moons.md §2`: hour 11 Trammel resolves to Moonstone slot 6
-        // through the published hour table. With no destination wired
+    fn natural_moongate_entry_uses_published_day_table_for_empty_slot() {
+        // `moons.md §2.2`: before noon the entry hook reads the first
+        // cached glyph, whose identity comes from the calendar day. With no destination wired
         // into slot 6, the gate hook still clears the tile and reports
         // the published "phase N is not set" message — confirming the
         // cached byte rather than recomputing the hour table at entry.
@@ -2245,7 +2265,11 @@
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
-        assert_eq!(state.message, "Natural moongate phase 7 is not set.");
+        // `moons.md §2.2`: the glyph is chosen by the calendar day, not
+        // by the hour. The fixture clock starts on day 5, whose Trammel
+        // row is `'2'` — the spec's own worked example ("Trammel's
+        // **glyph** comes from day 5, not hour 8 ... gives `'2'`").
+        assert_eq!(state.message, "Natural moongate phase 3 is not set.");
     }
 
     #[test]
@@ -2267,7 +2291,13 @@
     }
 
     #[test]
-    fn moon_glyph_cache_refreshes_on_hour_change_and_status_redraw() {
+    /// `moons.md §3`: "The strip renderer runs from exactly one place:
+    /// the per-turn cleanup pass, and only when that pass observes the
+    /// hour changing, and only in a scene that shows the surface/town
+    /// status strip. It is **not** driven by ordinary stats-panel
+    /// redraws, and an earlier statement in this document that it should
+    /// be refreshed on every stats-panel redraw is retracted."
+    fn moon_glyph_cache_refreshes_on_hour_change_but_not_on_status_redraw() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.clock = GameClock::new(10, 58).unwrap();
         state.set_cached_moon_glyph_bytes(
@@ -2278,21 +2308,32 @@
         state.advance_turn_with_minutes(2);
 
         assert_eq!(state.clock.hour, 11);
+        // `moons.md §3`: the hour change is the refresh *trigger*, but
+        // the cached glyph identity comes from the calendar day.
         assert_eq!(
             state.cached_moon_glyph_bytes,
-            cached_moon_glyph_bytes_for_hour(11)
+            cached_moon_glyph_bytes_for_day(state.clock.day).unwrap()
         );
 
+        // A redraw with no hour change must leave the cache exactly as
+        // the caller parked it: the natural-moongate entry hook reads
+        // these two bytes to pick the destination Moonstone slot, so a
+        // repaint must not silently re-derive them from the current day.
         state.clock = GameClock::new(12, 0).unwrap();
         state.set_cached_moon_glyph_bytes(
             TRAMMEL_OFF_HORIZON_SENTINEL,
             FELUCCA_OFF_HORIZON_SENTINEL,
         );
         let _ = state.render_text_window_frame(None);
-
         assert_eq!(
             state.cached_moon_glyph_bytes,
-            cached_moon_glyph_bytes_for_hour(12)
+            [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL]
+        );
+
+        let _ = state.render_stats_panel_frame();
+        assert_eq!(
+            state.cached_moon_glyph_bytes,
+            [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL]
         );
     }
 
@@ -2468,7 +2509,15 @@
     /// on the line, so the `overworld.md §6.2.4` payload never runs and the
     /// party's hit points stay out of the assertion.
     fn block_projectile_at(state: &mut PlayState, x: usize, y: usize) {
+        // Projectile obstruction samples the post-compositor primary grid.
+        // Keep the authored blocker inside the visible radius so this helper
+        // tests its tile class rather than the darkness sentinel.
+        state.ambient_light = FULL_DAYLIGHT;
         state.grid[world_cell_index(x, y)] = 0x0c;
+        let Area::World { plane } = state.area else {
+            panic!("projectile fixture must be in an overworld scene");
+        };
+        state.rebuild_world_live_chunks_from_grid(plane).unwrap();
     }
 
     /// A six-member party of identical, healthy members, so a whole-party
@@ -2600,6 +2649,46 @@
     }
 
     #[test]
+    fn outdoor_projectile_samples_the_post_compositor_primary_grid() {
+        let mut terrain_only = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        terrain_only.ambient_light = FULL_DAYLIGHT;
+        block_projectile_at(&mut terrain_only, 7, 5);
+        terrain_only
+            .rebuild_world_live_chunks_from_grid(WorldPlane::Underworld)
+            .unwrap();
+        let blocked = terrain_only
+            .outdoor_first_phase_ranged_attack_detail(1)
+            .expect("aligned broadside fires");
+        assert!(matches!(
+            blocked.outcome,
+            OutdoorRangedAttackOutcome::Obstructed { .. }
+        ));
+
+        let mut stamped = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        stamped.ambient_light = FULL_DAYLIGHT;
+        block_projectile_at(&mut stamped, 7, 5);
+        stamped
+            .rebuild_world_live_chunks_from_grid(WorldPlane::Underworld)
+            .unwrap();
+        stamped.active_objects.push(ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 7,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        let clear = stamped
+            .outdoor_first_phase_ranged_attack_detail(1)
+            .expect("aligned broadside fires");
+        assert_eq!(clear.outcome, OutdoorRangedAttackOutcome::Connects);
+        assert!(clear.absorption.is_some());
+    }
+
+    #[test]
     fn outdoor_walker_adjacency_preempts_the_ranged_class_test() {
         // A `0x2C` broadside family one cell away takes the adjacency arm.
         // It neither fires nor moves before the post-turn engagement handler.
@@ -2677,7 +2766,7 @@
             .unwrap();
 
         assert!(state.combat_active);
-        assert!(state.message.contains("BRIT.CBT arena 15"), "{}", state.message);
+        assert_eq!(state.message, COMBAT_BANNER);
         assert_eq!(
             state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class,
             16
@@ -3204,7 +3293,12 @@
         // not apply here, but the ladder's first two rungs do no damage of
         // their own either.
         assert!(state.party.iter().all(|member| member.hp == 40));
-        assert!(state.message.contains(SHIP_SUNK_MESSAGE));
+        let lines = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect::<Vec<_>>();
+        assert!(lines.ends_with(&[SHIP_SUNK_MESSAGE, ABANDON_SHIP_MESSAGE]));
     }
 
     #[test]
@@ -3231,6 +3325,12 @@
         assert!(CARPET_MARKER_FRAMES.contains(&type_byte), "{type_byte:#x}");
         assert_eq!(state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
         assert!(state.party.iter().all(|member| member.hp == 40));
+        let lines = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect::<Vec<_>>();
+        assert!(lines.ends_with(&[SHIP_SUNK_MESSAGE, ABANDON_SHIP_MESSAGE]));
     }
 
     #[test]
@@ -3253,7 +3353,6 @@
         assert_eq!(fallback, ShipLossFallback::Drown);
         assert_eq!(state.player.transport, TransportState::SpriteSuppressed);
         assert!(!drowning.is_empty());
-        assert!(drowning.len() < SHIP_LOSS_DROWNING_ITERATION_GUARD);
         // Every iteration is one whole-party pass, so it never damages a
         // member the previous pass already killed.
         for pass in &drowning {
@@ -3266,6 +3365,12 @@
                 .all(|member| member.status == PARTY_STATUS_DEAD && member.hp == 0)
         );
         assert!(!state.party_has_drowning_loop_survivor());
+        let lines = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect::<Vec<_>>();
+        assert!(lines.ends_with(&[SHIP_SUNK_MESSAGE, DROWNING_MESSAGE]));
     }
 
     #[test]
@@ -3298,10 +3403,9 @@
 
     #[test]
     fn drowning_exit_scan_and_damage_filter_are_deliberately_different() {
-        // `overworld.md §6.2.5` "Drowning-loop asymmetry": "The whole-party
-        // pass skips only dead members, while the living-member scan that
-        // decides whether the drowning loop ... continues counts only good,
-        // poisoned and sleeping members."
+        // `vehicles.md §6` "Status domain and exit predicate": imported
+        // outside-domain bytes are damaged while a G/P/S member holds the
+        // loop open, but do not themselves keep it alive.
         for status in [b'G', b'P', b'S'] {
             assert!(party_member_counts_as_living(status));
             assert!(outdoor_impact_damages_member(status));
@@ -3313,6 +3417,50 @@
         }
         assert!(!party_member_counts_as_living(PARTY_STATUS_DEAD));
         assert!(!outdoor_impact_damages_member(PARTY_STATUS_DEAD));
+    }
+
+    #[test]
+    fn imported_status_can_survive_the_drowning_helpers_direct_return() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = vec![
+            PartyMember {
+                status: b'C',
+                hp: 40,
+                max_hp: 40,
+                ..default_party()[0]
+            },
+            PartyMember {
+                slot: 1,
+                status: b'G',
+                hp: 1,
+                max_hp: 1,
+                ..default_party()[0]
+            },
+        ];
+
+        let passes = state.apply_ship_loss_drowning();
+
+        assert_eq!(passes.len(), 1, "the Good member holds open one pass");
+        assert_eq!(state.party[1].status, PARTY_STATUS_DEAD);
+        assert_eq!(state.party[1].hp, 0);
+        assert_eq!(state.party[0].status, b'C');
+        assert!((32..40).contains(&state.party[0].hp));
+        assert!(!state.party_has_drowning_loop_survivor());
+        assert_eq!(state.party_capability(), PartyCapability::Defeated);
+    }
+
+    #[test]
+    fn outdoor_damage_closing_repaint_clears_a_selected_sleeping_member() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(40);
+        state.party[0].status = b'S';
+        state.active_player = Some(0);
+
+        let damage = state.apply_shared_party_damage(0, 1);
+
+        assert_eq!(damage.hp_after, 39);
+        assert_eq!(state.party[0].status, b'S');
+        assert_eq!(state.active_player, None);
     }
 
     #[test]

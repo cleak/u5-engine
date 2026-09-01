@@ -59,7 +59,7 @@ impl PlayState {
     /// Append one already-classified transcript line.
     pub fn push_message_entry(&mut self, text: impl Into<String>, is_command_echo: bool) {
         let text = text.into();
-        let glyphs = text.bytes().map(TlkRenderedGlyph::ordinary).collect();
+        let glyphs = ordinary_glyphs_from_engine_text(&text);
         self.append_transcript_entry(text, glyphs, is_command_echo, false, false);
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
@@ -77,7 +77,7 @@ impl PlayState {
     /// Append one output line with the text cursor's centre mode enabled.
     pub fn push_centered_message_entry(&mut self, text: impl Into<String>) {
         let text = text.into();
-        let glyphs = text.bytes().map(TlkRenderedGlyph::ordinary).collect();
+        let glyphs = ordinary_glyphs_from_engine_text(&text);
         self.append_transcript_entry(text, glyphs, false, true, false);
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
@@ -247,13 +247,12 @@ impl PlayState {
             // then appends the direction, so keep its fuller line.
             if let Some(last) = self.message_transcript.last_mut() {
                 last.text = first.to_string();
-                last.glyphs = first.bytes().map(TlkRenderedGlyph::ordinary).collect();
+                last.glyphs = ordinary_glyphs_from_engine_text(first);
             }
         } else if echo_is_last && pending.echo.join.continues_line() {
             if let Some(last) = self.message_transcript.last_mut() {
                 last.text.push_str(first);
-                last.glyphs
-                    .extend(first.bytes().map(TlkRenderedGlyph::ordinary));
+                last.glyphs.extend(ordinary_glyphs_from_engine_text(first));
             }
         } else {
             self.push_message_entry(first, false);
@@ -282,7 +281,7 @@ impl PlayState {
         }
         last.text.push_str(continuation);
         last.glyphs
-            .extend(continuation.bytes().map(TlkRenderedGlyph::ordinary));
+            .extend(ordinary_glyphs_from_engine_text(continuation));
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         if self.message == verb {
             self.message.push_str(continuation);

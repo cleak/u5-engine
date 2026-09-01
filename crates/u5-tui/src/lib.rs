@@ -3,13 +3,16 @@
 //! Owns CLI argument parsing, the interactive play loop, terminal rendering,
 //! and the play-script command harness. Game logic lives in `u5-runtime`.
 
+pub mod audio_suite;
 pub mod cli;
 pub mod intro_loop;
 pub mod play_loop;
 pub mod route_smoke;
+pub mod runtime_game_dir;
 pub mod save_frame;
 pub mod visual_manifest;
 
+pub use audio_suite::{AudioSuiteCase, audio_suite_cases, run_audio_suite};
 pub use cli::{
     CLI_USAGE, CliArgs, CreateCharacterCommand, parse_chargen_gender_arg,
     parse_chargen_winners_arg, parse_cli_args, parse_pending_vehicle_arg, parse_start_arg,
@@ -31,6 +34,7 @@ pub use route_smoke::{
     RouteSmokeCase, RouteSmokeExpectation, RouteSmokeFrameReport, RouteSmokeReport,
     route_smoke_cases, run_route_smoke, run_route_smoke_case, write_route_smoke_manifest,
 };
+pub use runtime_game_dir::{RUNTIME_DIR_ENV, prepare_writable_game_dir};
 pub use save_frame::{
     SavedFrameReport, compose_gameplay_screen, run_save_frame, run_save_frame_suite,
     run_save_screen, save_frame_suite,

@@ -83,6 +83,9 @@ pub const TOWN_DOOR_WINDOWED_LOCKED_TILE: u8 = 0xBB;
 pub const TOWN_DOOR_MAGIC_PLAIN_TILE: u8 = 0x97;
 pub const TOWN_DOOR_MAGIC_WINDOWED_TILE: u8 = 0x98;
 pub const TOWN_OPEN_ALREADY_OPEN_TILE: u8 = 0xAF;
+/// `doors-and-z-transitions.md §2.2`: this exact non-dungeon tile selects
+/// Open's fixed "Too heavy!" branch. Neighboring high-range tiles do not.
+pub const TOWN_OPEN_TOO_HEAVY_TILE: u8 = 0x99;
 pub const TOWN_DOOR_CLEARED_TILE: u8 = 0x44;
 pub const JIMMY_STOCKS_TILE: u8 = 0x84;
 pub const JIMMY_MANACLES_TILE: u8 = 0x85;

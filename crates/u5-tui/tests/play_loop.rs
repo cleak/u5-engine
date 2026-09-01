@@ -769,8 +769,12 @@ fn route_smoke_cases_cover_representative_modes() {
     // four dungeon Jimmy committed-exit/rewrite routes, and the ruined-shrine
     // Word-of-Power restoration route from public issue #135, and the corrected
     // empty-Yell acted-result route from the public #134 return contract, and
-    // the canonical-OOL Castle exit from public #141.
-    assert_eq!(cases.len(), 514);
+    // the canonical-OOL Castle exit from public #141, and the seven
+    // `town-mode.md` §13 harpsichord routes: the thirteen-note completion, the
+    // two published re-sync cases, the away-from-the-chair digit fall-through,
+    // the no-turn-consumed check, and the reload that proves the passage
+    // rewrite is a live tile-buffer edit rather than a saved map change.
+    assert_eq!(cases.len(), 521);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)

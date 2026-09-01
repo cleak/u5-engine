@@ -375,7 +375,7 @@ fn tile_class_index(class: TileClass) -> usize {
         TileClass::Path => 3,
         TileClass::Wall => 4,
         TileClass::Furniture => 5,
-        TileClass::Door => 6,
+        TileClass::River => 6,
         TileClass::Decoration => 7,
         TileClass::Barrier => 8,
         TileClass::Special => 9,

@@ -53,6 +53,27 @@ pub const fn ui_colour_slot_bright(slot: usize, high_colour: bool) -> u8 {
 pub const EGA_DRIVER_SLOT_COUNT: u8 = 38;
 pub const EGA_DRIVER_LAST_DISPATCH_OFFSET: u8 = (EGA_DRIVER_SLOT_COUNT - 1) * 3;
 
+/// `display-driver-abi.md §9.5`: dispatch offset `0x27` picks between two
+/// live bodies "by the rectangle's left edge", and the message-panel fast
+/// path is the one whose "left edge at pixel column 192".
+pub const MESSAGE_PANEL_SCROLL_LEFT_EDGE: usize = 192;
+/// `display-driver-abi.md §9.5`, message-panel fast path: "Pixel columns
+/// 192 through 319 inclusive (a 128-pixel-wide right-side text panel, 16
+/// character cells wide)."
+pub const MESSAGE_PANEL_SCROLL_RIGHT_EDGE: usize = 319;
+/// `display-driver-abi.md §9.5`, message-panel fast path: "Pixel rows 88
+/// through 199".
+pub const MESSAGE_PANEL_SCROLL_TOP: usize = 88;
+pub const MESSAGE_PANEL_SCROLL_BOTTOM: usize = 199;
+/// `display-driver-abi.md §9.5`, message-panel fast path: "Exactly eight
+/// scanlines upward, hardcoded. The caller's distance argument is not
+/// read on this path."
+pub const MESSAGE_PANEL_SCROLL_SCANLINES: usize = 8;
+/// `display-driver-abi.md §9.5`, general path: the vacated band is filled
+/// "with colour index `0`" after the current drawing colour is saved, and
+/// the colour is restored afterwards.
+pub const SCROLL_VACATED_BAND_COLOUR: u8 = 0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisplayRenderTarget {
     Front,
@@ -90,9 +111,14 @@ pub enum EgaDisplayOperation<'a> {
         x1: i32,
         y1: i32,
     },
-    ScrollTextUp {
+    /// `display-driver-abi.md §9.5` dispatch offset `0x27`: "Scroll a
+    /// rectangle vertically by a signed row distance, on whichever
+    /// surface the render-target selector names, blanking the vacated
+    /// band. A hardwired fast path handles the message panel's
+    /// eight-scanline scroll-up without blanking."
+    ScrollRect {
         rect: DisplayPixelRect,
-        blank_color: u8,
+        rows: i32,
     },
     FillBackRect {
         rect: DisplayPixelRect,
@@ -484,29 +510,110 @@ impl EgaDisplaySurface {
         self.fill_rect(rect, 0);
     }
 
-    pub fn scroll_rect(&mut self, rect: DisplayPixelRect, dx: i32, dy: i32, blank_color: u8) {
-        let original = self.front_pixels.clone();
-        self.fill_rect(rect, blank_color);
-        for y in rect.y0..=rect.y1 {
-            for x in rect.x0..=rect.x1 {
-                let src_x = x as i32 - dx;
-                let src_y = y as i32 - dy;
-                if src_x < rect.x0 as i32
-                    || src_x > rect.x1 as i32
-                    || src_y < rect.y0 as i32
-                    || src_y > rect.y1 as i32
-                {
-                    continue;
+    /// `display-driver-abi.md §9.5` dispatch offset `0x27`, the vertical
+    /// rectangle scroll. "**Correction: this is a general
+    /// scroll-rectangle entry.** An earlier revision of this document
+    /// said the entry checked that its primary argument named the message
+    /// panel's left edge and that 'calls with any other left-edge value
+    /// return without visible effect', concluding that the entry was
+    /// 'strictly a right-side-text-panel scroll, not a general
+    /// scroll-rectangle helper', and that any per-call distance argument
+    /// was 'vestigial'. Those statements are withdrawn. The left-edge
+    /// test selects between two live bodies; it does not gate the entry."
+    ///
+    /// `rows` is the signed scanline distance. The published text fixes
+    /// both directions but not which sign names which — "positive moves
+    /// the rectangle's contents one way, negative the other" — so this
+    /// engine follows screen-space y: negative scrolls the contents
+    /// upward, positive downward.
+    pub fn scroll_rect_rows(&mut self, rect: DisplayPixelRect, rows: i32) {
+        if rect.x0 == MESSAGE_PANEL_SCROLL_LEFT_EDGE {
+            self.scroll_message_panel_fast_path();
+            return;
+        }
+        if rows == 0 {
+            return;
+        }
+
+        let height = rect.y1 - rect.y0 + 1;
+        let distance = rows.unsigned_abs() as usize;
+        let moved = height.saturating_sub(distance);
+        let width = DISPLAY_SURFACE_WIDTH;
+        let pixels = self.render_pixels_mut();
+
+        // The sign is folded into the row-walk direction so the copy
+        // never overlaps itself destructively.
+        if moved > 0 {
+            if rows < 0 {
+                for y in rect.y0..(rect.y0 + moved) {
+                    let src = (y + distance) * width;
+                    let dst = y * width;
+                    pixels.copy_within(src + rect.x0..=src + rect.x1, dst + rect.x0);
                 }
-                let src = src_y as usize * DISPLAY_SURFACE_WIDTH + src_x as usize;
-                let dst = y * DISPLAY_SURFACE_WIDTH + x;
-                self.front_pixels[dst] = original[src];
+            } else {
+                for y in (rect.y0 + distance..=rect.y1).rev() {
+                    let src = (y - distance) * width;
+                    let dst = y * width;
+                    pixels.copy_within(src + rect.x0..=src + rect.x1, dst + rect.x0);
+                }
             }
+        }
+
+        // "When the copy finishes, the entry **blanks the vacated band**:
+        // it saves the current drawing colour, fills the band the
+        // contents moved out of with colour index `0`, and restores the
+        // colour. The band is computed from the distance and its sign, so
+        // it is the correct edge of the rectangle in either direction."
+        let band_rows = distance.min(height);
+        let band = if rows < 0 {
+            DisplayPixelRect {
+                x0: rect.x0,
+                y0: rect.y1 + 1 - band_rows,
+                x1: rect.x1,
+                y1: rect.y1,
+            }
+        } else {
+            DisplayPixelRect {
+                x0: rect.x0,
+                y0: rect.y0,
+                x1: rect.x1,
+                y1: rect.y0 + band_rows - 1,
+            }
+        };
+        let saved_color = self.current_color;
+        self.current_color = SCROLL_VACATED_BAND_COLOUR;
+        self.fill_rect_current_color(band);
+        self.current_color = saved_color;
+    }
+
+    /// `display-driver-abi.md §9.5`, "Message-panel fast path — left edge
+    /// at pixel column 192": "This path is hardwired and ignores both the
+    /// rest of the rectangle and the distance argument". The exposed band
+    /// is *not* blanked — "After the scroll, the bottom eight scanlines of
+    /// the panel inherit whatever pixels happened to lie immediately below
+    /// the panel before the scroll", which on this 200-row surface is
+    /// non-visible video memory the engine does not model, so those rows
+    /// are left exactly as they were rather than cleared.
+    fn scroll_message_panel_fast_path(&mut self) {
+        let width = DISPLAY_SURFACE_WIDTH;
+        let distance = MESSAGE_PANEL_SCROLL_SCANLINES;
+        let pixels = self.render_pixels_mut();
+        for y in MESSAGE_PANEL_SCROLL_TOP..=(MESSAGE_PANEL_SCROLL_BOTTOM - distance) {
+            let src = (y + distance) * width;
+            let dst = y * width;
+            pixels.copy_within(
+                src + MESSAGE_PANEL_SCROLL_LEFT_EDGE..=src + MESSAGE_PANEL_SCROLL_RIGHT_EDGE,
+                dst + MESSAGE_PANEL_SCROLL_LEFT_EDGE,
+            );
         }
     }
 
-    pub fn scroll_text_rect_up_one_row(&mut self, rect: DisplayPixelRect, blank_color: u8) {
-        self.scroll_rect(rect, 0, -(CH_CELL_SIDE as i32), blank_color);
+    /// Thin wrapper for the text layer's one-cell-row scroll:
+    /// `display-driver-abi.md §9.5` notes that "every text scroll moves
+    /// exactly one cell row regardless of the distance the resident
+    /// helper computed".
+    pub fn scroll_text_rect_up_one_row(&mut self, rect: DisplayPixelRect) {
+        self.scroll_rect_rows(rect, -(CH_CELL_SIDE as i32));
     }
 
     pub fn copy_back_to_front_rect(&mut self, rect: DisplayPixelRect) {
@@ -752,10 +859,14 @@ impl EgaDisplaySurface {
                 self.draw_line(x0, y0, x1, y1);
                 Ok(EgaDispatchResult::None)
             }
-            EgaDisplayOperation::ScrollTextUp { rect, blank_color } => {
-                if self.render_target == DisplayRenderTarget::Front {
-                    self.scroll_text_rect_up_one_row(rect, blank_color);
-                }
+            EgaDisplayOperation::ScrollRect { rect, rows } => {
+                // `display-driver-abi.md §9.5`: the entry "reads the
+                // descriptor's render-target selector and has a
+                // **separate, complete body for the hidden surface**,
+                // exactly like the fill, tile and glyph entries", so
+                // there is no Front-only guard here — a hidden-surface
+                // scroll is a real scroll, not a silent no-op.
+                self.scroll_rect_rows(rect, rows);
                 Ok(EgaDispatchResult::None)
             }
             EgaDisplayOperation::FillBackRect { rect, color }

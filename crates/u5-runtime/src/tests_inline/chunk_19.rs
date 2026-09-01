@@ -352,7 +352,7 @@
 
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
-        let mut grid = open_grid();
+        let mut grid = npc_open_grid();
         grid[32 + 1] = 55;
         let mut state = test_state(grid, 1, 1);
         state.clock = GameClock::new(17, 30).unwrap();
@@ -502,11 +502,23 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `commands.md §10`: poisoned and dead members are not treated like
+    /// healthy sleepers, so the town bed-rest path skips HP gain for a
+    /// poisoned member — "recovered 0 HP".
+    ///
+    /// The poison tick is not hourly. `time.md §5` puts the status/provision
+    /// pass "once per ten-minute step of the town-bed rest loop", where "a
+    /// member whose status is exactly Poisoned loses **exactly 1 current hit
+    /// point** … per member per turn, independently, not a shared roll and
+    /// not an hourly effect", and spells out the consequence: "A poisoned
+    /// member in a town bed loses six hit points per simulated hour, because
+    /// the rest loop steps every ten minutes."
+    ///
+    /// A member entering the bed on 4 HP therefore runs out inside the hour,
+    /// and the shared party-damage path "stores zero, sets that member's
+    /// status to Dead".
     #[test]
     fn town_hole_up_poisoned_member_keeps_status_and_skips_hp_recovery() {
-        // commands.md §10: poisoned and dead members are not treated like
-        // healthy sleepers. The town bed-rest path must skip HP gain for
-        // poisoned members while still ticking mana and hourly poison.
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
@@ -529,8 +541,8 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.party[0].status, b'P');
-        assert_eq!(state.party[0].hp, 3);
+        assert_eq!(state.party[0].status, b'D');
+        assert_eq!(state.party[0].hp, 0);
         assert_eq!(state.party[0].mana, 90);
         assert!(state.message.contains("recovered 0 HP"));
         let _ = fs::remove_dir_all(dir);
@@ -575,7 +587,7 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_rest.is_some());
-        assert!(state.message.contains("Rest- how many hours"));
+        assert_eq!(state.message, REST_HOURS_PROMPT);
         assert_eq!(state.turn, 0);
 
         assert_eq!(
@@ -614,14 +626,14 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_rest.is_some());
-        assert!(state.message.contains("Set watch"));
+        assert_eq!(state.message, REST_WATCH_PROMPT);
         assert_eq!(state.turn, 0);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(state.message.contains("Who keeps watch"));
+        assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
 
         assert_eq!(
             handle_play_key_input(&mut state, '2', "", &dir).unwrap(),
@@ -677,7 +689,7 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_rest.is_some());
-        assert!(state.message.contains("Hole up- how many hours"));
+        assert_eq!(state.message, REST_HOURS_PROMPT);
         assert_eq!(state.turn, 0);
 
         assert_eq!(
@@ -1416,6 +1428,15 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `dungeon-mode.md §11` step 2: the rest wrapper "elapses the accepted
+    /// duration by calling the world-clock advance routine repeatedly", so a
+    /// one-hour rest must move the clock a full sixty minutes.
+    ///
+    /// That sits on top of the iteration's own minute. `dungeon-mode.md §15`:
+    /// "The single call site sits at the head of each iteration, ahead of the
+    /// render-and-poll step and the command dispatch" — pressing `H` is an
+    /// iteration, so it costs its minute before the handler runs and the two
+    /// call sites add: 01:45 + 1 + 60 = 02:46.
     #[test]
     fn dungeon_h_key_routes_to_rest_with_watch_with_inline_hours() {
         let dir = debug_game_dir();
@@ -1430,9 +1451,12 @@
                 .unwrap()
         );
 
-        assert_eq!(state.clock, GameClock::new(2, 45).unwrap());
+        assert_eq!(state.clock, GameClock::new(2, 46).unwrap());
         assert_eq!(state.turn, 3);
-        assert_eq!(state.torch_counter, 10);
+        // `dungeon-mode.md §7`: "A dungeon turn spends one counter unit" and
+        // the decay "is part of the world-clock advance call", so the
+        // counters age by the same sixty-one minutes the clock did.
+        assert_eq!(state.torch_counter, 9);
         assert_eq!(state.light_spell_counter, 0);
         assert!(state.message.starts_with("RESTED!"));
         let _ = fs::remove_dir_all(dir);

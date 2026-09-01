@@ -23,9 +23,15 @@ const FIXED_HIDDEN_FOUND_OFFSET: usize =
     RARE_REAGENT_DAYS_OFFSET + RARE_REAGENT_HARVEST_POINT_COUNT;
 const FIXED_HIDDEN_DAILY_DAY_OFFSET: usize =
     FIXED_HIDDEN_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES;
-const FIXED_HIDDEN_SINGLE_USE_COOKIE_OFFSET: usize = FIXED_HIDDEN_DAILY_DAY_OFFSET + 1;
+/// Reserved sidecar byte. It used to mirror a dedicated record-15
+/// single-use cookie; `formats/saved-gam.md` §10 withdrew that field
+/// ("Not a dedicated cookie. This is the **equipment-inventory counter
+/// for item id `39` (Glass Sword)**"), so nothing writes a meaning here
+/// any more. The slot stays zero-filled so the sidecar length and the
+/// shadowlord offset after it are unchanged for existing saves.
+const RESERVED_BYTE_OFFSET: usize = FIXED_HIDDEN_DAILY_DAY_OFFSET + 1;
 const SHADOWLORD_HIDEOUTS_LEGACY_OFFSET: usize = FIXED_HIDDEN_DAILY_DAY_OFFSET + 1;
-const SHADOWLORD_HIDEOUTS_OFFSET: usize = FIXED_HIDDEN_SINGLE_USE_COOKIE_OFFSET + 1;
+const SHADOWLORD_HIDEOUTS_OFFSET: usize = RESERVED_BYTE_OFFSET + 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldProgressState {
@@ -33,7 +39,10 @@ pub struct WorldProgressState {
     pub fixed_hidden_treasure_mirror_present: bool,
     pub fixed_hidden_treasure_found: [u8; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
     pub fixed_hidden_treasure_daily_day: u8,
-    pub fixed_hidden_treasure_single_use_cookie: Option<u8>,
+    /// True when the decoded sidecar carried the reserved byte described
+    /// at [`RESERVED_BYTE_OFFSET`]; false for the shorter legacy layout
+    /// that predates it. Only the shadowlord offset depends on it.
+    pub reserved_byte_present: bool,
     pub shadowlord_mirror_present: bool,
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
 }
@@ -46,9 +55,7 @@ impl Default for WorldProgressState {
             fixed_hidden_treasure_mirror_present: false,
             fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
             fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
-            fixed_hidden_treasure_single_use_cookie: Some(
-                FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR,
-            ),
+            reserved_byte_present: true,
             shadowlord_mirror_present: false,
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
         }
@@ -62,9 +69,7 @@ impl WorldProgressState {
             fixed_hidden_treasure_mirror_present: true,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
-            fixed_hidden_treasure_single_use_cookie: Some(
-                options.fixed_hidden_treasure_single_use_cookie,
-            ),
+            reserved_byte_present: true,
             shadowlord_mirror_present: true,
             shadowlord_hideouts: options.shadowlord_hideouts,
         }
@@ -76,9 +81,7 @@ impl WorldProgressState {
             fixed_hidden_treasure_mirror_present: true,
             fixed_hidden_treasure_found: state.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: state.fixed_hidden_treasure_daily_day,
-            fixed_hidden_treasure_single_use_cookie: Some(
-                state.fixed_hidden_treasure_single_use_cookie,
-            ),
+            reserved_byte_present: true,
             shadowlord_mirror_present: true,
             shadowlord_hideouts: state.shadowlord_hideouts,
         }
@@ -89,9 +92,6 @@ impl WorldProgressState {
         if self.fixed_hidden_treasure_mirror_present {
             options.fixed_hidden_treasure_found = self.fixed_hidden_treasure_found;
             options.fixed_hidden_treasure_daily_day = self.fixed_hidden_treasure_daily_day;
-            if let Some(cookie) = self.fixed_hidden_treasure_single_use_cookie {
-                options.fixed_hidden_treasure_single_use_cookie = cookie;
-            }
         }
         if self.shadowlord_mirror_present {
             options.shadowlord_hideouts = self.shadowlord_hideouts;
@@ -112,9 +112,7 @@ impl WorldProgressState {
             ..FIXED_HIDDEN_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES]
             .copy_from_slice(&self.fixed_hidden_treasure_found);
         bytes[FIXED_HIDDEN_DAILY_DAY_OFFSET] = self.fixed_hidden_treasure_daily_day;
-        bytes[FIXED_HIDDEN_SINGLE_USE_COOKIE_OFFSET] = self
-            .fixed_hidden_treasure_single_use_cookie
-            .unwrap_or(FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR);
+        bytes[RESERVED_BYTE_OFFSET] = 0;
         bytes[SHADOWLORD_HIDEOUTS_OFFSET..SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
         bytes
@@ -151,9 +149,9 @@ impl WorldProgressState {
             &bytes[FIXED_HIDDEN_FOUND_OFFSET
                 ..FIXED_HIDDEN_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES],
         );
-        let has_single_use_cookie = bytes.len() == WORLD_PROGRESS_STATE_LEN
+        let reserved_byte_present = bytes.len() == WORLD_PROGRESS_STATE_LEN
             || bytes.len() == WORLD_PROGRESS_STATE_SHRINE_STANDING_LEN;
-        let shadowlord_hideouts_offset = if has_single_use_cookie {
+        let shadowlord_hideouts_offset = if reserved_byte_present {
             SHADOWLORD_HIDEOUTS_OFFSET
         } else {
             SHADOWLORD_HIDEOUTS_LEGACY_OFFSET
@@ -168,8 +166,7 @@ impl WorldProgressState {
             fixed_hidden_treasure_mirror_present: true,
             fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: bytes[FIXED_HIDDEN_DAILY_DAY_OFFSET],
-            fixed_hidden_treasure_single_use_cookie: has_single_use_cookie
-                .then_some(bytes[FIXED_HIDDEN_SINGLE_USE_COOKIE_OFFSET]),
+            reserved_byte_present,
             shadowlord_mirror_present: true,
             shadowlord_hideouts,
         })

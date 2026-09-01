@@ -280,11 +280,12 @@ pub const fn outdoor_active_object_class_immobile(class_byte: u8) -> bool {
 /// `0` north, `1` east, `2` south, `3` west convention.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransportFamily {
-    /// `0x12..=0x13` — mounted horse.
+    /// `0x12..=0x13` — mounted horse. Two frames only, east/west.
     MountedHorse,
-    /// `0x14..=0x17` — magic carpet.
+    /// `0x14..=0x15` — magic carpet. Two frames only, east/west.
     MagicCarpet,
-    /// `0x1C..=0x1F` — foot/avatar (clean default `0x1C` faces north).
+    /// `0x1C..=0x1D` — foot/avatar. Only `0x1C` is ever written;
+    /// `0x1D` is accepted as defensive breadth.
     Foot,
     /// `0x20..=0x23` — ship under sail (hoisted, wind-controlled).
     ShipHoisted,
@@ -294,16 +295,23 @@ pub enum TransportFamily {
     Skiff,
 }
 
-/// `vehicles.md §2` transport/action marker ranges. Each four-marker
-/// family carries facing in its low two bits (so width = facing
-/// mask + 1 = 4). Magic-carpet sits in its own 0x14..=0x17 slot;
-/// the ship-hoisted/ship-furled/skiff bands tile contiguously from
-/// 0x20 upward. Anchor each *_LAST to FIRST + TRANSPORT_FACING_MASK
-/// (4-marker family width) and chain SHIP_FURLED/SKIFF *_FIRST to
-/// the previous family's *_LAST + 1.
+/// `vehicles.md §2` transport/action marker ranges. The persistent
+/// value set is **closed**: only the ship-hoisted, ship-furled and
+/// skiff families carry full four-way facing in their low two bits.
+/// The horse and the magic carpet have **two frames only** and the
+/// on-foot family persists a single value, so their bands are two
+/// markers wide, not four.
+///
+/// The ship-hoisted/ship-furled/skiff bands tile contiguously from
+/// 0x20 upward; anchor their *_LAST to FIRST + TRANSPORT_FACING_MASK
+/// and chain SHIP_FURLED/SKIFF *_FIRST to the previous family's
+/// *_LAST + 1.
 pub const TRANSPORT_MARKER_MAGIC_CARPET_FIRST: u8 = 0x14;
+/// `vehicles.md §2`: the carpet has two frames only - `0x14` east and
+/// `0x15` west. `0x16` and `0x17` are values the original engine
+/// cannot produce, so nothing here may write them.
 pub const TRANSPORT_MARKER_MAGIC_CARPET_LAST: u8 =
-    TRANSPORT_MARKER_MAGIC_CARPET_FIRST + TRANSPORT_FACING_MASK;
+    TRANSPORT_MARKER_MAGIC_CARPET_FIRST + TRANSPORT_TWO_FRAME_WEST_BIAS;
 pub const TRANSPORT_MARKER_SHIP_HOISTED_FIRST: u8 = 0x20;
 pub const TRANSPORT_MARKER_SHIP_HOISTED_LAST: u8 =
     TRANSPORT_MARKER_SHIP_HOISTED_FIRST + TRANSPORT_FACING_MASK;
@@ -316,8 +324,26 @@ pub const TRANSPORT_MARKER_SKIFF_LAST: u8 = TRANSPORT_MARKER_SKIFF_FIRST + TRANS
 /// `vehicles.md §2` low-bit mask the transport-marker facing decoder
 /// applies. Bit 0 selects east/west; bit 1 selects south/north; the
 /// pair yields the published `0` north / `1` east / `2` south /
-/// `3` west convention.
+/// `3` west convention. Only the ship and skiff families use the
+/// full two-bit form.
 pub const TRANSPORT_FACING_MASK: u8 = 0b0000_0011;
+
+/// `vehicles.md §2` two-frame families (horse `0x12`/`0x13`, carpet
+/// `0x14`/`0x15`, foot `0x1C`/`0x1D`): the family's first marker is
+/// the east frame and `FIRST + 1` is the west frame. Moving north or
+/// south leaves the frame unchanged.
+pub const TRANSPORT_TWO_FRAME_WEST_BIAS: u8 = 1;
+
+/// `vehicles.md §2`: resolve a two-frame family's marker for an
+/// announced move. East selects `first`, west selects `first + 1`,
+/// and north/south leave `previous` exactly as it was.
+pub const fn transport_two_frame_marker(first: u8, previous: u8, facing: Direction) -> u8 {
+    match facing {
+        Direction::East => first,
+        Direction::West => first + TRANSPORT_TWO_FRAME_WEST_BIAS,
+        _ => previous,
+    }
+}
 
 /// `vehicles.md §2`: classify a transport/action marker byte into
 /// its family. Returns `None` for marker values outside the known
@@ -402,9 +428,20 @@ pub const fn transport_marker_facing(marker: u8) -> Option<Direction> {
 }
 
 /// `vehicles.md §2`: rewrite the marker's facing bits while preserving
-/// the known transport family. Horse transport is constrained by the
-/// existing clean-engine mounted range (`0x12..=0x13`), so only its low
-/// east/west bit can be represented here.
+/// the known transport family, following the published per-family
+/// facing contract rather than one shared four-way compose.
+///
+/// - Mounted horse and magic carpet have **two frames only**: `FIRST`
+///   when the last announced move was east, `FIRST + 1` when it was
+///   west, and the previous frame unchanged for north or south.
+/// - Foot persists exactly `0x1C`; nothing ever writes `0x1D`.
+/// - Ship (hoisted and furled) and skiff carry full four-way facing in
+///   the low two bits.
+///
+/// An earlier clean-engine revision composed a four-way index into
+/// every family and inverted the horse's east/west bit, which could
+/// persist `0x16`, `0x17`, `0x1E` and `0x1F` - values §11 says the
+/// original engine cannot produce.
 pub const fn transport_marker_with_facing(marker: u8, facing: Direction) -> Option<u8> {
     let Some(index) = facing.cardinal_facing_index() else {
         return None;
@@ -413,9 +450,13 @@ pub const fn transport_marker_with_facing(marker: u8, facing: Direction) -> Opti
         return None;
     };
     Some(match family {
-        TransportFamily::MountedHorse => HORSE_TRANSPORT_FIRST + (index & 0x01),
-        TransportFamily::MagicCarpet => TRANSPORT_MARKER_MAGIC_CARPET_FIRST + index,
-        TransportFamily::Foot => TRANSPORT_MARKER_FOOT_FIRST + index,
+        TransportFamily::MountedHorse => {
+            transport_two_frame_marker(HORSE_TRANSPORT_FIRST, marker, facing)
+        }
+        TransportFamily::MagicCarpet => {
+            transport_two_frame_marker(TRANSPORT_MARKER_MAGIC_CARPET_FIRST, marker, facing)
+        }
+        TransportFamily::Foot => TRANSPORT_MARKER_FOOT_FIRST,
         TransportFamily::ShipHoisted => TRANSPORT_MARKER_SHIP_HOISTED_FIRST + index,
         TransportFamily::ShipFurled => TRANSPORT_MARKER_SHIP_FURLED_FIRST + index,
         TransportFamily::Skiff => TRANSPORT_MARKER_SKIFF_FIRST + index,
@@ -859,12 +900,16 @@ pub const fn random_encounter_spawn_outcomes(threshold: u8) -> u8 {
 pub const TRANSPORT_MARKER_FOOT_DEFAULT: u8 = 0x1C;
 
 /// `vehicles.md §2` foot/avatar transport-family byte range. Any
-/// byte in this band identifies the party as on foot; the low two
-/// bits encode the party leader's facing. Like the other
-/// transport families, the band is four markers wide; anchor
-/// FOOT_LAST to FIRST + TRANSPORT_FACING_MASK.
+/// byte in this band identifies the party as on foot.
+///
+/// Only `0x1C` is ever written: it is the clean seed and the single
+/// persistent on-foot value. The adjacent `0x1D` is the second frame
+/// of the on-foot sprite pair and is accepted by the two "party is on
+/// foot" predicates as defensive breadth, but nothing produces it, and
+/// `0x1E`/`0x1F` are outside the published set entirely.
 pub const TRANSPORT_MARKER_FOOT_FIRST: u8 = 0x1C;
-pub const TRANSPORT_MARKER_FOOT_LAST: u8 = TRANSPORT_MARKER_FOOT_FIRST + TRANSPORT_FACING_MASK;
+pub const TRANSPORT_MARKER_FOOT_LAST: u8 =
+    TRANSPORT_MARKER_FOOT_FIRST + TRANSPORT_TWO_FRAME_WEST_BIAS;
 
 /// `encounters.md §4` encounter-spawn coordinate-separation bounds.
 /// A candidate spawn coordinate is accepted only when both axes'
@@ -1019,6 +1064,14 @@ pub fn is_probe_walkable(tile: u8) -> bool {
     )
 }
 
+/// Combat-arena terrain uses its own collision query (`combat.md §2`), not
+/// the broad diagnostic/world probe above. The authored cobble floor used by
+/// town conflicts is `0x44` (with `0x45` the equivalent family stamp), and
+/// `0x40` is another published foot-passable floor used by arena seats.
+pub fn is_combat_arena_tile_walkable(tile: u8) -> bool {
+    is_probe_walkable(tile) || matches!(tile, 0x40 | 0x44 | 0x45)
+}
+
 pub fn is_tile_walkable(tile: u8, passability: Option<&TilePassability>) -> bool {
     is_tile_walkable_for_transport(tile, passability, TransportState::Foot)
 }
@@ -1045,7 +1098,11 @@ pub fn is_tile_walkable_for_transport(
             skiff_terrain_accepts(tile, type_byte & TRANSPORT_FACING_MASK)
         }
         TransportState::Carpet { .. } => carpet_terrain_accepts(tile),
-        TransportState::Balloon { .. } => true,
+        // `vehicles.md §2`: "**There is no balloon and no sixth vehicle
+        // family.**" The removed balloon arm accepted every tile; §11
+        // ("Do not invent boarding, landing, or wind-driven balloon
+        // movement") forbids re-homing that fly-over-anything acceptance
+        // on any surviving family, so it is simply gone.
         // `vehicles.md §2` gives every other marker family an explicit
         // "[o]rdinary terrain queries use the ... predicate family" line
         // and gives marker `0x00` none: the sprite-suppressed party is
@@ -1079,18 +1136,9 @@ pub fn is_water_tile(tile: u8) -> bool {
 /// Which `animation.md §6` family owns `tile`, or `None` when the tile is
 /// not animated by the world-tick tile animator.
 ///
-/// The family list is [`STATIC_TILE_ANIMATION_FAMILIES`] and is complete:
-/// waterfall `0xD4..0xD7`, fountain `0xD8..0xDB`, pendulum `0x80..0x83`,
-/// the standard of Britannia `0xEC..0xEF`, and the grandfather clock /
-/// bellows pair `0xFA..0xFD`.
-///
-/// `animation.md §6` (spec HEAD `c00bf63`) retracts the family list this
-/// function used to carry: "**no water, lava, brazier or torch tile
-/// animates through this pass at all.**" `catalogs/tile-catalog.md §4`
-/// carries the same correction and additionally withdraws a "wind / gust
-/// visuals" row. Water `0x01..0x03`, swamp `0x04`, lava `0x8F`, the
-/// brazier/fireplace band and every torch id therefore resolve to
-/// themselves, unchanged, at every phase.
+/// The family list is [`STATIC_TILE_ANIMATION_FAMILIES`]. It includes the
+/// published terrain-domain fire/light source runs `0xB0..0xB3` and
+/// `0xBC..0xBF` as well as the decorative selector families.
 ///
 /// Dungeon-mode and combat-mode effect tiles (fire field, poison field,
 /// sleep / energy field) are owned by per-effect handlers, not by this
@@ -1136,16 +1184,36 @@ pub fn is_wall_or_closed_door_tile(tile: u8) -> bool {
     matches!(tile, 24..=79) || town_command_door_tile(tile)
 }
 
-/// `conversation.md §2`: first tile id of the talk-through band.
-/// Talk-through tiles let the Talk command advance one more cell
-/// past shop counters, low fences, and similar pass-through barriers
-/// to find an NPC on the far side.
-pub const TALK_THROUGH_TILE_FIRST: u8 = 64;
-/// `conversation.md §2`: last tile id of the talk-through band.
-pub const TALK_THROUGH_TILE_LAST: u8 = 71;
+/// `conversation.md §2` step 3: the shipped talk-through white-list.
+/// When the facing tile holds no NPC, Talk advances `(dx, dy)` once
+/// more only if the tile is one of these counter-height and
+/// waist-height furniture ids; every other tile id is opaque to Talk.
+///
+/// This is a discrete id set, not a contiguous band. An earlier
+/// clean-engine revision modelled it as `0x40..=0x47`, which shares no
+/// member with the published set: it made real shop counters opaque
+/// and let Talk reach through the wall/closed-door band instead.
+///
+/// Note that the mirror tile `0x9D` sits deliberately *outside* the
+/// set, so Talk never reaches past a mirror - it can only resolve
+/// *onto* one, where the §2 step-4 status gate prints "No response!".
+pub const TALK_THROUGH_TILES: [u8; 17] = [
+    0x29, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0x9B, 0x9C, 0xA5, 0xAE, 0xBA, 0xBB, 0xBE, 0xCA,
+    0xCB,
+];
+/// `conversation.md §2`: the mirror tile, immediately past the
+/// `0x94..0x9C` run and deliberately excluded from the white-list.
+pub const TALK_MIRROR_TILE: u8 = 0x9D;
 
-pub fn is_talk_through_tile(tile: u8) -> bool {
-    (TALK_THROUGH_TILE_FIRST..=TALK_THROUGH_TILE_LAST).contains(&tile)
+pub const fn is_talk_through_tile(tile: u8) -> bool {
+    let mut index = 0;
+    while index < TALK_THROUGH_TILES.len() {
+        if TALK_THROUGH_TILES[index] == tile {
+            return true;
+        }
+        index += 1;
+    }
+    false
 }
 
 pub fn is_town_night_hour(hour: u8) -> bool {

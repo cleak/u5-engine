@@ -43,6 +43,8 @@ impl PlayState {
                 "Dungeon debug movement uses cardinal steps only in this slice.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        let origin_x = self.player.x;
+        let origin_y = self.player.y;
 
         let nx = nx.rem_euclid(DUNGEON_SIDE as isize) as usize;
         let ny = ny.rem_euclid(DUNGEON_SIDE as isize) as usize;
@@ -89,14 +91,33 @@ impl PlayState {
             return Ok(MoveOutcome::Moved);
         }
         if let Some(field) = dungeon_field_effect(tile) {
+            if field == DungeonFieldEffect::Electric {
+                // `dungeon-mode.md §8`: electric contact temporarily reaches
+                // the adjacent field for the flash, then reverses the exact
+                // one-cell displacement to the just-vacated origin. The
+                // origin is not subjected to another obstruction test.
+                self.player.x = origin_x;
+                self.player.y = origin_y;
+                self.sync_player_object();
+                self.mark_visibility_dirty();
+            }
             let field_report = self.apply_dungeon_field_effect_at(level, nx, ny, tile, field);
             self.advance_turn();
-            self.message = format!(
-                "Moved {} to ({nx}, {ny}) on {} level {level}; triggered {}; {field_report}.",
-                direction.name(),
-                scene.key(),
-                field.label()
-            );
+            self.message = if field == DungeonFieldEffect::Electric {
+                format!(
+                    "Contacted {} {} at ({nx}, {ny}) on {} level {level}; returned to ({origin_x}, {origin_y}); {field_report}.",
+                    direction.name(),
+                    field.label(),
+                    scene.key()
+                )
+            } else {
+                format!(
+                    "Moved {} to ({nx}, {ny}) on {} level {level}; triggered {}; {field_report}.",
+                    direction.name(),
+                    scene.key(),
+                    field.label()
+                )
+            };
             return Ok(MoveOutcome::Moved);
         }
         if is_dungeon_room_helper_state(tile) {
@@ -202,6 +223,17 @@ impl PlayState {
         })
     }
 
+    /// `systems/dungeon-mode.md` § 8 "Special cells in detail", Energy fields.
+    ///
+    /// Implemented here: a sleep field "rewrite[s] the live field cell to keep
+    /// only its visit-marker bit" and marks the presentation dirty, so it is a
+    /// one-shot contact hazard for the current visit, while a poison field
+    /// "do[es] not rewrite the field cell, so standing on or re-entering the
+    /// same poison field can trigger it again".
+    ///
+    /// Electric movement reversal is owned by the movement caller because it
+    /// must restore the exact pre-attempt coordinate before this helper rolls
+    /// damage. This helper owns the independently rolled `1..8` damage pass.
     pub fn apply_dungeon_field_effect_at(
         &mut self,
         level: u8,
@@ -218,12 +250,25 @@ impl PlayState {
         report
     }
 
+    /// `systems/dungeon-mode.md` § 8 "Special cells in detail", Energy fields.
+    ///
+    /// Sleep and poison roll independently for each non-Dead active member in
+    /// slot order. The inclusive `1..30` roll applies status on
+    /// `roll >= current Dexterity`; equality therefore fails the save, while an
+    /// unclamped Dexterity above 30 always saves.
     pub fn apply_dungeon_field_effect(&mut self, field: DungeonFieldEffect) -> String {
         if let Some(status) = field.status() {
             let mut affected = 0;
-            for member in &mut self.party {
-                if member.living() {
-                    member.status = status;
+            for index in 0..self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) {
+                if self.party[index].status == b'D' {
+                    continue;
+                }
+                let roll = self.random_range_u8(
+                    DUNGEON_FIELD_STATUS_ROLL_LOW,
+                    DUNGEON_FIELD_STATUS_ROLL_HIGH,
+                );
+                if dungeon_field_status_applies(self.party[index].climb_stat, roll) {
+                    self.party[index].status = status;
                     affected += 1;
                 }
             }
@@ -236,8 +281,8 @@ impl PlayState {
 
         if field.is_damage_field() {
             let mut reports = Vec::new();
-            for index in 0..self.party.len() {
-                if !self.party[index].living() {
+            for index in 0..self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) {
+                if self.party[index].status == b'D' {
                     continue;
                 }
                 let damage = self.dungeon_field_damage_roll();
@@ -466,6 +511,8 @@ impl PlayState {
     pub fn clear_town_visit_state(&mut self) {
         self.clear_open_town_door_state();
         self.active_blackthorn_guard_demand = None;
+        self.town_drunkenness_counter = 0;
+        self.tavern_secondary_drink_count = 0;
     }
 
     pub fn clear_town_floor_reload_door_state(&mut self) {
@@ -660,25 +707,45 @@ impl PlayState {
 
     pub fn step_world(
         &mut self,
-        mut direction: Direction,
-        mut nx: isize,
-        mut ny: isize,
+        direction: Direction,
+        nx: isize,
+        ny: isize,
         plane: WorldPlane,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
+        // `movement.md §2`: overworld movement consumes the four cardinal
+        // directions only — "No mode steps diagonally."
+        if !direction.is_cardinal() {
+            return Ok(MoveOutcome::Blocked);
+        }
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
-        if let Some(outcome) = self.resolve_balloon_wind_step(&mut direction, &mut nx, &mut ny) {
-            return Ok(outcome);
-        }
+        // `vehicles.md §11` "Balloon boundary": "Do not invent boarding,
+        // landing, or wind-driven balloon movement." The wind-driven
+        // balloon drift step that used to run here is removed with the
+        // family; wind still gates the hoisted frigate below, which is the
+        // only wind-cadenced movement §3 publishes.
         if let Some(outcome) = self.resolve_sailed_ship_wind_gate(direction) {
             return Ok(outcome);
         }
+        let ship_under_sail = self.player.transport.is_ship_under_sail();
         let underfoot_blackout_latched = self.refresh_world_underfoot_blackout_latch();
 
         let nx = nx.rem_euclid(WORLD_SIDE as isize) as usize;
         let ny = ny.rem_euclid(WORLD_SIDE as isize) as usize;
         let tile = self.grid[world_cell_index(nx, ny)];
+        // `overworld.md §6.2.5`: exact pier terrain is a refused coordinate
+        // step that silently docks the ship in place. It precedes occupancy
+        // and passability rejection and consumes neither random stream.
+        if ship_under_sail && tile == OVERWORLD_PIER_TILE {
+            self.player.transport = self.player.transport.with_ship_sails_furled();
+            self.sail_cadence = 0;
+            self.sail_stall_pending = false;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+            self.message = "Docked!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
         let transition = if let Some(game_dir) = game_dir {
             self.world_plane_transition_at(game_dir, plane, nx, ny)?
         } else {
@@ -696,11 +763,28 @@ impl PlayState {
         if transition.is_none() {
             if let Some(entry) = damage_tile {
                 if !entry.effect.allows_transport(self.player.transport) {
+                    if ship_under_sail {
+                        let _ = self.apply_sailing_collision(tile);
+                        return Ok(MoveOutcome::Blocked);
+                    }
                     self.message = format!("Blocked by {} at ({nx}, {ny}).", entry.effect.label());
+                    // `audio.md §7.4`: terrain impassable for the current
+                    // transport is one of the two ways the overworld step is
+                    // refused. No blocking object is involved, so the
+                    // whirlpool arm cannot apply.
+                    self.emit_overworld_blocked_step(false);
                     return Ok(MoveOutcome::Blocked);
                 }
-            } else if !self.tile_walkable(tile) {
+            } else if !self.tile_walkable(tile) && !(ship_under_sail && tile == OVERWORLD_PIER_TILE)
+            {
+                if ship_under_sail {
+                    let _ = self.apply_sailing_collision(tile);
+                    return Ok(MoveOutcome::Blocked);
+                }
                 self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));
+                // `audio.md §7.4`: the other overworld refusal, terrain
+                // impassable for the current transport.
+                self.emit_overworld_blocked_step(false);
                 return Ok(MoveOutcome::Blocked);
             }
         }
@@ -708,22 +792,22 @@ impl PlayState {
             .world_object_slot_at(nx, ny)
             .map(|(slot, object)| (slot, *object))
         {
+            if ship_under_sail {
+                let _ = self.apply_sailing_collision(tile);
+                return Ok(MoveOutcome::Blocked);
+            }
             if let Some(game_dir) = game_dir {
                 if game_dir.join(BRIT_CBT_FILE).exists()
                     && !is_whirlpool_object(object)
                     && terrain_combat_base_class(object).is_some()
                 {
                     self.advance_turn();
-                    let note = self.enter_terrain_combat_from_world_object(
+                    let _setup_report = self.enter_terrain_combat_from_world_object(
                         game_dir,
                         plane,
                         object_slot,
                         object,
                     )?;
-                    self.message = format!(
-                        "Moved into world object tile {} at ({nx}, {ny}) in slot {object_slot}; {note}.",
-                        object.tile
-                    );
                     return Ok(MoveOutcome::Used);
                 }
             }
@@ -732,6 +816,10 @@ impl PlayState {
                 "Blocked by world object tile {} at ({nx}, {ny}) in slot {object_slot}; {note}.",
                 object.tile
             );
+            // `audio.md §7.4`: refusal by a blocking object. Aboard a vehicle
+            // a whirlpool-class blocker "returns completely silently, with no
+            // message at all", so it is the one arm here that never beeps.
+            self.emit_overworld_blocked_step(is_whirlpool_object(object));
             return Ok(MoveOutcome::Blocked);
         }
 

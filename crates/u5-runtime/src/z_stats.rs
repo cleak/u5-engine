@@ -7,11 +7,28 @@ pub const READY_PICKER_PANEL_ROWS: usize = 8;
 pub const USE_PICKER_PANEL_ROWS: usize = 8;
 pub const READY_PICKER_ESCAPE_MESSAGE: &str = "Done";
 pub const ITEM_PICKER_ESCAPE_MESSAGE: &str = "None!";
+/// `inventory.md §4.7` empty-state placeholder, printed when the
+/// six-slot equipment block holds nothing readied.
+pub const Z_STATS_NONE_READY_PLACEHOLDER: &str = "(None ready)";
+/// `inventory.md §4.7` empty-state placeholder, printed when an
+/// inventory page's row scanner finds no slot with a non-zero count.
+pub const Z_STATS_NONE_OWNED_PLACEHOLDER: &str = "(None owned!)";
+/// `inventory.md §4.7` per-page slot counts.
+pub const Z_STATS_EQUIPMENT_SLOTS: usize = 6;
+pub const Z_STATS_ARMAMENTS_SLOTS: usize = 48;
+pub const Z_STATS_SPELLS_SLOTS: usize = 48;
+pub const Z_STATS_REAGENTS_SLOTS: usize = 8;
+pub const Z_STATS_ITEMS_SLOTS: usize = 38;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZStatsPage {
     Stats,
     Equipment,
+    /// Not part of the published page sequence (`inventory.md §4.7`
+    /// lists six pages and no spell-book page among them), so it is
+    /// absent from [`ZStatsPage::ORDERED`] and unreachable by
+    /// direction navigation. The variant and its renderer are retained
+    /// only until the render side is retired.
     SpellBook,
     Reagents,
     Spells,
@@ -20,16 +37,44 @@ pub enum ZStatsPage {
 }
 
 impl ZStatsPage {
-    pub const ORDERED: [Self; 7] = [
+    /// `inventory.md §4.7`: there are **six** pages in all - the
+    /// attribute page, the equipment page, and four inventory pages
+    /// (Armaments, Spells, Reagents, Items). Direction-style
+    /// navigation moves backward or forward through exactly this
+    /// visible page sequence (`inventory.md §4`), so the cycle is six
+    /// long. The engine-invented spell-book page is not among them
+    /// and is deliberately absent here.
+    pub const ORDERED: [Self; 6] = [
         Self::Stats,
         Self::Equipment,
-        Self::SpellBook,
         Self::Reagents,
         Self::Spells,
         Self::SpecialUse,
         Self::EquipmentStock,
     ];
 
+    /// `inventory.md §4.6`/`§4.7`: the panel's top border label for
+    /// this page, or `None` for the two character-specific pages,
+    /// whose border carries no label at all.
+    ///
+    /// The stored literals are the bare words with their punctuation;
+    /// the bracketing end-cap triangles are chrome, not characters.
+    /// The Items page shares the `Items:` literal with the U-Use item
+    /// browser.
+    pub const fn border_label(self) -> Option<&'static str> {
+        match self {
+            Self::Stats | Self::Equipment | Self::SpellBook => None,
+            Self::Reagents => Some("Reagents"),
+            Self::Spells => Some("Spells"),
+            // Same stored literal as the U-Use item browser's
+            // `USE_PICKER_ROSTER_BOX_LABEL`.
+            Self::SpecialUse => Some("Items:"),
+            Self::EquipmentStock => Some("Armaments"),
+        }
+    }
+
+    /// Debug/transcript name for the page. This is **not** the border
+    /// label - see [`Self::border_label`] for the published literals.
     pub const fn title(self) -> &'static str {
         match self {
             Self::Stats => "Stats",
@@ -157,6 +202,9 @@ pub struct DungeonChestSelection {
 pub enum SurfaceChestVerb {
     Get,
     Open,
+    /// `containers.md §9`: the moldy-corpse Search branch uses the same
+    /// shared acting-member picker as surface containers.
+    Search,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -256,6 +304,7 @@ pub enum DirectionPromptKind {
     },
     Fire,
     Get,
+    Jimmy,
     Look,
     Open,
     Push,
@@ -498,6 +547,7 @@ impl SurfaceChestVerb {
         match self {
             Self::Get => "Got",
             Self::Open => "Opened",
+            Self::Search => "Searched",
         }
     }
 }

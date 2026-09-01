@@ -14,7 +14,6 @@ pub fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
         play_options_from_save_bytes_named(&bytes, SAVED_GAM_FILENAME, "--from-save", true)?;
     refresh_saved_ool_mirrors_for_load(game_dir, needs_underworld_disk_swap)?;
     load_world_progress_state(game_dir)?.apply_sidecar_only_to_play_options(&mut options);
-    options.blackthorn_story = load_blackthorn_story_state(game_dir)?;
     options.town_npc_mutations = load_town_npc_mutations(game_dir)?;
     options.save_template_source = SaveTemplateSource::SavedGame;
     Ok(options)
@@ -215,6 +214,16 @@ pub fn play_options_from_save_bytes_named(
         *hull = bytes[SAVE_ACTIVE_OBJECTS_OFFSET + 5];
         *skiffs = bytes[SAVE_ACTIVE_OBJECTS_OFFSET + 7];
     }
+    let door_tracker = bytes
+        [SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET..=SAVE_DOOR_TRACKER_COUNTDOWN_OFFSET]
+        .iter()
+        .any(|byte| *byte != 0)
+        .then(|| DoorTracker {
+            previous_tile: bytes[SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET],
+            x: usize::from(bytes[SAVE_DOOR_TRACKER_X_OFFSET]),
+            y: usize::from(bytes[SAVE_DOOR_TRACKER_Y_OFFSET]),
+            turns_remaining: bytes[SAVE_DOOR_TRACKER_COUNTDOWN_OFFSET],
+        });
 
     Ok(PlayOptions {
         target,
@@ -250,8 +259,6 @@ pub fn play_options_from_save_bytes_named(
             RARE_REAGENT_HARVEST_POINT_COUNT],
         fixed_hidden_treasure_found,
         fixed_hidden_treasure_daily_day: bytes[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET],
-        fixed_hidden_treasure_single_use_cookie: bytes
-            [SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET],
         dungeon_room_clear_bitmap,
         saved_dungeon_working_buffer,
         moonstone_slots,
@@ -294,6 +301,7 @@ pub fn play_options_from_save_bytes_named(
         combat_interference_sources,
         transport,
         facing: transport_marker_facing(transport_marker),
+        door_tracker,
         pending_vehicle: PendingVehicleSaveState {
             x: bytes[SAVE_PENDING_VEHICLE_X_OFFSET],
             y: bytes[SAVE_PENDING_VEHICLE_Y_OFFSET],
@@ -306,7 +314,6 @@ pub fn play_options_from_save_bytes_named(
             class_byte: bytes[SAVE_PENDING_VEHICLE_CLASS_OFFSET],
         },
         inn_registry,
-        blackthorn_story: BlackthornStoryState::default(),
         initial_britannia_overlay: None,
         debug_enter: None,
         saved_active_objects: if include_active_objects {
@@ -436,6 +443,12 @@ pub fn decode_party_roster(bytes: &[u8]) -> Vec<PartyRosterRecord> {
                     level: bytes[record + SAVE_CHARACTER_LEVEL_OFFSET],
                 },
                 name,
+                // `formats/saved-gam.md §3.1`: field offset `0x09`, width
+                // one byte — "Gender. `0x0B` for male, `0x0C` for female."
+                // The same section pins the order as gender-then-class-
+                // then-status, so this byte sits between the nine-byte name
+                // and the ASCII class letter already read above.
+                gender: bytes[record + SAVE_CHARACTER_GENDER_OFFSET],
                 experience: u16_at(bytes, record + SAVE_CHARACTER_EXPERIENCE_OFFSET),
                 stay_counter: bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
                 strength: bytes[record + SAVE_CHARACTER_STR_OFFSET],

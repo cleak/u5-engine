@@ -1,6 +1,10 @@
-//! Transport state (foot/horse/ship/skiff/carpet/balloon), pending-vehicle acquisitions, and board-vehicle candidates.
+//! Transport state (foot/horse/ship/skiff/carpet), pending-vehicle acquisitions, and board-vehicle candidates.
 
 use crate::*;
+
+/// `vehicles.md §3`: the exact overworld pier tile that automatically furls
+/// an under-sail ship after a successful step onto it.
+pub const OVERWORLD_PIER_TILE: u8 = 0x47;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TransportState {
@@ -25,10 +29,16 @@ pub enum TransportState {
         type_byte: u8,
         tile: u8,
     },
-    Balloon {
-        type_byte: u8,
-        tile: u8,
-    },
+    /// `vehicles.md §11` "Balloon boundary": "Settled, not merely
+    /// untraced. Balloon sprites are catalog assets only. No value a
+    /// balloon could occupy is written or read by any shipped binary, and
+    /// Section 2 gives the arithmetic argument that closes the last route
+    /// by which such a value could have been reached." §2 states it
+    /// directly: "**There is no balloon and no sixth vehicle family.**"
+    /// and "Do not model balloon art as a transport state." There is
+    /// therefore deliberately no `Balloon` variant here; the balloon art
+    /// band stays in the tile catalog only.
+    ///
     /// `vehicles.md §2` marker `0x00`, "Party sprite suppressed": "The
     /// party is drawn as nothing. As a *persistent* state this is reached
     /// only by drowning when a ship is lost with no skiff and no carpet
@@ -87,39 +97,23 @@ pub const CARPET_MARKER_FRAMES: [u8; 2] = [0x14, 0x15];
 /// `vehicles.md §2` marker `0x00`, the sprite-suppressed party.
 pub const TRANSPORT_MARKER_SPRITE_SUPPRESSED: u8 = 0x00;
 
-/// `vehicles.md §6` drowning-loop exit scan: "the scan that ends the loop
-/// counts only good, poisoned and sleeping members".
+/// `vehicles.md §6` drowning-loop exit scan: the loop continues only while
+/// at least one Good, Poisoned, or Sleeping member remains.
 ///
 /// This is deliberately **not** the same test as
 /// [`crate::outdoor_impact_damages_member`], which skips only the dead
-/// marker. `overworld.md §6.2.5` names the difference as an open gap:
-/// "A member in some other living state would keep taking damage while no
-/// longer being counted alive by the exit test. Whether that state is
-/// reachable is unexamined." Both tests are implemented as published
-/// rather than reconciled into one.
+/// marker. `vehicles.md §6` now resolves the difference: shipped gameplay
+/// writes only G/P/S/D, but imported saves may preserve another status. Such
+/// a member is damaged while a G/P/S member holds the loop open, but does not
+/// itself keep the loop alive and can therefore survive the helper's return.
 pub const fn party_member_counts_as_living(status: u8) -> bool {
     matches!(status, b'G' | b'P' | b'S')
 }
 
-/// `vehicles.md §6` / `overworld.md §6.2.4`: "The ship-sunk line prints"
-/// when the hull roll destroys the frigate.
-///
-/// Neither section fixes the wording, so this follows the precedent of
-/// [`crate::OUTDOOR_BROADSIDE_BOOM_MESSAGE`] and states the published
-/// event in the tree's own voice rather than inventing a second cue for
-/// it. What *is* contract is that this line belongs to the ship-loss
-/// path: §6.2.4 says the payload itself "prints no narration line".
-pub const SHIP_SUNK_MESSAGE: &str = "Thy ship sinks!";
-
-/// Non-contract guard on the `vehicles.md §6` drowning loop.
-///
-/// The loop provably terminates — every iteration either removes at least
-/// one hit point from a member the exit scan counts, or converts a
-/// zero-hit-point member to the dead marker, and neither is reversible
-/// inside the loop. This bound exists so that a future change to the
-/// damage helper cannot turn a spec-faithful loop into a hang; it is not
-/// a published limit and is unreachable for any real roster.
-pub const SHIP_LOSS_DROWNING_ITERATION_GUARD: usize = 4096;
+/// `audio.md §8.9`: exact ship-loss presentation lines.
+pub const SHIP_SUNK_MESSAGE: &str = "Ship sunk!";
+pub const ABANDON_SHIP_MESSAGE: &str = "Abandon ship!";
+pub const DROWNING_MESSAGE: &str = "DROWNING!!!";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PendingVehicleAcquisition {
@@ -331,7 +325,6 @@ pub fn vehicle_exit_object_support(object: ActiveObject) -> bool {
             sails_hoisted: true,
             ..
         })
-        | Some(TransportState::Balloon { .. })
         | Some(TransportState::Foot)
         | Some(TransportState::SpriteSuppressed)
         | None => false,
@@ -391,8 +384,36 @@ impl TransportState {
         )
     }
 
+    /// Return the same transport with ship sails furled. Other transport
+    /// families are unchanged so callers can apply the pier rule directly.
+    pub fn with_ship_sails_furled(self) -> Self {
+        match self {
+            Self::Ship {
+                type_byte,
+                tile,
+                hull,
+                skiffs,
+                ..
+            } => Self::Ship {
+                type_byte,
+                tile,
+                sails_hoisted: false,
+                hull,
+                skiffs,
+            },
+            other => other,
+        }
+    }
+
+    /// `vehicles.md §11` "Balloon boundary": balloon sprites are
+    /// "catalog assets only" and there is no balloon transport family, so
+    /// this is always `false`.
+    ///
+    /// Retained only because `play_state_impl/chunk_07.rs` still calls it
+    /// from `vehicle_can_park_at_current_cell`; that call site (and this
+    /// shim with it) should be deleted by that file's owner.
     pub fn is_balloon(self) -> bool {
-        matches!(self, Self::Balloon { .. })
+        false
     }
 
     pub fn avatar_tile(self) -> u8 {
@@ -401,8 +422,7 @@ impl TransportState {
             Self::Horse { tile, .. }
             | Self::Ship { tile, .. }
             | Self::Skiff { tile, .. }
-            | Self::Carpet { tile, .. }
-            | Self::Balloon { tile, .. } => tile,
+            | Self::Carpet { tile, .. } => tile,
             // vehicles.md §2: "The party is drawn as nothing."
             Self::SpriteSuppressed => TRANSPORT_MARKER_SPRITE_SUPPRESSED,
         }
@@ -420,7 +440,6 @@ impl TransportState {
             Self::Ship { .. } => "ship",
             Self::Skiff { .. } => "skiff",
             Self::Carpet { .. } => "carpet",
-            Self::Balloon { .. } => "balloon",
             Self::SpriteSuppressed => "drowned",
         }
     }
@@ -441,7 +460,6 @@ impl TransportState {
             ),
             Self::Skiff { tile, .. } => format!("skiff tile {tile}"),
             Self::Carpet { tile, .. } => format!("magic carpet tile {tile}"),
-            Self::Balloon { tile, .. } => format!("balloon tile {tile}"),
             Self::SpriteSuppressed => "sprite suppressed".to_string(),
         }
     }
@@ -450,7 +468,9 @@ impl TransportState {
         match target {
             Self::Ship { .. } => ship_boarding_precondition_accepts(self.save_marker()),
             Self::Horse { .. } | Self::Skiff { .. } | Self::Carpet { .. } => self.is_foot(),
-            Self::Balloon { .. } => false,
+            // `vehicles.md §4`: "No balloon object byte is accepted by the
+            // traced B-Board handler" -- and §2 removes the family
+            // entirely, so there is no balloon target to reject here.
             Self::Foot | Self::SpriteSuppressed => false,
         }
     }
@@ -473,7 +493,6 @@ impl TransportState {
                 transport_marker_for_vehicle_bytes(type_byte, tile, false)
                     .unwrap_or(FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER)
             }
-            Self::Balloon { .. } => FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER,
             Self::SpriteSuppressed => TRANSPORT_MARKER_SPRITE_SUPPRESSED,
         }
     }
@@ -513,7 +532,6 @@ impl TransportState {
                 type_byte: marker,
                 tile: tile.unwrap_or(old_tile),
             },
-            Self::Balloon { type_byte, tile } => Self::Balloon { type_byte, tile },
             Self::SpriteSuppressed => Self::SpriteSuppressed,
         }
     }
@@ -530,9 +548,7 @@ impl TransportState {
                 };
                 (parked_type, tile, 0, 0)
             }
-            Self::Skiff { type_byte, tile } | Self::Balloon { type_byte, tile } => {
-                (type_byte, tile, 0, 0)
-            }
+            Self::Skiff { type_byte, tile } => (type_byte, tile, 0, 0),
             Self::Carpet { type_byte, tile } => {
                 let parked_type = if matches!(
                     transport_family(type_byte),

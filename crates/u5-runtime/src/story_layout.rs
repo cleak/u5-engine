@@ -190,13 +190,18 @@ pub const CHARGEN_GYPSY_PARAGRAPH_BOX: ProportionalLayoutDescriptor =
 /// above the `CREATE` result panel at `(168, 100)` and to its left below.
 /// This is the one caller `text-output.md §8.1` records as overriding the
 /// space advance, to 4, for a single paragraph.
+///
+/// `systems/chargen.md §5.1.2` publishes the result column of the descriptor
+/// table as "Band low, high | 90, 200", restated in prose as margin pair B
+/// (0..166, left of the 152-wide art at x = 168) applying "for every line
+/// whose pen has passed y = 90". The band low is 90, not 93.
 pub const CHARGEN_RESULT_PARAGRAPH_BOX: ProportionalLayoutDescriptor =
     ProportionalLayoutDescriptor {
         left_a: 0,
         right_a: 320,
         left_b: 0,
         right_b: 166,
-        band_low: 93,
+        band_low: 90,
         band_high: 200,
         space_advance: CHARGEN_RESULT_SPACE_ADVANCE,
         pen_x: 0,
@@ -211,6 +216,222 @@ pub const CHARGEN_RESULT_SPACE_ADVANCE: u8 = 4;
 /// below the two incense-bowl backings, which occupy rows 0..147.
 pub const CHARGEN_QUESTION_PARAGRAPH_BOX: ProportionalLayoutDescriptor =
     ProportionalLayoutDescriptor::full_width(0, 152);
+
+// ---------------------------------------------------------------------
+// `systems/endgame.md` section 8 - the six fixed final narrative windows.
+//
+// The endgame's prose uses the same proportional paragraph renderer as
+// the intro slides and the chargen screens, so its per-window layout
+// descriptors live here beside them. The panel bindings and title
+// strips travel with the descriptors because 8.1 and 8.2 publish them
+// as parallel per-window tables: "All of the values below are fixed
+// resident data laid out as parallel per-window tables; nothing about
+// them is computed at run time."
+// ---------------------------------------------------------------------
+
+/// `systems/endgame.md §8`: the six fixed `END.DAT` narrative windows.
+pub const ENDGAME_NARRATIVE_WINDOWS: usize = 6;
+
+/// `systems/endgame.md §8.1`: the first endgame panel archive. Windows
+/// 1 to 3 take their panel from it, slots 0 to 2 in order.
+pub const ENDGAME_PANEL_ARCHIVE_1: &str = "END1";
+/// `systems/endgame.md §8.1`: the second endgame panel archive. Windows
+/// 4 to 6 take theirs from it, slots 0 to 2 in order.
+pub const ENDGAME_PANEL_ARCHIVE_2: &str = "END2";
+/// `systems/endgame.md §8.2`: the shared strip archive the two
+/// decorative chapter titles come from.
+pub const ENDGAME_TITLE_STRIP_ARCHIVE: &str = "TEXT";
+
+/// One row of the `systems/endgame.md §8.1` per-window binding table.
+///
+/// "Each of the six windows binds one panel from the endgame panel
+/// archives to one `END.DAT` record and one paragraph rectangle." The
+/// panel is drawn opaque, with no border, no shadow and no frame of its
+/// own, and the window numbering matches the `END.DAT` record numbering
+/// of `formats/end-dat.md` section 4.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EndgameNarrativePanel {
+    /// `END1` or `END2`. "The archive is opened when it first becomes
+    /// the required one and released when the next window needs a
+    /// different archive."
+    pub archive: &'static str,
+    pub slot: u8,
+    pub width: u16,
+    pub height: u16,
+    pub top_left_x: u16,
+    pub top_left_y: u16,
+    /// The window's `END.DAT` record, which is also its window number.
+    pub end_dat_record: u8,
+}
+
+/// `systems/endgame.md §8.1` "Per-window bindings", verbatim:
+///
+/// ```text
+/// | Window | Archive | Slot | Panel size | Panel top-left | END.DAT record |
+/// |      1 | END1    |    0 | 167 x 124  | (0, 0)         |              1 |
+/// |      2 | END1    |    1 | 191 x 90   | (64, 0)        |              2 |
+/// |      3 | END1    |    2 | 192 x 95   | (0, 52)        |              3 |
+/// |      4 | END2    |    0 | 173 x 98   | (0, 0)         |              4 |
+/// |      5 | END2    |    1 | 157 x 90   | (0, 92)        |              5 |
+/// |      6 | END2    |    2 | 153 x 110  | (160, 0)       |              6 |
+/// ```
+pub const ENDGAME_NARRATIVE_PANELS: [EndgameNarrativePanel; ENDGAME_NARRATIVE_WINDOWS] = [
+    EndgameNarrativePanel {
+        archive: ENDGAME_PANEL_ARCHIVE_1,
+        slot: 0,
+        width: 167,
+        height: 124,
+        top_left_x: 0,
+        top_left_y: 0,
+        end_dat_record: 1,
+    },
+    EndgameNarrativePanel {
+        archive: ENDGAME_PANEL_ARCHIVE_1,
+        slot: 1,
+        width: 191,
+        height: 90,
+        top_left_x: 64,
+        top_left_y: 0,
+        end_dat_record: 2,
+    },
+    EndgameNarrativePanel {
+        archive: ENDGAME_PANEL_ARCHIVE_1,
+        slot: 2,
+        width: 192,
+        height: 95,
+        top_left_x: 0,
+        top_left_y: 52,
+        end_dat_record: 3,
+    },
+    EndgameNarrativePanel {
+        archive: ENDGAME_PANEL_ARCHIVE_2,
+        slot: 0,
+        width: 173,
+        height: 98,
+        top_left_x: 0,
+        top_left_y: 0,
+        end_dat_record: 4,
+    },
+    EndgameNarrativePanel {
+        archive: ENDGAME_PANEL_ARCHIVE_2,
+        slot: 1,
+        width: 157,
+        height: 90,
+        top_left_x: 0,
+        top_left_y: 92,
+        end_dat_record: 5,
+    },
+    EndgameNarrativePanel {
+        archive: ENDGAME_PANEL_ARCHIVE_2,
+        slot: 2,
+        width: 153,
+        height: 110,
+        top_left_x: 160,
+        top_left_y: 0,
+        end_dat_record: 6,
+    },
+];
+
+/// One decorative `TEXT` strip drawn over a narrative window
+/// (`systems/endgame.md §8.2`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EndgameTitleStrip {
+    pub slot: u8,
+    pub x: u16,
+    pub y: u16,
+}
+
+/// `systems/endgame.md §8.2`: "Two windows also draw decorative title
+/// strips from the shared `TEXT` strip archive ... before the prose is
+/// laid out."
+///
+/// ```text
+/// | Window | Strips drawn, in order                             |
+/// |      1 | TEXT slot 0 at (216, 0), then slot 4 at (152, 28)   |
+/// |      4 | TEXT slot 5 at (224, 0), then slot 0 at (176, 0)    |
+/// ```
+///
+/// The pairs read as the chapter titles "The Homecoming" and "The
+/// Dream"; the words are part of the artwork, not typeset text. The
+/// overlap inside window 4's pair is intentional kerning - the second
+/// strip is drawn opaque over the first.
+const ENDGAME_WINDOW_1_TITLE_STRIPS: [EndgameTitleStrip; 2] = [
+    EndgameTitleStrip {
+        slot: 0,
+        x: 216,
+        y: 0,
+    },
+    EndgameTitleStrip {
+        slot: 4,
+        x: 152,
+        y: 28,
+    },
+];
+const ENDGAME_WINDOW_4_TITLE_STRIPS: [EndgameTitleStrip; 2] = [
+    EndgameTitleStrip {
+        slot: 5,
+        x: 224,
+        y: 0,
+    },
+    EndgameTitleStrip {
+        slot: 0,
+        x: 176,
+        y: 0,
+    },
+];
+
+/// The section 8.2 title strips for a zero-based window index, in draw
+/// order. Only windows 1 and 4 (indices 0 and 3) have any.
+pub fn endgame_narrative_title_strips(window_index: usize) -> &'static [EndgameTitleStrip] {
+    match window_index {
+        0 => &ENDGAME_WINDOW_1_TITLE_STRIPS,
+        3 => &ENDGAME_WINDOW_4_TITLE_STRIPS,
+        _ => &[],
+    }
+}
+
+/// `systems/endgame.md §8.2` "Per-window paragraph rectangles",
+/// verbatim:
+///
+/// ```text
+/// | Window | Pen start | Outside: l, r | Inside: l, r | Band low, high |
+/// |      1 | (172, 66) | 172, 320      | 0, 320       | 126, 200       |
+/// |      2 | (0, 92)   | 0, 320        | 0, 320       | 126, 200       |
+/// |      3 | (0, 9)    | 0, 320        | 196, 320     | 42, 148        |
+/// |      4 | (179, 38) | 179, 320      | 0, 320       | 100, 200       |
+/// |      5 | (0, 9)    | 0, 320        | 161, 320     | 82, 200        |
+/// |      6 | (0, 0)    | 0, 154        | 0, 320       | 112, 200       |
+/// ```
+///
+/// "Line advance is nine pixels and glyph output stops once the pen
+/// reaches vertical position 192. The endgame never writes the space
+/// advance, so all six windows lay out with the shipped default of
+/// five." Those are already this module's [`PROPORTIONAL_LINE_STRIDE`],
+/// [`PROPORTIONAL_DRAW_CLIP_Y`] and
+/// [`PROPORTIONAL_DEFAULT_SPACE_ADVANCE`], so `step_box` is the right
+/// constructor here.
+pub const ENDGAME_NARRATIVE_PARAGRAPH_BOXES: [ProportionalLayoutDescriptor;
+    ENDGAME_NARRATIVE_WINDOWS] = [
+    //        A left/right   B left/right   band low/high   pen origin
+    step_box(172, 320, 0, 320, 126, 200, 172, 66),
+    step_box(0, 320, 0, 320, 126, 200, 0, 92),
+    step_box(0, 320, 196, 320, 42, 148, 0, 9),
+    step_box(179, 320, 0, 320, 100, 200, 179, 38),
+    step_box(0, 320, 161, 320, 82, 200, 0, 9),
+    step_box(0, 154, 0, 320, 112, 200, 0, 0),
+];
+
+/// Paragraph descriptor for a zero-based section 8 narrative window.
+pub fn endgame_narrative_paragraph_box(
+    window_index: usize,
+) -> Option<ProportionalLayoutDescriptor> {
+    ENDGAME_NARRATIVE_PARAGRAPH_BOXES.get(window_index).copied()
+}
+
+/// Panel binding for a zero-based section 8 narrative window.
+pub fn endgame_narrative_panel(window_index: usize) -> Option<EndgameNarrativePanel> {
+    ENDGAME_NARRATIVE_PANELS.get(window_index).copied()
+}
 
 /// One laid-out glyph: the byte to draw and its top-left pixel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -436,4 +657,97 @@ pub fn layout_proportional_paragraph_glyphs(
     }
 
     Ok(placed)
+}
+
+#[cfg(test)]
+mod chargen_descriptor_tests {
+    use super::*;
+
+    /// `systems/chargen.md §5.1.2` "Paragraph rectangles" publishes one column
+    /// per chargen paragraph. This pins all three literally against that table
+    /// so a drifted band bound cannot pass unnoticed again.
+    #[test]
+    fn chargen_paragraph_descriptors_match_published_table() {
+        // (name, left_a, right_a, left_b, right_b, band_low, band_high,
+        //  space_advance, pen_x, pen_y)
+        let published: [(&str, ProportionalLayoutDescriptor); 3] = [
+            (
+                "opening gypsy paragraph",
+                ProportionalLayoutDescriptor {
+                    left_a: 0,
+                    right_a: 320,
+                    left_b: 175,
+                    right_b: 320,
+                    band_low: 89,
+                    band_high: 200,
+                    space_advance: 5,
+                    pen_x: 0,
+                    pen_y: 9,
+                },
+            ),
+            (
+                "per-question paragraph",
+                ProportionalLayoutDescriptor {
+                    left_a: 0,
+                    right_a: 320,
+                    // The band is disabled by collapsing its low bound onto
+                    // its high bound, so pair B can never be selected.
+                    left_b: 0,
+                    right_b: 320,
+                    band_low: 200,
+                    band_high: 200,
+                    space_advance: 5,
+                    pen_x: 0,
+                    pen_y: 152,
+                },
+            ),
+            (
+                "result paragraph",
+                ProportionalLayoutDescriptor {
+                    left_a: 0,
+                    right_a: 320,
+                    left_b: 0,
+                    right_b: 166,
+                    band_low: 90,
+                    band_high: 200,
+                    space_advance: 4,
+                    pen_x: 0,
+                    pen_y: 0,
+                },
+            ),
+        ];
+
+        let actual = [
+            CHARGEN_GYPSY_PARAGRAPH_BOX,
+            CHARGEN_QUESTION_PARAGRAPH_BOX,
+            CHARGEN_RESULT_PARAGRAPH_BOX,
+        ];
+
+        for ((name, expected), got) in published.into_iter().zip(actual) {
+            assert_eq!(
+                got, expected,
+                "{name} descriptor drifted from chargen.md §5.1.2"
+            );
+        }
+
+        // Line advance is nine pixels for every chargen paragraph.
+        assert_eq!(PROPORTIONAL_LINE_STRIDE, 9);
+    }
+
+    /// `systems/chargen.md §5.1.2`: margin pair B applies to "every line whose
+    /// pen has passed y = 90", so the band must admit a pen at y = 91 and must
+    /// not admit one at y = 90 (the band test is strict at both ends).
+    #[test]
+    fn result_paragraph_band_admits_first_line_past_ninety() {
+        let d = CHARGEN_RESULT_PARAGRAPH_BOX;
+        let inside = |pen_y: u16| pen_y > d.band_low && pen_y < d.band_high;
+        assert!(!inside(90), "y = 90 has not yet passed the band low");
+        assert!(
+            inside(91),
+            "the first line past y = 90 must use margin pair B"
+        );
+        // With band_low = 93 the pen rows 91 and 92 would wrongly keep the
+        // full-width pair A.
+        assert_eq!(d.band_low, 90);
+    }
 }

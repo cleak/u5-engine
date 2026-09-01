@@ -105,7 +105,7 @@ fn cli_parser_accepts_world_start_coordinates() {
         "--at",
         "200,201",
         "--transport",
-        "balloon",
+        "horse",
         r"C:\Games\U5-Clean",
     ])
     .unwrap();
@@ -121,10 +121,27 @@ fn cli_parser_accepts_world_start_coordinates() {
     assert_eq!(args.play_options.start, Some((200, 201)));
     assert_eq!(
         args.play_options.transport,
-        TransportState::Balloon {
-            type_byte: FIRST_PLAYABLE_BALLOON_TILE,
-            tile: FIRST_PLAYABLE_BALLOON_TILE,
+        TransportState::Horse {
+            type_byte: 160,
+            tile: 160,
         }
+    );
+}
+
+/// `vehicles.md` section 11: "Balloon sprites are catalog assets only."
+/// There is no balloon vehicle family, so the parser must reject the word
+/// rather than seat the player in a vehicle the game does not have.
+///
+/// This test previously asserted the opposite - that `--transport balloon`
+/// produced a `TransportState::Balloon` - which is a large part of why the
+/// divergence survived as long as it did.
+#[test]
+fn cli_parser_rejects_the_balloon_transport() {
+    let error = parse_cli_args(["--play", "--transport", "balloon", r"C:\Games\U5-Clean"])
+        .expect_err("balloon is not a vehicle family");
+    assert!(
+        error.to_string().to_ascii_lowercase().contains("transport"),
+        "the error should name the rejected argument, got {error}"
     );
 }
 
@@ -1024,6 +1041,63 @@ fn cli_binary_create_character_save_loads_through_play_script() {
         "{play_stderr}"
     );
     let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn cli_binary_character_creation_stages_a_readonly_install() {
+    let source = debug_game_dir();
+    let runtime_root = PathBuf::from(format!("{}-runtime", source.display()));
+    fs::create_dir_all(&runtime_root).unwrap();
+    fs::write(
+        source.join("INIT.GAM"),
+        saved_game_seed_bytes(17, 0, 15, 15),
+    )
+    .unwrap();
+    fs::write(source.join("INIT.OOL"), vec![0; OOL_PLANE_LEN]).unwrap();
+    let brit_path = source.join(BRIT_OOL_FILENAME);
+    let brit_bytes = vec![0x5a; OOL_PLANE_LEN];
+    fs::write(&brit_path, &brit_bytes).unwrap();
+    let mut permissions = fs::metadata(&brit_path).unwrap().permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(&brit_path, permissions).unwrap();
+
+    let create = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .args([
+            "--create-character",
+            "AVATAR",
+            "--gender",
+            "male",
+            "--chargen-answers",
+            "AAAAAAA",
+        ])
+        .arg(source.as_os_str())
+        .env(RUNTIME_DIR_ENV, &runtime_root)
+        .output()
+        .unwrap();
+    assert!(create.status.success(), "{:?}", create.stderr);
+    assert_eq!(fs::read(&brit_path).unwrap(), brit_bytes);
+    assert!(!source.join(SAVED_GAM_FILENAME).exists());
+
+    let runtime = fs::read_dir(&runtime_root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.is_dir())
+        .expect("launcher should create one writable runtime mirror");
+    let saved = fs::read(runtime.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(
+        &saved[SAVE_AVATAR_NAME_OFFSET..SAVE_AVATAR_NAME_OFFSET + 6],
+        b"AVATAR"
+    );
+    assert!(
+        !fs::metadata(runtime.join(BRIT_OOL_FILENAME))
+            .unwrap()
+            .permissions()
+            .readonly()
+    );
+
+    u5_runtime::test_fixtures::clear_readonly(&brit_path).unwrap();
+    fs::remove_dir_all(source).unwrap();
+    fs::remove_dir_all(runtime_root).unwrap();
 }
 
 #[test]

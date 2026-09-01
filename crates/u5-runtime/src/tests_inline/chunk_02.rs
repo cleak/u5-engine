@@ -6,14 +6,6 @@ fn mount_horse(state: &mut PlayState) {
     state.sync_player_object();
 }
 
-fn mount_balloon(state: &mut PlayState) {
-    state.player.transport = TransportState::Balloon {
-        type_byte: FIRST_PLAYABLE_BALLOON_TILE,
-        tile: FIRST_PLAYABLE_BALLOON_TILE,
-    };
-    state.sync_player_object();
-}
-
 fn britannia_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
     let mut state = world_state(grid, x, y);
     state.area = Area::World {
@@ -256,11 +248,16 @@ fn from_init_town_bootstrap_caches_init_ool_for_surface_return() {
     assert_eq!(cached_overlay[0], init_object);
     // `active-objects.md §5` retracts the former player-as-NPC reading:
     // town entry keeps the player solely in active-object slot zero.
-    assert!(state
-        .npcs
-        .iter()
-        .all(|npc| npc.type_byte != SHADOWLORD_ACTOR_TILE));
-    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (15, 15));
+    assert!(
+        state
+            .npcs
+            .iter()
+            .all(|npc| npc.type_byte != SHADOWLORD_ACTOR_TILE)
+    );
+    assert_eq!(
+        (state.active_objects[0].x, state.active_objects[0].y),
+        (15, 15)
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1035,6 +1032,10 @@ fn from_save_town_load_preserves_embedded_active_object_table() {
     };
     let mut save = saved_game_seed_bytes(scene.byte, 0, 15, 15);
     save[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    save[SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET] = 0x44;
+    save[SAVE_DOOR_TRACKER_X_OFFSET] = 12;
+    save[SAVE_DOOR_TRACKER_Y_OFFSET] = 13;
+    save[SAVE_DOOR_TRACKER_COUNTDOWN_OFFSET] = 3;
     write_ool_object(
         &mut save[SAVE_ACTIVE_OBJECTS_OFFSET..SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN],
         1,
@@ -1047,12 +1048,30 @@ fn from_save_town_load_preserves_embedded_active_object_table() {
     let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
     assert_eq!(state.active_objects[1], object);
-    assert!(state
-        .npcs
-        .iter()
-        .all(|npc| npc.type_byte != SHADOWLORD_ACTOR_TILE));
     assert_eq!(
-        (state.active_objects[0].x, state.active_objects[0].y, state.active_objects[0].z),
+        state.door_tracker,
+        Some(DoorTracker {
+            previous_tile: 0,
+            x: 12,
+            y: 13,
+            turns_remaining: 3,
+        })
+    );
+    let authored_door_cell = state.grid[13 * 32 + 12];
+    state.tick_door_tracker();
+    assert_eq!(state.grid[13 * 32 + 12], authored_door_cell);
+    assert!(
+        state
+            .npcs
+            .iter()
+            .all(|npc| npc.type_byte != SHADOWLORD_ACTOR_TILE)
+    );
+    assert_eq!(
+        (
+            state.active_objects[0].x,
+            state.active_objects[0].y,
+            state.active_objects[0].z
+        ),
         (15, 15, 0)
     );
 
@@ -1061,6 +1080,10 @@ fn from_save_town_load_preserves_embedded_active_object_table() {
         MoveOutcome::Saved
     );
     let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(
+        &saved[SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET..=SAVE_DOOR_TRACKER_COUNTDOWN_OFFSET],
+        &[0, 12, 13, 3]
+    );
     let saved_objects = decode_saved_active_objects(&saved).unwrap();
     assert_eq!(saved_objects[0], object);
     let _ = fs::remove_dir_all(dir);
@@ -1119,5 +1142,39 @@ fn save_game_command_prompts_or_cancels_without_writing() {
     assert_eq!(state.message, "No.");
     assert!(!dir.join("SAVED.OOL").exists());
     assert_eq!(state.turn, 0);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `systems/chargen.md §4`: the gender prompt stores "the encoded gender byte"
+/// "into the avatar's record at the field one byte beyond the name" — the same
+/// `formats/saved-gam.md §3.1` offset-`0x09` field the loader now reads. This
+/// pins that chargen and the runtime roster share one source of truth rather
+/// than two, so a female avatar created in chargen reaches the female value in
+/// `PartyRosterRecord` after a load.
+#[test]
+fn a_female_chargen_avatar_loads_back_as_a_female_roster_record() {
+    let dir = debug_game_dir();
+    let mut init_gam = saved_game_seed_bytes(13, 0, 15, 15);
+    init_gam[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_CLASS_OFFSET] = b'A';
+    fs::write(dir.join("INIT.GAM"), &init_gam).unwrap();
+    fs::write(dir.join("INIT.OOL"), vec![0u8; OOL_PLANE_LEN]).unwrap();
+    let stats = ChargenStats {
+        strength: 20,
+        dexterity: 6,
+        intelligence: 8,
+    };
+
+    // `male = false` is the `F` answer to "Art thou Male or Female?".
+    commit_chargen_save(&dir, b"AVATAR", false, stats).unwrap();
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(
+        saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_GENDER_OFFSET],
+        SAVE_GENDER_FEMALE_BYTE
+    );
+
+    let options = play_options_from_save_bytes(&saved).unwrap();
+    assert_eq!(options.party_roster[0].gender, SAVE_GENDER_FEMALE_BYTE);
+    assert!(options.party_roster[0].is_female());
+
     let _ = fs::remove_dir_all(dir);
 }

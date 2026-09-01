@@ -126,38 +126,134 @@ impl TileViewport {
     }
 }
 
-/// Index whose shipped value deviates from the stock hardware set.
+/// Index six: the only palette slot whose value has ever been in
+/// dispute. It is settled now; see [`EGA_PALETTE_RGB`].
 pub const SHIPPED_PALETTE_DEVIATING_INDEX: usize = 6;
-/// Dark yellow: what the shipped table selects at index six.
+/// Dark yellow: what the six-bit register value `0x06` denotes, and
+/// what an enhanced display resolves it to.
 pub const SHIPPED_PALETTE_DARK_YELLOW: [u8; 3] = [0xaa, 0xaa, 0x00];
-/// Brown: what the *stock* mode table selects at index six, and what
-/// this engine must never render there.
+/// Brown: what the firmware default `0x14` denotes, and also what a
+/// 200-line display resolves `0x06` to, via the correction modelled by
+/// [`MonitorModel::Period200Line`].
 pub const STOCK_EGA_BROWN: [u8; 3] = [0xaa, 0x55, 0x00];
 
-/// The game's sixteen-entry palette.
+/// The sixteen six-bit values the shipped program loads into the
+/// adapter's palette registers.
 ///
-/// **This is not the stock IBM EGA palette, and must not be "corrected"
-/// back into one.** `formats/tiles.md` section 7 and
-/// `systems/display-driver-mode.md` section 5.2: the palette is a table
-/// of attribute-controller values shipping inside the resident screen
-/// descriptor, handed to the BIOS once during mode setup. Fifteen
-/// entries are the stock values for the mode; **index six is dark
-/// yellow where stock selects brown**, and that single substitution is
-/// the only way the game's palette differs from the hardware default.
-/// A reader that renders index six as brown gets the game's dark-yellow
-/// tones wrong everywhere they appear.
+/// The firmware mode set installs its own defaults first; the program
+/// then overwrites all sixteen from a table of its own that is the
+/// stock set in fifteen entries and differs only here at index six,
+/// where firmware writes `0x14` (brown) and the program writes `0x06`.
+/// It is deliberately undoing the firmware's brown special case.
 ///
-/// The spec directs implementations to take the stock set and apply the
-/// index-six substitution rather than parsing the resident table, which
-/// is what this constant is. It is the single palette the whole
-/// renderer shares - tiles, text, chrome and every reverse index
-/// lookup - so the substitution lands everywhere at once.
+/// This is the register state, not a colour. What it *looks like*
+/// depends on the display, which is [`MonitorModel`]'s job.
+pub const SHIPPED_PALETTE_REGISTERS: [u8; 16] = [
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f,
+];
+
+/// Which display the renderer is modelling.
+///
+/// This exists because "what colour is attribute six" has two correct
+/// answers and they differ by hardware, not by palette. Keeping the
+/// register table and the display model separate is what stops the
+/// question being re-litigated as a palette edit, which is how it went
+/// wrong twice before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MonitorModel {
+    /// An enhanced display, taking each register value at face value.
+    /// `0x06` is dark yellow. This is the specification's stated v1
+    /// baseline colour space.
+    Enhanced,
+    /// A period display driven at 200 lines, whose correction circuit
+    /// darkens green for the one value `0x06`, rendering it brown.
+    ///
+    /// This is not folklore; it is reproduced under control. A test
+    /// program of ours that writes `0x06` into palette register *two*
+    /// and `0x02` into register *six* renders band two brown and band
+    /// six green, so the correction keys off the value and not the
+    /// register index. A write of `0x3f` to register six renders white,
+    /// which is what rules out the register writes simply being
+    /// ignored.
+    Period200Line,
+}
+
+/// Resolve one six-bit register value to RGB under a display model.
+pub const fn resolve_palette_register(value: u8, model: MonitorModel) -> [u8; 3] {
+    // The 200-line correction applies to exactly one value.
+    if matches!(model, MonitorModel::Period200Line) && value == 0x06 {
+        return STOCK_EGA_BROWN;
+    }
+    // Bits 2..0 are the primary (two thirds) intensities and bits 5..3
+    // the secondary (one third) ones, one pair per channel.
+    [
+        channel_level(value, 0x04, 0x20),
+        channel_level(value, 0x02, 0x10),
+        channel_level(value, 0x01, 0x08),
+    ]
+}
+
+const fn channel_level(value: u8, primary: u8, secondary: u8) -> u8 {
+    let mut level = 0;
+    if value & primary != 0 {
+        level += 0xaa;
+    }
+    if value & secondary != 0 {
+        level += 0x55;
+    }
+    level
+}
+
+/// The game's sixteen-entry palette, resolved for [`DISPLAY_MODEL`].
+///
+/// The v1 baseline is the enhanced-display colour space, so index six renders
+/// dark yellow. A frontend may deliberately select the period-monitor model
+/// and obtain brown from the same `0x06` register value; changing the register
+/// itself to `0x14` would conflate those two layers.
+///
+/// `formats/tiles.md` section 7 and `systems/display-driver-mode.md`
+/// section 5.2 state that the program overwrites the firmware palette
+/// from its own table, stock in fifteen entries, substituting `0x06`
+/// for the firmware's `0x14` at index six. That is correct.
+///
+/// Two separate pieces of evidence appeared to contradict it, and both
+/// were wrong for different reasons:
+///
+/// - The specification's own `capture/ultima_000.png` has brown at
+///   palette entry six. Its `PLTE` is padded to 256 entries with only
+///   0..15 used, and those sixteen are a textbook-exact stock set, so
+///   the capture pipeline wrote a canonical palette rather than reading
+///   the live registers. It is evidence about a screenshot tool.
+/// - Live capture of the shipped game under EGA emulation shows brown
+///   and zero dark yellow. That one is real, but it is the *display*,
+///   not the register: emulating the same program with a control that
+///   writes `0x06` into register two and `0x02` into register six
+///   renders band two brown and band six green. The correction keys off
+///   the value `0x06`, wherever it is stored. See [`MonitorModel`].
+///
+/// So both observations are consistent with the register holding
+/// `0x06`, and neither is evidence against the spec. The general
+/// lesson, which cost two reverts: a value that looks like a known
+/// hardware default is evidence of a misread *and* evidence of a
+/// deliberate override, and only the shipped bytes tell them apart.
+///
+/// This is the single v1 palette the whole renderer shares - tiles, text,
+/// chrome and every reverse index lookup - so index six lands everywhere at
+/// once: bridges, tables, beds, desert, doors, and every other wooden or
+/// earthen tone in the game.
 ///
 /// Nothing reprograms the palette after mode setup, the intro included.
 /// Anything that looks like recolouring is either a draw under a
 /// restricted plane write mask, landing pixels at a different index, or
 /// an effect that mutates loaded asset data. Do not add palette-change
 /// modelling here.
+/// The display model selected for the v1 rendering baseline.
+///
+/// `display-driver-mode.md §5.2` explicitly chooses the enhanced-display
+/// colour space for v1. Period-monitor emulation remains available through
+/// [`resolve_palette_register`] but is not the default renderer contract.
+pub const DISPLAY_MODEL: MonitorModel = MonitorModel::Enhanced;
+
 pub const EGA_PALETTE_RGB: [[u8; 3]; 16] = [
     [0x00, 0x00, 0x00],
     [0x00, 0x00, 0xaa],
@@ -165,6 +261,7 @@ pub const EGA_PALETTE_RGB: [[u8; 3]; 16] = [
     [0x00, 0xaa, 0xaa],
     [0xaa, 0x00, 0x00],
     [0xaa, 0x00, 0xaa],
+    // Register `0x06`, resolved under the v1 enhanced-display model.
     SHIPPED_PALETTE_DARK_YELLOW,
     [0xaa, 0xaa, 0xaa],
     [0x55, 0x55, 0x55],

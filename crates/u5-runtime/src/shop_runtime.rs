@@ -1144,12 +1144,24 @@ pub enum TavernState {
         tavern: Tavern,
         continuation_ready: bool,
     },
+    /// The menu-shaped key wait reached after answering Yes to the resident's
+    /// anything-else question. Unlike fresh entry, its exit keys use the
+    /// randomized no-sale bark; a displayed lore key remains inert while the
+    /// continuation word is zero.
+    PostListWait {
+        tavern: Tavern,
+        continuation_ready: bool,
+    },
     PickProvisionQuantity {
         tavern: Tavern,
         unit_price: u16,
         continuation_ready: bool,
     },
     BlueBoarDrinkList {
+        tavern: Tavern,
+        continuation_ready: bool,
+    },
+    ConfirmEnoughDrink {
         tavern: Tavern,
         continuation_ready: bool,
     },
@@ -1197,8 +1209,11 @@ pub enum TavernOutcome {
     SecondaryTavernSelected {
         tavern: Tavern,
         letter: char,
+        cost: u16,
     },
     PickBlueBoarDrink,
+    ConfirmEnoughDrink,
+    DeclinedEnoughDrink,
     BlueBoarDrinkServed {
         choice: BlueBoarDrinkChoice,
         cost: u16,
@@ -1225,6 +1240,8 @@ pub enum TavernOutcome {
         follow_up_record_id: usize,
     },
     DeclinedContinuation,
+    NoSaleExit,
+    IgnoredInput,
     Declined,
     RefusedShortFunds {
         cost: u16,
@@ -1272,19 +1289,31 @@ pub fn step_tavern(
             TavernState::Menu {
                 tavern,
                 continuation_ready,
+            }
+            | TavernState::PostListWait {
+                tavern,
+                continuation_ready,
             },
             TavernInput::Key(b),
         ) => {
             let upper = b.to_ascii_uppercase();
             if upper == b' ' || upper == 0x1B || upper == b'\r' || upper == b'\n' {
+                let post_list_wait = matches!(*state, TavernState::PostListWait { .. });
                 *state = TavernState::Exited;
-                return TavernOutcome::Exited;
+                return if post_list_wait {
+                    TavernOutcome::NoSaleExit
+                } else {
+                    TavernOutcome::Exited
+                };
             }
             let letters = tavern_menu_letters(tavern);
             if upper == letters.round as u8 {
                 let outcome = apply_tavern_round_drink(gold, tavern, ctx.living_party_members);
                 return match outcome {
                     Ok(outcome) => {
+                        *food = food
+                            .saturating_add(u16::from(ctx.living_party_members))
+                            .min(crate::PARTY_FOOD_CAP);
                         *state = TavernState::AnythingElse {
                             tavern,
                             continuation_ready: true,
@@ -1308,6 +1337,12 @@ pub fn step_tavern(
                     };
                     return TavernOutcome::PickBlueBoarDrink;
                 }
+                let cost = u16::from(ctx.living_party_members);
+                if *gold < cost {
+                    *state = TavernState::Exited;
+                    return TavernOutcome::RefusedShortFunds { cost };
+                }
+                *gold -= cost;
                 *state = TavernState::AnythingElse {
                     tavern,
                     continuation_ready: true,
@@ -1315,6 +1350,7 @@ pub fn step_tavern(
                 return TavernOutcome::SecondaryTavernSelected {
                     tavern,
                     letter: letters.secondary,
+                    cost,
                 };
             }
             if letters
@@ -1334,7 +1370,7 @@ pub fn step_tavern(
             }
             if upper == letters.lore as u8 {
                 if !continuation_ready {
-                    return TavernOutcome::InvalidInput;
+                    return TavernOutcome::IgnoredInput;
                 }
                 *state = TavernState::Exited;
                 return TavernOutcome::EnteredSagePrompt;
@@ -1428,7 +1464,7 @@ pub fn step_tavern(
             TavernInput::Key(b),
         ) => match b.to_ascii_uppercase() {
             b'Y' => {
-                *state = TavernState::Menu {
+                *state = TavernState::PostListWait {
                     tavern,
                     continuation_ready,
                 };
@@ -2822,8 +2858,10 @@ mod tests {
             TavernOutcome::SecondaryTavernSelected {
                 tavern: Tavern::TheWayfarerTavern,
                 letter: 'A',
+                cost: 1,
             }
         );
+        assert_eq!(gold, 99);
         assert_eq!(
             step_tavern(
                 &mut state,
@@ -2978,7 +3016,7 @@ mod tests {
     }
 
     #[test]
-    fn tavern_round_drink_charges_per_living_member() {
+    fn tavern_round_drink_charges_and_feeds_per_living_member() {
         let mut state = TavernState::for_tavern(Tavern::TheSwordAndKeg);
         let mut gold = 100u16;
         let mut food = 30u16;
@@ -3021,7 +3059,7 @@ mod tests {
                 cost: 15,
             }
         );
-        assert_eq!(food, 30);
+        assert_eq!(food, 33);
         assert_eq!(gold, 85);
     }
 
@@ -3250,7 +3288,7 @@ mod tests {
         );
         assert_eq!(
             state,
-            TavernState::Menu {
+            TavernState::PostListWait {
                 tavern: Tavern::TheHumblePalate,
                 continuation_ready: true,
             }
@@ -3274,8 +3312,54 @@ mod tests {
                 &mut gold,
                 &mut food,
             ),
-            TavernOutcome::Exited
+            TavernOutcome::NoSaleExit
         );
+    }
+
+    #[test]
+    fn tavern_zero_continuation_lore_is_silent_and_keeps_waiting() {
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+        let mut gold = 100;
+        let mut food = 30;
+        let mut state = TavernState::AnythingElse {
+            tavern: Tavern::TheHonestMeal,
+            continuation_ready: false,
+        };
+
+        assert!(matches!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'Y'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::Continued { .. }
+        ));
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(tavern_lore_menu_letter(Tavern::TheHonestMeal) as u8),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::IgnoredInput
+        );
+        assert!(matches!(
+            state,
+            TavernState::PostListWait {
+                continuation_ready: false,
+                ..
+            }
+        ));
+        assert_eq!((gold, food), (100, 30));
     }
 
     #[test]
@@ -3515,6 +3599,13 @@ mod tests {
         assert_eq!(gold, 10);
     }
 
+    /// `shops.md §8.7`: "The stock shipwright rows carry the two base
+    /// prices *and* a fixed delivery coordinate", and the published row for
+    /// scene 24 is "| `24` (Buccaneer's Den) | The Rusty Bucket | 700 | 100
+    /// | `(138, 159)` |". The coordinate "is **not** the town's exterior
+    /// entrance or exit cell, and it is not derived from the
+    /// scene-to-exit mapping"; an earlier revision of this test pinned
+    /// `(136, 158)`, which is not the published cell.
     #[test]
     fn ship_broker_f_key_quotes_then_queues_frigate_delivery() {
         let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
@@ -3556,8 +3647,8 @@ mod tests {
         assert_eq!(
             pending,
             Some(PendingVehicleAcquisition::Frigate {
-                x: 136,
-                y: 158,
+                x: 138,
+                y: 159,
                 skiffs: 2,
             })
         );

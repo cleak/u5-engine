@@ -155,9 +155,9 @@ fn advance_combat_round_after_scenario_actor(
         let application = state.apply_combat_round_walk_from_slot(start_slot, 30, false);
         state.next_combat_actor_slot = match application.stop_reason {
             CombatRoundWalkStopReason::EndOfRound => 0,
-            CombatRoundWalkStopReason::AwaitingPlayer | CombatRoundWalkStopReason::Exit => {
-                application.next_slot
-            }
+            CombatRoundWalkStopReason::AwaitingPlayer
+            | CombatRoundWalkStopReason::AutomaticAction
+            | CombatRoundWalkStopReason::Exit => application.next_slot,
         };
         if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
             state.pending_combat_actor_slot =
@@ -253,7 +253,7 @@ mod tests {
         state.combat_actors[8] = crate::CombatActorDescriptor::from_row([
             20,
             1,
-            crate::COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            crate::COMBAT_ACTOR_FLAG_SELECTABLE_40,
             33,
             8,
             0,

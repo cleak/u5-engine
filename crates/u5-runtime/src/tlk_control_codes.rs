@@ -297,34 +297,49 @@ pub const QUEST_PASSWORD_RESISTANCE: &str = "DAWN";
 /// hostile or dangerous infiltration branches.
 pub const QUEST_PASSWORD_OPPRESSION: &str = "IMPERA";
 
-/// `conversation.md §7.6` ASK-PARTY-NAME (`0x84`) match. The typed
-/// answer is compared against each live party member's name with
-/// the bit-7-stripping case-insensitive convention also used by
-/// the ordinary keyword scanner. Returns the matched 1-based slot
-/// index on a successful match, or `0` when no member's name
-/// matches.
+/// `conversation.md §7.6` ASK-WHO (`0x88`) match.
 ///
-/// The match is whole-string equality after stripping bit 7 and
-/// folding case; the function does not look for substrings or word
-/// boundaries. Empty names never match (callers should skip empty
-/// roster slots before passing them in).
-pub fn tlk_ask_party_name_match(typed: &[u8], party_member_names: &[&[u8]]) -> u8 {
+/// The published rule is deliberately looser than the top-level keyword
+/// scan: "For each active party slot in order, the engine takes the
+/// **first four characters** of that member's name and searches for them
+/// as a substring of the typed line. A hit counts only at the start of
+/// the line or immediately after a literal space; a hit in the middle of
+/// a longer word is rejected and the scan continues with the next member.
+/// The first accepted hit ends the scan, sets the bit, and prints the
+/// affirmative line. Empty input is its own early exit and never sets the
+/// bit."
+///
+/// Returns the matched 1-based party slot, or `0` for empty input or no
+/// match. Both sides are compared with bit 7 stripped and case folded,
+/// the same convention the ordinary keyword scanner uses.
+///
+/// *Corrected:* `0x88` previously ran through a whole-string equality
+/// matcher (`tlk_ask_party_name_match`) whose own doc comment said it
+/// "does not look for substrings or word boundaries" — the exact opposite
+/// of the published rule, and strict enough that a typed "my friend Iolo"
+/// never matched.
+pub fn tlk_ask_who_match(typed: &[u8], party_member_names: &[&[u8]]) -> u8 {
+    if typed.is_empty() {
+        return 0;
+    }
+    let folded: Vec<u8> = typed
+        .iter()
+        .map(|byte| (byte & 0x7F).to_ascii_uppercase())
+        .collect();
     for (zero_index, name) in party_member_names.iter().enumerate() {
-        if name.is_empty() || name.len() != typed.len() {
+        let prefix_len = name.len().min(TLK_ASK_WHO_NAME_PREFIX_LEN);
+        if prefix_len == 0 {
             continue;
         }
-        let mut matched = true;
-        let mut i = 0;
-        while i < name.len() {
-            let n = name[i] & 0x7F;
-            let t = typed[i] & 0x7F;
-            if !n.eq_ignore_ascii_case(&t) {
-                matched = false;
-                break;
-            }
-            i += 1;
-        }
-        if matched {
+        let prefix: Vec<u8> = name[..prefix_len]
+            .iter()
+            .map(|byte| (byte & 0x7F).to_ascii_uppercase())
+            .collect();
+        let accepted = folded
+            .windows(prefix_len)
+            .enumerate()
+            .any(|(at, window)| (at == 0 || folded[at - 1] == b' ') && window == prefix.as_slice());
+        if accepted {
             return (zero_index + 1) as u8;
         }
     }
@@ -462,12 +477,47 @@ pub const TLK_CODE_CURSE_CHECK: u8 = 0x8B;
 pub const TLK_CODE_PROTECT_RUN: u8 = 0x8E;
 
 // §7.6 branching, recruitment, and transactional codes
-pub const TLK_CODE_ASK_PARTY_NAME: u8 = 0x84;
+/// `conversation.md §7.6` RECRUIT-SPEAKER. Takes **no argument bytes,
+/// prompts for nothing, and reads no input**: the engine takes the
+/// speaker's own name from the loaded blob's Name entry and matches its
+/// opening characters against the reserve portion of the sixteen-slot
+/// character roster, scanned from the last slot downwards.
+///
+/// *Corrected:* this engine previously named the byte
+/// `TLK_CODE_ASK_PARTY_NAME` and dispatched it as a free-text "Name?"
+/// prompt matched against the *live* party. §7.6 withdraws that reading —
+/// "There is no player prompt and no input read" — and §10 repeats it:
+/// "RECRUIT-SPEAKER reads no input and is not a prompt".
+pub const TLK_CODE_RECRUIT_SPEAKER: u8 = 0x84;
 pub const TLK_CODE_GOLD_PAYMENT: u8 = 0x85;
 pub const TLK_CODE_ACTION_DISPATCH: u8 = 0x86;
-pub const TLK_CODE_SET_FLAG: u8 = 0x87;
+/// `conversation.md §7.6` KEYWORD-ALIAS. Positional, not a search: save
+/// the cursor, skip the remainder of the current record, skip any run of
+/// terminators, skip the whole record that follows, and run the record
+/// after that as a nested stream.
+///
+/// *Corrected:* the historical mnemonic was SET-FLAG and an earlier
+/// revision described the code as a recursive keyword *scan*. §7.6:
+/// "Both are wrong. `0x87` does no string comparison, reads no player
+/// input, consumes no argument byte, and writes no flag."
+pub const TLK_CODE_KEYWORD_ALIAS: u8 = 0x87;
+/// `conversation.md §7.6`: how far `0x87` KEYWORD-ALIAS skips, counted in
+/// whole records. The published byte walk is "skip forward past the
+/// remainder of the current record, past any run of terminators, and past
+/// the whole record that follows; run the record after that". Against a
+/// blob already split into records that is two records on, and because a
+/// response record is preceded by its keyword record, two records on from
+/// a response is the *next keyword's response* — the alias reading §7.6
+/// gives for all six hundred forty-one shipped occurrences.
+pub const TLK_KEYWORD_ALIAS_RECORD_SKIP: usize = 2;
 pub const TLK_CODE_ASK_WHO: u8 = 0x88;
 pub const TLK_CODE_IF_ELSE: u8 = 0x8C;
+/// `conversation.md §7.6`: the reserved `0x8C` argument. Every other
+/// argument value names a branch target label; this one, on the set arm,
+/// "ends the response and returns to the keyword prompt". It is the guard
+/// that fronts the shipped introduce-yourself idiom, usually in the NPC's
+/// Name or Greeting entry.
+pub const TLK_IF_ELSE_END_RESPONSE_ARGUMENT: u8 = 0xFF;
 pub const TLK_CODE_IF_ELSE_ALT: u8 = 0xFE;
 
 // §7.7 labels, GOTO, and scoped prompts (and §7 dispatcher boundaries)
@@ -522,6 +572,15 @@ pub const TLK_EMPTY_INPUT_BYE_MESSAGE: &str = "BYE\n\n";
 /// `conversation.md §7.6`: exact fixed output for an unaffordable
 /// `0x85` demand. Quotes and both trailing line feeds are visible.
 pub const TLK_GOLD_PAYMENT_REFUSAL_MESSAGE: &str = "\"Thou hast not enough gold!\"\n\n";
+
+/// `conversation.md §7.6`: the `0x84` RECRUIT-SPEAKER refusal printed
+/// when the active party is already at the six-member cap. The code
+/// recruits nobody in that case.
+pub const TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL: &str = "\"There is no room for me in thy party.\nSeek me again if one of thy members doth leave thee.\"\n\n";
+
+/// `conversation.md §7.6`: number of leading characters of a party
+/// member's name that `0x88` ASK-WHO searches the typed line for.
+pub const TLK_ASK_WHO_NAME_PREFIX_LEN: usize = 4;
 
 /// `conversation.md §6` no-match response. When both the reserved
 /// keyword scan and the ordinary keyword scan fail, the keyword

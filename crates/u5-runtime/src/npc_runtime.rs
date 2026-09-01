@@ -37,14 +37,17 @@ pub enum NpcScheduleState {
     /// `3` — replaying a cached path produced by the pathfinder;
     /// pop the next direction byte and apply it.
     ReplayQueue,
-    /// `4` — NPC is upstairs of the target; steer toward a
-    /// down-stairway on this floor.
+    /// `4` — NPC's floor is above the displayed floor and the
+    /// waypoint is on it; search the displayed floor for an
+    /// ascend-link cell (`0xC8`), route to it, then surface there.
     DescendTowardTarget,
-    /// `5` — NPC is downstairs of the target; steer toward an
-    /// up-stairway on this floor.
+    /// `5` — NPC's floor is below the displayed floor and the
+    /// waypoint is on it; search the displayed floor for a
+    /// descend-link cell (`0xC9`), route to it, then surface there.
     AscendTowardTarget,
-    /// `6` — NPC is on this floor and target is above; steer
-    /// toward an up-stairway. Floor change happens via state 4/5.
+    /// `6` — NPC is on the displayed floor and the waypoint is
+    /// above; ask the gate whether it already stands on an ascend
+    /// link (`0xC8`) or stairway, else route toward the nearest.
     ClimbUpOffFloor,
     /// `7` — mirror of state 6 for a target below.
     ClimbDownOffFloor,
@@ -115,6 +118,31 @@ impl NpcScheduleState {
     }
 }
 
+/// `npc-schedules.md §7`: what one per-slot walker step reports back to
+/// the pass. The pass needs three answers, not two, because the
+/// queue-drain re-entry into state 6/7 "also ends the tick... every slot
+/// after the one that triggered it is skipped for that tick", and it is
+/// the only path in the walker that leaves the per-slot loop early.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NpcScheduleStepOutcome {
+    /// The slot took no observable action this tick.
+    Stalled,
+    /// The slot moved, or its sprite link changed; the pass marks the
+    /// view dirty once at the end.
+    Moved,
+    /// The queue drained while the NPC was still in state 3 and the
+    /// walker re-entered state 6/7. The pass stops iterating slots.
+    EndTick,
+}
+
+impl NpcScheduleStepOutcome {
+    /// Lift the ordinary "did this slot produce a visible change" bool
+    /// into the three-valued outcome.
+    pub const fn from_moved(moved: bool) -> Self {
+        if moved { Self::Moved } else { Self::Stalled }
+    }
+}
+
 /// `npc-schedules.md §6` floor-classification mapper. The boundary
 /// trigger compares the NPC's current floor, the new waypoint's
 /// floor, and the location's current floor and chooses the new
@@ -123,35 +151,20 @@ impl NpcScheduleState {
 /// - both on map -> in-plane move (2)
 /// - NPC on map, target above -> climb-up off-floor (6)
 /// - NPC on map, target below -> climb-down off-floor (7)
-/// - NPC above, target on map -> ascend toward target (5)
-/// - NPC below, target on map -> descend toward target (4)
+/// - NPC above, target on map -> descend toward target (4)
+/// - NPC below, target on map -> ascend toward target (5)
 /// - neither on map -> parked off-floor (8)
 ///
-/// "Below" means floor index numerically greater than the map's
-/// current floor; "above" means numerically less.
+/// The floor index grows upward and the ordering test is signed, so
+/// the basement byte `0xFF` orders below `0x00`. This is an alias of
+/// [`schedule_floor_state`]; both names resolve to one classifier so
+/// the two can never drift apart.
 pub const fn npc_schedule_state_for_floor_transition(
     npc_z: u8,
     target_z: u8,
     map_current_floor: u8,
 ) -> u8 {
-    let npc_on_map = npc_z == map_current_floor;
-    let target_on_map = target_z == map_current_floor;
-    if npc_on_map && target_on_map {
-        return NPC_STATE_INPLANE_MOVE;
-    }
-    if npc_on_map && target_z < map_current_floor {
-        return NPC_STATE_CLIMB_UP_OFF_FLOOR;
-    }
-    if npc_on_map && target_z > map_current_floor {
-        return NPC_STATE_CLIMB_DOWN_OFF_FLOOR;
-    }
-    if target_on_map && npc_z < map_current_floor {
-        return NPC_STATE_ASCEND_TOWARD_TARGET;
-    }
-    if target_on_map && npc_z > map_current_floor {
-        return NPC_STATE_DESCEND_TOWARD_TARGET;
-    }
-    NPC_STATE_PARKED_OFF_FLOOR
+    schedule_floor_state(npc_z, target_z, map_current_floor)
 }
 /// `npc-schedules.md §8.1` pathfinder workspace shape. The flood-fill
 /// pathfinder operates on a 32x32 byte scratch grid (1,024 bytes
@@ -223,9 +236,12 @@ pub const fn npc_type_byte_occupied(byte: u8) -> bool {
 /// no-dialogue value (the engine prints the funny-look stub when the
 /// player Talks to such an NPC).
 pub const NPC_DIALOG_ID_NONE: u8 = 0;
-/// `catalogs/npc-roster.md §4`: dialog-id `1` is the universal `.TLK`
-/// header sentinel — no shipped roster slot carries this id.
-pub const NPC_DIALOG_ID_TLK_SENTINEL: u8 = 1;
+// `formats/npc.md §7`: "Dialog index `1` is **not** reserved. It
+// addresses an ordinary authored blob like any other id, and exactly
+// one occupied roster slot in each of the four class files carries
+// it: `TOWNE:0` slot 3, `DWELLING:0` slot 1, `CASTLE:0` slot 13, and
+// `KEEP:0` slot 1." The withdrawn `NPC_DIALOG_ID_TLK_SENTINEL` used
+// to sit here; id `1` now classifies as an ordinary blob id.
 /// `catalogs/npc-roster.md §4`: high dialog ids `129..=136` and `255`
 /// are observed in the shipped roster but do not resolve to real
 /// `.TLK` records; they likely mark guards, generic role actors,
@@ -238,19 +254,55 @@ pub const NPC_DIALOG_ID_HIGH_FALLBACK: u8 = 255;
 /// the hidden-NPC bitmask suppresses only presentation. The active
 /// object keeps its nonzero NPC type byte so collision, scheduling,
 /// and Talk linkage remain live while the rendered tile is transparent.
-pub const NPC_HIDDEN_SPRITE_TILE: u8 = 0x00;
+///
+/// The transparent value is the one reserved actor byte, not zero:
+/// `catalogs/tile-catalog.md §3.1` says "the sole reserved actor byte
+/// is `0x16`, which means 'draw nothing'". Actor byte `0x00` is an
+/// ordinary drawable actor id (atlas tile `256`), so storing zero here
+/// painted real artwork over every hidden NPC.
+pub const NPC_HIDDEN_SPRITE_TILE: u8 = crate::ACTOR_TILE_TRANSPARENT_BYTE;
 
-/// `npc-schedules.md Section 11`: shipped hidden-sprite mask keyed by
-/// public one-based town-mode scene byte and roster slot. Hidden slots
-/// still participate in scheduling and Talk; only the active-object
-/// tile is replaced by [`NPC_HIDDEN_SPRITE_TILE`].
+/// `formats/npc.md §6` / `catalogs/npc-roster.md §4`: the sprite the
+/// sprite-link helper forces for roster tag `0x01`, the "default
+/// human/person" sentinel, "instead of using the tag as a direct
+/// sprite class".
+///
+/// **The spec does not publish this tile's numeric id.**
+/// `npc-schedules.md §11` only says the tile is "a single hard-coded
+/// 'person' tile". This engine uses the villager class `0x50`, which
+/// `catalogs/npc-roster.md §4` publishes as `a villager` / "Generic
+/// adult townsperson; the most common named-NPC sprite class" - the
+/// only generic-person sprite class the catalog names. Three shipped
+/// roster slots carry tag `0x01` (`CASTLE:0` slots 23, 24 and 25, all
+/// static, dialogue-less basement actors); if the spec later publishes
+/// the real id, only this constant changes.
+pub const NPC_DEFAULT_PERSON_SPRITE_TILE: u8 = 0x50;
+
+/// `npc-schedules.md §11`: shipped hidden-sprite mask. "The mask table
+/// is indexed by the **one-based public scene byte itself**, not by a
+/// zero-based scene ordinal", and "the shipped DOS data sets
+/// hidden-sprite bits in only four scenes":
+///
+/// | Public scene | Location | Hidden roster slots |
+/// |---:|---|---|
+/// | 4 | Yew | 15, 17 (two of the three rodent-class actors) |
+/// | 5 | Minoc | 1 (Tactus) |
+/// | 28 | Windemere | 3..=9 (the keep's rodent group) |
+/// | 29 | Stonegate | 5..=8 (the four bat-class actors) |
+///
+/// The zero-based reading — Moonglow/Minoc/Trinsic/Stonegate/Lycaeum —
+/// is retracted by §11: every row of it sat one scene late, and it
+/// wrongly hid quest-critical speakers such as Zachariah, Malik and
+/// Lady Janell. "No shipped scene hides a talkable named NPC except
+/// Minoc's single row." Hidden slots still participate in scheduling,
+/// collision and Talk; only the active-object tile is replaced by
+/// [`NPC_HIDDEN_SPRITE_TILE`].
 pub const fn npc_hidden_sprite_slot(scene_byte: u8, slot: usize) -> bool {
     match scene_byte {
-        SCENE_MOONGLOW => matches!(slot, 0..=5 | 9 | 11),
-        SCENE_MINOC => matches!(slot, 15 | 17),
-        SCENE_TRINSIC => slot == 1,
-        SCENE_STONEGATE => matches!(slot, 3..=9),
-        SCENE_THE_LYCAEUM => matches!(slot, 5..=8),
+        SCENE_YEW => matches!(slot, 15 | 17),
+        SCENE_MINOC => slot == 1,
+        SCENE_WINDEMERE => matches!(slot, 3..=9),
+        SCENE_STONEGATE => matches!(slot, 5..=8),
         _ => false,
     }
 }
@@ -261,10 +313,10 @@ pub const fn npc_hidden_sprite_slot(scene_byte: u8, slot: usize) -> bool {
 pub enum NpcDialogIdKind {
     /// `0` — no dialogue; Talk produces the funny-look stub.
     NoDialogue,
-    /// `1` — universal `.TLK` sentinel; no live roster slot uses it.
-    TlkHeaderSentinel,
-    /// `2..=128` and any other id below the high-special band — an
-    /// ordinary `.TLK` blob lookup key.
+    /// `1..=128` and any other id below the high-special band — an
+    /// ordinary `.TLK` blob lookup key. `formats/npc.md §7`: "Dialog
+    /// index `1` is **not** reserved. It addresses an ordinary
+    /// authored blob like any other id".
     OrdinaryBlobId,
     /// `129..=136` and `255` — high/special non-resolving ids the
     /// shipped roster uses for guards, hostiles, and similar
@@ -276,7 +328,6 @@ pub enum NpcDialogIdKind {
 pub const fn npc_dialog_id_kind(byte: u8) -> NpcDialogIdKind {
     match byte {
         NPC_DIALOG_ID_NONE => NpcDialogIdKind::NoDialogue,
-        NPC_DIALOG_ID_TLK_SENTINEL => NpcDialogIdKind::TlkHeaderSentinel,
         NPC_DIALOG_ID_HIGH_FIRST..=NPC_DIALOG_ID_HIGH_LAST => NpcDialogIdKind::HighSpecial,
         NPC_DIALOG_ID_HIGH_FALLBACK => NpcDialogIdKind::HighSpecial,
         _ => NpcDialogIdKind::OrdinaryBlobId,
@@ -511,36 +562,84 @@ pub const fn npc_pathfind_visit_stamp(direction: u8) -> u8 {
 pub const NPC_FLOOR_LINK_TILE_C8: u8 = crate::NPC_FLOOR_LINK_TILE_A;
 pub const NPC_FLOOR_LINK_TILE_C9: u8 = crate::NPC_FLOOR_LINK_TILE_B;
 
+/// `npc-schedules.md §6`: "The floor index grows upward... The ordering
+/// test that separates 'above' from 'below' is a **signed eight-bit**
+/// comparison: `0xFF` orders below `0x00`, not above it." Returns `true`
+/// when floor byte `floor` is above floor byte `other`. The separate
+/// equality test ("is this floor the displayed floor?") stays a plain
+/// byte match, so no conversion is needed there.
+pub const fn npc_floor_is_above(floor: u8, other: u8) -> bool {
+    (floor as i8) > (other as i8)
+}
+
 /// `npc-schedules.md §6`: classify a real boundary transition into the
 /// movement state byte the per-tick walker switches on, given the NPC's
 /// current floor, the new waypoint's floor, and the location's current
 /// floor. Returns the state byte from the floor-classification table:
-///   - both equal → 2 (in-plane move)
-///   - equal/below → 7 (climb-down off this floor)
-///   - equal/above → 6 (climb-up off this floor)
-///   - below/equal → 5 (ascend toward target floor)
-///   - above/equal → 4 (descend toward target floor)
+///   - equal/equal → 2 (in-plane move)
+///   - equal/below → 7 (NPC on this floor; target downstairs)
+///   - equal/above → 6 (NPC on this floor; target upstairs)
+///   - below/equal → 5 (NPC downstairs; surfaces at a descend link)
+///   - above/equal → 4 (NPC upstairs; surfaces at an ascend link)
 ///   - neither/neither → 8 (parked off-floor / replan needed)
-/// "Below" means a floor index numerically greater than the map's
-/// current floor; "above" means numerically smaller. Caller still
-/// applies the already-on-waypoint short-circuit and only invokes the
-/// classifier when a real transition has been detected.
+///
+/// "Above" and "below" are the signed comparison of
+/// [`npc_floor_is_above`], so the basement floor byte `0xFF` orders
+/// *below* `0x00` and a basement NPC lands in state 5 rather than state
+/// 4. Caller still applies the already-on-waypoint short-circuit and
+/// only invokes the classifier when a real transition has been detected.
 pub const fn schedule_floor_state(npc_floor: u8, target_floor: u8, map_floor: u8) -> u8 {
     let npc_eq = npc_floor == map_floor;
     let target_eq = target_floor == map_floor;
     if npc_eq && target_eq {
         NPC_STATE_INPLANE_MOVE
-    } else if npc_eq && target_floor > map_floor {
-        NPC_STATE_CLIMB_DOWN_OFF_FLOOR
-    } else if npc_eq && target_floor < map_floor {
+    } else if npc_eq && npc_floor_is_above(target_floor, map_floor) {
         NPC_STATE_CLIMB_UP_OFF_FLOOR
-    } else if target_eq && npc_floor > map_floor {
-        NPC_STATE_ASCEND_TOWARD_TARGET
-    } else if target_eq && npc_floor < map_floor {
+    } else if npc_eq && npc_floor_is_above(map_floor, target_floor) {
+        NPC_STATE_CLIMB_DOWN_OFF_FLOOR
+    } else if target_eq && npc_floor_is_above(npc_floor, map_floor) {
         NPC_STATE_DESCEND_TOWARD_TARGET
+    } else if target_eq && npc_floor_is_above(map_floor, npc_floor) {
+        NPC_STATE_ASCEND_TOWARD_TARGET
     } else {
         NPC_STATE_PARKED_OFF_FLOOR
     }
+}
+
+/// `npc-schedules.md §8.5` ("Which marker a state selects"): *the walker
+/// hunts the link that points toward whichever floor is not the displayed
+/// one.* The live tile grid only ever holds the displayed floor, so the
+/// search always runs there: an "other" floor above the displayed floor
+/// selects the ascend link `0xC8`, and one below selects the descend link
+/// `0xC9`. States 6/7 pass the active waypoint's floor as `other_floor`;
+/// states 4/5 pass the NPC's own off-screen floor.
+pub const fn npc_floor_link_marker_toward(displayed_floor: u8, other_floor: u8) -> u8 {
+    if npc_floor_is_above(other_floor, displayed_floor) {
+        NPC_FLOOR_LINK_TILE_C8
+    } else {
+        NPC_FLOOR_LINK_TILE_C9
+    }
+}
+
+/// `npc-schedules.md §8.5` ("Stairway acceptance"), on-floor half. The
+/// states 6/7 gate reads the live tile under the NPC's own cell and
+/// accepts the direction-matching link marker or a stairway-family tile.
+/// The on-floor gate is the deliberately *wider* of the two acceptance
+/// tests: besides the visible stairway family `0xC4..=0xC7` it also
+/// treats `0xCC..=0xCF` as stairway-like.
+pub const fn npc_floor_link_gate_accepts(tile: u8, marker: u8) -> bool {
+    tile == marker
+        || (crate::TOWN_STAIR_TILE_FIRST <= tile && tile <= crate::TOWN_STAIR_TILE_LAST)
+        || matches!(tile, 0xCC..=0xCF)
+}
+
+/// `npc-schedules.md §8.5` ("Stairway acceptance"), off-floor half. The
+/// states 4/5 arrival test re-reads the live tile at the link cell the
+/// search returned and accepts the state's own marker "or any tile in the
+/// stairway family `0xC4..0xC7`" — and nothing else. The two tests are
+/// intentionally not identical; `0xCC..=0xCF` is gate-only.
+pub const fn npc_floor_link_arrival_accepts(tile: u8, marker: u8) -> bool {
+    tile == marker || (crate::TOWN_STAIR_TILE_FIRST <= tile && tile <= crate::TOWN_STAIR_TILE_LAST)
 }
 
 /// Per `npc-schedules.md §4`: stuck counter threshold for forced replan.
@@ -580,10 +679,16 @@ pub const fn npc_dynamic_obstacle_blocks(
     (dx + dy) < NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS as i32
 }
 
-/// `npc-schedules.md §10`: dedicated NPC pathfinding bitmap. This is
-/// intentionally separate from player/vehicle terrain passability; set bits
-/// mark tile ids the NPC workspace treats as open.
-pub const fn npc_path_tile_open(tile: u8) -> bool {
+/// `npc-schedules.md §10` ("Tile passability"): dedicated NPC pathfinding
+/// bitmap, intentionally separate from player/vehicle terrain passability.
+/// "A set bit marks the tile id as an **obstacle** for NPC pathfinding; a
+/// clear bit marks it open." The ranges below are the published obstacle
+/// list; everything else is open, including the two unlocked door ids
+/// `0xB8`/`0xBA`, the chair family `0x90..=0x93`, the stairway family
+/// `0xC4..=0xC7`, and both floor links `0xC8`/`0xC9`. The locked doors
+/// `0xB9`/`0xBB` stay obstacles, which is the spec's own confirmation that
+/// this is the right way round.
+pub const fn npc_path_tile_obstacle(tile: u8) -> bool {
     matches!(
         tile,
         0x01..=0x03

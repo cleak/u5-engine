@@ -334,6 +334,100 @@ pub const fn active_object_composite(
     }
 }
 
+/// `visibility.md §8` + `active-objects.md §5`: composite **slot zero**, the
+/// player, through the same branch classifier as every other slot, with one
+/// difference: the terrain-aware suppress arms cannot erase the party sprite.
+///
+/// `active-objects.md §5` gives slot zero its own contract - "the renderer
+/// walks the table from slot thirty-one down so slot zero paints on top",
+/// restated by `visibility.md §8` as "slot zero is the player, so the avatar
+/// always draws on top". The party sprite is the one stamp the player cannot
+/// lose track of, so a `Suppress` from the terrain-aware helper degrades to
+/// the helper's ordinary fallback - stamp the effective tile unchanged through
+/// the companion band - instead of leaving the bare terrain on screen.
+///
+/// The two *cell-state* guards still suppress: a player cell carrying the
+/// hidden marker (`0xFF`) is in fog and a cell carrying the already-rendered
+/// marker (`0x87`) has been claimed, and `visibility.md §8` step 3 skips both
+/// before any class branch runs. Only the terrain-aware rows are exempted.
+///
+/// Deviation note: `visibility.md §8`'s terrain-aware table row "current
+/// terrain `0xEC` or `0x0A` - suppress the active-object stamp" carries no
+/// effective-tile qualifier, unlike the `0x6A`/`0x6B` row beside it, and the
+/// spec never carves slot zero out of the table. Taken literally it makes the
+/// party vanish on dense-forest terrain `0x0A` (`visibility.md §6` names it
+/// "tropical forest"), which the shipped passability bitset marks walkable, so
+/// the party walks onto it in ordinary play. The published text does not
+/// settle whether the row was meant to reach slot zero; this engine keeps the
+/// row for every other slot and exempts the player.
+pub const fn active_object_composite_for_player(
+    type_byte: u8,
+    frame_byte: u8,
+    current_grid_byte: u8,
+    current_terrain: u8,
+    previous_row_terrain: Option<u8>,
+    next_row_terrain: Option<u8>,
+    viewport_row: usize,
+    variant: u8,
+) -> ActiveObjectCompositeResult {
+    if current_grid_byte == VISIBILITY_HIDDEN || current_grid_byte == VISIBILITY_ALREADY_RENDERED {
+        return ActiveObjectCompositeResult::Suppress;
+    }
+    match active_object_composite(
+        type_byte,
+        frame_byte,
+        current_grid_byte,
+        current_terrain,
+        previous_row_terrain,
+        next_row_terrain,
+        viewport_row,
+        variant,
+    ) {
+        ActiveObjectCompositeResult::Suppress => ActiveObjectCompositeResult::Companion(frame_byte),
+        other => other,
+    }
+}
+
+/// `visibility.md §8`: composite one active-object slot, choosing the slot-zero
+/// contract when `player_slot` is set. `active-objects.md §5` reserves slot
+/// zero for the player and every other slot for NPCs, monsters, vehicles and
+/// props, so this is the single place the two contracts part company.
+pub const fn composite_active_object_slot(
+    player_slot: bool,
+    type_byte: u8,
+    frame_byte: u8,
+    current_grid_byte: u8,
+    current_terrain: u8,
+    previous_row_terrain: Option<u8>,
+    next_row_terrain: Option<u8>,
+    viewport_row: usize,
+    variant: u8,
+) -> ActiveObjectCompositeResult {
+    if player_slot {
+        active_object_composite_for_player(
+            type_byte,
+            frame_byte,
+            current_grid_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+            viewport_row,
+            variant,
+        )
+    } else {
+        active_object_composite(
+            type_byte,
+            frame_byte,
+            current_grid_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+            viewport_row,
+            variant,
+        )
+    }
+}
+
 /// `visibility.md §7` fog-edge refinement squared-distance threshold.
 /// The post-pass folds each viewport coordinate around the centre
 /// `(5, 5)`, computes `(5 - folded_x)^2 + (5 - folded_y)^2`, and

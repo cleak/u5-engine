@@ -1,7 +1,6 @@
 use std::io;
 use std::path::Path;
 
-use crate::play_state_impl::chunk_04::sextant_coordinate;
 use crate::*;
 
 fn cardinal_direction_key(direction: Direction) -> char {
@@ -11,6 +10,34 @@ fn cardinal_direction_key(direction: Direction) -> char {
         Direction::South => '2',
         Direction::West => '4',
         _ => unreachable!("caller filters cardinal directions"),
+    }
+}
+
+/// `audio.md §8.3` commit-time shared variant for the directed utility route.
+///
+/// `§8.3` names exactly one pre-success spell boundary: Vanish "first runs
+/// variant 1 when direction input commits", which is why "a nonmatching tile
+/// retains the earlier variant-1 presentation, then reaches the common failure
+/// tail". No other spell on this route sounds before its own success test.
+fn directed_utility_commit_variant(spell_index: usize) -> Option<u8> {
+    match spell_index {
+        VANISH_SPELL_INDEX => Some(1),
+        _ => None,
+    }
+}
+
+/// `audio.md §6` shared variant for the directed utility spells whose row the
+/// published table qualifies by success: `successful Open` is variant 2, and
+/// `Magic Lock, and successful unlock-door effects` are variant 5.
+///
+/// Vanish is absent because `§8.3` already sounded its variant 1 at the commit
+/// and closes with the action snap instead. A spell the published table does
+/// not name gets no cue.
+fn directed_utility_success_variant(spell_index: usize) -> Option<u8> {
+    match spell_index {
+        OPEN_SPELL_INDEX => Some(2),
+        MAGIC_LOCK_SPELL_INDEX | UNLOCK_MAGIC_SPELL_INDEX => Some(5),
+        _ => None,
     }
 }
 
@@ -47,12 +74,24 @@ impl PlayState {
     /// Observed: `Select:` while the party-member selector is live and
     /// `Items:` while a U-Use picker owns the box. `None` means the box
     /// keeps its ordinary border. The stats-panel renderer consumes this.
+    ///
+    /// `inventory.md §4.6`: "The stored literals are the bare words with
+    /// their punctuation - `Select:`, `Items:`, `Reagents`, `Spells`,
+    /// `Armaments` [...] When neither a picker nor a member selection is
+    /// active, the panel's top border carries no label." `§4.7` assigns
+    /// those literals per Z-stats page and gives the attribute and
+    /// equipment pages no label at all, which is what
+    /// [`ZStatsPage::border_label`] encodes; a live Z-stats page therefore
+    /// paints its own published literal into this same slot.
     pub fn roster_box_label(&self) -> Option<&'static str> {
         if self.active_party_selector.is_some() {
             return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL);
         }
         if self.active_use.is_some() {
             return Some(USE_PICKER_ROSTER_BOX_LABEL);
+        }
+        if let Some(session) = &self.active_z_stats {
+            return session.page.border_label();
         }
         None
     }
@@ -191,7 +230,7 @@ impl PlayState {
                 .copied()
                 .is_some_and(combat_actor_is_active_not_dead)
         {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         self.active_cast = Some(CastSession::for_combat_actor(actor_slot, combat_had_foe));
@@ -206,11 +245,18 @@ impl PlayState {
             .unwrap_or_else(cast_prompt_message)
     }
 
+    /// `magic.md §5` Step 2: the dispatcher prints `Spell name:` and reads
+    /// the compact selector-letter form. "The echo shown while typing is
+    /// friendlier than the stored token: each letter prints its associated
+    /// rune word followed by a space, but that echo is not a long-form
+    /// input alias." Only the echo changes here - the parse path in
+    /// [`PlayState::step_active_cast`] still consumes the raw selector
+    /// buffer, so typing `VAS FLAM` still just feeds selector letters.
     pub fn render_cast_session(&self, session: &CastSession) -> String {
         let prompt = if session.buffer.is_empty() {
             "Spell name: _".to_string()
         } else {
-            format!("Spell name: {}", session.buffer)
+            format!("Spell name: {}", rune_echo_for_buffer(&session.buffer))
         };
         format!(
             "Cast: party member {}. {prompt}\nType selector letters; Enter/Space casts; Backspace erases; Esc cancels.",
@@ -980,6 +1026,13 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_jimmy_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt =
+            Some(DirectionPromptSession::new(DirectionPromptKind::Jimmy));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn start_look_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Look));
         self.message = self.render_active_direction_prompt();
@@ -1152,6 +1205,7 @@ impl PlayState {
                 }
                 DirectionPromptKind::Fire => "Fire- which direction?".to_string(),
                 DirectionPromptKind::Get => "Get-".to_string(),
+                DirectionPromptKind::Jimmy => "Jimmy-".to_string(),
                 DirectionPromptKind::Look => "Look-".to_string(),
                 DirectionPromptKind::Open => "Open-".to_string(),
                 DirectionPromptKind::Push => "Push-".to_string(),
@@ -1175,12 +1229,38 @@ impl PlayState {
                 session.kind,
                 DirectionPromptKind::Push | DirectionPromptKind::CombatPush { .. }
             );
-            if ch == '\u{1b}' && push_prompt {
-                // `commands.md §8.1` row A: Escape is ignored. The open
-                // `Push-` echo and prompt session remain active.
+            // `input.md §10`: "**Escape does not cancel this prompt.**
+            // Space is the only pass key here. The original contains a
+            // cancel arm for Escape, but its accept filter never releases
+            // the key to that arm, so pressing Escape simply causes another
+            // read like any other rejected key." `commands.md §5.4` says the
+            // same for the shared prompt table - "Escape does not reach a
+            // cancellation arm: it emits nothing and the prompt reads
+            // again" - and retracts the earlier `Space` **or** `Esc` row;
+            // `commands.md §8.1` row A is the `Push-` instance of it.
+            //
+            // The one family that keeps an Escape cancel arm is the
+            // party-member *selection* prompt of `input.md §9`, whose
+            // selector "treats Escape as cancellation"
+            // (`dungeon-mode.md §12` repeats it for L-Look step 1: "the
+            // standard \"by whom?\" prompt; ESC cancels"). Once a dungeon
+            // look has its slot it is on the shared relative-focus helper,
+            // where "Space/Pass returns no focus" is the only published
+            // no-choice key.
+            let escape_cancels = matches!(
+                session.kind,
+                DirectionPromptKind::DungeonLook {
+                    party_index: None,
+                    ..
+                } | DirectionPromptKind::SurfaceFountainDrink { .. }
+                    | DirectionPromptKind::SurfaceDeathVision { .. }
+            );
+            if ch == '\u{1b}' && !escape_cancels {
+                // Ignored like any other rejected key: no echo, no result,
+                // and the open verb echo and prompt session stay active.
                 continue;
             }
-            if matches!(ch, '\u{1b}' | ' ') {
+            if ch == ' ' || ch == '\u{1b}' {
                 if matches!(
                     session.kind,
                     DirectionPromptKind::SurfaceFountainDrink { .. }
@@ -1315,6 +1395,9 @@ impl PlayState {
                 DirectionPromptKind::Fire => self.fire_command(Some(direction), game_dir)?,
                 DirectionPromptKind::Get => {
                     self.get_direction_with_game_dir(direction, game_dir)?
+                }
+                DirectionPromptKind::Jimmy => {
+                    self.jimmy_direction_with_game_dir_and_member(direction, Some(game_dir), None)?
                 }
                 DirectionPromptKind::Look => {
                     self.look_direction_with_game_dir(direction, game_dir)?
@@ -1451,11 +1534,19 @@ impl PlayState {
         render_stats_panel(self, self.active_player)
     }
 
+    /// `stats-panel.md §11`: "Draw the active-player marker on every
+    /// refresh while a member is selected; it is persistent, not
+    /// consumed by the refresh. Clear the selector only when the
+    /// selected member is dead or sleeping, or when a command changes
+    /// the selection."
+    ///
+    /// `moons.md §3`: the sky strip "is **not** driven by ordinary
+    /// stats-panel redraws", so this frame does not touch the cached
+    /// moon glyphs either; the per-turn hour-change pass owns that.
     pub fn render_stats_panel_frame(&mut self) -> String {
         let active_cursor = self.active_player;
-        self.refresh_cached_moon_glyphs();
         let panel = render_stats_panel(self, active_cursor);
-        if stats_panel_active_cursor_visible(self, active_cursor) {
+        if stats_panel_active_cursor_resets(self, active_cursor) {
             self.active_player = None;
         }
         panel
@@ -1465,11 +1556,15 @@ impl PlayState {
         render_play_text_window_ascii(self, self.active_player, input_echo)
     }
 
+    /// Same two rules as [`PlayState::render_stats_panel_frame`]: the
+    /// active-player selector survives the refresh unless the selected
+    /// member is dead or sleeping (`stats-panel.md §4.1`, §11), and the
+    /// moon-glyph cache is refreshed only by the per-turn hour-change
+    /// pass, never by a redraw (`moons.md §3`).
     pub fn render_text_window_frame(&mut self, input_echo: Option<&str>) -> String {
         let active_cursor = self.active_player;
-        self.refresh_cached_moon_glyphs();
         let frame = render_play_text_window_ascii(self, active_cursor, input_echo);
-        if stats_panel_active_cursor_visible(self, active_cursor) {
+        if stats_panel_active_cursor_resets(self, active_cursor) {
             self.active_player = None;
         }
         frame
@@ -1515,19 +1610,16 @@ impl PlayState {
                 self.message = self.render_z_stats_session(&session);
                 self.active_z_stats = Some(session);
             }
+            // `inventory.md §4.7`: the inventory pages "do not paginate", so
+            // the forward and backward keys advance the scan by one
+            // displayable slot rather than by a panel of rows.
             ZStatsInputAction::InventoryPageNext => {
-                self.move_z_stats_inventory_cursor(
-                    &mut session,
-                    Z_STATS_INVENTORY_PANEL_ROWS as isize,
-                );
+                self.move_z_stats_inventory_cursor(&mut session, 1);
                 self.message = self.render_z_stats_session(&session);
                 self.active_z_stats = Some(session);
             }
             ZStatsInputAction::InventoryPagePrevious => {
-                self.move_z_stats_inventory_cursor(
-                    &mut session,
-                    -(Z_STATS_INVENTORY_PANEL_ROWS as isize),
-                );
+                self.move_z_stats_inventory_cursor(&mut session, -1);
                 self.message = self.render_z_stats_session(&session);
                 self.active_z_stats = Some(session);
             }
@@ -1628,7 +1720,7 @@ impl PlayState {
                 .copied()
                 .is_some_and(combat_actor_is_active_not_dead)
         {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         self.start_ready_equipment_for_party(actor_slot)
@@ -1886,29 +1978,25 @@ impl PlayState {
         session.cursor = visible[next];
     }
 
+    /// `inventory.md §4.7`: "Long pages **do not paginate**: the navigator
+    /// scans forward or backward for the next slot with a non-zero count, so
+    /// empty slots are skipped rather than shown as blank rows."
+    ///
+    /// `delta` is therefore a count of **displayable slots**, not of panels:
+    /// one step moves the band by one non-zero slot. The engine's rows are
+    /// already zero-filtered, so a single-slot step over the filtered list is
+    /// the scan. Nothing wraps - see [`z_stats_inventory_last_cursor`].
     fn move_z_stats_inventory_cursor(&self, session: &mut ZStatsSession, delta: isize) {
         let Some(row_count) = self.z_stats_inventory_row_count(session) else {
             session.inventory_cursor = 0;
             return;
         };
-        if row_count <= Z_STATS_INVENTORY_PANEL_ROWS {
-            session.inventory_cursor = 0;
-            return;
-        }
-
-        let last_start =
-            ((row_count - 1) / Z_STATS_INVENTORY_PANEL_ROWS) * Z_STATS_INVENTORY_PANEL_ROWS;
-        let current = session.inventory_cursor.min(last_start);
+        let last_cursor = z_stats_inventory_last_cursor(row_count);
+        let current = session.inventory_cursor.min(last_cursor);
         session.inventory_cursor = if delta >= 0 {
-            let next = current.saturating_add(delta as usize);
-            if next > last_start { 0 } else { next }
+            current.saturating_add(delta as usize).min(last_cursor)
         } else {
-            let step = delta.unsigned_abs();
-            if step > current {
-                last_start
-            } else {
-                current - step
-            }
+            current.saturating_sub(delta.unsigned_abs())
         };
     }
 
@@ -1921,8 +2009,23 @@ impl PlayState {
                 let visible_circle = max_circle.min(member.level).min(8);
                 Some(usize::from(visible_circle) * SPELLS_PER_CIRCLE)
             }
-            ZStatsPage::Reagents => Some(REAGENT_COUNT),
-            ZStatsPage::Spells => Some(SPELL_COUNT),
+            // Both bands report their **displayable** slot count, because
+            // `inventory.md §4.7` has the navigator scanning "for the next
+            // slot with a non-zero count"; a zero slot is not a stop.
+            ZStatsPage::Reagents => Some(
+                self.reagents
+                    .iter()
+                    .copied()
+                    .filter(|count| *count > 0)
+                    .count(),
+            ),
+            ZStatsPage::Spells => Some(
+                self.spell_charges
+                    .iter()
+                    .copied()
+                    .filter(|count| *count > 0)
+                    .count(),
+            ),
             ZStatsPage::SpecialUse => Some(self.z_stats_special_use_row_count()),
             ZStatsPage::EquipmentStock => Some(
                 self.equipment_stock
@@ -2001,9 +2104,12 @@ impl PlayState {
         lines.push(z_stats_stat_row("Exp", &experience.to_string()));
     }
 
+    /// `inventory.md §4.7`: "The empty equipment value in the six-slot
+    /// block is the all-bits-set byte; if all six slots are empty the page
+    /// prints the `(None ready)` placeholder rather than a blank list."
     fn render_z_stats_equipment_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
         let Some(equipment) = self.party_equipment.get(session.selected_party_index) else {
-            lines.push("Nothing equipped.".to_string());
+            lines.push(Z_STATS_NONE_READY_PLACEHOLDER.to_string());
             return;
         };
         let mut count = 0;
@@ -2019,7 +2125,7 @@ impl PlayState {
             ));
         }
         if count == 0 {
-            lines.push("Nothing equipped.".to_string());
+            lines.push(Z_STATS_NONE_READY_PLACEHOLDER.to_string());
         }
     }
 
@@ -2067,29 +2173,34 @@ impl PlayState {
             Reagent::Nightshade,
             Reagent::Mandrake,
         ];
+        // `inventory.md §4.7`: "the navigator scans forward or backward for
+        // the next slot with a non-zero count, so empty slots are skipped
+        // rather than shown as blank rows." The eight-slot reagent band is
+        // ordinary inventory browsing, so its zero slots never reach a row.
         let rows = REAGENTS
             .iter()
-            .map(|reagent| {
+            .filter_map(|reagent| {
                 let count = self.reagents[reagent.inventory_index()];
-                format!("{}: {count}", reagent.display_name())
+                (count > 0).then(|| format!("{}: {count}", reagent.display_name()))
             })
             .collect::<Vec<_>>();
         append_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
     fn render_z_stats_spell_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
+        // `inventory.md §4.7`: the forty-eight-slot spell-charge band is one
+        // of the four inventory pages, and those pages "do not paginate: the
+        // navigator scans forward or backward for the next slot with a
+        // non-zero count, so empty slots are skipped rather than shown as
+        // blank rows." A zero-charge spell is therefore not a row at all.
         let rows = self
             .spell_charges
             .iter()
             .copied()
             .enumerate()
-            .map(|(index, count)| {
+            .filter_map(|(index, count)| {
                 let name = spell_common_name(index).unwrap_or("Unknown Spell");
-                if count == 0 {
-                    format!("{} {}: 0 (zero)", SPELL_CODES[index], name)
-                } else {
-                    format!("{} {}: {count}", SPELL_CODES[index], name)
-                }
+                (count > 0).then(|| format!("{} {}: {count}", SPELL_CODES[index], name))
             })
             .collect::<Vec<_>>();
         append_inventory_rows(lines, rows, session.inventory_cursor);
@@ -2526,6 +2637,14 @@ impl PlayState {
                 "Readied {name} for party member {}, but it vanished.",
                 request.party_index + 1
             );
+            // `audio.md §8.1` Ready/equip path, in its published order:
+            // "print `Ring vanishes!`, destroy the item, then play the
+            // 40-update action snap". The terrain-combat-entry path shares the
+            // recipe and the 1-in-16 odds but orders print/tone/remove, so
+            // neither ordering is asserted across both. Destruction is "a
+            // 1-in-16 random roll with no player interaction"; §8.1's earlier
+            // cancelled-confirmation clause is withdrawn (`RETRACTIONS.md`).
+            self.emit_sound_effect(SoundEffect::ActionSnap);
         } else {
             self.message = format!(
                 "Readied {name} for party member {} in {}; stock is {}.",
@@ -2558,6 +2677,16 @@ impl PlayState {
             & 0x0f
     }
 
+    /// `audio.md §8.3` common spell failure tail: print `Failed!`, then play
+    /// the 50-update 800-to-2000 Hz cast-failure glissando.
+    ///
+    /// Every committed spell failure in this module funnels through here so
+    /// the published tail cannot drift between handlers.
+    fn fail_committed_spell_cast(&mut self) {
+        self.message = "Failed!".to_string();
+        self.emit_sound_effect(SoundEffect::CastFailure);
+    }
+
     pub fn cast_light_spell(
         &mut self,
         caster_index: usize,
@@ -2567,6 +2696,17 @@ impl PlayState {
     ) -> MoveOutcome {
         if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
             return outcome;
+        }
+
+        // `audio.md §8.3`: the committed spell pre-effect runs once the spell's
+        // own input gate accepts and before the effect. `§6.1` fixes the
+        // variant at the spell's circle and states that "**no spell uses
+        // variant 0**": In Lor (id 0, circle 1) is variant 1 and Vas Lor
+        // (id 12, circle 3) is variant 3. Variant 0 belongs to the Light
+        // *scroll*, which "does not sound like its spell". Both rows run
+        // "after the torch radius is set".
+        if let Some(variant) = audio::spell_shared_variant(spell_index) {
+            self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }
 
         self.advance_turn();
@@ -2647,7 +2787,12 @@ impl PlayState {
             return MoveOutcome::Observed;
         };
 
-        let target = if self.combat_active {
+        // The combat caster re-check runs ahead of every cue on this route.
+        // The caster can die between the direction prompt and this
+        // confirmation re-entry, and its `Who casts?` is a bare refusal that
+        // never reaches the audio.md §8.3 failure tail; audio.md §9 gives such
+        // a refusal no acknowledgement sound.
+        let combat_caster = if self.combat_active {
             let Some(actor) = self
                 .combat_actors
                 .get(caster_index)
@@ -2657,6 +2802,22 @@ impl PlayState {
                 self.message = "Who casts?".to_string();
                 return MoveOutcome::Blocked;
             };
+            Some(actor)
+        } else {
+            None
+        };
+
+        // audio.md §8.3: Vanish "first runs variant 1 when direction input
+        // commits", before the tile is matched, so "a nonmatching tile retains
+        // the earlier variant-1 presentation, then reaches the common failure
+        // tail". Open, Magic Lock and Unlock Magic carry audio.md §6 rows
+        // qualified by success, so they sound from the success arms below
+        // instead. The explicit pass returned above is silent for all four.
+        if let Some(variant) = directed_utility_commit_variant(spell_index) {
+            self.emit_sound_effect(SoundEffect::SharedVariant { variant });
+        }
+
+        let target = if let Some(actor) = combat_caster {
             directed_utility_adjacent_coordinate(
                 usize::from(actor.x),
                 usize::from(actor.y),
@@ -2685,7 +2846,7 @@ impl PlayState {
         };
         let Some((tx, ty)) = target else {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         };
 
@@ -2712,6 +2873,17 @@ impl PlayState {
             } else {
                 "Success!".to_string()
             };
+            if spell_index == VANISH_SPELL_INDEX {
+                // audio.md §8.3: after the accepted tile rewrite, `POOF!`,
+                // dirtying, and redraw, Vanish plays the 40-update action
+                // snap. The other three spells on this route do not.
+                self.emit_sound_effect(SoundEffect::ActionSnap);
+            } else if let Some(variant) = directed_utility_success_variant(spell_index) {
+                // audio.md §6: the accepted rewrite is what makes this a
+                // `successful Open` or a `successful unlock-door` effect, so
+                // the shared variant belongs here and not at the commit.
+                self.emit_sound_effect(SoundEffect::SharedVariant { variant });
+            }
             return MoveOutcome::Cast;
         }
 
@@ -2722,11 +2894,15 @@ impl PlayState {
             self.mark_visibility_dirty();
             self.advance_turn();
             self.message = "Success!".to_string();
+            // audio.md §6: unlocking the chest is the other `successful Open`.
+            if let Some(variant) = directed_utility_success_variant(spell_index) {
+                self.emit_sound_effect(SoundEffect::SharedVariant { variant });
+            }
             return MoveOutcome::Cast;
         }
 
         self.advance_turn();
-        self.message = "Failed!".to_string();
+        self.fail_committed_spell_cast();
         MoveOutcome::Blocked
     }
 
@@ -2757,6 +2933,17 @@ impl PlayState {
             return outcome;
         }
 
+        // `audio.md §6.1`: Protection (19, circle 4), Quickness (29, circle 5),
+        // Mass Charm (31, circle 6) and Negate Magic (32, circle 6) all sound
+        // "through the scene-flag helper, whose first argument is the variant",
+        // and the variant is the caster's circle. The Protection and Negate
+        // Magic *scrolls* reach the same helper with their own scroll indices
+        // (2 and 3), which is why the variant travels with the caller rather
+        // than being derived here.
+        if let Some(variant) = audio::spell_shared_variant(spell_index) {
+            self.emit_sound_effect(SoundEffect::SharedVariant { variant });
+        }
+
         self.advance_turn();
         self.active_effect_tag = Some(tag);
         self.active_effect_counter = duration;
@@ -2774,6 +2961,15 @@ impl PlayState {
         {
             return outcome;
         }
+
+        // `audio.md §6.1`: Reveal is id 23, circle 4, so the variant is 4 -
+        // "Unconditional at helper entry". The earlier variant-2 grouping came
+        // from the withdrawn "Reveal/locate" pairing; Locate is id 9, circle 2,
+        // and the two spells do not share a variant. `§8.3` puts the committed
+        // pre-effect after the spell's own gate and before the effect.
+        self.emit_sound_effect(SoundEffect::SharedVariant {
+            variant: audio::spell_circle(REVEAL_SPELL_INDEX),
+        });
 
         let revealed = apply_combat_reveal(&mut self.combat_actors);
         if revealed != 0 {
@@ -2799,6 +2995,11 @@ impl PlayState {
             return outcome;
         }
 
+        // audio.md §6: Invisibility is variant 7; audio.md §8.3 puts the
+        // committed pre-effect after the spell's own gate and before the
+        // effect.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 7 });
+
         let eligible = caster_index < COMBAT_PARTY_ACTOR_SLOTS;
         self.advance_turn();
         let applied = eligible
@@ -2809,15 +3010,10 @@ impl PlayState {
             .is_some_and(CombatLinkedVisibilityOutcome::changed);
         if applied {
             self.mark_visibility_dirty();
-        }
-        self.message = if applied {
-            "Invisibility!".to_string()
-        } else {
-            "Failed!".to_string()
-        };
-        if applied {
+            self.message = "Invisibility!".to_string();
             MoveOutcome::Cast
         } else {
+            self.fail_committed_spell_cast();
             MoveOutcome::Blocked
         }
     }
@@ -2832,6 +3028,12 @@ impl PlayState {
         {
             return outcome;
         }
+
+        // `audio.md §6.1`: Cause Fear is id 41, circle 7 - "Unconditional at
+        // helper entry", so it sounds before any target is collected.
+        self.emit_sound_effect(SoundEffect::SharedVariant {
+            variant: audio::spell_circle(CAUSE_FEAR_SPELL_INDEX),
+        });
 
         let mut groups = [0u8; COMBAT_ACTOR_SLOTS];
         for (slot, group) in groups.iter_mut().enumerate() {
@@ -2867,9 +3069,14 @@ impl PlayState {
             return outcome;
         }
 
+        // audio.md §6: Awaken is variant 1; audio.md §8.3 puts the committed
+        // pre-effect after the spell's own gate and before the effect, so a
+        // no-sleeper Awaken still sounds before the failure tail.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
+
         let Some(target_index) = self.party.iter().position(|member| member.status == b'S') else {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         };
 
@@ -2890,9 +3097,13 @@ impl PlayState {
             return outcome;
         }
 
+        // audio.md §6: Cure is variant 1; audio.md §8.3 puts the committed
+        // pre-effect after the spell's own gate and before the effect.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
+
         if self.party[target_index].status != b'P' {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
 
@@ -2913,9 +3124,13 @@ impl PlayState {
             return outcome;
         }
 
+        // audio.md §6: Heal is variant 1; audio.md §8.3 puts the committed
+        // pre-effect after the spell's own gate and before the effect.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
+
         if self.party[target_index].status == b'D' {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
 
@@ -2984,16 +3199,24 @@ impl PlayState {
 
         if self.party[target_index].status == b'D' {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
         // magic.md §8: Great Heal also fails during the dungeon combat-active
         // substate.
         if matches!(self.area, Area::Dungeon { .. }) && self.combat_active {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // `audio.md §6.1`: Great Heal is id 27, circle 5, and sounds only once
+        // the "target [is] picked, not dead, and either out of combat or a
+        // combat-permission flag set" - so after both refusals above, which
+        // reach the failure tail instead.
+        self.emit_sound_effect(SoundEffect::SharedVariant {
+            variant: audio::spell_circle(GREAT_HEAL_SPELL_INDEX),
+        });
 
         let before = self.party[target_index].hp;
         let (_, hp) = self.party[target_index].heal_to_max();
@@ -3018,9 +3241,14 @@ impl PlayState {
             return outcome;
         }
 
+        // audio.md §6 variant 8 is "the highest resurrection-mode
+        // presentation"; audio.md §8.3 puts the committed pre-effect after the
+        // spell's own gate and before the effect.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 8 });
+
         if self.party[target_index].status != b'D' {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
 
@@ -3046,12 +3274,21 @@ impl PlayState {
             return outcome;
         }
 
-        let y = sextant_coordinate(self.player.y);
-        let x = sextant_coordinate(self.player.x);
+        // audio.md §6: "Reveal/locate" is variant 2; audio.md §8.3 puts the
+        // committed pre-effect after the spell's own gate and before the
+        // effect.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 2 });
+
         self.advance_turn();
-        // magic.md §8: the sextant-style printer prints Y first, then a
-        // comma and the X-coordinate, with a trailing double-quote character.
-        self.message = format!("Locate: {y},{x}\"");
+        // `magic.md §8`: "Locate uses the shared sextant-style
+        // coordinate printer" — Y first, then X, each carrying its own
+        // closing double-quote, joined by comma-space, with a newline
+        // before the pair as well as after it. The label carries no
+        // newline of its own.
+        self.message = format!(
+            "Locate:{}",
+            sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8)
+        );
         MoveOutcome::Observed
     }
 
@@ -3061,6 +3298,10 @@ impl PlayState {
         {
             return outcome;
         }
+
+        // audio.md §6: View is variant 7; audio.md §8.3 puts the committed
+        // pre-effect after the spell's own gate and before the effect.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 7 });
 
         self.advance_turn();
         let _ = self.activate_peer_view_overlay();
@@ -3082,6 +3323,12 @@ impl PlayState {
             return outcome;
         }
 
+        // `audio.md §6.1`: X-Ray is id 33, circle 6 - "Unconditional, then the
+        // visibility-recompute animation".
+        self.emit_sound_effect(SoundEffect::SharedVariant {
+            variant: audio::spell_circle(X_RAY_SPELL_INDEX),
+        });
+
         self.advance_turn();
         let _ = self.activate_x_ray_view_overlay();
         self.message.clear();
@@ -3094,6 +3341,11 @@ impl PlayState {
         {
             return outcome;
         }
+
+        // audio.md §6: Create Food is variant 2; audio.md §8.3 puts the
+        // committed pre-effect after the spell's own gate and before the
+        // effect - here before the gameplay-PRNG grant roll.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 2 });
 
         let before = self.food;
         // `cleak/u5-spec#49`: per-cast grant is uniform `1..=3`,
@@ -3231,7 +3483,7 @@ impl PlayState {
         let tile = self.grid[idx];
         if tile >> 4 != 0x4 {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -3244,6 +3496,12 @@ impl PlayState {
             self.player.y,
             scene.key()
         );
+        // audio.md §6 qualifies variant 2 as `successful Open`, and audio.md
+        // §8.3's only pre-success spell boundary is Vanish, so the cue follows
+        // the chest test rather than the committed gate. The surface and
+        // combat routes sound from `cast_directed_utility_spell`; this dungeon
+        // arm only runs when they do not, so there is no double emit.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 2 });
         Ok(MoveOutcome::ContainerOpened)
     }
 
@@ -3265,12 +3523,17 @@ impl PlayState {
             return Ok(outcome);
         }
 
+        // audio.md §6: "Dungeon rise/fall" is variant 4; audio.md §8.3 puts
+        // the committed pre-effect after the spell's own gate and before the
+        // effect, so the Doom refusal below still sounds first.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 4 });
+
         // `dungeon-mode.md` §13.1/§13.3: both level-change spells refuse
         // outright in Doom. This is an effect-level refusal after the common
         // spell resource gate has accepted and spent the cast.
         if scene.record == DOOM_DUNGEON_RECORD {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -3288,7 +3551,7 @@ impl PlayState {
         let destination = self.dungeon_cell(next_level, self.player.x, self.player.y);
         if !dungeon_level_change_spell_destination_allowed(destination) {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return Ok(MoveOutcome::Blocked);
         }
         self.area = Area::Dungeon {
@@ -3339,12 +3602,22 @@ impl PlayState {
             return outcome;
         }
 
+        // `audio.md §6.1`: the four field spells sound the shared variant on
+        // their **dungeon arm only** - Fire/Poison/Sleep Field (14, 15, 16) at
+        // circle 3, and Energy Field (20) at 4, which "the shared field helper
+        // special-cases ... specifically to keep variant equal to circle". The
+        // combat arm plays the combat template instead; see
+        // `confirm_spent_combat_arena_field_spell`.
+        if let Some(variant) = audio::field_spell_shared_variant(spell_index, true) {
+            self.emit_sound_effect(SoundEffect::SharedVariant { variant });
+        }
+
         let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..DUNGEON_SIDE as isize).contains(&tx) || !(0..DUNGEON_SIDE as isize).contains(&ty) {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
 
@@ -3354,7 +3627,7 @@ impl PlayState {
             0x08 => marker_field,
             _ => {
                 self.advance_turn();
-                self.message = "Failed!".to_string();
+                self.fail_committed_spell_cast();
                 return MoveOutcome::Blocked;
             }
         };
@@ -3396,12 +3669,17 @@ impl PlayState {
             return outcome;
         }
 
+        // audio.md §6: Dispel Field is variant 4; audio.md §8.3 puts the
+        // committed pre-effect after the spell's own gate and before the
+        // effect. The combat route returned above owns its own boundary.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 4 });
+
         let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..DUNGEON_SIDE as isize).contains(&tx) || !(0..DUNGEON_SIDE as isize).contains(&ty) {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
 
@@ -3409,7 +3687,7 @@ impl PlayState {
         let cell = self.grid[idx];
         let Some(field) = dungeon_field_effect(cell) else {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         };
         self.grid[idx] = cell & 0x08;
@@ -3435,6 +3713,15 @@ impl PlayState {
         {
             return outcome;
         }
+
+        // `audio.md §6.1`: Negate Time is id 47, circle 8 - "Unconditional at
+        // helper entry". Its `Magic absorbed!` arm adds a manual envelope cue
+        // that §6.1 records as one of "two pre-commit sounds that section 8
+        // does not list"; the engine models no absorbing actor yet, so that arm
+        // has no site here.
+        self.emit_sound_effect(SoundEffect::SharedVariant {
+            variant: audio::spell_circle(TIME_STOP_SPELL_INDEX),
+        });
 
         self.advance_turn();
         self.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
@@ -3471,9 +3758,13 @@ impl PlayState {
             return Ok(outcome);
         }
 
+        // audio.md §6: Blink is variant 3; audio.md §8.3 puts the committed
+        // pre-effect after the spell's own gate and before the effect.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 3 });
+
         let Some((to_x, to_y)) = self.noncombat_blink_target(direction) else {
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return Ok(MoveOutcome::Blocked);
         };
 
@@ -3559,6 +3850,11 @@ impl PlayState {
             return outcome;
         }
 
+        // audio.md §6: Blink is variant 3; audio.md §8.3: "For combat cursor
+        // spells, confirmation plays the spell effect before the
+        // coordinate/projectile-impact resolver."
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 3 });
+
         let legal_cells = self.combat_legal_cell_mask();
         let legal = combat_arena_coordinate_in_bounds(i16::from(tx), i16::from(ty))
             && legal_cells[usize::from(ty)][usize::from(tx)]
@@ -3573,10 +3869,17 @@ impl PlayState {
 
         self.advance_turn();
         if !legal {
-            self.message = "Failed!".to_string();
+            self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
 
+        // Defensive, and unreachable from here: the only `None` cases are an
+        // empty or marked-dead actor, both already excluded by the
+        // `combat_actor_is_active_not_dead` gate above. It stays silent -
+        // audio.md §8.3 attaches the cast-failure glissando to `Failed!`, and
+        // this arm prints a bare `Who casts?` refusal instead, which audio.md
+        // §9 gives no acknowledgement sound. The §8.3 confirmation variant has
+        // already sounded; nothing published adds a second cue here.
         let Some(commit) = commit_combat_actor_linked_position(
             &mut self.combat_actors[caster_index],
             &mut self.active_objects,
@@ -3695,33 +3998,87 @@ fn directed_utility_adjacent_coordinate(
         .then_some((tx as usize, ty as usize))
 }
 
+/// `magic.md §3`: the canonical twenty-four-syllable rune vocabulary is
+/// keyed by each syllable's own initial letter, which is exactly why
+/// `magic.md §5` Step 2 says "`J` and `O` are ignored because no rune
+/// selector is keyed by those letters" - `J` and `O` are the two ASCII
+/// letters that begin none of the twenty-four syllables.
+///
+/// Returns the rune word a selector letter echoes, or `None` for a byte
+/// that is not a resident selector.
+fn rune_syllable_for_selector(letter: u8) -> Option<&'static str> {
+    let letter = letter.to_ascii_uppercase();
+    RUNE_SYLLABLE_VOCABULARY
+        .iter()
+        .copied()
+        .find(|syllable| syllable.as_bytes()[0] == letter)
+}
+
+/// `magic.md §5` Step 2: "each letter prints its associated rune word
+/// followed by a space". The result is presentation only; the stored
+/// selector buffer keeps its compact letter-coded form for the parser.
+///
+/// A character with no rune word cannot reach the buffer through
+/// [`cast_input_action`], so it is echoed verbatim rather than dropped.
+fn rune_echo_for_buffer(buffer: &str) -> String {
+    let mut echo = String::new();
+    for ch in buffer.chars() {
+        match u8::try_from(ch as u32)
+            .ok()
+            .and_then(rune_syllable_for_selector)
+        {
+            Some(syllable) => {
+                echo.push_str(syllable);
+                echo.push(' ');
+            }
+            None => echo.push(ch),
+        }
+    }
+    echo
+}
+
+/// The shared inventory-page row scanner.
+///
+/// `inventory.md §4.7`: "Long pages **do not paginate**: the navigator scans
+/// forward or backward for the next slot with a non-zero count, so empty
+/// slots are skipped rather than shown as blank rows", and "The row scanner
+/// walks a caller-supplied counter band forward or backward from a mutable
+/// cursor, skipping zero-count rows for ordinary inventory browsing."
+///
+/// `rows` is therefore already the zero-filtered displayable band, and
+/// `cursor` names the displayable slot drawn on the panel's first row: the
+/// page shows that slot and the seven displayable slots after it, with no
+/// page number, no page count and no fixed page boundaries.
+///
+/// `inventory.md §4.7`: "When no displayable row exists, the panel prints
+/// the none placeholder and waits for a key before returning to the page
+/// loop", and the placeholder for an inventory page with no non-zero slot
+/// is the parenthesised `(None owned!)`.
 fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usize) {
     if rows.is_empty() {
-        lines.push("None.".to_string());
+        lines.push(Z_STATS_NONE_OWNED_PLACEHOLDER.to_string());
         return;
     }
-    let total = rows.len();
-    let start = if total <= Z_STATS_INVENTORY_PANEL_ROWS {
-        0
-    } else {
-        (cursor.min(total - 1) / Z_STATS_INVENTORY_PANEL_ROWS) * Z_STATS_INVENTORY_PANEL_ROWS
-    };
-    let end = (start + Z_STATS_INVENTORY_PANEL_ROWS).min(total);
-    if total > Z_STATS_INVENTORY_PANEL_ROWS {
-        lines.push(format!("Rows {}-{end} of {total}", start + 1));
-    }
-    let mut shown = 0;
+    let start = cursor.min(z_stats_inventory_last_cursor(rows.len()));
     for row in rows
         .into_iter()
         .skip(start)
         .take(Z_STATS_INVENTORY_PANEL_ROWS)
     {
-        shown += 1;
         lines.push(row);
     }
-    if total > start + shown {
-        lines.push(format!("... {} more", total - start - shown));
-    }
+}
+
+/// The furthest the row cursor can scan forward on a band with `row_count`
+/// displayable slots.
+///
+/// `inventory.md §4.7` publishes the scan - "the navigator scans forward or
+/// backward for the next slot with a non-zero count" - but says nothing about
+/// what happens at the two ends of the band, so the conservative reading is
+/// taken: a scan that finds no further displayable slot leaves the cursor
+/// where it was. Nothing here wraps.
+fn z_stats_inventory_last_cursor(row_count: usize) -> usize {
+    row_count.saturating_sub(Z_STATS_INVENTORY_PANEL_ROWS)
 }
 
 /// `inventory.md §4` Z-stats stats page: "Shows class, status, level,

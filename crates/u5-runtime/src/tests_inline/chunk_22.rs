@@ -526,6 +526,47 @@
     }
 
     #[test]
+    fn town_free_roaming_walker_skips_linked_npc_sprites_without_prng() {
+        // `town-mode.md §16` eligible-object-bytes row: "Empty slots, the
+        // avatar's slot-zero record, linked NPC sprite classes, and all
+        // other object families are skipped", and "No PRNG value is
+        // consumed for ineligible or off-floor slots". The three shipped
+        // `CASTLE:0` stable horses are roster slots carrying the horse
+        // tags `0x10`/`0x11` (`catalogs/npc-roster.md §4`), so their
+        // linked sprites must not also be driven by this walker.
+        let mut state = test_state(town_free_roaming_grid(), 1, 1);
+        state.prng_state = 0x1234;
+        state.active_objects.push(npc_active_object(0x10, 5, 5, 0));
+        state.npcs.push(RuntimeNpc {
+            slot: 15,
+            type_byte: 0x10,
+            dialog_id: 0,
+            schedule: [0; NPC_SCHEDULE_RECORD_LEN],
+            state: NPC_STATE_IDLE,
+            x: 5,
+            y: 5,
+            z: 0,
+            cached_wp: 0,
+            move_queue: Vec::new(),
+            move_queue_pos: 0,
+            stuck_counter: 0,
+            active_object: Some(1),
+        });
+
+        state.advance_active_objects();
+
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
+        assert!(!state.visibility_dirty);
+
+        // Unlink it and the same record becomes an ordinary free-roaming
+        // animal again.
+        state.npcs.clear();
+        state.advance_active_objects();
+        assert_ne!(state.prng_state, 0x1234);
+    }
+
+    #[test]
     fn town_free_roaming_actor_chance_skip_consumes_one_draw() {
         let mut state = test_state(town_free_roaming_grid(), 1, 1);
         state.prng_state = 0x0008;
@@ -708,8 +749,7 @@
         assert_eq!(outcome, MoveOutcome::Used);
         assert!(state.combat_active);
         assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
-        assert!(state.message.contains("Attacked by world object tile 192"));
-        assert!(state.message.contains("entered terrain combat"));
+        assert_eq!(state.message, format!("Passed. {COMBAT_BANNER}"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -718,7 +758,6 @@
         let dir = debug_game_dir();
         let record = synthetic_combat_arena_record();
         fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
-        let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(2).unwrap();
         let replacement_seed = (0..=u16::MAX)
             .find(|seed| {
                 let mut prng = *seed;
@@ -749,7 +788,89 @@
         assert!(message.contains("BRIT.CBT arena 2"));
         assert!(message.contains("requested Orc"));
         assert_eq!(state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile, 0xc0);
-        assert_eq!(replacement_tile, 1);
+        // `catalogs/monster-bestiary.md §2.1`: the substitution is keyed
+        // to the base class, not the arena - Orc bands mix in Trolls.
+        assert_eq!(combat_class_companion(32), Some(41));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `encounters.md §4`, Shadow Lord arena branch: "if the party is
+    /// carrying the Sceptre of Lord British, entering that fight prints
+    /// the sceptre-reclaimed message, plays a tone, and clears the
+    /// sceptre flag. The arena is 10 either way."
+    #[test]
+    fn terrain_combat_shadow_lord_entry_reclaims_the_sceptre() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
+        let shadow_lord_type =
+            COMBAT_CLASS_SHADOW_LORD * 4 + OUTDOOR_COMBAT_TYPE_FIRST;
+        let object = ActiveObject {
+            type_byte: shadow_lord_type,
+            tile: shadow_lord_type,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        let message = state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, object)
+            .unwrap();
+
+        assert!(message.contains("BRIT.CBT arena 10"), "{message}");
+        assert_eq!(state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX], 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `combat.md §5` order of operations: the party is seated from the
+    /// arena record's own six party entry coordinates at step 2, before
+    /// the banner at step 3 and the count roll at step 4, so the seats
+    /// never depend on how many monsters spawned.
+    #[test]
+    fn terrain_combat_entry_seats_party_from_arena_record_and_prints_banner() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let record =
+            CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        let object = ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, object)
+            .unwrap();
+
+        let entry_x = record.outdoor_setup_table_a();
+        let entry_y = record.outdoor_setup_table_b();
+        assert_eq!(
+            (state.active_objects[0].x, state.active_objects[0].y),
+            (usize::from(entry_x[0]), usize::from(entry_y[0]))
+        );
+        assert_eq!(
+            (state.combat_actors[0].x, state.combat_actors[0].y),
+            (entry_x[0], entry_y[0])
+        );
+        assert_eq!(state.message, COMBAT_BANNER);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -852,10 +973,18 @@
 
         assert!(message.contains("BRIT.CBT arena 2"));
         assert_eq!(state.combat_terrain[0][0], 0x42);
+        // `combat.md §5`: the monster's descriptor is index six but its
+        // renderer record "continues from the first record left free by
+        // the seated party", so index the record through the
+        // descriptor's link byte. One live party member leaves record
+        // one free.
+        let first_monster_record =
+            usize::from(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].active_object_slot);
+        assert_eq!(first_monster_record, 1);
         assert_eq!(
             (
-                state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].x,
-                state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].y,
+                state.active_objects[first_monster_record].x,
+                state.active_objects[first_monster_record].y,
             ),
             (2, 13)
         );
@@ -977,4 +1106,3 @@
         assert_eq!((object.x, object.y), (15, 0));
         assert_eq!(object.phase, 0x62);
     }
-

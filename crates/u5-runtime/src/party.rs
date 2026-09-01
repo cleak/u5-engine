@@ -71,11 +71,88 @@ impl PartyMember {
 pub struct PartyRosterRecord {
     pub member: PartyMember,
     pub name: [u8; SAVE_CHARACTER_NAME_LEN],
+    /// `formats/saved-gam.md §3.1`: the one-byte gender field at record
+    /// offset `0x09`, "`0x0B` for male, `0x0C` for female. Not ASCII; the
+    /// values are private to the engine." Stored raw so an externally
+    /// edited save round-trips whatever byte it holds; read it through
+    /// [`PartyRosterRecord::is_female`] rather than comparing by hand.
+    pub gender: u8,
     pub experience: u16,
     pub stay_counter: u8,
     pub strength: u8,
     pub intelligence: u8,
     pub equipment: [u8; EQUIPMENT_SLOT_COUNT],
+}
+
+impl PartyRosterRecord {
+    /// `systems/shops.md §8.1`: the arms post-item prompt selects `milady?`
+    /// "when the speaking member's gender field is the female value and
+    /// `sir?` otherwise" — an equality test against the single female
+    /// value, so every other byte (including a corrupt or absent one)
+    /// takes the masculine "otherwise" branch.
+    pub fn is_female(&self) -> bool {
+        self.gender == SAVE_GENDER_FEMALE_BYTE
+    }
+}
+
+/// Resolve the roster record that belongs to an active-party slot.
+///
+/// `formats/saved-gam.md §3.1` puts the gender byte on the thirty-two-byte
+/// character record and nowhere else, and unlike name / STR / INT / experience
+/// / equipment it has no parallel active-party vector on `PlayState`. The
+/// paths that reshuffle the travelling party — the inn's leave-a-companion and
+/// pick-up-a-companion helpers in `shops.rs`, and New Order — shift those
+/// parallel vectors without shifting `party_roster`, so the record parked at a
+/// given slot index is not always the member the active party now holds there.
+///
+/// The nine-byte name field is the one per-member identity every one of those
+/// paths does keep in step, so it is used as a *disambiguator* for the slot
+/// index rather than as the primary key:
+///
+/// 1. the record already parked at `slot`, when its name field matches;
+/// 2. otherwise the first record anywhere in the roster carrying that name;
+/// 3. otherwise the record at `slot` regardless of name, then the leader.
+///
+/// Slot-first matters because `§3.1` publishes a fixed-width name field and
+/// promises nothing about uniqueness — an edited save, or a player-entered
+/// avatar name colliding with a companion, is enough to put two identical
+/// name fields in the roster. A name-first scan would hand such a slot the
+/// wrong record while looking authoritative about the slot it ignored.
+pub fn party_roster_record_for_active_slot<'a>(
+    roster: &'a [PartyRosterRecord],
+    slot: usize,
+    name: Option<&[u8; SAVE_CHARACTER_NAME_LEN]>,
+) -> Option<&'a PartyRosterRecord> {
+    if let Some(name) = name.filter(|name| name.iter().any(|byte| *byte != 0)) {
+        if let Some(record) = roster.get(slot)
+            && &record.name == name
+        {
+            return Some(record);
+        }
+        if let Some(record) = roster.iter().find(|record| &record.name == name) {
+            return Some(record);
+        }
+    }
+    roster.get(slot).or_else(|| roster.first())
+}
+
+/// The gender byte [`party_roster_record_for_active_slot`] resolves, or the
+/// synthesised-record default when no record answers for the slot.
+///
+/// `formats/saved-gam.md §3.1` publishes only `0x0B` male and `0x0C` female
+/// and says nothing about a record the engine invents with no save byte behind
+/// it, so the fallback here is an unpublished engine choice rather than a spec
+/// contract. It is behaviourally inert for the one consumer: `systems/shops.md
+/// §8.1` tests the field for equality with the female value, so any other byte
+/// takes the same "otherwise" branch.
+pub fn party_roster_carried_gender(
+    roster: &[PartyRosterRecord],
+    slot: usize,
+    name: Option<&[u8; SAVE_CHARACTER_NAME_LEN]>,
+) -> u8 {
+    party_roster_record_for_active_slot(roster, slot, name)
+        .map(|record| record.gender)
+        .unwrap_or(SAVE_GENDER_MALE_BYTE)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -177,6 +254,15 @@ pub fn party_roster_from_active(
                 .get(index)
                 .copied()
                 .unwrap_or([0; SAVE_CHARACTER_NAME_LEN]),
+            // `formats/saved-gam.md §3.1` publishes only `0x0B` male and
+            // `0x0C` female; it says nothing about a record synthesised with
+            // no save byte behind it, so the male value here is an
+            // unpublished engine default, not a spec contract. It is inert
+            // for the only consumer — `systems/shops.md §8.1` tests for
+            // equality with the female value, so every other byte takes the
+            // same "otherwise" branch. A real save overwrites this in
+            // `decode_party_roster`.
+            gender: SAVE_GENDER_MALE_BYTE,
             experience: experience.get(index).copied().unwrap_or(0),
             stay_counter: stay_counters.get(index).copied().unwrap_or(0),
             strength: strengths.get(index).copied().unwrap_or(AVATAR_STAT_MAX),

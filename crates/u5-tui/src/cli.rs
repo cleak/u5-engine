@@ -9,12 +9,14 @@ use std::path::{Path, PathBuf};
 
 use u5_runtime::{
     CHARGEN_QUESTION_COUNT, ChargenAvatar, ChargenSession, ChargenSessionStep, ChargenStats,
-    DEFAULT_GAME_DIR, FIRST_PLAYABLE_BALLOON_TILE, FIRST_PLAYABLE_FRIGATE_TILE,
-    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE, GameClock, PendingVehicleAcquisition,
-    PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth, TransportState, WindState,
-    chargen_stats_from_winners, commit_chargen_save, load_play_options_from_init,
-    load_play_options_from_save, load_question_records, parse_u8_literal, run_chargen_tournament,
+    DEFAULT_GAME_DIR, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
+    FIRST_PLAYABLE_SKIFF_TILE, GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget,
+    ShrineVirtue, TileGraphicsDepth, TransportState, WindState, chargen_stats_from_winners,
+    commit_chargen_save, load_play_options_from_init, load_play_options_from_save,
+    load_question_records, parse_u8_literal, run_chargen_tournament,
 };
+
+use crate::runtime_game_dir::prepare_writable_game_dir;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateCharacterCommand {
@@ -60,6 +62,10 @@ pub struct CliArgs {
     pub compare_frame_manifests: Option<(PathBuf, PathBuf)>,
     /// If set, write a sanitized aggregate LOCATION.DAT audit and exit.
     pub location_audit: Option<PathBuf>,
+    /// If set, render every published PC-speaker effect to a WAV plus a
+    /// sanitized manifest in the supplied directory, and exit. Needs no game
+    /// assets: the contract is synthesized entirely from `systems/audio.md`.
+    pub audio_suite: Option<PathBuf>,
     pub create_character: Option<CreateCharacterCommand>,
     pub create_character_interactive: bool,
 }
@@ -97,6 +103,7 @@ where
     let mut help = false;
     let mut save_frame: Option<PathBuf> = None;
     let mut save_frame_suite: Option<PathBuf> = None;
+    let mut audio_suite: Option<PathBuf> = None;
     let mut save_screen: Option<PathBuf> = None;
     let mut visual_frame_suite: Option<PathBuf> = None;
     let mut visual_route_suite: Option<PathBuf> = None;
@@ -136,6 +143,15 @@ where
                 })?;
                 save_screen = Some(PathBuf::from(value));
                 play = true;
+            }
+            "--audio-suite" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--audio-suite requires an output directory",
+                    )
+                })?;
+                audio_suite = Some(PathBuf::from(value));
             }
             "--save-frame-suite" => {
                 let value = args.next().ok_or_else(|| {
@@ -362,7 +378,7 @@ where
                 let value = args.next().ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        "--transport requires foot|horse|ship|skiff|carpet|balloon",
+                        "--transport requires foot|horse|ship|skiff|carpet",
                     )
                 })?;
                 transport_override = Some(parse_transport_arg(&value)?);
@@ -376,7 +392,7 @@ where
             _ => game_dir = Some(PathBuf::from(arg)),
         }
     }
-    let game_dir = game_dir.unwrap_or_else(|| PathBuf::from(DEFAULT_GAME_DIR));
+    let mut game_dir = game_dir.unwrap_or_else(|| PathBuf::from(DEFAULT_GAME_DIR));
     if help {
         return Ok(CliArgs {
             play: false,
@@ -392,6 +408,7 @@ where
             help: true,
             save_frame: None,
             save_frame_suite: None,
+            audio_suite: None,
             save_screen: None,
             visual_frame_suite: None,
             visual_route_suite: None,
@@ -651,6 +668,7 @@ where
         None
     };
     if from_save {
+        game_dir = prepare_writable_game_dir(&game_dir)?;
         options = load_play_options_from_save(&game_dir)?;
     } else if from_init {
         options = load_play_options_from_init(&game_dir)?;
@@ -685,6 +703,7 @@ where
         help: false,
         save_frame,
         save_frame_suite,
+        audio_suite,
         save_screen,
         visual_frame_suite,
         visual_route_suite,
@@ -715,7 +734,7 @@ OPTIONS:
         --at <X,Y>            Start coordinates.
         --time <HH:MM>        Start clock.
         --wind <DIR>          calm|north|south|east|west.
-        --transport <KIND>    foot|horse|ship|skiff|carpet|balloon.
+        --transport <KIND>    foot|horse|ship|skiff|carpet.
         --from-save           Seed play options from SAVED.GAM/SAVED.OOL.
         --from-init           Seed play options from INIT.GAM (debug).
         --create-character <N>
@@ -741,6 +760,9 @@ OPTIONS:
         --save-frame-suite <DIR>
                               Write representative headless PNG frames plus a
                               sanitized manifest into DIR and exit.
+        --audio-suite <DIR>   Render every published PC-speaker effect to a WAV
+                              plus a sanitized manifest in DIR and exit. Needs
+                              no game assets.
         --visual-frame-suite <DIR>
                               Write representative Bevy-owned PNG frames plus
                               a sanitized manifest into DIR and exit.
@@ -1017,6 +1039,13 @@ pub fn parse_pending_vehicle_arg(value: &str) -> io::Result<PendingVehicleAcquis
     }
 }
 
+/// `vehicles.md §2`: "**There is no balloon and no sixth vehicle
+/// family.**" §3's family table lists foot, horse, ship, skiff and magic
+/// carpet as the live families and marks Balloon "Vehicle tile family only
+/// in the analyzed baseline... do not infer a boardable vehicle from art
+/// alone"; §11 settles it: "Balloon sprites are catalog assets only."
+/// `--transport balloon` therefore parses as an unknown transport, exactly
+/// like any other non-family word.
 pub fn parse_transport_arg(value: &str) -> io::Result<TransportState> {
     match value.trim().to_ascii_lowercase().as_str() {
         "foot" => Ok(TransportState::Foot),
@@ -1039,13 +1068,9 @@ pub fn parse_transport_arg(value: &str) -> io::Result<TransportState> {
             type_byte: 184,
             tile: 184,
         }),
-        "balloon" => Ok(TransportState::Balloon {
-            type_byte: FIRST_PLAYABLE_BALLOON_TILE,
-            tile: FIRST_PLAYABLE_BALLOON_TILE,
-        }),
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("unknown transport `{value}`; expected foot|horse|ship|skiff|carpet|balloon"),
+            format!("unknown transport `{value}`; expected foot|horse|ship|skiff|carpet"),
         )),
     }
 }

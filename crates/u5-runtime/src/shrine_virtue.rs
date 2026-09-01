@@ -191,6 +191,34 @@ pub const fn shrine_virtue_for_altar_tile(tile: u8) -> Option<ShrineVirtue> {
     ShrineVirtue::from_index((tile - SHRINE_ALTAR_TILE_FIRST) as usize)
 }
 
+/// `view.md §3` terrain-description path row 5b trigger tile: the
+/// Eternal Flame tile `0xDE`.
+pub const ETERNAL_FLAME_LOOK_TILE: u8 = 0xDE;
+
+/// `view.md §3` row 5b: "Live tile `0xDE` | Append a virtue word
+/// chosen by the current scene: scene `30` appends Truth, scene `31`
+/// appends Love, scene `32` appends Courage. In any other scene the
+/// base description is printed with no appended word."
+///
+/// The word is chosen by *scene*, not by tile id, which is what
+/// separates this row from [`shrine_virtue_for_altar_tile`] (keyed by
+/// tile id inside the `0x88..=0x8F` altar band) and from the row-5c
+/// `0xDF` dungeon-name appender (keyed by map X coordinate).
+///
+/// §3 also notes that row 5b is an *appender row* even when it appends
+/// nothing: "`0xDE` in a scene other than `30`, `31` or `32` ... print
+/// the base description alone and still skip the [line-spacing]
+/// cleanup." Callers must therefore return after this row rather than
+/// falling through to the plain-description path.
+pub const fn eternal_flame_word_for_scene(scene_byte: u8) -> Option<&'static str> {
+    Some(match scene_byte {
+        crate::SCENE_THE_LYCAEUM => "Truth",
+        crate::SCENE_EMPATH_ABBEY => "Love",
+        crate::SCENE_SERPENTS_HOLD => "Courage",
+        _ => return None,
+    })
+}
+
 /// `karma.md §10` per-virtue shrine quest state encoded by the
 /// (ordained, codex-read) bit pair in the two shrine masks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -288,4 +316,40 @@ pub fn read_codex_urn(ordained_mask: u8, codex_mask: &mut u8) -> CodexUrnReadOut
         }
     }
     CodexUrnReadOutcome::NoOrdained
+}
+
+#[cfg(test)]
+mod eternal_flame_tests {
+    use super::*;
+
+    #[test]
+    fn eternal_flame_word_is_selected_by_scene_not_by_tile() {
+        // `view.md §3` row 5b: "scene `30` appends Truth, scene `31`
+        // appends Love, scene `32` appends Courage."
+        assert_eq!(ETERNAL_FLAME_LOOK_TILE, 0xDE);
+        assert_eq!(crate::SCENE_THE_LYCAEUM, 30);
+        assert_eq!(crate::SCENE_EMPATH_ABBEY, 31);
+        assert_eq!(crate::SCENE_SERPENTS_HOLD, 32);
+        assert_eq!(eternal_flame_word_for_scene(30), Some("Truth"));
+        assert_eq!(eternal_flame_word_for_scene(31), Some("Love"));
+        assert_eq!(eternal_flame_word_for_scene(32), Some("Courage"));
+    }
+
+    #[test]
+    fn any_other_scene_appends_nothing() {
+        // §3: "In any other scene the base description is printed with
+        // no appended word", and that case still counts as having
+        // matched the appender row.
+        for scene in [0u8, 29, 33, 255] {
+            assert_eq!(eternal_flame_word_for_scene(scene), None, "scene {scene}");
+        }
+    }
+
+    #[test]
+    fn the_flame_tile_is_outside_the_shrine_altar_band() {
+        // Row 5b is keyed by scene; the altar band is keyed by tile id.
+        // The two rows must not overlap.
+        assert!(ETERNAL_FLAME_LOOK_TILE > SHRINE_ALTAR_TILE_LAST);
+        assert_eq!(shrine_virtue_for_altar_tile(ETERNAL_FLAME_LOOK_TILE), None);
+    }
 }

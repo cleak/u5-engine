@@ -1,3 +1,18 @@
+    /// `commands.md §3` gives "Unknown input" the status `0` — "No action.
+    /// The loop skips its epilogue" — so the action counter stays put.
+    ///
+    /// The clock is a different question underground. `dungeon-mode.md §15`:
+    /// "The single call site sits at the head of each iteration, ahead of the
+    /// render-and-poll step and the command dispatch, so a command the
+    /// dispatcher reports as \"no action\" … still costs a minute
+    /// underground." `input.md §6`/§7 agrees: "the overworld, town, and combat
+    /// loops gate their cleanup call on a consumed turn, but the dungeon
+    /// loop's call is ungated and costs a minute every iteration." The light
+    /// counters ride along with that call (`dungeon-mode.md §7`: the decay "is
+    /// part of the world-clock advance call, not the dungeon mode loop's own
+    /// logic").
+    ///
+    /// The town half is unchanged: its cleanup *is* gated on a consumed turn.
     #[test]
     fn dungeon_unhandled_play_input_uses_sleep_idle_visual_tick_without_turn() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -21,9 +36,9 @@
 
         assert_eq!(state.message, "Zzzzzz...");
         assert_eq!(state.turn, 0);
-        assert_eq!(state.clock, GameClock::new(12, 34).unwrap());
-        assert_eq!(state.torch_counter, 3);
-        assert_eq!(state.light_spell_counter, 2);
+        assert_eq!(state.clock, GameClock::new(12, 35).unwrap());
+        assert_eq!(state.torch_counter, 2);
+        assert_eq!(state.light_spell_counter, 1);
         assert_eq!(state.animation.frame, 1);
         assert_eq!(state.active_objects[1].phase, 0x22);
 
@@ -66,7 +81,7 @@
             MoveOutcome::Observed
         );
 
-        assert!(state.message.contains("Who picks?"));
+        assert_eq!(state.message, PARTY_SELECTION_PROMPT);
         assert!(state.active_jimmy.is_some());
         assert_eq!(state.turn, 0);
         assert_eq!(state.keys, 0);
@@ -975,13 +990,17 @@
             let y = (party_y as isize + dy) as usize * cell + ly;
             viewport.pixel(x, y)
         };
-        assert_eq!(px(1, 0, cell / 2, 0), Some(14));
-        assert_eq!(px(0, 1, 0, 0), Some(14));
+        // `view.md §6.3`: "the value being read is the display adapter
+        // identifier, not a peer-spell flag. The dungeon map renderer has no
+        // peer-spell branch." These pens used to be the gem/peer tint family
+        // (14 / 13 / 5); the whole map now paints in one pen set.
+        assert_eq!(px(1, 0, cell / 2, 0), Some(15));
+        assert_eq!(px(0, 1, 0, 0), Some(15));
         // §12.5: the fountain's lower lip covers `x + 1..x + 6` at
         // `y + 4`, so the mid-cell pixel is the basin's bright
         // foreground pen, not the old full-width cross-bar's blue.
-        assert_eq!(px(1, -1, cell / 2, cell / 2), Some(14));
-        assert_eq!(px(-1, 1, cell / 2, cell / 2), Some(14));
+        assert_eq!(px(1, -1, cell / 2, cell / 2), Some(15));
+        assert_eq!(px(-1, 1, cell / 2, cell / 2), Some(11));
     }
 
     #[test]
@@ -1372,53 +1391,53 @@
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), gem),
             [
-                [14, 14, 14, 14, 14, 14, 14, 14],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
+                [15, 15, 15, 15, 15, 15, 15, 15],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
             ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2D)), gem),
             [
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [14, 14, 14, 14, 14, 14, 14, 14],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [15, 15, 15, 15, 15, 15, 15, 15],
             ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2F)), gem),
             [
-                [14, 14, 14, 14, 14, 14, 14, 14],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [14, 14, 14, 14, 14, 14, 14, 14],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [0, 0, 0, 0, 14, 0, 0, 0],
-                [14, 14, 14, 14, 14, 14, 14, 14],
+                [15, 15, 15, 15, 15, 15, 15, 15],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [15, 15, 15, 15, 15, 15, 15, 15],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 0, 15, 0, 0, 0],
+                [15, 15, 15, 15, 15, 15, 15, 15],
             ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x70)), gem),
             [
-                [14, 14, 14, 14, 14, 14, 14, 14],
-                [14, 6, 6, 6, 6, 6, 6, 14],
-                [14, 6, 6, 6, 6, 6, 6, 14],
-                [14, 6, 6, 6, 6, 6, 6, 14],
-                [14, 6, 6, 6, 6, 6, 6, 14],
-                [14, 6, 6, 6, 6, 6, 6, 14],
-                [14, 6, 6, 6, 6, 6, 6, 14],
-                [14, 14, 14, 14, 14, 14, 14, 14],
+                [15, 15, 15, 15, 15, 15, 15, 15],
+                [15, 6, 6, 6, 6, 6, 6, 15],
+                [15, 6, 6, 6, 6, 6, 6, 15],
+                [15, 6, 6, 6, 6, 6, 6, 15],
+                [15, 6, 6, 6, 6, 6, 6, 15],
+                [15, 6, 6, 6, 6, 6, 6, 15],
+                [15, 6, 6, 6, 6, 6, 6, 15],
+                [15, 15, 15, 15, 15, 15, 15, 15],
             ]
         );
         // `dungeon-mode.md §12.4` exact byte `0x68`: the up-and-down
@@ -1444,12 +1463,12 @@
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), gem),
             [
                 [0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 11, 0, 0, 11, 0, 0],
-                [0, 11, 0, 11, 11, 0, 11, 0],
-                [0, 0, 0, 11, 11, 0, 0, 0],
-                [0, 14, 14, 14, 14, 14, 14, 0],
-                [0, 0, 14, 14, 14, 14, 0, 0],
-                [0, 14, 14, 0, 0, 14, 14, 0],
+                [0, 0, 9, 0, 0, 9, 0, 0],
+                [0, 9, 0, 9, 9, 0, 9, 0],
+                [0, 0, 0, 9, 9, 0, 0, 0],
+                [0, 15, 15, 15, 15, 15, 15, 0],
+                [0, 0, 15, 15, 15, 15, 0, 0],
+                [0, 15, 15, 0, 0, 15, 15, 0],
                 [0, 0, 0, 0, 0, 0, 0, 0],
             ]
         );
@@ -1474,14 +1493,14 @@
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::text(0x19)), gem),
             [
-                [14, 14, 14, 14, 14, 14, 14, 14],
-                [14, 0, 0, 0, 0, 0, 0, 14],
-                [14, 0, 0, 0, 0, 0, 0, 14],
-                [14, 0, 0, 0, 0, 0, 0, 14],
-                [14, 0, 0, 0, 14, 0, 0, 14],
-                [14, 0, 0, 0, 0, 0, 0, 14],
-                [14, 0, 0, 0, 0, 0, 0, 14],
-                [14, 14, 14, 14, 14, 14, 14, 14],
+                [15, 15, 15, 15, 15, 15, 15, 15],
+                [15, 0, 0, 0, 0, 0, 0, 15],
+                [15, 0, 0, 0, 0, 0, 0, 15],
+                [15, 0, 0, 0, 0, 0, 0, 15],
+                [15, 0, 0, 0, 15, 0, 0, 15],
+                [15, 0, 0, 0, 0, 0, 0, 15],
+                [15, 0, 0, 0, 0, 0, 0, 15],
+                [15, 15, 15, 15, 15, 15, 15, 15],
             ]
         );
         assert_eq!(
@@ -1513,128 +1532,165 @@
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), gem),
             [
-                [0, 0, 0, 0, 14, 14, 0, 0],
-                [0, 0, 0, 0, 14, 14, 0, 0],
-                [0, 0, 0, 0, 14, 14, 0, 0],
-                [0, 0, 0, 0, 14, 14, 0, 0],
-                [14, 14, 14, 14, 14, 14, 14, 14],
-                [0, 0, 0, 0, 14, 14, 0, 0],
-                [0, 0, 0, 0, 14, 14, 0, 0],
-                [0, 0, 0, 0, 14, 14, 0, 0],
+                [0, 0, 0, 0, 11, 11, 0, 0],
+                [0, 0, 0, 0, 11, 11, 0, 0],
+                [0, 0, 0, 0, 11, 11, 0, 0],
+                [0, 0, 0, 0, 11, 11, 0, 0],
+                [11, 11, 11, 11, 11, 11, 11, 11],
+                [0, 0, 0, 0, 11, 11, 0, 0],
+                [0, 0, 0, 0, 11, 11, 0, 0],
+                [0, 0, 0, 0, 11, 11, 0, 0],
             ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x74)), gem),
             [
-                [13, 13, 13, 13, 13, 13, 13, 13],
-                [13, 0, 0, 0, 0, 0, 0, 13],
-                [13, 0, 0, 0, 0, 0, 0, 13],
-                [13, 0, 0, 0, 0, 0, 0, 13],
-                [13, 0, 0, 0, 0, 0, 0, 13],
-                [13, 0, 0, 0, 0, 0, 0, 13],
-                [13, 0, 0, 0, 0, 0, 0, 13],
-                [13, 13, 13, 13, 13, 13, 13, 13],
+                [8, 8, 8, 8, 8, 8, 8, 8],
+                [8, 0, 0, 0, 0, 0, 0, 8],
+                [8, 0, 0, 0, 0, 0, 0, 8],
+                [8, 0, 0, 0, 0, 0, 0, 8],
+                [8, 0, 0, 0, 0, 0, 0, 8],
+                [8, 0, 0, 0, 0, 0, 0, 8],
+                [8, 0, 0, 0, 0, 0, 0, 8],
+                [8, 8, 8, 8, 8, 8, 8, 8],
             ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x75)), gem),
             [
-                [13, 13, 13, 13, 14, 13, 13, 13],
-                [13, 0, 0, 0, 14, 0, 0, 13],
-                [13, 0, 0, 0, 14, 0, 0, 13],
-                [13, 0, 0, 0, 14, 0, 0, 13],
-                [13, 0, 0, 0, 14, 0, 0, 13],
-                [13, 0, 0, 0, 14, 0, 0, 13],
-                [13, 0, 0, 0, 14, 0, 0, 13],
-                [13, 13, 13, 13, 14, 13, 13, 13],
+                [8, 8, 8, 8, 15, 8, 8, 8],
+                [8, 0, 0, 0, 15, 0, 0, 8],
+                [8, 0, 0, 0, 15, 0, 0, 8],
+                [8, 0, 0, 0, 15, 0, 0, 8],
+                [8, 0, 0, 0, 15, 0, 0, 8],
+                [8, 0, 0, 0, 15, 0, 0, 8],
+                [8, 0, 0, 0, 15, 0, 0, 8],
+                [8, 8, 8, 8, 15, 8, 8, 8],
             ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x76)), gem),
             [
-                [5, 5, 5, 5, 5, 5, 5, 5],
-                [5, 0, 0, 0, 0, 0, 0, 5],
-                [5, 0, 0, 0, 0, 0, 0, 5],
-                [5, 0, 0, 0, 0, 0, 0, 5],
-                [5, 0, 0, 0, 14, 0, 0, 5],
-                [5, 0, 0, 0, 0, 0, 0, 5],
-                [5, 0, 0, 0, 0, 0, 0, 5],
-                [5, 5, 5, 5, 5, 5, 5, 5],
+                [13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 15, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 0, 0, 0, 0, 0, 0, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13],
             ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x77)), gem),
             [
-                [14, 14, 14, 14, 14, 14, 14, 14],
-                [14, 0, 0, 0, 14, 14, 0, 14],
-                [14, 0, 0, 0, 14, 14, 0, 14],
-                [14, 0, 0, 0, 14, 14, 0, 14],
-                [14, 14, 14, 14, 14, 14, 14, 14],
-                [14, 0, 0, 0, 14, 14, 0, 14],
-                [14, 0, 0, 0, 14, 14, 0, 14],
-                [14, 14, 14, 14, 14, 14, 14, 14],
+                [11, 11, 11, 11, 11, 11, 11, 11],
+                [11, 0, 0, 0, 11, 11, 0, 11],
+                [11, 0, 0, 0, 11, 11, 0, 11],
+                [11, 0, 0, 0, 11, 11, 0, 11],
+                [11, 11, 11, 11, 11, 11, 11, 11],
+                [11, 0, 0, 0, 11, 11, 0, 11],
+                [11, 0, 0, 0, 11, 11, 0, 11],
+                [11, 11, 11, 11, 11, 11, 11, 11],
             ]
         );
         assert_eq!(
             dungeon_view_audit_mask(Some(DungeonMinimapGlyph::text(0x7F)), gem),
             [
-                [13, 13, 13, 13, 13, 13, 13, 13],
-                [13, 13, 13, 13, 13, 13, 13, 13],
-                [13, 13, 13, 13, 13, 13, 13, 13],
-                [13, 13, 13, 13, 13, 13, 13, 13],
-                [13, 13, 13, 13, 13, 13, 13, 13],
-                [13, 13, 13, 13, 13, 13, 13, 13],
-                [13, 13, 13, 13, 13, 13, 13, 13],
-                [13, 13, 13, 13, 13, 13, 13, 13],
+                [8, 8, 8, 8, 8, 8, 8, 8],
+                [8, 8, 8, 8, 8, 8, 8, 8],
+                [8, 8, 8, 8, 8, 8, 8, 8],
+                [8, 8, 8, 8, 8, 8, 8, 8],
+                [8, 8, 8, 8, 8, 8, 8, 8],
+                [8, 8, 8, 8, 8, 8, 8, 8],
+                [8, 8, 8, 8, 8, 8, 8, 8],
+                [8, 8, 8, 8, 8, 8, 8, 8],
             ]
         );
     }
 
+    /// `view.md §6.3`: "Earlier revisions of this section described a magic
+    /// peer-view tint branch inside the dungeon map renderer, and an alternate
+    /// tinted tile source for some wall classes. Both are withdrawn: the value
+    /// being read is the display adapter identifier, not a peer-spell flag.
+    /// The dungeon map renderer has no peer-spell branch."
+    ///
+    /// `dungeon-mode.md §12.4` says the same of V-View: "V-View has no
+    /// peer-spell branch of its own; the peer spell's own presentation is
+    /// specified in `magic.md`."
+    ///
+    /// This test used to assert the opposite - that gem and peer shared one
+    /// tint and X-Ray got another. Every mode now paints the identical
+    /// dungeon map for a given display adapter.
     #[test]
-    fn dungeon_view_overlay_audit_pins_peer_gem_tint_against_xray_mode() {
+    fn dungeon_view_overlay_audit_has_no_peer_spell_branch() {
         let gem = ViewOverlayMode::GemView;
         let peer = ViewOverlayMode::PeerSpell;
         let x_ray = ViewOverlayMode::XRaySpell;
+        let look = ViewOverlayMode::SurfaceLook;
 
-        assert_eq!(
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), gem),
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), peer)
-        );
-        assert_eq!(
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), gem),
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), peer)
-        );
+        for glyph in [
+            Some(DungeonMinimapGlyph::runic(0x2E)),
+            Some(DungeonMinimapGlyph::runic(0x2D)),
+            Some(DungeonMinimapGlyph::runic(0x2F)),
+            Some(DungeonMinimapGlyph::runic(0x70)),
+            Some(DungeonMinimapGlyph::runic(0x73)),
+            Some(DungeonMinimapGlyph::runic(0x74)),
+            Some(DungeonMinimapGlyph::runic(0x75)),
+            Some(DungeonMinimapGlyph::runic(0x76)),
+            Some(DungeonMinimapGlyph::runic(0x77)),
+            Some(DungeonMinimapGlyph::text(0x7F)),
+            Some(DungeonMinimapGlyph::text(0x19)),
+            Some(DungeonMinimapGlyph::Fountain),
+            Some(DungeonMinimapGlyph::EnergyField),
+            Some(DUNGEON_MINIMAP_PARTY_GLYPH),
+        ] {
+            let expected = dungeon_view_audit_mask(glyph, gem);
+            for mode in [peer, x_ray, look] {
+                assert_eq!(
+                    dungeon_view_audit_mask(glyph, mode),
+                    expected,
+                    "{glyph:?} must paint identically in {mode:?} and gem view"
+                );
+            }
+        }
 
+        // The published pens, pinned once so the collapse cannot silently
+        // land on the withdrawn tint family instead.
         // Row 4 is the mid-cell row of an eight-pixel cell, where the
         // ladder and door cross-bars land.
         assert_eq!(
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), x_ray)[0][0],
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x2E)), peer)[0][0],
             15
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), x_ray)[4][0],
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x73)), peer)[4][0],
             11
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x74)), x_ray)[0][0],
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x74)), peer)[0][0],
             8
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x76)), x_ray)[0][0],
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::runic(0x76)), peer)[0][0],
             13
         );
         // `dungeon-mode.md §12.5`: the fountain's lower lip runs
         // `x + 1..x + 6` at `y + 4`, so column 0 of row 4 is background
-        // and column 1 carries the basin pen. This assertion used to read
-        // column 0 of row 4 as the fountain colour, because the fountain
-        // was drawn as a full-width cross-bar.
+        // and column 1 carries the basin pen - "the bright foreground pen".
         assert_eq!(
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), x_ray)[4][0],
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), peer)[4][0],
             0
         );
         assert_eq!(
-            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), x_ray)[4][1],
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), peer)[4][1],
             15
+        );
+        // ... and "a brighter blue for the jet and spray": the upper jet
+        // runs `x + 3..x + 4` at `y + 2`.
+        assert_eq!(
+            dungeon_view_audit_mask(Some(DungeonMinimapGlyph::Fountain), peer)[2][3],
+            9
         );
     }
 
@@ -1728,12 +1784,36 @@
         }
     }
 
+    /// `lighting.md §3` "Scope of the forced-dark tests": the Z test
+    /// "does **not** select ordinary dungeon levels: a dungeon level index
+    /// counts upward from zero at the top of the stack, so it never sets
+    /// the high bit, and the ambient value computed while the party is
+    /// inside a dungeon is simply whatever the clock produces." So noon
+    /// inside a dungeon recomputes to full daylight, and only the clock
+    /// puts the party below §4's floors. An earlier revision of this test
+    /// asserted `FULL_DARKNESS` at noon in a dungeon, on the wording that
+    /// "placed \"any dungeon depth\" inside the forced-dark scope"; that
+    /// wording "is **withdrawn**".
+    ///
+    /// §4 then supplies the two floors on top of the clock value -
+    /// "effective = max(ambient, 18 if light spell active, 10 if torch
+    /// active)" - and §3 the skip-recompute sentinel: "if the cached
+    /// ambient value is already in that range when the cleanup routine
+    /// reaches the daylight stage, it leaves the value alone."
     #[test]
     fn daylight_recompute_applies_fixed_dark_floors_and_sentinels() {
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
         dungeon.clock = GameClock::new(12, 0).unwrap();
         dungeon.mode_zero_cleanup();
+        assert_eq!(dungeon.ambient_light, FULL_DAYLIGHT);
+
+        // Hours 20 through 4 inclusive give 2 (full dark) - underground
+        // included, because nothing pins a dungeon level to the dark value.
+        dungeon.clock = GameClock::new(22, 0).unwrap();
+        dungeon.visibility_dirty = false;
+        dungeon.mode_zero_cleanup();
         assert_eq!(dungeon.ambient_light, FULL_DARKNESS);
+        assert!(dungeon.visibility_dirty);
 
         dungeon.torch_counter = 3;
         dungeon.visibility_dirty = false;
@@ -2525,21 +2605,101 @@
     }
 
     #[test]
-    fn stats_panel_frame_consumes_visible_active_player_cursor_only() {
+    fn stats_panel_counters_row_ship_variant_anchors_ship_label_at_column_32() {
+        // stats-panel.md §6, "Gold slot, ship variant": the gold
+        // group is replaced in place by the literal `Ship:` in
+        // columns 32..36, then the hull value at its natural width,
+        // then one extra space when the hull is below ten. The result
+        // fills columns 32..38 for hull values 0..99, and this
+        // variant does NOT use the gold group's leading-space ladder.
+        let ship_panel = |hull: u8| {
+            let mut state = test_state(open_grid(), 1, 1);
+            state.food = 123;
+            state.gold = 456;
+            state.player.transport = TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE,
+                sails_hoisted: false,
+                hull,
+                skiffs: 1,
+            };
+            let panel = state.render_stats_panel_view();
+            panel.lines().nth(6).unwrap().to_string()
+        };
+
+        let column = |row: &str, absolute: u8| {
+            row.chars()
+                .nth(usize::from(absolute - STATS_PANEL_TEXT_LEFT))
+                .unwrap()
+        };
+
+        let single_digit = ship_panel(7);
+        assert_eq!(single_digit.chars().count(), STATS_PANEL_WIDTH);
+        assert_eq!(&single_digit, "F:123   Ship:7 ");
+        for (offset, expected) in STATS_PANEL_SHIP_HULL_LABEL.chars().enumerate() {
+            assert_eq!(
+                column(
+                    &single_digit,
+                    STATS_PANEL_MIDDLE_COUNTER_COLUMN + offset as u8
+                ),
+                expected,
+            );
+        }
+        assert_eq!(column(&single_digit, 37), '7');
+        assert_eq!(column(&single_digit, 38), ' ');
+
+        // Two-digit hulls drop the trailing space and still fill the
+        // group's last cell, column 38.
+        let two_digit = ship_panel(77);
+        assert_eq!(&two_digit, "F:123   Ship:77");
+        assert_eq!(column(&two_digit, 37), '7');
+        assert_eq!(column(&two_digit, 38), '7');
+
+        // The gold variant keeps its own right-justified ladder: the
+        // last gold digit lands in column 38.
+        let mut state = test_state(open_grid(), 1, 1);
+        state.food = 123;
+        state.gold = 456;
+        let gold_row = state.render_stats_panel_view();
+        let gold_row = gold_row.lines().nth(6).unwrap();
+        assert_eq!(gold_row, "F:123     G:456");
+        assert_eq!(column(gold_row, 38), '6');
+    }
+
+    /// `stats-panel.md §4.1`: "The marker is drawn on the row whose slot
+    /// equals the resident active-player selector, with one exception:
+    /// if that member's status byte is `'D'` (dead) or `'S'` (sleeping),
+    /// a space is drawn instead **and the selector is reset to the none
+    /// sentinel**. ... The marker is persistent: it survives any number
+    /// of refreshes and is cleared only by an explicit selection change
+    /// or by the dead/sleeping rule above."
+    #[test]
+    fn stats_panel_frame_resets_only_a_dead_or_sleeping_active_player_cursor() {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_player = Some(0);
 
         let visible_panel = state.render_stats_panel_frame();
 
         assert!(visible_panel.lines().next().unwrap().contains(">"));
-        assert_eq!(state.active_player, None);
+        assert_eq!(state.active_player, Some(0));
 
-        state.active_player = Some(0);
+        // Persistent across any number of refreshes.
+        let repeat_panel = state.render_stats_panel_frame();
+        assert!(repeat_panel.lines().next().unwrap().contains(">"));
+        assert_eq!(state.active_player, Some(0));
+
         state.party[0].status = b'S';
         let sleeping_panel = state.render_stats_panel_frame();
 
         assert!(!sleeping_panel.lines().next().unwrap().contains(">"));
-        assert_eq!(state.active_player, Some(0));
+        assert_eq!(state.active_player, None);
+
+        state.active_player = Some(0);
+        state.party[0].status = b'D';
+        let dead_panel = state.render_stats_panel_frame();
+
+        assert!(!dead_panel.lines().next().unwrap().contains(">"));
+        assert_eq!(state.active_player, None);
     }
 
     #[test]
@@ -2575,7 +2735,14 @@
                 .first()
                 .unwrap()
                 .trim_end(),
-            "Avatar   >  60G"
+            // This reads the emitted CELL SURFACE, so it carries the
+            // fixed-cell font glyph `0x1A` (stats-panel.md section 4,
+            // column 33), not the `'>'` stand-in that the plain-text
+            // transcription uses.
+            format!(
+                "Avatar   {}  60G",
+                char::from(crate::stats_panel::STATS_PANEL_ACTIVE_MARKER_GLYPH)
+            )
         );
         assert_eq!(
             system.cell(STATS_PANEL_TEXT_LEFT, STATS_ROSTER_TOP).unwrap().byte,
@@ -2587,6 +2754,75 @@
                 .unwrap()
                 .byte,
             b'j'
+        );
+    }
+
+    #[test]
+    fn stats_refresh_emits_timed_effect_through_stats_window_then_reselects_message() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_effect_tag = Some(b'P');
+        let mut system = TextWindowSystem::new();
+        configure_play_text_windows(&mut system);
+        let message_cursor = system
+            .window(MESSAGE_TEXT_WINDOW_INDEX)
+            .map(|window| (window.cursor_x, window.cursor_y))
+            .unwrap();
+
+        paint_stats_panel_text_window(&mut system, &state, state.active_player);
+
+        assert_eq!(system.active_window_index(), MESSAGE_TEXT_WINDOW_INDEX);
+        assert_eq!(
+            system
+                .window(MESSAGE_TEXT_WINDOW_INDEX)
+                .map(|window| (window.cursor_x, window.cursor_y)),
+            Some(message_cursor)
+        );
+        let stats = system.window(STATS_PANEL_TEXT_WINDOW_INDEX).unwrap();
+        assert_eq!(
+            (stats.cursor_x, stats.cursor_y),
+            (
+                STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN + 3,
+                STATS_PANEL_TIMED_EFFECT_LOCAL_ROW
+            )
+        );
+        assert_eq!(system.cell(30, 7).unwrap().byte, RIBBON_CAP_RIGHT_SOURCE_GLYPH);
+        assert_eq!(system.cell(31, 7).unwrap().byte, b'P');
+        assert_eq!(system.cell(32, 7).unwrap().byte, RIBBON_CAP_LEFT_SOURCE_GLYPH);
+    }
+
+    #[test]
+    fn zero_effect_leaves_plain_band_cursor_at_the_published_origin() {
+        let state = test_state(open_grid(), 1, 1);
+        let mut system = TextWindowSystem::new();
+        configure_play_text_windows(&mut system);
+
+        paint_stats_panel_text_window(&mut system, &state, state.active_player);
+
+        let stats = system.window(STATS_PANEL_TEXT_WINDOW_INDEX).unwrap();
+        assert_eq!(
+            (stats.cursor_x, stats.cursor_y),
+            (
+                STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN,
+                STATS_PANEL_TIMED_EFFECT_LOCAL_ROW
+            )
+        );
+        assert!((30..=32).all(|column| system.cell(column, 7).is_none()));
+        assert_eq!(system.active_window_index(), MESSAGE_TEXT_WINDOW_INDEX);
+    }
+
+    #[test]
+    fn imported_status_byte_uses_the_shared_emitter_control_path() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party[0].status = TEXT_CTRL_INVERSE_TOGGLE;
+        let mut system = TextWindowSystem::new();
+        configure_play_text_windows(&mut system);
+
+        paint_stats_panel_text_window(&mut system, &state, state.active_player);
+
+        assert!(system.cell(38, 1).is_none(), "the control is not a glyph");
+        assert!(
+            system.cell(24, 2).unwrap().inverse,
+            "the imported toggle affects the next row through the shared emitter"
         );
     }
 
@@ -2921,11 +3157,25 @@
         assert_eq!(system.active_cursor(), (4, 12));
     }
 
+    /// `stats-panel.md §11`: "Draw the active-player marker on every
+    /// refresh while a member is selected; it is persistent, not
+    /// consumed by the refresh. Clear the selector only when the
+    /// selected member is dead or sleeping, or when a command changes
+    /// the selection."
     #[test]
-    fn play_text_window_frame_consumes_active_cursor_like_stats_panel() {
+    fn play_text_window_frame_keeps_active_cursor_like_stats_panel() {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_player = Some(0);
 
+        // `render_text_window_frame` reads back the **emitted cell
+        // stream**, so the marker here is the font glyph code, not an
+        // ASCII character: `stats-panel.md §4` party-row column 33 is
+        // "the fixed-cell font's right-pointing arrow, glyph code
+        // `0x1A`, or a space". (The plain-text transcription
+        // `render_stats_panel_view` keeps `'>'` as a terminal stand-in;
+        // see the assertions at the top of this file and in
+        // `stats_panel_combat_overlay_brackets_active_player_cursor_with_inverse_video`.)
+        let marker = char::from(crate::stats_panel::STATS_PANEL_ACTIVE_MARKER_GLYPH);
         let visible_frame = state.render_text_window_frame(None);
 
         assert!(
@@ -2933,16 +3183,25 @@
                 .lines()
                 .nth(usize::from(STATS_ROSTER_TOP))
                 .unwrap()
-                .contains(">")
+                .contains(marker)
         );
-        assert_eq!(state.active_player, None);
+        assert_eq!(state.active_player, Some(0));
 
-        state.active_player = Some(0);
+        let repeat_frame = state.render_text_window_frame(None);
+        assert!(
+            repeat_frame
+                .lines()
+                .nth(usize::from(STATS_ROSTER_TOP))
+                .unwrap()
+                .contains(marker)
+        );
+        assert_eq!(state.active_player, Some(0));
+
         state.party[0].status = b'S';
         let sleeping_frame = state.render_text_window_frame(None);
 
-        assert!(!sleeping_frame.lines().nth(1).unwrap().contains(">"));
-        assert_eq!(state.active_player, Some(0));
+        assert!(!sleeping_frame.lines().nth(1).unwrap().contains(marker));
+        assert_eq!(state.active_player, None);
     }
 
     #[test]
@@ -2996,10 +3255,25 @@
                 .unwrap_or(false)
         );
 
+        // stats-panel.md §5 / combat.md §6.1a: casting has NO panel
+        // letter. The "casting and self-targeted" reading of the `C`
+        // glyph is withdrawn - a mid-cast member keeps their ordinary
+        // roster status letter.
         state.active_cast = Some(CastSession::for_combat_actor(0, true));
-        let casting_overlay = stats_panel_combat_row_overlay(&state, 0);
+        assert_eq!(
+            stats_panel_combat_row_overlay(&state, 0).status_override,
+            None
+        );
+        state.active_cast = None;
 
-        assert_eq!(casting_overlay.status_override, Some(b'C'));
+        // The glyph marks the controlled/charmed bit 0x01 on the
+        // row's OWN descriptor: party-side set, monster-side clear,
+        // not marked dead, controlled, and the owner/character field
+        // naming this same row.
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+        let controlled_overlay = stats_panel_combat_row_overlay(&state, 0);
+
+        assert_eq!(controlled_overlay.status_override, Some(b'C'));
         assert!(
             state
                 .render_stats_panel_view()
@@ -3007,6 +3281,36 @@
                 .next()
                 .unwrap()
                 .ends_with('C')
+        );
+
+        // combat.md §6.1: the asleep/magically-disabled bit 0x08 is
+        // not part of the test, so a sleeping controlled member still
+        // shows `C`.
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+        assert_eq!(
+            stats_panel_combat_row_overlay(&state, 0).status_override,
+            Some(b'C')
+        );
+        state.combat_actors[0].flags &= !COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+
+        // Marked dead clears it, as does the monster-side marker, as
+        // does an owner/character field naming a different row.
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_MARKED_DEAD;
+        assert_eq!(
+            stats_panel_combat_row_overlay(&state, 0).status_override,
+            None
+        );
+        state.combat_actors[0].flags &= !COMBAT_ACTOR_FLAG_MARKED_DEAD;
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_SELECTABLE_40;
+        assert_eq!(
+            stats_panel_combat_row_overlay(&state, 0).status_override,
+            None
+        );
+        state.combat_actors[0].flags &= !COMBAT_ACTOR_FLAG_SELECTABLE_40;
+        state.combat_actors[0].owner_target_class = 1;
+        assert_eq!(
+            stats_panel_combat_row_overlay(&state, 0).status_override,
+            None
         );
     }
 
@@ -3030,13 +3334,21 @@
         let panel = state.render_stats_panel_view();
         let row = panel.lines().next().unwrap();
 
+        // Plain-text transcription path: `'>'` is the engine-local
+        // terminal stand-in for the marker, the same way the
+        // arms-browser page badges (`0x01`/`0x02`/`0x19`) are simply
+        // absent from this view.
         assert!(row.contains('>'));
         let cursor_column = STATS_PANEL_TEXT_LEFT + STATS_PANEL_NAME_CELLS as u8;
         let last_column = STATS_PANEL_TEXT_LEFT + STATS_PANEL_WIDTH as u8 - 1;
         let system = render_play_text_window_system(&state, state.active_player, None);
+        // Emitted-cell path: `stats-panel.md §4` party-row column 33 is
+        // "the fixed-cell font's right-pointing arrow, glyph code
+        // `0x1A`, or a space", so the byte that reaches `IBM.CH` is
+        // `0x1A` and not the ASCII arrow asserted three lines above.
         assert_eq!(
             system.cell(cursor_column, STATS_ROSTER_TOP).unwrap().byte,
-            b'>'
+            crate::stats_panel::STATS_PANEL_ACTIVE_MARKER_GLYPH
         );
         assert!(system.cell(cursor_column, STATS_ROSTER_TOP).unwrap().inverse);
         assert!(system.cell(last_column, STATS_ROSTER_TOP).unwrap().inverse);
@@ -3102,7 +3414,11 @@
         let panel = state.render_stats_panel_view();
         let middle = panel.lines().nth(STATS_PANEL_PARTY_ROWS).unwrap();
 
-        assert!(middle.contains("H:42"), "{middle}");
+        // stats-panel.md §6: the ship variant writes the literal
+        // `Ship:` in columns 32..36 followed by the hull value, not
+        // an unlabelled abbreviation.
+        assert_eq!(middle, "F:63    Ship:42", "{middle}");
+        assert!(middle.contains(STATS_PANEL_SHIP_HULL_LABEL), "{middle}");
         assert!(!middle.contains("999"), "{middle}");
     }
 

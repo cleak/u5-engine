@@ -233,11 +233,12 @@ pub enum TownNpcAttackResolution {
     Refused,
 }
 
-/// `town-mode.md §4, §10` and `catalogs/npc-roster.md §4`: only
-/// the rare `0x0E` actor class participates in the town
-/// activation/death mask. Ordinary town actors may still be live
-/// NPCs, but attacking them must not create a persistent removed
-/// marker for scene re-entry.
+/// `town-mode.md §4` and `catalogs/npc-roster.md §4`: the sandalwood-box
+/// object class `0x0E`, the story-object roster slot in Lord British's
+/// Castle that `G` Get consumes. Its removal is one of the two writes
+/// that "bypass the sprite-class filter and are written directly against
+/// a fixed location and slot", so it keeps its own predicate rather than
+/// riding the shared write-path filter below.
 pub const fn town_npc_activation_mask_eligible(type_byte: u8) -> bool {
     type_byte == 0x0E
 }
@@ -246,14 +247,87 @@ pub const fn town_npc_type_guard_like(type_byte: u8) -> bool {
     matches!(type_byte, 0x70..=0x7f)
 }
 
-pub const fn town_npc_attack_resolution(type_byte: u8) -> TownNpcAttackResolution {
+/// `town-mode.md §4` ("Which removals are recorded"): the write path for
+/// the per-scene removal mask filters on the NPC's sprite class.
+///
+/// | Sprite class group | Recorded as permanently gone? |
+/// |---|---|
+/// | The human/townsperson sprite classes | Yes |
+/// | The guard sprite group | **No** |
+/// | Every creature sprite class | **No** |
+/// | The royal-regalia sprite group (shard, crown, sceptre, amulet) | Yes |
+///
+/// "So killing a townsperson or a named character is permanent: that slot
+/// is never placed again in that location. Killing a guard or a monster
+/// is not recorded at all, and those slots are placed again on the very
+/// next entry." The townsperson band is the ordinary town-actor band
+/// `town-mode.md §14` already publishes for the forced-flight helper,
+/// minus the guard group; the regalia group is the four object tags
+/// `systems/containers.md §8` names as shard/crown/sceptre/amulet. The
+/// sandalwood box keeps its bypass so its pickup still records.
+pub const fn town_npc_removal_recorded(type_byte: u8) -> bool {
     if town_npc_activation_mask_eligible(type_byte) {
+        return true;
+    }
+    if town_npc_type_guard_like(type_byte) {
+        return false;
+    }
+    (TOWN_NPC_ORDINARY_TYPE_FIRST <= type_byte && type_byte <= TOWN_NPC_ORDINARY_TYPE_LAST)
+        || (TOWN_NPC_REGALIA_TYPE_FIRST <= type_byte && type_byte <= TOWN_NPC_REGALIA_TYPE_LAST)
+}
+
+/// `town-mode.md §10` ("Attack"): "killing a townsperson or a named
+/// character records that slot as permanently removed in the per-scene
+/// removal mask (Section 4), while killing a guard or a creature records
+/// nothing and that slot is placed again on the next entry." The
+/// recorded-class test runs first so a guard inside the ordinary band
+/// still lands on the alarm arm rather than the death mask.
+pub const fn town_npc_attack_resolution(type_byte: u8) -> TownNpcAttackResolution {
+    if town_npc_removal_recorded(type_byte) {
         TownNpcAttackResolution::DeathMask
     } else if town_npc_type_guard_like(type_byte) {
         TownNpcAttackResolution::AlarmOnly
     } else {
         TownNpcAttackResolution::Refused
     }
+}
+
+/// `town-mode.md §14`: "The town overlay has a live NPC-conflict chain,
+/// entered both from A-Attack and from post-action cleanup, that hands
+/// the target NPC's linked active-object slot to the same terrain-combat
+/// entry the overworld uses, so a town fight is an ordinary arena fight:
+/// ordinary town ground resolves to the cobble arena, and the
+/// scene-keyed town-style override forces the monster count to one
+/// unless the target's class is Guard (whose stat row carries the
+/// sentinel count eight)." The earlier reading - that A-Attack "stays
+/// inside town mode; it does not call the combat framer or swap to a
+/// `.CBT` arena" - is withdrawn.
+///
+/// The chain is for the location's *actors*: the ordinary townsperson
+/// band and the guard group. The §4 royal-regalia tags and the
+/// sandalwood box are story objects rather than combatants, so they keep
+/// the in-town removal path.
+pub const fn town_npc_attack_enters_conflict(type_byte: u8) -> bool {
+    (TOWN_NPC_ORDINARY_TYPE_FIRST <= type_byte && type_byte <= TOWN_NPC_ORDINARY_TYPE_LAST)
+        || town_npc_type_guard_like(type_byte)
+}
+
+/// `town-mode.md §14` town NPC-conflict chain, carried across the arena
+/// fight: "On exit the town chain clears the NPC slot, reloads the town
+/// map, and re-runs the Shadowlord install pass of Section 13 (which, in
+/// a hideout town whose Shadowlord is still standing in the
+/// active-object table, is rejected by the one-at-a-time check and does
+/// nothing)."
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PendingTownConflict {
+    pub scene_byte: u8,
+    pub floor: i8,
+    pub npc_slot: usize,
+    pub type_byte: u8,
+    /// Set once the exit chain's slot-clear half has run on combat
+    /// restore. The map reload and the Shadowlord re-install still owe a
+    /// game directory, so they are drained at the input boundary.
+    pub awaiting_floor_reload: bool,
 }
 
 /// `town-mode.md §5`: returns `true` when town entry hit the
@@ -416,6 +490,15 @@ pub const NPC_SCHEDULE_TIME_OFFSET: usize = NPC_SCHEDULE_Z_OFFSET + NPC_SCHEDULE
 /// `town-mode.md §§13-14`: destructive alarm/Shadowlord schedule rewrites.
 pub const TOWN_NPC_ORDINARY_TYPE_FIRST: u8 = 0x40;
 pub const TOWN_NPC_ORDINARY_TYPE_LAST: u8 = 0x73;
+/// `town-mode.md §4` royal-regalia sprite group — "shard, crown,
+/// sceptre, amulet". The four tags are the object ids
+/// `systems/containers.md §8` gives for the Shadowlord shard (`0xB4`),
+/// the Crown (`0xB5`), the Sceptre (`0xB6`), and the Amulet (`0xB7`);
+/// `catalogs/npc-roster.md §4` carries `B5`/`B6` as live roster tags.
+/// Removals in this group are recorded even though the group sits
+/// outside the ordinary townsperson band.
+pub const TOWN_NPC_REGALIA_TYPE_FIRST: u8 = 0xB4;
+pub const TOWN_NPC_REGALIA_TYPE_LAST: u8 = 0xB7;
 pub const TOWN_NPC_ALARM_GUARD_TYPE: u8 = 0x70;
 pub const TOWN_NPC_ALARM_LICH_TYPE: u8 = 0xD8;
 pub const TOWN_NPC_FORCED_FLIGHT_AI: u8 = 3;

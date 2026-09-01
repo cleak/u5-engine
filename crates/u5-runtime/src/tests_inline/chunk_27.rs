@@ -545,50 +545,77 @@ fn chrome_paint_takes_its_two_colours_as_parameters() {
 }
 
 #[test]
-fn shipped_palette_is_stock_except_dark_yellow_at_index_six() {
-    // `formats/tiles.md` section 7: the palette shipped in the resident
-    // screen descriptor is the stock set for the mode with exactly one
-    // substitution - index six is dark yellow, not brown. Rendering it
-    // as brown gets the game's dark-yellow tones wrong everywhere they
-    // appear, so this guards against anyone "restoring" the stock
-    // hardware default.
-    const STOCK: [[u8; 3]; 16] = [
-        [0x00, 0x00, 0x00],
-        [0x00, 0x00, 0xaa],
-        [0x00, 0xaa, 0x00],
-        [0x00, 0xaa, 0xaa],
-        [0xaa, 0x00, 0x00],
-        [0xaa, 0x00, 0xaa],
-        STOCK_EGA_BROWN,
-        [0xaa, 0xaa, 0xaa],
-        [0x55, 0x55, 0x55],
-        [0x55, 0x55, 0xff],
-        [0x55, 0xff, 0x55],
-        [0x55, 0xff, 0xff],
-        [0xff, 0x55, 0x55],
-        [0xff, 0x55, 0xff],
-        [0xff, 0xff, 0x55],
-        [0xff, 0xff, 0xff],
-    ];
-
+fn palette_index_six_resolves_per_display_model() {
+    // `formats/tiles.md` section 7 and `systems/display-driver-mode.md`
+    // section 5.2 say the shipped descriptor substitutes dark yellow
+    // for the firmware's brown at index six. That is correct, and this
+    // test pins it. An earlier revision asserted the reverse on the
+    // strength of captures showing brown; see `EGA_PALETTE_RGB` for why
+    // those captures are consistent with a dark-yellow register.
+    //
+    // The register table and the display model are pinned separately on
+    // purpose, because conflating them is what produced two wrong
+    // reverts.
     assert_eq!(
-        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX],
-        SHIPPED_PALETTE_DARK_YELLOW,
-        "index six must be dark yellow"
-    );
-    assert_ne!(
-        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX],
-        STOCK_EGA_BROWN,
-        "index six must not be the stock brown"
+        SHIPPED_PALETTE_REGISTERS[SHIPPED_PALETTE_DEVIATING_INDEX], 0x06,
+        "the program overwrites the firmware brown with 0x06"
     );
 
-    // Every other entry matches stock, and index six is the only
-    // deviation - "that single substitution is the only way the game's
-    // palette differs from the hardware default".
-    let deviations: Vec<usize> = (0..16)
-        .filter(|index| EGA_PALETTE_RGB[*index] != STOCK[*index])
-        .collect();
-    assert_eq!(deviations, vec![SHIPPED_PALETTE_DEVIATING_INDEX]);
+    // `display-driver-mode.md §5.2` makes the enhanced-display colour space
+    // the v1 baseline. Period-monitor brown is a supported alternate model,
+    // not the default renderer contract.
+    assert_eq!(DISPLAY_MODEL, MonitorModel::Enhanced);
+    assert_eq!(
+        EGA_PALETTE_RGB[SHIPPED_PALETTE_DEVIATING_INDEX], SHIPPED_PALETTE_DARK_YELLOW,
+        "v1 index six renders the shipped 0x06 register as dark yellow"
+    );
+    assert!(
+        EGA_PALETTE_RGB.contains(&SHIPPED_PALETTE_DARK_YELLOW),
+        "the v1 palette must expose the deliberate dark-yellow substitution"
+    );
+
+    // Every other slot is the stock set, so index six is the only place
+    // the two models can ever disagree.
+    for index in 0..16 {
+        assert_eq!(
+            EGA_PALETTE_RGB[index],
+            resolve_palette_register(SHIPPED_PALETTE_REGISTERS[index], DISPLAY_MODEL),
+            "index {index} must follow the register table"
+        );
+        if index != SHIPPED_PALETTE_DEVIATING_INDEX {
+            assert_eq!(
+                resolve_palette_register(SHIPPED_PALETTE_REGISTERS[index], MonitorModel::Enhanced),
+                resolve_palette_register(SHIPPED_PALETTE_REGISTERS[index], MonitorModel::Period200Line),
+                "the 200-line correction must touch index six and nothing else"
+            );
+        }
+    }
+
+    // The period model is the one that yields the brown every capture
+    // shows, and it is keyed to the value rather than the index - which
+    // is the fact that reconciles the captures with the spec. Writing
+    // 0x06 into any other register browns that register too.
+    assert_eq!(
+        resolve_palette_register(0x06, MonitorModel::Period200Line),
+        STOCK_EGA_BROWN
+    );
+    assert_eq!(
+        resolve_palette_register(0x06, MonitorModel::Enhanced),
+        SHIPPED_PALETTE_DARK_YELLOW
+    );
+    // Register six holding some other value is unaffected by it.
+    assert_eq!(
+        resolve_palette_register(0x02, MonitorModel::Period200Line),
+        [0x00, 0xaa, 0x00],
+        "the correction keys off the value 0x06, not off index six"
+    );
+
+    // Spot-check the six-bit decode itself against known values, so a
+    // broken decoder cannot make the assertions above vacuously true.
+    assert_eq!(resolve_palette_register(0x14, MonitorModel::Enhanced), STOCK_EGA_BROWN);
+    assert_eq!(resolve_palette_register(0x3f, MonitorModel::Enhanced), [0xff, 0xff, 0xff]);
+    assert_eq!(resolve_palette_register(0x00, MonitorModel::Enhanced), [0x00, 0x00, 0x00]);
+    assert_eq!(resolve_palette_register(0x01, MonitorModel::Enhanced), [0x00, 0x00, 0xaa]);
 }
 
 #[test]

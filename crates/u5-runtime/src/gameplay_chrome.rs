@@ -1066,9 +1066,11 @@ fn draw_glyph(
 ) {
     let mut mask = [0u8; CH_CELL_SIDE];
     for (glyph_row, bits) in mask.iter_mut().enumerate() {
-        *bits = font
-            .glyph_row(code, glyph_row)
-            .unwrap_or_else(|| panic!("fixed-cell glyph {code:#04x} row {glyph_row} missing"));
+        *bits = font.glyph_row(code, glyph_row).unwrap_or_else(|| {
+            panic!(
+                "fixed-cell glyph {code:#04x} row {glyph_row} missing at column {column}                  row {row}: the caller handed the renderer a code this font does not                  cover. That usually means an unmasked high byte reached the text path                  — `paint_label_content` masks with 0x7F, so a code above 0x7F here came                  from a rune/sky-strip caller or from asset text that was not decoded."
+            )
+        });
     }
     draw_mask(rgba, width, height, &mask, column, row, palette_index);
 }

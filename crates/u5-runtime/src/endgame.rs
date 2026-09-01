@@ -467,7 +467,17 @@ impl EndgameState {
                 .messages
                 .as_ref()
                 .and_then(|messages| messages.rite_messages().get(index as usize))
-                .cloned()
+                .map(|message| {
+                    if index == 1 && self.cinematic.rite_lead_in_visible {
+                        format!(
+                            "\n{}\n\n{}",
+                            crate::endgame_cinematic::ENDGAME_RITE_LEAD_IN,
+                            message
+                        )
+                    } else {
+                        message.clone()
+                    }
+                })
                 .unwrap_or_else(|| {
                     panic!(
                         "endgame victory rite beat {index} has no ENDMSG.DAT record; displaying the step's debug banner label instead is a forbidden fallback (endgame.md §7)"
@@ -1243,6 +1253,19 @@ impl PlayState {
                 .unwrap_or_default();
             return true;
         }
+        let advanced_rite_pause = self
+            .endgame
+            .as_mut()
+            .is_some_and(|endgame| endgame.cinematic.advance_rite_pause_tick(true));
+        if advanced_rite_pause {
+            self.animation.tick_static_tiles();
+            self.message = self
+                .endgame
+                .as_ref()
+                .map(|endgame| endgame.current_cinematic_text())
+                .unwrap_or_default();
+            return true;
+        }
         let advanced = self
             .endgame
             .as_mut()
@@ -1336,9 +1359,15 @@ impl PlayState {
                         )
                     });
                 self.message.push_str(&format!("\n{name} lives!\n"));
-                // The frontend has no PC-speaker backend. This tick retains
-                // the published blocking restoration beat; the ordinary
-                // status/tableau compositor performs the post-flourish redraw.
+                // audio.md §8.7: after the restoration announcement and the
+                // one gameplay-rectangle fill, and before the full stats-panel
+                // redraw, run envelope (1, 5000, 40000, 1, 8800). It is a
+                // single blocking flourish per restored member, so it belongs
+                // on this one restoration beat and not on the placement or
+                // walk-in beats that follow.
+                self.emit_sound_effect(SoundEffect::EndgameRestoration);
+                // The ordinary status/tableau compositor performs the
+                // post-flourish redraw.
                 self.animation.tick_static_tiles();
                 return true;
             }
@@ -1681,6 +1710,16 @@ impl PlayState {
         match phase {
             EndgameVictoryTableauPhase::Inactive => self.present_endgame_orb_frame(),
             EndgameVictoryTableauPhase::OrbAwaitingAcknowledgement => {
+                // endgame.md §7 step 7: "Change slot 6's actor byte to
+                // `0x08`, the Orb spark - the box opens. A blocking key read
+                // and a speaker sting follow." This arm is that key read's
+                // resolution, so the sting sounds here, after the
+                // acknowledgement and before step 8 clears the slot.
+                // audio.md §8.7 supplies the envelope only:
+                // "the later box/tableau presentation uses envelope
+                // (1, 10000, 50000, 1, 5200)". Reaching this arm moves the
+                // phase to `GateRise`, so it sounds once per tableau.
+                self.emit_sound_effect(SoundEffect::EndgameTableau);
                 self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_BOX_SLOT);
                 let (x, y) = ENDGAME_GATE_CELL;
                 if let Some(cell) = self.grid.get_mut(y * TOWN_GRID_SIDE + x) {
@@ -1709,6 +1748,9 @@ impl PlayState {
         }
         box_object.type_byte = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
         box_object.tile = ENDGAME_TABLEAU_ORB_ACTOR_BYTE;
+        // endgame.md §7 step 7: the swap is silent. "A blocking key read
+        // and a speaker sting follow" - the sting belongs after the read,
+        // in the acknowledgement arm of the exit step.
         if let Some(endgame) = self.endgame.as_mut() {
             endgame.victory_tableau_phase = EndgameVictoryTableauPhase::OrbAwaitingAcknowledgement;
         }

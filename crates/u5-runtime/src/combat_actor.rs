@@ -12,15 +12,17 @@ pub const COMBAT_ACTOR_SLOTS: usize = crate::OOL_SLOTS;
 /// [`crate::SAVE_PARTY_SIZE_MAX`] so the combat party cap and
 /// the save-file roster cap stay one value.
 pub const COMBAT_PARTY_ACTOR_SLOTS: usize = crate::SAVE_PARTY_SIZE_MAX as usize;
-/// `active-objects.md §7`: combat caps total combatants (party + monsters)
-/// at twenty-six. Monster placement runs in slots 1..=25.
-pub const COMBAT_MONSTER_SLOT_FIRST: usize = 1;
-pub const COMBAT_MONSTER_SLOT_LAST: usize = 25;
-/// `active-objects.md §7`: combat caps total combatants at the
-/// last monster slot index plus one (slots 0..=25 = 26 records).
-/// Anchored to [`COMBAT_MONSTER_SLOT_LAST`] + 1 so resizing the
-/// monster band only happens in one place.
-pub const COMBAT_MAX_COMBATANTS: usize = COMBAT_MONSTER_SLOT_LAST + 1;
+// `active-objects.md §7`: "Within combat there is no reserved
+// player slot and no twenty-six-combatant cap; earlier drafts of
+// this section claimed both and were wrong." The withdrawn reading
+// used to live here as `COMBAT_MONSTER_SLOT_FIRST` = 1,
+// `COMBAT_MONSTER_SLOT_LAST` = 25 and `COMBAT_MAX_COMBATANTS` = 26.
+// The setup pass clears all thirty-two records, seats the party in
+// the first free records in roster order, and takes the next free
+// records for monsters, so there is no fixed monster band. The hard
+// limits are [`COMBAT_ACTOR_SLOTS`] (the thirty-two records) and,
+// for terrain combat, the sixteen arena placement slots
+// ([`crate::CBT_PLACEMENT_SLOT_COUNT`]).
 /// `active-objects.md §7`: each combat actor record shares the
 /// 8-byte active-object record layout. Anchored to
 /// [`crate::OOL_RECORD_LEN`] so the combat-side record stride
@@ -187,6 +189,10 @@ pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
 pub const COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED: u8 = 0x04;
+/// `combat.md §6.3`: branch-specific narration already emitted.
+pub const COMBAT_ACTION_RESULT_VANISH_NARRATED: u8 = 0x02;
+/// `combat.md §6.3`: normal sleep helper result, replacing the whole field.
+pub const COMBAT_ACTION_RESULT_SLEEP: u8 = 0x04;
 pub const COMBAT_NO_TARGET_FLEE_MIN_SLOT: usize = 5;
 pub const COMBAT_NO_TARGET_FLEE_MAX_SLOT: usize = 25;
 pub const COMBAT_NO_TARGET_FLEE_STEP_QUEUE: u8 = 1;
@@ -197,14 +203,20 @@ pub const COMBAT_INSTANT_KILL_DAMAGE: i16 = 99;
 pub const COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX: u8 = 99;
 /// `combat.md` death-marker table: party-member corpse marker.
 pub const COMBAT_PARTY_CORPSE_TILE: u8 = 0x1E;
-/// `combat.md` death-marker table: default monster death/drop marker.
-/// Drop and no-drop outcomes share this tile; byte five records
-/// promoted loot when a drop gate accepts.
-pub const COMBAT_DEFAULT_DEATH_MARKER_TILE: u8 = 0x01;
-/// Back-compatible name for the default monster death/drop marker.
-pub const COMBAT_DEFAULT_DEATH_DROP_TILE: u8 = COMBAT_DEFAULT_DEATH_MARKER_TILE;
-/// Back-compatible name for the default monster death/no-drop marker.
-pub const COMBAT_DEFAULT_DEATH_NO_DROP_TILE: u8 = COMBAT_DEFAULT_DEATH_MARKER_TILE;
+/// `combat.md §6.3` death-marker table, ordinary monster with the drop
+/// roll **accepted**: "`0x01` (dead-monster / drop marker)". "The
+/// accepted-drop marker is a chest object, and its byte-5 high bit is
+/// the ordinary lock/trap flag."
+pub const COMBAT_DEFAULT_DEATH_DROP_TILE: u8 = 0x01;
+/// `combat.md §6.3` death-marker table, ordinary monster with the drop
+/// roll **rejected**: `0x1F`, the moldy corpse. Numerically equal to
+/// [`COMBAT_GAZER_DEATH_MARKER_TILE`] but a separate contract - "Most
+/// stock monster classes have a zero drop cap, so `0x1F` is by far the
+/// most common ordinary corpse marker in play."
+pub const COMBAT_DEFAULT_DEATH_NO_DROP_TILE: u8 = 0x1F;
+/// Back-compatible name for the accepted-drop marker only. The drop and
+/// no-drop outcomes are two distinct tile ids, not one.
+pub const COMBAT_DEFAULT_DEATH_MARKER_TILE: u8 = COMBAT_DEFAULT_DEATH_DROP_TILE;
 /// `combat.md` death-marker table: vanish-on-death marker.
 pub const COMBAT_VANISH_DEATH_MARKER_TILE: u8 = 0x16;
 /// `combat.md` death-marker table: Gazer eye-burst marker.
@@ -272,11 +284,15 @@ pub const COMBAT_CONTACT_TERRAIN_SWAMP: u8 = 0x04;
 pub const COMBAT_CONTACT_TERRAIN_MOLTEN_LAVA: u8 = 0x8f;
 pub const COMBAT_CONTACT_TERRAIN_FIREPLACE: u8 = 0xbc;
 pub const COMBAT_FIELD_CURSOR_RANGE: u8 = (COMBAT_ARENA_SIDE - 1) as u8;
-pub const COMBAT_ROUND_RESULT_DEFEAT: u8 = 0;
-pub const COMBAT_ROUND_RESULT_SUCCESS: u8 = COMBAT_ROUND_RESULT_DEFEAT + 1;
-pub const COMBAT_TARGET_GROUP_NEUTRAL: u8 = 0;
-pub const COMBAT_TARGET_GROUP_PARTY: u8 = COMBAT_TARGET_GROUP_NEUTRAL + 1;
-pub const COMBAT_TARGET_GROUP_MONSTER: u8 = COMBAT_TARGET_GROUP_PARTY + 1;
+/// The round walker returns zero after cleanup empties both sides and one when
+/// the party side is gone while foes remain. The framer discards this word.
+pub const COMBAT_ROUND_RESULT_SUCCESS: u8 = 0;
+pub const COMBAT_ROUND_RESULT_DEFEAT: u8 = 1;
+/// Internal sentinel used only when no descriptor slot exists. Published
+/// combat has two acting groups: party-aligned group 0 and hostile group 1.
+pub const COMBAT_TARGET_GROUP_NEUTRAL: u8 = 2;
+pub const COMBAT_TARGET_GROUP_PARTY: u8 = 0;
+pub const COMBAT_TARGET_GROUP_MONSTER: u8 = 1;
 pub const COMBAT_HIDDEN_ACTIVE_OBJECT_TILE: u8 = 0x00;
 pub const COMBAT_ARENA_CENTER_COORDINATE: u8 = (COMBAT_ARENA_SIDE / 2) as u8;
 
@@ -518,6 +534,31 @@ pub enum CombatSceneAbortVerb {
     Xit,
 }
 
+/// The command key that selects each abort verb, as the parser table below
+/// assigns them.
+///
+/// `audio.md §8.8` names the same twelve keys as the scope of the refusal
+/// sound - "`B` Board, `E` Enter, `F` Fire, `H` Hole up, `I` Ignite, `L` Look,
+/// `M` Mix, `N` New order, `Q` Quit, `T` Talk, `V` View, `X` X-it" - and the
+/// audio gate is stated over keys, so this is the inverse of
+/// [`resolve_combat_command_branch`]'s twelve `SceneMessageAbort` rows.
+pub const fn combat_scene_abort_verb_key(verb: CombatSceneAbortVerb) -> char {
+    match verb {
+        CombatSceneAbortVerb::Board => 'B',
+        CombatSceneAbortVerb::Enter => 'E',
+        CombatSceneAbortVerb::Fire => 'F',
+        CombatSceneAbortVerb::HoleUp => 'H',
+        CombatSceneAbortVerb::IgniteTorch => 'I',
+        CombatSceneAbortVerb::Look => 'L',
+        CombatSceneAbortVerb::Mix => 'M',
+        CombatSceneAbortVerb::NewOrder => 'N',
+        CombatSceneAbortVerb::Quit => 'Q',
+        CombatSceneAbortVerb::Talk => 'T',
+        CombatSceneAbortVerb::View => 'V',
+        CombatSceneAbortVerb::Xit => 'X',
+    }
+}
+
 pub const fn combat_scene_abort_verb_prefix(verb: CombatSceneAbortVerb) -> &'static str {
     match verb {
         CombatSceneAbortVerb::Board => "Board",
@@ -660,6 +701,12 @@ pub enum CombatMonsterDeathPath {
     DefaultDropCheck,
     SpecialTileTransition,
     Vanish,
+    /// `combat.md §6.3` Incorporeal-class row + `§12` "Special-class
+    /// death paths": "Incorporeal death (low bit set, vanish bit
+    /// clear ...) releases the slot immediately and leaves **no tile
+    /// marker and no drop at all**. This is a distinct branch, not a
+    /// variant of the default kill."
+    Incorporeal,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -946,6 +993,13 @@ impl CombatActorDescriptor {
     }
 
     pub const fn is_empty(self) -> bool {
+        self.flags == 0
+    }
+
+    /// Whether all eight serialized bytes are zero. This is a diagnostic
+    /// property, not the slot-occupancy predicate: the negative release form
+    /// deliberately leaves descriptor byte 3 stale while clearing `flags`.
+    pub const fn is_zeroed(self) -> bool {
         self.raw_row()[0] == 0
             && self.raw_row()[1] == 0
             && self.raw_row()[2] == 0
@@ -954,6 +1008,12 @@ impl CombatActorDescriptor {
             && self.raw_row()[5] == 0
             && self.raw_row()[6] == 0
             && self.raw_row()[7] == 0
+    }
+
+    /// `combat.md §5`/§6.3: allocation keys only on the flags byte. A
+    /// negative-form released record can be free without being all zero.
+    pub const fn is_free_for_allocation(self) -> bool {
+        self.is_empty()
     }
 
     pub const fn is_marked_dead(self) -> bool {
@@ -993,6 +1053,14 @@ impl CombatActorDescriptor {
 
     pub fn clear(&mut self) {
         *self = Self::empty();
+    }
+
+    /// `combat.md §6.3`: negative-form release clears descriptor bytes
+    /// 0,1,2,4,5,6,7 while preserving byte 3 (owner/target/class).
+    pub fn release_preserving_owner_target_class(&mut self) {
+        let owner_target_class = self.owner_target_class;
+        *self = Self::empty();
+        self.owner_target_class = owner_target_class;
     }
 
     pub fn mark_dead(&mut self) {
@@ -1043,8 +1111,15 @@ impl CombatActorDescriptor {
         let death_path = if killed {
             self.hp_or_wound = 0;
             self.mark_dead();
+            // `combat.md §6.3`: "The branch order is: party-side bit
+            // first; then the pair test \"incorporeal bit or vanish bit
+            // set\"; inside that pair, vanish wins over incorporeal;
+            // outside it, the two hand-written class exceptions (Gazer,
+            // then Gargoyle) win over the general terrain/drop path."
             Some(if traits.vanish_branch {
                 CombatMonsterDeathPath::Vanish
+            } else if traits.incorporeal {
+                CombatMonsterDeathPath::Incorporeal
             } else if traits.special_death {
                 CombatMonsterDeathPath::SpecialTileTransition
             } else {
@@ -1248,12 +1323,16 @@ pub fn resolve_combat_step_or_attack_inner_pass(
         .enumerate()
         .take(COMBAT_ACTOR_SLOTS)
     {
+        let passive_occupant = combat_actor_is_passive_placement(candidate.descriptor);
         if slot == moving_slot
             || candidate.descriptor.x != x
             || candidate.descriptor.y != y
-            || !combat_step_or_attack_occupant_is_active(candidate)
+            || (!combat_step_or_attack_occupant_is_active(candidate) && !passive_occupant)
         {
             continue;
+        }
+        if passive_occupant {
+            return CombatStepOrAttackOutcome::BlockedActor { target_slot: slot };
         }
         return if combat_target_groups_are_hostile(attacker_group, candidate.group) {
             CombatStepOrAttackOutcome::Attack { target_slot: slot }
@@ -1342,14 +1421,13 @@ pub const fn resolve_combat_out_of_arena_leave(
     } else {
         CombatOutOfArenaLeavePresentation::OrdinaryCleanup
     };
-    let established_direction_code = if constrained_exit {
-        Some(match established_exit_direction_code {
-            Some(required_direction_code) => required_direction_code,
-            None => direction_code,
-        })
-    } else {
-        None
-    };
+    // The shared direction byte is seeded by the first accepted party-side
+    // edge even in an ordinary encounter. Only high-bit/constrained encounters
+    // reject a later different direction.
+    let established_direction_code = Some(match established_exit_direction_code {
+        Some(required_direction_code) => required_direction_code,
+        None => direction_code,
+    });
 
     CombatOutOfArenaLeaveOutcome::Accepted {
         direction_code,
@@ -1531,6 +1609,13 @@ pub const fn directed_spell_actor_is_eligible(actor: CombatActorDescriptor) -> b
 
 pub const fn combat_actor_is_present_not_dead(actor: CombatActorDescriptor) -> bool {
     !actor.is_empty() && !actor.is_marked_dead() && actor.has_field_lookup_selectable_bit()
+}
+
+/// `combat.md §16.1`: classes 8 and 9 use the otherwise non-acting `0x20`
+/// descriptor form. They are absent from dispatch, targeting, and side counts,
+/// but their active objects still occupy their arena cells.
+pub const fn combat_actor_is_passive_placement(actor: CombatActorDescriptor) -> bool {
+    actor.flags == COMBAT_ACTOR_FLAG_MARKED_DEAD && matches!(actor.owner_target_class, 8 | 9)
 }
 
 pub const fn combat_actor_is_active_not_dead(actor: CombatActorDescriptor) -> bool {
@@ -2356,7 +2441,7 @@ pub fn resolve_clone_spell_allocation(
         .iter()
         .enumerate()
         .skip(COMBAT_PARTY_ACTOR_SLOTS)
-        .find_map(|(slot, descriptor)| descriptor.is_empty().then_some(slot))?;
+        .find_map(|(slot, descriptor)| descriptor.is_free_for_allocation().then_some(slot))?;
     let active_object_slot = active_objects
         .iter()
         .enumerate()
@@ -2553,7 +2638,7 @@ pub fn resolve_combat_split_placement(
             *slot < COMBAT_ACTOR_SLOTS
                 && descriptors
                     .get(*slot)
-                    .is_some_and(|descriptor| descriptor.is_empty())
+                    .is_some_and(|descriptor| descriptor.is_free_for_allocation())
         })
         .map(|slot| CombatSplitPlacement { slot, class })
 }
@@ -2638,8 +2723,16 @@ pub fn combat_possess_candidate_reaches_resistance(
     candidate: CombatPossessCandidateView,
     active_player: Option<usize>,
 ) -> bool {
+    // `combat.md §9`: the active-player sentinel "is compared against
+    // the target's own owner/character byte, never against the caster's
+    // slot". `§5` makes that a real distinction - a party with a dead
+    // member "pack[s] into the low descriptor indexes rather than
+    // keeping their roster index" - so the sentinel, which names a
+    // roster slot, must be matched against the descriptor's
+    // owner/target/class byte and not against `slot`.
+    let owner_slot = usize::from(candidate.descriptor.owner_target_class);
     if slot >= COMBAT_PARTY_ACTOR_SLOTS
-        || active_player == Some(slot)
+        || active_player == Some(owner_slot)
         || candidate.descriptor.is_empty()
         || candidate.descriptor.is_marked_dead()
         || !candidate.descriptor.has_field_lookup_selectable_bit()
@@ -2667,8 +2760,15 @@ pub fn resolve_combat_possess_candidate_slot(
         .then_some(random_slot)
 }
 
+/// `combat.md §9`: on landing "the active-player sentinel is cleared to
+/// "none" **if the sentinel currently names the possessed character** -
+/// it is compared against the target's own owner/character byte, never
+/// against the caster's slot". `target_owner_slot` is therefore the
+/// target descriptor's owner/target/class byte - its roster slot - and
+/// not its descriptor index, which `§5` packing separates from the
+/// roster index whenever the party contains a dead member.
 pub const fn resolve_combat_possess_resistance_outcome(
-    target_slot: usize,
+    target_owner_slot: usize,
     caster_class: u8,
     active_player: Option<usize>,
     resistance_blocks: bool,
@@ -2677,7 +2777,7 @@ pub const fn resolve_combat_possess_resistance_outcome(
         CombatPossessResistanceOutcome::Blocked
     } else {
         CombatPossessResistanceOutcome::Landed {
-            cleared_active_player: matches!(active_player, Some(slot) if slot == target_slot),
+            cleared_active_player: matches!(active_player, Some(slot) if slot == target_owner_slot),
             daemon_clears_self: caster_class == COMBAT_CLASS_DAEMON,
         }
     }
@@ -2948,21 +3048,29 @@ pub const fn resolve_mass_charm_target_group(normal_group: u8, threshold: u8, ro
     if roll > threshold { 0 } else { normal_group }
 }
 
-pub fn party_name_forces_monster_combat_group(name: &[u8]) -> bool {
-    name.get(4).copied() == Some(b'j')
+/// `combat.md §9` hard-wired hostile roster template: "the last record
+/// of the shipped sixteen-record roster". §9 blesses keying the rule
+/// directly to that record - "An implementation may key this rule
+/// directly to that roster record; it must not key it to any property
+/// that a player-entered name could satisfy."
+pub const TRAITOR_ROSTER_RECORD: u8 = 15;
+
+/// `combat.md §9`: the traitor override "is consulted only for slots
+/// that reference a *non-zero* roster record, and roster record zero is
+/// the player's own character", so the player's character is exempt by
+/// construction and no name the player can enter changes any actor's
+/// team.
+pub const fn roster_record_is_shipped_traitor(roster_record: u8) -> bool {
+    roster_record != 0 && roster_record == TRAITOR_ROSTER_RECORD
 }
 
-pub fn resolve_combat_target_group(
-    slot: usize,
-    party_name: Option<&[u8]>,
-    team_toggled: bool,
-) -> u8 {
+pub fn resolve_combat_target_group(slot: usize, roster_record: u8, team_toggled: bool) -> u8 {
     if slot >= COMBAT_ACTOR_SLOTS {
         return COMBAT_TARGET_GROUP_NEUTRAL;
     }
 
     if slot < COMBAT_PARTY_ACTOR_SLOTS {
-        if party_name.is_some_and(party_name_forces_monster_combat_group) {
+        if roster_record_is_shipped_traitor(roster_record) {
             return COMBAT_TARGET_GROUP_MONSTER;
         }
         if team_toggled {
@@ -2977,12 +3085,45 @@ pub fn resolve_combat_target_group(
     }
 }
 
+/// `combat.md §9` + `§5`: for a seated party member the descriptor's
+/// owner/target/class field holds the character's roster slot index, so
+/// the descriptor itself carries the roster record the traitor override
+/// is keyed to. `_party_name` is vestigial: §9 forbids keying the
+/// override to any property a player-entered name could satisfy, so the
+/// name is never consulted.
 pub fn resolve_combat_target_group_for_actor(
     actor: CombatActorDescriptor,
     slot: usize,
-    party_name: Option<&[u8]>,
+    _party_name: Option<&[u8]>,
 ) -> u8 {
-    resolve_combat_target_group(slot, party_name, actor.team_toggled())
+    if actor.is_marked_dead() {
+        return COMBAT_TARGET_GROUP_PARTY;
+    }
+    resolve_combat_target_group(slot, actor.owner_target_class, actor.team_toggled())
+}
+
+/// `combat.md §6.1a`: "The walker sends the group ordinarily occupied
+/// by seated party members to the keystroke/command path (Section 8)
+/// and the other group to the automatic actor driver (Section 9). A
+/// party-side actor carrying this bit therefore takes its turns
+/// through the automatic driver instead of the player's prompt - which
+/// is exactly the Sword of Chaos behaviour described above". `§9` adds
+/// that the traitor-roster override forces its slot into the
+/// monster-side group "for both the friendly-fire filter and the
+/// player-versus-AI dispatch gate".
+///
+/// A monster-side slot never reaches the keystroke path even when the
+/// controlled bit puts it in the party's group for the same-faction
+/// filter. `magic.md §8`: "All three place their creature through the
+/// ordinary monster placement path, so the new actor keeps the
+/// monster-side class byte and monster AI drives its turns exactly as
+/// it drives any other monster. Nothing routes a summoned creature
+/// through the player command parser, and the player never gets to
+/// move it." The earlier reading - that the controlled bit hands a
+/// summoned creature to the player's prompt - is withdrawn.
+pub fn combat_slot_takes_player_command_path(slot: usize, actor: CombatActorDescriptor) -> bool {
+    slot < COMBAT_PARTY_ACTOR_SLOTS
+        && resolve_combat_target_group_for_actor(actor, slot, None) == COMBAT_TARGET_GROUP_PARTY
 }
 
 pub fn combat_target_candidate_view_from_descriptor(
@@ -2998,6 +3139,16 @@ pub fn combat_target_candidate_view_from_descriptor(
         suppressed,
         invisible_or_unrevealed,
     }
+}
+
+/// `magic.md §8`: the Crown of Lord British's `0x1C` code "shares the
+/// enemy-cast gate with `N` and acts as a permanent Negate Magic aura"
+/// while it occupies the shared timed-effect slot at the permanent
+/// duration `0xFF`. This is the shared predicate for that gate; the
+/// party-side combat `C`-Cast absorption stays keyed to `N` alone.
+pub const fn negate_magic_aura_active(tag: Option<u8>, counter: u8) -> bool {
+    active_effect_is_active(tag, counter, NEGATE_MAGIC_ACTIVE_EFFECT_TAG)
+        || active_effect_is_active(tag, counter, CROWN_LB_ACTIVE_EFFECT_TAG)
 }
 
 pub const fn age_active_effect_state(tag: Option<u8>, counter: u8) -> ActiveEffectAgeOutcome {
@@ -3199,7 +3350,9 @@ pub fn combat_ai_legal_cell(
 }
 
 pub const fn combat_actor_occupies_arena_cell(actor: CombatActorDescriptor, x: u8, y: u8) -> bool {
-    combat_actor_is_present_not_dead(actor) && actor.x == x && actor.y == y
+    (combat_actor_is_present_not_dead(actor) || combat_actor_is_passive_placement(actor))
+        && actor.x == x
+        && actor.y == y
 }
 
 pub fn build_combat_ai_legal_cell_mask(
@@ -3215,7 +3368,7 @@ pub fn build_combat_ai_legal_cell_mask(
     }
 
     for actor in actors.iter().copied().take(COMBAT_ACTOR_SLOTS) {
-        if !combat_actor_is_present_not_dead(actor) {
+        if !combat_actor_is_present_not_dead(actor) && !combat_actor_is_passive_placement(actor) {
             continue;
         }
         let x = actor.x as usize;
@@ -3415,4 +3568,78 @@ fn integer_square_root(value: u16) -> u16 {
         root += 1;
     }
     root
+}
+
+#[cfg(test)]
+mod incorporeal_death_path_tests {
+    use super::*;
+
+    fn kill(class: u8) -> CombatMonsterDamageOutcome {
+        let stats = combat_class_stats(class).unwrap();
+        let mut descriptor = CombatActorDescriptor::for_monster_placement(stats, 7, 4, 5, 0, 0);
+        descriptor
+            .apply_monster_damage(COMBAT_INSTANT_KILL_DAMAGE, true)
+            .unwrap()
+    }
+
+    #[test]
+    fn an_incorporeal_class_takes_its_own_branch_not_the_default_drop_check() {
+        // `combat.md §12` "Special-class death paths": "Incorporeal
+        // death (low bit set, vanish bit clear; Sea Horse, Squid, Sea
+        // Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp,
+        // Daemon) releases the slot immediately and leaves **no tile
+        // marker and no drop at all**. This is a distinct branch, not a
+        // variant of the default kill."
+        let ghost = kill(23);
+        assert!(ghost.killed);
+        assert_eq!(ghost.death_path, Some(CombatMonsterDeathPath::Incorporeal));
+        assert_ne!(
+            ghost.death_path,
+            Some(CombatMonsterDeathPath::DefaultDropCheck),
+            "the incorporeal branch is not a variant of the default kill"
+        );
+        // `§12`: "Each monster killed computes a small raw reward unit"
+        // — the branch change must not cost the attacker its credit.
+        assert_eq!(
+            ghost.return_value,
+            combat_class_stats(23).unwrap().reward_unit()
+        );
+    }
+
+    #[test]
+    fn death_branch_order_puts_vanish_above_incorporeal_above_the_class_exceptions() {
+        // `combat.md §6.3`: "The branch order is: party-side bit first;
+        // then the pair test "incorporeal bit or vanish bit set";
+        // inside that pair, vanish wins over incorporeal; outside it,
+        // the two hand-written class exceptions (Gazer, then Gargoyle)
+        // win over the general terrain/drop path."
+        for class in [13u8, 14, 15, 47] {
+            assert_eq!(
+                kill(class).death_path,
+                Some(CombatMonsterDeathPath::Vanish),
+                "class {class}"
+            );
+        }
+        for class in [16u8, 17, 18, 19, 21, 23, 24, 31, 37, 38] {
+            assert_eq!(
+                kill(class).death_path,
+                Some(CombatMonsterDeathPath::Incorporeal),
+                "class {class}"
+            );
+        }
+        for class in [28u8, 30] {
+            assert_eq!(
+                kill(class).death_path,
+                Some(CombatMonsterDeathPath::SpecialTileTransition),
+                "class {class}"
+            );
+        }
+        for class in [20u8, 32, 33, 39, 41] {
+            assert_eq!(
+                kill(class).death_path,
+                Some(CombatMonsterDeathPath::DefaultDropCheck),
+                "class {class}"
+            );
+        }
+    }
 }

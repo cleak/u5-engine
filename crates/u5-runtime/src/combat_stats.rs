@@ -1,12 +1,16 @@
 //! Published combat-class stat rows and encounter count helpers.
 
 pub const COMBAT_CLASS_COUNT: usize = 48;
-/// `combat.md §5` shared spawn-count cap. The post-roll clamp
-/// reduces any spawn count to at most the combat actor table's
-/// total combatant capacity. Anchored to
-/// [`crate::COMBAT_MAX_COMBATANTS`] so the spawn cap and the
-/// combat-actor combatant capacity stay one value.
-pub const COMBAT_SPAWN_COUNT_CAP: u8 = crate::COMBAT_MAX_COMBATANTS as u8;
+/// `combat.md §5` shared spawn-count cap: "The reroll arm ends with
+/// a defensive cap at twenty-six." It is a clamp on the rolled
+/// count, not a combatant capacity — `active-objects.md §7` states
+/// combat has "no reserved player slot and no twenty-six-combatant
+/// cap". With shipped class data the clamp is unreachable: "The
+/// twenty-six cap is therefore unreachable defensive code, placement
+/// slot indexes sixteen through twenty-five are never used, and a
+/// conforming engine may treat the sixteen placement slots as
+/// sufficient for every terrain encounter."
+pub const COMBAT_SPAWN_COUNT_CAP: u8 = 26;
 
 /// `combat.md §5` per-arena spawn-count exact-count sentinels. The
 /// terrain setup helper treats these byte values as the exact spawn
@@ -98,6 +102,13 @@ pub struct CombatClassTraits {
     pub physical_immune: bool,
     pub team_override: bool,
     pub vanish_branch: bool,
+    /// `combat.md §6.3` "Death-marker tile bytes": the class-flag
+    /// word's low bit, "call it the *incorporeal* bit". `§12`
+    /// "Special-class death paths": "Incorporeal death (low bit set,
+    /// vanish bit clear ...) releases the slot immediately and leaves
+    /// **no tile marker and no drop at all**. This is a distinct
+    /// branch, not a variant of the default kill."
+    pub incorporeal: bool,
     pub special_death: bool,
     pub possess: bool,
     pub blink: bool,
@@ -169,6 +180,7 @@ impl CombatClassTraits {
             physical_immune: false,
             team_override: false,
             vanish_branch: false,
+            incorporeal: false,
             special_death: false,
             possess: false,
             blink: false,
@@ -234,6 +246,11 @@ pub fn combat_class_stats(class: u8) -> Option<CombatClassStats> {
     }
 }
 
+/// `combat.md §6.3` Death-marker table, Incorporeal-class row: the
+/// classes "whose class-flag word has the low bit set but **not** the
+/// vanish bit" are "Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost,
+/// Slime, Insect Swarm, Wisp, Daemon" — classes 16, 17, 18, 19, 21,
+/// 23, 24, 31, 37 and 38 of this table.
 pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
     match class {
         0 => Some(traits!(0, "Mage", turnable_attack)),
@@ -265,15 +282,15 @@ pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
             turnable_attack,
             vanish_branch
         )),
-        16 => Some(traits!(16, "Sea Horse", turnable_attack)),
-        17 => Some(traits!(17, "Squid", poison_status_attack)),
-        18 => Some(traits!(18, "Sea Serpent")),
-        19 => Some(traits!(19, "Shark")),
+        16 => Some(traits!(16, "Sea Horse", incorporeal, turnable_attack)),
+        17 => Some(traits!(17, "Squid", incorporeal, poison_status_attack)),
+        18 => Some(traits!(18, "Sea Serpent", incorporeal)),
+        19 => Some(traits!(19, "Shark", incorporeal)),
         20 => Some(traits!(20, "Giant Rat", poison_status_attack)),
-        21 => Some(traits!(21, "Bat")),
+        21 => Some(traits!(21, "Bat", incorporeal)),
         22 => Some(traits!(22, "Giant Spider", poison_status_attack)),
-        23 => Some(traits!(23, "Ghost", physical_half, blink)),
-        24 => Some(traits!(24, "Slime", splits)),
+        23 => Some(traits!(23, "Ghost", physical_half, incorporeal, blink)),
+        24 => Some(traits!(24, "Slime", splits, incorporeal)),
         25 => Some(traits!(25, "Gremlin")),
         26 => Some(traits!(26, "Mimic", team_override)),
         27 => Some(traits!(27, "Reaper", team_override, turnable_attack)),
@@ -292,17 +309,18 @@ pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
             team_override,
             special_death
         )),
-        31 => Some(traits!(31, "Insect Swarm")),
+        31 => Some(traits!(31, "Insect Swarm", incorporeal)),
         32 => Some(traits!(32, "Orc", team_override)),
         33 => Some(traits!(33, "Skeleton", physical_half)),
         34 => Some(traits!(34, "Python", poison_status_attack)),
         35 => Some(traits!(35, "Ettin", team_override)),
         36 => Some(traits!(36, "Headless", team_override)),
-        37 => Some(traits!(37, "Wisp", possess, teleport_capable)),
+        37 => Some(traits!(37, "Wisp", incorporeal, possess, teleport_capable)),
         38 => Some(traits!(
             38,
             "Daemon",
             physical_half,
+            incorporeal,
             possess,
             turnable_attack
         )),
@@ -434,6 +452,12 @@ pub fn resolve_physical_damage_for_class(class: u8, damage: u8, magical: bool) -
     }
 }
 
+/// `encounters.md §5` + `combat.md §5` early-game encounter-size
+/// damper. Both rolls draw a uniform integer in `[1, n]`, but the
+/// second one draws over **the first roll's result**, so applying it
+/// "can only *lower* the count. It is a damper, not a doubler."
+/// The three exact-count sentinels `1`, `8` and `16` skip both rolls
+/// entirely, and the reroll arm ends with the defensive cap at 26.
 pub fn resolve_combat_spawn_count(
     base_count: u8,
     first_roll_seed: u8,
@@ -443,9 +467,84 @@ pub fn resolve_combat_spawn_count(
         0 => 0,
         1 | 8 | 16 => base_count,
         max => {
-            let seed = fortunes_second_roll_seed.unwrap_or(first_roll_seed);
-            1 + (seed % max)
+            let first = 1 + (first_roll_seed % max);
+            match fortunes_second_roll_seed {
+                // `first` is always at least one, so the second
+                // modulus is never zero.
+                Some(seed) => 1 + (seed % first),
+                None => first,
+            }
         }
     };
     count.min(COMBAT_SPAWN_COUNT_CAP)
+}
+
+/// `catalogs/monster-bestiary.md §2.1` forty-eight-entry companion
+/// class table, indexed by class id. Its values are **class ids**,
+/// not tile ids: it is the "and a few of something else showed up"
+/// table consumed by the terrain-combat early-spawn substitution
+/// (`combat.md §5`). Eighteen classes are their own companion, which
+/// makes the substitution a no-op for them.
+pub const COMBAT_CLASS_COMPANION: [u8; COMBAT_CLASS_COUNT] = [
+    33, 1, 1, 3, 4, 4, 4, 4, 4, 4, 10, 4, 12, 13, 14, 15, 17, 16, 17, 19, 33, 21, 20, 33, 24, 26,
+    35, 21, 21, 24, 30, 24, 41, 0, 22, 36, 35, 23, 39, 39, 40, 20, 42, 43, 44, 45, 20, 38,
+];
+
+/// `catalogs/monster-bestiary.md §2.1`: the companion class for a
+/// base combat class id, or `None` for ids outside the forty-eight
+/// row table. The substitution is keyed to the base class and never
+/// to the arena index.
+pub const fn combat_class_companion(class: u8) -> Option<u8> {
+    if (class as usize) < COMBAT_CLASS_COUNT {
+        Some(COMBAT_CLASS_COMPANION[class as usize])
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod incorporeal_class_flag_tests {
+    use super::*;
+
+    /// `combat.md §6.3` Death-marker table, Incorporeal-class row:
+    /// "Monster whose class-flag word has the low bit set but **not**
+    /// the vanish bit — Sea Horse, Squid, Sea Serpent, Shark, Bat,
+    /// Ghost, Slime, Insect Swarm, Wisp, Daemon".
+    const PUBLISHED_INCORPOREAL_CLASSES: [u8; 10] = [16, 17, 18, 19, 21, 23, 24, 31, 37, 38];
+
+    #[test]
+    fn exactly_the_ten_published_classes_carry_the_incorporeal_bit() {
+        for class in 0..COMBAT_CLASS_COUNT as u8 {
+            let Some(traits) = combat_class_traits(class) else {
+                continue;
+            };
+            assert_eq!(
+                traits.incorporeal,
+                PUBLISHED_INCORPOREAL_CLASSES.contains(&class),
+                "class {class} ({})",
+                traits.name
+            );
+        }
+    }
+
+    #[test]
+    fn no_class_carries_both_the_incorporeal_and_the_vanish_bit() {
+        // `combat.md §6.3`: the incorporeal row is selected by "the low
+        // bit set but **not** the vanish bit", and "inside that pair,
+        // vanish wins over incorporeal". The four published vanish
+        // classes must therefore stay off the incorporeal roster.
+        for class in 0..COMBAT_CLASS_COUNT as u8 {
+            let Some(traits) = combat_class_traits(class) else {
+                continue;
+            };
+            assert!(
+                !(traits.incorporeal && traits.vanish_branch),
+                "class {class} ({}) claims both death bits",
+                traits.name
+            );
+        }
+        for vanish_class in [13u8, 14, 15, 47] {
+            assert!(combat_class_traits(vanish_class).unwrap().vanish_branch);
+        }
+    }
 }

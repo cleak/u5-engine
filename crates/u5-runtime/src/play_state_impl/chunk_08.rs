@@ -23,23 +23,9 @@ impl PlayState {
 
     fn render_rest_session(&self, session: &RestSession) -> String {
         match session.phase {
-            RestPhase::Hours => {
-                let label = if matches!(self.area, Area::Town { .. }) {
-                    "Hole up"
-                } else {
-                    "Rest"
-                };
-                // cleak/u5-spec#81: the hours prompt literal is unpublished; the
-                // invented `Choose 1-9; Space/0 cancels.` line is removed.
-                format!("{label}- how many hours? _")
-            }
-            RestPhase::WatchYesNo => "Set watch? (Y/N)".to_string(),
-            RestPhase::WatchSlot => {
-                let last = self.party.len().min(6);
-                format!(
-                    "Who keeps watch? _\nChoose party member 1-{last}; Space/0 leaves no watch."
-                )
-            }
+            RestPhase::Hours => REST_HOURS_PROMPT.to_string(),
+            RestPhase::WatchYesNo => REST_WATCH_PROMPT.to_string(),
+            RestPhase::WatchSlot => REST_WATCH_MEMBER_PROMPT.to_string(),
         }
     }
 
@@ -86,12 +72,14 @@ impl PlayState {
                 }
                 RestPhase::WatchYesNo => match ch.to_ascii_uppercase() {
                     'Y' => {
+                        self.emit_message_line(REST_WATCH_YES_LITERAL);
                         session.phase = RestPhase::WatchSlot;
                         self.active_rest = Some(session);
                         self.message = self.render_active_rest();
                         return Ok(None);
                     }
                     'N' | '\u{1b}' | ' ' | '0' | '\r' | '\n' => {
+                        self.emit_message_line(REST_WATCH_NO_LITERAL);
                         let hours = session.hours.unwrap_or(1);
                         return self.finish_active_rest(hours, None, game_dir);
                     }
@@ -99,6 +87,7 @@ impl PlayState {
                 },
                 RestPhase::WatchSlot => {
                     if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                        self.emit_message_line(REST_NO_WATCH_LITERAL);
                         let hours = session.hours.unwrap_or(1);
                         return self.finish_active_rest(hours, None, game_dir);
                     }
@@ -199,11 +188,18 @@ impl PlayState {
         'resting: for _ in 0..hours {
             for _ in 0..ticks_per_hour {
                 let hour_before_tick = self.clock.hour;
-                if wilderness_camp {
-                    self.advance_wilderness_camp_tick(minutes_per_tick);
-                } else {
-                    self.advance_turn_with_minutes(minutes_per_tick);
-                }
+                // `rest-and-camp.md §5`: "That loop advances the clock [...]
+                // and never enters the shared party status/provision pass, so
+                // while a camp is elapsing no poison damage is taken, no
+                // provisions are spent, and no starvation damage is applied,
+                // regardless of how many hours the camp covers. Only the
+                // town-bed loop runs that pass." `time.md §10`'s caller census
+                // agrees: the pass has exactly four call sites, and the only
+                // rest one is "the town-bed rest loop's ten-minute step".
+                // Dungeon rest-with-watch is not a town bed - it is a camp -
+                // so it takes the camp tick too. Only the step size differs
+                // between the two camp surfaces.
+                self.advance_wilderness_camp_tick(minutes_per_tick);
                 let _ = self.apply_rest_with_watch_recovery_tick();
                 if let Area::World { plane } = self.area {
                     if let Some(report) =
@@ -723,7 +719,14 @@ impl PlayState {
             if candidate != WindState::Calm
                 || self.idle_wind_roll(attempt.wrapping_add(2)) >= WIND_DRIFT_CALM_ACCEPT_MIN
             {
-                self.apply_wind_state(candidate);
+                // `audio.md §7.3` is titled "Accepted wind change / Rel Hur"
+                // and every row of its table describes a transition the
+                // player accepted behind the direction prompt. An unprompted
+                // weather drift is not a published trigger, so it commits the
+                // identical state change without the shared variant — the
+                // alternative is a one-to-two-second blocking sequence firing
+                // on an idle tick at sea.
+                self.apply_wind_state_without_sound(candidate);
                 return Some(candidate);
             }
         }
@@ -802,19 +805,25 @@ impl PlayState {
                     _ => Ok(self.start_klimb_direction_prompt()),
                 }
             }
+            // `dungeon-mode.md §8`: "the dispatcher masks the underfoot cell to
+            // its high nibble before any comparison, so the whole `0x6?` family
+            // - not just the exact byte `0x60`, and including the marked/fired
+            // variants - enables the down arm. That arm calls the same
+            // level-step helper a down ladder uses, so the party simply
+            // descends one level". §13.2 adds: "An earlier revision said exact
+            // byte `0x60` bypassed the level-step helper and invoked the exit
+            // contract directly; that is withdrawn."
             Area::Dungeon { level, .. } => {
                 let tile = self.dungeon_cell(level, self.player.x, self.player.y);
-                if tile == 0x60 {
-                    self.climb(game_dir, ClimbIntent::Up)
-                } else {
-                    match tile >> 4 {
-                        0x1 => self.climb(game_dir, ClimbIntent::Up),
-                        0x2 => self.climb(game_dir, ClimbIntent::Down),
-                        0x3 => Ok(self.start_klimb_direction_prompt()),
-                        _ => {
-                            self.message = "Not climbable!".to_string();
-                            Ok(MoveOutcome::Blocked)
-                        }
+                match dungeon_klimb_apply(tile) {
+                    DungeonKlimbApply::UpLadder => self.climb(game_dir, ClimbIntent::Up),
+                    DungeonKlimbApply::DownLadder | DungeonKlimbApply::PitDescent => {
+                        self.climb(game_dir, ClimbIntent::Down)
+                    }
+                    DungeonKlimbApply::TwoWayPrompt => Ok(self.start_klimb_direction_prompt()),
+                    DungeonKlimbApply::NoLevelChange => {
+                        self.message = "Not climbable!".to_string();
+                        Ok(MoveOutcome::Blocked)
                     }
                 }
             }
@@ -1206,7 +1215,8 @@ impl PlayState {
         if !self.sky_strip_hour_refresh_runs() {
             return;
         }
-        self.cached_moon_glyph_bytes = cached_moon_glyph_bytes_for_hour(self.clock.hour);
+        self.cached_moon_glyph_bytes =
+            cached_moon_glyph_bytes_for_day(self.clock.day).unwrap_or(MOON_GLYPH_CACHE_NO_GATE);
     }
 
     pub fn set_cached_moon_glyph_bytes(&mut self, trammel: u8, felucca: u8) {
@@ -1254,6 +1264,7 @@ impl PlayState {
         // out explicitly as "the original's behaviour, not a defect to
         // design around", so it is reproduced here rather than worked
         // around.
+        let sound_serial_before_transit = self.sound_effect_serial;
         let playback = self.play_natural_moongate_transit()?;
         let outcome = self.resolve_natural_moongate_entry_after_transit(game_dir, idx);
         // The warp below rebuilds the state from `PlayOptions`, which does
@@ -1261,6 +1272,19 @@ impl PlayState {
         // already finished, so restore its record afterwards rather than
         // letting the destination scene claim none played.
         self.last_natural_moongate_transit = Some(playback);
+        // The rebuild used to discard the recorded sound history too, which
+        // silenced the `audio.md §8.3` transit envelope on exactly the path
+        // that has a destination handoff. `enter_world_target` now carries the
+        // outgoing history across instead of clearing it, so the envelope
+        // survives the warp on its own. This assertion is what keeps that
+        // true: it is the only place in the engine where a cue is emitted
+        // before a scene rebuild and read after one.
+        debug_assert_eq!(
+            self.sound_effects_after(sound_serial_before_transit)
+                .first(),
+            Some(&SoundEffect::MoongateTransit),
+            "the transit envelope must survive the destination rebuild",
+        );
         outcome
     }
 
@@ -1342,6 +1366,15 @@ impl PlayState {
     /// [`crate::moongate_transit::run_moongate_transit_presentation`],
     /// which composes each stage-B frame through the `§9.1` scratch slot.
     pub fn play_natural_moongate_transit(&mut self) -> io::Result<MoongateTransitPlayback> {
+        // `audio.md §8.3`: "During an accepted transit, run
+        // `(2, 2000, 30000, 1, 5900)`. No destination handoff means no
+        // transit envelope." The envelope belongs to the transit itself, so
+        // it is recorded on entry, before the blocking stage-A/stage-B
+        // presentation this call runs to completion. A movement that hands
+        // no live gate cell to the entry hook returns from
+        // `resolve_natural_moongate_entry` without reaching here and stays
+        // silent.
+        self.emit_sound_effect(SoundEffect::MoongateTransit);
         let animation = &mut self.animation;
         let playback =
             run_moongate_transit(&mut self.natural_moongate_counter, &mut |step, _phase| {
@@ -1433,7 +1466,6 @@ impl PlayState {
             rare_reagent_harvest_days: self.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: self.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: self.fixed_hidden_treasure_daily_day,
-            fixed_hidden_treasure_single_use_cookie: self.fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: self.dungeon_room_clear_bitmap,
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
@@ -1466,10 +1498,10 @@ impl PlayState {
             combat_interference_sources: self.combat_interference_sources,
             transport: entering_transport,
             facing: None,
+            door_tracker: None,
             pending_vehicle: None,
             pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),
-            blackthorn_story: self.blackthorn_story,
             initial_britannia_overlay: None,
             debug_enter: self.debug_enter,
             saved_active_objects: None,
@@ -1564,9 +1596,18 @@ impl PlayState {
         if debug {
             next.append_stonegate_entry_presentation_message();
         }
+        // `audio.md §2` keeps one serial speaker, and the frontend reads it
+        // through a monotonic serial. A scene rebuild constructs `next` from
+        // scratch, so its history is numbered from 1 and collides with this
+        // state's early serials. Carry the outgoing history across and
+        // re-serialize the destination's own entry effects on top of it:
+        // clearing here used to drop every cue emitted before the transition
+        // — the transit envelope among them — while the serial kept counting,
+        // so the frontend advanced past serials that had no history entry and
+        // the cue was silently lost.
         let entry_effects = next.sound_effects_after(0);
         next.sound_effect_serial = prior_sound_serial;
-        next.sound_effect_history.clear();
+        next.sound_effect_history = std::mem::take(&mut self.sound_effect_history);
         for effect in entry_effects {
             next.emit_sound_effect(effect);
         }

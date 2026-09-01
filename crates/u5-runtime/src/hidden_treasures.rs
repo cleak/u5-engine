@@ -24,11 +24,21 @@ pub const fn hidden_treasure_record_14_ready(stored_day: u8, current_day: u8) ->
     stored_day != current_day
 }
 
-/// Public issue #18 record 15 stage-acceptance gate. Search stages
-/// this record only when its single-use cookie is clear and the
-/// searched cell is not occupied by an NPC.
-pub const fn hidden_treasure_record_15_accepts(single_use_cookie: u8, npc_present: bool) -> bool {
-    single_use_cookie == crate::FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR && !npc_present
+/// `formats/saved-gam.md` §10, record 15: "Record 15 grants only when
+/// the byte is zero and no NPC is present at the searched tile; the skip
+/// predicate is `byte != 0` OR an NPC is present." The byte is "Not a
+/// dedicated cookie. This is the **equipment-inventory counter for item
+/// id `39` (Glass Sword)** from Section 7, and record 15's granted item
+/// is that same Glass Sword. ... The scan itself never writes the byte
+/// and never sets bitmap bit 15 - the ordinary inventory grant
+/// increments the counter, and that is what makes the record single-use.
+/// An engine that gives record 15 a separate never-written cookie yields
+/// an infinitely repeatable Glass Sword."
+pub const fn hidden_treasure_record_15_accepts(
+    glass_sword_equipment_stock: u8,
+    npc_present: bool,
+) -> bool {
+    glass_sword_equipment_stock == 0 && !npc_present
 }
 
 /// `hidden-treasures.md §3` distinct pickup classes that appear in
@@ -117,9 +127,11 @@ pub const fn hidden_treasure_rule(record_index: usize) -> HiddenTreasureRule {
 
 /// `hidden-treasures.md §2`: predicate combining the rule check with
 /// caller-provided context for record 13 (zero-key + NPC), 14 (daily
-/// cooldown), and 15 (single-use cookie + NPC). For record 13 the caller
-/// passes the party key count; for 14 the cooldown cookie + current
-/// day; for 15 the saved single-use flag. Records outside the gated
+/// cooldown), and 15 (Glass Sword counter + NPC). For record 13 the
+/// caller passes the party key count; for 14 the cooldown cookie +
+/// current day; for 15 the equipment-inventory counter for item id 39,
+/// which `formats/saved-gam.md` §10 names as record 15's gate - "It is
+/// the same byte, not a parallel cookie." Records outside the gated
 /// set return `true` because the ordinary one-shot bitmap is owned by
 /// the caller, not by this rule.
 pub const fn hidden_treasure_can_stage(
@@ -128,7 +140,7 @@ pub const fn hidden_treasure_can_stage(
     tile_has_npc: bool,
     cooldown_day_cookie: u8,
     current_day: u8,
-    single_use_cookie: u8,
+    glass_sword_equipment_stock: u8,
 ) -> bool {
     match hidden_treasure_rule(record_index) {
         HiddenTreasureRule::OneShot => true,
@@ -137,7 +149,7 @@ pub const fn hidden_treasure_can_stage(
         }
         HiddenTreasureRule::DailyCache => cooldown_day_cookie != current_day,
         HiddenTreasureRule::SingleUseAndNpcAbsence => {
-            hidden_treasure_record_15_accepts(single_use_cookie, tile_has_npc)
+            hidden_treasure_record_15_accepts(glass_sword_equipment_stock, tile_has_npc)
         }
     }
 }

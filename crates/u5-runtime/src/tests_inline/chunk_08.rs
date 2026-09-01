@@ -343,59 +343,6 @@
     }
 
     #[test]
-    fn balloon_crosses_clean_lava_sidecar_without_damage() {
-        let dir = debug_game_dir();
-        fs::write(
-            dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
-            "UNDERWORLD 1 0 LAVA 14\n",
-        )
-        .unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(1, 0)] = 14;
-        let mut state = world_state(grid, 0, 0);
-        mount_balloon(&mut state);
-        state.wind = WindState::East;
-        state.party[0].hp = 12;
-
-        assert_eq!(
-            state
-                .step_with_game_dir(Direction::South, Some(&dir))
-                .unwrap(),
-            MoveOutcome::Moved
-        );
-
-        assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.party[0].hp, 12);
-        assert!(!state.message.contains("lava damage"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn balloon_overflies_clean_waterfall_sidecar_without_sweep() {
-        let dir = debug_game_dir();
-        fs::write(
-            dir.join(WORLD_WATERFALL_TABLE_FILE),
-            "UNDERWORLD 1 0 EAST 2 5\n",
-        )
-        .unwrap();
-        let mut state = world_state(open_world_grid(), 0, 0);
-        mount_balloon(&mut state);
-        state.wind = WindState::East;
-
-        assert_eq!(
-            state
-                .step_with_game_dir(Direction::South, Some(&dir))
-                .unwrap(),
-            MoveOutcome::Moved
-        );
-
-        assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.turn, 1);
-        assert!(!state.message.contains("waterfall swept"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn horse_world_movement_ignores_first_cell_waterfall_sidecar() {
         let dir = debug_game_dir();
         fs::write(

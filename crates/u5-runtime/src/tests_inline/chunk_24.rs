@@ -45,8 +45,8 @@ fn location_cell_owner_classifies_authored_markers_before_visual_classes() {
         LocationCellOwner::ClimbTransition
     );
     assert_eq!(
-        classify_location_cell_owner(TOWN_CHAIR_TILE),
-        LocationCellOwner::ChairTrigger
+        classify_location_cell_owner(TOWN_LOOSE_BRICK_TRAPDOOR_TILE),
+        LocationCellOwner::LooseBrickTrapdoor
     );
     assert_eq!(
         classify_location_cell_owner(TOWN_POISON_GAS_LIVE_TILE),
@@ -114,7 +114,7 @@ fn synthetic_location_dat_audit_reads_all_four_families_without_raw_report_rows(
     bytes[4] = TELESCOPE_LOOK_TRIGGER_TILE;
     bytes[5] = TOWN_STAIR_TILE_FIRST;
     bytes[6] = TOWN_KLIMB_DESCEND_GRATE_TILE;
-    bytes[7] = TOWN_CHAIR_TILE;
+    bytes[7] = TOWN_LOOSE_BRICK_TRAPDOOR_TILE;
     bytes[8] = TOWN_POISON_GAS_LIVE_TILE;
     bytes[9] = 0xAB;
 
@@ -211,7 +211,7 @@ fn shipped_location_dat_audit_covers_authored_cell_facets_when_assets_present() 
         LocationCellOwner::WalkOnStair,
         LocationCellOwner::ClimbTransition,
         LocationCellOwner::Door,
-        LocationCellOwner::ChairTrigger,
+        LocationCellOwner::LooseBrickTrapdoor,
         LocationCellOwner::PoisonGas,
         LocationCellOwner::Pushable,
         LocationCellOwner::SearchInspectable,

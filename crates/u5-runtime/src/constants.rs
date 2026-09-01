@@ -85,28 +85,35 @@ pub const KARMA_DAT_LEN: usize = 761;
 pub const KARMA_DAT_RECORDS: usize = 6;
 pub const TILES_EGA_FILE: &str = "TILES.16";
 pub const TILES_CGA_FILE: &str = "TILES.4";
-/// `formats/bit.md §3`: each pointer-table entry is exactly 4 bytes
-/// (a strip-pointer word followed by a metadata word).
-pub const BIT_POINTER_TABLE_ENTRY_LEN: usize = 4;
-/// `formats/bit.md §3`: leading two-byte entry-count word precedes
-/// the pointer-table entries.
-pub const BIT_ENTRY_COUNT_WORD_LEN: usize = 2;
-/// `formats/bit.md §3`: a strip-pointer word value of zero means the
-/// entry has no associated strip body (skipped by the driver scan).
-pub const BIT_STRIP_POINTER_NONE: u16 = 0;
-/// `formats/bit.md §4.3`: `WD.BIT` is a single-entry resource whose
-/// "Warriors of Destiny" lettering is exactly 288 by 49 — the same
-/// geometry as the `ULTIMA` title-tick records it ignites into.
+/// `formats/bit.md §3`: the directory opens with a two-byte
+/// "Sub-image count" word — "Number of sub-images in this resource."
+///
+/// It is not an entry count for a display-driver strip table: §1 says
+/// "Nothing in the family is a display-driver 'sparse strip' table, and
+/// the leading value is never an entry count for such a table."
+pub const BIT_SUB_IMAGE_COUNT_WORD_LEN: usize = 2;
+/// `formats/bit.md §3`: the offset table is `count * 2` bytes — "For
+/// each sub-image, its byte offset measured from the start of the
+/// decoded image." There are no four-byte pointer/metadata entries and
+/// no zero-pointer sentinel; §6: "There are no sparse or skipped
+/// entries and no over-allocated table; every entry in the directory
+/// names a real sub-image."
+pub const BIT_OFFSET_TABLE_ENTRY_LEN: usize = 2;
+/// `formats/bit.md §4.3`: `WD.BIT` is a single-sub-image resource whose
+/// "Warriors of Destiny" record is exactly 288 by 49 — the same
+/// geometry as the `ULTIMA` title-tick records it ignites into. The
+/// record "is never drawn. It is a **mask**."
 pub const WD_BIT_LETTERING_ROWS: u16 = 49;
 pub const WD_BIT_LETTERING_COLUMNS: u16 = 288;
-/// `formats/bit.md §3` strip-body header word widths. Each strip
-/// body opens with a width-related word and a row-count word before
-/// its packed pixel payload — four bytes of header total. Promote
-/// the widths so a future driver/bitmap decoder names the strip
-/// header instead of repeating `2` as a bare literal.
-pub const BIT_STRIP_WIDTH_WORD_LEN: usize = 2;
-pub const BIT_STRIP_ROW_COUNT_WORD_LEN: usize = 2;
-pub const BIT_STRIP_HEADER_LEN: usize = BIT_STRIP_WIDTH_WORD_LEN + BIT_STRIP_ROW_COUNT_WORD_LEN;
+/// `formats/bit.md §3` sub-image header word widths. Each sub-image
+/// opens with a width word and a height word before its
+/// one-bit-per-pixel rows — four bytes of header total, which is also
+/// the constant term of the record stride
+/// `4 + max(1, ceil(width / 8)) * height`.
+pub const BIT_SUB_IMAGE_WIDTH_WORD_LEN: usize = 2;
+pub const BIT_SUB_IMAGE_HEIGHT_WORD_LEN: usize = 2;
+pub const BIT_SUB_IMAGE_HEADER_LEN: usize =
+    BIT_SUB_IMAGE_WIDTH_WORD_LEN + BIT_SUB_IMAGE_HEIGHT_WORD_LEN;
 pub const CH_GLYPH_COUNT: usize = 128;
 pub const CH_CELL_SIDE: usize = 8;
 /// `formats/font-ch.md §2`: each .CH glyph is an 8x8 cell with
@@ -197,14 +204,19 @@ pub const LZW_MAX_CODE_SIZE: u8 = 12;
 /// decode_lzw_envelope does not encode `4` as a bare literal.
 pub const LZW_ENVELOPE_LENGTH_HEADER_BYTES: usize = 4;
 
-/// `formats/tiles.md §5.1.1` resident miniature tile-glyph encoding.
-/// The stats panel and a few inventory-style contexts render a
-/// compact per-tile miniature whose record describes sixteen rows
-/// with two offset bytes per row, for thirty-two bytes per tile.
-pub const MINIATURE_TILE_ROWS: usize = 16;
-pub const MINIATURE_TILE_OFFSET_BYTES_PER_ROW: usize = 2;
-pub const MINIATURE_TILE_RECORD_BYTES: usize =
-    MINIATURE_TILE_ROWS * MINIATURE_TILE_OFFSET_BYTES_PER_ROW;
+// `formats/tiles.md §5.1.1` is titled "Resident miniature tile glyphs —
+// withdrawn": "Earlier revisions of this section claimed that the
+// resident engine carries a second, compact per-tile rendering source: a
+// 'miniature' encoding of thirty-two bytes per tile, sixteen rows of two
+// offset bytes each ... No such path exists." The thirty-two-byte
+// records that section does publish are the night beacon's beam stencil,
+// indexed by animation frame modulo sixteen, and their named lengths
+// live in `light_beacon.rs` as `BEACON_STENCIL_RECORD_BYTES` and
+// friends. `stats-panel.md §8` withdrew the other half: the
+// timed-effect byte "is emitted as an ordinary character through the
+// text system", not through any tile path. So the miniature row /
+// bytes-per-row / record-length constants that used to sit here are
+// gone; nothing is owed a miniature-glyph decoder.
 
 /// `formats/tiles.md §5.2` image-directory count-word width. The
 /// directory opens with a little-endian unsigned word giving the
@@ -219,8 +231,6 @@ pub const TILE_IMAGE_DIRECTORY_OFFSET_BYTES: usize = 4;
 /// two-byte unsigned-word type the directory itself uses) so the
 /// per-image header derives from the format's word size.
 pub const TILE_IMAGE_BLOCK_HEADER_BYTES: usize = 2 * TILE_IMAGE_DIRECTORY_COUNT_BYTES;
-pub const SINGLE_IMAGE_BIT_FORMAT_MARKER: u16 = 1;
-pub const SINGLE_IMAGE_BIT_MODE_MARKER: u16 = 4;
 /// Both shipped fixed-cell fonts (.CH and .HCS) carry exactly 128
 /// glyphs (`formats/font-ch.md §2`, `formats/font-hcs.md §2`).
 /// Anchored to [`CH_GLYPH_COUNT`] so the parse-side glyph count
@@ -302,6 +312,20 @@ pub const NATURAL_MOONGATE_TERRAIN_TILE: u8 = 0xDC;
 pub const NATURAL_MOONGATE_RESTORED_TERRAIN_TILE: u8 = 5;
 pub const NATURAL_MOONGATE_COUNTER_MAX: u8 = 16;
 pub const STEADY_PHASE: u8 = 0x0f;
+/// `systems/weather.md §7`: "The cadence counter is stored per
+/// active-object slot ... The cadence counter is persisted with the
+/// object, so it survives save and reload."
+///
+/// `formats/saved-gam.md §8.1` gives active-object byte `+6` as the
+/// "Animation phase / direction-step counter; compositor reads it for
+/// water creatures", which is this engine's `phase`. Its high nibble
+/// carries the frame heading and bits `0..1` select the drawn frame
+/// (see [`crate::active_object_frame_tile`]), so the wind cadence count
+/// takes bits `2..3` — two bits, which is exactly the `0..3` range the
+/// published `2 of 3` and `3 of 4` cycles need.
+pub const ACTIVE_SHIP_CADENCE_PHASE_SHIFT: u8 = 2;
+/// See [`ACTIVE_SHIP_CADENCE_PHASE_SHIFT`].
+pub const ACTIVE_SHIP_CADENCE_PHASE_MASK: u8 = 0b0000_1100;
 /// `systems/chargen.md §6` / `systems/save-load.md`: the canonical
 /// campaign start date. The year/month/day match the chargen
 /// starting date documented in chargen.md; the start hour is
@@ -478,8 +502,15 @@ pub const SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT: usize = 8;
 pub const SAVE_SHRINE_RUIN_FLAGS_OFFSET: usize = 0x0332;
 pub const SAVE_SHRINE_RUIN_FLAG_COUNT: usize = 8;
 pub const SAVE_QUEST_TILE_FLAG_HIGH_BIT: u8 = 0x80;
+/// `formats/saved-gam.md §10`: active temporary-door tracker. A zero
+/// previous-tile byte gates the tracker inactive; the following bytes are
+/// X, Y, and the remaining-turn countdown.
+pub const SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET: usize = 0x03A9;
+pub const SAVE_DOOR_TRACKER_X_OFFSET: usize = SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET + 1;
+pub const SAVE_DOOR_TRACKER_Y_OFFSET: usize = SAVE_DOOR_TRACKER_X_OFFSET + 1;
+pub const SAVE_DOOR_TRACKER_COUNTDOWN_OFFSET: usize = SAVE_DOOR_TRACKER_Y_OFFSET + 1;
 /// `formats/saved-gam.md §10`: queued shipwright-delivery X coordinate.
-pub const SAVE_PENDING_VEHICLE_X_OFFSET: usize = 0x03AD;
+pub const SAVE_PENDING_VEHICLE_X_OFFSET: usize = SAVE_DOOR_TRACKER_COUNTDOWN_OFFSET + 1;
 /// `formats/saved-gam.md §10`: queued shipwright-delivery Y coordinate.
 pub const SAVE_PENDING_VEHICLE_Y_OFFSET: usize = 0x03AE;
 pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;
@@ -534,7 +565,17 @@ pub const SAVE_SPELL_CHARGE_BLOCK_OFFSET: usize = 0x024A;
 pub const SAVE_SCROLL_COUNTERS_OFFSET: usize = 0x027A;
 pub const SAVE_POTION_COUNTERS_OFFSET: usize = 0x0282;
 pub const SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET: usize = 0x020C;
-pub const SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET: usize = 0x0241;
+/// `formats/saved-gam.md` §10, record 15: "Not a dedicated cookie. This
+/// is the **equipment-inventory counter for item id `39` (Glass Sword)**
+/// from Section 7, and record 15's granted item is that same Glass Sword.
+/// ... An engine that gives record 15 a separate never-written cookie
+/// yields an infinitely repeatable Glass Sword." §7 restates it: "`0x0241`
+/// - the equipment counter for item id `39`, the Glass Sword - is also the
+/// gate for fixed hidden-treasure record 15. It is the same byte, not a
+/// parallel cookie." Anchored to the equipment block so the alias cannot
+/// drift; the byte is written only by the equipment-stock block write.
+pub const SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET: usize =
+    SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_ID_GLASS_SWORD;
 pub const SAVE_SHADOWLORD_HIDEOUTS_OFFSET: usize = 0x0322;
 /// `formats/saved-gam.md §9.2`: two back-to-back banks of 32
 /// little-endian `u32` masks. Scene ids are one-based; bit `n` is
@@ -791,7 +832,16 @@ pub const SHADOWLORD_COWARDICE_INDEX: usize = SHADOWLORD_HATRED_INDEX + 1;
 pub const SHADOWLORD_HIDEOUT_MIN: u8 = 1;
 pub const SHADOWLORD_HIDEOUT_MAX: u8 = 8;
 pub const SHADOWLORD_VANQUISHED: u8 = 0xff;
-pub const DEFAULT_SHADOWLORD_HIDEOUTS: [u8; SHADOWLORD_COUNT] = [4, 7, 8];
+/// `systems/time.md §7` per-day events, Shadowlord hideout maintenance:
+/// "A slot value of `0` means 'not yet placed'. A newly created game
+/// starts with all three slots at `0`, so no Shadowlord is anywhere
+/// until the first midnight pass assigns hideouts."
+///
+/// `0` is deliberately neither "in a town" nor "vanquished": it matches
+/// no town scene byte, [`crate::PlayState::shadowlord_slot_is_living`]
+/// rejects it, and it has the high bit clear so the midnight walker
+/// rewrites it on the first day rollover.
+pub const DEFAULT_SHADOWLORD_HIDEOUTS: [u8; SHADOWLORD_COUNT] = [0, 0, 0];
 /// `formats/saved-gam.md §9.1`: successful destruction suppresses
 /// the corresponding Stonegate NPC roster slot through the ordinary
 /// per-scene removal-mask bank.
@@ -856,6 +906,96 @@ pub const SPECIAL_ITEM_WOODEN_BOX_INDEX: usize = 0x0f;
 pub const SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE: u8 = 0xFF;
 pub const SPECIAL_ITEM_OWNED_VALUE: u8 = 1;
 pub const SPECIAL_ITEM_WORN_VALUE: u8 = 2;
+
+/// `systems/containers.md §8` found-item class codes for the two quest
+/// families the Underworld fixed-placement pass emits. The class byte
+/// is what [`crate::inventory_add_class`] decodes out of an
+/// active-object's type byte; `0xB4` is "Shadowlord shard" with the
+/// shard index `0..2` as its subtype, and `0xB7` is "Amulet of Lord
+/// British".
+pub const INVENTORY_ADD_CLASS_SHADOWLORD_SHARD: u8 = 0xB4;
+/// See [`INVENTORY_ADD_CLASS_SHADOWLORD_SHARD`].
+pub const INVENTORY_ADD_CLASS_AMULET_LORD_BRITISH: u8 = 0xB7;
+
+/// One row of the Underworld fixed-placement pass.
+///
+/// `catalogs/quest-graph.md §5`, "Where the shards are: fixed
+/// Underworld placement".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnderworldFixedPlacement {
+    /// Underworld X from the §5 table.
+    pub x: u8,
+    /// Underworld Y from the §5 table.
+    pub y: u8,
+    /// Carried-flag slot in `special_items`; the row is emitted only
+    /// while that flag is clear.
+    pub special_item_index: usize,
+    /// Shadowlord slot that must not be vanquished, or `None` for the
+    /// Amulet, which carries no Shadowlord gate.
+    pub shadowlord_index: Option<usize>,
+    /// `containers.md §8` inventory-add class byte stored in the
+    /// object's type byte.
+    pub class_byte: u8,
+    /// Class subtype stored in the object's first auxiliary byte. For
+    /// the shard class this is the shard index `0..2`; the Amulet class
+    /// takes no subtype.
+    pub subtype: u8,
+}
+
+/// `catalogs/quest-graph.md §5`: "They are ordinary active objects
+/// placed at fixed Underworld coordinates by the outdoor setup pass
+/// that runs whenever the party is on a non-surface outdoor plane. The
+/// same pass places the Amulet of Lord British. Every record it writes
+/// is on the Underworld plane (floor byte `255`)."
+///
+/// | Object | X | Y | Placed only while |
+/// |---|---|---|---|
+/// | Amulet of Lord British | 105 | 225 | the party does not already carry the Amulet |
+/// | Shard of Falsehood | 192 | 80 | not carried **and** Faulinei's slot is not vanquished |
+/// | Shard of Hatred | 130 | 65 | not carried **and** Astaroth's slot is not vanquished |
+/// | Shard of Cowardice | 176 | 184 | not carried **and** Nosfentor's slot is not vanquished |
+///
+/// The Shadowlord half of the gate is "not vanquished", not "living":
+/// §5 warns that "an engine that implements the placement with only the
+/// carried-flag half of the gate will respawn every spent shard", while
+/// `systems/time.md §7` makes slot value `0` mean "not yet placed" —
+/// "neither 'in a town' nor 'vanquished'" — so a fresh game, whose
+/// slots are all `0` before the first midnight pass, must still place
+/// all three shards.
+pub const UNDERWORLD_FIXED_OBJECT_PLACEMENTS: [UnderworldFixedPlacement; 4] = [
+    UnderworldFixedPlacement {
+        x: 105,
+        y: 225,
+        special_item_index: SPECIAL_ITEM_AMULET_LB_INDEX,
+        shadowlord_index: None,
+        class_byte: INVENTORY_ADD_CLASS_AMULET_LORD_BRITISH,
+        subtype: 0,
+    },
+    UnderworldFixedPlacement {
+        x: 192,
+        y: 80,
+        special_item_index: SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+        shadowlord_index: Some(SHADOWLORD_FALSEHOOD_INDEX),
+        class_byte: INVENTORY_ADD_CLASS_SHADOWLORD_SHARD,
+        subtype: SHADOWLORD_FALSEHOOD_INDEX as u8,
+    },
+    UnderworldFixedPlacement {
+        x: 130,
+        y: 65,
+        special_item_index: SPECIAL_ITEM_SHARD_HATRED_INDEX,
+        shadowlord_index: Some(SHADOWLORD_HATRED_INDEX),
+        class_byte: INVENTORY_ADD_CLASS_SHADOWLORD_SHARD,
+        subtype: SHADOWLORD_HATRED_INDEX as u8,
+    },
+    UnderworldFixedPlacement {
+        x: 176,
+        y: 184,
+        special_item_index: SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+        shadowlord_index: Some(SHADOWLORD_COWARDICE_INDEX),
+        class_byte: INVENTORY_ADD_CLASS_SHADOWLORD_SHARD,
+        subtype: SHADOWLORD_COWARDICE_INDEX as u8,
+    },
+];
 pub const LORD_BLACKTHORN_CASTLE_SCENE_BYTE: u8 = 18;
 pub const STONEGATE_SCENE_BYTE: u8 = 29;
 pub const DOOM_DUNGEON_RECORD: usize = 7;
@@ -927,6 +1067,10 @@ pub const EQUIPMENT_ID_ARROWS: usize = 27;
 pub const EQUIPMENT_ID_CROSSBOW: usize = 28;
 pub const EQUIPMENT_ID_QUARRELS: usize = 29;
 pub const EQUIPMENT_ID_MAGIC_BOW: usize = 36;
+/// `hidden-treasures.md §2`: "Record 15's granted item is the Glass
+/// Sword (equipment item id `39` in `catalogs/item-list.md`), and its gate
+/// is that same item's carried counter."
+pub const EQUIPMENT_ID_GLASS_SWORD: usize = 39;
 pub const EQUIPMENT_ID_RING_INVISIBILITY: usize = 42;
 pub const EQUIPMENT_ID_RING_REGENERATION: usize = 44;
 pub const EQUIPMENT_ID_AMULET_TURNING: usize = 45;
@@ -982,8 +1126,14 @@ pub const FIXED_HIDDEN_TREASURE_COUNT: usize = 113;
 /// `ceil(FIXED_HIDDEN_TREASURE_COUNT / 8)` = 15 so the
 /// found-bitmap byte count tracks the treasure count.
 pub const FIXED_HIDDEN_TREASURE_FOUND_BYTES: usize = FIXED_HIDDEN_TREASURE_COUNT.div_ceil(8);
-pub const FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY: u8 = 0xFF;
-pub const FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR: u8 = 0;
+/// `hidden-treasures.md §2` record 14 / `time.md §8`: the daily
+/// cooldown cookie's factory value is **zero**. Days of the month run
+/// `1..28`, so zero matches no calendar day and the record is
+/// available on the first search; the 28-to-1 month rollover resets it
+/// to this same value. The cookie is written to the save image, so an
+/// out-of-band sentinel such as `0xFF` would make the byte stream
+/// diverge from the original for the whole life of the save.
+pub const FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY: u8 = 0;
 pub const FIXED_HIDDEN_TREASURE_OBJECT_TILE: u8 = 0x1f;
 pub const FIXED_HIDDEN_TREASURE_OBJECT_AUX3: u8 = 0xa5;
 /// `catalogs/spell-list.md §3` per-reagent recipe-mask bit. The mix
@@ -1156,15 +1306,15 @@ pub const FIREBALL_SPELL_INDEX: usize = 13;
 pub const FIREBALL_RAW_DAMAGE_MAX: u8 = 30;
 pub const KILL_SPELL_INDEX: usize = 37;
 
-/// Inclusive town/world door tile-id range per
-/// `catalogs/tile-catalog.md §6`: indices `0x60..=0x67` are the
-/// door family used by O-Open / J-Jimmy / magic Open. Open
-/// variants written by the O command live in this range alongside
-/// the closed forms. Anchored to [`crate::TILE_DOOR_FIRST`] /
-/// [`crate::TILE_DOOR_LAST`] so the two parallel range
-/// definitions share one source of truth.
-pub const TOWN_DOOR_TILE_FIRST: u8 = crate::TILE_DOOR_FIRST;
-pub const TOWN_DOOR_TILE_LAST: u8 = crate::TILE_DOOR_LAST;
+// `catalogs/tile-catalog.md` §7: "Top-down doors are not the obsolete
+// contiguous decimal `96..103` range; every shipped Look entry in that
+// range is river terrain. The live ordinary pairs used by Jimmy and Open
+// are `0xB8`/`0xB9` (wooden/locked) and `0xBA`/`0xBB`
+// (wooden-with-window/locked-with-window). Magic-locked plain and windowed
+// forms are `0x97` and `0x98`." The former `TOWN_DOOR_TILE_FIRST` /
+// `TOWN_DOOR_TILE_LAST` pair published the withdrawn `0x60..=0x67` door
+// range; the live identifiers are owned by the command predicates in
+// `predicates.rs`, which never used this range.
 /// Inclusive town stair tile-id range per `catalogs/tile-catalog.md` §6:
 /// `0xC4..=0xC7` is the facing-sensitive stairway family whose low two bits
 /// encode movement-wrapper-normalised facing. Anchored to the canonical
@@ -1173,8 +1323,11 @@ pub const TOWN_DOOR_TILE_LAST: u8 = crate::TILE_DOOR_LAST;
 /// truth.
 pub const TOWN_STAIR_TILE_FIRST: u8 = crate::town_mode::TOWN_STAIR_TILE_FIRST;
 pub const TOWN_STAIR_TILE_LAST: u8 = crate::town_mode::TOWN_STAIR_TILE_LAST;
-/// Town chair trigger tile per `catalogs/tile-catalog.md` §6.
-pub const TOWN_CHAIR_TILE: u8 = 0x8C;
+/// Town loose-brick / trapdoor trigger tile per `catalogs/tile-catalog.md` §6.
+///
+/// The shipped description calls `0x8C` a loose brick. The separate chair
+/// family is `0x90..=0x93` and has no underfoot trigger.
+pub const TOWN_LOOSE_BRICK_TRAPDOOR_TILE: u8 = 0x8C;
 /// NPC floor-link marker tiles consumed by the schedule pathfinder per
 /// `catalogs/tile-catalog.md` §6.
 pub const NPC_FLOOR_LINK_TILE_A: u8 = 0xC8;
@@ -1410,6 +1563,14 @@ pub const TOWN_REST_DURATION_DIGIT_MAX: u8 = 9;
 pub const REST_MANA_CAP: u8 = SPELL_CHARGE_CAP;
 pub const DEFAULT_TORCH_STOCK: u8 = 4;
 pub const SURFACE_TORCH_DURATION: u8 = 240;
+/// `lighting.md §8` / `containers.md §7`: the G-Get "borrow" branch,
+/// which lifts a lit fixture out of a town or castle cell, **sets**
+/// the torch counter to 100 counter units. It consumes no carried
+/// torch and adds no inventory item - borrowing a lit fixture is a
+/// light source, not a pickup - and it does not debit the shared
+/// moral-standing selector. Together with Ignite and the Blackthorn
+/// clear these are the only three torch-counter writers besides decay.
+pub const BORROWED_FIXTURE_TORCH_DURATION: u8 = 100;
 /// `lighting.md §8` dungeon Ignite minimum increment. Same value as
 /// the `DUNGEON_TORCH_INCREMENT_MIN` anchor in lighting.rs: dungeon
 /// Ignite rolls a uniform `[MIN, MAX]` torch-counter increment.

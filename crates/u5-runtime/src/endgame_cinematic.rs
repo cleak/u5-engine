@@ -40,6 +40,10 @@ pub enum EndgameCinematicStep {
 
 /// Total number of `END.DAT` narrative windows (per `endgame.md` §8).
 pub const ENDGAME_NARRATIVE_WINDOW_COUNT: u8 = 6;
+/// `endgame.md §5`: shared world-animation ticks between the first rite
+/// page and the fixed `He says:` lead-in for the second page.
+pub const ENDGAME_RITE_LEAD_IN_PAUSE_TICKS: u8 = 40;
+pub const ENDGAME_RITE_LEAD_IN: &str = "He says:";
 /// `endgame.md §7.1` full-screen fade to black, inclusive
 /// `(0, 0)..(319, 199)`.
 ///
@@ -83,6 +87,11 @@ pub struct EndgameCinematic {
     /// Pending `§7.1` full-screen fade-to-black beat, entering the
     /// final narrative presentation.
     pub fade_to_black_rect: Option<(u16, u16, u16, u16)>,
+    /// Display-driven pause remaining after rite page zero. Input is not
+    /// sampled while this blocking helper is active.
+    pub rite_pause_ticks_remaining: u8,
+    /// The second rite page alone carries the fixed lead-in.
+    pub rite_lead_in_visible: bool,
 }
 
 impl EndgameCinematic {
@@ -103,14 +112,45 @@ impl EndgameCinematic {
             rite_message_count,
             keystrokes: 0,
             fade_to_black_rect: None,
+            rite_pause_ticks_remaining: if rite_message_count > 1 {
+                ENDGAME_RITE_LEAD_IN_PAUSE_TICKS
+            } else {
+                0
+            },
+            rite_lead_in_visible: false,
         }
+    }
+
+    /// Advance one display tick of the first-to-second rite-page pause. When
+    /// the shared world-animation gate is disabled, the helper skips the loop
+    /// and publishes the second page immediately.
+    pub fn advance_rite_pause_tick(&mut self, world_animation_enabled: bool) -> bool {
+        if !matches!(self.step, EndgameCinematicStep::RiteMessage(0))
+            || self.rite_pause_ticks_remaining == 0
+        {
+            return false;
+        }
+        if world_animation_enabled && self.rite_pause_ticks_remaining > 1 {
+            self.rite_pause_ticks_remaining -= 1;
+            return true;
+        }
+        self.rite_pause_ticks_remaining = 0;
+        self.rite_lead_in_visible = true;
+        self.step = EndgameCinematicStep::RiteMessage(1);
+        true
     }
 
     /// Advance one step. Returns the new step. Pressing a key while
     /// already `Finished` is a no-op.
     pub fn advance(&mut self) -> EndgameCinematicStep {
+        if matches!(self.step, EndgameCinematicStep::RiteMessage(0))
+            && self.rite_pause_ticks_remaining != 0
+        {
+            return self.step;
+        }
         self.keystrokes = self.keystrokes.saturating_add(1);
         self.fade_to_black_rect = None;
+        self.rite_lead_in_visible = false;
         self.step = match self.step {
             EndgameCinematicStep::Inactive | EndgameCinematicStep::Finished => self.step,
             EndgameCinematicStep::RiteMessage(idx) => {
@@ -330,10 +370,28 @@ mod tests {
     fn rite_messages_page_before_the_tableau_and_the_fade() {
         let mut cin = EndgameCinematic::start_with_rite_messages(3);
         assert_eq!(cin.step, EndgameCinematicStep::RiteMessage(0));
-        assert_eq!(cin.advance(), EndgameCinematicStep::RiteMessage(1));
+        assert_eq!(cin.advance(), EndgameCinematicStep::RiteMessage(0));
+        assert_eq!(cin.keystrokes, 0);
+        for _ in 0..ENDGAME_RITE_LEAD_IN_PAUSE_TICKS - 1 {
+            assert!(cin.advance_rite_pause_tick(true));
+            assert_eq!(cin.step, EndgameCinematicStep::RiteMessage(0));
+        }
+        assert!(cin.advance_rite_pause_tick(true));
+        assert_eq!(cin.step, EndgameCinematicStep::RiteMessage(1));
+        assert!(cin.rite_lead_in_visible);
         assert_eq!(cin.advance(), EndgameCinematicStep::RiteMessage(2));
+        assert!(!cin.rite_lead_in_visible);
         assert_eq!(cin.advance(), EndgameCinematicStep::ThroneTableau);
         assert_eq!(cin.fade_to_black_rect, None);
         assert_eq!(cin.advance(), EndgameCinematicStep::FadeToBlack);
+    }
+
+    #[test]
+    fn disabled_world_animation_skips_the_rite_pause_loop() {
+        let mut cin = EndgameCinematic::start_with_rite_messages(7);
+        assert!(cin.advance_rite_pause_tick(false));
+        assert_eq!(cin.step, EndgameCinematicStep::RiteMessage(1));
+        assert_eq!(cin.rite_pause_ticks_remaining, 0);
+        assert!(cin.rite_lead_in_visible);
     }
 }

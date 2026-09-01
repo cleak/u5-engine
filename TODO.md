@@ -6,6 +6,17 @@ and now includes broad runtime coverage for command routing, movement,
 animation, save/load, combat, shops, conversation, character creation, intro
 flows, magic, rest/camp, Blackthorn/Codex paths, and the terminal endgame.
 
+**2026-08-26: this file overstated completeness and its optimistic claims are
+withdrawn.** A systematic audit of all ~85 published specification documents
+found 106 contracts the engine does not implement (`cleak/u5-engine#2`). Most
+are cases where the engine implemented a spec revision that was later
+*reversed* — with a doc comment quoting the retracted sentence and a test
+pinning the retracted behaviour, so nothing in the repository flagged it. Treat
+every "implemented" and "verified" statement below as a claim about a spec
+revision at some past date, not about spec HEAD. See
+`docs/completion-audit.md`, "Published but not implemented", for the process
+consequences.
+
 This file is a working handoff checklist, not an authoritative status database.
 Many older milestone bullets below were written during the first-playable phase.
 Before treating any item as missing, verify current code with `rg`, read the
@@ -889,7 +900,11 @@ tables are not yet public or not yet encoded.
   - `end_narrative_windows.tsv` (now an override for public END.DAT
     final-narrative byte windows)
   - `SAVED.WPS`
-  - `SAVED.BTH`
+
+`SAVED.BTH` is deliberately absent. Public issue `cleak/u5-spec#168` retracted
+the alleged Blackthorn captive/progression fields: they were the ordinary Food
+word and existing moral-standing byte, so the phantom sidecar and all of its
+save/load plumbing were removed.
 
 - For each sidecar:
   - identify whether the public spec now has enough information to implement a

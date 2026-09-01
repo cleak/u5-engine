@@ -4,19 +4,83 @@ use std::path::Path;
 use crate::*;
 
 impl PlayState {
-    pub(crate) fn emit_sound_effect(&mut self, effect: PlaySoundEffect) {
+    /// Record one published sound boundary.
+    ///
+    /// `audio.md §3`: the sound setting changes output, not cadence, so the
+    /// runtime records every effect unconditionally and never consults the
+    /// Ctrl-S boolean here. A frontend decides audibility.
+    pub(crate) fn emit_sound_effect(&mut self, effect: SoundEffect) {
         self.sound_effect_serial = self.sound_effect_serial.wrapping_add(1);
         self.sound_effect_history
             .push((self.sound_effect_serial, effect));
-        if self.sound_effect_history.len() > 16 {
+        if self.sound_effect_history.len() > SOUND_EFFECT_HISTORY_CAPACITY {
             self.sound_effect_history.remove(0);
         }
     }
 
-    pub fn sound_effects_after(&self, serial: u64) -> Vec<PlaySoundEffect> {
+    /// `audio.md §6.1` scroll presentation: the variant is the scroll index.
+    ///
+    /// "A scroll supplies its **scroll index**, 0 through 7." The scroll
+    /// variant disagrees with the corresponding spell's in six of the eight
+    /// cases, so "a frontend must not reuse the spell's variant for the
+    /// scroll" - this helper exists so no caller can.
+    pub(crate) fn emit_scroll_shared_variant(&mut self, scroll_index: usize) {
+        if let Some(variant) = audio::scroll_shared_variant(scroll_index) {
+            self.emit_sound_effect(SoundEffect::SharedVariant { variant });
+        }
+    }
+
+    /// `audio.md §7.4` overworld blocked step.
+    ///
+    /// One of the exactly four sites that carry the 165 Hz / 200-unit recipe.
+    /// The predicate "is not simply `step refused`": under sail nothing beeps,
+    /// and a whirlpool-class blocker aboard a vehicle "returns completely
+    /// silently, with no message at all". `RETRACTIONS.md` records that naming
+    /// only town and combat under-scoped the cue by this mode.
+    ///
+    /// The `OUCH!` animated-terrain branch is **unidentified** in `§7.4`, so no
+    /// caller can select it; see [`audio::overworld_blocked_step_beeps`].
+    pub(crate) fn emit_overworld_blocked_step(&mut self, blocker_is_whirlpool_class: bool) {
+        if audio::overworld_blocked_step_beeps(
+            self.player.transport.is_ship_under_sail(),
+            !self.player.transport.is_foot(),
+            blocker_is_whirlpool_class,
+            false,
+        ) {
+            self.emit_sound_effect(SoundEffect::BlockedStep);
+        }
+    }
+
+    /// `audio.md §7.4` town blocked step.
+    ///
+    /// The second of the four sites: "Prints `Blocked!`, beeps, flushes
+    /// type-ahead. Two refusal arms (object occupancy, tile-class refusal)
+    /// share one tail." Town has no under-sail or whirlpool arm, so both
+    /// refusal arms beep unconditionally.
+    pub(crate) fn emit_town_blocked_step(&mut self) {
+        self.emit_sound_effect(SoundEffect::BlockedStep);
+    }
+
+    /// Run the `audio.md §8.4` shared major full-viewport flash.
+    ///
+    /// Eight rounds of four 58-band sweeps: 1,856 band draws and 1,856
+    /// frequency changes. Every band consumes one **gameplay** PRNG draw, so
+    /// this must be called at the published boundary whether or not sound is
+    /// audible — muting suppresses each tone start but skips none of the
+    /// advances. Shrine restoration, a recognized Word of Power, and
+    /// Shadowlord destruction all share it.
+    pub(crate) fn emit_major_flash(&mut self) {
+        let mut prng = U5Prng::new(self.prng_state);
+        let bands = audio::draw_major_flash_bands(&mut prng);
+        self.prng_state = prng.state();
+        self.emit_sound_effect(SoundEffect::MajorFlash { bands });
+    }
+
+    pub fn sound_effects_after(&self, serial: u64) -> Vec<SoundEffect> {
         self.sound_effect_history
             .iter()
-            .filter_map(|(event_serial, effect)| (*event_serial > serial).then_some(*effect))
+            .filter(|(event_serial, _)| *event_serial > serial)
+            .map(|(_, effect)| effect.clone())
             .collect()
     }
 
@@ -198,6 +262,25 @@ impl PlayState {
         save[SAVE_NATURAL_MOONGATE_COUNTER_OFFSET] = self.natural_moongate_counter;
         save[SAVE_CAMP_COOLDOWN_OFFSET] = self.camp_cooldown;
         save[SAVE_CAMP_MONTH_COOKIE_OFFSET] = self.camp_month_cookie;
+        if let Some(tracker) = self.door_tracker {
+            save[SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET] = tracker.previous_tile;
+            save[SAVE_DOOR_TRACKER_X_OFFSET] = u8::try_from(tracker.x).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("door tracker X is outside byte range: {}", tracker.x),
+                )
+            })?;
+            save[SAVE_DOOR_TRACKER_Y_OFFSET] = u8::try_from(tracker.y).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("door tracker Y is outside byte range: {}", tracker.y),
+                )
+            })?;
+            save[SAVE_DOOR_TRACKER_COUNTDOWN_OFFSET] = tracker.turns_remaining;
+        } else {
+            save[SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET..=SAVE_DOOR_TRACKER_COUNTDOWN_OFFSET]
+                .fill(0);
+        }
         let pending_vehicle_save = self
             .return_world
             .as_ref()
@@ -215,8 +298,11 @@ impl PlayState {
             ..SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES]
             .copy_from_slice(&self.fixed_hidden_treasure_found);
         save[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET] = self.fixed_hidden_treasure_daily_day;
-        save[SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET] =
-            self.fixed_hidden_treasure_single_use_cookie;
+        // `formats/saved-gam.md` §10, record 15: the gate at `0x0241` is
+        // "Not a dedicated cookie. This is the **equipment-inventory counter
+        // for item id `39` (Glass Sword)** from Section 7". It is inside the
+        // equipment-stock block written above, so there is deliberately no
+        // second write here - one used to clobber the Glass Sword counter.
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
         encode_npc_mask_bank(
@@ -303,7 +389,6 @@ impl PlayState {
         disk_session.request_operation(DiskOperationFamily::UltimaVSaveFiles);
         write_disk_file(&game_dir.join(SAVED_GAM_FILENAME), save)?;
         write_disk_file(&game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
-        write_blackthorn_story_state(game_dir, self.blackthorn_story)?;
         write_world_progress_state(game_dir, WorldProgressState::from_play_state(self))?;
         write_town_npc_mutations(game_dir, &self.town_npc_mutations)?;
         Ok(())
@@ -358,8 +443,90 @@ impl PlayState {
             aux3: 0,
         });
         self.active_objects.extend(overlay);
+        self.place_underworld_fixed_objects(plane);
         self.cache_current_world_overlay();
         Ok(())
+    }
+
+    /// `catalogs/quest-graph.md §5`, "Where the shards are: fixed
+    /// Underworld placement": the three shards and the Amulet of Lord
+    /// British "are ordinary active objects placed at fixed Underworld
+    /// coordinates by the outdoor setup pass that runs whenever the
+    /// party is on a non-surface outdoor plane", every record "on the
+    /// Underworld plane (floor byte `255`)".
+    ///
+    /// Both gates are required. A shard is emitted only while "the party
+    /// does not carry it **and** [its Shadowlord's] slot is not
+    /// vanquished", because destruction "clears exactly the carried flag
+    /// this pass reads", so "an engine that implements the placement with
+    /// only the carried-flag half of the gate will respawn every spent
+    /// shard". The Shadowlord half is the *vanquished* test rather than
+    /// the living test: `systems/time.md §7` makes slot value `0` mean
+    /// "not yet placed", "neither 'in a town' nor 'vanquished'", and a
+    /// newly created game holds `0` in all three slots until the first
+    /// midnight pass.
+    ///
+    /// "The pass is a placement pass, not a respawn: once the carried
+    /// flag is set the object is never emitted again."
+    pub fn place_underworld_fixed_objects(&mut self, plane: WorldPlane) {
+        if plane != WorldPlane::Underworld {
+            return;
+        }
+        for placement in UNDERWORLD_FIXED_OBJECT_PLACEMENTS {
+            if self
+                .special_items
+                .get(placement.special_item_index)
+                .copied()
+                .unwrap_or(0)
+                != 0
+            {
+                continue;
+            }
+            if let Some(shadowlord_index) = placement.shadowlord_index {
+                if self.shadowlord_vanquished(shadowlord_index) {
+                    continue;
+                }
+            }
+            let x = placement.x as usize;
+            let y = placement.y as usize;
+            // The overlay file may already ship the same record. The pass
+            // places one object, so never stack a second copy on the cell.
+            if self.active_objects.iter().any(|object| {
+                object.type_byte == placement.class_byte
+                    && object.aux1 == placement.subtype
+                    && object.x == x
+                    && object.y == y
+            }) {
+                continue;
+            }
+            let object = ActiveObject {
+                type_byte: placement.class_byte,
+                // `containers.md §3` puts the loose item-art band at
+                // `0x80..=0xBF`, which is what `gettable_object_visual`
+                // accepts, and the §8 quest class bytes sit inside it. The
+                // individual art id for these four records is not
+                // published, so the class byte doubles as the visual until
+                // a clean tile catalog names one.
+                tile: placement.class_byte,
+                x,
+                y,
+                z: plane.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: placement.subtype,
+                aux3: 0,
+            };
+            if let Some(slot) = self
+                .active_objects
+                .iter()
+                .enumerate()
+                .skip(ACTIVE_OBJECT_ORDINARY_FIRST)
+                .find_map(|(slot, existing)| existing.is_empty().then_some(slot))
+            {
+                self.active_objects[slot] = object;
+            } else if self.active_objects.len() < OOL_SLOTS {
+                self.active_objects.push(object);
+            }
+        }
     }
 
     pub fn load_town_scene(
@@ -443,13 +610,24 @@ impl PlayState {
             },
             active_objects,
             npcs: Vec::new(),
-            door_tracker: None,
+            // `commands.md` Journey Onward contract: the four bytes survive
+            // save decoding, but town setup clears only the active/previous-
+            // tile byte before the authored location floor is installed.
+            // The remaining bytes stay resident and inert for round-tripping.
+            door_tracker: options.door_tracker.map(|mut tracker| {
+                if saved_game_reload {
+                    tracker.previous_tile = 0;
+                }
+                tracker
+            }),
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),
             passability,
             grid,
             world_live_chunks: None,
             clock: options.clock,
+            status_pass_previous_hour: options.clock.hour,
+            dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             animation: AnimationClock::default(),
             dungeon_fountain_frame: 0,
@@ -457,11 +635,15 @@ impl PlayState {
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
             pending_map_viewport_dissolves: Vec::new(),
+            pending_blackthorn_rescue_playbacks: Vec::new(),
+            pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
             pending_stonegate_trapdoor_playback: None,
-            pending_stonegate_status_provision_pass: false,
-            pending_stonegate_object_epilogue: false,
-            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
+            pending_town_status_provision_pass: false,
+            pending_town_npc_schedule_pass: false,
+            pending_town_active_object_pass: false,
+            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
+                .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -484,8 +666,6 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
-            fixed_hidden_treasure_single_use_cookie: options
-                .fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
@@ -497,6 +677,8 @@ impl PlayState {
             word_of_power_seal_flags: options.word_of_power_seal_flags,
             shrine_ruin_flags: options.shrine_ruin_flags,
             moral_standing: options.moral_standing,
+            town_drunkenness_counter: 0,
+            tavern_secondary_drink_count: 0,
             toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
@@ -524,11 +706,14 @@ impl PlayState {
             camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
+            combat_action_result: 0,
             combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
+            pace_combat_presentations: false,
             combat_frame_snapshot: None,
             pending_combat_actor_slot: None,
             pending_combat_terrain_trigger_slot: None,
+            pending_town_conflict: None,
             pending_outdoor_reaction_slots: Vec::new(),
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
@@ -558,12 +743,12 @@ impl PlayState {
             music_enabled: true,
             sound_effect_serial: 0,
             sound_effect_history: Vec::new(),
+            harpsichord_progress: 0,
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,
             blackthorn_audience_map: None,
-            blackthorn_story: options.blackthorn_story,
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
@@ -711,6 +896,8 @@ impl PlayState {
             grid,
             world_live_chunks: None,
             clock: options.clock,
+            status_pass_previous_hour: options.clock.hour,
+            dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             animation: AnimationClock::default(),
             dungeon_fountain_frame: 0,
@@ -718,11 +905,15 @@ impl PlayState {
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
             pending_map_viewport_dissolves: Vec::new(),
+            pending_blackthorn_rescue_playbacks: Vec::new(),
+            pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
             pending_stonegate_trapdoor_playback: None,
-            pending_stonegate_status_provision_pass: false,
-            pending_stonegate_object_epilogue: false,
-            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
+            pending_town_status_provision_pass: false,
+            pending_town_npc_schedule_pass: false,
+            pending_town_active_object_pass: false,
+            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
+                .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -745,8 +936,6 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
-            fixed_hidden_treasure_single_use_cookie: options
-                .fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
@@ -758,6 +947,8 @@ impl PlayState {
             word_of_power_seal_flags: options.word_of_power_seal_flags,
             shrine_ruin_flags: options.shrine_ruin_flags,
             moral_standing: options.moral_standing,
+            town_drunkenness_counter: 0,
+            tavern_secondary_drink_count: 0,
             toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
@@ -785,11 +976,14 @@ impl PlayState {
             camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
+            combat_action_result: 0,
             combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
+            pace_combat_presentations: false,
             combat_frame_snapshot: None,
             pending_combat_actor_slot: None,
             pending_combat_terrain_trigger_slot: None,
+            pending_town_conflict: None,
             pending_outdoor_reaction_slots: Vec::new(),
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
@@ -826,12 +1020,12 @@ impl PlayState {
             music_enabled: true,
             sound_effect_serial: 0,
             sound_effect_history: Vec::new(),
+            harpsichord_progress: 0,
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,
             blackthorn_audience_map: None,
-            blackthorn_story: options.blackthorn_story,
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
@@ -1005,6 +1199,8 @@ impl PlayState {
             grid,
             world_live_chunks,
             clock: options.clock,
+            status_pass_previous_hour: options.clock.hour,
+            dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             animation: AnimationClock::default(),
             dungeon_fountain_frame: 0,
@@ -1012,11 +1208,15 @@ impl PlayState {
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
             pending_map_viewport_dissolves: Vec::new(),
+            pending_blackthorn_rescue_playbacks: Vec::new(),
+            pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
             pending_stonegate_trapdoor_playback: None,
-            pending_stonegate_status_provision_pass: false,
-            pending_stonegate_object_epilogue: false,
-            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
+            pending_town_status_provision_pass: false,
+            pending_town_npc_schedule_pass: false,
+            pending_town_active_object_pass: false,
+            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
+                .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -1039,8 +1239,6 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
-            fixed_hidden_treasure_single_use_cookie: options
-                .fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
@@ -1052,6 +1250,8 @@ impl PlayState {
             word_of_power_seal_flags: options.word_of_power_seal_flags,
             shrine_ruin_flags: options.shrine_ruin_flags,
             moral_standing: options.moral_standing,
+            town_drunkenness_counter: 0,
+            tavern_secondary_drink_count: 0,
             toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
@@ -1079,11 +1279,14 @@ impl PlayState {
             camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
+            combat_action_result: 0,
             combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
+            pace_combat_presentations: false,
             combat_frame_snapshot: None,
             pending_combat_actor_slot: None,
             pending_combat_terrain_trigger_slot: None,
+            pending_town_conflict: None,
             pending_outdoor_reaction_slots: Vec::new(),
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
@@ -1114,12 +1317,12 @@ impl PlayState {
             music_enabled: true,
             sound_effect_serial: 0,
             sound_effect_history: Vec::new(),
+            harpsichord_progress: 0,
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
             active_blackthorn: None,
             blackthorn_audience_map: None,
-            blackthorn_story: options.blackthorn_story,
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
@@ -1167,6 +1370,13 @@ impl PlayState {
         direction: Direction,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
+        // `movement.md §2`: "No mode steps diagonally." World and town
+        // movement consume the four cardinal directions only, so a diagonal
+        // is refused before the facing is written. The dungeon step keeps its
+        // own refusal below so its message stays mode-local.
+        if !direction.is_cardinal() && !matches!(self.area, Area::Dungeon { .. }) {
+            return Ok(MoveOutcome::Blocked);
+        }
         self.player.facing = direction;
         let previous_avatar_tile = self.player.transport.avatar_tile();
         self.player.transport = self.player.transport.with_facing(direction);
@@ -1185,11 +1395,15 @@ impl PlayState {
             let corner_tile = self.grid[31 * 32 + 31];
             if !self.tile_walkable(corner_tile) {
                 self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(corner_tile));
+                // `audio.md §7.4`: the town tile-class refusal arm.
+                self.emit_town_blocked_step();
                 self.advance_turn();
                 return Ok(MoveOutcome::Blocked);
             }
             if self.blocking_town_object_at_candidate(nx, ny).is_some() {
                 self.message = format!("Blocked by actor at ({nx}, {ny}).");
+                // `audio.md §7.4`: the town object-occupancy refusal arm.
+                self.emit_town_blocked_step();
                 self.advance_turn();
                 return Ok(MoveOutcome::Blocked);
             }
@@ -1200,6 +1414,8 @@ impl PlayState {
         let ny = ny as usize;
         if self.blocking_object_at(nx, ny).is_some() {
             self.message = format!("Blocked by actor at ({nx}, {ny}).");
+            // `audio.md §7.4`: the town object-occupancy refusal arm.
+            self.emit_town_blocked_step();
             return Ok(MoveOutcome::Blocked);
         }
         let tile = self.grid[ny * 32 + nx];
@@ -1232,13 +1448,18 @@ impl PlayState {
             self.sync_player_object();
             self.mark_visibility_dirty();
             self.message = format!("Moved to ({nx}, {ny}).");
-            if let Some(game_dir) = game_dir {
-                self.append_town_poison_gas_message(game_dir, scene, floor)?;
-            }
+            // `town-mode.md §17` "Underfoot-effect cadence is fixed": "The
+            // underfoot handler is a per-turn post-action pass, not a
+            // step-commit hook. Any earlier statement that the poison-gas
+            // effect 'fires from the step path' is retracted". The gas arm
+            // now lives in `apply_town_post_turn_effects_after_turn`, after
+            // this turn's clock advance.
             self.advance_turn();
             Ok(MoveOutcome::Moved)
         } else {
             self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));
+            // `audio.md §7.4`: the town tile-class refusal arm.
+            self.emit_town_blocked_step();
             Ok(MoveOutcome::Blocked)
         }
     }

@@ -32,6 +32,34 @@ pub const fn sextant_coordinate_letters(coordinate: u8) -> (u8, u8) {
     (high, low)
 }
 
+/// `magic.md §8` shared sextant-style coordinate printer.
+///
+/// "Each coordinate is rendered as high-letter, apostrophe,
+/// low-letter, **double-quote**, and the two coordinates are joined by
+/// a comma and a space. *Corrected:* an earlier revision said the
+/// helper 'ends the line with a trailing double-quote character',
+/// which undercounts the quotes ... Both coordinates carry their own
+/// closing quote."
+///
+/// "The printer emits a **newline before** the coordinate pair as well
+/// as after it. *Corrected:* an earlier revision of this paragraph
+/// said only that 'a newline ends the line' ... the label a caller
+/// prints first carries no newline of its own, so the observable
+/// output is the label on one line and the coordinate pair on the line
+/// below, followed by a further line break."
+///
+/// The Y coordinate (latitude) prints first, then X (longitude).
+/// Callers print only their own label — Locate's `Locate:` and the
+/// Sextant U-Use's `Sextant:` — and concatenate this string after it.
+pub fn sextant_coordinate_pair_line(y: u8, x: u8) -> String {
+    let (y_high, y_low) = sextant_coordinate_letters(y);
+    let (x_high, x_low) = sextant_coordinate_letters(x);
+    format!(
+        "\n{}'{}\", {}'{}\"\n",
+        y_high as char, y_low as char, x_high as char, x_low as char
+    )
+}
+
 /// `magic.md §8` field-placement spell -> energy-field cell byte
 /// the placement writes into the dungeon image. `In Flam Grav`
 /// (spell 14, Fire Field) writes `0x82`; `In Nox Grav` (spell 15,
@@ -868,4 +896,67 @@ pub const fn spell_rune_name(index: usize) -> Option<&'static str> {
 pub const fn heal_spell_amount_from_raw_roll_u8(raw_roll_0_to_60: u8) -> u8 {
     let halved = raw_roll_0_to_60 / 2;
     if halved == 0 { 1 } else { halved }
+}
+
+#[cfg(test)]
+mod sextant_printer_tests {
+    use super::*;
+
+    #[test]
+    fn coordinate_pair_line_matches_the_corrected_punctuation() {
+        // `magic.md §8`: "Each coordinate is rendered as high-letter,
+        // apostrophe, low-letter, **double-quote**, and the two
+        // coordinates are joined by a comma and a space." The earlier
+        // "trailing double-quote character" wording undercounted the
+        // quotes; both coordinates carry their own closing quote.
+        //
+        // "The printer emits a **newline before** the coordinate pair
+        // as well as after it."
+        let line = sextant_coordinate_pair_line(0xAF, 0x23);
+        assert_eq!(line, "\nK'P\", C'D\"\n");
+        assert_eq!(line.matches('"').count(), 2);
+        assert!(line.starts_with('\n'));
+        assert!(line.ends_with('\n'));
+        assert!(line.contains(", "));
+    }
+
+    #[test]
+    fn label_sits_on_its_own_line_above_the_pair() {
+        // §8: "the label a caller prints first carries no newline of
+        // its own, so the observable output is the label on one line
+        // and the coordinate pair on the line below, followed by a
+        // further line break. An engine that concatenates label and
+        // coordinates onto a single line matches the old wording and
+        // still does not match the original."
+        let message = format!("Locate:{}", sextant_coordinate_pair_line(0x7C, 0x3E));
+        let mut lines = message.split('\n');
+        assert_eq!(lines.next(), Some("Locate:"));
+        assert_eq!(lines.next(), Some("H'M\", D'O\""));
+        assert_eq!(lines.next(), Some(""));
+        assert_eq!(lines.next(), None);
+    }
+
+    #[test]
+    fn both_callers_share_one_printer() {
+        // §8 calls this "the shared sextant-style coordinate printer",
+        // and `inventory.md §7` gives the Sextant U-Use the same one, so
+        // the two must differ only by their label.
+        let locate = format!("Locate:{}", sextant_coordinate_pair_line(0xAF, 0x23));
+        let sextant = format!("Sextant:{}", sextant_coordinate_pair_line(0xAF, 0x23));
+        assert_eq!(
+            locate.trim_start_matches("Locate:"),
+            sextant.trim_start_matches("Sextant:")
+        );
+    }
+
+    #[test]
+    fn nibbles_map_to_letters_a_through_p_with_y_first() {
+        // §8: "splits each coordinate byte into high and low nibbles,
+        // maps nibble values 0 through 15 to letters `A` through `P`,
+        // and prints the Y-coordinate (latitude) first, then the
+        // X-coordinate (longitude)."
+        assert_eq!(sextant_coordinate_letters(0x00), (b'A', b'A'));
+        assert_eq!(sextant_coordinate_letters(0xFF), (b'P', b'P'));
+        assert_eq!(sextant_coordinate_pair_line(0x00, 0xFF), "\nA'A\", P'P\"\n");
+    }
 }

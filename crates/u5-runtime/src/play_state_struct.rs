@@ -5,24 +5,26 @@ use std::collections::HashMap;
 use crate::*;
 
 /// Frontend-facing sound boundaries published by the clean specification.
+///
 /// The runtime records only the effect identity and a monotonically changing
-/// serial; each frontend owns the actual sound synthesis and playback.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlaySoundEffect {
-    CombatBlocked,
-    CombatEscape,
-    CombatPossession,
-    CombatSummon,
-    DungeonDecorationSweep0,
-    DungeonDecorationSweep1,
-    DungeonDecorationSweep2,
-    RingVanish,
-    ShrineWordRumble,
-    StonegateTone,
-    StolenWarning,
-    TrapSting,
-    WindChange,
-}
+/// serial; each frontend owns synthesis and playback. The effect vocabulary is
+/// `crate::audio::SoundEffect`, whose variants are exactly the confirmed
+/// trigger inventory of `systems/audio.md`.
+pub use crate::audio::SoundEffect;
+
+/// `audio.md §2` keeps one serial speaker, so a frontend only ever needs the
+/// most recent boundaries; this bounds the non-saved history.
+///
+/// The bound has to clear the longest single blocking sequence the engine can
+/// emit between two frontend drains, because eviction drops the oldest entry
+/// while the serial keeps counting — a lost cue looks exactly like a cue that
+/// never fired. The worst published case is the `town-mode.md §7.1` Stonegate
+/// scripted death: the ordinary trapdoor prefix rolls `1..8` damage against
+/// every party slot (one `§8.2` damage rumble each), then the script emits its
+/// descent sweep and one further rumble per slot as it kills them. With a full
+/// party that is fifteen boundaries from one keystroke, so sixteen left no
+/// margin at all.
+pub const SOUND_EFFECT_HISTORY_CAPACITY: usize = 64;
 
 #[derive(Clone, Debug)]
 pub struct PlayState {
@@ -37,6 +39,19 @@ pub struct PlayState {
     pub grid: Vec<u8>,
     pub world_live_chunks: Option<WorldLiveChunkBuffer>,
     pub clock: GameClock,
+    /// `time.md §5`: "The pass keeps its own previous-hour snapshot and
+    /// compares it with the current hour." The party status/provision pass
+    /// runs once per turn-consuming action, so it cannot share the per-turn
+    /// cleanup's local snapshot — only its food/starvation branch is gated on
+    /// the hour changing, and the camp loop advances the clock without
+    /// entering the pass at all.
+    pub status_pass_previous_hour: u8,
+    /// `dungeon-mode.md §15`: the dungeon loop charges one minute at the
+    /// head of every iteration, ungated on whether the command consumed a
+    /// turn. This flag records that the iteration's minute is already spent so
+    /// a turn-consuming dungeon handler's own `advance_turn` bumps the action
+    /// counter and runs its epilogues without charging the clock twice.
+    pub dungeon_loop_minute_charged: bool,
     pub prng_state: u16,
     pub animation: AnimationClock,
     /// `dungeon-mode.md §6.7`: shared three-frame fountain-water phase,
@@ -54,6 +69,13 @@ pub struct PlayState {
     /// Completed blocking map-viewport dissolves waiting for a frontend to
     /// present them. This is transient presentation state, never save data.
     pub pending_map_viewport_dissolves: Vec<MapViewportDissolvePlayback>,
+    /// Completed Blackthorn rescue tableau between its two rectangle
+    /// dissolves. Transient presentation state, never serialized.
+    pub pending_blackthorn_rescue_playbacks: Vec<BlackthornRescuePlayback>,
+    /// Completed vanish-on-death single-cell reveals waiting for the frontend.
+    /// The runtime has already exhausted all 256 pixel operations and 31
+    /// world ticks; this transient record preserves their exact order.
+    pub pending_combat_terrain_reveals: Vec<CombatTerrainRevealPlayback>,
     /// `catalogs/item-list.md §7.2`: a selected-bottle flash waiting for the
     /// frontend to present it. This is transient presentation state, never
     /// resumable or saved gameplay state.
@@ -61,12 +83,22 @@ pub struct PlayState {
     /// Completed Stonegate trapdoor tableau waiting for a frontend. This is a
     /// blocking, non-resumable presentation record and is never save data.
     pub pending_stonegate_trapdoor_playback: Option<StonegateTrapdoorPlayback>,
-    /// Stonegate underfoot detection defers an hour-boundary party pass until
-    /// after the scripted deaths. Transient within one town action.
-    pub pending_stonegate_status_provision_pass: bool,
-    /// Stonegate underfoot detection defers the ordinary animal/NPC tail until
-    /// after the script-owned object-table clear. Transient within one action.
-    pub pending_stonegate_object_epilogue: bool,
+    /// `town-mode.md §7`/§10: an ordinary one-minute town turn advances the
+    /// clock first, then runs tile effects, and only then enters the shared
+    /// party status/provision pass. This flag carries that pass from the
+    /// clock routine to the trailing edge of the town underfoot handler.
+    /// Transient within one town action and never serialized.
+    pub pending_town_status_provision_pass: bool,
+    /// `town-mode.md §7`: the NPC scheduler follows the underfoot/status pass
+    /// and the slot-zero coordinate copy. This flag carries that scheduler
+    /// call across the I/O-bearing underfoot handler. Stonegate uses the same
+    /// tail after its script-owned object-table clear. Never serialized.
+    pub pending_town_npc_schedule_pass: bool,
+    /// Whether the deferred town tail also owes the ordinary active-object
+    /// animator/free-roaming pass requested by the clock caller. This remains
+    /// separate because some low-level time calls deliberately suppress that
+    /// pass while still owing the NPC scheduler. Never serialized.
+    pub pending_town_active_object_pass: bool,
     pub cached_moon_glyph_bytes: [u8; 2],
     pub food: u16,
     pub gold: u16,
@@ -90,7 +122,6 @@ pub struct PlayState {
     pub rare_reagent_harvest_days: [u8; RARE_REAGENT_HARVEST_POINT_COUNT],
     pub fixed_hidden_treasure_found: [u8; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
     pub fixed_hidden_treasure_daily_day: u8,
-    pub fixed_hidden_treasure_single_use_cookie: u8,
     pub dungeon_room_clear_bitmap: [u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
     pub moonstone_slots: [MoonstoneGateSlot; MOONSTONE_SLOT_COUNT],
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
@@ -108,6 +139,13 @@ pub struct PlayState {
     pub word_of_power_seal_flags: [u8; SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT],
     pub shrine_ruin_flags: [u8; SAVE_SHRINE_RUIN_FLAG_COUNT],
     pub moral_standing: u8,
+    /// Visit-local tavern drunken-command counter. It is armed to 25 by
+    /// accepting a fourth secondary drink and is cleared on town entry/exit.
+    /// This is transient runtime state and is never serialized.
+    pub town_drunkenness_counter: u8,
+    /// Number of successful secondary-drink purchases in the current tavern
+    /// visit. Reset whenever Talk opens a new tavern session.
+    pub tavern_secondary_drink_count: u8,
     pub toll_progress: u8,
     pub avatar_stats: AvatarStats,
     pub torches: u8,
@@ -158,13 +196,25 @@ pub struct PlayState {
     pub camp_month_cookie: u8,
     pub active_player: Option<usize>,
     pub combat_round_counter: u8,
+    /// `combat.md §6.3`: global combat action-result/narration scratch.
+    /// It is reset before actor dispatch and has no resumable combat lifetime.
+    pub combat_action_result: u8,
     /// `magic.md §7`: save-backed per-victim source slots used by the C-Cast
     /// interference gate. This state intentionally survives combat boundaries.
     pub combat_interference_sources: [u8; COMBAT_ACTOR_SLOTS],
     pub combat_active: bool,
+    /// Frontend presentation policy, never serialized. Graphical frontends
+    /// set this so the automatic actor walk stops after each visible action;
+    /// batch-oriented callers retain the blocking walk by default.
+    pub pace_combat_presentations: bool,
     pub combat_frame_snapshot: Option<CombatFrameSnapshot>,
     pub pending_combat_actor_slot: Option<usize>,
     pub pending_combat_terrain_trigger_slot: Option<usize>,
+    /// `town-mode.md §14`: the town NPC-conflict chain's carry-over.
+    /// A-Attack on a town actor enters the ordinary terrain arena, and
+    /// "On exit the town chain clears the NPC slot, reloads the town
+    /// map, and re-runs the Shadowlord install pass of Section 13".
+    pub pending_town_conflict: Option<PendingTownConflict>,
     /// High-to-low outdoor reaction slots staged by the I/O-free active-object
     /// walker. Lower entries survive a terrain-combat frame and resume when
     /// that frame returns to the world.
@@ -216,13 +266,17 @@ pub struct PlayState {
     /// Non-saved presentation event. The serial lets a frontend distinguish a
     /// new occurrence from a redraw of the same message or state.
     pub sound_effect_serial: u64,
-    pub(crate) sound_effect_history: Vec<(u64, PlaySoundEffect)>,
+    pub(crate) sound_effect_history: Vec<(u64, SoundEffect)>,
+    /// `town-mode.md §13`: how many leading notes of the thirteen-note
+    /// harpsichord tune have been played. Non-saved runtime state; the
+    /// section is explicit that leaving the chair does not clear it, so only
+    /// a wrong note or a completed tune resets it.
+    pub(crate) harpsichord_progress: usize,
     pub active_blackthorn_guard_demand: Option<ActiveBlackthornGuardDemand>,
     pub pending_town_arrest: Option<TownArrestPrompt>,
     pub endgame: Option<EndgameState>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
-    pub blackthorn_story: BlackthornStoryState,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     pub common_word_dictionary: Option<crate::common_words_io::CommonWordDictionary>,
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
@@ -286,7 +340,17 @@ pub enum ViewOverlayMode {
 }
 
 impl ViewOverlayMode {
-    pub const fn uses_alternate_view_bank(self) -> bool {
+    /// `view.md §4`: the 32x32 LOOKOBJ overlay classes `0xA`/`0xB`/`0xC`/
+    /// `0xD`/`0xF` publish modal normal-vs-peer source families, so the
+    /// **surface** overlay does pick an alternate pen family in the gem and
+    /// peer-spell modes.
+    ///
+    /// This is a surface-only distinction. `view.md §6.3` and
+    /// `dungeon-mode.md §12.4` withdraw the matching dungeon reading: "the
+    /// value they were reading is the **display-adapter identifier**, not a
+    /// peer-spell flag ... V-View has no peer-spell branch of its own." The
+    /// dungeon minimap painters must therefore not call this.
+    pub const fn uses_alternate_surface_view_bank(self) -> bool {
         matches!(self, Self::GemView | Self::PeerSpell)
     }
 }

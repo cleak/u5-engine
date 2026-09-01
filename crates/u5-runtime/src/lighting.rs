@@ -184,7 +184,61 @@ pub const LAST_IN_HOUR_MINUTE: u8 = crate::MINUTES_PER_HOUR - 1;
 /// Caller still applies the personal-light floors in [`apply_personal_light`]
 /// and the [`ambient_is_sentinel`] skip rule before writing the result.
 pub const fn daylight_base_value(hour: u8, minute: u8, underworld: bool, depth_z: u8) -> u8 {
-    if underworld || depth_z != 0 {
+    daylight_base_value_for_scene(hour, minute, underworld, depth_z, crate::SCENE_OVERWORLD)
+}
+
+/// `lighting.md §3` scene byte pinned to [`FULL_DARKNESS`] at every
+/// hour: "One location, scene twenty-five (Ararat), is pinned to the
+/// dark value regardless of the hour."
+///
+/// §10 records that the name attached to the scene number comes from
+/// the gazetteer rather than a fresh trace, but "the forced-dark rule
+/// for that scene number is firm", so the pin is anchored to the
+/// number through [`crate::SCENE_ARARAT`].
+pub const FORCED_DARK_SCENE: u8 = crate::SCENE_ARARAT;
+
+/// `lighting.md §3` Stage-1 base daylight value, including the scene
+/// forced-dark test.
+///
+/// "**Scope of the forced-dark tests.** Both tests run *before* the
+/// clock is consulted, and there are exactly two of them." The plane /
+/// floor test is the `underworld`/`depth_z` pair; the scene test
+/// "pins scene twenty-five (Ararat) to 2 at every hour, independently
+/// of Z".
+///
+/// The pin is applied to the *base* value only: §3's torch and
+/// light-spell floors "then apply normally on top of a forced-dark
+/// result", so a light source still lifts Ararat to its personal-light
+/// floor. Callers apply those floors in [`apply_personal_light`] and
+/// the [`ambient_is_sentinel`] skip rule before writing the result.
+/// `lighting.md §3`: the forced-dark plane/floor test fires on any Z with its
+/// high bit set, i.e. any value above 127. Both the Underworld plane and a
+/// below-entry town floor carry `0xFF`; dungeon level indices count upward from
+/// zero and never reach it.
+pub const FORCED_DARK_MIN_DEPTH_Z: u8 = 128;
+
+pub const fn daylight_base_value_for_scene(
+    hour: u8,
+    minute: u8,
+    underworld: bool,
+    depth_z: u8,
+    scene_byte: u8,
+) -> u8 {
+    if scene_byte == FORCED_DARK_SCENE {
+        return FULL_DARKNESS;
+    }
+    // `lighting.md §3`: "The plane / floor test is on the party's Z value, read
+    // as an unsigned byte: any Z with its high bit set - that is, any value
+    // above one hundred twenty-seven - pins the ambient value at 2 for every
+    // hour." That selects the Underworld plane and a below-entry town floor,
+    // both of which carry Z `0xFF`.
+    //
+    // It explicitly "does **not** select ordinary dungeon levels: a dungeon
+    // level index counts upward from zero at the top of the stack, so it never
+    // sets the high bit". This engine tested `depth_z != 0`, which is the
+    // earlier wording the section retracts, and which would force darkness on
+    // every dungeon level below the first.
+    if underworld || depth_z >= FORCED_DARK_MIN_DEPTH_Z {
         return FULL_DARKNESS;
     }
     if hour < DAWN_HOUR || hour > DUSK_HOUR {
@@ -209,4 +263,69 @@ pub const fn daylight_base_value(hour: u8, minute: u8, underworld: bool, depth_z
         return DAWN_DUSK_LIGHT[idx];
     }
     FULL_DAYLIGHT
+}
+
+#[cfg(test)]
+mod forced_dark_scene_tests {
+    use super::*;
+
+    #[test]
+    fn ararat_is_pinned_to_full_darkness_at_every_hour() {
+        // `lighting.md §3`: "One location, scene twenty-five (Ararat),
+        // is pinned to the dark value regardless of the hour", and
+        // "**The scene test** pins scene twenty-five (Ararat) to 2 at
+        // every hour, independently of Z."
+        assert_eq!(FORCED_DARK_SCENE, 25);
+        for hour in 0u8..24 {
+            for minute in [0u8, 9, 10, 29, 30, 49, 50, 59] {
+                assert_eq!(
+                    daylight_base_value_for_scene(hour, minute, false, 0, FORCED_DARK_SCENE),
+                    FULL_DARKNESS,
+                    "{hour}:{minute:02} in scene {FORCED_DARK_SCENE}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_scene_test_runs_before_the_clock_and_independently_of_z() {
+        // §3: "Both tests run *before* the clock is consulted", and the
+        // scene test applies "independently of Z".
+        assert_eq!(
+            daylight_base_value_for_scene(12, 0, true, 0xFF, FORCED_DARK_SCENE),
+            FULL_DARKNESS
+        );
+        // Noon in an ordinary scene still reaches full daylight, so the
+        // pin is scene-specific rather than a blanket dark value.
+        assert_eq!(
+            daylight_base_value_for_scene(12, 0, false, 0, crate::SCENE_OVERWORLD),
+            FULL_DAYLIGHT
+        );
+        assert_eq!(
+            daylight_base_value_for_scene(12, 0, false, 0, FORCED_DARK_SCENE - 1),
+            FULL_DAYLIGHT
+        );
+        assert_eq!(
+            daylight_base_value_for_scene(12, 0, false, 0, FORCED_DARK_SCENE + 1),
+            FULL_DAYLIGHT
+        );
+        // The four-argument form is the overworld-scene projection of
+        // the five-argument one.
+        assert_eq!(
+            daylight_base_value(12, 0, false, 0),
+            daylight_base_value_for_scene(12, 0, false, 0, crate::SCENE_OVERWORLD)
+        );
+    }
+
+    #[test]
+    fn personal_light_floors_still_apply_on_top_of_the_ararat_pin() {
+        // §3: "The torch and light-spell floors of Section 4 then apply
+        // normally on top of a forced-dark result", so the pin lands on
+        // the base value, not on the final one.
+        let base = daylight_base_value_for_scene(12, 0, false, 0, FORCED_DARK_SCENE);
+        assert_eq!(base, FULL_DARKNESS);
+        assert_eq!(apply_personal_light(base, 1, 0), TORCH_LIGHT_FLOOR);
+        assert_eq!(apply_personal_light(base, 0, 1), LIGHT_SPELL_FLOOR);
+        assert_eq!(apply_personal_light(base, 0, 0), FULL_DARKNESS);
+    }
 }

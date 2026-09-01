@@ -71,8 +71,10 @@ impl ActiveShopSession {
             Self::Sage(_) => "Sage",
             Self::Tavern(TavernState::Greeting { tavern })
             | Self::Tavern(TavernState::Menu { tavern, .. })
+            | Self::Tavern(TavernState::PostListWait { tavern, .. })
             | Self::Tavern(TavernState::PickProvisionQuantity { tavern, .. })
             | Self::Tavern(TavernState::BlueBoarDrinkList { tavern, .. })
+            | Self::Tavern(TavernState::ConfirmEnoughDrink { tavern, .. })
             | Self::Tavern(TavernState::AnythingElse { tavern, .. }) => tavern.display_name(),
             Self::Tavern(TavernState::Exited) => "Tavern",
             Self::HorseTrader(HorseTraderState::Greeting { stable })
@@ -212,6 +214,10 @@ impl ActiveShopSession {
                 TavernState::Menu {
                     tavern,
                     continuation_ready,
+                }
+                | TavernState::PostListWait {
+                    tavern,
+                    continuation_ready,
                 } => {
                     let letters = tavern_menu_letters(tavern);
                     let provisions = letters
@@ -233,6 +239,9 @@ impl ActiveShopSession {
                 }
                 TavernState::BlueBoarDrinkList { .. } => {
                     lines.push("Choose Blue Boar drink A-F, or Space.".into());
+                }
+                TavernState::ConfirmEnoughDrink { .. } => {
+                    lines.push("Had enough? (Y/N)".into());
                 }
                 TavernState::AnythingElse { .. } => {
                     lines.push("Anything else? (Y/N)".into());

@@ -2,15 +2,12 @@
 
 use crate::*;
 
-/// `animation.md §6` (spec HEAD `c00bf63`): the world-tick tile animator
-/// owns **exactly five** tile families, and that is the complete list.
+/// Static tile families advanced by the world-tick animator.
 ///
-/// Earlier revisions of `animation.md §6` and `catalogs/tile-catalog.md
-/// §4` headed the list with water, lava and torch/fire families plus
-/// unnamed "special effect" and "alternate decorative" families. Both
-/// documents now retract that: "**no water, lava, brazier or torch tile
-/// animates through this pass at all.**" Nothing in this module may grow
-/// a water or fire terrain family back.
+/// This list is intentionally limited to the selector ranges published by
+/// `animation.md §6`. The light-source runs in `formats/data-ovl.md` identify
+/// cells that illuminate their surroundings; they do not establish that the
+/// adjacent tile ids are animation frames of one another.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum StaticTileAnimationFamily {
     /// `0xD4..0xD7`, four-frame cycle, ungated (advances every tick).
@@ -131,6 +128,17 @@ pub struct StaticTileAnimationPass {
 }
 
 impl StaticTileAnimationPass {
+    /// A pass that advances every family, used by callers that ask
+    /// "could any animated family be on screen?" rather than "did *this*
+    /// tick's pass move something on screen?".
+    pub const ALL: Self = Self {
+        waterfall: true,
+        fountain: true,
+        pendulum: true,
+        standard_of_britannia: true,
+        clock_and_bellows: true,
+    };
+
     pub const fn advances(self, family: StaticTileAnimationFamily) -> bool {
         match family {
             StaticTileAnimationFamily::Waterfall => self.waterfall,
@@ -158,7 +166,7 @@ impl StaticTileAnimationPass {
 /// test. An earlier revision calling this pass "short and
 /// unconditional" with independently gated families is withdrawn.
 pub const fn static_tile_animation_pass(phase: u8) -> StaticTileAnimationPass {
-    // Two families are ungated.
+    // The two traced water families are ungated.
     let waterfall = true;
     let fountain = true;
 

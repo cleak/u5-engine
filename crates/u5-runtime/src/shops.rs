@@ -2005,7 +2005,12 @@ pub const fn tavern_follow_up_record_id(tavern: Tavern) -> usize {
 
 pub const TAVERN_PROVISION_QUOTE_RECORD_FIRST: usize = 77;
 pub const TAVERN_PROVISION_QUOTE_RECORD_LAST: usize = 82;
+pub const TAVERN_NO_SALE_RECORD_FIRST: usize = 61;
+pub const TAVERN_NO_SALE_RECORD_LAST: usize = 64;
 pub const TAVERN_TABLE_SCRAPS_RECORD_ID: usize = 90;
+pub const TAVERN_BARE_TABLE_SETTING_TILE: u8 = 0x95;
+pub const TAVERN_NORTH_FOOD_SETTING_TILE: u8 = 0x9B;
+pub const TAVERN_SOUTH_FOOD_SETTING_TILE: u8 = 0x9A;
 
 pub const fn tavern_round_drink_menu_letter(tavern: Tavern) -> char {
     tavern_menu_letters(tavern).round
@@ -2048,13 +2053,28 @@ pub const fn arms_buy_confirmation_prompt(item_id: u8) -> &'static str {
     arms_buy_confirmation_prompt_for_roll(item_id)
 }
 
+/// `shops.md §8.1` (draw table) / `§8.A` resident-literal table: the
+/// four-entry arms no-credit bark pool, published verbatim. One line is
+/// chosen uniformly on draws `0..3` and the render site wraps it in the
+/// shopkeeper-attribution tail `yells <shopkeeper>.`
+///
+/// *Corrected:* this pool previously held four invented polite refusals
+/// ("I cannot extend thee credit." and friends). The sibling pools in this
+/// module were already verbatim; this row was an isolated invention.
 pub const fn arms_no_credit_bark_for_roll(roll: u8) -> &'static str {
     match roll & 0x03 {
-        0 => "I cannot extend thee credit.",
-        1 => "Thou hast not the gold.",
-        2 => "No gold, no goods.",
-        _ => "Come back when thou canst pay.",
+        0 => "Can't pay?! Out with ye, orc-face!",
+        1 => "What be ye trying to pull? OUT!",
+        2 => "OUT, SLIME!",
+        _ => "BEAT IT!",
     }
+}
+
+/// `shops.md §8.1` / `§8.A`: attribution tail wrapped around a drawn
+/// arms no-credit bark. The shopkeeper name is substituted for
+/// `<shopkeeper>`.
+pub fn arms_no_credit_bark_with_attribution(bark: &str, shopkeeper: &str) -> String {
+    format!("{bark}\nyells {shopkeeper}.")
 }
 
 pub const fn arms_no_credit_bark(item_id: u8) -> &'static str {
@@ -2787,14 +2807,26 @@ pub const fn shipwright_price(shipwright: Shipwright, kind: ShipwrightPurchaseKi
     }
 }
 
+/// `shops.md §8.7` delivery cell for one shipwright row.
+///
+/// These four pairs are **table data**, published verbatim beside the two
+/// base prices in the same resident shop row. §8.7: "The delivery
+/// coordinate is a per-shipwright value held beside the price rows in the
+/// same resident shop table; it is **not** the town's exterior entrance or
+/// exit cell, and it is not derived from the scene-to-exit mapping in
+/// `systems/town-mode.md` or `systems/doors-and-z-transitions.md`."
+///
+/// *Corrected:* this function previously returned each hosting scene's
+/// exterior entry/return coordinate, which is exactly the derivation §8.7
+/// withdraws. Every row is near — but not equal to — the town's own
+/// entrance cell, so the derived values looked plausible and were wrong by
+/// up to nine tiles.
 pub const fn shipwright_delivery_coordinate(shipwright: Shipwright) -> (usize, usize) {
     match shipwright {
-        // shops.md §8.7 / gazetteer.md §5.1: shipwright deliveries
-        // use the hosting scene's exterior entry/return coordinate.
-        Shipwright::IslandShipwrights => (36, 222),
-        Shipwright::TheCrowsNest => (159, 20),
-        Shipwright::TheOakenOar => (88, 106),
-        Shipwright::TheRustyBucket => (136, 158),
+        Shipwright::IslandShipwrights => (39, 221),
+        Shipwright::TheCrowsNest => (151, 21),
+        Shipwright::TheOakenOar => (79, 109),
+        Shipwright::TheRustyBucket => (138, 159),
     }
 }
 

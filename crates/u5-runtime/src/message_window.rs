@@ -144,10 +144,7 @@ impl GameplayMessageLog {
     }
 
     fn push_wrapped_plain(&mut self, text: &str, kind: MessageLineKind) {
-        let glyphs: Vec<_> = text
-            .bytes()
-            .map(crate::TlkRenderedGlyph::ordinary)
-            .collect();
+        let glyphs = crate::ordinary_glyphs_from_engine_text(text);
         self.push_wrapped_glyphs(&glyphs, kind);
     }
 

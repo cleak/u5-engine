@@ -37,6 +37,36 @@ pub const STATS_PANEL_TEXT_TOP: u8 = STATS_ROSTER_TOP;
 pub const STATS_PANEL_TEXT_BOTTOM: u8 = STATS_COUNTER_BOTTOM;
 /// Cells of the party row's left-aligned name field.
 pub const STATS_PANEL_NAME_CELLS: usize = 9;
+/// `stats-panel.md §4` party-row field table, column 33: "Active-player
+/// marker | The fixed-cell font's right-pointing arrow, glyph code
+/// `0x1A`, or a space." The byte that reaches the `IBM.CH` glyph table
+/// is `0x1A`, not the ASCII `>` (0x3E) the panel used to emit.
+pub const STATS_PANEL_ACTIVE_MARKER_GLYPH: u8 = 0x1A;
+/// Absolute screen column of that marker cell (`stats-panel.md §4`).
+pub const STATS_PANEL_ACTIVE_MARKER_COLUMN: u8 = 33;
+/// The same cell as a panel-local index: the marker sits immediately
+/// after the nine-cell name field.
+pub const STATS_PANEL_ACTIVE_MARKER_CELL: usize = STATS_PANEL_NAME_CELLS;
+/// `stats-panel.md §8`: local stats-window origin of the cap/effect/cap
+/// sequence in absolute cells 30..=32, row 7.
+pub const STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN: u8 = 6;
+pub const STATS_PANEL_TIMED_EFFECT_LOCAL_ROW: u8 = 6;
+/// Stand-in [`render_stats_panel`] uses for the marker in its
+/// plain-text panel transcription.
+///
+/// `0x1A` is a resident `IBM.CH` glyph code, not an ASCII character, so
+/// it means nothing in a string view - exactly like the arms-browser
+/// page badges (`0x01`, `0x02`, `0x19`), which [`arms_sell_browser_row`]
+/// also leaves out. This character is engine-local presentation and is
+/// **not** a spec value.
+///
+/// Scope, precisely: this substitution applies only to the string the
+/// panel *builds*. [`render_play_text_window_ascii`] and
+/// `PlayState::render_text_window_frame` transcribe the emitted cell
+/// surface instead, so they carry the real
+/// [`STATS_PANEL_ACTIVE_MARKER_GLYPH`] byte, as does every pixel
+/// renderer downstream of [`paint_stats_panel_text_window`].
+pub const STATS_PANEL_ACTIVE_MARKER_ASCII: char = '>';
 /// Cells of the party row's right-justified hit-point field.
 pub const STATS_PANEL_HP_CELLS: usize = 4;
 pub const INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX: usize = STATS_PANEL_TEXT_WINDOW_INDEX;
@@ -183,6 +213,36 @@ pub fn render_play_text_window_ascii(
     render_play_text_window_system(state, active_cursor, input_echo)
         .screen_rows(b' ')
         .join("\n")
+}
+
+/// Transcribe an emitted-cell frame for a plain-text consumer, such as a
+/// terminal that has no `IBM.CH` glyph table.
+///
+/// `stats-panel.md §4` party-row field table, column 33: "Active-player
+/// marker | The fixed-cell font's right-pointing arrow, glyph code
+/// `0x1A`, or a space." [`render_play_text_window_ascii`] and
+/// `PlayState::render_text_window_frame` read back the emitted cell
+/// surface, so that cell arrives carrying the literal
+/// [`STATS_PANEL_ACTIVE_MARKER_GLYPH`] byte - which a terminal renders
+/// as the SUB control byte, not as an arrow.
+///
+/// This swaps in the [`STATS_PANEL_ACTIVE_MARKER_ASCII`] stand-in that
+/// [`render_stats_panel`]'s own string view already uses, following the
+/// same convention as the arms-browser page badges (`0x01`, `0x02`,
+/// `0x19`), which [`arms_sell_browser_row`] simply omits from its
+/// plain-text row. Engine-local presentation, **not** a spec value: the
+/// cell surface and every pixel renderer downstream of
+/// [`paint_stats_panel_text_window`] keep the `0x1A` glyph code.
+pub fn transcribe_cell_frame_for_plain_text(frame: &str) -> String {
+    let mut out = String::with_capacity(frame.len());
+    for ch in frame.chars() {
+        if ch == char::from(STATS_PANEL_ACTIVE_MARKER_GLYPH) {
+            out.push(STATS_PANEL_ACTIVE_MARKER_ASCII);
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 pub fn paint_message_text_window(system: &mut TextWindowSystem, message: &str) {
@@ -428,6 +488,23 @@ pub fn paint_stats_panel_text_window(
             system.emit_byte(byte);
         }
     }
+
+    // `stats-panel.md §8` / RETRACTIONS R281: this sequence belongs to
+    // the stats text window, not the full-screen window. With no effect the
+    // graphics-only chrome repaint leaves the cursor at its positioned origin.
+    system.set_active_cursor(
+        STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN,
+        STATS_PANEL_TIMED_EFFECT_LOCAL_ROW,
+    );
+    if let Some(effect) = state.active_effect_tag.filter(|effect| *effect != 0) {
+        system.emit_byte(crate::gameplay_chrome::RIBBON_CAP_RIGHT_SOURCE_GLYPH);
+        system.emit_byte(effect);
+        system.emit_byte(crate::gameplay_chrome::RIBBON_CAP_LEFT_SOURCE_GLYPH);
+    }
+
+    // §2.1: a full refresh always returns to the message window without
+    // repositioning that descriptor's saved cursor.
+    system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
 }
 
 pub fn paint_prompt_text_window(system: &mut TextWindowSystem, input_echo: &str) {
@@ -462,6 +539,29 @@ pub fn stats_panel_active_cursor_visible(state: &PlayState, active_cursor: Optio
         .is_some_and(|member| !matches!(member.status, b'D' | b'S'))
 }
 
+/// `stats-panel.md §4.1`: "The marker is drawn on the row whose slot
+/// equals the resident active-player selector, with one exception: if
+/// that member's status byte is `'D'` (dead) or `'S'` (sleeping), a
+/// space is drawn instead **and the selector is reset to the none
+/// sentinel**."
+///
+/// The marker itself is *not* consumed by drawing it — §11: "Draw the
+/// active-player marker on every refresh while a member is selected; it
+/// is persistent, not consumed by the refresh. Clear the selector only
+/// when the selected member is dead or sleeping, or when a command
+/// changes the selection." So a refresh clears the selector in exactly
+/// the space branch, never in the marker branch.
+pub fn stats_panel_active_cursor_resets(state: &PlayState, active_cursor: Option<usize>) -> bool {
+    let Some(index) = active_cursor else {
+        return false;
+    };
+    state
+        .party
+        .get(index)
+        .copied()
+        .is_some_and(|member| matches!(member.status, b'D' | b'S'))
+}
+
 fn render_stats_panel_party_row(
     state: &PlayState,
     active_cursor: Option<usize>,
@@ -488,8 +588,8 @@ fn stats_panel_party_row(
         .unwrap_or_else(|| format!("Party {}", index + 1));
     let name = truncate_ascii_chars(&name, STATS_PANEL_NAME_CELLS);
     let overlay = stats_panel_combat_row_overlay(state, index);
-    let cursor = if active_cursor == Some(index) && !matches!(member.status, b'D' | b'S') {
-        '>'
+    let cursor = if stats_panel_active_marker_drawn(state, active_cursor, index) {
+        STATS_PANEL_ACTIVE_MARKER_ASCII
     } else {
         ' '
     };
@@ -504,6 +604,23 @@ fn stats_panel_party_row(
     )
 }
 
+/// `stats-panel.md §4.1`: the marker is drawn on the row whose slot
+/// equals the resident active-player selector, unless that member's
+/// status byte is `'D'` or `'S'`, in which case the cell is a space.
+/// Every other row always gets a space in column 33.
+pub fn stats_panel_active_marker_drawn(
+    state: &PlayState,
+    active_cursor: Option<usize>,
+    index: usize,
+) -> bool {
+    active_cursor == Some(index)
+        && state
+            .party
+            .get(index)
+            .copied()
+            .is_some_and(|member| !matches!(member.status, b'D' | b'S'))
+}
+
 fn paint_stats_panel_party_row(
     system: &mut TextWindowSystem,
     state: &PlayState,
@@ -511,18 +628,33 @@ fn paint_stats_panel_party_row(
     index: usize,
 ) {
     let (line, overlay) = stats_panel_party_row(state, active_cursor, index);
+    let status = overlay
+        .status_override
+        .or_else(|| state.party.get(index).copied().map(|member| member.status));
     if overlay.highlighted {
         system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
     }
-    emit_fixed_panel_line(system, &line);
+    let active_marker = stats_panel_active_marker_drawn(state, active_cursor, index);
+    for (cell, byte) in fixed_panel_line(&line)
+        .bytes()
+        .take(STATS_PANEL_WIDTH - 1)
+        .enumerate()
+    {
+        if active_marker && cell == STATS_PANEL_ACTIVE_MARKER_CELL {
+            system.emit_byte(STATS_PANEL_ACTIVE_MARKER_GLYPH);
+        } else {
+            system.emit_byte(byte);
+        }
+    }
+    if let Some(status) = status {
+        // RETRACTIONS R280: preserve the raw status byte. The shared emitter
+        // renders ordinary low bytes and executes imported high control bytes.
+        system.emit_byte(status);
+    } else {
+        system.emit_byte(b' ');
+    }
     if overlay.highlighted {
         system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
-    }
-}
-
-fn emit_fixed_panel_line(system: &mut TextWindowSystem, line: &str) {
-    for byte in fixed_panel_line(line).bytes().take(STATS_PANEL_WIDTH) {
-        system.emit_byte(byte);
     }
 }
 
@@ -542,36 +674,78 @@ pub fn stats_panel_combat_row_overlay(
             usize::from(actor.owner_target_class) == index && combat_actor_is_active_not_dead(actor)
         });
 
-    let status_override = stats_panel_combat_cast_status_override(state, index);
+    let status_override = stats_panel_combat_controlled_status_override(state, index);
     StatsPanelCombatRowOverlay {
         highlighted,
         status_override,
     }
 }
 
-fn stats_panel_combat_cast_status_override(state: &PlayState, index: usize) -> Option<u8> {
-    if state
-        .active_cast
-        .as_ref()
-        .is_some_and(|session| session.combat_actor_slot == Some(index))
-        || state
-            .active_cast_followup
-            .as_ref()
-            .is_some_and(|session| session.combat_actor_slot == Some(index))
-    {
-        Some(b'C')
-    } else {
-        None
+/// `stats-panel.md §5` / `combat.md §6.1a`: the row's status glyph is
+/// replaced by `C` when combat is active and the row's **own** combat
+/// descriptor satisfies all five of - and only - these conditions:
+/// the party-side marker `0x80` is set, the monster-side marker `0x40`
+/// is clear, the descriptor is not marked dead, it carries the
+/// controlled/charmed bit `0x01`, and its owner/character field names
+/// this same party row.
+///
+/// The asleep/magically-disabled bit `0x08` is deliberately **not**
+/// part of the test, so a sleeping party member still shows the
+/// ordinary roster status letter (`combat.md §6.1`).
+///
+/// An earlier revision of `stats-panel.md` described this glyph as
+/// marking a party member "casting and self-targeted"; that reading is
+/// withdrawn. Casting has no panel letter at all - the bit is the
+/// controlled/charmed state written by monster possession, by the Charm
+/// spell, and by the Sword of Chaos compulsion.
+fn stats_panel_combat_controlled_status_override(state: &PlayState, index: usize) -> Option<u8> {
+    if index >= COMBAT_PARTY_ACTOR_SLOTS {
+        return None;
     }
+    let actor = state.combat_actors.get(index).copied()?;
+    let party_side = actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0;
+    let monster_side = actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_40 != 0;
+    (party_side
+        && !monster_side
+        && !actor.is_marked_dead()
+        && actor.is_controlled()
+        && usize::from(actor.owner_target_class) == index)
+        .then_some(b'C')
 }
 
-/// Screen row 8: provisions left-aligned at column 24 and the middle
-/// counter right-aligned to end at column 38, sharing one row.
+/// `stats-panel.md §6` middle-counter anchor column. The food group
+/// always occupies columns 24..31, so both middle-counter variants
+/// begin at absolute column 32.
+pub const STATS_PANEL_MIDDLE_COUNTER_COLUMN: u8 = 32;
+/// `stats-panel.md §6` ship-variant label. The literal fills columns
+/// 32..36 and is followed by the hull value at its natural width.
+pub const STATS_PANEL_SHIP_HULL_LABEL: &str = "Ship:";
+/// `stats-panel.md §6`: the ship variant appends one extra trailing
+/// space when the hull is below ten, so the group fills columns
+/// 32..38 for every hull value 0..99.
+pub const STATS_PANEL_SHIP_HULL_PAD_BELOW: u8 = 10;
+
+/// Screen row 8 (`stats-panel.md §6`): the food group is written left
+/// to right from column 24 and padded out to column 32, then the
+/// middle counter fills columns 32..38.
+///
+/// The two middle-counter variants are placed differently. The gold
+/// group runs a leading-space ladder that shifts the ` G:` label left
+/// as the number grows, so the last gold digit always lands in column
+/// 38 - reproduced here by right-justifying the group inside the
+/// remaining cells. The ship variant does **not** use that ladder: it
+/// is anchored left at column 32 and pads on the right instead.
 fn render_stats_panel_counter_row(state: &PlayState) -> String {
     let food = format!("F:{}", state.food.min(9999));
     let middle = render_stats_panel_middle_counter(state);
     let used = food.chars().count() + middle.chars().count();
-    let padding = STATS_PANEL_WIDTH.saturating_sub(used);
+    let padding = match stats_panel_middle_counter(state.player.transport.save_marker()) {
+        StatsPanelMiddleCounter::PartyGold => STATS_PANEL_WIDTH.saturating_sub(used),
+        StatsPanelMiddleCounter::ShipHullCondition => {
+            usize::from(STATS_PANEL_MIDDLE_COUNTER_COLUMN - STATS_PANEL_TEXT_LEFT)
+                .saturating_sub(food.chars().count())
+        }
+    };
     fixed_panel_line(&format!("{food}{}{middle}", " ".repeat(padding)))
 }
 
@@ -579,7 +753,13 @@ fn render_stats_panel_middle_counter(state: &PlayState) -> String {
     match stats_panel_middle_counter(state.player.transport.save_marker()) {
         StatsPanelMiddleCounter::PartyGold => format!("G:{}", state.gold),
         StatsPanelMiddleCounter::ShipHullCondition => {
-            format!("H:{}", current_ship_hull(state).unwrap_or(0))
+            let hull = current_ship_hull(state).unwrap_or(0);
+            let trailing = if hull < STATS_PANEL_SHIP_HULL_PAD_BELOW {
+                " "
+            } else {
+                ""
+            };
+            format!("{STATS_PANEL_SHIP_HULL_LABEL}{hull}{trailing}")
         }
     }
 }

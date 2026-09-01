@@ -96,12 +96,64 @@ pub const fn combat_arena_row_offset(arena_index: usize, row: usize) -> usize {
 pub const DEFAULT_COMBAT_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
     [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
 
-/// Public `cleak/u5-spec#21`: dungeon wandering-monster ambush combat
-/// builds an eleven-by-eleven stock dungeon-floor arena in resident state
-/// instead of loading `DUNGEON.CBT`.
+/// `dungeon-mode.md §14.1`: dungeon wandering-monster ambush combat
+/// synthesises its arena in the room buffer instead of loading
+/// `DUNGEON.CBT` - "No arena record is read from disk on this path."
+/// The painter fills the eleven-by-eleven terrain grid with the current
+/// corridor fill byte before stamping its outline/corner/centre/per-side
+/// treatments, whose byte values §14.1 does not publish.
 pub const DUNGEON_AMBUSH_ARENA_FLOOR_TILE: u8 = 0x04;
 pub const DUNGEON_AMBUSH_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
     [[DUNGEON_AMBUSH_ARENA_FLOOR_TILE; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+
+/// `dungeon-mode.md §14.1` party-entry rows for the synthesised ambush
+/// arena. "Metadata rows one through four receive fixed six-entry X and
+/// Y sequences", indexed here by `row - 1`. The entry-facing seed the
+/// setup helper later reads is the party's current dungeon facing, and
+/// the rows are arranged so the row that facing selects places the party
+/// on the side of the arena *behind* its facing.
+pub const DUNGEON_AMBUSH_PARTY_ENTRY_X: [[u8; DUNGEON_ROOM_PARTY_POSITION_COUNT]; 4] = [
+    [6, 7, 7, 8, 8, 8],
+    [4, 3, 3, 2, 2, 2],
+    [5, 4, 6, 3, 5, 7],
+    [5, 4, 6, 3, 5, 7],
+];
+pub const DUNGEON_AMBUSH_PARTY_ENTRY_Y: [[u8; DUNGEON_ROOM_PARTY_POSITION_COUNT]; 4] = [
+    [5, 4, 6, 3, 5, 7],
+    [5, 4, 6, 3, 5, 7],
+    [6, 7, 7, 8, 8, 8],
+    [4, 3, 3, 2, 2, 2],
+];
+
+/// `dungeon-mode.md §14.1` source-coordinate rows, "arranged so monsters
+/// start on the side the party is facing". Facing south swaps the east
+/// pair and facing west swaps the north pair.
+pub const DUNGEON_AMBUSH_SOURCE_X_NORTH: [u8; DUNGEON_ROOM_SOURCE_COUNT] =
+    [5, 4, 6, 3, 7, 2, 8, 5, 2, 8, 3, 7, 2, 4, 6, 8];
+pub const DUNGEON_AMBUSH_SOURCE_Y_NORTH: [u8; DUNGEON_ROOM_SOURCE_COUNT] =
+    [2, 2, 2, 3, 3, 4, 4, 1, 2, 2, 1, 1, 0, 0, 0, 0];
+pub const DUNGEON_AMBUSH_SOURCE_X_EAST: [u8; DUNGEON_ROOM_SOURCE_COUNT] =
+    [8, 8, 8, 7, 7, 6, 6, 9, 8, 8, 9, 9, 10, 10, 10, 10];
+pub const DUNGEON_AMBUSH_SOURCE_Y_EAST: [u8; DUNGEON_ROOM_SOURCE_COUNT] =
+    [5, 4, 6, 3, 7, 2, 8, 5, 2, 8, 7, 3, 2, 4, 6, 8];
+
+/// `dungeon-mode.md §14.1`: the facing-selected sixteen-entry source
+/// coordinate rows, or `None` for "a facing value outside zero through
+/// three", which "leaves both rows untouched".
+pub const fn dungeon_ambush_source_rows(
+    facing_seed: u8,
+) -> Option<(
+    [u8; DUNGEON_ROOM_SOURCE_COUNT],
+    [u8; DUNGEON_ROOM_SOURCE_COUNT],
+)> {
+    match facing_seed {
+        0 => Some((DUNGEON_AMBUSH_SOURCE_X_NORTH, DUNGEON_AMBUSH_SOURCE_Y_NORTH)),
+        1 => Some((DUNGEON_AMBUSH_SOURCE_X_EAST, DUNGEON_AMBUSH_SOURCE_Y_EAST)),
+        2 => Some((DUNGEON_AMBUSH_SOURCE_Y_EAST, DUNGEON_AMBUSH_SOURCE_X_EAST)),
+        3 => Some((DUNGEON_AMBUSH_SOURCE_Y_NORTH, DUNGEON_AMBUSH_SOURCE_X_NORTH)),
+        _ => None,
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CombatArenaRecord {
@@ -125,6 +177,63 @@ impl CombatArenaRecord {
             row.copy_from_slice(&bytes[start..start + COMBAT_ARENA_ROW_STRIDE]);
         }
         Ok(Self { rows })
+    }
+
+    /// `dungeon-mode.md §14.1` step 3: synthesise the wandering-monster
+    /// ambush arena in the room buffer. The terrain grid is filled with
+    /// the corridor fill byte, metadata rows one through four receive the
+    /// published party-entry sequences, rows six and seven receive the
+    /// facing-selected source coordinate sequences, and the source band
+    /// receives `count` copies of the ordinary source byte
+    /// `class * 4 + 0x40` written "into the first `count` permuted
+    /// slots". The record is then read back by the ordinary room-combat
+    /// setup helper, which recovers the same class the painter encoded.
+    ///
+    /// The outline, corner markers, underfoot-class centre icon and the
+    /// four per-side treatments §14.1 also describes are not stamped
+    /// here: that section publishes no byte values for them and flags the
+    /// filler byte as inferred rather than traced.
+    pub fn synthesise_dungeon_ambush(
+        fill_byte: u8,
+        facing_seed: u8,
+        class: u8,
+        count: u8,
+        permutation: [u8; DUNGEON_ROOM_SOURCE_COUNT],
+    ) -> Self {
+        let mut rows = [[0u8; COMBAT_ARENA_ROW_STRIDE]; COMBAT_ARENA_SIDE];
+        for row in rows.iter_mut() {
+            for cell in row[..COMBAT_ARENA_SIDE].iter_mut() {
+                *cell = fill_byte;
+            }
+        }
+        for (index, row) in rows
+            .iter_mut()
+            .take(DUNGEON_AMBUSH_PARTY_ENTRY_X.len() + 1)
+            .enumerate()
+            .skip(1)
+        {
+            let entry = index - 1;
+            for slot in 0..DUNGEON_ROOM_PARTY_POSITION_COUNT {
+                row[DUNGEON_ROOM_PARTY_COLUMN_X + slot] = DUNGEON_AMBUSH_PARTY_ENTRY_X[entry][slot];
+                row[DUNGEON_ROOM_PARTY_COLUMN_Y + slot] = DUNGEON_AMBUSH_PARTY_ENTRY_Y[entry][slot];
+            }
+        }
+        if let Some((source_x, source_y)) = dungeon_ambush_source_rows(facing_seed) {
+            for slot in 0..DUNGEON_ROOM_SOURCE_COUNT {
+                rows[DUNGEON_ROOM_SOURCE_X_ROW][DUNGEON_ROOM_SOURCE_COLUMN + slot] = source_x[slot];
+                rows[DUNGEON_ROOM_SOURCE_Y_ROW][DUNGEON_ROOM_SOURCE_COLUMN + slot] = source_y[slot];
+            }
+        }
+        let source_byte = class
+            .wrapping_mul(4)
+            .wrapping_add(DUNGEON_ROOM_ORDINARY_SOURCE_FIRST);
+        for placed in 0..usize::from(count).min(DUNGEON_ROOM_SOURCE_COUNT) {
+            let slot = usize::from(permutation[placed]);
+            if slot < DUNGEON_ROOM_SOURCE_COUNT {
+                rows[DUNGEON_ROOM_SOURCE_ROW][DUNGEON_ROOM_SOURCE_COLUMN + slot] = source_byte;
+            }
+        }
+        Self { rows }
     }
 
     pub fn row(&self, y: usize) -> Option<&[u8; COMBAT_ARENA_ROW_STRIDE]> {
@@ -286,10 +395,16 @@ impl DungeonRoomSetupSource {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DungeonRoomSetupSourceKind {
-    OrdinaryCombatant { setup_class: u8 },
+    /// `formats/cbt.md §5` ordinary room source. `palette_selector` is
+    /// `Some(i)` only for the `0xEC..0xEF` vermin family, whose derived
+    /// setup class is replaced by the `i`-th pre-rolled palette id
+    /// before placement; the placement path itself is unchanged.
+    OrdinaryCombatant {
+        setup_class: u8,
+        palette_selector: Option<u8>,
+    },
     AbsorbableField,
     SpecialPlacement(DungeonRoomSpecialPlacement),
-    RandomSpecialPlacement { selector: u8 },
 }
 
 impl DungeonRoomSetupSourceKind {
@@ -297,9 +412,15 @@ impl DungeonRoomSetupSourceKind {
         if dungeon_room_absorbable_field_family(source) {
             Self::AbsorbableField
         } else if let Some(setup_class) = dungeon_room_ordinary_setup_class(source) {
-            Self::OrdinaryCombatant { setup_class }
-        } else if let Some(selector) = dungeon_room_random_special_selector(source) {
-            Self::RandomSpecialPlacement { selector }
+            // `formats/cbt.md §5` + `dungeon-mode.md §14`: sources in
+            // the `0xEC..0xEF` family "pass the ordinary/special test,
+            // take the ordinary path, and only have their derived setup
+            // class replaced by one of four setup ids pre-rolled from a
+            // small vermin palette".
+            Self::OrdinaryCombatant {
+                setup_class,
+                palette_selector: dungeon_room_vermin_palette_selector(source),
+            }
         } else {
             Self::SpecialPlacement(DungeonRoomSpecialPlacement::from_setup_id(source))
         }
@@ -328,18 +449,23 @@ pub enum DungeonRoomSpecialPostWrite {
     RandomRange { low: u8, high: u8 },
     RandomRangePlus { base: u8, low: u8, high: u8 },
     Constant(u8),
+    DegenerateDrawThenConstant(u8),
     None,
 }
 
 pub const DUNGEON_ROOM_RANDOM_SPECIAL_SETUP_PALETTE: [u8; 8] = [20, 21, 22, 34, 33, 24, 31, 24];
 pub const DUNGEON_ROOM_RANDOM_SPECIAL_ROLL_COUNT: usize = 4;
 
+/// `formats/cbt.md §5` ordinary/special test: "if the source is at
+/// least `0x40`, and its masked family is neither `0xB4` nor `0xE8`,
+/// the setup class is `(source - 0x40) / 4` and the actor is placed
+/// through the ordinary room-combat path. **The `0xEC..0xEF` family
+/// is not excluded by this test and therefore takes this path.**"
 pub const fn dungeon_room_ordinary_setup_class(source: u8) -> Option<u8> {
     let family = source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK;
     if source >= DUNGEON_ROOM_ORDINARY_SOURCE_FIRST
         && family != DUNGEON_ROOM_SPECIAL_SOURCE_B4
         && family != DUNGEON_ROOM_SPECIAL_SOURCE_E8
-        && family != DUNGEON_ROOM_SPECIAL_SOURCE_EC
     {
         Some((source - DUNGEON_ROOM_ORDINARY_SOURCE_FIRST) / 4)
     } else {
@@ -347,7 +473,11 @@ pub const fn dungeon_room_ordinary_setup_class(source: u8) -> Option<u8> {
     }
 }
 
-pub const fn dungeon_room_random_special_selector(source: u8) -> Option<u8> {
+/// `formats/cbt.md §5` vermin-palette class override. Sources in the
+/// `0xEC..0xEF` family stay on the ordinary placement path; only their
+/// derived setup class is overwritten with the pre-rolled palette id
+/// selected by the source's low two bits.
+pub const fn dungeon_room_vermin_palette_selector(source: u8) -> Option<u8> {
     if source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK == DUNGEON_ROOM_SPECIAL_SOURCE_EC {
         Some(source & 0x03)
     } else {
@@ -387,7 +517,7 @@ pub const fn dungeon_room_special_post_write(setup_id: u8) -> DungeonRoomSpecial
             low: 0,
             high: 2,
         },
-        14 => DungeonRoomSpecialPostWrite::Constant(1),
+        14 => DungeonRoomSpecialPostWrite::DegenerateDrawThenConstant(1),
         _ => DungeonRoomSpecialPostWrite::None,
     }
 }

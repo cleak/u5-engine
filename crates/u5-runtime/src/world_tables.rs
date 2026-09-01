@@ -325,17 +325,26 @@ impl WorldDamageEffect {
         }
     }
 
+    /// `vehicles.md §11` "Balloon boundary": "Settled, not merely
+    /// untraced. Balloon sprites are catalog assets only... Do not invent
+    /// boarding, landing, or wind-driven balloon movement." §2 adds
+    /// "**There is no balloon and no sixth vehicle family.**"
+    ///
+    /// Each of the three rows below previously listed a balloon
+    /// alternative. With no balloon family those alternatives are deleted
+    /// outright rather than transferred: §3's family table gives the
+    /// horse "normal terrain restrictions"/mounted-horse passability, the
+    /// skiff the "facing-sensitive skiff predicate", the ship the ship
+    /// predicate and the carpet "the carpet predicate family", and none of
+    /// those rows names a lava or drowning immunity that the balloon row
+    /// was standing in for. The surviving alternatives are exactly the
+    /// ones that were already there for their own reasons.
     pub fn allows_transport(self, transport: TransportState) -> bool {
         match self {
-            Self::Lava => matches!(
-                transport,
-                TransportState::Carpet { .. } | TransportState::Balloon { .. }
-            ),
+            Self::Lava => matches!(transport, TransportState::Carpet { .. }),
             Self::NativeLava => matches!(
                 transport,
-                TransportState::Foot
-                    | TransportState::Carpet { .. }
-                    | TransportState::Balloon { .. }
+                TransportState::Foot | TransportState::Carpet { .. }
             ),
             Self::Drowning => matches!(
                 transport,
@@ -343,7 +352,6 @@ impl WorldDamageEffect {
                     | TransportState::Ship { .. }
                     | TransportState::Skiff { .. }
                     | TransportState::Carpet { .. }
-                    | TransportState::Balloon { .. }
             ),
         }
     }

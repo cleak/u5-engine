@@ -4,6 +4,22 @@ use std::path::Path;
 use crate::*;
 
 impl PlayState {
+    /// `town-mode.md §10`: the fireplace id of the town burning family.
+    pub const TOWN_BURNING_FIREPLACE_TILE: u8 = 0xbc;
+
+    /// `town-mode.md §10`: the molten-lava id of the town burning family. It
+    /// is the same tile the Stonegate script fills the whole live grid with,
+    /// which is why that scene's survivors keep burning afterwards.
+    pub const TOWN_BURNING_LAVA_TILE: u8 = 0x8f;
+
+    /// `town-mode.md §10`: the stored line printed by the burning family.
+    pub const TOWN_BURNING_MESSAGE: &'static str = "Burning!";
+
+    /// `blackthorn.md §4`/`§8`: "Moral standing | Durable; debited five per
+    /// correct interrogation answer". The subtraction is clamped and floored
+    /// at zero.
+    pub const BLACKTHORN_CORRECT_ANSWER_STANDING_DEBIT: u8 = 5;
+
     pub fn combat_sjog_actor_direction(
         &mut self,
         actor_slot: usize,
@@ -93,6 +109,10 @@ impl PlayState {
             self.message = "It's open!".to_string();
             return MoveOutcome::DoorOpened;
         }
+        if tile == TOWN_OPEN_TOO_HEAVY_TILE {
+            self.message = "Too heavy!".to_string();
+            return MoveOutcome::Blocked;
+        }
         if jimmy_locked_door_rewrite(tile).is_some() || jimmy_magic_locked_door(tile) {
             self.message = "Locked!".to_string();
             return MoveOutcome::Blocked;
@@ -130,14 +150,21 @@ impl PlayState {
         }
         let tile = self.combat_terrain[y][x];
         if jimmy_magic_locked_door(tile) {
-            self.keys = self.keys.saturating_sub(1);
             self.message = "Key broke!".to_string();
+            // `audio.md §8.1`: failure only — print the break line, play
+            // the 40-update action snap, then decrement the key count.
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+            self.keys = self.keys.saturating_sub(1);
             return MoveOutcome::LockTried;
         }
         if jimmy_restraint_tile(tile) {
             if !self.jimmy_lock_pick_succeeds(actor_slot) {
-                self.keys = self.keys.saturating_sub(1);
                 self.message = "Key broke!".to_string();
+                // `audio.md §8.1`: failure only — print the break line,
+                // play the 40-update action snap, then decrement the key
+                // count.
+                self.emit_sound_effect(SoundEffect::ActionSnap);
+                self.keys = self.keys.saturating_sub(1);
                 return MoveOutcome::LockTried;
             }
             self.combat_terrain[y][x] = TOWN_DOOR_CLEARED_TILE;
@@ -157,8 +184,11 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !self.jimmy_lock_pick_succeeds(actor_slot) {
-            self.keys = self.keys.saturating_sub(1);
             self.message = "Key broke!".to_string();
+            // `audio.md §8.1`: failure only — print the break line, play
+            // the 40-update action snap, then decrement the key count.
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+            self.keys = self.keys.saturating_sub(1);
             return MoveOutcome::LockTried;
         }
 
@@ -175,7 +205,7 @@ impl PlayState {
         out_of_bounds_message: &str,
     ) -> Option<(CombatActorDescriptor, usize, usize)> {
         let Some(actor) = self.live_combat_party_actor(actor_slot) else {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return None;
         };
         if !direction.is_cardinal() {
@@ -198,7 +228,7 @@ impl PlayState {
         intent: ClimbIntent,
     ) -> MoveOutcome {
         let Some(actor) = self.live_combat_party_actor(actor_slot) else {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         let tile = self.combat_terrain[actor.y as usize][actor.x as usize];
@@ -235,7 +265,7 @@ impl PlayState {
         direction: Direction,
     ) -> MoveOutcome {
         let Some(actor) = self.live_combat_party_actor(actor_slot) else {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
@@ -267,7 +297,7 @@ impl PlayState {
             x as u8,
             y as u8,
         ) else {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
@@ -1120,7 +1150,10 @@ impl PlayState {
         match yell_input_context(scene_byte) {
             YellInputContext::WordOfPower => {
                 if let Some((word_index, seal)) = word_of_power_seal_prefix_match(&word) {
-                    self.emit_sound_effect(PlaySoundEffect::ShrineWordRumble);
+                    // `audio.md §8.4`: the recognized-Word effect occurs before
+                    // the location-specific success test, so a known Word
+                    // spoken at the wrong place is still audible and visible.
+                    self.emit_major_flash();
                     let outcome = self.open_word_of_power_seal(word_index, seal);
                     let utterance = format!(
                         "Yelled {word}, the Word of Power for {}. A word of power is uttered. {}",
@@ -1282,6 +1315,10 @@ impl PlayState {
             session
                 .transcript
                 .push_str(Self::word_of_power_presentation_message());
+            // `audio.md §8.4`: a successful ruined-shrine restoration invokes
+            // the shared full-viewport flash again at its own success
+            // boundary — a second invocation after the recognized-Word flash.
+            self.emit_major_flash();
             let _ = self.refresh_world_live_chunks_for_current_area();
             self.mark_visibility_dirty();
         } else {
@@ -1640,6 +1677,15 @@ impl PlayState {
         (SHADOWLORD_HIDEOUT_MIN..=SHADOWLORD_HIDEOUT_MAX).contains(&value)
     }
 
+    /// `time.md §7`: "the daily walker skips any slot whose high bit is set".
+    /// The skip test is the high bit, not the living `1..8` range, because a
+    /// slot holding `0` means "not yet placed" — neither in a town nor
+    /// vanquished — and "the reroll walker rewrites it on the first day
+    /// rollover". Only a vanquished `0xFF` slot is sticky.
+    pub fn shadowlord_slot_is_rerollable(value: u8) -> bool {
+        value & SAVE_QUEST_TILE_FLAG_HIGH_BIT == 0
+    }
+
     pub fn shadowlord_slot_is_vanquished(value: u8) -> bool {
         value == SHADOWLORD_VANQUISHED
     }
@@ -1703,13 +1749,6 @@ impl PlayState {
         let Some(note) = self.stonegate_entry_presentation_message() else {
             return;
         };
-        if self
-            .sound_effect_history
-            .last()
-            .is_none_or(|(_, effect)| *effect != PlaySoundEffect::StonegateTone)
-        {
-            self.emit_sound_effect(PlaySoundEffect::StonegateTone);
-        }
         if !self.message.is_empty() {
             self.message.push('\n');
         }
@@ -1729,17 +1768,41 @@ impl PlayState {
         self.reroll_shadowlord_hideouts_excluding(self.current_shadowlord_hideout_id())
     }
 
-    pub fn reroll_shadowlord_hideouts_excluding(&mut self, _current: Option<u8>) -> usize {
-        let previous = self.shadowlord_hideouts;
+    /// `time.md §7`: "For each slot whose high bit is clear, the midnight
+    /// pass draws a candidate id uniformly from `1..8` inclusive and rejects
+    /// it when either of these holds, then draws again: the candidate equals
+    /// the party's current scene byte, or the candidate equals the value
+    /// currently stored in **any** of the three slots, including the slot
+    /// being rerolled and any slot already rewritten earlier in the same
+    /// pass."
+    ///
+    /// The rejection set is therefore read live from `shadowlord_hideouts`,
+    /// never from a pre-pass snapshot: that is what makes "a living
+    /// Shadowlord never stays in the same town two days running, and no two
+    /// living Shadowlords share a town" true. Vanquished `0xFF` slots never
+    /// collide with a `1..8` candidate, so they do not constrain the draw,
+    /// and with three slots plus one party scene at most four of the eight
+    /// ids are ever excluded, so the redraw loop always terminates.
+    pub fn reroll_shadowlord_hideouts_excluding(&mut self, current: Option<u8>) -> usize {
         let mut rerolled = 0usize;
 
         for slot in 0..SHADOWLORD_COUNT {
-            if !Self::shadowlord_slot_is_living(previous[slot]) {
+            if !Self::shadowlord_slot_is_rerollable(self.shadowlord_hideouts[slot]) {
                 continue;
             }
 
-            self.shadowlord_hideouts[slot] =
-                self.random_range_u8(SHADOWLORD_HIDEOUT_MIN, SHADOWLORD_HIDEOUT_MAX);
+            loop {
+                let candidate =
+                    self.random_range_u8(SHADOWLORD_HIDEOUT_MIN, SHADOWLORD_HIDEOUT_MAX);
+                if Some(candidate) == current {
+                    continue;
+                }
+                if self.shadowlord_hideouts.contains(&candidate) {
+                    continue;
+                }
+                self.shadowlord_hideouts[slot] = candidate;
+                break;
+            }
             rerolled += 1;
         }
 
@@ -1870,17 +1933,12 @@ impl PlayState {
                         && terrain_combat_base_class(object).is_some()
                     {
                         self.advance_turn();
-                        let note = self.enter_terrain_combat_from_world_object(
+                        let _setup_report = self.enter_terrain_combat_from_world_object(
                             game_dir,
                             plane,
                             object_slot,
                             object,
                         )?;
-                        self.message = format!(
-                            "Attacked object tile {} at ({x}, {y}) to the {} in slot {object_slot}; {note}.",
-                            object.tile,
-                            direction.name()
-                        );
                         return Ok(MoveOutcome::Used);
                     }
                 }
@@ -1898,6 +1956,76 @@ impl PlayState {
                 if let Some((npc_index, npc_slot, object_slot, type_byte)) =
                     self.town_attack_target_at(floor, x, y)
                 {
+                    // `town-mode.md §14`: "The town overlay has a live
+                    // NPC-conflict chain, entered both from A-Attack and
+                    // from post-action cleanup, that hands the target
+                    // NPC's linked active-object slot to the same
+                    // terrain-combat entry the overworld uses, so a town
+                    // fight is an ordinary arena fight: ordinary town
+                    // ground resolves to the cobble arena, and the
+                    // scene-keyed town-style override forces the monster
+                    // count to one unless the target's class is Guard
+                    // (whose stat row carries the sentinel count eight)."
+                    // The withdrawn reading kept A-Attack inside town
+                    // mode and never called the combat framer.
+                    if town_npc_attack_enters_conflict(type_byte)
+                        && !matches!(
+                            town_npc_attack_resolution(type_byte),
+                            TownNpcAttackResolution::Refused
+                        )
+                    {
+                        // `combat.md §5`: the encounter's base combat
+                        // class "is derived from the creature's own
+                        // sprite byte". A town actor's renderer record
+                        // carries the drawn person tile rather than its
+                        // roster sprite class, so the conflict chain
+                        // hands the entry a trigger stamped with the
+                        // roster type byte - that is what makes a guard
+                        // resolve to class 12 and skip the town-style
+                        // single-attacker override.
+                        // `combat.md §5`: the placed lead monster "keeps
+                        // the triggering object's own tile byte", so the
+                        // trigger carries the roster sprite tag in both
+                        // sprite bytes rather than the town renderer's
+                        // generic person tile.
+                        let trigger = ActiveObject {
+                            type_byte,
+                            tile: type_byte,
+                            ..object
+                        };
+                        if let Some(game_dir) = game_dir {
+                            if game_dir.join(BRIT_CBT_FILE).exists()
+                                && terrain_combat_base_class(trigger).is_some()
+                            {
+                                // §14 keeps the alarm sweep on the
+                                // A-Attack routing; the death flow's
+                                // slot clear, floor reload and
+                                // Shadowlord re-install move to the
+                                // arena exit.
+                                let (pursued, fled) =
+                                    self.town_alarm_sweep(scene, floor, Some(npc_slot));
+                                self.pending_town_conflict = Some(PendingTownConflict {
+                                    scene_byte: scene.byte,
+                                    floor,
+                                    npc_slot,
+                                    type_byte,
+                                    awaiting_floor_reload: false,
+                                });
+                                let hostile_terrain = self.grid[y * TOWN_GRID_SIDE + x];
+                                let _setup_report = self
+                                    .enter_terrain_combat_from_object_in_scene_with_terrain(
+                                        game_dir,
+                                        WorldPlane::Britannia,
+                                        object_slot,
+                                        trigger,
+                                        scene.byte,
+                                        hostile_terrain,
+                                    )?;
+                                let _ = (pursued, fled);
+                                return Ok(MoveOutcome::Used);
+                            }
+                        }
+                    }
                     match town_npc_attack_resolution(type_byte) {
                         TownNpcAttackResolution::DeathMask => {
                             self.free_active_object_slot(object_slot);
@@ -1979,6 +2107,59 @@ impl PlayState {
             && object.x == x
             && object.y == y)
             .then_some((DUNGEON_ACTIVE_MONSTER_SLOT, object))
+    }
+
+    /// `town-mode.md §14`: the first half of the NPC-conflict chain's
+    /// exit - "On exit the town chain clears the NPC slot". The
+    /// removal-mask policy of §4 still decides whether the cleared slot
+    /// is recorded as permanently gone: "killing a townsperson or a
+    /// named character records that slot as permanently removed in the
+    /// per-scene removal mask (Section 4), while killing a guard or a
+    /// creature records nothing and that slot is placed again on the
+    /// next entry."
+    pub fn clear_town_conflict_npc_slot(&mut self, scene: Scene, npc_slot: usize, type_byte: u8) {
+        if let Some(npc_index) = self.npcs.iter().position(|npc| npc.slot == npc_slot) {
+            if let Some(object_slot) = self.npcs[npc_index].active_object {
+                self.free_active_object_slot(object_slot);
+            }
+            self.npcs.remove(npc_index);
+        }
+        if town_npc_removal_recorded(type_byte) {
+            self.mark_removed_town_npc_once(scene, npc_slot);
+        }
+        self.mark_visibility_dirty();
+    }
+
+    /// `town-mode.md §14`: the rest of the NPC-conflict chain's exit -
+    /// the chain "reloads the town map, and re-runs the Shadowlord
+    /// install pass of Section 13 (which, in a hideout town whose
+    /// Shadowlord is still standing in the active-object table, is
+    /// rejected by the one-at-a-time check and does nothing)". Both
+    /// halves need a game directory, so they are drained at the input
+    /// boundary once the arena frame has been restored.
+    pub fn drain_pending_town_conflict(&mut self, game_dir: &Path) -> io::Result<bool> {
+        if self.combat_active {
+            return Ok(false);
+        }
+        let Some(pending) = self.pending_town_conflict else {
+            return Ok(false);
+        };
+        if !pending.awaiting_floor_reload {
+            return Ok(false);
+        }
+        self.pending_town_conflict = None;
+        let Area::Town { scene, floor } = self.area else {
+            return Ok(false);
+        };
+        if scene.byte != pending.scene_byte {
+            return Ok(false);
+        }
+        self.reload_town_floor(game_dir, scene, floor)?;
+        // `encounters.md §7`: the chain "does not re-place the player:
+        // the player's position comes from the world-state globals
+        // throughout."
+        self.install_shadowlord_entry_encounter();
+        Ok(true)
     }
 
     pub fn town_attack_target_at(
@@ -2395,7 +2576,7 @@ impl PlayState {
         direction: Direction,
     ) -> MoveOutcome {
         if !self.combat_active || actor_slot >= COMBAT_PARTY_ACTOR_SLOTS {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if !direction.is_cardinal() {
@@ -2403,11 +2584,11 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         if !combat_actor_is_active_not_dead(actor) {
-            self.message = "No active combatant.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -2817,6 +2998,10 @@ impl PlayState {
                 return Ok(outcome);
             }
         } else {
+            // Test-only/sidecar-free callers have no town post-action I/O
+            // path to enter. They still finish the deferred town tail.
+            self.apply_pending_town_status_provision_pass();
+            self.apply_pending_town_object_epilogue();
             self.append_pending_hourly_status_message();
         }
         Ok(MoveOutcome::Passed)
@@ -2873,6 +3058,7 @@ impl PlayState {
         };
 
         let pre_effect_message = self.message.clone();
+        let mut nonterminal_outcome = None;
         if let Some(transition) = self.apply_world_underfoot_plane_transition(game_dir, plane)? {
             let transition_message = self.message.clone();
             self.message = format!("{pre_effect_message} {transition_message}");
@@ -2902,10 +3088,18 @@ impl PlayState {
                     // as they occurred; preserve the command result in the
                     // compatibility message slot.
                     self.message = pre_effect_message;
+                    nonterminal_outcome = Some(outcome);
                 }
-                return Ok(Some(outcome));
+                if outcome.is_transition() || self.combat_active {
+                    return Ok(Some(outcome));
+                }
             }
         }
+        // `overworld.md §6.2.5`: rough seas follows committed action work and
+        // cleanup, but precedes the remaining encounter epilogue. A reaction
+        // that already changed mode returned above; an ordinary reaction does
+        // not suppress this terrain/transport check.
+        let _ = self.apply_rough_seas_if_eligible();
         self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(Some(game_dir), plane)?;
         self.append_world_status_tile_message(plane);
@@ -2915,7 +3109,7 @@ impl PlayState {
                     .push_str(&format!(" Wandering encounter spawned in slot {slot}."));
             }
         }
-        Ok(None)
+        Ok(nonterminal_outcome)
     }
 
     /// Resolve the high-to-low reaction list staged by the active-object
@@ -3006,6 +3200,18 @@ impl PlayState {
         // original transport marker. A frigate therefore takes its hull roll
         // (and can sink) immediately before the durable transition.
         self.free_active_object_slot(whirlpool_slot);
+        // `audio.md §8.9`, second row: "The whirlpool object is cleared,
+        // `WHIRLPOOL!` prints, the party sprite is **replaced by the whirlpool
+        // sprite**, and the viewport repaints ... **then** the long descent -
+        // then the sprite is restored, the shared impact payload runs, and the
+        // party is teleported".
+        //
+        // So the sweep sits after the slot is freed and strictly before the
+        // impact payload and the transition: "The state commit - the teleport -
+        // happens strictly after it." The on-foot arm above returned already,
+        // which is the `§9` silence boundary "whirlpool engagement while the
+        // party is on foot, which plays no long descent".
+        self.emit_sound_effect(SoundEffect::LongDescent);
         self.apply_outdoor_impact();
         let entry = WorldPlaneTransitionEntry {
             from_plane: plane,
@@ -3064,6 +3270,18 @@ impl PlayState {
         if self.turn == turn_before {
             return Ok(None);
         }
+        // `active-objects.md §9`: "Combat suspends the world by swapping
+        // the active-object table to a backup region and overwriting the
+        // live table with combat actors ... The calling mode loop sees
+        // combat as a function call that returns with the table and
+        // globals exactly as they were". The §7 per-turn epilogue -
+        // underfoot effects and the NPC schedule processor - therefore
+        // resumes only once the framer has restored the world table. This
+        // arm became reachable with the §14 NPC-conflict chain, which
+        // enters an arena while the area is still a town.
+        if self.combat_active {
+            return Ok(None);
+        }
         let Area::Town { scene, floor } = self.area else {
             return Ok(None);
         };
@@ -3097,6 +3315,23 @@ impl PlayState {
                 }
                 let outcome =
                     self.apply_town_trap_door_transition(game_dir, scene, entry, false)?;
+                // `town-mode.md §10`: "If an effect moves the party to a
+                // different floor, the handler re-reads the tile under the
+                // party's new position and applies that tile's effect too."
+                let landed_tile = self.grid[self.player.y * 32 + self.player.x];
+                if Self::is_town_burning_live_tile(landed_tile) {
+                    self.apply_town_burning_underfoot_effect();
+                }
+                let Area::Town {
+                    scene: landed_scene,
+                    floor: landed_floor,
+                } = self.area
+                else {
+                    unreachable!("town trapdoor transition must remain in town mode");
+                };
+                self.append_town_poison_gas_message(game_dir, landed_scene, landed_floor)?;
+                self.apply_pending_town_status_provision_pass();
+                self.apply_pending_town_object_epilogue();
                 let transition_message = self.message.clone();
                 self.message = if pre_effect_message.is_empty() {
                     transition_message
@@ -3106,7 +3341,93 @@ impl PlayState {
                 return Ok(Some(outcome));
             }
         }
+        // `town-mode.md §10` burning family. This arm runs after the
+        // trapdoor arm and before the trailing party pass, and it is not
+        // shadowed by the trapdoor: the trapdoor tile is `0x8C` while the
+        // burning ids are `0xBC`/`0x8F`. It has no transport gate, so it
+        // fires from a carpet too, and it re-fires every consumed turn the
+        // party spends standing on the tile.
+        if Self::is_town_burning_live_tile(tile) {
+            self.apply_town_burning_underfoot_effect();
+        }
+        // `town-mode.md §17` "Underfoot-effect cadence is fixed": "The
+        // underfoot handler is a per-turn post-action pass, not a step-commit
+        // hook. Any earlier statement that the poison-gas effect 'fires from
+        // the step path' is retracted: it fires once per turn-consuming action
+        // while the party occupies the tile, including turns spent passing in
+        // place, and it fires after that turn's clock advance."
+        //
+        // `town-mode.md §10`: "If an effect moves the party to a different
+        // floor, the handler re-reads the tile under the party's new position
+        // and applies that tile's effect too", so the gas arm re-reads the
+        // live tile rather than reusing the `tile` sampled above the trapdoor
+        // arm.
+        self.append_town_poison_gas_message(game_dir, scene, floor)?;
+        self.apply_pending_town_status_provision_pass();
+        self.apply_pending_town_object_epilogue();
         self.apply_town_npc_contact_event(scene, floor)
+    }
+
+    /// Finish the shared pass deliberately deferred by an ordinary town
+    /// turn's clock advance. `town-mode.md §10` makes this the last act of the
+    /// underfoot handler, after waking, trapdoor/burning, and poison-gas work.
+    pub(crate) fn apply_pending_town_status_provision_pass(&mut self) {
+        if std::mem::take(&mut self.pending_town_status_provision_pass) {
+            self.apply_hourly_status_provision_pass();
+        }
+    }
+
+    /// Finish the scheduler/object half of the ordinary town epilogue after
+    /// underfoot effects and the shared status/provision pass. The explicit-T
+    /// arrest discriminator suppresses only the scheduler; it does not erase
+    /// the independently requested active-object animation pass.
+    pub(crate) fn apply_pending_town_object_epilogue(&mut self) {
+        let run_npc_schedule = std::mem::take(&mut self.pending_town_npc_schedule_pass);
+        let run_active_objects = std::mem::take(&mut self.pending_town_active_object_pass);
+        if run_npc_schedule && self.pending_town_arrest.is_none() {
+            self.advance_npc_schedules();
+        }
+        if run_active_objects {
+            self.advance_active_objects();
+        }
+    }
+
+    /// `town-mode.md §10`: the live town tiles in the burning family — the
+    /// fireplace `0xBC` and molten lava `0x8F` of
+    /// `catalogs/tile-catalog.md §6`. The earlier "rune/lever family" label
+    /// for this bullet is withdrawn; both ids are damage tiles.
+    pub const fn is_town_burning_live_tile(tile: u8) -> bool {
+        matches!(
+            tile,
+            Self::TOWN_BURNING_FIREPLACE_TILE | Self::TOWN_BURNING_LAVA_TILE
+        )
+    }
+
+    /// `town-mode.md §10`: "Rebuild the view, print the stored line
+    /// `Burning!`, then apply the same independently rolled `1..8` mass
+    /// damage to every non-Dead slot."
+    pub fn apply_town_burning_underfoot_effect(&mut self) {
+        self.mark_visibility_dirty();
+        let line = Self::TOWN_BURNING_MESSAGE;
+        self.message = if self.message.is_empty() {
+            line.to_string()
+        } else {
+            format!("{} {line}", self.message)
+        };
+        self.apply_town_burning_party_damage();
+    }
+
+    /// The burning family's mass damage is the same independently rolled
+    /// `1..8` pass the trapdoor arm runs (`town-mode.md §10`).
+    pub fn apply_town_burning_party_damage(&mut self) {
+        let slots = self.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
+        for slot in 0..slots {
+            if self.party[slot].status == CharacterStatus::Dead.save_byte() {
+                continue;
+            }
+            let damage = self.random_range_u8(1, TRAP_BOMB_DAMAGE_MAX);
+            self.apply_shared_party_damage(slot, damage);
+        }
     }
 
     pub fn apply_town_trapdoor_party_damage(&mut self) {
@@ -3131,14 +3452,27 @@ impl PlayState {
         self.pending_stonegate_trapdoor_playback =
             Some(StonegateTrapdoorPlayback::complete(self.party.len()));
 
+        // `town-mode.md §7.1` fixes the order of this script precisely, and
+        // `audio.md §8.2` places the descent inside it. Step 1 is the direct
+        // black viewport fill, carried by the playback record above. Step 2 is
+        // the speaker sweep — every integer frequency from 1000 down through
+        // 251 Hz, 750 tones. Only then does step 3 rewrite the live grid.
+        // Emitting after the grid rewrite would put the sweep one published
+        // step late.
+        self.emit_sound_effect(SoundEffect::StonegateDescent);
+
         self.grid.fill(STONEGATE_TRAPDOOR_GRID_TILE);
         self.mark_visibility_dirty();
 
         self.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
 
-        for member in &mut self.party {
-            member.hp = 0;
-            member.status = CharacterStatus::Dead.save_byte();
+        for slot in 0..self.party.len() {
+            self.party[slot].hp = 0;
+            self.party[slot].status = CharacterStatus::Dead.save_byte();
+            // `audio.md §8.2`: the descent stops, then one 75-update
+            // 100..500 Hz rumble per party member, as that member is killed
+            // and the stats panel is repainted.
+            self.emit_sound_effect(SoundEffect::StonegateMemberDeath);
         }
 
         // The status/provision tail follows the deaths. If this action crossed
@@ -3151,9 +3485,7 @@ impl PlayState {
         {
             self.active_player = None;
         }
-        if std::mem::take(&mut self.pending_stonegate_status_provision_pass) {
-            self.apply_hourly_status_provision_pass();
-        }
+        self.apply_pending_town_status_provision_pass();
 
         // The normal coordinate-only record-zero tail follows the all-zero
         // script boundary. The zero-type animal pass cannot move it; the NPC
@@ -3161,10 +3493,7 @@ impl PlayState {
         self.active_objects[0].x = self.player.x;
         self.active_objects[0].y = self.player.y;
         self.active_objects[0].z = floor;
-        if std::mem::take(&mut self.pending_stonegate_object_epilogue) {
-            self.advance_active_objects();
-            self.advance_npc_schedules();
-        }
+        self.apply_pending_town_object_epilogue();
     }
 
     pub fn town_poison_gas_at(
@@ -3189,6 +3518,13 @@ impl PlayState {
         Ok(None)
     }
 
+    /// `town-mode.md §10` poison-gas terrain, driven at the `§17` cadence:
+    /// "The underfoot handler is a per-turn post-action pass, not a
+    /// step-commit hook ... it fires once per turn-consuming action while the
+    /// party occupies the tile, including turns spent passing in place, and it
+    /// fires after that turn's clock advance." The only caller is
+    /// [`PlayState::apply_town_post_turn_effects_after_turn`]; the retracted
+    /// step-commit call site in the town step path is gone.
     pub fn append_town_poison_gas_message(
         &mut self,
         game_dir: &Path,
@@ -3202,7 +3538,11 @@ impl PlayState {
             return Ok(());
         };
         let report = self.apply_town_poison_gas(entry);
-        self.message.push_str(&format!(" {report}."));
+        if self.message.is_empty() {
+            self.message = format!("{report}.");
+        } else {
+            self.message.push_str(&format!(" {report}."));
+        }
         Ok(())
     }
 
@@ -3414,15 +3754,35 @@ impl PlayState {
         self.clear_non_player_active_objects();
         self.mark_visibility_dirty();
 
-        let Some(target_slot) = self.next_blackthorn_challenge_target_slot() else {
+        // `blackthorn.md §3` step 2: "Select which shrine the interrogation
+        // will demand a mantra for: scan the eight shrine ruin flags in
+        // shrine order and take the first whose flag is *exactly* clear —
+        // never ruined and never restored. If every flag is non-zero the
+        // whole audience is abandoned." The §3 withdrawal is explicit that
+        // this eight-slot scan selects a *shrine*, not a party member, and
+        // that there is no per-member Blackthorn jail flag.
+        let Some(shrine_index) = self.blackthorn_selected_shrine() else {
+            let outcome = self.apply_blackthorn_captive_cell_handoff(
+                game_dir,
+                "Blackthorn audience found no un-ruined shrine to interrogate.",
+            )?;
+            return Ok(Some(outcome));
+        };
+
+        // `blackthorn.md §3`: the setup "counts the active party members
+        // that are still eligible for the challenge". Eligibility is
+        // liveness only - the §3 withdrawal is explicit that "**There is
+        // no per-member jail flag.**"
+        if self.blackthorn_eligible_party_member_count() == 0 {
             let outcome = self.apply_blackthorn_captive_cell_handoff(
                 game_dir,
                 "Blackthorn audience found no eligible party member.",
             )?;
             return Ok(Some(outcome));
-        };
+        }
 
-        let mut challenge = crate::blackthorn_session::BlackthornChallenge::new();
+        let mut challenge =
+            crate::blackthorn_session::BlackthornChallenge::for_shrine(shrine_index as u8);
         let prompt = match challenge.begin() {
             crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
                 prompt,
@@ -3440,13 +3800,15 @@ impl PlayState {
         self.install_blackthorn_audience_actors();
         let approach =
             self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceThroneApproach);
-        let rise = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::BlackthornRises);
+        let release = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::GuardReleaseRoute);
         self.active_blackthorn = Some(challenge);
+        // `blackthorn.md §4`: "The loop asks about ONE shrine, up to four
+        // times." The withdrawn reading made the loop's party-slot
+        // argument semantic - "it names which companion is at risk" - so
+        // the prompt names the shrine's virtue and nothing else.
         self.message = format!(
-            "Blackthorn audience: {opening}. Opening cutscene pause {}, output {} byte(s). Party slot {} is challenged for {prompt}.",
-            approach.pause_ticks,
-            rise.output_bytes.len(),
-            target_slot + 1,
+            "Blackthorn audience: {opening}. Opening cutscene advanced {} world ticks; the guard release advanced {}. Blackthorn demands the mantra of {prompt}.",
+            approach.world_ticks, release.world_ticks,
         );
         Ok(Some(MoveOutcome::Used))
     }
@@ -3474,9 +3836,18 @@ impl PlayState {
                 continue;
             }
             let slot = placement.actor.slot_index() as usize;
+            let actor_byte = if placement.actor == BlackthornCutsceneActor::SecondPartyMember {
+                self.party
+                    .get(BLACKTHORN_FAILURE_VICTIM_SLOT)
+                    .map(|member| combat_party_actor_byte(member.class_byte))
+                    .filter(|byte| *byte != 0)
+                    .unwrap_or(crate::PLAYER_TILE)
+            } else {
+                placement.tile
+            };
             self.active_objects[slot] = ActiveObject {
-                type_byte: placement.type_byte,
-                tile: placement.tile,
+                type_byte: actor_byte,
+                tile: actor_byte,
                 x: placement.x,
                 y: placement.y,
                 z: 0,
@@ -3507,10 +3878,11 @@ impl PlayState {
                 BlackthornCutsceneActorState {
                     x: object.x,
                     y: object.y,
-                    visible: true,
+                    actor_byte: object.tile,
                 },
             );
         }
+        vm.visible_actors = vm.actors;
         vm
     }
 
@@ -3522,8 +3894,8 @@ impl PlayState {
             let slot = placement.actor.slot_index() as usize;
             if let Some(state) = vm.actor(placement.actor) {
                 self.active_objects[slot] = ActiveObject {
-                    type_byte: placement.type_byte,
-                    tile: placement.tile,
+                    type_byte: state.actor_byte,
+                    tile: state.actor_byte,
                     x: state.x,
                     y: state.y,
                     z: 0,
@@ -3553,6 +3925,14 @@ impl PlayState {
     ) -> BlackthornCutsceneVm {
         let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
         vm.run(blackthorn_cutscene_beat_commands(beat));
+        // `audio.md §8.6` / cleak/u5-spec#177: every explicit stinger-pause
+        // repetition and every movement step while per-step pauses are enabled
+        // runs the live two-part sting. The VM owns the separate two-tick
+        // cinematic pause; the speaker program owns only its two rumble halves
+        // and calibrated silent gap.
+        for _ in 0..vm.stinger_count {
+            self.emit_sound_effect(SoundEffect::BlackthornMovementStinger);
+        }
         self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
         vm
     }
@@ -3573,61 +3953,147 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
 
+        // `blackthorn.md §4`: "The shrine index is fixed before the loop
+        // starts and never changes inside it", so the consequence arms read
+        // the session's index rather than re-scanning the ruin flags — a
+        // re-scan would drift onto the next shrine the moment this one is
+        // ruined.
+        let shrine_index = usize::from(challenge.shrine_index);
+
         match challenge.submit(&answer) {
             crate::blackthorn_session::BlackthornChallengeOutcome::Correct { ordinal } => {
-                let handled_slot = self.mark_blackthorn_current_target_handled();
+                // `blackthorn.md §4`: the correct-answer consequences are the
+                // shrine ruin flag and the clamped five-point standing debit.
+                self.apply_blackthorn_correct_answer_consequences(shrine_index);
+                let standing = self.moral_standing;
+                let fate = self.apply_blackthorn_correct_answer_companion_fate();
                 let vm = self
                     .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
-                if self.next_blackthorn_challenge_target_slot().is_none() {
-                    self.run_blackthorn_cutscene_beat(
-                        BlackthornCutsceneBeat::ConditionalThroneCleanup,
-                    );
-                    return self.apply_blackthorn_captive_cell_handoff(
-                        game_dir,
-                        &format!(
-                            "Answered Blackthorn's prompt {} correctly; party slot {} is handled; cutscene pause {}.",
-                            ordinal + 1,
-                            handled_slot.map(|slot| slot + 1).unwrap_or(0),
-                            vm.pause_ticks
-                        ),
-                    );
-                }
-                self.active_blackthorn = Some(challenge);
-                self.message = format!(
-                    "Answered Blackthorn's prompt {} correctly; party slot {} is handled; cutscene pause {}. {}",
-                    ordinal + 1,
-                    handled_slot.map(|slot| slot + 1).unwrap_or(0),
-                    vm.pause_ticks,
-                    self.blackthorn_current_prompt_message()
-                );
-                Ok(MoveOutcome::Used)
+                // A correct answer resolves the interrogation; the
+                // withdrawn reading ended it only once the jail scan ran
+                // dry, i.e. once every party slot had been flagged.
+                self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
+                self.apply_blackthorn_captive_cell_handoff(
+                    game_dir,
+                    &format!(
+                        "Answered Blackthorn's prompt {} correctly; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks.",
+                        ordinal + 1,
+                        shrine_index + 1,
+                        vm.world_ticks
+                    ),
+                )
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
-                let handled_slot = self.mark_blackthorn_current_target_handled();
+                // `blackthorn.md §4`: a correct answer resolves the
+                // interrogation, and it is the answer — not surviving the
+                // ladder — that ruins the shrine and debits five points of
+                // moral standing.
+                self.apply_blackthorn_correct_answer_consequences(shrine_index);
+                let standing = self.moral_standing;
+                let fate = self.apply_blackthorn_correct_answer_companion_fate();
                 let vm = self
                     .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
                 self.apply_blackthorn_captive_cell_handoff(
                     game_dir,
                     &format!(
-                        "Survived Blackthorn's challenge; party slot {} is handled; cutscene screen cleared {}.",
-                        handled_slot.map(|slot| slot + 1).unwrap_or(0),
-                        vm.screen_cleared
+                        "Survived Blackthorn's challenge; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks without clearing the screen.",
+                        shrine_index + 1,
+                        vm.world_ticks
                     ),
                 )
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
-                let victim = self.mark_blackthorn_failure_victim_handled();
-                let vm = self
-                    .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::FailedChallengeReaction);
-                self.apply_blackthorn_captive_cell_handoff(
-                    game_dir,
-                    &format!(
-                        "Failed Blackthorn's prompt {}; expected {expected}; party slot {} is punished; cutscene output {} byte(s).",
-                        ordinal + 1,
-                        victim.map(|slot| slot + 1).unwrap_or(0),
-                        vm.output_bytes.len()
-                    ),
-                )
+                // `blackthorn.md §4`: "**A wrong answer, when few companions
+                // remain, ends the interrogation** with a mocking line about
+                // lying and a threat of the dungeon. **A wrong answer
+                // otherwise escalates.** The first wrong answer produces a
+                // threat naming the companion at risk. Later wrong answers
+                // stamp a tile into the cutscene map, and the fourth wrong
+                // answer **kills** the named companion with the pendulum-blade
+                // narration."
+                //
+                // §5 scopes the punishing side to "a branch that can punish a
+                // companion" and names the victim as "the second living party
+                // member (the first living companion behind the Avatar)", so
+                // the ending branch is the one where no such companion exists.
+                // §4 does not quantify "few" beyond that, so nothing narrower
+                // is assumed here.
+                let victim = self
+                    .blackthorn_failure_victim_index()
+                    .filter(|index| *index != 0);
+                let Some(victim) = victim else {
+                    return self.apply_blackthorn_captive_cell_handoff(
+                        game_dir,
+                        &format!(
+                            "Failed Blackthorn's prompt {}; expected {expected}; too few companions remain, so the interrogation ends with a threat of the dungeon.",
+                            ordinal + 1,
+                        ),
+                    );
+                };
+                match challenge.wrong_escalation() {
+                    // First wrong answer: a threat only. No tile is stamped
+                    // yet, and the loop re-asks with the next wording.
+                    Some(crate::blackthorn_session::BlackthornWrongEscalation::Threat) => {
+                        let prompt = challenge
+                            .current_prompt()
+                            .map(|(_, prompt)| prompt)
+                            .unwrap_or("Virtue");
+                        self.active_blackthorn = Some(challenge);
+                        self.message = format!(
+                            "Failed Blackthorn's prompt {}; expected {expected}; Blackthorn threatens party slot {}. He demands the mantra of {prompt} again.",
+                            ordinal + 1,
+                            victim + 1,
+                        );
+                        Ok(MoveOutcome::PromptDeclined)
+                    }
+                    // Second and third wrong answers: "Later wrong answers
+                    // stamp a tile into the cutscene map". They do not run
+                    // §5's execution beat or clear the victim actor; that
+                    // happens only on the fourth answer. The two published
+                    // punishment props are introduced in prompt order.
+                    Some(crate::blackthorn_session::BlackthornWrongEscalation::TileStamp) => {
+                        let (x, y, tile) = if ordinal == 1 {
+                            (5, 7, BLACKTHORN_PENDULUM_TILE)
+                        } else {
+                            (5, 9, BLACKTHORN_HOURGLASS_TILE)
+                        };
+                        let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
+                        vm.run(&[
+                            BlackthornCutsceneCommand::WriteTerrain { x, y, tile },
+                            BlackthornCutsceneCommand::ExplicitRedraw,
+                        ]);
+                        self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
+                        let prompt = challenge
+                            .current_prompt()
+                            .map(|(_, prompt)| prompt)
+                            .unwrap_or("Virtue");
+                        self.active_blackthorn = Some(challenge);
+                        self.message = format!(
+                            "Failed Blackthorn's prompt {}; expected {expected}; the punishment tableau changes over party slot {}; cutscene advanced {} world tick. He demands the mantra of {prompt} again.",
+                            ordinal + 1,
+                            victim + 1,
+                            vm.world_ticks,
+                        );
+                        Ok(MoveOutcome::PromptDeclined)
+                    }
+                    // Fourth wrong answer: the §5 execution.
+                    _ => {
+                        let vm = self.run_blackthorn_cutscene_beat(
+                            BlackthornCutsceneBeat::FailedChallengeReaction,
+                        );
+                        let report = self
+                            .execute_blackthorn_companion(victim)
+                            .unwrap_or_else(|| "no companion remains to punish".to_string());
+                        self.apply_blackthorn_captive_cell_handoff(
+                            game_dir,
+                            &format!(
+                                "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade; cutscene advanced {} world ticks.",
+                                ordinal + 1,
+                                vm.world_ticks
+                            ),
+                        )
+                    }
+                }
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
                 prompt,
@@ -3660,39 +4126,229 @@ impl PlayState {
             return "Blackthorn audience is not active.".to_string();
         };
         if let Some((_, prompt)) = challenge.current_prompt() {
-            let target = self
-                .next_blackthorn_challenge_target_slot()
-                .map(|slot| slot + 1)
-                .unwrap_or(0);
-            format!("Blackthorn asks party slot {target} for {prompt}.")
+            // `blackthorn.md §4` withdrawal: "the loop's party-slot
+            // argument is semantic: it names which companion is at risk"
+            // is withdrawn. "The loop asks about ONE shrine, up to four
+            // times", so the prompt names only that shrine's virtue.
+            format!("Blackthorn asks for the mantra of {prompt}.")
         } else {
             "Blackthorn waits.".to_string()
         }
     }
 
-    pub fn next_blackthorn_challenge_target_slot(&self) -> Option<usize> {
-        self.party.iter().enumerate().find_map(|(index, member)| {
-            let slot = member.slot;
-            (member.living() && !self.blackthorn_story.is_party_slot_jailed(slot)).then_some(index)
-        })
+    /// `blackthorn.md §3` step 2: "scan the eight shrine ruin flags in
+    /// shrine order and take the first whose flag is *exactly* clear — never
+    /// ruined and never restored."
+    ///
+    /// "Exactly clear" is a whole-byte test, not a high-bit test: the
+    /// restoration path at the Word-of-Power arm only clears the ruin bit, so
+    /// a restored shrine keeps a non-zero flag byte and is skipped here.
+    pub fn blackthorn_selected_shrine(&self) -> Option<usize> {
+        (0..SAVE_SHRINE_RUIN_FLAG_COUNT).find(|index| self.shrine_ruin_flags[*index] == 0)
     }
 
-    pub fn mark_blackthorn_current_target_handled(&mut self) -> Option<usize> {
-        let index = self.next_blackthorn_challenge_target_slot()?;
-        let slot = self.party[index].slot;
-        self.blackthorn_story.mark_party_slot_jailed(slot);
-        Some(index)
-    }
-
-    pub fn mark_blackthorn_failure_victim_handled(&mut self) -> Option<usize> {
-        let index = if self.party.len() > BLACKTHORN_FAILURE_VICTIM_SLOT {
-            BLACKTHORN_FAILURE_VICTIM_SLOT
-        } else {
-            self.next_blackthorn_challenge_target_slot()?
+    /// `blackthorn.md §4`: "A correct answer ruins that shrine and costs five
+    /// points of moral standing. The shrine's durable ruin flag is set, so
+    /// the shrine thereafter renders and behaves as a ruined shrine until the
+    /// player restores it by meditating there. The moral-standing debit is a
+    /// clamped subtraction of five, floored at zero."
+    ///
+    /// The §4 withdrawal reverses the earlier "the challenge does not
+    /// directly adjust numeric karma" reading: the interrogation *does* debit
+    /// moral standing. The ruin bit written here is the same
+    /// `SAVE_QUEST_TILE_FLAG_HIGH_BIT` the overworld quest-tile pass reads to
+    /// render a ruined shrine and the shrine-restoration arm clears.
+    pub fn apply_blackthorn_correct_answer_consequences(&mut self, shrine_index: usize) -> bool {
+        let Some(flag) = self.shrine_ruin_flags.get_mut(shrine_index) else {
+            return false;
         };
-        let slot = self.party[index].slot;
-        self.blackthorn_story.mark_party_slot_jailed(slot);
-        Some(index)
+        *flag |= SAVE_QUEST_TILE_FLAG_HIGH_BIT;
+        self.moral_standing = self
+            .moral_standing
+            .saturating_sub(Self::BLACKTHORN_CORRECT_ANSWER_STANDING_DEBIT);
+        true
+    }
+
+    /// `blackthorn.md §3`: the audience setup "counts the active party
+    /// members that are still eligible for the challenge". The withdrawn
+    /// reading made this an eight-slot scan for "the first party slot
+    /// ... whose per-member Blackthorn-jail flag is still clear";
+    /// §3 answers that in full: "**There is no per-member jail flag.**"
+    /// Eligibility is liveness.
+    pub fn blackthorn_eligible_party_member_count(&self) -> usize {
+        self.party.iter().filter(|member| member.living()).count()
+    }
+
+    /// `blackthorn.md §5`: "The victim is the second living party member
+    /// (the first living companion behind the Avatar)". Nothing is
+    /// flagged on the victim's record - the earlier
+    /// `mark_blackthorn_failure_victim_handled` wrote a durable jail bit,
+    /// which §8 withdraws.
+    pub fn blackthorn_failure_victim_index(&self) -> Option<usize> {
+        self.party
+            .iter()
+            .enumerate()
+            .filter(|(_, member)| member.living())
+            .map(|(index, _)| index)
+            .nth(BLACKTHORN_FAILURE_VICTIM_SLOT)
+            .or_else(|| self.party.iter().position(|member| member.living()))
+    }
+
+    /// `blackthorn.md §4`: "**A correct answer also decides a
+    /// companion's fate.** If more than one companion is still alive,
+    /// Blackthorn thanks the player for their honesty and **kills** one
+    /// companion as 'a merciful death'. If only one remains, he spares
+    /// the player instead."
+    ///
+    /// §5 gives the execution's shape: the routine "erases that
+    /// companion's on-screen actor; lifts their roster record out of the
+    /// party, compacts the remaining records up, and decrements the
+    /// party count; parks the lifted record in the last roster slot with
+    /// a **whereabouts value that matches no location**." §8 lists the
+    /// result as "Durable and irreversible". The withdrawn reading
+    /// substituted a per-member jail flag for the death, so the roster
+    /// never shrank.
+    pub fn apply_blackthorn_correct_answer_companion_fate(&mut self) -> String {
+        let living_companions = self
+            .party
+            .iter()
+            .skip(1)
+            .filter(|member| member.living())
+            .count();
+        if living_companions <= 1 {
+            return "only one companion remains, so Blackthorn spares the player".to_string();
+        }
+        let Some(index) = self.blackthorn_failure_victim_index() else {
+            return "no companion remains to take the merciful death".to_string();
+        };
+        if index == 0 {
+            return "only the Avatar remains, so Blackthorn spares the player".to_string();
+        }
+        // `blackthorn.md §5`: "The same execution runs on the *correct*-answer
+        // branch whenever more than one companion is alive, under a different
+        // message - Blackthorn thanking the player for their honesty and
+        // granting the companion 'a merciful death'." Both branches therefore
+        // share one execution routine.
+        match self.execute_blackthorn_companion(index) {
+            Some(report) => format!("{report} as a merciful death"),
+            None => "no companion remains to take the merciful death".to_string(),
+        }
+    }
+
+    /// `blackthorn.md §5`: "parks the lifted record in the last roster slot
+    /// with a **whereabouts value that matches no location**. That
+    /// whereabouts field is the same one the innkeeper uses when a companion
+    /// is left at an inn; the value written here matches no inn and no scene,
+    /// so no inn can ever retrieve them".
+    ///
+    /// The spec pins the *property* of that byte - it matches no inn and no
+    /// scene - and leaves the exact value with the data, so the engine reuses
+    /// the no-scene sentinel it already has: [`Scene::new`] rejects `0xFF`,
+    /// and no inn's scene marker can equal it, so
+    /// [`crate::inn_guest_indices_for_scene`] can never select the parked
+    /// record.
+    pub const BLACKTHORN_EXECUTED_WHEREABOUTS: u8 = 0xff;
+
+    /// `blackthorn.md §5`: "**The punishment is an execution, and it is
+    /// durable.** ... the routine:
+    ///
+    /// - erases that companion's on-screen actor;
+    /// - lifts their roster record out of the party, compacts the remaining
+    ///   records up, and decrements the party count;
+    /// - parks the lifted record in the last roster slot with a
+    ///   **whereabouts value that matches no location**."
+    ///
+    /// §8 records the result as "Durable and irreversible", and §5 adds that
+    /// "the refuge/rescue sequence does not restore them either. **The
+    /// companion is dead and gone, and the effect survives saving and
+    /// reloading.**" This is the shared routine behind both the §5 failure
+    /// reaction and the §4 correct-answer "merciful death".
+    ///
+    /// Returns a description of what was executed, or `None` when `index`
+    /// names no companion behind the Avatar.
+    pub fn execute_blackthorn_companion(&mut self, index: usize) -> Option<String> {
+        if index == 0 || index >= self.party.len() {
+            return None;
+        }
+
+        // "erases that companion's on-screen actor" - the audience cinematic
+        // holds the victim in the `SecondPartyMember` actor slot of
+        // `blackthorn.md §6`.
+        let actor_slot = BlackthornCutsceneActor::SecondPartyMember.slot_index() as usize;
+        if let Some(object) = self.active_objects.get_mut(actor_slot) {
+            *object = ActiveObject::empty();
+        }
+
+        // "lifts their roster record out of the party, compacts the remaining
+        // records up, and decrements the party count".
+        let mut roster = self.synced_party_roster();
+        let lifted = if index < roster.len() {
+            Some(roster.remove(index))
+        } else {
+            None
+        };
+        let removed = self.party.remove(index);
+        if index < self.party_names.len() {
+            self.party_names.remove(index);
+        }
+        if index < self.party_experience.len() {
+            self.party_experience.remove(index);
+        }
+        if index < self.party_stay_counters.len() {
+            self.party_stay_counters.remove(index);
+        }
+        if index < self.party_strengths.len() {
+            self.party_strengths.remove(index);
+        }
+        if index < self.party_intelligence.len() {
+            self.party_intelligence.remove(index);
+        }
+        if index < self.party_equipment.len() {
+            self.party_equipment.remove(index);
+        }
+        for (slot, member) in self.party.iter_mut().enumerate() {
+            member.slot = slot as u8;
+        }
+        match self.active_player {
+            Some(active) if active == index => self.active_player = None,
+            Some(active) if active > index => self.active_player = Some(active - 1),
+            _ => {}
+        }
+
+        // "parks the lifted record in the last roster slot with a whereabouts
+        // value that matches no location". `formats/saved-gam.md` puts the
+        // roster at sixteen fixed slots, so the park target is the sixteenth;
+        // a shorter modelled roster parks at its own last slot.
+        if let Some(record) = lifted {
+            let park_slot = (SAVE_ROSTER_SLOT_COUNT - 1).min(roster.len());
+            roster.insert(park_slot, record.clone());
+            // The whereabouts byte lives in the shifted inn-guest view that
+            // overlaps the roster (`formats/saved-gam.md`: the registry starts
+            // one record-length minus one past the roster, so guest slot `k`'s
+            // leading marker is the tail byte of roster record `k`). Writing
+            // an unmatchable marker there is what makes the record
+            // unretrievable by any inn while still surviving save/reload.
+            if self.inn_registry.len() < INN_REGISTRY_CAP {
+                self.inn_registry.push(InnGuestRecord {
+                    scene_marker: Self::BLACKTHORN_EXECUTED_WHEREABOUTS,
+                    name: record.name,
+                    member: record.member,
+                    strength: record.strength,
+                    intelligence: record.intelligence,
+                    experience: record.experience,
+                    equipment: record.equipment,
+                    stay_counter: record.stay_counter,
+                });
+            }
+        }
+        self.party_roster = roster;
+        self.mark_visibility_dirty();
+
+        Some(format!(
+            "roster slot {} is executed; party count {}",
+            removed.slot + 1,
+            self.party.len()
+        ))
     }
 
     pub fn apply_blackthorn_captive_cell_handoff(
@@ -3718,9 +4374,14 @@ impl PlayState {
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.blackthorn_audience_map = None;
-        if self.blackthorn_story.captive_cell_counter == 0 {
-            self.blackthorn_story.captive_cell_counter = 1;
-        }
+        // `blackthorn.md §8`: "Carried-key count zeroed by the audience
+        // cleanup | Durable inventory effect of the capture". The byte an
+        // earlier revision of that table called a Blackthorn conversation
+        // signal "is the party's ordinary carried-key counter ... and the
+        // audience's cleanup simply zeroes it, so the party leaves the
+        // capture without its keys". This handoff is that cleanup, so the
+        // debit fires on every exit path out of the interrogation.
+        self.keys = 0;
         self.clear_town_floor_reload_door_state();
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
@@ -3742,13 +4403,26 @@ impl PlayState {
     pub fn apply_blackthorn_rescue_refuge(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let verdict = blackthorn_rescue_verdict_record(self.moral_standing);
         let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
-        let previous_standing = self.moral_standing;
 
         // `blackthorn.md §7` (public spec b34ae69): after the
         // unending-darkness line, the first blocking call publishes a hidden
         // viewport containing colour zero only. It precedes scratch-state
         // clearing, tableau construction, and every durable handoff write.
         self.run_map_viewport_dissolve(MapViewportDissolveSource::BlackthornRescueBlack);
+
+        // `blackthorn.md §7.1`: the temporary refuge tableau is presented
+        // between the two dissolves. Its three direct cell reveals all use
+        // the shared 256-pixel LFSR order and 31 checkpoints. The thunder
+        // beat invokes the shared major flash twice and therefore consumes
+        // 3,712 gameplay-PRNG draws even when sound is muted.
+        self.pending_blackthorn_rescue_playbacks
+            .push(blackthorn_rescue_playback());
+        // `audio.md §8.6.2`: after the refuge tableau first redraws the party
+        // actor, run six independent envelope programs back-to-back. No visual
+        // operation or intentional hold occurs between rows.
+        self.emit_sound_effect(SoundEffect::BlackthornRescueEnvelopes);
+        self.emit_major_flash();
+        self.emit_major_flash();
 
         for member in &mut self.party {
             member.status = b'G';
@@ -3767,7 +4441,12 @@ impl PlayState {
         self.clear_active_effect_slot();
         self.torch_counter = 0;
         self.light_spell_counter = 0;
-        self.blackthorn_story.clear_jailed_party_slots();
+        // `blackthorn.md §8.1` (R284): there is no captive-cell counter.
+        // Rescue instead initializes the existing Food word only when the
+        // complete little-endian value is zero; every nonzero value survives.
+        if self.food == 0 {
+            self.food = 63;
+        }
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
         let floor = 0i8;
         let (grid, beacon_sources) =
@@ -3786,10 +4465,6 @@ impl PlayState {
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.blackthorn_audience_map = None;
-        if self.blackthorn_story.captive_cell_counter == 0 {
-            self.blackthorn_story.captive_cell_counter = 1;
-        }
-        self.blackthorn_story.capture_context = BLACKTHORN_CAPTURE_CONTEXT_NONE;
         self.clear_town_floor_reload_door_state();
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
@@ -3797,16 +4472,17 @@ impl PlayState {
         let _ = self.restore_resident_shadowlord_after_floor_reload();
         self.sync_player_object();
         self.mark_visibility_dirty();
-        self.message = format!(
-            "Blackthorn rescue/refuge: {verdict_message}; standing {previous_standing}->{}, restored party, handed off to {} at ({}, {}).",
-            self.moral_standing,
-            scene.key(),
-            self.player.x,
-            self.player.y
-        );
+        // The message window belongs to the original verdict record. Scene,
+        // coordinate, standing and restoration details are runtime state, not
+        // player-facing prose from the game data.
+        self.message = verdict_message;
         Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(
             scene,
         )))
+    }
+
+    pub fn take_pending_blackthorn_rescue_playbacks(&mut self) -> Vec<BlackthornRescuePlayback> {
+        std::mem::take(&mut self.pending_blackthorn_rescue_playbacks)
     }
 
     pub fn blackthorn_rescue_verdict_message(
@@ -3815,12 +4491,9 @@ impl PlayState {
         record_index: usize,
     ) -> io::Result<String> {
         let Some(records) = load_karma_records(game_dir)? else {
-            return Ok(format!("verdict record {record_index} unavailable"));
+            return Ok(String::new());
         };
-        Ok(records
-            .get(record_index)
-            .map(|record| format!("verdict record {record_index}: {record}"))
-            .unwrap_or_else(|| format!("verdict record {record_index} unavailable")))
+        Ok(records.get(record_index).cloned().unwrap_or_default())
     }
 
     pub fn apply_dungeon_post_turn_effects_after_turn(

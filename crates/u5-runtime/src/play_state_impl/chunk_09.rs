@@ -723,7 +723,13 @@ impl PlayState {
             }
         }
         for slot in (1..self.active_objects.len()).rev() {
-            self.composite_top_down_object(area, radius, self.active_objects[slot], &mut prepared);
+            self.composite_top_down_object(
+                area,
+                radius,
+                self.active_objects[slot],
+                false,
+                &mut prepared,
+            );
         }
         if let Some(z) = self.current_floor() {
             self.composite_top_down_object(
@@ -739,6 +745,7 @@ impl PlayState {
                     aux1: 0,
                     aux3: 0,
                 },
+                true,
                 &mut prepared,
             );
         }
@@ -1149,14 +1156,12 @@ impl PlayState {
         }
         let stage = cell & 0x07;
         if stage == 5 {
-            if dungeon_decoration_tone_sweep(band).is_some() {
-                self.emit_sound_effect(match band {
-                    0 => PlaySoundEffect::DungeonDecorationSweep0,
-                    1 => PlaySoundEffect::DungeonDecorationSweep1,
-                    2 => PlaySoundEffect::DungeonDecorationSweep2,
-                    _ => unreachable!("only dungeon bands 0..=2 publish a tone sweep"),
-                });
-            }
+            // `audio.md §8.5`: the droplet plays its depth-dependent glissando
+            // only when it reaches landing stage 5. All four depth bands are
+            // emitted, including the far band, whose published span is
+            // negative: it produces no tone update but still performs the
+            // final speaker stop.
+            self.emit_sound_effect(SoundEffect::DungeonWallDrip { band: band as u8 });
             self.grid[index] = cell & 0xf8;
             return;
         }
@@ -1344,7 +1349,7 @@ impl PlayState {
     ) {
         for slot in (1..self.active_objects.len()).rev() {
             let object = self.active_objects[slot];
-            self.composite_top_down_object_into_visibility_buffers(area, radius, object);
+            self.composite_top_down_object_into_visibility_buffers(area, radius, object, false);
         }
         if let Some(z) = self.current_floor() {
             let marker = self.player.transport.save_marker();
@@ -1358,7 +1363,7 @@ impl PlayState {
                 aux1: 0,
                 aux3: 0,
             };
-            self.composite_top_down_object_into_visibility_buffers(area, radius, player);
+            self.composite_top_down_object_into_visibility_buffers(area, radius, player, true);
         }
     }
 
@@ -1367,6 +1372,7 @@ impl PlayState {
         area: TopDownRenderArea,
         radius: usize,
         object: ActiveObject,
+        player_slot: bool,
     ) {
         if object.is_empty() {
             return;
@@ -1390,7 +1396,8 @@ impl PlayState {
             self.terrain_band[index]
         });
         let variant = self.active_object_render_variant(col, row, object);
-        match active_object_composite(
+        match composite_active_object_slot(
+            player_slot,
             object.type_byte,
             object.tile,
             current_grid_byte,
@@ -1451,7 +1458,7 @@ impl PlayState {
 
         for slot in (1..self.active_objects.len()).rev() {
             let object = self.active_objects[slot];
-            self.composite_top_down_object(area, radius, object, &mut prepared);
+            self.composite_top_down_object(area, radius, object, false, &mut prepared);
         }
         if let Some(z) = self.current_floor() {
             let marker = self.player.transport.save_marker();
@@ -1465,7 +1472,7 @@ impl PlayState {
                 aux1: 0,
                 aux3: 0,
             };
-            self.composite_top_down_object(area, radius, player, &mut prepared);
+            self.composite_top_down_object(area, radius, player, true, &mut prepared);
         }
 
         prepared
@@ -1534,6 +1541,7 @@ impl PlayState {
         area: TopDownRenderArea,
         radius: usize,
         object: ActiveObject,
+        player_slot: bool,
         prepared: &mut [Option<PreparedTopDownCell>],
     ) {
         if object.is_empty() {
@@ -1557,7 +1565,8 @@ impl PlayState {
             .flatten()
             .map(|cell| cell.terrain);
         let variant = self.active_object_render_variant(cell_x, cell_y, object);
-        match active_object_composite(
+        match composite_active_object_slot(
+            player_slot,
             object.type_byte,
             object.tile,
             cell.grid,
@@ -1682,13 +1691,34 @@ impl PlayState {
         if self.visibility_dirty || self.white_potion_sweep.is_some() {
             return true;
         }
+        self.viewport_has_animated_tiles_advanced_by(radius, StaticTileAnimationPass::ALL)
+    }
+
+    /// Narrower form of [`Self::viewport_has_animated_tiles`]: is any
+    /// `animation.md §6` family that **this tick's pass advanced** visible
+    /// in the viewport?
+    ///
+    /// The gated families only move on some ticks (the pendulum and the
+    /// flag at half rate, the clock/bellows pair at quarter rate), so a
+    /// tick whose pass skipped them cannot change the composed frame and
+    /// must not force a rebuild of it.
+    ///
+    /// Unlike [`Self::viewport_has_animated_tiles`] this is a pure question
+    /// about the map and the pass. It deliberately does **not** report the
+    /// already-dirty field or a live White repaint as "animated": those two
+    /// say the frame is being redrawn anyway, which is the opposite of a
+    /// reason to raise the flag. `magic.md`'s White sweep in particular
+    /// "does not itself dirty the visibility field".
+    pub fn viewport_has_animated_tiles_advanced_by(
+        &self,
+        radius: usize,
+        pass: StaticTileAnimationPass,
+    ) -> bool {
+        let advances = |tile: u8| {
+            static_tile_animation_family(tile).is_some_and(|family| pass.advances(family))
+        };
         if self.combat_active {
-            return self
-                .combat_terrain
-                .iter()
-                .flatten()
-                .copied()
-                .any(|tile| static_tile_animation_family(tile).is_some());
+            return self.combat_terrain.iter().flatten().copied().any(&advances);
         }
 
         let Some(area) = self.top_down_render_area() else {
@@ -1712,7 +1742,7 @@ impl PlayState {
                         self.world_live_tile_at(wx, wy)
                     }
                 };
-                if static_tile_animation_family(tile).is_some() {
+                if advances(tile) {
                     return true;
                 }
             }
@@ -2327,6 +2357,53 @@ impl PlayState {
         self.apply_hourly_ring_regeneration_tick();
     }
 
+    /// `dungeon-mode.md §15`: "Dungeon turns advance the world clock at the
+    /// indoor rate: one minute per loop iteration. The loop calls the same
+    /// world-clock advance routine that town turns use, but — unlike the town
+    /// and overworld loops — it does **not** gate that call on whether the
+    /// command consumed a turn. The single call site sits at the head of each
+    /// iteration, ahead of the render-and-poll step and the command dispatch,
+    /// so a command the dispatcher reports as \"no action\" (a digit
+    /// solo-select, a refused Push, the typeahead toggle) still costs a minute
+    /// underground. Only the dungeon post-action pass is gated on the status
+    /// word."
+    ///
+    /// This is the clock half of a turn: the calendar cascade, the hour
+    /// bundle, the light-counter decay and the daylight recompute run, but the
+    /// action counter is not bumped and no post-action pass is entered. The
+    /// iteration's minute is flagged so the dispatched command's own
+    /// `advance_turn` does not charge it a second time.
+    pub fn advance_dungeon_loop_minute(&mut self) {
+        let minutes = self.turn_minute_increment();
+        let effective_minutes = if self.negate_time_active() {
+            0
+        } else {
+            TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
+                .effective_minutes(minutes)
+        };
+        self.dungeon_loop_minute_charged = true;
+        let previous_day = self.clock.day;
+        let previous_hour = self.clock.hour;
+        self.clock.advance_minutes(effective_minutes);
+        if self.clock.day != previous_day {
+            self.reroll_shadowlord_hideouts();
+        }
+        if previous_day == 28 && self.clock.day == 1 {
+            self.rare_reagent_harvest_days
+                .fill(RARE_REAGENT_HARVEST_UNSEEN_DAY);
+            self.fixed_hidden_treasure_daily_day = FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY;
+            self.fortunes_of_war = 0;
+            age_stay_counters_month(&mut self.party_stay_counters);
+            age_inn_registry_month(&mut self.inn_registry);
+        }
+        if self.clock.hour != previous_hour {
+            self.refresh_cached_moon_glyphs();
+            self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
+        }
+        self.decay_light_counters(effective_minutes);
+        self.recompute_daylight();
+    }
+
     pub(crate) fn advance_turn_with_minutes_policy(
         &mut self,
         minutes: u8,
@@ -2335,9 +2412,40 @@ impl PlayState {
         apply_hourly_party_status: bool,
         age_payment_cooldown: bool,
     ) {
+        // `dungeon-mode.md §15`: the dungeon loop already charged this
+        // iteration's minute at its head, so a turn-consuming dungeon command
+        // spends the action but not the ordinary mode increment a second
+        // time.
+        //
+        // The suppression covers only that mode increment. `dungeon-mode.md
+        // §11` step 2 has the dungeon rest wrapper "elapse the accepted
+        // duration by calling the world-clock advance routine repeatedly",
+        // and `time.md §10` says a wait/rest handler "calls the cleanup
+        // directly with whatever increment it wants" — those are a second,
+        // genuine call site, so a handler-supplied increment keeps its full
+        // value rather than being swallowed by the loop-head minute. The flag
+        // is consumed on the next advance either way, so it cannot leak past
+        // one turn.
+        let minutes = if self.dungeon_loop_minute_charged {
+            self.dungeon_loop_minute_charged = false;
+            if matches!(self.area, Area::Dungeon { .. }) && minutes == self.turn_minute_increment()
+            {
+                0
+            } else {
+                minutes
+            }
+        } else {
+            minutes
+        };
         let defer_stonegate_epilogue = self.stonegate_trapdoor_underfoot_is_armed();
-        self.pending_stonegate_status_provision_pass = false;
-        self.pending_stonegate_object_epilogue = false;
+        // Production dispatch drains this at the end of the same town turn.
+        // If a low-level caller began another turn without running that tail,
+        // finish the earlier pass before changing the clock again rather than
+        // silently dropping it.
+        if std::mem::take(&mut self.pending_town_status_provision_pass) {
+            self.apply_hourly_status_provision_pass();
+        }
+        self.apply_pending_town_object_epilogue();
         let negate_time_active = self.negate_time_active();
         let turn_before = self.turn;
         let effective_minutes = if negate_time_active {
@@ -2361,22 +2469,45 @@ impl PlayState {
             self.reroll_shadowlord_hideouts();
         }
         if previous_day == 28 && self.clock.day == 1 {
+            // `time.md §8` long-period flag clears. "The traced set is
+            // exactly: the three rare-reagent harvest cooldown cookies … the
+            // cycling fixed hidden-treasure record's daily cooldown cookie
+            // (record 14) … the early-game encounter-size damper." Zero is
+            // written deliberately: "Zeroing matters because zero matches no
+            // calendar day (days run `1..28`), so every once-per-day gate
+            // that compares against one of these cookies is guaranteed open
+            // on the first day of a new month."
+            self.rare_reagent_harvest_days
+                .fill(RARE_REAGENT_HARVEST_UNSEEN_DAY);
+            self.fixed_hidden_treasure_daily_day = FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY;
             self.fortunes_of_war = 0;
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
         }
         if self.clock.hour != previous_hour {
             self.refresh_cached_moon_glyphs();
-            if apply_hourly_party_status {
-                if defer_stonegate_epilogue {
-                    self.pending_stonegate_status_provision_pass = true;
-                } else {
-                    self.apply_hourly_status_provision_pass();
-                }
-            }
             // `rest-and-camp.md §5`: the camp cooldown counter is
             // "reduced by one, floored at zero, at every hour rollover".
             self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
+        }
+        // `time.md §5`: the party status/provision pass runs "once per
+        // turn-consuming action in overworld mode, town mode, and dungeon
+        // mode", not once per hour. "Only the food and starvation branch is
+        // gated on an hour change; everything else in the pass runs on every
+        // invocation." The pass owns its own previous-hour snapshot, so it is
+        // invoked here unconditionally and decides the hour gate itself.
+        if apply_hourly_party_status {
+            // `town-mode.md §7`/§10 puts this pass at the *end* of the
+            // underfoot handler. Ordinary town actions are one-minute turns;
+            // longer town-rest/arrest cleanup increments are direct time-loop
+            // calls and retain their existing immediate pass.
+            let ordinary_town_turn =
+                matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
+            if ordinary_town_turn || defer_stonegate_epilogue {
+                self.pending_town_status_provision_pass = true;
+            } else {
+                self.apply_hourly_status_provision_pass();
+            }
         }
         self.decay_light_counters(effective_minutes);
         if matches!(self.area, Area::Town { .. })
@@ -2399,8 +2530,12 @@ impl PlayState {
             let world_object_epilogue_runs = !matches!(self.area, Area::World { .. })
                 || TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
                     .world_object_epilogue_runs(turn_before);
-            if defer_stonegate_epilogue {
-                self.pending_stonegate_object_epilogue = true;
+            let ordinary_town_turn =
+                matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
+            if ordinary_town_turn || defer_stonegate_epilogue {
+                self.pending_town_npc_schedule_pass = true;
+                self.pending_town_active_object_pass =
+                    advance_active_objects && world_object_epilogue_runs;
             } else {
                 self.advance_npc_schedules();
                 if advance_active_objects && world_object_epilogue_runs {
@@ -2458,13 +2593,37 @@ impl PlayState {
             .count() as u16
     }
 
+    /// `time.md §5` party status/provision pass, entered once per
+    /// turn-consuming action. The pass "keeps its own previous-hour snapshot
+    /// and compares it with the current hour", and updates that snapshot
+    /// after the branch "so the branch cannot repeat until the clock crosses
+    /// another hour".
     pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
+        let hour_changed = self.clock.hour != self.status_pass_previous_hour;
+        let consumers = self.apply_status_provision_pass(hour_changed);
+        self.status_pass_previous_hour = self.clock.hour;
+        consumers
+    }
+
+    /// `time.md §5`: "Only the food and starvation branch is gated on an
+    /// hour change; everything else in the pass runs on every invocation."
+    ///
+    /// - *Unconditional part, every invocation*: the party walk (Dead-selector
+    ///   clear plus the 1 HP-per-Poisoned-member tick) and the
+    ///   provision-consumer count.
+    /// - *Hour-gated part*: starvation when the provision counter is already
+    ///   zero, otherwise the 06:00/12:00/18:00 provision decrement.
+    /// - *Trailing part, every invocation*: the Ring of Regeneration 1-in-8
+    ///   roll.
+    pub fn apply_status_provision_pass(&mut self, hour_changed: bool) -> u16 {
         let consumers = self.hourly_provision_consumer_count();
         self.apply_hourly_poison_tick();
-        if self.food == 0 {
-            self.pending_hourly_status_message = self.apply_hourly_starvation_tick();
-        } else if is_provision_decrement_hour(self.clock.hour) {
-            self.food = self.food.saturating_sub(consumers);
+        if hour_changed {
+            if self.food == 0 {
+                self.pending_hourly_status_message = self.apply_hourly_starvation_tick();
+            } else if is_provision_decrement_hour(self.clock.hour) {
+                self.food = self.food.saturating_sub(consumers);
+            }
         }
         self.apply_hourly_ring_regeneration_tick();
         consumers
@@ -2495,13 +2654,32 @@ impl PlayState {
         healed
     }
 
+    /// `time.md §5` unconditional part of the status/provision pass: "The
+    /// pass walks the active party in slot order" and, per member, clears the
+    /// active-member selector when that member is Dead, skips Dead and
+    /// Sleeping members entirely, and takes "exactly 1 current hit point"
+    /// from a member whose status is exactly Poisoned. "This is per member per
+    /// turn, independently, not a shared roll and not an hourly effect."
+    ///
+    /// Poison damage that reaches zero hit points goes through the shared
+    /// party-damage path, which marks the member Dead and "clears the
+    /// active-member selector if it pointed at that member".
     pub fn apply_hourly_poison_tick(&mut self) -> u16 {
         let mut damaged = 0;
-        for member in &mut self.party {
-            if member.status != b'P' || !member.living() {
+        for index in 0..self.party.len() {
+            if self.party[index].status == b'D' {
+                if self.active_player == Some(index) {
+                    self.active_player = None;
+                }
                 continue;
             }
-            member.apply_damage(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE);
+            if self.party[index].status != b'P' || !self.party[index].living() {
+                continue;
+            }
+            self.party[index].apply_damage(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE);
+            if self.party[index].hp == 0 && self.active_player == Some(index) {
+                self.active_player = None;
+            }
             damaged += 1;
         }
         damaged
@@ -2732,15 +2910,44 @@ impl PlayState {
         }
     }
 
+    /// `time.md §6` / `lighting.md §3` stage one. The plane/floor forced-dark
+    /// test is on "the party's Z value, read as an unsigned byte": any Z with
+    /// its high bit set pins the ambient value at full darkness for every
+    /// hour, which selects "the **Underworld plane** on the outdoor map … and
+    /// a **below-entry floor** inside a town-family location".
+    ///
+    /// "It does **not** select ordinary dungeon levels: a dungeon level index
+    /// counts upward from zero at the top of the stack, so it never sets the
+    /// high bit, and the ambient value computed while the party is inside a
+    /// dungeon is simply whatever the clock produces." Earlier wording placing
+    /// "any dungeon depth" inside the forced-dark scope is withdrawn, so no
+    /// depth is fed to the helper here.
     pub fn base_daylight(&self) -> u8 {
-        let (underworld, depth_z) = match self.area {
-            Area::Dungeon { level, .. } => (false, level.saturating_add(1)),
+        // `Area::Town`'s floor is an `i8`, so a below-entry (basement) floor
+        // is exactly the Z byte whose high bit is set when read unsigned.
+        let underworld = match self.area {
             Area::World {
                 plane: WorldPlane::Underworld,
-            } => (true, 0),
-            _ => (false, 0),
+            } => true,
+            Area::Town { floor, .. } => floor < 0,
+            _ => false,
         };
-        daylight_base_value(self.clock.hour, self.clock.minute, underworld, depth_z)
+        let depth_z = 0u8;
+        // `lighting.md §3` "Scope of the forced-dark tests": there are
+        // exactly two, and the second "pins scene twenty-five (Ararat)
+        // to 2 at every hour, independently of Z". The scene byte is
+        // therefore part of the base-daylight input.
+        let scene_byte = match self.area {
+            Area::Town { scene, .. } => scene.byte,
+            _ => SCENE_OVERWORLD,
+        };
+        daylight_base_value_for_scene(
+            self.clock.hour,
+            self.clock.minute,
+            underworld,
+            depth_z,
+            scene_byte,
+        )
     }
 
     pub fn advance_visual_tick(&mut self) {
@@ -2750,7 +2957,13 @@ impl PlayState {
         if self.white_potion_sweep.is_some() {
             return;
         }
-        self.sync_player_object();
+        // Combat and endgame own temporary active-object tables. Their
+        // presentation ticks must not recreate slot zero from the saved world
+        // player after an actor release (the top-down renderer observes the
+        // same ownership boundary).
+        if !self.combat_active && self.endgame.is_none() {
+            self.sync_player_object();
+        }
         if self.time_stop_counter == 0
             && !self.negate_time_active()
             && !matches!(self.area, Area::Dungeon { .. })
@@ -2851,7 +3064,34 @@ impl PlayState {
     /// and skipping a rendered frame does not advance it." Only the
     /// once-per-turn refresh in `refresh_natural_moongates` moves it.
     pub fn advance_animation_clock(&mut self) {
+        // `animation.md §6`: the pass that is about to run is the one for
+        // the counter's *current* value; the counter is incremented once
+        // at the end, "whichever path was taken".
+        let pass = static_tile_animation_pass(self.animation.frame);
         self.animation.tick_static_tiles();
+        // `animation.md §7`/`§10`: "after advancing phases and tile
+        // selectors, the engine explicitly gives the display layer a
+        // chance to make the result visible", and an implementation must
+        // "present the frame only after both the per-slot pass and the
+        // global tile selector pass have completed".
+        //
+        // This engine's viewport composition caches the *resolved* family
+        // frame in the terrain band (`§6`: "one selector update affect
+        // every visible cell in the same family"), and `main-loop.md §9`
+        // only re-runs the producer when the visibility-dirty flag is set.
+        // Without this the composed frame keeps whatever selector value it
+        // was built with, so a waterfall, fountain, pendulum, flag or
+        // clock stays frozen for the whole life of the process even though
+        // the shared counter is advancing underneath it. The per-slot pass
+        // already marks the composition dirty when an object's frame tile
+        // changes; the global tile pass owes the same notification.
+        //
+        // The flag is only raised when this tick's pass actually advanced
+        // a family that is on screen, so `main-loop.md §9`'s lazy-refill
+        // branch still runs on every tick that cannot change the picture.
+        if self.viewport_has_animated_tiles_advanced_by(VIEWPORT_PLAYER_ROW, pass) {
+            self.mark_visibility_dirty();
+        }
     }
 
     pub fn animate_active_objects(&mut self) {
@@ -2862,9 +3102,17 @@ impl PlayState {
             {
                 continue;
             }
+            let phase_before_tick = self.active_objects[slot].phase;
             let tick = self.active_objects[slot].tick_phase();
-            let ship_wind = if (self.active_objects[slot].phase & 0x0f) == 0 {
-                self.try_drift_active_ship(slot, tick)
+            let ship_wind = if self.slot_is_wind_driven_ship(slot, phase_before_tick) {
+                // `weather.md §7`: the wind cadence counter "is stored per
+                // active-object slot" and is not the shared animation
+                // countdown, so carry it across the tick untouched.
+                self.active_objects[slot].phase = merge_active_ship_cadence_phase(
+                    self.active_objects[slot].phase,
+                    phase_before_tick,
+                );
+                self.try_drift_active_ship(slot)
             } else {
                 ActiveShipWind::None
             };
@@ -2904,6 +3152,7 @@ impl PlayState {
             if self.active_objects[slot].is_empty() {
                 continue;
             }
+            let phase_before_tick = self.active_objects[slot].phase;
             let tick = self.active_objects[slot].tick_phase();
             // Orthogonal adjacency is consumed before any ranged class test.
             // Its I/O-bearing combat/transition effect is completed by the
@@ -2915,11 +3164,18 @@ impl PlayState {
             }
             reaction_count += usize::from(claimed_by_first_phase);
             let movement_allowed = reaction_count == 0;
-            let ship_wind = if movement_allowed && (self.active_objects[slot].phase & 0x0f) == 0 {
-                self.try_drift_active_ship(slot, tick)
-            } else {
-                ActiveShipWind::None
-            };
+            let ship_wind =
+                if movement_allowed && self.slot_is_wind_driven_ship(slot, phase_before_tick) {
+                    // `weather.md §7`: see `animate_active_objects` — the cadence
+                    // counter lives in the slot and is not the shared countdown.
+                    self.active_objects[slot].phase = merge_active_ship_cadence_phase(
+                        self.active_objects[slot].phase,
+                        phase_before_tick,
+                    );
+                    self.try_drift_active_ship(slot)
+                } else {
+                    ActiveShipWind::None
+                };
             let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
             let wandered = movement_allowed
                 && !ship_wind_changed
@@ -3086,14 +3342,10 @@ impl PlayState {
     /// party direction: announce, trace, and on a clear line run the
     /// §6.2.4 payload.
     ///
-    /// The trace runs in **viewport** space, as §6.2.2 specifies: the
-    /// obstruction test "consults the on-screen eleven-by-eleven viewport
-    /// tile grid rather than the world map". The predicate below maps each
-    /// sampled viewport cell back to its wrapped world coordinate and
-    /// reads terrain there. §6.2.5 leaves the two ways that can differ
-    /// open — whether a stamped active-object sprite blocks a shot was not
-    /// established, and an unresolved (dark) viewport cell is positively
-    /// established *not* to block — so terrain is the conservative read.
+    /// The trace runs in **viewport** space, as §6.2.2 specifies. It samples
+    /// the primary grid after compositing: an ordinary actor stamp therefore
+    /// contributes passable sentinel `0x00` instead of either its sprite or
+    /// the hidden terrain. An unresolved/dark cell is likewise passable.
     fn resolve_outdoor_ranged_attack(
         &mut self,
         wrapped_dx: i32,
@@ -3106,19 +3358,23 @@ impl PlayState {
         }
 
         let attacker_cell = outdoor_ranged_attacker_viewport_cell(wrapped_dx, wrapped_dy);
-        let player_x = self.player.x as i32;
-        let player_y = self.player.y as i32;
-        let world_side = WORLD_SIDE as i32;
-        let grid = &self.grid;
+        let plane = match self.area {
+            Area::World { plane } => plane,
+            _ => unreachable!("outdoor ranged attacks require world mode"),
+        };
+        let viewport =
+            self.prepare_top_down_render_grid(TopDownRenderArea::World(plane), VIEWPORT_PLAYER_ROW);
         let outcome = trace_outdoor_ranged_attack(
             attacker_cell,
             OUTDOOR_RANGED_ATTACK_PARTY_CELL,
             |column, row| {
-                let x = (player_x + column - OUTDOOR_RANGED_ATTACK_PARTY_CELL.0)
-                    .rem_euclid(world_side) as usize;
-                let y = (player_y + row - OUTDOOR_RANGED_ATTACK_PARTY_CELL.1).rem_euclid(world_side)
-                    as usize;
-                surface_tile_blocks_projectile(grid[world_cell_index(x, y)])
+                let tile = usize::try_from(row)
+                    .ok()
+                    .zip(usize::try_from(column).ok())
+                    .and_then(|(row, column)| viewport.get(row * VIEWPORT_SIDE + column))
+                    .and_then(|cell| cell.map(|cell| cell.grid))
+                    .unwrap_or(VISIBILITY_USE_COMPANION);
+                outdoor_projectile_tile_blocks(tile)
             },
         );
 
@@ -3155,6 +3411,50 @@ impl PlayState {
     pub fn apply_outdoor_impact(&mut self) -> OutdoorImpactAbsorption {
         self.outdoor_impact_presentation();
         self.apply_outdoor_impact_absorption()
+    }
+
+    /// `overworld.md §6.2.5`: a released hoisted-frigate move that a
+    /// non-pier destination refuses. Narration selects only on exact shoal
+    /// terrain; the collision rumble owns the audio stream and absorption
+    /// owns the single gameplay draw.
+    pub fn apply_sailing_collision(&mut self, destination_tile: u8) -> OutdoorImpactAbsorption {
+        self.message = if destination_tile == 0x03 {
+            "BREAKING UP!".to_string()
+        } else {
+            "COLLISION!".to_string()
+        };
+        self.sail_cadence = 0;
+        self.sail_stall_pending = false;
+        self.mark_visibility_dirty();
+        self.emit_sound_effect(SoundEffect::ShipCollisionRumble);
+        self.apply_outdoor_impact_absorption()
+    }
+
+    /// `overworld.md §6.2.5`: exact deep water under a skiff or carpet.
+    pub fn rough_seas_trigger_is_eligible(&self) -> bool {
+        if !matches!(self.area, Area::World { .. }) {
+            return false;
+        }
+        let terrain = self.grid[world_cell_index(self.player.x, self.player.y)];
+        let marker = self.player.transport.save_marker();
+        terrain == 0x01
+            && (matches!(
+                marker,
+                TRANSPORT_MARKER_SKIFF_FIRST..=TRANSPORT_MARKER_SKIFF_LAST
+            ) || CARPET_MARKER_FRAMES.contains(&marker))
+    }
+
+    /// Run the rough-seas presentation and shared non-frigate absorption.
+    /// The caller has already committed exactly one ordinary outdoor action.
+    pub fn apply_rough_seas_if_eligible(&mut self) -> Option<OutdoorImpactAbsorption> {
+        if !self.rough_seas_trigger_is_eligible() {
+            return None;
+        }
+        self.push_impact_line("Rough seas!");
+        self.outdoor_impact_presentation();
+        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
+        self.advance_visual_tick();
+        Some(self.apply_outdoor_impact_absorption())
     }
 
     /// `overworld.md §6.2.4` stage one — impact presentation. "An impact
@@ -3262,10 +3562,26 @@ impl PlayState {
         slot: usize,
         amount: u8,
     ) -> OutdoorImpactMemberDamage {
+        // `audio.md §8.2`: "The shared damage presentation runs the
+        // 160-update 100..2000 Hz rumble. Preserve the caller's own
+        // damage/narration order; this is not a global sound for every HP
+        // write." This helper *is* that shared presentation - it flashes the
+        // member's row before subtracting from the hit-point word - so the
+        // rumble is recorded ahead of the write and ahead of the death and
+        // active-player bookkeeping below. The cue is deliberately not
+        // attached to `PartyMember::apply_damage`, which several callers
+        // reach without this presentation and which stay silent.
+        self.emit_sound_effect(SoundEffect::DamageRumble);
         let applied = self.party[slot].apply_damage(amount);
         let hp_after = self.party[slot].hp;
         let died = hp_after == 0;
         if died && self.active_player == Some(slot) {
+            self.active_player = None;
+        }
+        // `overworld.md §6.2.4` / `stats-panel.md §2.1`: the closing full
+        // repaint independently clears a selected Sleeping row. Its Dead
+        // safeguard is normally redundant with the endpoint write above.
+        if stats_panel_active_cursor_resets(self, self.active_player) {
             self.active_player = None;
         }
         OutdoorImpactMemberDamage {
@@ -3303,6 +3619,7 @@ impl PlayState {
             // "The party abandons into a skiff, keeping the ship's current
             // facing, and the marker becomes the matching skiff value."
             ShipLossFallback::Skiff => {
+                self.push_impact_line(ABANDON_SHIP_MESSAGE);
                 let marker = TRANSPORT_MARKER_SKIFF_FIRST + facing;
                 self.player.transport = TransportState::Skiff {
                     type_byte: marker,
@@ -3315,6 +3632,7 @@ impl PlayState {
             // carpet frames (chosen at random, since the frame is
             // cosmetic)."
             ShipLossFallback::Carpet => {
+                self.push_impact_line(ABANDON_SHIP_MESSAGE);
                 self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
                     self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);
                 let pick = self.random_mod_u8(CARPET_MARKER_FRAMES.len() as u8) as usize;
@@ -3330,6 +3648,27 @@ impl PlayState {
             // value becomes persistent state."
             ShipLossFallback::Drown => {
                 self.player.transport = TransportState::SpriteSuppressed;
+                // `audio.md §8.9`, first row: "`Ship sunk!` prints, the party
+                // sprite is cleared, the stats panel refreshes, and the
+                // viewport is rebuilt so the empty ocean is on screen -
+                // **then** the long descent - then `DROWNING!!!`, then the
+                // death loop."
+                //
+                // `Ship sunk!` was pushed by the absorption stage before it
+                // called this ladder, and the sprite clear is the marker write
+                // immediately above, so this is the published slot: after the
+                // clear and its repaint, before the loop. The loop's own
+                // per-member damage rumbles therefore trail the sweep in the
+                // effect history rather than racing it.
+                //
+                // Only this rung sounds. On the skiff and carpet rungs "the
+                // game prints `Abandon ship!`, substitutes the vehicle, and
+                // plays **no** long sound", which is why the emission is inside
+                // this arm and not after the match.
+                self.sync_player_object();
+                self.mark_visibility_dirty();
+                self.emit_sound_effect(SoundEffect::LongDescent);
+                self.push_impact_line(DROWNING_MESSAGE);
                 drowning = self.apply_ship_loss_drowning();
             }
         }
@@ -3353,9 +3692,6 @@ impl PlayState {
     pub fn apply_ship_loss_drowning(&mut self) -> Vec<Vec<OutdoorImpactMemberDamage>> {
         let mut iterations = Vec::new();
         while self.party_has_drowning_loop_survivor() {
-            if iterations.len() >= SHIP_LOSS_DROWNING_ITERATION_GUARD {
-                break;
-            }
             self.outdoor_impact_presentation();
             iterations.push(self.apply_outdoor_impact_party_damage());
         }
@@ -3383,7 +3719,60 @@ impl PlayState {
         self.emit_message_line(line);
     }
 
-    pub fn try_drift_active_ship(&mut self, slot: usize, tick: PhaseTick) -> ActiveShipWind {
+    /// `weather.md §7`: is this slot one of the wind-driven "ship-like
+    /// water-creature class" records the overworld per-slot movement
+    /// dispatch applies prevailing wind to?
+    ///
+    /// `phase_before_tick` is the slot's phase byte as it stood before
+    /// the shared animation countdown ran this turn; see
+    /// [`merge_active_ship_cadence_phase`].
+    pub fn slot_is_wind_driven_ship(&self, slot: usize, phase_before_tick: u8) -> bool {
+        let Area::World { plane } = self.area else {
+            return false;
+        };
+        let Some(object) = self.active_objects.get(slot).copied() else {
+            return false;
+        };
+        object.z == plane.save_floor()
+            && is_ship_object(object)
+            // `STEADY_PHASE` is this engine's "slot does not animate"
+            // marker (see `ActiveObject::tick_phase`), which is what a
+            // parked vehicle object carries. Weather drives *active*
+            // ship-like slots; a steady slot is not one, and
+            // `merge_active_ship_cadence_phase` guarantees the cadence
+            // encoding never produces that value.
+            && (phase_before_tick & 0x0f) != STEADY_PHASE
+            && cardinal_direction_from_active_object_phase(phase_before_tick).is_some()
+    }
+
+    /// `weather.md §7` Active Ships.
+    ///
+    /// "Calm wind suppresses this movement. For non-calm wind, the object
+    /// uses its current frame and the prevailing wind to select a cadence
+    /// cap" — perpendicular frames move every turn, a frame facing the
+    /// wind source moves 2 of 3 turns, a frame facing away moves 3 of 4.
+    /// [`WindState::active_ship_cadence`] owns that table.
+    ///
+    /// "The cadence counter is stored per active-object slot. A '2 of 3'
+    /// entry means the slot moves on two eligible passes, then resets and
+    /// skips one. A '3 of 4' entry moves on three eligible passes, then
+    /// resets and skips one. The cadence counter is persisted with the
+    /// object, so it survives save and reload. 'Every turn' bypasses the
+    /// counter and immediately allows the slot's movement helper to run."
+    ///
+    /// The counter lives in bits `2..3` of the object's phase byte —
+    /// `formats/saved-gam.md §8.1` byte `+6`, the "animation phase /
+    /// direction-step counter ... compositor reads it for water
+    /// creatures" — whose high nibble carries the frame heading and
+    /// whose bits `0..1` select the drawn frame. See
+    /// [`ACTIVE_SHIP_CADENCE_PHASE_MASK`]. The callers hand this
+    /// function the pre-tick phase so the shared animation countdown
+    /// cannot decrement the cadence count.
+    ///
+    /// This replaces an ad-hoc heading-versus-wind test that stalled every
+    /// perpendicular frame forever, which is the opposite of the table's
+    /// "every turn" row.
+    pub fn try_drift_active_ship(&mut self, slot: usize) -> ActiveShipWind {
         let Area::World { plane } = self.area else {
             return ActiveShipWind::None;
         };
@@ -3394,20 +3783,30 @@ impl PlayState {
         let Some(heading) = cardinal_direction_from_active_object_phase(object.phase) else {
             return ActiveShipWind::None;
         };
-        let Some(wind_direction) = self.wind.direction() else {
+        // Calm returns `None` from the cadence table as well, but keep the
+        // explicit wind read so a calm slot reports `Stalled` rather than
+        // "not a ship".
+        let Some(cadence) = self
+            .wind
+            .direction()
+            .and_then(|_| self.wind.active_ship_cadence(heading))
+        else {
             return ActiveShipWind::Stalled;
         };
 
-        if heading != wind_direction {
-            if heading.opposite_cardinal() == Some(wind_direction)
-                && matches!(tick, PhaseTick::Countdown)
-            {
-                // The prior stalled phase countdown completed, so this is the
-                // slow same-axis movement turn.
+        let counter =
+            (object.phase & ACTIVE_SHIP_CADENCE_PHASE_MASK) >> ACTIVE_SHIP_CADENCE_PHASE_SHIFT;
+        let moves_per_cycle = cadence.0;
+        if cadence != ACTIVE_SHIP_CADENCE_EVERY_TURN {
+            let next = if counter >= moves_per_cycle {
+                // The cycle's moves are spent: skip this pass and reset.
+                0
             } else {
-                if heading.opposite_cardinal() == Some(wind_direction) {
-                    self.active_objects[slot].phase = (object.phase & 0xf0) | 0x01;
-                }
+                counter + 1
+            };
+            self.active_objects[slot].phase = (object.phase & !ACTIVE_SHIP_CADENCE_PHASE_MASK)
+                | (next << ACTIVE_SHIP_CADENCE_PHASE_SHIFT);
+            if counter >= moves_per_cycle {
                 return ActiveShipWind::Stalled;
             }
         }
@@ -3447,7 +3846,9 @@ impl PlayState {
 
         self.active_objects[slot].x = nx;
         self.active_objects[slot].y = ny;
-        self.active_objects[slot].phase = object.phase & 0xf0;
+        // The cadence counter written above stays: `weather.md §7` counts
+        // the passes the cadence allowed, and validation of the step it
+        // allowed belongs to `active-objects.md`.
         self.mark_visibility_dirty();
         ActiveShipWind::Drifted
     }
@@ -3641,6 +4042,19 @@ impl PlayState {
         if object.z != floor || !town_free_roaming_object_eligible(object) {
             return false;
         }
+        // `town-mode.md §16` eligible-object-bytes row: "Empty slots, the
+        // avatar's slot-zero record, **linked NPC sprite classes**, and all
+        // other object families are skipped." Twenty shipped roster slots
+        // carry the horse tags `0x10`/`0x11` (`catalogs/npc-roster.md §4`:
+        // "Unmounted horse frames, used for stable and paddock actors"), so
+        // a linked stable horse would otherwise be driven twice per turn -
+        // once by its schedule and once by this walker - and would spend
+        // PRNG draws doing it. The chance gate sits below this test because
+        // the same row says "No PRNG value is consumed for ineligible or
+        // off-floor slots".
+        if self.npcs.iter().any(|npc| npc.active_object == Some(slot)) {
+            return false;
+        }
 
         if self.random_mod_u8(2) != 0 {
             return false;
@@ -3774,12 +4188,8 @@ impl PlayState {
             return Ok(Some(MoveOutcome::Used));
         }
 
-        let note =
+        let _setup_report =
             self.enter_terrain_combat_from_world_object(game_dir, plane, object_slot, object)?;
-        self.message = format!(
-            "Attacked by world object tile {} in slot {object_slot}; {note}.",
-            object.tile
-        );
         Ok(Some(MoveOutcome::Used))
     }
 
@@ -4103,6 +4513,30 @@ pub fn cardinal_direction_from_delta(dx: i8, dy: i8) -> Option<Direction> {
     }
 }
 
+/// `systems/weather.md §7`: "The cadence counter is stored per
+/// active-object slot ... and is persisted with the object."
+///
+/// This engine keeps that counter in bits `2..3` of the slot's phase
+/// byte ([`ACTIVE_SHIP_CADENCE_PHASE_MASK`]), which the shared
+/// animation countdown in [`ActiveObject::tick_phase`] would otherwise
+/// decrement as part of the low nibble. Rejoin the two: the frame
+/// selector and heading come from the post-tick byte, the cadence count
+/// from the pre-tick byte.
+///
+/// The one forbidden result is a low nibble equal to [`STEADY_PHASE`],
+/// which is the "slot does not animate" marker a parked vehicle
+/// carries; clearing the two cosmetic frame bits keeps the encoding out
+/// of it.
+pub const fn merge_active_ship_cadence_phase(post_tick: u8, pre_tick: u8) -> u8 {
+    let merged =
+        (post_tick & !ACTIVE_SHIP_CADENCE_PHASE_MASK) | (pre_tick & ACTIVE_SHIP_CADENCE_PHASE_MASK);
+    if (merged & 0x0f) == STEADY_PHASE {
+        merged & !0x03
+    } else {
+        merged
+    }
+}
+
 pub fn is_outdoor_active_object_walker(object: ActiveObject) -> bool {
     is_outdoor_active_object_walker_byte(object.type_byte)
         || is_outdoor_active_object_walker_byte(object.tile)
@@ -4168,5 +4602,175 @@ pub fn outdoor_active_object_step_accepts_tile(
             is_base_tile_passable(tile, passability)
                 && !movement_chair_force_reject_applies(class_byte, tile)
         }
+    }
+}
+
+#[cfg(test)]
+mod time_cascade_and_daylight_spec_tests {
+    use crate::test_fixtures::{
+        dungeon_state, open_dungeon_record, open_grid, open_world_grid, test_state, world_state,
+    };
+    use crate::*;
+
+    /// `time.md §5`: "A member whose status is exactly Poisoned loses
+    /// **exactly 1 current hit point** … This is per member per turn,
+    /// independently, not a shared roll and not an hourly effect."
+    #[test]
+    fn a_poisoned_member_loses_one_hit_point_on_every_turn_not_every_hour() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.party[0].status = b'P';
+        state.party[0].hp = DEFAULT_PARTY_HP;
+        state.food = 100;
+        let hour_before = state.clock.hour;
+
+        for _ in 0..3 {
+            state.advance_turn();
+            // Town's shared pass is the trailing act of its underfoot
+            // handler, not part of the clock advance itself.
+            state.apply_pending_town_status_provision_pass();
+        }
+
+        assert_eq!(
+            state.clock.hour, hour_before,
+            "the three turns must stay inside one hour for this to test the cadence"
+        );
+        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 3);
+    }
+
+    /// `time.md §5`: "Only the food and starvation branch is gated on an hour
+    /// change" - so provisions must not be spent by ordinary turns inside the
+    /// same hour.
+    #[test]
+    fn provisions_are_not_spent_by_turns_inside_the_same_hour() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.clock.hour = 12;
+        state.clock.minute = 10;
+        state.status_pass_previous_hour = 12;
+        state.food = 100;
+
+        for _ in 0..5 {
+            state.advance_turn();
+            state.apply_pending_town_status_provision_pass();
+        }
+
+        assert_eq!(state.clock.hour, 12);
+        assert_eq!(state.food, 100);
+    }
+
+    /// `time.md §5`: "If the member is Dead and is also the currently selected
+    /// active member, the active-member selector is cleared to its
+    /// no-selection sentinel."
+    #[test]
+    fn the_status_pass_clears_the_selector_when_it_names_a_dead_member() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.party[0].status = b'D';
+        state.party[0].hp = 0;
+        state.active_player = Some(0);
+        state.food = 100;
+
+        state.advance_turn();
+        state.apply_pending_town_status_provision_pass();
+
+        assert_eq!(state.active_player, None);
+    }
+
+    /// `time.md §8`: the month rollover zeroes "the three rare-reagent harvest
+    /// cooldown cookies", "the cycling fixed hidden-treasure record's daily
+    /// cooldown cookie (record 14)" and "the early-game encounter-size
+    /// damper". "Zeroing matters because zero matches no calendar day."
+    #[test]
+    fn the_month_rollover_clears_the_long_period_cookies() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.clock.day = 28;
+        state.clock.hour = 23;
+        state.clock.minute = 59;
+        state.rare_reagent_harvest_days = [7; RARE_REAGENT_HARVEST_POINT_COUNT];
+        state.fixed_hidden_treasure_daily_day = 7;
+        state.fortunes_of_war = 3;
+        state.food = 100;
+
+        state.advance_turn();
+
+        assert_eq!(state.clock.day, 1, "the turn must cross the 28 -> 1 wrap");
+        assert_eq!(
+            state.rare_reagent_harvest_days,
+            [RARE_REAGENT_HARVEST_UNSEEN_DAY; RARE_REAGENT_HARVEST_POINT_COUNT]
+        );
+        assert_eq!(
+            state.fixed_hidden_treasure_daily_day,
+            FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY
+        );
+        assert_eq!(state.fortunes_of_war, 0);
+    }
+
+    /// `time.md §8`: the clears fire only on the `28 -> 1` wrap, "never at
+    /// ordinary midnight".
+    #[test]
+    fn ordinary_midnight_leaves_the_long_period_cookies_alone() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.clock.day = 12;
+        state.clock.hour = 23;
+        state.clock.minute = 59;
+        state.rare_reagent_harvest_days = [7; RARE_REAGENT_HARVEST_POINT_COUNT];
+        state.fixed_hidden_treasure_daily_day = 7;
+        state.food = 100;
+
+        state.advance_turn();
+
+        assert_eq!(state.clock.day, 13);
+        assert_eq!(state.rare_reagent_harvest_days[0], 7);
+        assert_eq!(state.fixed_hidden_treasure_daily_day, 7);
+    }
+
+    /// `time.md §6` / `lighting.md §3`: "any Z with its high bit set … pins
+    /// the ambient value at 2 for every hour", which selects "a **below-entry
+    /// floor** inside a town-family location".
+    #[test]
+    fn a_town_basement_floor_is_fully_dark_at_midday() {
+        let mut basement = test_state(open_grid(), 10, 10);
+        let Area::Town { scene, .. } = basement.area else {
+            unreachable!("test_state builds a town area");
+        };
+        basement.area = Area::Town { scene, floor: -1 };
+        basement.clock.hour = 12;
+        basement.clock.minute = 0;
+
+        assert_eq!(basement.base_daylight(), FULL_DARKNESS);
+
+        let mut entry_floor = test_state(open_grid(), 10, 10);
+        entry_floor.clock.hour = 12;
+        entry_floor.clock.minute = 0;
+        assert_eq!(entry_floor.base_daylight(), FULL_DAYLIGHT);
+    }
+
+    /// `lighting.md §3`: the forced-dark test "does **not** select ordinary
+    /// dungeon levels: a dungeon level index counts upward from zero at the
+    /// top of the stack, so it never sets the high bit, and the ambient value
+    /// computed while the party is inside a dungeon is simply whatever the
+    /// clock produces." Earlier "any dungeon depth" wording is withdrawn.
+    #[test]
+    fn ordinary_dungeon_levels_are_not_forced_dark() {
+        for level in [0u8, 1, 5] {
+            let mut state = dungeon_state(open_dungeon_record(), level, 1, 1);
+            state.clock.hour = 12;
+            state.clock.minute = 0;
+            assert_eq!(
+                state.base_daylight(),
+                FULL_DAYLIGHT,
+                "dungeon level {level} must take the clock's value"
+            );
+
+            state.clock.hour = 2;
+            assert_eq!(state.base_daylight(), FULL_DARKNESS);
+        }
+    }
+
+    /// `time.md §6`: the Underworld plane keeps its high-bit forced dark.
+    #[test]
+    fn the_underworld_plane_stays_fully_dark_at_midday() {
+        let mut state = world_state(open_world_grid(), 40, 40);
+        state.clock.hour = 12;
+        state.clock.minute = 0;
+        assert_eq!(state.base_daylight(), FULL_DARKNESS);
     }
 }

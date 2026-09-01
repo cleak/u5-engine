@@ -318,12 +318,28 @@ BRITANNIA 11 21
         assert_eq!(parse_inline_cardinal_direction("1FGI3"), None);
     }
 
+    /// `lighting.md §8`: "The ordinary Light spell, *In Lor*, sets the
+    /// light-spell counter to 100 counter units."
+    ///
+    /// The ambient assertion is taken at a night hour on purpose.
+    /// `lighting.md §3` withdraws the dungeon-depth forced-dark reading -
+    /// "Earlier wording in this document and in `systems/time.md` that
+    /// placed "any dungeon depth" inside the forced-dark scope is
+    /// **withdrawn**" - so "the ambient value computed while the party is
+    /// inside a dungeon is simply whatever the clock produces". At noon
+    /// that is the full-daylight 50 and §4's floor would be invisible
+    /// ("In daylight, where the ambient value is already 50, lighting a
+    /// torch or casting a light spell changes nothing at all"); at 22:00
+    /// the clock produces the dark value of 2, so the spell's floor of 18
+    /// is the value actually under test. An earlier revision of this test
+    /// read the noon-in-a-dungeon ambient as forced dark and is retracted.
     #[test]
     fn cast_in_lor_sets_light_counter_and_consumes_charge_mana_and_turn() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
         state.party[0].mana = 1;
         state.party[0].level = 1;
+        state.clock = GameClock::new(22, 0).unwrap();
         state.ambient_light = FULL_DARKNESS;
 
         assert_eq!(
@@ -334,9 +350,10 @@ BRITANNIA 11 21
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
+        assert_eq!(IN_LOR_LIGHT_DURATION, 100);
         assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
+        assert_eq!(state.clock, GameClock::new(22, 1).unwrap());
         assert_eq!(state.message, "Light!");
     }
 
@@ -482,7 +499,13 @@ BRITANNIA 11 21
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(state.message, "Locate: K'P,C'D\"");
+        // `magic.md §8`: "Locate uses the shared sextant-style
+        // coordinate printer" — both coordinates carry their own
+        // closing quote, the pair is joined by comma-space, and a
+        // newline is emitted before the pair as well as after it.
+        // This assertion previously pinned the retracted
+        // single-line, single-quote wording.
+        assert_eq!(state.message, "Locate:\nK'P\", C'D\"\n");
     }
 
     #[test]
@@ -1064,7 +1087,10 @@ BRITANNIA 11 21
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 2);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 99);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Mixed 1 IL charge; stock is 99.");
+        assert_eq!(
+            state.message,
+            "Mixing...\nMixed 1 IL charge; stock is 99."
+        );
     }
 
     #[test]
@@ -1084,9 +1110,9 @@ BRITANNIA 11 21
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(
             state.message,
-            "Mixed wrong reagents for AS; no spell charges added.\nAcid trap hit party member 1 for 12 HP."
+            "Mixing...\nMixed wrong reagents for AS; no spell charges added.\nAcid trap hit party member 1 for 5 HP."
         );
-        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 12);
+        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 5);
     }
 
     #[test]
@@ -1101,16 +1127,39 @@ BRITANNIA 11 21
             .collect::<Vec<_>>();
         assert_eq!(combat, vec![0, 1, 0, 1, 0, 1, 0, 1]);
 
-        assert_eq!(shared_trap_damage_from_index(0, TRAP_ACID_DAMAGE_MAX), 1);
-        assert_eq!(
-            shared_trap_damage_from_index(29, TRAP_ACID_DAMAGE_MAX),
-            30
-        );
-        assert_eq!(
-            shared_trap_damage_from_index(30, TRAP_ACID_DAMAGE_MAX),
-            1
-        );
+        // `traps.md §3` effect id 2 (Bomb) keeps the uniform draw.
+        assert_eq!(shared_trap_damage_from_index(0, TRAP_BOMB_DAMAGE_MAX), 1);
         assert_eq!(shared_trap_damage_from_index(7, TRAP_BOMB_DAMAGE_MAX), 8);
+        assert_eq!(shared_trap_damage_from_index(8, TRAP_BOMB_DAMAGE_MAX), 1);
+
+        // `traps.md §3` effect id 0 (Acid): "The roll is an inclusive
+        // `0..60` roll halved with truncation and floored to one ... so
+        // it is **not** uniform over `1..30`: low values are markedly
+        // more likely." This block previously pinned the withdrawn flat
+        // `1 + (index % 30)` draw.
+        assert_eq!(shared_trap_acid_damage_from_index(0), 1);
+        assert_eq!(shared_trap_acid_damage_from_index(1), 1);
+        assert_eq!(shared_trap_acid_damage_from_index(2), 1);
+        assert_eq!(shared_trap_acid_damage_from_index(3), 1);
+        assert_eq!(shared_trap_acid_damage_from_index(4), 2);
+        assert_eq!(shared_trap_acid_damage_from_index(59), 29);
+        assert_eq!(shared_trap_acid_damage_from_index(60), 30);
+        // The published input domain is the inclusive `0..=60` raw
+        // roll, so index 61 folds back to raw roll 0.
+        assert_eq!(TRAP_ACID_RAW_ROLL_MAX, 60);
+        assert_eq!(shared_trap_acid_damage_from_index(61), 1);
+        // Every index stays inside the published `1..30` bound, and
+        // damage 1 is markedly more likely than any middle value.
+        let counts = (0..=u8::MAX)
+            .map(shared_trap_acid_damage_from_index)
+            .inspect(|damage| assert!((1..=TRAP_ACID_DAMAGE_MAX).contains(damage)))
+            .filter(|damage| *damage == 1)
+            .count();
+        let middles = (0..=u8::MAX)
+            .map(shared_trap_acid_damage_from_index)
+            .filter(|damage| *damage == 15)
+            .count();
+        assert!(counts > middles, "{counts} ones vs {middles} fifteens");
     }
 
     #[test]
@@ -1159,17 +1208,23 @@ BRITANNIA 11 21
 
         state.turn = 0;
         state.active_player = Some(0);
+        // `traps.md §3` effect id 0: the acid roll is the skewed
+        // halve-and-floor shape, so the same seed now yields half the
+        // old flat draw.
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(0),
-            "Acid trap hit party member 1 for 10 HP."
+            "Acid trap hit party member 1 for 5 HP."
         );
-        assert_eq!(state.party[0].hp, 0);
-        assert_eq!(state.party[0].status, b'D');
-        assert_eq!(state.active_player, None);
+        assert_eq!(state.party[0].hp, 5);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.active_player, Some(0));
 
         // traps.md §3: effect id 1 is a poison primitive, not a revive.
-        // Slot 0 was just killed by the acid roll, so the helper skips it
-        // and leaves it Dead rather than rewriting it to Poisoned.
+        // A Dead slot is skipped and left Dead rather than rewritten to
+        // Poisoned.
+        state.party[0].hp = 0;
+        state.party[0].status = b'D';
+        state.active_player = None;
         state.turn = 3;
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(0),
@@ -1212,6 +1267,41 @@ BRITANNIA 11 21
     }
 
     #[test]
+    fn wrong_mix_uses_first_good_or_poisoned_and_never_falls_back_to_active_member() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'P',
+            climb_stat: 10,
+            mana: 0,
+            hp: 10,
+            max_hp: 10,
+            level: 1,
+        });
+        state.party[0].status = b'S';
+        state.active_player = Some(0);
+        assert_eq!(state.mixer_trap_target_slot(), Some(1));
+
+        state.party[1].status = b'D';
+        assert_eq!(state.mixer_trap_target_slot(), None);
+        // Select an Acid family for the safe invalid sentinel used by the
+        // forced-call edge. The stale active-player hint must not become an
+        // arbitrary roster fallback.
+        state.turn = (0..=u8::MAX)
+            .find(|turn| {
+                state.turn = u64::from(*turn);
+                state.shared_trap_effect_family(usize::MAX) == TrapEffect::Acid
+            })
+            .map(u64::from)
+            .unwrap();
+        let before = state.party.clone();
+        let message = state.wrong_mix_trap_message("wrong".to_string());
+        assert!(message.contains("Acid trap found no party member"));
+        assert_eq!(state.party, before);
+    }
+
+    #[test]
     fn mix_reagents_refuses_empty_zero_and_insufficient_without_debit() {
         let mut empty = test_state(open_grid(), 1, 1);
         empty.reagents = [0; REAGENT_COUNT];
@@ -1247,6 +1337,15 @@ BRITANNIA 11 21
         assert_eq!(state.message, "Insufficient reagents!");
     }
 
+    /// `magic.md §6` Step 6: "The handler prints `Mixing...`, pauses
+    /// briefly, then subtracts the requested quantity from each selected
+    /// raw reagent counter", and Step 7 prints the completion message only
+    /// afterwards. `text-output.md` §11 owns how the two land in one
+    /// transcript: "**Both lines are emitted, in the order they occur**",
+    /// because "Text output is a *stream* into a windowed grid" with no
+    /// current-message slot to overwrite. So the mix transcript is the
+    /// pause line followed by the completion line, not the completion line
+    /// alone. An earlier revision of this test omitted the pause line.
     #[test]
     fn handle_play_key_input_routes_inline_mix() {
         let mut state = test_state(open_grid(), 1, 1);
@@ -1261,7 +1360,8 @@ BRITANNIA 11 21
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 0);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Mixed 1 IL charge; stock is 1.");
+        assert_eq!(state.message, "Mixing...
+Mixed 1 IL charge; stock is 1.");
     }
 
     #[test]
@@ -1816,7 +1916,10 @@ BRITANNIA 11 21
 
         assert_eq!(
             state.sound_effects_after(serial),
-            vec![PlaySoundEffect::WindChange, PlaySoundEffect::TrapSting]
+            vec![
+                SoundEffect::SharedVariant { variant: 2 },
+                SoundEffect::TrapRumble,
+            ]
         );
         assert_eq!(state.sound_effect_serial, serial + 2);
     }
@@ -1842,7 +1945,7 @@ BRITANNIA 11 21
 
         assert_eq!(
             state.sound_effects_after(serial),
-            vec![PlaySoundEffect::DungeonDecorationSweep0]
+            vec![SoundEffect::DungeonWallDrip { band: 0 }]
         );
         assert_eq!(state.grid[index], 0xc0);
 
@@ -1851,7 +1954,7 @@ BRITANNIA 11 21
             .unwrap();
         assert_eq!(
             state.sound_effects_after(serial),
-            vec![PlaySoundEffect::DungeonDecorationSweep0],
+            vec![SoundEffect::DungeonWallDrip { band: 0 }],
             "clearing stage five prevents the presentation cue from replaying on redraw"
         );
     }
