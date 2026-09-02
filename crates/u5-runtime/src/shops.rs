@@ -1268,6 +1268,11 @@ pub const fn inn_main_action(byte: u8) -> InnMainAction {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InnGuestRecord {
+    /// Index of this guest's slot in the sixteen-slot shifted registry view of
+    /// `formats/saved-gam.md` §3.3. The registry overlaps the character roster,
+    /// so a guest must be written back at the slot it came from; repacking the
+    /// list from slot zero shifts whole roster records.
+    pub registry_slot: u8,
     pub scene_marker: u8,
     pub name: [u8; SAVE_CHARACTER_NAME_LEN],
     pub member: PartyMember,
@@ -2449,6 +2454,9 @@ pub fn apply_inn_leave_guest(
     if registry.len() >= INN_REGISTRY_CAP {
         return Err(InnError::RegistryFull);
     }
+    let Some(registry_slot) = crate::free_inn_registry_slot(registry) else {
+        return Err(InnError::RegistryFull);
+    };
     if *gold < base_lodging_charge {
         return Err(InnError::InsufficientGold {
             available: *gold,
@@ -2470,6 +2478,7 @@ pub fn apply_inn_leave_guest(
     normalize_party_slots(party);
 
     let guest = InnGuestRecord {
+        registry_slot,
         scene_marker,
         name,
         member,

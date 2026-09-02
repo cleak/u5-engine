@@ -373,8 +373,13 @@ impl PlayState {
                 record + SAVE_CHARACTER_EXPERIENCE_OFFSET,
                 roster_record.experience,
             );
-            save[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] =
-                roster_record.stay_counter.min(INN_STAY_COUNTER_CAP);
+            // `formats/saved-gam.md` §3.1: the per-character month counter is
+            // "capped at 25" by *the time system* when it increments at the
+            // 28-day rollover. Clamping again on write mutates an inherited
+            // byte the engine only read - the shipped seed carries `0xFF`
+            // here - so the raw value round-trips and the cap stays in the
+            // ageing pass that owns it.
+            save[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = roster_record.stay_counter;
             save[record + SAVE_CHARACTER_LEVEL_OFFSET] = member.level;
             let start = record + SAVE_CHARACTER_EQUIPMENT_OFFSET;
             save[start..start + EQUIPMENT_SLOT_COUNT].copy_from_slice(&roster_record.equipment);

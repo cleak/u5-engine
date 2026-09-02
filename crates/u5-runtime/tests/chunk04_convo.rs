@@ -115,6 +115,7 @@ fn recruit_speaker_clears_the_joined_records_inn_lodging_marker() {
     let lodged = roster_record(1, b"GWENNO\0\0\0", b'B');
     state.party_roster = vec![roster_record(0, b"AVATAR\0\0\0", b'A'), lodged.clone()];
     state.inn_registry = vec![InnGuestRecord {
+        registry_slot: 0,
         scene_marker: 0x11,
         name: *b"GWENNO\0\0\0",
         member: lodged.member,

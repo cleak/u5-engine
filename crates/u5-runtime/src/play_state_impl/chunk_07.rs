@@ -4342,7 +4342,10 @@ impl PlayState {
             // an unmatchable marker there is what makes the record
             // unretrievable by any inn while still surviving save/reload.
             if self.inn_registry.len() < INN_REGISTRY_CAP {
+                let registry_slot =
+                    crate::free_inn_registry_slot(&self.inn_registry).unwrap_or_default();
                 self.inn_registry.push(InnGuestRecord {
+                    registry_slot,
                     scene_marker: Self::BLACKTHORN_EXECUTED_WHEREABOUTS,
                     name: record.name,
                     member: record.member,

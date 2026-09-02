@@ -1786,6 +1786,7 @@ fn inn_pickup_bills_zero_stay_as_one_and_poisoned_guest_returns_dead() {
     let mut state = test_state(open_grid(), 1, 1);
     state.gold = 50;
     state.inn_registry.push(InnGuestRecord {
+        registry_slot: 0,
         scene_marker: 0x11,
         name: *b"IOLO\0\0\0\0\0",
         member: PartyMember {
@@ -1827,6 +1828,7 @@ fn inn_pickup_bills_zero_stay_as_one_and_poisoned_guest_returns_dead() {
 #[test]
 fn inn_registry_filters_by_scene_and_refusals_preserve_state() {
     let first = InnGuestRecord {
+        registry_slot: 0,
         scene_marker: 0x11,
         name: [0; SAVE_CHARACTER_NAME_LEN],
         member: default_party()[0],
@@ -1837,6 +1839,7 @@ fn inn_registry_filters_by_scene_and_refusals_preserve_state() {
         stay_counter: 2,
     };
     let second = InnGuestRecord {
+        registry_slot: 1,
         scene_marker: 0x12,
         name: [0; SAVE_CHARACTER_NAME_LEN],
         stay_counter: 30,
@@ -1876,6 +1879,7 @@ fn inn_registry_filters_by_scene_and_refusals_preserve_state() {
 #[test]
 fn inn_registry_month_aging_increments_lodged_guests_to_cap() {
     let base = InnGuestRecord {
+        registry_slot: 0,
         scene_marker: 0x11,
         name: [0; SAVE_CHARACTER_NAME_LEN],
         member: default_party()[0],
@@ -1906,6 +1910,7 @@ fn inn_registry_month_aging_increments_lodged_guests_to_cap() {
 #[test]
 fn inn_registry_ages_once_on_twenty_eight_day_month_rollover() {
     let base = InnGuestRecord {
+        registry_slot: 0,
         scene_marker: 0x11,
         name: [0; SAVE_CHARACTER_NAME_LEN],
         member: default_party()[0],

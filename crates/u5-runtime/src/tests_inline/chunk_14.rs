@@ -2936,6 +2936,7 @@
     fn inn_pickup_register_uses_window_one_then_restores_talk_shop_window_two() {
         let mut state = test_state(open_grid(), 1, 1);
         state.inn_registry.push(InnGuestRecord {
+            registry_slot: 0,
             scene_marker: 0x11,
             name: *b"IOLO\0\0\0\0\0",
             member: PartyMember {

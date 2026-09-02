@@ -4939,6 +4939,7 @@ fn end_to_end_innkeeper_pickup_restores_matching_guest() {
     let mut state = test_state(open_grid(), 1, 1);
     state.gold = 100;
     state.inn_registry.push(InnGuestRecord {
+        registry_slot: 0,
         scene_marker: 0x11,
         name: *b"IOLO\0\0\0\0\0",
         member: PartyMember {
@@ -4981,6 +4982,7 @@ fn end_to_end_innkeeper_pickup_bill_uses_stay_units_not_leave_deposit() {
     state.gold = 100;
     state.party_intelligence[0] = 25;
     state.inn_registry.push(InnGuestRecord {
+        registry_slot: 0,
         scene_marker: 0x11,
         name: *b"IOLO\0\0\0\0\0",
         member: PartyMember {
