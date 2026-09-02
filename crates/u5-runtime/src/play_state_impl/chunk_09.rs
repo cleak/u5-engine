@@ -1508,9 +1508,6 @@ impl PlayState {
     ) -> Option<(u8, Option<u8>)> {
         match area {
             TopDownRenderArea::Town => {
-                if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    return None;
-                }
                 if self.surface_visibility_pitch_dark() {
                     return None;
                 }
@@ -1525,9 +1522,10 @@ impl PlayState {
                 ) {
                     return None;
                 }
-                let xu = x as usize;
-                let yu = y as usize;
-                let terrain = self.animation.resolve_static_tile(self.grid[yu * 32 + xu]);
+                // `town-mode.md §15`: cells beyond the 32-by-32 floor take
+                // the loaded floor's southeast-corner terrain, not a hole.
+                let tile = self.surface_viewport_tile(x, y, false)?;
+                let terrain = self.animation.resolve_static_tile(tile);
                 Some((terrain, None))
             }
             TopDownRenderArea::World(_) => {
@@ -2196,7 +2194,10 @@ impl PlayState {
                 }
                 considered[index] = true;
 
-                let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
+                // `town-mode.md §15`: the carve runs over the constructed
+                // viewport, so off-floor town cells carry the substituted
+                // southeast-corner terrain rather than dropping out.
+                let Some(tile) = self.surface_viewport_tile(x, y, wrap_world) else {
                     continue;
                 };
                 let verdict = classify(SurfaceCarveCandidate {
@@ -2342,6 +2343,32 @@ impl PlayState {
         } else {
             None
         }
+    }
+
+    /// `town-mode.md §15`: "movement reads the adjacent cell already
+    /// present in the party-centred viewport. When that cell represents any
+    /// coordinate outside a town floor, **viewport construction substitutes
+    /// the loaded floor's southeast-corner cell `(31,31)`**."
+    ///
+    /// The substitution belongs to viewport construction, so it applies to
+    /// the terrain the viewport paints and to the visibility carve that
+    /// runs over that viewport - not to the 32-by-32 map window itself.
+    /// [`Self::surface_visibility_tile`] therefore stays the raw map
+    /// accessor and keeps returning `None` off-grid for the local-light
+    /// scan of `visibility.md §12.1`, which explicitly "scan[s] the active
+    /// thirty-two by thirty-two map window".
+    ///
+    /// Without this a party standing within five cells of a town edge sees
+    /// the out-of-floor rows painted black; the original paints the corner
+    /// terrain there (Britain's is grass).
+    fn surface_viewport_tile(&self, x: isize, y: isize, wrap_world: bool) -> Option<u8> {
+        if let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) {
+            return Some(tile);
+        }
+        if wrap_world || !matches!(self.area, Area::Town { .. }) {
+            return None;
+        }
+        self.grid.get(TOWN_VIEWPORT_OFF_GRID_SAMPLE_INDEX).copied()
     }
 
     pub fn advance_turn(&mut self) {
@@ -3005,12 +3032,17 @@ impl PlayState {
         )
     }
 
-    pub fn advance_visual_tick(&mut self) {
+    /// One world step (`animation.md §13.2`).
+    ///
+    /// Returns the wind state the step's wind check installed, if it fired,
+    /// so a shell that narrates the idle tick can report it. Every other
+    /// caller ignores it.
+    pub fn advance_visual_tick(&mut self) -> Option<WindState> {
         // A White-potion repaint advances this same presentation state from
         // `advance_presentation_frame`. Suppress the ordinary frontend tick so
         // one displayed White frame cannot advance objects or tiles twice.
         if self.white_potion_sweep.is_some() {
-            return;
+            return None;
         }
         // Combat and endgame own temporary active-object tables. Their
         // presentation ticks must not recreate slot zero from the saved world
@@ -3029,6 +3061,18 @@ impl PlayState {
             // not move one while the player is idle.
             self.animate_active_object_sprites_only();
         }
+        // `animation.md §13.2`: one world step advances "one wind-change
+        // check" alongside the object phases, and `§13.1` freezes it with
+        // the rest of the step while Negate Time runs ("no wind check").
+        // Unlike the object pass above it is not scene-gated -
+        // `weather.md §2`: "The store happens before any scene test, so
+        // the state is always updated; only the banner repaint is
+        // conditional."
+        let wind_change = if self.time_stop_counter == 0 && !self.negate_time_active() {
+            self.idle_wind_drift()
+        } else {
+            None
+        };
         self.advance_animation_clock();
         // `combat.md §7`: the shared tile-painting pass - "run by the idle
         // redraw tick in *every* mode" - has a combat-band tail that "toggles
@@ -3037,6 +3081,7 @@ impl PlayState {
         // flag only moved at a round boundary, and the box the original blinks
         // sat solid for a whole round. The helper is inert outside combat.
         let _ = self.apply_combat_cursor_blink_tick();
+        wind_change
     }
 
     pub fn decay_light_counters(&mut self, units: u8) {

@@ -64,6 +64,22 @@ fn idle_tick_advances_visuals_without_turn_time_doors_or_schedules() {
     assert_eq!(object.tile, 169);
 }
 
+/// Drive idle ticks until the `weather.md §2` 1-in-64 selector fires,
+/// returning the tick count. The selector now draws off the shared
+/// gameplay PRNG (`prng.md §4`), so the firing tick is seed-dependent
+/// rather than fixed; a few hundred ticks is far beyond the published
+/// rate.
+fn idle_until_wind_change(state: &mut PlayState) -> usize {
+    for tick in 1..=4096 {
+        let before = state.wind;
+        assert_eq!(state.idle_tick(), MoveOutcome::IdleTick);
+        if state.wind != before {
+            return tick;
+        }
+    }
+    panic!("the 1-in-64 wind selector never fired in 4096 idle ticks");
+}
+
 #[test]
 fn idle_tick_can_apply_public_random_wind_drift_without_turn() {
     let mut state = britannia_state(open_world_grid(), 1, 10);
@@ -73,15 +89,23 @@ fn idle_tick_can_apply_public_random_wind_drift_without_turn() {
     state.sail_cadence = 1;
     state.sail_stall_pending = true;
 
-    assert_eq!(state.idle_tick(), MoveOutcome::IdleTick);
+    idle_until_wind_change(&mut state);
 
+    // `weather.md §2`: the drift "is not a spell cast, does not consume a
+    // turn by itself, and does not run from the time cleanup".
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
-    assert_eq!(state.wind, WindState::North);
-    assert_eq!(state.wind_save_byte, 1);
+    assert_ne!(state.wind, WindState::Calm);
+    assert_eq!(state.wind_save_byte, state.wind.save_byte());
+    assert!((1..=4).contains(&state.wind_save_byte));
+    // "Setting a new state also clears the cached wind-cadence byte used by
+    // sailing and by wind-driven actors."
     assert_eq!(state.sail_cadence, 0);
     assert!(!state.sail_stall_pending);
-    assert_eq!(state.message, "Idle animation tick. North Winds");
+    assert_eq!(
+        state.message,
+        format!("Idle animation tick. {}", state.wind.status_message())
+    );
 }
 
 #[test]
@@ -98,13 +122,30 @@ fn idle_tick_underworld_drift_uses_non_surface_presentation_branch() {
     state.wind = WindState::Calm;
     state.wind_save_byte = 0x7a;
 
-    assert_eq!(state.idle_tick(), MoveOutcome::IdleTick);
+    idle_until_wind_change(&mut state);
 
     // Wind state did update.
-    assert_eq!(state.wind, WindState::North);
+    assert_ne!(state.wind, WindState::Calm);
     // Message must NOT contain the cardinal wind label.
-    assert!(!state.message.contains("North Winds"));
+    assert!(!state.message.contains(state.wind.status_message()));
     assert!(state.message.contains("Idle animation tick"));
+}
+
+#[test]
+fn idle_tick_wind_selector_runs_inside_a_town_scene() {
+    // `weather.md §2`: "The store happens before any scene test, so the
+    // state is always updated; only the banner repaint is conditional."
+    // The paired Britain captures show the original cycling the wind while
+    // the party is inside a town, which the old world-plane-only gate made
+    // impossible.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.wind = WindState::Calm;
+    state.wind_save_byte = 0;
+
+    idle_until_wind_change(&mut state);
+
+    assert_ne!(state.wind, WindState::Calm);
+    assert_eq!(state.turn, 0);
 }
 
 #[test]

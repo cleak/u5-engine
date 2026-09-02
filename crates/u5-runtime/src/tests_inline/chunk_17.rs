@@ -1,5 +1,5 @@
     #[test]
-    fn z_stats_opens_browser_stats_page_without_turn() {
+    fn z_stats_opens_browser_stats_page_and_charges_one_turn() {
         let mut state = test_state(open_grid(), 5, 5);
         state.party = vec![
             PartyMember {
@@ -34,7 +34,13 @@
         );
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
-        assert_eq!(state.turn, 0);
+        // `commands.md §4`: "the status/equipment overlay produces no status
+        // word of its own, and the dispatcher discards whatever it returns,
+        // so both letters always report the default 'acted'. Opening either
+        // panel and immediately backing out therefore costs a turn in every
+        // non-combat mode". The charge lands once, at the `Z` keystroke, so
+        // the selector and the sheet below it add nothing further.
+        assert_eq!(state.turn, 1);
         // inventory.md §4: "The command starts by choosing a character...
         // outside combat they use the normal party-member selector."
         assert!(state.active_z_stats.is_none());
@@ -46,7 +52,7 @@
             handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         assert!(state.active_party_selector.is_none());
         assert_eq!(state.selector_highlight(), None);
         assert_eq!(

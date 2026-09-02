@@ -263,6 +263,11 @@ pub const ACTIVE_SHIP_CADENCE_WITH_WIND: (u8, u8) = (3, 4);
 /// requiring callers to range-check the raw byte.
 pub const WIND_DRIFT_OUTER_ROLL_MASK: u8 = 0x3F;
 
+/// `weather.md §2`: the inclusive high end of the outer roll's `0..63`
+/// window, for callers drawing it straight off the gameplay PRNG rather
+/// than masking an arbitrary byte.
+pub const WIND_DRIFT_OUTER_ROLL_MAX: u8 = WIND_DRIFT_OUTER_ROLL_MASK;
+
 /// `weather.md §2` autonomous wind-drift candidate modulus. After the
 /// outer roll accepts, the selector picks a candidate in `0..=4` (Calm
 /// plus four cardinals) via a modulo-five reduction of a fresh roll.

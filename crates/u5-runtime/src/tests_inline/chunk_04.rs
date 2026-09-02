@@ -80,7 +80,7 @@ fn sync_player_object_recreates_empty_active_object_table() {
 }
 
 #[test]
-fn movement_blocks_impassable_tiles_without_spending_turn() {
+fn movement_blocks_impassable_tiles_but_still_spends_the_town_turn() {
     let mut grid = open_grid();
     grid[32 + 2] = 0x0c;
     let mut state = test_state(grid, 1, 1);
@@ -89,8 +89,16 @@ fn movement_blocks_impassable_tiles_without_spending_turn() {
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.animation.frame, 0);
+    // `town-mode.md §15`: a refused town step "Consumes one normal town
+    // turn: advance the clock by one minute, run underfoot/post-action
+    // processing, and run one NPC schedule step". This assertion used to
+    // read `state.turn, 0` with no citation behind it; `combat.md §11`
+    // ("A blocked step re-prompts at no cost") is the arena, not here.
+    assert_eq!(state.turn, 1);
+    // The consumed turn runs the ordinary epilogue, so the animator
+    // advances exactly as it does behind an accepted step; only the
+    // party coordinate and the viewport stay put.
+    assert_eq!(state.animation.frame, 1);
     assert!(!state.visibility_dirty);
 }
 
@@ -104,11 +112,12 @@ fn movement_ignores_optional_passability_bitmap_for_promoted_transport() {
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.turn, 0);
+    // `town-mode.md §15`: a refused town step still costs one town turn.
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
-fn movement_blocks_same_floor_active_object_without_spending_turn() {
+fn movement_blocks_same_floor_active_object_but_still_spends_the_town_turn() {
     let mut state = test_state(open_grid(), 1, 1);
     state.active_objects.push(ActiveObject {
         type_byte: 192,
@@ -123,7 +132,10 @@ fn movement_blocks_same_floor_active_object_without_spending_turn() {
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.turn, 0);
+    // `audio.md §7.4`: the town object-occupancy and tile-class refusal
+    // arms "share one tail", so occupancy pays the same `town-mode.md §15`
+    // turn the terrain refusal pays.
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
@@ -231,7 +243,7 @@ fn negate_time_effect_skips_minutes_and_light_but_runs_cleanup() {
 }
 
 #[test]
-fn world_movement_blocks_impassable_tiles_without_turn() {
+fn world_movement_blocks_impassable_tiles_but_still_spends_the_outdoor_turn() {
     let mut grid = open_world_grid();
     grid[world_cell_index(1, 0)] = 0x0c;
     let mut state = world_state(grid, 0, 0);
@@ -239,12 +251,19 @@ fn world_movement_blocks_impassable_tiles_without_turn() {
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
     assert_eq!((state.player.x, state.player.y), (0, 0));
-    assert_eq!(state.clock, GameClock::default());
-    assert_eq!(state.turn, 0);
+    // `overworld.md §6.2.5` singles out the released sailing collision as
+    // the path that "adds no ordinary action-time increment and skips the
+    // later underfoot, encounter, and active-object tail" - the ordinary
+    // refusal runs that tail and pays the two-minute outdoor increment of
+    // §12.
+    let mut expected = GameClock::default();
+    expected.advance_minutes(MINUTES_PER_OUTDOOR_TURN);
+    assert_eq!(state.clock, expected);
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
-fn world_movement_blocks_active_object_without_turn() {
+fn world_movement_blocks_active_object_but_still_spends_the_outdoor_turn() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.active_objects.push(ActiveObject {
         type_byte: 170,
@@ -260,8 +279,10 @@ fn world_movement_blocks_active_object_without_turn() {
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
     assert_eq!((state.player.x, state.player.y), (0, 0));
-    assert_eq!(state.clock, GameClock::default());
-    assert_eq!(state.turn, 0);
+    let mut expected = GameClock::default();
+    expected.advance_minutes(MINUTES_PER_OUTDOOR_TURN);
+    assert_eq!(state.clock, expected);
+    assert_eq!(state.turn, 1);
     // `audio.md §7.4`: a refusal by a blocking object prints the shared
     // refusal line. The arena/class selection it used to narrate is
     // asserted directly, where no player-facing string has to carry it.

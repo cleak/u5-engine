@@ -937,7 +937,16 @@ fn rough_seas_hits_each_non_dead_member_after_one_repaint_tick() {
     state.party[2].status = PARTY_STATUS_DEAD;
     state.party[2].hp = 0;
     state.prng_state = 0x2468;
-    let mut expected_prng = state.prng_state;
+    // `overworld.md §6.2.5` puts "one world repaint tick" between the
+    // impact rumble and absorption, and `prng.md §4` says that tick's wind
+    // check draws off the same gameplay stream ("The per-pass wind check
+    // draws once in the common case"). The absorption rolls therefore start
+    // from the post-tick stream position, which this probe reproduces.
+    let mut expected_prng = {
+        let mut probe = state.clone();
+        probe.advance_visual_tick();
+        probe.prng_state
+    };
     let expected_rolls = [0usize, 1, 3, 4, 5]
         .map(|slot| {
             (

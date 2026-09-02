@@ -24596,16 +24596,19 @@ fn transcript_is_capped_so_a_long_session_cannot_grow_without_bound() {
 
 #[test]
 fn top_down_uppercase_command_letters_preempt_vi_movement() {
-    for (key, expected) in [
-        ('A', "Attack where?"),
-        ('C', "Spell name:"),
-        ('D', "What?"),
-        ('M', MMIX_SPELL_PROMPT_MESSAGE),
-        ('N', "New order:"),
-        ('Q', "Save game?"),
-        ('U', ITEM_SELECTION_PROMPT),
-        ('W', "What?"),
-        ('Z', PARTY_SELECTION_PROMPT),
+    // `commands.md §4`: `Z` Z-stats "always report[s] the default 'acted'",
+    // so opening the selector costs a turn even though every other letter
+    // here only raises a prompt.
+    for (key, expected, expected_turn) in [
+        ('A', "Attack where?", 0),
+        ('C', "Spell name:", 0),
+        ('D', "What?", 0),
+        ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
+        ('N', "New order:", 0),
+        ('Q', "Save game?", 0),
+        ('U', ITEM_SELECTION_PROMPT, 0),
+        ('W', "What?", 0),
+        ('Z', PARTY_SELECTION_PROMPT, 1),
     ] {
         let mut state = test_state(open_grid(), 5, 5);
 
@@ -24616,7 +24619,7 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
         );
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, expected_turn, "{key} turn");
         assert!(
             state.message.contains(expected),
             "{key} reported `{}`",
@@ -24982,8 +24985,11 @@ fn dungeon_q_exit_prompt_is_separate_from_save_command() {
 #[test]
 fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
     // `inventory.md §8`: R-Ready costs a turn in **every** mode, dungeon
-    // exploration included, and opening the picker is what spends it. The
-    // other letters here only open a prompt and stay free.
+    // exploration included, and opening the picker is what spends it.
+    // `commands.md §4` puts `Z` Z-stats in the same class: the overlay
+    // "produces no status word of its own ... so both letters always report
+    // the default 'acted'". The other letters here only open a prompt and
+    // stay free.
     for (key, expected, expected_turn) in [
         ('C', "Spell name:", 0),
         ('D', "What?", 0),
@@ -24993,7 +24999,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('U', "No usable items.", 1),
         ('W', "What?", 0),
         ('Y', "Yell what?", 0),
-        ('Z', PARTY_SELECTION_PROMPT, 0),
+        ('Z', PARTY_SELECTION_PROMPT, 1),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 

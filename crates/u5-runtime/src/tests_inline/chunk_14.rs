@@ -4026,15 +4026,21 @@
     /// seals the column across the whole viewport: the carve is a
     /// centre-out flood, so a wall with an open cell past its end is
     /// walked around rather than casting a shadow behind it.
+    ///
+    /// The party sits at `(5,5)` rather than `(1,1)` so that the sealed
+    /// column really does span every viewport row. At `(1,1)` the radius-2
+    /// viewport reaches `y = -1`, and `town-mode.md §15` now fills those
+    /// off-floor cells with the southeast-corner terrain instead of leaving
+    /// them dark - open ground the flood can legitimately walk around the
+    /// end of a four-cell wall through.
     #[test]
     fn town_render_visibility_carve_uses_terrain_blockers() {
         let mut grid = open_grid();
-        grid[2] = 0x4D;
-        grid[32 + 2] = 0x4D;
-        grid[64 + 2] = 0x4D;
-        grid[96 + 2] = 0x4D;
-        grid[32 + 3] = 16;
-        let state = test_state(grid, 1, 1);
+        for row in 3..=7 {
+            grid[row * 32 + 6] = 0x4D;
+        }
+        grid[5 * 32 + 7] = 16;
+        let state = test_state(grid, 5, 5);
 
         let view = state.render_text_view(2);
         let row: Vec<_> = view.lines().nth(3).unwrap().chars().collect();
@@ -4042,6 +4048,35 @@
         assert_eq!(row[2], '@');
         assert_eq!(row[3], 'f');
         assert_eq!(row[4], ' ');
+    }
+
+    /// `town-mode.md §15`: "movement reads the adjacent cell already
+    /// present in the party-centred viewport. When that cell represents any
+    /// coordinate outside a town floor, **viewport construction substitutes
+    /// the loaded floor's southeast-corner cell `(31,31)`**."
+    ///
+    /// The engine used to drop those cells, so a party standing within five
+    /// cells of a town edge saw the out-of-floor rows painted black while
+    /// the original paints them with the corner terrain.
+    #[test]
+    fn town_render_fills_off_floor_viewport_cells_from_the_southeast_corner() {
+        let mut grid = open_grid();
+        grid[31 * 32 + 31] = 0x4D;
+        let state = test_state(grid, 16, 30);
+
+        let view = state.render_text_view(2);
+        let rows: Vec<Vec<char>> = view.lines().skip(1).map(|line| line.chars().collect()).collect();
+
+        // Viewport rows are y = 28..=32; the last is off the floor.
+        assert_eq!(rows[2][2], '@');
+        assert_eq!(rows[3][2], render_glyph(16), "row 31 is still floor");
+        for column in 0..5 {
+            assert_eq!(
+                rows[4][column],
+                render_glyph(0x4D),
+                "row 32 is off the floor and takes the (31,31) sample"
+            );
+        }
     }
 
     #[test]

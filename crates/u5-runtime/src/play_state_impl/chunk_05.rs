@@ -684,6 +684,26 @@ impl PlayState {
         ))
     }
 
+    /// An ordinary refused overworld step still costs the outdoor turn.
+    ///
+    /// `overworld.md §6.2.5` states of the *released sailing collision*
+    /// that "the movement command returns zero, so this released collision
+    /// adds no ordinary action-time increment and skips the later
+    /// underfoot, encounter, and active-object tail", and its conformance
+    /// vector requires that path to "skip the **ordinary** per-turn tail".
+    /// That exemption is only meaningful because an ordinary refused
+    /// destination does run the tail; §12 says the same thing from the
+    /// other side - overworld turns "either consume the standard increment
+    /// or are no-ops at the dispatch level", and only the four typed
+    /// Control bindings of §5 are published as costing nothing. The town
+    /// half of the same shared movement layer is explicit
+    /// (`town-mode.md §15`: "Terrain rejected ... Consumes one normal town
+    /// turn"), and `combat.md §11` is the published exception - "A blocked
+    /// step re-prompts at no cost" applies to the arena only.
+    fn charge_refused_overworld_step(&mut self) {
+        self.advance_turn();
+    }
+
     pub fn step_world(
         &mut self,
         direction: Direction,
@@ -752,6 +772,7 @@ impl PlayState {
                     // refused. No blocking object is involved, so the
                     // whirlpool arm cannot apply.
                     self.emit_overworld_blocked_step(false);
+                    self.charge_refused_overworld_step();
                     return Ok(MoveOutcome::Blocked);
                 }
             } else if !self.tile_walkable(tile) && !(ship_under_sail && tile == OVERWORLD_PIER_TILE)
@@ -764,6 +785,7 @@ impl PlayState {
                 // `audio.md §7.4`: the other overworld refusal, terrain
                 // impassable for the current transport.
                 self.emit_overworld_blocked_step(false);
+                self.charge_refused_overworld_step();
                 return Ok(MoveOutcome::Blocked);
             }
         }
@@ -803,6 +825,9 @@ impl PlayState {
                 MOVEMENT_BLOCKED_REFUSAL.to_string()
             };
             self.emit_overworld_blocked_step(whirlpool);
+            if !silent_whirlpool {
+                self.charge_refused_overworld_step();
+            }
             return Ok(MoveOutcome::Blocked);
         }
 
