@@ -18509,7 +18509,7 @@ fn negate_time_freezes_every_tile_animation_clock() {
         "a frozen pass cannot change the picture, so it must not restage it"
     );
 
-    // `magic.md §12.1`: the shared `T` tag is what gates it. Clear the tag and
+    // `magic.md §8`: the shared `T` tag is what gates it. Clear the tag and
     // the same call advances again, so the freeze is the effect rather than a
     // dead code path.
     state.active_effect_tag = None;
@@ -18603,7 +18603,7 @@ fn idle_world_step_suppression_is_the_published_scene_value_band() {
 }
 
 /// `animation.md §9`: the driver-side animation layer "is **not** reset ...
-/// its state lives in the asset buffer for the whole program run", and `§10`
+/// its state lives in the asset buffer for the whole program run", and `§12.1`
 /// adds that it "survives scene changes, save loads, and everything else
 /// short of reloading the asset". So an area constructor must inherit the
 /// running phases rather than start a fresh clock.

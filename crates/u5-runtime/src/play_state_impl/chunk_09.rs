@@ -3030,9 +3030,24 @@ impl PlayState {
         // character-creation and Return-to-View animation states (`0x40`,
         // `0x41`, `0x42`) also lie inside it". An `Area::Dungeon` match
         // cannot express those three, so the scene value is tested instead.
+        // (This engine's `current_scene_byte()` cannot itself return
+        // `0x40..=0x42` today - those states are not modelled as scene
+        // values here - so at this call site the band is numerically the
+        // same set as the dungeon family. The published shape is what is
+        // being followed, and the predicate is reusable where those states
+        // do get modelled.)
         // Combat reports `0xFF` and is outside the band, which is what
         // §8.2 requires ("Combat sets scene value `0xFF` and does run the
         // world step").
+        //
+        // NOT YET CONFORMANT, and out of scope here: §8.2 says the pass
+        // performs *no world step* in the band, and `animation.md §13.2`
+        // counts "the tail pair of Sections 6 and 12" among what one world
+        // step advances - yet `advance_animation_clock()` below still runs
+        // unconditionally, in the band as everywhere else. This gate covers
+        // only the sprite/AI half. Behaviour there is unchanged from before
+        // this change; closing it is the audit's separate `CONTRA (partial)`
+        // row.
         if self.time_stop_counter == 0
             && !self.negate_time_active()
             && !idle_world_step_suppressed_for_scene(self.current_scene_byte())
@@ -3166,7 +3181,7 @@ impl PlayState {
         // tick. ... An engine that keeps animating during Negate Time is
         // visibly wrong."
         //
-        // `magic.md §12.1` names the same tag: "**`T` Negate Time.** The
+        // `magic.md §8` names the same tag: "**`T` Negate Time.** The
         // per-turn cleanup skips the entire time advance ... and the
         // overworld epilogue returns before animating anything."
         //

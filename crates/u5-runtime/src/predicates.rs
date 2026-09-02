@@ -1319,8 +1319,10 @@ pub const fn tile_blocks_sight_propagation(tile: u8) -> bool {
 /// `visibility.md` §6: the five tile identities that propagate the carve only
 /// when orthogonally adjacent to the centre cell — arrow slit `0x4A`, window
 /// `0x4B`, odd door `0x98`, and the two windowed doors, wooden `0xBA` and
-/// locked `0xBB`. These are "the four openings you can only see through from
-/// immediately in front". The bookshelf/dresser, Giant Spider and Gargoyle
+/// locked `0xBB`. §6's prose calls four of them "the four openings you can
+/// only see through from immediately in front — an arrow slit, a window, and
+/// the two windowed doors"; the odd door `0x98` is a fifth id that §6's table
+/// gives the same rule in its own row. The bookshelf/dresser, Giant Spider and Gargoyle
 /// names an earlier revision used for these ids are withdrawn along with the
 /// rest of the creature names; see [`tile_blocks_sight_propagation`].
 pub const fn tile_propagates_sight_only_when_adjacent(tile: u8) -> bool {

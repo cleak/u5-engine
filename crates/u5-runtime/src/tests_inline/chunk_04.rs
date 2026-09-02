@@ -228,7 +228,7 @@ fn negate_time_effect_skips_minutes_and_light_but_runs_cleanup() {
     assert!(state.visibility_dirty);
     // `animation.md §13.1`: "For the effect's full duration nothing advances:
     // no water rotation, no fire flicker, no fountain, no banner, no clock or
-    // bellows, no object animation ..." and `magic.md §12.1` says "the
+    // bellows, no object animation ..." and `magic.md §8` says "the
     // overworld epilogue returns before animating anything". A consumed turn
     // under Negate Time therefore leaves the shared phase counter alone; an
     // earlier revision asserted `1` here and pinned the withdrawn behaviour.

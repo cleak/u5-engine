@@ -629,13 +629,25 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            // `animation.md §9`: the driver-side layer "is **not** reset ...
-            // its state lives in the asset buffer for the whole program
-            // run", and `§10` adds that the mutation "survives scene
-            // changes, save loads, and everything else short of reloading
-            // the asset". These two counters are that layer, so an area
-            // constructor must carry the running phases in rather than
-            // start a fresh clock — see [`AnimationAssetBuffer`].
+            // Neither counter restarts on area entry, but for two
+            // different published reasons.
+            //
+            // `water_scroll` is the `animation.md §12` driver-side layer.
+            // `§9`: it "is **not** reset ... its state lives in the asset
+            // buffer for the whole program run", and `§12.1` adds that the
+            // mutation "survives scene changes, save loads, and everything
+            // else short of reloading the asset".
+            //
+            // `animation` is the `§6` frame-selector pass, a different
+            // layer, and `§9` does license resetting it ("Rebuild or reset
+            // transient animation counters during startup or mode entry as
+            // needed"). It is carried anyway on `§6.1`'s own terms: the
+            // selector "is transient and global. It is not part of saved
+            // state, it survives map changes and reloads."
+            //
+            // Either way an area constructor carries the running phases in
+            // rather than starting a fresh clock — see
+            // [`AnimationAssetBuffer`].
             animation: options.animation_asset_buffer.animation,
             water_scroll: options.animation_asset_buffer.water_scroll,
             dungeon_fountain_frame: 0,
@@ -913,13 +925,25 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            // `animation.md §9`: the driver-side layer "is **not** reset ...
-            // its state lives in the asset buffer for the whole program
-            // run", and `§10` adds that the mutation "survives scene
-            // changes, save loads, and everything else short of reloading
-            // the asset". These two counters are that layer, so an area
-            // constructor must carry the running phases in rather than
-            // start a fresh clock — see [`AnimationAssetBuffer`].
+            // Neither counter restarts on area entry, but for two
+            // different published reasons.
+            //
+            // `water_scroll` is the `animation.md §12` driver-side layer.
+            // `§9`: it "is **not** reset ... its state lives in the asset
+            // buffer for the whole program run", and `§12.1` adds that the
+            // mutation "survives scene changes, save loads, and everything
+            // else short of reloading the asset".
+            //
+            // `animation` is the `§6` frame-selector pass, a different
+            // layer, and `§9` does license resetting it ("Rebuild or reset
+            // transient animation counters during startup or mode entry as
+            // needed"). It is carried anyway on `§6.1`'s own terms: the
+            // selector "is transient and global. It is not part of saved
+            // state, it survives map changes and reloads."
+            //
+            // Either way an area constructor carries the running phases in
+            // rather than starting a fresh clock — see
+            // [`AnimationAssetBuffer`].
             animation: options.animation_asset_buffer.animation,
             water_scroll: options.animation_asset_buffer.water_scroll,
             dungeon_fountain_frame: 0,
@@ -1224,13 +1248,25 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            // `animation.md §9`: the driver-side layer "is **not** reset ...
-            // its state lives in the asset buffer for the whole program
-            // run", and `§10` adds that the mutation "survives scene
-            // changes, save loads, and everything else short of reloading
-            // the asset". These two counters are that layer, so an area
-            // constructor must carry the running phases in rather than
-            // start a fresh clock — see [`AnimationAssetBuffer`].
+            // Neither counter restarts on area entry, but for two
+            // different published reasons.
+            //
+            // `water_scroll` is the `animation.md §12` driver-side layer.
+            // `§9`: it "is **not** reset ... its state lives in the asset
+            // buffer for the whole program run", and `§12.1` adds that the
+            // mutation "survives scene changes, save loads, and everything
+            // else short of reloading the asset".
+            //
+            // `animation` is the `§6` frame-selector pass, a different
+            // layer, and `§9` does license resetting it ("Rebuild or reset
+            // transient animation counters during startup or mode entry as
+            // needed"). It is carried anyway on `§6.1`'s own terms: the
+            // selector "is transient and global. It is not part of saved
+            // state, it survives map changes and reloads."
+            //
+            // Either way an area constructor carries the running phases in
+            // rather than starting a fresh clock — see
+            // [`AnimationAssetBuffer`].
             animation: options.animation_asset_buffer.animation,
             water_scroll: options.animation_asset_buffer.water_scroll,
             dungeon_fountain_frame: 0,

@@ -239,13 +239,13 @@ pub const fn static_tile_animation_pass(phase: u8) -> StaticTileAnimationPass {
 /// for the whole program run**: the water tiles keep whatever rotation they
 /// have reached, and the fire fixtures keep every noise pattern ever XORed
 /// into them. Loading a saved game does not restore pristine artwork."
-/// `§10` says the same of the mutation: "It survives scene changes, save
+/// `§12.1` says the same of the mutation: "It survives scene changes, save
 /// loads, and everything else short of reloading the asset." `§6.1` says the
 /// frame-selector table "is transient and global. It is not part of saved
 /// state, it survives map changes and reloads".
 ///
 /// This engine keeps pristine artwork and derives each frame from a counter —
-/// the licence `§10` grants for the rotation — so the "asset buffer" here is
+/// the licence `§12.1` grants ("keep pristine artwork and derive each frame") — so the "asset buffer" here is
 /// the pair of counters below rather than mutated pixels. What matters for
 /// parity is the sentence above: **entering an area, changing scene or
 /// loading a save must not reset them.** They are therefore carried into
