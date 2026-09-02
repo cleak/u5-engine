@@ -2323,12 +2323,20 @@ impl PlayState {
         .to_string();
     }
 
+    /// `audio.md §3`: "Ctrl-S in overworld, town, combat, and dungeon command
+    /// loops prints the new `Sound On` or `Sound Off` state and flips the
+    /// boolean. The toggle command itself plays no acknowledgement sound and
+    /// consumes no gameplay turn."
+    ///
+    /// The published strings carry no terminating period. `PlayState`'s field
+    /// is still named `music_enabled` for historical reasons; `audio.md §3`
+    /// calls it the sound setting, and it is the boolean this toggle flips.
     pub fn toggle_music(&mut self) {
         self.music_enabled = !self.music_enabled;
         self.message = if self.music_enabled {
-            "Music On."
+            SOUND_TOGGLE_ON_MESSAGE
         } else {
-            "Music Off."
+            SOUND_TOGGLE_OFF_MESSAGE
         }
         .to_string();
     }

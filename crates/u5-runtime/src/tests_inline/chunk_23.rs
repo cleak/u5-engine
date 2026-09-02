@@ -5422,6 +5422,33 @@ fn combat_pass_command_has_specified_control_flow() {
     );
 }
 
+/// `audio.md §3`: Ctrl-S "prints the new `Sound On` or `Sound Off` state and
+/// flips the boolean. The toggle command itself plays no acknowledgement sound
+/// and consumes no gameplay turn."
+///
+/// The published strings are exact: no terminating period, and the noun is
+/// `Sound`, not `Music`. Nothing in `RETRACTIONS.md` withdraws either.
+#[test]
+fn ctrl_s_prints_the_published_sound_toggle_state() {
+    assert_eq!(SOUND_TOGGLE_ON_MESSAGE, "Sound On");
+    assert_eq!(SOUND_TOGGLE_OFF_MESSAGE, "Sound Off");
+
+    let mut state = combat_player_command_state(10, 10);
+    let before = state.sound_effect_serial;
+    assert!(state.music_enabled);
+
+    state.toggle_music();
+    assert!(!state.music_enabled);
+    assert_eq!(state.message, SOUND_TOGGLE_OFF_MESSAGE);
+
+    state.toggle_music();
+    assert!(state.music_enabled);
+    assert_eq!(state.message, SOUND_TOGGLE_ON_MESSAGE);
+
+    // "The toggle command itself plays no acknowledgement sound".
+    assert!(state.sound_effects_after(before).is_empty());
+}
+
 #[test]
 fn combat_ctrl_s_and_escape_are_no_turn_top_level_controls() {
     let game_dir = std::path::Path::new(".");
@@ -5435,7 +5462,7 @@ fn combat_ctrl_s_and_escape_are_no_turn_top_level_controls() {
     assert!(!state.music_enabled);
     assert_eq!(state.turn, 0);
     assert_eq!(state.pending_combat_actor_slot, None);
-    assert_eq!(state.message, "Music Off.");
+    assert_eq!(state.message, "Sound Off");
     assert_eq!(
         (state.combat_actors[8].x, state.combat_actors[8].y),
         (10, 10)

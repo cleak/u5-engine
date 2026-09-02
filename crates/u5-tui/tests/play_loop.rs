@@ -285,7 +285,7 @@ fn music_toggle_token_maps_to_ctrl_s_and_is_visible_in_status() {
 
     assert!(!state.music_enabled);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "Music Off.");
+    assert_eq!(state.message, "Sound Off");
     assert!(play_script_state_line(&state).contains("music off"));
     assert!(state.z_stats_message().contains("music off"));
 
@@ -294,7 +294,7 @@ fn music_toggle_token_maps_to_ctrl_s_and_is_visible_in_status() {
         PlayInputDisposition::Continue
     );
     assert!(state.music_enabled);
-    assert_eq!(state.message, "Music On.");
+    assert_eq!(state.message, "Sound On");
 }
 
 // from chunk_18

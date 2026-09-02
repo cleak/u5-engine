@@ -794,10 +794,31 @@
         let _ = fs::remove_dir_all(dir);
     }
 
-    /// `encounters.md §4`, Shadow Lord arena branch: "if the party is
-    /// carrying the Sceptre of Lord British, entering that fight prints
-    /// the sceptre-reclaimed message, plays a tone, and clears the
-    /// sceptre flag. The arena is 10 either way."
+    fn shadow_lord_trigger_object() -> ActiveObject {
+        let shadow_lord_type = COMBAT_CLASS_SHADOW_LORD * 4 + OUTDOOR_COMBAT_TYPE_FIRST;
+        ActiveObject {
+            type_byte: shadow_lord_type,
+            tile: shadow_lord_type,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        }
+    }
+
+    /// `encounters.md §4`, Shadow Lord arena branch. "The arena is 10 either
+    /// way, and the branch runs entirely inside encounter setup, before the
+    /// combat scene is entered." In order, and only when the sceptre is held:
+    ///
+    /// 1. "Print exactly `The Sceptre is reclaimed!` followed by one newline.
+    ///    There is no terminating period and no leading blank line."
+    /// 2. "Play the sceptre-reclaimed sting (`audio.md` section 8.4.1)."
+    /// 3. "Clear the sceptre flag."
+    ///
+    /// "The order matters for a transcript: the line completes before the
+    /// sting starts, and the flag clears last."
     #[test]
     fn terrain_combat_shadow_lord_entry_reclaims_the_sceptre() {
         let dir = debug_game_dir();
@@ -808,25 +829,83 @@
         .unwrap();
         let mut state = world_state(open_world_grid(), 5, 5);
         state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
-        let shadow_lord_type =
-            COMBAT_CLASS_SHADOW_LORD * 4 + OUTDOOR_COMBAT_TYPE_FIRST;
-        let object = ActiveObject {
-            type_byte: shadow_lord_type,
-            tile: shadow_lord_type,
-            x: 6,
-            y: 5,
-            z: WorldPlane::Britannia.save_floor(),
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        };
+        let before = state.sound_effect_serial;
 
         let message = state
-            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, object)
+            .enter_terrain_combat_from_world_object(
+                &dir,
+                WorldPlane::Britannia,
+                1,
+                shadow_lord_trigger_object(),
+            )
             .unwrap();
 
         assert!(message.contains("BRIT.CBT arena 10"), "{message}");
         assert_eq!(state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX], 0);
+
+        // Step 1: the exact published line, with no terminating period, and
+        // printed after the conflict banner rather than before it.
+        assert_eq!(SCEPTRE_RECLAIMED_LINE, "The Sceptre is reclaimed!");
+        let texts: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let banner_at = texts
+            .iter()
+            .position(|text| *text == COMBAT_BANNER)
+            .expect("the conflict banner is printed");
+        let line_at = texts
+            .iter()
+            .position(|text| *text == SCEPTRE_RECLAIMED_LINE)
+            .expect("the sceptre line is printed");
+        assert!(banner_at < line_at, "{texts:?}");
+
+        // Step 2: the sting. `audio.md §8.4.1` — "It is the only caller of
+        // this recipe."
+        assert_eq!(
+            state.sound_effects_after(before),
+            vec![SoundEffect::SceptreReclaimed]
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `encounters.md §4`: "If the sceptre is not held, none of the three
+    /// happen and setup proceeds directly to arena entry."
+    #[test]
+    fn terrain_combat_shadow_lord_entry_without_the_sceptre_is_silent() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 0;
+        let before = state.sound_effect_serial;
+
+        let message = state
+            .enter_terrain_combat_from_world_object(
+                &dir,
+                WorldPlane::Britannia,
+                1,
+                shadow_lord_trigger_object(),
+            )
+            .unwrap();
+
+        // The arena is 10 either way.
+        assert!(message.contains("BRIT.CBT arena 10"), "{message}");
+        assert!(
+            !state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text == SCEPTRE_RECLAIMED_LINE)
+        );
+        assert!(
+            !state
+                .sound_effects_after(before)
+                .contains(&SoundEffect::SceptreReclaimed)
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
