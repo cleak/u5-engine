@@ -6352,7 +6352,7 @@ fn validate_route_smoke_case_state(
                 || state.player.y != HARPSICHORD_ROUTE_OFF_CHAIR_Y - 1
                 || state.harpsichord_progress() != 0
                 || passage != HARPSICHORD_ROUTE_WALL_TILE
-                || state.message != "Unhandled command `5`."
+                || state.message != "What?"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not forward its digits to the ordinary dispatcher:                      turn={}, party at ({}, {}), progress={}, passage tile {passage:#04x}, message {:?}",

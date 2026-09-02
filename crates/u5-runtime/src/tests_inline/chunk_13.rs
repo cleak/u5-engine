@@ -24385,7 +24385,7 @@ fn z_stats_selector_cancels_with_the_observed_none_result() {
                 .unwrap()
         );
         assert!(state.active_party_selector.is_some());
-        assert_eq!(state.roster_box_label(), Some("Select:"));
+        assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
         assert_eq!(
             transcript_texts(&state),
             vec!["Z-stats...", PARTY_SELECTION_PROMPT]
@@ -24426,7 +24426,7 @@ fn use_picker_labels_the_roster_box_for_the_panel_renderer() {
             .handle_top_down_key_with_inline('U', Path::new(""), None, None, None, None)
             .unwrap()
     );
-    assert_eq!(state.roster_box_label(), Some("Items:"));
+    assert_eq!(state.roster_box_label().as_deref(), Some("Items:"));
     assert_eq!(state.selector_highlight(), None);
 }
 
@@ -24597,7 +24597,7 @@ fn transcript_is_capped_so_a_long_session_cannot_grow_without_bound() {
 #[test]
 fn top_down_uppercase_command_letters_preempt_vi_movement() {
     for (key, expected) in [
-        ('A', "Attack where?"),
+        ('A', "Attack-"),
         ('C', "Spell name:"),
         ('D', "What?"),
         ('M', MMIX_SPELL_PROMPT_MESSAGE),

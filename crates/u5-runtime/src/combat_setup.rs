@@ -1858,27 +1858,36 @@ mod combat_setup_batch_tests {
     /// player's arena cell", and §8 prompts one combatant at a time, so the
     /// selector the box reads has to follow the actor the round walk parked
     /// on rather than whichever member was selected outside the fight.
+    ///
+    /// It must do so **without** writing the resident active-player
+    /// selector: `stats-panel.md §4.1` draws the roster's `0x1A` arrow
+    /// from that selector, and a capture of the original's combat panel
+    /// shows the acting member's row inverted with no arrow on it.
     #[test]
-    fn the_pending_combat_actor_becomes_the_active_player() {
+    fn the_combat_cursor_follows_the_pending_actor_without_moving_the_roster_marker() {
         let (mut state, dir) = batch_combat_state(&[b'G', b'D', b'G', b'G']);
         let (active_objects, actors) = seat_batch_party(&mut state);
         state.active_objects = active_objects;
         state.combat_actors = actors;
-        state.active_player = Some(0);
+        state.active_player = None;
 
         // Descriptor two carries roster slot three in a party packed by the
         // dead member at roster slot one.
         state.pending_combat_actor_slot = Some(2);
-        state.select_active_player_for_pending_combat_actor();
 
-        assert_eq!(state.active_player, Some(3));
+        assert_eq!(state.combat_cursor_roster_slot(), Some(3));
         assert_eq!(state.combat_cursor_actor_cell(), Some(BATCH_SEATS[3]));
+        assert_eq!(
+            state.active_player, None,
+            "the round walk must not move the roster arrow"
+        );
 
-        // With nobody parked on, the selector is left where it stands.
+        // With nobody parked on, the box falls back to the player's own
+        // `0`-command selection.
         state.pending_combat_actor_slot = None;
-        state.select_active_player_for_pending_combat_actor();
+        state.active_player = Some(3);
 
-        assert_eq!(state.active_player, Some(3));
+        assert_eq!(state.combat_cursor_actor_cell(), Some(BATCH_SEATS[3]));
         let _ = fs::remove_dir_all(dir);
     }
 }

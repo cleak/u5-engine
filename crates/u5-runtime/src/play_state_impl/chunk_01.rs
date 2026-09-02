@@ -157,7 +157,21 @@ impl PlayState {
             }
             Some(true) => {
                 self.write_save_files_with_entry_required_disk(game_dir, entry_required_disk)?;
-                self.message = "Yes. Saving... Done.".to_string();
+                // `save-load.md §5.2` steps 2 and 8: on `Y` the handler
+                // "prints `Yes` followed by `Saving...`", and after the
+                // write it "prints `Done.`". The reply lands on the
+                // still-open `Save game?` line - the original renders
+                // `Save game? Yes` / `Saving...` / `Done.` on three rows,
+                // not one wrapped run.
+                if !self.complete_open_direction_echo(
+                    SAVE_PROMPT_MESSAGE,
+                    &format!(" {SAVE_PROMPT_YES_REPLY}"),
+                ) && !self.complete_open_direction_echo(SAVE_PROMPT_LINE, SAVE_PROMPT_YES_REPLY)
+                {
+                    self.emit_message_line(SAVE_PROMPT_YES_REPLY);
+                }
+                self.emit_message_line(SAVE_IN_PROGRESS_MESSAGE);
+                self.emit_message_line(SAVE_DONE_MESSAGE);
                 Ok(MoveOutcome::Saved)
             }
         }

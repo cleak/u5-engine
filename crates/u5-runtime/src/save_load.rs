@@ -674,6 +674,13 @@ pub const INIT_OOL_FILENAME: &str = "INIT.OOL";
 /// echo the chosen branch label, announce the disk activity, and
 /// confirm completion.
 pub const SAVE_PROMPT_MESSAGE: &str = "Save game?";
+/// The same prompt as the input cursor sees it.
+///
+/// Runtime observation, spec silent: `save-load.md §5.2` step 1 gives
+/// the prompt text but not its trailing space. A capture of the
+/// original shows `Save game? ` with the barber-pole cursor in the cell
+/// after that space, and the `Yes` reply landing in the same cell.
+pub const SAVE_PROMPT_LINE: &str = "Save game? ";
 pub const SAVE_PROMPT_YES_REPLY: &str = "Yes";
 pub const SAVE_PROMPT_NO_REPLY: &str = "No";
 pub const SAVE_IN_PROGRESS_MESSAGE: &str = "Saving...";

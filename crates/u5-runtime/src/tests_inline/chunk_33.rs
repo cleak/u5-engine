@@ -52,7 +52,7 @@ fn town_digit_falls_through_to_the_ordinary_dispatcher_when_not_seated() {
     // `5` has no ordinary binding, so the forwarded result is the
     // dispatcher's own refusal rather than anything the instrument printed.
     play_digits(&mut state, &[5]);
-    assert_eq!(state.message, "Unhandled command `5`.");
+    assert_eq!(state.message, "What?");
 
     assert_eq!(state.harpsichord_progress(), 0);
     assert!(state.sound_effects_after(0).is_empty());
@@ -66,7 +66,7 @@ fn town_digit_reaches_the_instrument_only_from_the_cell_north_of_it() {
     state.grid[9 * 32 + 10] = HARPSICHORD_TILE;
 
     play_digits(&mut state, &[5]);
-    assert_eq!(state.message, "Unhandled command `5`.");
+    assert_eq!(state.message, "What?");
     assert!(state.sound_effects_after(0).is_empty());
 
     state.grid[9 * 32 + 10] = 16;
@@ -167,7 +167,7 @@ fn harpsichord_progress_is_not_cleared_by_leaving_the_chair() {
     state.player.x = 4;
     state.player.y = 4;
     play_digits(&mut state, &[5]);
-    assert_eq!(state.message, "Unhandled command `5`.");
+    assert_eq!(state.message, "What?");
     assert_eq!(state.harpsichord_progress(), 6);
 
     state.player.x = 10;

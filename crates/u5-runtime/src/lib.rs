@@ -346,7 +346,8 @@ pub use input_codes::{
     party_target_selector_action, party_target_selector_result,
 };
 pub use input_dispatch::{
-    PlayInputDisposition, advance_paced_combat_presentation, handle_play_key_input,
+    PlayInputDisposition, UNRECOGNISED_COMMAND_MESSAGE, advance_paced_combat_presentation,
+    handle_play_key_input,
 };
 pub use intro::{
     BRITISH_PTH_PEN_ORIGINS, INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,
@@ -696,20 +697,21 @@ pub use stats_panel::{
     INN_PICKUP_REGISTER_FRAME_RIGHT, INN_PICKUP_REGISTER_INITIAL_RIGHT, INN_PICKUP_REGISTER_LEFT,
     INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX, INN_PICKUP_REGISTER_TOP, MAIN_TEXT_WINDOW_INDEX,
     MESSAGE_TEXT_WINDOW_INDEX, MESSAGE_TEXT_WINDOW_RIGHT, PROMPT_TEXT_WINDOW_INDEX,
-    SHOP_SIDE_PANEL_LEFT_BORDER_COLUMN, SHOP_SIDE_PANEL_RIGHT_BORDER_COLUMN, STATS_PANEL_HP_CELLS,
-    STATS_PANEL_MIDDLE_COUNTER_COLUMN, STATS_PANEL_NAME_CELLS, STATS_PANEL_PARTY_ROWS,
-    STATS_PANEL_SHIP_HULL_LABEL, STATS_PANEL_SHIP_HULL_PAD_BELOW, STATS_PANEL_TEXT_BOTTOM,
-    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_TOP,
-    STATS_PANEL_TEXT_WINDOW_INDEX, STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN,
-    STATS_PANEL_TIMED_EFFECT_LOCAL_ROW, STATS_PANEL_WIDTH, StatsPanelCombatRowOverlay,
-    TALK_SHOP_TEXT_WINDOW_INDEX, UNUSED_TEXT_WINDOW_INDEX, active_arms_sell_browser,
-    active_arms_sell_page_indicator, active_shop_side_panel_border_rows, arms_sell_browser_row,
-    arms_sell_page_indicator_bytes, configure_play_text_windows, configure_talk_shop_text_window,
-    paint_arms_sell_browser_text_window, paint_inn_pickup_register_text_window,
-    paint_message_text_window, paint_prompt_text_window, paint_prompt_text_window_with_cursor,
-    paint_stats_panel_text_window, paint_talk_shop_text_window, render_play_text_window_ascii,
-    render_play_text_window_system, render_stats_panel, stats_panel_active_cursor_resets,
-    stats_panel_active_cursor_visible, stats_panel_combat_row_overlay,
+    SHOP_SIDE_PANEL_LEFT_BORDER_COLUMN, SHOP_SIDE_PANEL_RIGHT_BORDER_COLUMN,
+    STATS_PANEL_ACTIVE_MARKER_ASCII, STATS_PANEL_HP_CELLS, STATS_PANEL_MIDDLE_COUNTER_COLUMN,
+    STATS_PANEL_NAME_CELLS, STATS_PANEL_PARTY_ROWS, STATS_PANEL_SHIP_HULL_LABEL,
+    STATS_PANEL_SHIP_HULL_PAD_BELOW, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_TOP, STATS_PANEL_TEXT_WINDOW_INDEX,
+    STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN, STATS_PANEL_TIMED_EFFECT_LOCAL_ROW, STATS_PANEL_WIDTH,
+    StatsPanelCombatRowOverlay, TALK_SHOP_TEXT_WINDOW_INDEX, UNUSED_TEXT_WINDOW_INDEX,
+    active_arms_sell_browser, active_arms_sell_page_indicator, active_shop_side_panel_border_rows,
+    arms_sell_browser_row, arms_sell_page_indicator_bytes, configure_play_text_windows,
+    configure_talk_shop_text_window, paint_arms_sell_browser_text_window,
+    paint_inn_pickup_register_text_window, paint_message_text_window, paint_prompt_text_window,
+    paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
+    paint_talk_shop_text_window, render_play_text_window_ascii, render_play_text_window_system,
+    render_stats_panel, stats_panel_active_cursor_resets, stats_panel_active_cursor_visible,
+    stats_panel_combat_row_overlay,
 };
 pub use stonegate_trapdoor::*;
 pub use story_io::{

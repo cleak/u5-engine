@@ -22,9 +22,13 @@ fn z_stats_pages_paint_their_published_border_labels() {
 
     assert_eq!(state.z_stats(), MoveOutcome::Observed);
 
+    // Runtime observation: the two character-specific pages have no
+    // *page* label in `§4.7`'s table, and a capture of the original
+    // shows the selected member's own name framed there instead.
+    let member = state.party_member_display_name(0);
     let expected = [
-        (ZStatsPage::Stats, None),
-        (ZStatsPage::Equipment, None),
+        (ZStatsPage::Stats, Some(member.as_str())),
+        (ZStatsPage::Equipment, Some(member.as_str())),
         (ZStatsPage::Reagents, Some("Reagents")),
         (ZStatsPage::Spells, Some("Spells")),
         (ZStatsPage::SpecialUse, Some("Items:")),
@@ -41,7 +45,7 @@ fn z_stats_pages_paint_their_published_border_labels() {
             "page sequence diverged at step {index}"
         );
         assert_eq!(
-            state.roster_box_label(),
+            state.roster_box_label().as_deref(),
             label,
             "border label wrong on {page:?}"
         );
@@ -83,12 +87,13 @@ fn empty_z_stats_pages_print_the_published_placeholders() {
         state.active_z_stats.as_ref().map(|session| session.page),
         Some(ZStatsPage::Equipment)
     );
+    // `inventory.md §4.7`: the page body is drawn over the panel.
+    let panel = z_stats_panel_text(&state);
     assert!(
-        state.message.contains(Z_STATS_NONE_READY_PLACEHOLDER),
-        "equipment page message was {:?}",
-        state.message
+        panel.contains(Z_STATS_NONE_READY_PLACEHOLDER),
+        "equipment page panel was {panel:?}"
     );
-    assert!(!state.message.contains("Nothing equipped."));
+    assert!(!panel.contains("Nothing equipped."));
 
     // The Items page is the only zero-filtered inventory page whose scanner
     // can run out of displayable rows in this fixture.
@@ -99,12 +104,22 @@ fn empty_z_stats_pages_print_the_published_placeholders() {
         state.active_z_stats.as_ref().map(|session| session.page),
         Some(ZStatsPage::SpecialUse)
     );
+    let panel = z_stats_panel_text(&state);
     assert!(
-        state.message.contains(Z_STATS_NONE_OWNED_PLACEHOLDER),
-        "items page message was {:?}",
-        state.message
+        panel.contains(Z_STATS_NONE_OWNED_PLACEHOLDER),
+        "items page panel was {panel:?}"
     );
-    assert!(!state.message.contains("None."));
+    assert!(!panel.contains("None."));
+}
+
+/// `inventory.md §4.7`: a live Z-stats page draws its body over the stats
+/// panel, so page content is read from there, not from the message window.
+fn z_stats_panel_text(state: &PlayState) -> String {
+    let session = state
+        .active_z_stats
+        .clone()
+        .expect("a live Z-stats page to read");
+    state.z_stats_panel_rows(&session).join("|")
 }
 
 /// `magic.md §5` Step 2: "The echo shown while typing is friendlier than the

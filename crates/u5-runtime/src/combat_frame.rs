@@ -5529,30 +5529,31 @@ impl PlayState {
             .find(|slot| self.combat_roster_slot_for_actor_slot(*slot) == Some(roster_slot))
     }
 
-    /// Point the resident active-player selector at the combat actor the
-    /// round walk just parked on.
+    /// The roster slot the combat cursor box is drawn on.
     ///
-    /// `combat.md §7` draws the cursor box "around the eligible active
-    /// player's arena cell" and `stats-panel.md §4.1` puts the roster marker
-    /// on the selected member; both read this one selector. Nothing else
-    /// moved it during a fight, so the box and the marker stayed on whichever
-    /// member the exploration gate had selected instead of following the
-    /// character being prompted - which is the member the original draws the
-    /// white box around.
-    pub(crate) fn select_active_player_for_pending_combat_actor(&mut self) {
-        let Some(slot) = self.pending_combat_actor_slot else {
-            return;
-        };
-        if let Some(roster_slot) = self.combat_roster_slot_for_actor_slot(slot) {
-            self.active_player = Some(roster_slot);
-        }
+    /// `combat.md §7` draws the box "around the eligible active player's
+    /// arena cell" and §8 prompts one combatant at a time, so the box
+    /// follows the actor the round walk parked on.
+    ///
+    /// This is deliberately **not** the resident active-player selector
+    /// that `stats-panel.md §4.1` draws the roster arrow from. The
+    /// engine used to write the round walk's actor into that selector,
+    /// which put a `0x1A` arrow on the acting member's roster row; a
+    /// capture of the original shows the acting member's row inverted
+    /// with no arrow on it and no arrow anywhere else in the panel, so
+    /// the fight never moves the shared selector.
+    pub(crate) fn combat_cursor_roster_slot(&self) -> Option<usize> {
+        self.pending_combat_actor_slot
+            .and_then(|slot| self.combat_roster_slot_for_actor_slot(slot))
+            .or(self.active_player)
     }
 
     pub(crate) fn combat_cursor_actor_cell(&self) -> Option<(u8, u8)> {
-        // The active-player sentinel names a roster slot; the cursor is
-        // drawn on that character's descriptor, found through its
-        // owner/target/class byte (`combat.md §5`).
-        let slot = self.combat_party_descriptor_slot_for_roster_slot(self.active_player?)?;
+        // The selector names a roster slot; the cursor is drawn on that
+        // character's descriptor, found through its owner/target/class
+        // byte (`combat.md §5`).
+        let slot =
+            self.combat_party_descriptor_slot_for_roster_slot(self.combat_cursor_roster_slot()?)?;
         let actor = *self.combat_actors.get(slot)?;
         if !combat_actor_is_active_not_dead(actor)
             || self.combat_target_group_for_slot(slot) != COMBAT_TARGET_GROUP_PARTY
@@ -5866,7 +5867,6 @@ impl PlayState {
             };
             if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
                 self.pending_combat_actor_slot = ready_player_slot_from_round_walk(&application);
-                self.select_active_player_for_pending_combat_actor();
             }
             let should_stop = !matches!(
                 application.stop_reason,

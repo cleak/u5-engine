@@ -130,6 +130,20 @@ impl PlayState {
         self.message_flushed = text;
     }
 
+    /// Emit one line that the turn loop's own prompt marker belongs to.
+    ///
+    /// `text-output.md §10.2`: the mode loop emits the newline and the
+    /// end-cap marker **before** it reads the key, so "echoed command
+    /// lines carry it and pure output lines do not". A refusal the
+    /// dispatcher prints in place of a verb echo - the `What?` of
+    /// `commands.md §5.2` - is written onto that already-marked line.
+    pub fn emit_command_echo_line(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.push_message_entry(text.clone(), true);
+        self.message = text.clone();
+        self.message_flushed = text;
+    }
+
     /// Emit one font-preserving TLK response immediately.
     pub fn emit_tlk_message(&mut self, rendered: TlkRenderedText) {
         self.push_tlk_message_transcript_lines(&rendered);

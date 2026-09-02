@@ -190,6 +190,11 @@ pub struct MessageWindowRow {
 pub struct MessageWindowLayout {
     /// Rows to draw, top to bottom.
     pub rows: Vec<MessageWindowRow>,
+    /// Absolute `(column, row)` of the input cursor when a prompt keeps
+    /// its own line open, so the cursor belongs on that line rather
+    /// than on a fresh live row. `None` leaves the cursor where the
+    /// renderer's ordinary rule puts it - after the last placed row.
+    pub inline_cursor: Option<(u8, u8)>,
 }
 
 impl MessageWindowLayout {
@@ -265,6 +270,38 @@ pub fn layout_message_window(
     log: &GameplayMessageLog,
     live_input: Option<&str>,
 ) -> MessageWindowLayout {
+    layout_message_window_with_open_prompt(log, live_input, None)
+}
+
+/// Place a log with a prompt that is still waiting for a key.
+///
+/// `text-output.md §10.6`: "Typed input happens on the message window's
+/// own last row, so the visible layout is a log whose final line is
+/// being edited — for example `Player: ` followed by the input cursor".
+/// `commands.md §5.1` puts the cursor "in the cell immediately to the
+/// right of the prompt triangle" for a fresh input line, but a prompt
+/// such as `Player:_` or `Save game?` has already opened its own line,
+/// so no new prompt row is started and no end-cap triangle is drawn:
+/// the cursor sits one cell past the prompt text on that same row.
+///
+/// `open_prompt` is the prompt literal. It is honoured only when the
+/// log's newest row is that prompt, so a line that has already been
+/// answered (`Player: None!`) falls back to the ordinary live row.
+pub fn layout_message_window_with_open_prompt(
+    log: &GameplayMessageLog,
+    live_input: Option<&str>,
+    open_prompt: Option<&str>,
+) -> MessageWindowLayout {
+    let open_prompt = open_prompt.filter(|prompt| {
+        log.lines()
+            .last()
+            .is_some_and(|line| line.text == prompt.trim_end())
+    });
+    let live_input = if open_prompt.is_some() {
+        None
+    } else {
+        live_input
+    };
     let mut rows = Vec::new();
     let history_rows = match live_input {
         Some(_) => MESSAGE_WINDOW_HISTORY_ROWS,
@@ -309,7 +346,25 @@ pub fn layout_message_window(
             prefixed: true,
         });
     }
-    MessageWindowLayout { rows }
+    // The cursor cell is the one the prompt literal leaves the cursor
+    // in, measured from the row's own first column and counting the
+    // literal's trailing space (which the drawn row has trimmed).
+    // `Player: ` starts in column 24 and puts the cursor in 32;
+    // `Open-` starts in column 25 - one past its end cap - and puts it
+    // in 30, which is where the direction word then lands.
+    let inline_cursor = open_prompt.and_then(|prompt| {
+        rows.last().map(|row| {
+            (
+                (row.column as usize + prompt.chars().count()).min(MESSAGE_WINDOW_RIGHT as usize)
+                    as u8,
+                row.row,
+            )
+        })
+    });
+    MessageWindowLayout {
+        rows,
+        inline_cursor,
+    }
 }
 
 fn wrap_rendered_to_width(

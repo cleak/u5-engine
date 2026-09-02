@@ -47,7 +47,9 @@
             handle_play_key_input(&mut town, '?', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(town.message, "Unhandled command `?`.");
+        // `commands.md §5.2` verb-echo table, last row: any unmapped
+        // key prints `What?`.
+        assert_eq!(town.message, "What?");
         assert_eq!(town.turn, 0);
     }
 
