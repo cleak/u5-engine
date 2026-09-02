@@ -588,3 +588,305 @@ fn the_compositor_variant_is_stable_across_animation_ticks() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// `systems/animation.md §12.4` — the fire fixtures' cumulative masked-noise
+// XOR, on the render path.
+// ---------------------------------------------------------------------------
+
+/// Build a 512-entry atlas whose fire fixture and mask tiles carry
+/// distinctive artwork. `mask_rows` is the flame silhouette: for each row,
+/// how many pixels from column zero the mask covers.
+fn fire_test_atlas(
+    fixture: u8,
+    mask_id: u8,
+    mask_colour: u8,
+    mask_rows: &[(usize, usize)],
+) -> TileAtlas {
+    let mut pixels = vec![0u8; 512 * TILE_ATLAS_TILE_PIXELS];
+    let base = usize::from(fixture) * TILE_ATLAS_TILE_PIXELS;
+    for index in 0..TILE_ATLAS_TILE_PIXELS {
+        pixels[base + index] = (index % 16) as u8;
+    }
+    let mask = usize::from(mask_id) * TILE_ATLAS_TILE_PIXELS;
+    for (row, width) in mask_rows {
+        for x in 0..*width {
+            pixels[mask + row * TILE_ATLAS_SIDE + x] = mask_colour;
+        }
+    }
+    TileAtlas {
+        depth: TileGraphicsDepth::Ega16,
+        pixels,
+        dungeon_billboards: None,
+        dungeon_sprites: None,
+    }
+}
+
+fn fire_cell_pixels(state: &mut PlayState, atlas: &TileAtlas, radius: usize) -> Vec<u8> {
+    let viewport = state
+        .render_top_down_viewport(radius, atlas)
+        .unwrap()
+        .expect("a world viewport");
+    (0..TILE_ATLAS_TILE_PIXELS)
+        .map(|index| {
+            let y = index / TILE_ATLAS_SIDE;
+            let x = index % TILE_ATLAS_SIDE;
+            viewport.pixels[((radius - 1) * TILE_ATLAS_SIDE + y) * viewport.width
+                + radius * TILE_ATLAS_SIDE
+                + x]
+        })
+        .collect()
+}
+
+/// `animation.md §12.4`: "for each fire fixture, over the whole 16x16 tile:
+/// `fixture ^= (noise AND mask)`", where "each mask is a small shape sitting
+/// exactly over its fixture's flame, so only pixels inside the flame
+/// silhouette are ever touched" and the XOR is "cumulative and ... never
+/// undone".
+///
+/// The three properties, on the render path: the drawn tile changes between
+/// successive world ticks, about half the mask's pixels change per tick, and
+/// nothing outside the mask ever moves. Capture measured "about 12.8 of
+/// those 26 pixels change per update" over the brazier's 26-pixel region.
+#[test]
+fn a_fire_fixture_flickers_inside_its_mask_and_nowhere_else() {
+    let radius = VIEWPORT_PLAYER_ROW;
+    // The measured brazier region: rows 2 through 6, four to six pixels a
+    // row, 26 pixels in all.
+    let mask_rows = [(2usize, 4usize), (3, 5), (4, 6), (5, 6), (6, 5)];
+    let fixture = fire_fixture_spec(0xB2).expect("the brazier is a published fixture");
+    assert_eq!(fixture.mask, 0xC2);
+    assert_eq!(fixture.noise, FIRE_NOISE_TILE);
+
+    let atlas = fire_test_atlas(fixture.tile, fixture.mask, FIRE_NOISE_PLANES, &mask_rows);
+    let authored: Vec<u8> = atlas
+        .tile_pixels(usize::from(fixture.tile))
+        .expect("fixture artwork")
+        .to_vec();
+
+    let mut grid = vec![0x05u8; WORLD_CELLS];
+    grid[world_cell_index(100, 99)] = fixture.tile;
+    let mut state = world_state(grid, 100, 100);
+
+    let masked: Vec<usize> = mask_rows
+        .iter()
+        .flat_map(|(row, width)| (0..*width).map(move |x| row * TILE_ATLAS_SIDE + x))
+        .collect();
+    assert_eq!(masked.len(), 26, "the measured brazier region");
+
+    // Before any world step the shipped artwork is drawn unaltered.
+    assert_eq!(
+        fire_cell_pixels(&mut state, &atlas, radius),
+        authored,
+        "a fresh clock draws the shipped art"
+    );
+
+    let ticks = 200usize;
+    let mut previous = fire_cell_pixels(&mut state, &atlas, radius);
+    let mut changed_ticks = 0usize;
+    let mut total_changed = 0usize;
+    for tick in 0..ticks {
+        state.advance_visual_tick();
+        let now = fire_cell_pixels(&mut state, &atlas, radius);
+
+        for index in 0..TILE_ATLAS_TILE_PIXELS {
+            if !masked.contains(&index) {
+                assert_eq!(
+                    now[index], authored[index],
+                    "tick {tick} pixel {index} is outside the mask"
+                );
+            }
+            // Only the planes noise tile `0x1EA` occupies may ever move.
+            assert_eq!(
+                (now[index] ^ authored[index]) & !FIRE_NOISE_PLANES,
+                0,
+                "tick {tick} pixel {index}: 0x1EA supplies only planes 0b1100"
+            );
+        }
+
+        let changed = masked.iter().filter(|i| now[**i] != previous[**i]).count();
+        total_changed += changed;
+        if changed > 0 {
+            changed_ticks += 1;
+        }
+        previous = now;
+    }
+
+    assert_eq!(
+        changed_ticks, ticks,
+        "every world tick must change the fixture"
+    );
+    let mean = total_changed as f64 / ticks as f64;
+    assert!(
+        (mean - 13.0).abs() < 2.0,
+        "about half of 26 masked pixels should change per tick, saw {mean:.2}"
+    );
+    assert_eq!(
+        state.grid[world_cell_index(100, 99)],
+        fixture.tile,
+        "the map byte is never rewritten"
+    );
+    assert_eq!(
+        static_tile_animation_family(fixture.tile),
+        None,
+        "the fixture is not a §6 tile-id family"
+    );
+}
+
+/// `animation.md §12.4`: the fire stage touches the published fixtures and
+/// nothing else. A neighbouring terrain id — and a mask id itself — must
+/// draw exactly its shipped artwork at every tick.
+#[test]
+fn non_fire_tiles_are_untouched_by_the_fire_stage() {
+    let radius = VIEWPORT_PLAYER_ROW;
+    let mask_rows = [(2usize, 4usize), (3, 5), (4, 6)];
+    let base_atlas = fire_test_atlas(0xB2, 0xC2, FIRE_NOISE_PLANES, &mask_rows);
+
+    // `0xB4` sits just past the torch/brazier/spit run, `0xC2` is a mask
+    // rather than a fixture, `0xDD` neighbours the shrine flame and `0x44`
+    // is ordinary floor.
+    for tile in [0xB4u8, 0xC2, 0xDD, 0x44] {
+        assert!(!fire_pass_animates_tile(tile), "0x{tile:02x}");
+        let mut pixels = base_atlas.pixels.clone();
+        let base = usize::from(tile) * TILE_ATLAS_TILE_PIXELS;
+        for index in 0..TILE_ATLAS_TILE_PIXELS {
+            pixels[base + index] = ((index * 7) % 16) as u8;
+        }
+        let atlas = TileAtlas {
+            depth: TileGraphicsDepth::Ega16,
+            pixels,
+            dungeon_billboards: None,
+            dungeon_sprites: None,
+        };
+        let authored: Vec<u8> = atlas
+            .tile_pixels(usize::from(tile))
+            .expect("artwork")
+            .to_vec();
+
+        let mut grid = vec![0x05u8; WORLD_CELLS];
+        grid[world_cell_index(100, 99)] = tile;
+        let mut state = world_state(grid, 100, 100);
+
+        for tick in 0..40 {
+            state.advance_visual_tick();
+            assert_eq!(
+                fire_cell_pixels(&mut state, &atlas, radius),
+                authored,
+                "0x{tile:02x} tick {tick} must not flicker"
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `systems/timing.md §8.2` — the idle pass's world step, and where it stops.
+// ---------------------------------------------------------------------------
+
+/// `timing.md §8.2`: "The shared wait tests the current scene value and
+/// performs no world step for values `0x21` through `0x7F` **inclusive**;
+/// both the bound and its inclusiveness are exact." "Implement the gate as a
+/// numeric range test on the scene value, **not** as an 'is this dungeon
+/// mode' test: the band is a strict superset of the dungeon scenes, and the
+/// intro, character-creation and Return-to-View animation states (`0x40`,
+/// `0x41`, `0x42`) also lie inside it." "Combat sets scene value `0xFF` and
+/// does run the world step."
+#[test]
+fn the_idle_world_step_is_suppressed_for_the_published_scene_band() {
+    assert_eq!(IDLE_WORLD_STEP_SUPPRESSED_FIRST, 0x21);
+    assert_eq!(IDLE_WORLD_STEP_SUPPRESSED_LAST, 0x7F);
+    for scene in 0x00u8..=0xFF {
+        assert_eq!(
+            idle_world_step_suppressed_for_scene(scene),
+            (0x21..=0x7F).contains(&scene),
+            "scene 0x{scene:02x}"
+        );
+    }
+    for scene in [0x21u8, 0x28, 0x40, 0x41, 0x42, 0x7F] {
+        assert!(idle_world_step_suppressed_for_scene(scene));
+    }
+    for scene in [SCENE_OVERWORLD, 0x01, 0x20, 0x80, SCENE_COMBAT_TEMPORARY] {
+        assert!(!idle_world_step_suppressed_for_scene(scene));
+    }
+}
+
+/// `timing.md §8.2`: "First-person dungeon scenes occupy `0x21..0x28` and
+/// therefore get no idle world step". No world step means no tile animation
+/// of any kind underground — neither the `§6` frame-selector pass nor the
+/// `§12` driver pass.
+#[test]
+fn a_dungeon_idle_tick_runs_no_world_step_at_all() {
+    let mut state = u5_runtime::test_fixtures::dungeon_state(
+        u5_runtime::test_fixtures::open_dungeon_record(),
+        0,
+        1,
+        1,
+    );
+    assert!(idle_world_step_suppressed_for_scene(
+        state.current_scene_byte()
+    ));
+
+    let animation = state.animation;
+    let water = state.water_scroll;
+    let fire = state.fire_flicker.clone();
+    for _ in 0..40 {
+        state.advance_visual_tick();
+    }
+    assert_eq!(state.animation, animation, "no §6 frame-selector pass");
+    assert_eq!(state.water_scroll, water, "no §12.2/§12.3 water pass");
+    assert_eq!(state.fire_flicker, fire, "no §12.4 fire pass");
+    assert_eq!(state.fire_flicker.steps(), 0);
+
+    // The same tick on the overworld does step the world, so the gate is
+    // the scene value and not a blanket freeze.
+    let mut surface = world_state(open_world_grid(), 100, 100);
+    surface.advance_visual_tick();
+    assert_eq!(surface.water_scroll.phase, 1);
+    assert_eq!(surface.fire_flicker.steps(), 1);
+}
+
+/// `timing.md §8.2`: "On the overworld the input helper performs one
+/// scripted step-and-wait — one world step followed by one one-tick wait —
+/// before either entering the command wait or, when sails are set,
+/// performing a bare cursor poll instead; so an **under-sail auto-advance
+/// pass costs two ticks and one world step and never enters the command wait
+/// at all**."
+///
+/// So under sail the world advances once per two idle passes. Off sail every
+/// pass is one tick and one world step.
+#[test]
+fn an_under_sail_idle_pass_costs_two_ticks_and_one_world_step() {
+    let mut state = world_state(open_world_grid(), 100, 100);
+    state.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: true,
+        hull: 77,
+        skiffs: 2,
+    };
+    assert!(state.player.transport.is_ship_under_sail());
+
+    for pass in 1..=32u32 {
+        state.advance_visual_tick();
+        assert_eq!(
+            state.fire_flicker.steps(),
+            pass.div_ceil(2),
+            "pass {pass}: one world step per two ticks under sail"
+        );
+        assert_eq!(
+            u32::from(state.water_scroll.phase),
+            pass.div_ceil(2) % u32::from(WATER_SCROLL_PHASE_COUNT)
+        );
+    }
+
+    // Furling the sails restores one world step per tick immediately.
+    state.player.transport = TransportState::Foot;
+    let before = state.fire_flicker.steps();
+    for pass in 1..=8u32 {
+        state.advance_visual_tick();
+        assert_eq!(
+            state.fire_flicker.steps(),
+            before + pass,
+            "pass {pass} on foot"
+        );
+    }
+}

@@ -63,6 +63,23 @@ pub struct PlayState {
     /// `animation.md §6` family pass and nothing else — see
     /// [`crate::water_scroll`].
     pub water_scroll: WaterScrollClock,
+    /// The driver-side fire animator's accumulated state.
+    ///
+    /// `animation.md §12.4`: the fire fixtures animate by a cumulative
+    /// masked-noise XOR with no frame set to enumerate, so unlike
+    /// [`WaterScrollClock`] this cannot be a phase counter. It rides the
+    /// same driver pass on the same tick - see [`crate::fire_flicker`].
+    pub fire_flicker: FireFlickerClock,
+    /// `timing.md §8.2`: which half of the under-sail auto-advance pass the
+    /// next idle tick is.
+    ///
+    /// "On the overworld the input helper performs one scripted
+    /// step-and-wait - one world step followed by one one-tick wait - before
+    /// either entering the command wait or, when sails are set, performing a
+    /// bare cursor poll instead; so an **under-sail auto-advance pass costs
+    /// two ticks and one world step and never enters the command wait at
+    /// all**." `false` means the next tick is the step-and-wait half.
+    pub under_sail_wait_phase: bool,
     /// `dungeon-mode.md §6.7`: shared three-frame fountain-water phase,
     /// advanced once per point-blank corridor paint.
     pub dungeon_fountain_frame: u8,

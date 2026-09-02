@@ -24876,6 +24876,17 @@ fn dungeon_post_turn_non_class_contact_reports_no_combat_class() {
     assert!(!state.message.contains("pending"));
 }
 
+/// `timing.md §8.2`: "First-person dungeon scenes occupy `0x21..0x28` and
+/// therefore get no idle world step - they run their own loop instead,
+/// which uses the same cursor-poll helper and so inherits the same one-tick
+/// pacing and four-frame cursor, but whose per-pass work is a first-person
+/// re-render and a rumble step, with no viewport rebuild, no sprite
+/// animation, no wind check and no moongate or beacon work."
+///
+/// So the dungeon idle tick advances neither objects nor the tile passes.
+/// An earlier revision of this test asserted `animation.frame == 1` here,
+/// on the narrower reading that only the object animator was suppressed
+/// underground; that reading is withdrawn.
 #[test]
 fn dungeon_idle_tick_does_not_animate_top_down_active_objects() {
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -24896,7 +24907,7 @@ fn dungeon_idle_tick_does_not_animate_top_down_active_objects() {
     assert_eq!(object.phase, 0x22);
     assert_eq!(object.tile, 192);
     assert_eq!((object.x, object.y), (3, 3));
-    assert_eq!(state.animation.frame, 1);
+    assert_eq!(state.animation.frame, 0, "no world step underground");
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
 }

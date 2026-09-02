@@ -182,12 +182,15 @@ pub fn classify_location_cell_owner(tile: u8) -> LocationCellOwner {
         return LocationCellOwner::SearchInspectable;
     }
     // What actually animates: the five published `animation.md §6` tile-id
-    // families, plus the display driver's water animator (`cleak/u5-spec#179`)
-    // — the rotated water and lava ids, and the river, coast and shore ids it
-    // composites from them. This used to read the withdrawn
-    // `tile_animation_family`, which called water a four-frame tile-id family
-    // — see the note in `tile_classes.rs`.
-    if static_tile_animation_family(tile).is_some() || water_pass_animates_tile(tile) {
+    // families, plus the display driver's own pass — `§12.2`/`§12.3`'s
+    // rotated water and lava ids with the river, coast and shore ids
+    // composited from them, and `§12.4`'s fire fixtures. This used to read
+    // the withdrawn `tile_animation_family`, which called water a four-frame
+    // tile-id family — see the note in `tile_classes.rs`.
+    if static_tile_animation_family(tile).is_some()
+        || water_pass_animates_tile(tile)
+        || fire_pass_animates_tile(tile)
+    {
         return LocationCellOwner::Animated;
     }
     match coarse_tile_class(tile) {

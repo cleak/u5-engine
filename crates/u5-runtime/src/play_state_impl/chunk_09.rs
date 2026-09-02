@@ -545,6 +545,7 @@ impl PlayState {
                     cell_x,
                     cell_y,
                     self.water_scroll,
+                    &self.fire_flicker,
                 )?;
             }
         }
@@ -667,9 +668,20 @@ impl PlayState {
                     cell_x,
                     cell_y,
                     self.water_scroll,
+                    &self.fire_flicker,
                 )?;
                 if let Some(sprite) = self.combat_render_sprite_at(arena_x, arena_y) {
-                    blit_tile_id_to_viewport(viewport, atlas, sprite, cell_x, cell_y)?;
+                    // `animation.md §12.4`: a combat field-effect tile is one
+                    // of the four the driver re-randomises every step, so the
+                    // arena's sprite pass goes through the actor-half helper.
+                    blit_actor_tile_to_viewport(
+                        viewport,
+                        atlas,
+                        sprite,
+                        cell_x,
+                        cell_y,
+                        &self.fire_flicker,
+                    )?;
                 }
             }
         }
@@ -3012,6 +3024,28 @@ impl PlayState {
         if self.white_potion_sweep.is_some() {
             return;
         }
+        // `timing.md §8.2`: "The shared wait tests the current scene value and
+        // performs no world step for values `0x21` through `0x7F`
+        // **inclusive**". "First-person dungeon scenes occupy `0x21..0x28` and
+        // therefore get no idle world step - they run their own loop instead,
+        // which uses the same cursor-poll helper and so inherits the same
+        // one-tick pacing and four-frame cursor, but whose per-pass work is a
+        // first-person re-render and a rumble step, with no viewport rebuild,
+        // no sprite animation, no wind check and no moongate or beacon work."
+        //
+        // The gate is the published **numeric range test on the scene value**,
+        // not an "is this dungeon mode" test. The engine's other scene values -
+        // overworld `0`, towns `1..=32`, combat `0xFF` - all fall outside the
+        // band and step the world as before; combat is called out explicitly
+        // as doing so.
+        if idle_world_step_suppressed_for_scene(self.current_scene_byte()) {
+            return;
+        }
+        // `timing.md §8.2`, the under-sail auto-advance pass: two ticks, one
+        // world step. The poll half advances nothing here.
+        if !self.under_sail_idle_pass_steps_the_world() {
+            return;
+        }
         // Combat and endgame own temporary active-object tables. Their
         // presentation ticks must not recreate slot zero from the saved world
         // player after an actor release (the top-down renderer observes the
@@ -3037,6 +3071,34 @@ impl PlayState {
         // flag only moved at a round boundary, and the box the original blinks
         // sat solid for a whole round. The helper is inert outside combat.
         let _ = self.apply_combat_cursor_blink_tick();
+    }
+
+    /// `timing.md §8.2`: is this idle pass the under-sail pass's world step,
+    /// or its bare cursor poll?
+    ///
+    /// "On the overworld the input helper performs one scripted step-and-wait
+    /// - one world step followed by one one-tick wait - before either entering
+    /// the command wait or, when sails are set, performing a bare cursor poll
+    /// instead; so an **under-sail auto-advance pass costs two ticks and one
+    /// world step and never enters the command wait at all**."
+    ///
+    /// So under sail the world advances on one idle pass in two, and the other
+    /// pass costs a tick and does nothing but poll. Off sail every pass is one
+    /// tick and one world step, so the phase is held at its entry value.
+    ///
+    /// The rest of that sentence - that the under-sail pass "never enters the
+    /// command wait at all", i.e. the ship auto-advances without a keystroke -
+    /// is **not** implemented. This engine still requires a command to move a
+    /// ship under sail, which is the conservative behaviour: the published
+    /// text gives the pass's cost, not the step it takes, and inventing an
+    /// auto-advance would move the party without input.
+    fn under_sail_idle_pass_steps_the_world(&mut self) -> bool {
+        if !matches!(self.area, Area::World { .. }) || !self.player.transport.is_ship_under_sail() {
+            self.under_sail_wait_phase = false;
+            return true;
+        }
+        self.under_sail_wait_phase = !self.under_sail_wait_phase;
+        self.under_sail_wait_phase
     }
 
     pub fn decay_light_counters(&mut self, units: u8) {
@@ -3145,6 +3207,14 @@ impl PlayState {
         // pixels are rolled inside the blit, so the cached tile-id
         // buffers `main-loop.md §9` guards stay valid.
         self.water_scroll.tick();
+        // `animation.md §12.4`: the same driver pass's third stage. "First
+        // the driver refreshes four actor-half 'field' tiles ... with fresh
+        // pseudo-random pixel bits from a generator the driver owns ... Then
+        // it uses one of the refreshed tiles as a noise source and, for each
+        // fire fixture, over the whole 16x16 tile: `fixture ^= (noise AND
+        // mask)`." Like the water stages it has no gate of its own (`§12.1`),
+        // so it rides this tick exactly.
+        self.fire_flicker.tick();
         // `animation.md §7`/`§10`: "after advancing phases and tile
         // selectors, the engine explicitly gives the display layer a
         // chance to make the result visible", and an implementation must
