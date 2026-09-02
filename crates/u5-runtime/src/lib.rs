@@ -147,6 +147,7 @@ pub use animation::{
     STATIC_TILE_ANIMATION_FAMILIES, STATIC_TILE_ANIMATION_PERIOD_TICKS, StaticTileAnimationFamily,
     StaticTileAnimationFamilySpec, StaticTileAnimationPass, static_tile_animation_pass,
 };
+pub use audio::{SOUND_TOGGLE_OFF_MESSAGE, SOUND_TOGGLE_ON_MESSAGE};
 pub use blackthorn::{
     ActiveBlackthornGuardDemand, BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS,
     BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD, BLACKTHORN_CAPTIVE_CELL_SCENE,

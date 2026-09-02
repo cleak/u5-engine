@@ -28,6 +28,19 @@ use std::sync::Arc;
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
+// Sound toggle
+// ---------------------------------------------------------------------------
+
+/// `audio.md §3`: Ctrl-S "prints the new `Sound On` or `Sound Off` state and
+/// flips the boolean".
+///
+/// The published strings carry no terminating period.
+pub const SOUND_TOGGLE_ON_MESSAGE: &str = "Sound On";
+
+/// `audio.md §3`. See [`SOUND_TOGGLE_ON_MESSAGE`].
+pub const SOUND_TOGGLE_OFF_MESSAGE: &str = "Sound Off";
+
+// ---------------------------------------------------------------------------
 // Timing anchors
 // ---------------------------------------------------------------------------
 

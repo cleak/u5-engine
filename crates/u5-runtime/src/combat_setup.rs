@@ -296,6 +296,11 @@ pub const fn scene_is_town_dwelling_castle_or_keep(scene_byte: u8) -> bool {
 /// party seating and before the count roll.
 pub const COMBAT_BANNER: &str = "CONFLICT";
 
+/// `encounters.md §4` Shadow Lord branch, step 1: "Print exactly
+/// `The Sceptre is reclaimed!` followed by one newline. There is no
+/// terminating period and no leading blank line."
+pub const SCEPTRE_RECLAIMED_LINE: &str = "The Sceptre is reclaimed!";
+
 /// Combat placements initialise byte seven of the renderer-facing active
 /// object to the all-ones "no linked descriptor" marker. The parallel combat
 /// descriptor owns the actual link in the other direction.
@@ -1338,12 +1343,14 @@ impl PlayState {
         })?;
         // `encounters.md §4` Shadow Lord arena branch: "if the party is
         // carrying the Sceptre of Lord British, entering that fight
-        // ... clears the sceptre flag."
+        // reclaims it ... the branch runs entirely inside encounter setup,
+        // before the combat scene is entered."
+        //
+        // Only the *test* runs here. The three published consequences are
+        // ordered against the banner and are performed below: "the line
+        // completes before the sting starts, and the flag clears last."
         let sceptre_reclaimed = base_class.class == COMBAT_CLASS_SHADOW_LORD
             && self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] != 0;
-        if sceptre_reclaimed {
-            self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 0;
-        }
 
         // Step 1/2: clear both tables, then seat the party from the
         // arena record's six party entry X/Y coordinates. Seating runs
@@ -1373,6 +1380,31 @@ impl PlayState {
         // into the transcript at the moment it is produced rather than
         // parked in the slot.
         self.emit_message_line(COMBAT_BANNER);
+
+        // `encounters.md §4` Shadow Lord branch, in the published order:
+        //
+        //   1. Print exactly `The Sceptre is reclaimed!`
+        //   2. Play the sceptre-reclaimed sting (`audio.md §8.4.1`).
+        //   3. Clear the sceptre flag.
+        //
+        // "The order matters for a transcript: the line completes before the
+        // sting starts, and the flag clears last."
+        //
+        // The line is published as following "the class banner that names the
+        // opponent". `combat.md §5` step 4 groups that encounter-name print
+        // with the conflict banner and the arena-record load; this engine
+        // emits only the conflict banner of that group, so the sceptre line
+        // follows the banner it does print. Nothing between them consumes a
+        // PRNG draw (`combat.md §5.3` step 4: "None"), so the placement of
+        // this block ahead of the count roll is draw-neutral.
+        //
+        // `audio.md §8.4.1`: entering this fight while carrying the sceptre
+        // "is the only caller of this recipe".
+        if sceptre_reclaimed {
+            self.emit_message_line(SCEPTRE_RECLAIMED_LINE);
+            self.emit_sound_effect(SoundEffect::SceptreReclaimed);
+            self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 0;
+        }
 
         // Step 4: choose the monster count. The identity-gap classes
         // carry all-zero stat rows; terrain setup still creates the lead
