@@ -1479,13 +1479,18 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             min_turn: 1,
             expected_frame_kind: "view overlay",
         },
+        // `systems/magic.md §8`: X-Ray (*Wis An Ylem*) is the second caller of
+        // the shared visibility sweep, and `catalogs/item-list.md §7.2` says
+        // that branch "does not ... enter the modal View overlay" (R327). The
+        // frame it leaves is therefore the ordinary eleven-by-eleven raster
+        // with every cell revealed, not the 32x32 class map.
         RouteSmokeCase {
-            name: "castle-x-ray-overlay",
+            name: "castle-x-ray-sweep",
             options: x_ray_view,
             script: &["C1AWY"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
-            expected_frame_kind: "view overlay",
+            expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
             name: "castle-surface-fountain-look",

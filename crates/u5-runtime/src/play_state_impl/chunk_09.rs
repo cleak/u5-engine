@@ -492,8 +492,8 @@ impl PlayState {
             io::Error::new(io::ErrorKind::InvalidInput, "viewport radius is too large")
         })?;
         let prepared = if radius == VIEWPORT_PLAYER_ROW {
-            if let Some(sweep) = self.white_potion_sweep {
-                self.prepare_white_potion_render_grid(area, radius, sweep)
+            if let Some(sweep) = self.visibility_sweep {
+                self.prepare_visibility_sweep_render_grid(area, radius, sweep)
             } else {
                 self.refresh_top_down_visibility_buffers(area, radius);
                 self.prepared_top_down_grid_from_visibility_buffers()
@@ -698,16 +698,17 @@ impl PlayState {
         Ok(())
     }
 
-    /// `catalogs/item-list.md §7.2`: White runs the ordinary visibility
-    /// producer once, then holds that completed field unchanged through all
-    /// twenty repaints. Terrain, ordinary objects, and animation are freshly
-    /// composited through the frozen field; White contributes no raster of its
-    /// own.
-    fn prepare_white_potion_render_grid(
+    /// `catalogs/item-list.md §7.2`: the shared spell/potion visibility sweep
+    /// runs the producer once — in its no-line-of-sight mode, so the field is
+    /// all 121 cells — then "the completed grid stays unchanged for all twenty
+    /// frames". Terrain, ordinary objects and animation are freshly
+    /// composited through that frozen field; the sweep "draws no colour,
+    /// circle, mask, line, or cell overlay" of its own.
+    fn prepare_visibility_sweep_render_grid(
         &self,
         area: TopDownRenderArea,
         radius: usize,
-        sweep: WhitePotionSweep,
+        sweep: VisibilitySweep,
     ) -> Vec<Option<PreparedTopDownCell>> {
         let cells = radius.saturating_mul(2).saturating_add(1);
         let px = sweep.center_x as isize;
@@ -1728,7 +1729,7 @@ impl PlayState {
     }
 
     pub fn viewport_has_animated_tiles(&self, radius: usize) -> bool {
-        if self.visibility_dirty || self.white_potion_sweep.is_some() {
+        if self.visibility_dirty || self.visibility_sweep.is_some() {
             return true;
         }
         self.viewport_has_animated_tiles_advanced_by(radius, StaticTileAnimationPass::ALL)
@@ -1745,10 +1746,11 @@ impl PlayState {
     ///
     /// Unlike [`Self::viewport_has_animated_tiles`] this is a pure question
     /// about the map and the pass. It deliberately does **not** report the
-    /// already-dirty field or a live White repaint as "animated": those two
+    /// already-dirty field or a live sweep repaint as "animated": those two
     /// say the frame is being redrawn anyway, which is the opposite of a
-    /// reason to raise the flag. `magic.md`'s White sweep in particular
-    /// "does not itself dirty the visibility field".
+    /// reason to raise the flag. The spell/potion visibility sweep in
+    /// particular "does not itself dirty the visibility grid"
+    /// (`catalogs/item-list.md §7.2`).
     pub fn viewport_has_animated_tiles_advanced_by(
         &self,
         radius: usize,
@@ -2045,6 +2047,55 @@ impl PlayState {
     ) -> Vec<bool> {
         let threshold = (radius as u32).saturating_mul(radius as u32);
         self.surface_visibility_carve_with_light_threshold(px, py, radius, threshold, wrap_world)
+    }
+
+    /// `visibility.md §4` Stage 2 — the producer's branch on the light
+    /// argument, which is **signed**. This is the entry point every caller
+    /// that can supply a sentinel must use; the carve below is only the
+    /// positive arm.
+    ///
+    /// | light | producer behaviour |
+    /// |---|---|
+    /// | positive | run the visibility carve with the value as the inclusive squared-distance threshold |
+    /// | zero | total blackout — the carve is skipped outright and the grid stays fully obscured, "the player's own cell included" |
+    /// | negative | full-fill — "every cell is populated from the world map directly, without any visibility carve, distance gate or blocker test" |
+    ///
+    /// **R327.** `visibility.md §3` previously called the negative branch
+    /// "structurally unreachable in the shipped 2D pipeline". That is
+    /// withdrawn: the redraw orchestrator still zero-extends the unsigned
+    /// lighting byte and can never present a negative value, but it is not the
+    /// producer's only caller — the spell/potion visibility sweep passes the
+    /// negative sentinel deliberately, and that branch is "the whole mechanism
+    /// of the White potion and the X-Ray spell". Implement it as live gameplay
+    /// behaviour, not as compatibility scaffolding.
+    pub fn surface_visibility_produce(
+        &self,
+        px: isize,
+        py: isize,
+        view_radius: usize,
+        light: i32,
+        wrap_world: bool,
+    ) -> Vec<bool> {
+        let side = view_radius.saturating_mul(2).saturating_add(1);
+        let cell_count = side.saturating_mul(side);
+        if light < 0 {
+            // `catalogs/item-list.md §7.2`: "no distance test, no propagation
+            // frontier, and no blocker rule on this branch: a wall does not
+            // stop the reveal, and a cell in the far corner is revealed
+            // exactly as readily as the party's own." The window bounds are
+            // the whole contract, so every cell is in.
+            return vec![true; cell_count];
+        }
+        if light == 0 {
+            return vec![false; cell_count];
+        }
+        self.surface_visibility_carve_with_light_threshold(
+            px,
+            py,
+            view_radius,
+            light as u32,
+            wrap_world,
+        )
     }
 
     /// `visibility.md §5`: `light_threshold` is the squared-distance
@@ -2608,20 +2659,29 @@ impl PlayState {
                 .is_some_and(is_town_trapdoor_live_tile)
     }
 
+    /// One frame of a blocking presentation.
+    ///
+    /// `animation.md §13.5` claim 1: "No blocking presentation runs the town
+    /// NPC schedule processor, the town object walker that moves loose
+    /// horse-family objects, or the outdoor per-turn creature walker ...
+    /// **Exceptions: none.**" What it *does* pay for is presentation state —
+    /// `catalogs/item-list.md §7.2`: "That per-frame animator step advances
+    /// sprite appearance only and **moves no actor**, so running it inside the
+    /// sweep is faithful; what the sweep must not do is walk NPCs or
+    /// creatures, and the original does not." Neither the loop nor the final
+    /// idle redraw spends a turn or calls the gameplay clock, and Negate Time
+    /// suppresses both the object and the tile animation step.
     pub fn advance_presentation_frame(&mut self) {
-        if let Some(mut sweep) = self.white_potion_sweep {
-            // The blocking White loop advances only ordinary presentation
-            // state. It neither calls the gameplay clock nor spends another
-            // action, and Negate Time suppresses both object and tile animation.
+        if let Some(mut sweep) = self.visibility_sweep {
             if !self.negate_time_active() {
                 self.animate_active_objects();
                 self.advance_animation_clock();
             }
             if sweep.frames_remaining <= 1 {
-                self.white_potion_sweep = None;
+                self.visibility_sweep = None;
             } else {
                 sweep.frames_remaining -= 1;
-                self.white_potion_sweep = Some(sweep);
+                self.visibility_sweep = Some(sweep);
             }
         }
     }
@@ -3006,10 +3066,11 @@ impl PlayState {
     }
 
     pub fn advance_visual_tick(&mut self) {
-        // A White-potion repaint advances this same presentation state from
-        // `advance_presentation_frame`. Suppress the ordinary frontend tick so
-        // one displayed White frame cannot advance objects or tiles twice.
-        if self.white_potion_sweep.is_some() {
+        // A visibility-sweep repaint advances this same presentation state
+        // from `advance_presentation_frame`. Suppress the ordinary frontend
+        // tick so one displayed sweep frame cannot advance objects or tiles
+        // twice.
+        if self.visibility_sweep.is_some() {
             return;
         }
         // Combat and endgame own temporary active-object tables. Their
@@ -3023,11 +3084,12 @@ impl PlayState {
             && !self.negate_time_active()
             && !matches!(self.area, Area::Dungeon { .. })
         {
-            // Presentation only: see
-            // [`Self::animate_active_object_sprites_only`]. A visual tick
-            // must not move an actor, because the observed original does
-            // not move one while the player is idle.
-            self.animate_active_object_sprites_only();
+            // Presentation only: see [`Self::animate_active_objects`], which
+            // per `active-objects.md §8` (R316) writes nothing but the
+            // displayed tile and the packed phase/facing byte. A visual tick
+            // must not move an actor, because the observed original does not
+            // move one while the player is idle (R315).
+            self.animate_active_objects();
         }
         self.advance_animation_clock();
         // `combat.md §7`: the shared tile-painting pass - "run by the idle
@@ -3170,40 +3232,32 @@ impl PlayState {
         }
     }
 
-    /// The per-turn animator pass: sprite phases **and** the movement the
-    /// animator owns (wind-driven ship drift, autonomous wandering).
+    /// The per-slot animator pass (`active-objects.md §8`,
+    /// `animation.md §5`). For each non-empty slot it advances the animation
+    /// phase and, at phase zero, may reroll the stored facing and the
+    /// displayed frame.
+    ///
+    /// **It cannot move anything.** "The animator's complete set of record
+    /// writes is the displayed-tile byte and the packed phase/facing byte; it
+    /// never writes a slot's column or row."
+    ///
+    /// **R316.** The withdrawn text had the phase-zero roll "turn or step them
+    /// one cell" for "hostile creature classes that wander on the overworld
+    /// (or in towns past their schedule)". Both halves are gone: there is no
+    /// animator movement path at all, so there is nothing for a collision rule
+    /// to refuse. Ambient creature movement belongs to the outdoor per-turn
+    /// walker [`Self::advance_outdoor_active_objects`], and a town's loose
+    /// horse-family roamers to the separate town object walker
+    /// [`Self::advance_town_free_roaming_active_objects`] — "town roamers,
+    /// town schedule NPCs and outdoor creatures are three separate movement
+    /// systems that happen to share this table".
+    ///
+    /// Because the pass moves nothing, it is also what a blocking
+    /// presentation is allowed to pump: `animation.md §13.5` claim 1 —
+    /// "no blocking presentation runs the town NPC schedule processor, the
+    /// town object walker ..., or the outdoor per-turn creature walker.
+    /// **Exceptions: none.**"
     pub fn animate_active_objects(&mut self) {
-        self.animate_active_objects_with_movement(true);
-    }
-
-    /// The idle presentation pass: sprite phases only, no movement.
-    ///
-    /// Runtime observation, `cleak/u5-spec#179`: the world does not advance
-    /// while the player is idle. Over a 160 s idle sample the date, food,
-    /// gold, sun/moon indicator and every status row were bit-identical,
-    /// and over a separate 28 s sample a hostile creature standing in the
-    /// tile adjacent to the party animated its sprite continuously but
-    /// **never moved to another tile and never attacked** — combat began
-    /// only once the player passed a turn. Actor movement is therefore
-    /// driven by player turns, not by wall-clock time.
-    ///
-    /// `input.md §2` agrees for the scheduled half — "NPC schedules and the
-    /// in-world clock do not advance from this idle tick" — while
-    /// `main-loop.md §9` and `animation.md §5` describe ambient wandering
-    /// as something the world tick's animator can do. The measurement is
-    /// the narrower and more direct evidence about what a player sees, so
-    /// the idle tick is presentation-only here and every wander step is
-    /// paid for out of a consumed turn by
-    /// [`Self::advance_outdoor_active_objects`] (overworld) or
-    /// [`Self::advance_town_free_roaming_active_objects`] (towns). This
-    /// mattered little at the frontend's old ~3 Hz pump; at the measured
-    /// 18.2 Hz world tick an idle party would otherwise watch creatures
-    /// jitter around it once a second.
-    pub fn animate_active_object_sprites_only(&mut self) {
-        self.animate_active_objects_with_movement(false);
-    }
-
-    fn animate_active_objects_with_movement(&mut self, movement_allowed: bool) {
         for slot in 1..self.active_objects.len() {
             if self.active_objects[slot].is_empty()
                 || (matches!(self.area, Area::Town { .. })
@@ -3211,34 +3265,8 @@ impl PlayState {
             {
                 continue;
             }
-            let phase_before_tick = self.active_objects[slot].phase;
             let tick = self.active_objects[slot].tick_phase();
-            let ship_wind =
-                if movement_allowed && self.slot_is_wind_driven_ship(slot, phase_before_tick) {
-                    // `weather.md §7`: the wind cadence counter "is stored per
-                    // active-object slot" and is not the shared animation
-                    // countdown, so carry it across the tick untouched.
-                    self.active_objects[slot].phase = merge_active_ship_cadence_phase(
-                        self.active_objects[slot].phase,
-                        phase_before_tick,
-                    );
-                    self.try_drift_active_ship(slot)
-                } else {
-                    ActiveShipWind::None
-                };
-            let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
-            let wandered = movement_allowed
-                && !ship_wind_changed
-                && !matches!(self.area, Area::Town { .. })
-                && (self.active_objects[slot].phase & 0x0f) == 0
-                && self.try_wander_active_object(slot);
-            if wandered {
-                self.active_objects[slot].phase = (self.active_objects[slot].phase & 0xf0) | 0x02;
-            }
-            if ship_wind_changed
-                || wandered
-                || matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint)
-            {
+            if matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint) {
                 if let Some(tile) = active_object_frame_tile(
                     self.active_objects[slot].type_byte,
                     self.active_objects[slot].phase,

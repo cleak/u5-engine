@@ -713,7 +713,7 @@ fn save_game_command_does_not_persist_transient_potion_presentation() {
     let base_ool = fs::read(base_dir.join("SAVED.OOL")).unwrap();
 
     let mut transient = world_state(open_world_grid(), 10, 20);
-    transient.white_potion_sweep = Some(WhitePotionSweep {
+    transient.visibility_sweep = Some(VisibilitySweep {
         frames_remaining: 7,
         pause_bios_ticks_per_frame: POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME,
         center_x: 10,
@@ -745,7 +745,7 @@ fn load_scene_starts_with_no_transient_potion_presentation() {
     let options = load_play_options_from_save(&dir).unwrap();
     let state = PlayState::load_scene(&dir, options).unwrap();
 
-    assert_eq!(state.white_potion_sweep, None);
+    assert_eq!(state.visibility_sweep, None);
     assert_eq!(state.pending_potion_flash, None);
     let _ = fs::remove_dir_all(dir);
 }

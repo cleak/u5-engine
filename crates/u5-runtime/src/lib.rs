@@ -599,8 +599,8 @@ pub use play_state_impl::{
 };
 pub use play_state_struct::{
     MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, PlayState, SOUND_EFFECT_HISTORY_CAPACITY,
-    SoundEffect, ViewOverlay, ViewOverlayKind, ViewOverlayMode, WhitePotionSweep,
-    WorldOverlayCache, WorldReturn,
+    SoundEffect, ViewOverlay, ViewOverlayKind, ViewOverlayMode, VisibilitySweep, WorldOverlayCache,
+    WorldReturn,
 };
 pub use predicates::*;
 pub use prng::*;

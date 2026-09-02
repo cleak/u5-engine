@@ -784,17 +784,27 @@ pub const SCEPTRE_BARRIER_TILE_FIRST: u8 = crate::TILE_BARRIER_FIRST;
 pub const SCEPTRE_BARRIER_TILE_LAST: u8 = crate::TILE_BARRIER_LAST;
 pub const SCEPTRE_BARRIER_DISSOLVED_TILE: u8 = 0x44;
 
-/// `catalogs/item-list.md §7.2` White-potion surface visibility-sweep
-/// frame count and per-frame pause request. In overworld and named
-/// interior scenes the white potion computes one visibility field,
-/// repaints it twenty times, requests one BIOS tick after each repaint,
-/// and then performs one ordinary idle redraw. Dungeon and combat
-/// scenes take the no-noticeable-effect branch instead.
+/// `catalogs/item-list.md §7.2` shared spell/potion visibility-sweep frame
+/// count and per-frame pause request. In overworld and named interior scenes
+/// the sweep computes one visibility field, repaints it twenty times, requests
+/// one BIOS tick after each repaint, and then performs one ordinary idle
+/// redraw. Dungeon and combat scenes take the no-noticeable-effect branch
+/// instead. Both callers — the White potion and X-Ray (*Wis An Ylem*) — use
+/// these numbers.
 pub const POTION_WHITE_SWEEP_FRAMES: u8 = 20;
 pub const POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME: u8 = 1;
-/// White passes this value directly to the ordinary visibility producer. It is
-/// an inclusive squared-distance threshold, not a linear radius.
-pub const POTION_WHITE_VISIBILITY_THRESHOLD: u8 = 32;
+
+/// `systems/visibility.md §3`/`§4`: the negative sentinel the spell/potion
+/// visibility sweep puts in the producer's light argument to select the
+/// full-fill branch — every cell of the window populated from the map, with no
+/// carve, no distance gate and no blocker test.
+///
+/// **R318/R327.** The withdrawn contract had White pass the literal `32` as an
+/// inclusive squared-distance gate admitting 101 of 121 cells, with blockers
+/// stopping propagation. That argument is never read by the producer; the
+/// branch the sweep actually takes reveals all 121 cells through walls,
+/// corners included, and is live gameplay rather than dead compatibility code.
+pub const VISIBILITY_NO_LINE_OF_SIGHT_LIGHT: i32 = -1;
 
 /// `catalogs/item-list.md §7.2` shared EGA/Tandy potion flash geometry. The
 /// rectangle is inclusive and covers the complete 176-by-176 playfield.

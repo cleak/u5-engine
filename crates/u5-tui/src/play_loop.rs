@@ -214,9 +214,10 @@ pub fn write_play_script_snapshot<W: Write>(
 }
 
 /// Complete synchronous presentation work before a terminal or headless
-/// frontend accepts another command. With an atlas, White's twenty frames run
-/// through the normal map compositor; text-only mode still advances the same
-/// presentation state even though it has no persistent pixel page to display.
+/// frontend accepts another command. With an atlas, the visibility sweep's
+/// twenty frames run through the normal map compositor; text-only mode still
+/// advances the same presentation state even though it has no persistent
+/// pixel page to display.
 pub fn complete_headless_blocking_presentations(
     state: &mut PlayState,
     tile_atlas: Option<&TileAtlas>,
@@ -225,7 +226,7 @@ pub fn complete_headless_blocking_presentations(
         let _ = run_potion_flash_soundless_timing(playback);
     }
 
-    while state.white_potion_sweep.is_some() {
+    while state.visibility_sweep.is_some() {
         let rendered = if let Some(atlas) = tile_atlas {
             state.render_top_down_base_frame(5, atlas)?.is_some()
         } else {

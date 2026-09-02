@@ -9439,11 +9439,15 @@ fn sceptre_barrier_constants_match_catalog() {
 }
 
 #[test]
-fn white_potion_sweep_constants_match_catalog() {
+fn visibility_sweep_constants_match_catalog() {
     // catalogs/item-list.md §7.2
     assert_eq!(POTION_WHITE_SWEEP_FRAMES, 20);
     assert_eq!(POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME, 1);
-    assert_eq!(POTION_WHITE_VISIBILITY_THRESHOLD, 32);
+    // R318 withdrew `POTION_WHITE_VISIBILITY_THRESHOLD = 32` and the
+    // "inclusive squared-distance threshold 32" reveal with it: the `32` is an
+    // argument the producer never reads. The sweep passes the negative
+    // no-line-of-sight sentinel instead (`systems/visibility.md §3`, R327).
+    assert!(VISIBILITY_NO_LINE_OF_SIGHT_LIGHT < 0);
 }
 
 #[test]

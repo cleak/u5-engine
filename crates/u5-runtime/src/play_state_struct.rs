@@ -315,7 +315,7 @@ pub struct PlayState {
     pub active_shrine_restoration: Option<crate::z_stats::ShrineRestorationSession>,
     pub active_wishing_well: Option<crate::z_stats::WishingWellSession>,
     pub active_view_overlay: Option<ViewOverlay>,
-    pub white_potion_sweep: Option<WhitePotionSweep>,
+    pub visibility_sweep: Option<VisibilitySweep>,
     pub active_direction_prompt: Option<crate::z_stats::DirectionPromptSession>,
     pub active_yes_no_prompt: Option<crate::z_stats::YesNoPromptSession>,
     pub town_npc_mutations: Vec<TownNpcMutation>,
@@ -364,8 +364,19 @@ impl ViewOverlayMode {
     }
 }
 
+/// The shared spell/potion visibility sweep: the body of the White potion
+/// (`catalogs/item-list.md §7.2`) and of the sixth-circle X-Ray spell
+/// *Wis An Ylem* (`systems/magic.md §8` utility effects) — "the two are the
+/// only callers of it".
+///
+/// The sweep calls the visibility producer once with the negative
+/// no-line-of-sight sentinel in the light argument, so the field it freezes is
+/// the producer's full-fill branch: all 121 cells of the eleven-by-eleven
+/// window, straight from the map, with no distance test, no propagation
+/// frontier and no blocker rule (`systems/visibility.md §3`/`§4`, corrected by
+/// R327). It then holds that unchanged field through twenty repaints.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct WhitePotionSweep {
+pub struct VisibilitySweep {
     pub frames_remaining: u8,
     pub pause_bios_ticks_per_frame: u8,
     pub center_x: usize,

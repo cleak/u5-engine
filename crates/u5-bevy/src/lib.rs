@@ -4322,7 +4322,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_peer_spell),
         },
         VisualRouteSuiteCase {
-            label: "route-castle-x-ray-overlay",
+            label: "route-castle-x-ray-sweep",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -9447,8 +9447,8 @@ fn screenshot_system(
     if !state.preset_keys_applied && !config.preset_keys.is_empty() {
         if let Some(mut visual) = visual {
             if visual.potion_flash_restore_pending.is_some()
-                || visual.state.white_potion_sweep.is_some()
-                || visual.white_idle_redraw_pending
+                || visual.state.visibility_sweep.is_some()
+                || visual.sweep_idle_redraw_pending
             {
                 // Scripted screenshot input follows the same blocking potion
                 // boundary as live keyboard input. Leave the remaining key
@@ -9609,9 +9609,9 @@ struct VisualState {
     /// Prevent the animation pump from painting a second frame in the same
     /// Update that restores a potion flash.
     skip_animation_pump_once: bool,
-    /// White owns one ordinary idle redraw immediately after its twentieth
-    /// frozen-visibility repaint.
-    white_idle_redraw_pending: bool,
+    /// The spell/potion visibility sweep owns one ordinary idle redraw
+    /// immediately after its twentieth frozen-visibility repaint.
+    sweep_idle_redraw_pending: bool,
     /// Host-side typematic state for physical movement keys. The original
     /// input loop flushes queued type-ahead after every action, so this emits
     /// at most one fresh direction at a time after an initial hold delay.
@@ -10120,7 +10120,7 @@ impl Default for VisualIntroAnimationPump {
 }
 
 fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> (bool, f32) {
-    state.white_potion_sweep.map_or_else(
+    state.visibility_sweep.map_or_else(
         || {
             let paced_combat_waiting = state.combat_active
                 && state.pace_combat_presentations
@@ -10163,15 +10163,15 @@ fn advance_gameplay_animation_pump(
     pump: &mut AnimationPump,
     delta: f32,
     interval: f32,
-    white_active: bool,
+    sweep_active: bool,
 ) -> bool {
     pump.accumulator += delta;
     if pump.accumulator < interval {
         return false;
     }
-    if white_active {
-        // White is a paced blocking presentation. Never catch up by
-        // skipping multiple visible repaints after a slow host frame.
+    if sweep_active {
+        // The visibility sweep is a paced blocking presentation. Never catch
+        // up by skipping multiple visible repaints after a slow host frame.
         pump.accumulator = 0.0;
     } else {
         pump.accumulator -= interval;
@@ -10200,10 +10200,10 @@ fn animate_static_tiles(
         return;
     }
 
-    if visual.white_idle_redraw_pending {
+    if visual.sweep_idle_redraw_pending {
         visual.state.advance_visual_tick();
         visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
-        visual.white_idle_redraw_pending = false;
+        visual.sweep_idle_redraw_pending = false;
         let v: &mut VisualState = visual.as_mut();
         let input_line = v.input_line.clone();
         let ctx = PlayFrameContext {
@@ -10220,14 +10220,14 @@ fn animate_static_tiles(
             "",
             v.prompt_cursor_visible,
         );
-        replace_visual_image_data(&mut images, &v.image_handle, rgba, "White idle redraw");
+        replace_visual_image_data(&mut images, &v.image_handle, rgba, "sweep idle redraw");
         pump.accumulator = 0.0;
         return;
     }
 
     let mut advanced = false;
-    let (white_active, interval) = visual_animation_pump_interval(&visual.state, pump.interval);
-    if advance_gameplay_animation_pump(&mut pump, time.delta_secs(), interval, white_active) {
+    let (sweep_active, interval) = visual_animation_pump_interval(&visual.state, pump.interval);
+    if advance_gameplay_animation_pump(&mut pump, time.delta_secs(), interval, sweep_active) {
         // One pump firing is one logical step. The early exits below used
         // to `break` out of a catch-up loop; they now leave this block.
         'step: {
@@ -10298,8 +10298,8 @@ fn animate_static_tiles(
         "",
         v.prompt_cursor_visible,
     );
-    if white_active && v.state.white_potion_sweep.is_none() {
-        v.white_idle_redraw_pending = true;
+    if sweep_active && v.state.visibility_sweep.is_none() {
+        v.sweep_idle_redraw_pending = true;
     }
     replace_visual_image_data(&mut images, &v.image_handle, rgba, "static tile animation");
 }
@@ -10378,7 +10378,7 @@ fn setup(
         prompt_cursor_visible: false,
         potion_flash_restore_pending: None,
         skip_animation_pump_once: false,
-        white_idle_redraw_pending: false,
+        sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
     });
     commands.remove_resource::<PendingBootstrap>();
@@ -10552,7 +10552,7 @@ fn transition_visual_intro_to_gameplay(
         prompt_cursor_visible: false,
         potion_flash_restore_pending: None,
         skip_animation_pump_once: false,
-        white_idle_redraw_pending: false,
+        sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
     });
     commands.remove_resource::<VisualIntroState>();
@@ -11902,9 +11902,11 @@ fn drive_visual(
         replace_visual_image_data(&mut images, &v.image_handle, rgba, "potion flash restore");
         return;
     }
-    if visual.state.white_potion_sweep.is_some() || visual.white_idle_redraw_pending {
-        // White is synchronous and polls no input through its twenty paced
-        // repaints and final ordinary idle redraw.
+    if visual.state.visibility_sweep.is_some() || visual.sweep_idle_redraw_pending {
+        // `catalogs/item-list.md §7.2`: the shared spell/potion visibility
+        // sweep - the White potion and X-Ray (*Wis An Ylem*) - "is
+        // synchronous, polls no input, and blocks through all twenty frames",
+        // plus its final ordinary idle redraw.
         return;
     }
     if !visual_modal_prompt_active(&visual.state) {
@@ -17670,13 +17672,13 @@ mod tests {
         );
         assert!(pump.accumulator < interval);
 
-        // The blocking White presentation keeps its stricter rule: the
+        // The blocking visibility sweep keeps its stricter rule: the
         // accumulator is pinned, so a stall never skips a visible repaint.
-        let mut white = AnimationPump::default();
+        let mut sweep = AnimationPump::default();
         assert!(advance_gameplay_animation_pump(
-            &mut white, 1.0, interval, true
+            &mut sweep, 1.0, interval, true
         ));
-        assert_eq!(white.accumulator, 0.0);
+        assert_eq!(sweep.accumulator, 0.0);
     }
 
     #[test]
@@ -20863,14 +20865,14 @@ mod tests {
     }
 
     #[test]
-    fn white_potion_animation_interval_reads_typed_playback_cadence() {
+    fn visibility_sweep_animation_interval_reads_typed_playback_cadence() {
         let mut state = world_state(open_world_grid(), 10, 20);
         let ordinary_interval = 0.25;
         assert_eq!(
             visual_animation_pump_interval(&state, ordinary_interval),
             (false, ordinary_interval)
         );
-        state.white_potion_sweep = Some(u5_runtime::WhitePotionSweep {
+        state.visibility_sweep = Some(u5_runtime::VisibilitySweep {
             frames_remaining: 20,
             pause_bios_ticks_per_frame: 3,
             center_x: 10,
@@ -21368,7 +21370,7 @@ mod tests {
         assert!(
             cases
                 .iter()
-                .any(|case| case.label == "route-castle-x-ray-overlay")
+                .any(|case| case.label == "route-castle-x-ray-sweep")
         );
         assert!(
             cases
@@ -22261,8 +22263,8 @@ mod tests {
         assert!(manifest.contains("route-dungeon-view-overlay-02-idle"));
         assert!(manifest.contains("route-castle-peer-overlay-01-c1iqw"));
         assert!(manifest.contains("route-castle-peer-overlay-02-idle"));
-        assert!(manifest.contains("route-castle-x-ray-overlay-01-c1awy"));
-        assert!(manifest.contains("route-castle-x-ray-overlay-02-idle"));
+        assert!(manifest.contains("route-castle-x-ray-sweep-01-c1awy"));
+        assert!(manifest.contains("route-castle-x-ray-sweep-02-idle"));
         assert!(manifest.contains("route-britannia-look-01-l6"));
         assert!(manifest.contains("route-britannia-look-pass-01-l6"));
         assert!(manifest.contains("route-castle-look-pass-01-l6"));

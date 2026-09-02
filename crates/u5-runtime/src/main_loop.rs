@@ -57,9 +57,19 @@ pub const fn save_scene_byte_normalised(scene_byte: u8, post_combat_home: u8) ->
 /// `main-loop.md §3` scene-byte ranges: well-known sentinels for the
 /// intro sub-states and the temporary combat marker.
 /// `main-loop.md §9` world-tick branch the redraw orchestrator
-/// dispatches to. The orchestrator runs between keystrokes from
-/// inside the input pipeline's idle wait; it does not run while
-/// prompt mode is active.
+/// dispatches to.
+///
+/// "The input pipeline's idle wait is where the world tick runs most
+/// often, but it is not the only caller: presentations, cutscene beats
+/// and paced turn loops call it directly, dozens of call sites across
+/// the resident image and the overlays." What the idle wait owns is the
+/// *idle* pump, and that pump does not run while prompt mode is active.
+///
+/// **R319.** `main-loop.md §9` previously said "the world tick is **only**
+/// called from inside the input pipeline's idle wait". That is withdrawn:
+/// "an engine that can reach its world tick only from an idle poll cannot
+/// implement the paced presentations at all" — see
+/// [`PlayState::advance_presentation_frame`] and `animation.md §13`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorldTickPath {
     /// Combat scene — blat-copy the precomputed combat terrain
