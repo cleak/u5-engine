@@ -1853,4 +1853,32 @@ mod combat_setup_batch_tests {
         assert_eq!(state.combat_cursor_actor_cell(), Some(BATCH_SEATS[3]));
         let _ = fs::remove_dir_all(dir);
     }
+
+    /// `combat.md §7`: the cursor box is drawn "around the eligible active
+    /// player's arena cell", and §8 prompts one combatant at a time, so the
+    /// selector the box reads has to follow the actor the round walk parked
+    /// on rather than whichever member was selected outside the fight.
+    #[test]
+    fn the_pending_combat_actor_becomes_the_active_player() {
+        let (mut state, dir) = batch_combat_state(&[b'G', b'D', b'G', b'G']);
+        let (active_objects, actors) = seat_batch_party(&mut state);
+        state.active_objects = active_objects;
+        state.combat_actors = actors;
+        state.active_player = Some(0);
+
+        // Descriptor two carries roster slot three in a party packed by the
+        // dead member at roster slot one.
+        state.pending_combat_actor_slot = Some(2);
+        state.select_active_player_for_pending_combat_actor();
+
+        assert_eq!(state.active_player, Some(3));
+        assert_eq!(state.combat_cursor_actor_cell(), Some(BATCH_SEATS[3]));
+
+        // With nobody parked on, the selector is left where it stands.
+        state.pending_combat_actor_slot = None;
+        state.select_active_player_for_pending_combat_actor();
+
+        assert_eq!(state.active_player, Some(3));
+        let _ = fs::remove_dir_all(dir);
+    }
 }

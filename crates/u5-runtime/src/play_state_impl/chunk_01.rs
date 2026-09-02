@@ -730,7 +730,13 @@ impl PlayState {
                 .map(PendingVehicleSaveState::from_acquisition)
                 .unwrap_or(options.pending_vehicle_save),
             turn: 0,
-            message: format!("Entered {} at ({x}, {y}).", scene.key()),
+            // `cleak/u5-spec#81` dropped the dungeon entry line for the same
+            // reason this town one goes: no `systems/` document publishes a
+            // scene-entry narration, and the line printed the party's raw map
+            // coordinates and an internal scene key. `town-mode.md` has the
+            // entry paint the frame and nothing else. The route harness reads
+            // position from `play_script_state_line`, not from this slot.
+            message: String::new(),
             message_transcript: Vec::new(),
             message_transcript_revision: 0,
             message_flushed: String::new(),
@@ -1302,11 +1308,12 @@ impl PlayState {
             sail_stall_pending: false,
             pending_vehicle_save,
             turn: 0,
-            message: format!(
-                "Entered {} at ({x}, {y}). {}.",
-                plane.key(),
-                wind_status_message_from_state_and_save_byte(options.wind, options.wind_save_byte)
-            ),
+            // As above for the coordinate half. The wind half is a duplicate:
+            // `text-output.md §10.7` puts the prevailing wind in the
+            // viewport's bottom ribbon, which `gameplay_chrome` already
+            // draws from the same state, so printing it here would show the
+            // player the banner twice.
+            message: String::new(),
             message_transcript: Vec::new(),
             message_transcript_revision: 0,
             message_flushed: String::new(),
@@ -1397,14 +1404,14 @@ impl PlayState {
         if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
             let corner_tile = self.grid[31 * 32 + 31];
             if !self.tile_walkable(corner_tile) {
-                self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(corner_tile));
+                self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
                 // `audio.md §7.4`: the town tile-class refusal arm.
                 self.emit_town_blocked_step();
                 self.advance_turn();
                 return Ok(MoveOutcome::Blocked);
             }
             if self.blocking_town_object_at_candidate(nx, ny).is_some() {
-                self.message = format!("Blocked by actor at ({nx}, {ny}).");
+                self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
                 // `audio.md §7.4`: the town object-occupancy refusal arm.
                 self.emit_town_blocked_step();
                 self.advance_turn();
@@ -1416,7 +1423,7 @@ impl PlayState {
         let nx = nx as usize;
         let ny = ny as usize;
         if self.blocking_object_at(nx, ny).is_some() {
-            self.message = format!("Blocked by actor at ({nx}, {ny}).");
+            self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             // `audio.md §7.4`: the town object-occupancy refusal arm.
             self.emit_town_blocked_step();
             return Ok(MoveOutcome::Blocked);
@@ -1450,7 +1457,10 @@ impl PlayState {
             self.player.y = ny;
             self.sync_player_object();
             self.mark_visibility_dirty();
-            self.message = format!("Moved to ({nx}, {ny}).");
+            // `text-output.md §10.2`/§10.3: the direction echo is the whole
+            // of an accepted step; there is no result line and no
+            // coordinate narration (`commands.md §8.1`).
+            self.message = String::new();
             // `town-mode.md §17` "Underfoot-effect cadence is fixed": "The
             // underfoot handler is a per-turn post-action pass, not a
             // step-commit hook. Any earlier statement that the poison-gas
@@ -1460,7 +1470,7 @@ impl PlayState {
             self.advance_turn();
             Ok(MoveOutcome::Moved)
         } else {
-            self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));
+            self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             // `audio.md §7.4`: the town tile-class refusal arm.
             self.emit_town_blocked_step();
             Ok(MoveOutcome::Blocked)

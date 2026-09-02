@@ -5529,6 +5529,25 @@ impl PlayState {
             .find(|slot| self.combat_roster_slot_for_actor_slot(*slot) == Some(roster_slot))
     }
 
+    /// Point the resident active-player selector at the combat actor the
+    /// round walk just parked on.
+    ///
+    /// `combat.md §7` draws the cursor box "around the eligible active
+    /// player's arena cell" and `stats-panel.md §4.1` puts the roster marker
+    /// on the selected member; both read this one selector. Nothing else
+    /// moved it during a fight, so the box and the marker stayed on whichever
+    /// member the exploration gate had selected instead of following the
+    /// character being prompted - which is the member the original draws the
+    /// white box around.
+    pub(crate) fn select_active_player_for_pending_combat_actor(&mut self) {
+        let Some(slot) = self.pending_combat_actor_slot else {
+            return;
+        };
+        if let Some(roster_slot) = self.combat_roster_slot_for_actor_slot(slot) {
+            self.active_player = Some(roster_slot);
+        }
+    }
+
     pub(crate) fn combat_cursor_actor_cell(&self) -> Option<(u8, u8)> {
         // The active-player sentinel names a roster slot; the cursor is
         // drawn on that character's descriptor, found through its
@@ -5847,6 +5866,7 @@ impl PlayState {
             };
             if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
                 self.pending_combat_actor_slot = ready_player_slot_from_round_walk(&application);
+                self.select_active_player_for_pending_combat_actor();
             }
             let should_stop = !matches!(
                 application.stop_reason,

@@ -26,8 +26,9 @@ fn routed_world_k_plane_transition_does_not_retrigger_reciprocal_landing_row() {
     );
     assert_eq!((state.player.x, state.player.y), (30, 40));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Climbed East"));
-    assert!(state.message.contains("F-A-L-L-S"));
+    // `doors-and-z-transitions.md §9`: a clean climb prints nothing, so the
+    // underfoot transition it lands on owns the whole line.
+    assert!(state.message.starts_with("F-A-L-L-S"));
     assert!(!state.message.contains("Ascended from the underworld"));
     let _ = fs::remove_dir_all(dir);
 }
@@ -64,12 +65,8 @@ fn world_k_low_climb_stat_falls_but_still_moves() {
     assert_eq!(state.party[0].hp, 10 - expected_damage);
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.party[0].status, b'G');
-    assert!(state.message.contains("Fell! slot 0 took"));
-    assert!(
-        state
-            .message
-            .contains(&format!("{} HP left", state.party[0].hp))
-    );
+    // `doors-and-z-transitions.md §9`: one failed roll prints one `Fell!`.
+    assert_eq!(state.message, "Fell!");
 }
 
 #[test]
@@ -111,8 +108,8 @@ fn world_k_skips_dead_or_ashes_members_for_fall_checks() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.party[0].hp, 10);
     assert_eq!(state.party[1].hp, 9);
-    assert!(state.message.contains("fall checks passed for 0 living"));
-    assert!(!state.message.contains("Fell!"));
+    // `doors-and-z-transitions.md §9`: no member fell, so nothing is printed.
+    assert!(state.message.is_empty());
 }
 
 #[test]
@@ -204,6 +201,32 @@ fn dungeon_surface_reset_uses_clean_location_table_when_no_return_snapshot() {
     assert_eq!((state.player.x, state.player.y), (10, 20));
     assert_eq!(state.active_objects[0].z, 0);
     assert_eq!(state.message, DUNGEON_EXIT_TO_BRITANNIA_NARRATION);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn entering_a_location_keeps_the_frontend_paced_combat_flag() {
+    // A scene entry rebuilds the whole `PlayState`, so every frontend
+    // presentation flag defaults off unless it is carried over. The graphical
+    // shell sets `pace_combat_presentations` once at bootstrap: dropping it
+    // here left a fight entered after any location transition resolving a
+    // whole sixteen-actor round inside one host frame.
+    let dir = debug_game_dir();
+    let scene = Scene::new(17).unwrap();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(10, 20)] = 7;
+    let mut state = world_state(grid, 10, 20);
+    state.pace_combat_presentations = true;
+
+    assert_eq!(
+        state
+            .enter_world_target(&dir, WorldPlane::Underworld, PlayTarget::Town(scene), true)
+            .unwrap(),
+        MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+    );
+
+    assert_eq!(state.area, Area::Town { scene, floor: 0 });
+    assert!(state.pace_combat_presentations);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -561,7 +584,7 @@ fn dungeon_movement_accepts_passage_and_blocks_walls() {
     assert_eq!(state.step(Direction::South), MoveOutcome::Moved);
     assert_eq!((state.player.x, state.player.y), (1, 2));
     assert_eq!(state.turn, 3);
-    assert!(state.message.contains("underfoot heavy-door variant"));
+    assert_eq!(state.message, "");
 }
 
 #[test]
@@ -589,7 +612,18 @@ fn dungeon_back_step_rejects_room_families_but_allows_e_variant() {
     assert_eq!((state.player.x, state.player.y), (0, 1));
     assert_eq!(state.player.facing, Direction::East);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("underfoot heavy-door variant"));
+    // An accepted step prints no result line, so the transcript ends on the
+    // move's own echo and the compatibility slot keeps the previous line
+    // (`commit_command_echo` restores it when a handler printed nothing).
+    assert!(
+        state
+            .message_entries()
+            .last()
+            .is_some_and(|entry| entry.is_command_echo),
+        "{:?}",
+        state.message_entries().last()
+    );
+    assert_eq!(state.message, "Blocked!");
 }
 
 #[test]
@@ -730,8 +764,7 @@ fn world_k_dexterity_equal_to_roll_does_not_fall() {
     assert_eq!((state.player.x, state.player.y), (11, 20));
     assert_eq!(state.party[0].hp, 10);
     assert_eq!(state.prng_state, expected_prng);
-    assert!(state.message.contains("fall checks passed for 1 living"));
-    assert!(!state.message.contains("Fell!"));
+    assert!(state.message.is_empty());
 }
 
 #[test]
@@ -896,7 +929,6 @@ fn pass_turn_on_dungeon_fall_trap_applies_underfoot_fall_after_turn() {
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.grid[dungeon_cell_index(1, 1, 1)], 0x08);
     assert_eq!(state.turn, 1);
-    assert!(state.message.starts_with("Passed."));
     assert!(state.message.contains("pit trap"));
 }
 
@@ -996,8 +1028,7 @@ fn dungeon_secondary_field_visual_family_is_not_contact_field() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.party[0].hp, 10);
-    assert!(state.message.contains("underfoot energy field"));
-    assert!(!state.message.contains("triggered energy field"));
+    assert_eq!(state.message, "");
 }
 
 #[test]
@@ -1107,7 +1138,6 @@ fn dungeon_fire_and_electric_fields_damage_living_party_members() {
     assert_eq!(electric.prng_state, expected_electric_prng);
     assert_eq!((electric.player.x, electric.player.y), (1, 1));
     assert!(electric.message.contains("electric field"));
-    assert!(electric.message.contains("returned to (1, 1)"));
 }
 
 #[test]
@@ -1218,7 +1248,6 @@ fn pass_turn_on_dungeon_fire_field_damages_without_extra_turn() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.party[0].hp, 20 - expected_damage as u16);
     assert_eq!(state.prng_state, expected_prng);
-    assert!(state.message.starts_with("Passed."));
     assert!(state.message.contains("wall of fire"));
     assert!(state.message.contains("slot 0 took"));
 }

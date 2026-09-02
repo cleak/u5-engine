@@ -170,9 +170,10 @@ pub fn blit_terrain_tile_to_viewport(
         // so every composited id shows the phase the rotated tiles show.
         let rotated =
             crate::rotate_tile_rows_down(source, shift).ok_or_else(|| not_one_tile(source_id))?;
-        let plane_mask = atlas.depth.pixel_limit().wrapping_sub(1);
+        // The mask is the mask tile's intensity plane, one boolean per pixel.
+        let intensity_bit = crate::composite_mask_intensity_bit(atlas.depth.pixel_limit());
         let composed =
-            crate::composite_tile_pixels(dest, mask, &rotated, mask_inverted, plane_mask)
+            crate::composite_tile_pixels(dest, mask, &rotated, mask_inverted, intensity_bit)
                 .ok_or_else(|| not_one_tile(tile))?;
         return blit_tile_pixels_to_viewport(viewport, &composed, cell_x, cell_y);
     }

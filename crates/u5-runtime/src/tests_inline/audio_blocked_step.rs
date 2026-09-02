@@ -92,7 +92,7 @@ fn a_refused_town_step_beeps_on_both_arms() {
     let mut tile_class_refusal = test_state(grid, 4, 4);
     let serial = tile_class_refusal.sound_effect_serial;
     assert_eq!(tile_class_refusal.step(Direction::East), MoveOutcome::Blocked);
-    assert!(tile_class_refusal.message.starts_with("Blocked by"));
+    assert_eq!(tile_class_refusal.message, "Blocked!");
     assert_eq!(
         tile_class_refusal.sound_effects_after(serial),
         vec![SoundEffect::BlockedStep],
@@ -116,7 +116,7 @@ fn a_refused_town_step_beeps_on_both_arms() {
     );
     let serial = object_refusal.sound_effect_serial;
     assert_eq!(object_refusal.step(Direction::East), MoveOutcome::Blocked);
-    assert!(object_refusal.message.starts_with("Blocked by actor"));
+    assert_eq!(object_refusal.message, "Blocked!");
     assert_eq!(
         object_refusal.sound_effects_after(serial),
         vec![SoundEffect::BlockedStep],

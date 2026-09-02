@@ -155,7 +155,7 @@
         assert_eq!(state.grid[1], 0xc4);
         assert_eq!(state.active_objects[0].z, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Moved to (1, 0).");
+        assert_eq!(state.message, "");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -266,8 +266,7 @@
         assert_eq!(state.area, Area::Town { scene, floor: -1 });
         assert_eq!(state.turn, 1);
         assert_eq!(state.grid[32 + 1], 4);
-        assert!(state.message.starts_with("Passed."));
-        assert!(state.message.contains("A TRAPDOOR!"));
+        assert!(state.message.starts_with("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -776,7 +775,7 @@
             assert_eq!((state.player.x, state.player.y), (x, y));
             assert_eq!(state.active_yes_no_prompt, None);
             assert_eq!(state.turn, 1);
-            assert!(state.message.contains("Blocked by"));
+            assert_eq!(state.message, "Blocked!");
         }
         let _ = fs::remove_dir_all(dir);
     }
@@ -847,7 +846,7 @@
             MoveOutcome::Passed
         );
         assert_eq!(state.active_yes_no_prompt, None);
-        assert!(state.message.starts_with("Passed."));
+        assert!(state.message.is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1206,11 +1205,6 @@
             "the passed turn consumed a save roll",
         );
         assert!(
-            state.message.starts_with("Passed."),
-            "the pass line is kept and the gas report appended: {}",
-            state.message,
-        );
-        assert!(
             state.message.contains("is poisoned!"),
             "the gas report is appended to the pass line: {}",
             state.message,
@@ -1453,7 +1447,7 @@
             state.party.iter().map(|member| member.max_hp).collect::<Vec<_>>(),
             max_hp_before
         );
-        assert_eq!(state.message, "Passed. A TRAPDOOR!");
+        assert_eq!(state.message, "A TRAPDOOR!");
         assert_eq!(
             state.take_pending_stonegate_trapdoor_playback(),
             Some(StonegateTrapdoorPlayback::complete(2))
@@ -1483,7 +1477,7 @@
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
         assert_eq!(state.party[0].hp, hp);
         assert_eq!(state.grid[32 + 1], TOWN_TRAPDOOR_LIVE_TILE);
-        assert_eq!(state.message, "Passed.");
+        assert!(state.message.is_empty());
         assert_eq!(state.pending_stonegate_trapdoor_playback, None);
     }
 
@@ -1761,8 +1755,8 @@
             (11, 20)
         );
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Climbed East"));
-        assert!(state.message.contains("fall checks passed for 1 living"));
+        // `doors-and-z-transitions.md §9`: nobody fell, so nothing is printed.
+        assert!(state.message.is_empty());
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
     }
 
@@ -1797,7 +1791,6 @@
         assert_eq!((state.player.x, state.player.y), (30, 40));
         assert_eq!(state.player.transport, TransportState::Foot);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Climbed East"));
-        assert!(state.message.contains("F-A-L-L-S"));
+        assert!(state.message.starts_with("F-A-L-L-S"));
         let _ = fs::remove_dir_all(dir);
     }

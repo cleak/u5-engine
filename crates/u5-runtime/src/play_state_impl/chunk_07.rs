@@ -2989,7 +2989,12 @@ impl PlayState {
             self.sail_stall_pending = false;
             self.message = "Ship remains stalled by the wind.".to_string();
         } else {
-            self.message = "Passed.".to_string();
+            // `commands.md §8.1` row B: `Pass` completes its own echo and
+            // "no result line follows"; `text-output.md §10.3` lists the
+            // `Pass` echo as complete in itself. The observed original
+            // prints the echo and nothing beneath it, so the slot is left
+            // empty for whatever the turn epilogue produces.
+            self.message = String::new();
         }
         if let Some(game_dir) = game_dir {
             if let Some(outcome) =
@@ -3061,7 +3066,15 @@ impl PlayState {
         let mut nonterminal_outcome = None;
         if let Some(transition) = self.apply_world_underfoot_plane_transition(game_dir, plane)? {
             let transition_message = self.message.clone();
-            self.message = format!("{pre_effect_message} {transition_message}");
+            // The command that consumed the turn may have printed nothing
+            // (`Pass`, an accepted step), so the separator only belongs here
+            // when there is something to separate - as the sibling branches
+            // below already do.
+            self.message = if pre_effect_message.is_empty() {
+                transition_message
+            } else {
+                format!("{pre_effect_message} {transition_message}")
+            };
             return Ok(Some(MoveOutcome::Transition(transition)));
         }
         // active-objects.md §8: adjacent whirlpool engagement is a

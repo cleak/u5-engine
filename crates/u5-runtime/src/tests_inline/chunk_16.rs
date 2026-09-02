@@ -132,7 +132,7 @@
 
         assert_eq!(town.clock, GameClock::new(18, 0).unwrap());
         assert_eq!(town.turn, 1);
-        assert_eq!(town.message, "Passed.");
+        assert!(town.message.is_empty());
 
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
         dungeon.clock = GameClock::new(17, 59).unwrap();
@@ -141,7 +141,49 @@
 
         assert_eq!(dungeon.clock, GameClock::new(18, 0).unwrap());
         assert_eq!(dungeon.turn, 1);
-        assert_eq!(dungeon.message, "Passed.");
+        assert!(dungeon.message.is_empty());
+    }
+
+    #[test]
+    fn an_accepted_step_prints_its_direction_echo_and_nothing_beneath_it() {
+        // `text-output.md §10.2`: the mode loop emits the prompt marker and
+        // the handler's own echo before the key is read, and §10.3 lists the
+        // movement echo as complete in itself. The observed original prints
+        // `>East` and no second line; the refusal adds the `audio.md §7.4`
+        // `Blocked!` beneath it.
+        let mut open = test_state(open_grid(), 4, 4);
+
+        assert_eq!(
+            handle_play_key_input(&mut open, 'd', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((open.player.x, open.player.y), (5, 4));
+        assert!(open.message.is_empty(), "message: {}", open.message);
+        let accepted: Vec<(&str, bool)> = open
+            .message_entries()
+            .iter()
+            .map(|entry| (entry.text.as_str(), entry.is_command_echo))
+            .collect();
+        assert_eq!(accepted, vec![("East", true)]);
+
+        let mut grid = open_grid();
+        grid[4 * 32 + 5] = IMPASSABLE_FOOT_TILE;
+        let mut blocked = test_state(grid, 4, 4);
+
+        assert_eq!(
+            handle_play_key_input(&mut blocked, 'd', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((blocked.player.x, blocked.player.y), (4, 4));
+        assert_eq!(blocked.message, MOVEMENT_BLOCKED_REFUSAL);
+        let refused: Vec<(&str, bool)> = blocked
+            .message_entries()
+            .iter()
+            .map(|entry| (entry.text.as_str(), entry.is_command_echo))
+            .collect();
+        assert_eq!(refused, vec![("East", true), ("Blocked!", false)]);
     }
 
 

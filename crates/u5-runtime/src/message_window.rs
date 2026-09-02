@@ -211,7 +211,7 @@ impl MessageWindowLayout {
 /// command result has both entries here, and both are drawn.
 ///
 /// `render` decides how each line reaches the window: `None` drops it
-/// (the engine's own scene-entry diagnostics), `Some(text)` supplies
+/// (blank filler the window derives for itself), `Some(text)` supplies
 /// the text to draw, which lets a caller substitute names into it.
 ///
 /// The blank row between turns is derived rather than stored, per
@@ -363,19 +363,6 @@ fn trim_trailing_spaces(glyphs: &mut Vec<crate::TlkRenderedGlyph>) {
     while glyphs.last().is_some_and(|glyph| glyph.byte == b' ') {
         glyphs.pop();
     }
-}
-
-/// True when the message is the engine's own scene-entry narration —
-/// `"Entered <scene> at (x, y)."` and its level/plane variants, plus
-/// the moongate arrival line.
-///
-/// These print the party's raw map coordinates and no `systems/`
-/// document specifies them: they are harness diagnostics rather than
-/// game text, so the gameplay message window leaves them out. They
-/// stay in `PlayState::message` for the terminal harness and for the
-/// tests that assert on scene entry.
-pub fn message_is_scene_entry_narration(message: &str, x: usize, y: usize) -> bool {
-    message.starts_with("Entered ") && message.contains(&format!(" at ({x}, {y})."))
 }
 
 #[cfg(test)]

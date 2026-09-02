@@ -3583,6 +3583,12 @@ fn apply_route_smoke_case_setup(
     case_name: &str,
     game_dir: &Path,
 ) -> io::Result<()> {
+    // Route smoke is a fixed-input regression suite, so it must not inherit
+    // the host-clock seed `prng.md` gives a fresh scene: `britannia-hole-up-rest`
+    // took the sleep-ambush branch on roughly one run in four with it. Pinning
+    // happens before the per-case setup below, so a case that needs a
+    // particular stream still sets its own. Production seeding is untouched.
+    state.prng_state = route_smoke_prng_seed();
     if let Some(index) = route_smoke_public_location_index(case_name) {
         seed_public_location_route_position(state, index)?;
     }
@@ -4752,6 +4758,27 @@ fn seed_long_camp_recovery_route(state: &mut PlayState) {
     state.party_equipment = default_party_equipment(6);
     state.party_roster = default_party_roster(6);
     state.prng_state = long_camp_no_ambush_seed();
+}
+
+/// The fixed stream every route-smoke case starts from.
+///
+/// Reuses the ambush-free camp seed, which is the strictest requirement any
+/// route places on the stream: eighteen consecutive `0..63` draws that never
+/// roll zero covers both the wilderness and the dungeon rest routes.
+/// Did the case's last turn come from the `Pass` key?
+///
+/// `commands.md §8.1` gives the pass an echo and no result line, so the
+/// evidence is the transcript entry the dispatcher opened, not the message
+/// slot the handler leaves empty.
+fn route_state_echoed_a_pass(state: &PlayState) -> bool {
+    state
+        .message_entries()
+        .iter()
+        .any(|entry| entry.is_command_echo && entry.text == "Pass")
+}
+
+fn route_smoke_prng_seed() -> u16 {
+    long_camp_no_ambush_seed()
 }
 
 fn long_camp_no_ambush_seed() -> u16 {
@@ -6219,7 +6246,7 @@ fn validate_route_smoke_case_state(
                 || state.party_equipment.first().is_none_or(|equipment| {
                     equipment[EQUIP_SLOT_RING] != EQUIPMENT_ID_RING_REGENERATION as u8
                 })
-                || !state.message.contains("Pass")
+                || !route_state_echoed_a_pass(state)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply hourly Ring of Regeneration"
@@ -6448,7 +6475,7 @@ fn validate_route_smoke_case_state(
                         || object.y != state.player.y
                         || object.z != WorldPlane::Britannia.save_floor()
                 })
-                || !state.message.contains("Pass")
+                || !route_state_echoed_a_pass(state)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve boarded horse state across save/reload"
@@ -6468,7 +6495,7 @@ fn validate_route_smoke_case_state(
                         || object.y != state.player.y
                         || object.z != WorldPlane::Underworld.save_floor()
                 })
-                || !state.message.contains("Pass")
+                || !route_state_echoed_a_pass(state)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve Gate Travel destination across save/reload"
@@ -6545,7 +6572,7 @@ fn validate_route_smoke_case_state(
                         || object.y != SURFACE_CHASM_Y as usize
                         || object.z != WorldPlane::Underworld.save_floor()
                 })
-                || !state.message.contains("Pass")
+                || !route_state_echoed_a_pass(state)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve chasm Underworld landing across save/reload"
@@ -6588,7 +6615,7 @@ fn validate_route_smoke_case_state(
                 })
                 || !state
                     .message
-                    .ends_with("\nThou art not upon a Sacred Quest!\nPassage denied!\n")
+                    .ends_with("Thou art not upon a Sacred Quest!\nPassage denied!\n")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the unordained narrative gate branch"
@@ -6604,7 +6631,7 @@ fn validate_route_smoke_case_state(
             ) || state.player.x != NARRATIVE_GATE_X as usize
                 || state.player.y != NARRATIVE_GATE_Y as usize
                 || state.shrine_ordained_mask == 0
-                || !state.message.ends_with("\nPass, Seeker!\n")
+                || !state.message.ends_with("Pass, Seeker!\n")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the ordained passage branch"
@@ -6877,10 +6904,17 @@ fn validate_route_smoke_case_state(
             if state.current_floor() != Some(0)
                 || state.player.x != 15
                 || state.player.y != 14
-                || !state.message.contains("Moved to")
+                // `text-output.md §10.2`: an accepted step is complete at its
+                // own direction echo and prints no result line, so "ordinary
+                // movement" here is the arrival with an empty result slot.
+                || !state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not treat side-crossing a native stair as ordinary movement"
+                    "route smoke `{case_name}` did not treat side-crossing a native stair as ordinary movement; floor {:?} at ({}, {}) message {:?}",
+                    state.current_floor(),
+                    state.player.x,
+                    state.player.y,
+                    state.message
                 )));
             }
         }
@@ -7172,7 +7206,7 @@ fn validate_route_smoke_case_state(
                 || state.active_shop.is_some()
                 || horse.is_none()
                 || !boardable
-                || !state.message.contains("Pass")
+                || !route_state_echoed_a_pass(state)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve horse-trader delivery across save/reload: gold={}/{expected_gold}, shop={}, horse={horse:?}, boardable={boardable}, message={:?}",
@@ -7236,7 +7270,7 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-light-decay-route" => {
-            if state.light_spell_counter != 0 || !state.message.contains("Pass") {
+            if state.light_spell_counter != 0 || !route_state_echoed_a_pass(state) {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not age light counters through turns"
                 )));
@@ -7368,10 +7402,18 @@ fn validate_route_smoke_case_state(
             }
         }
         "dungeon-heavy-door-variant-pass-through" => {
+            // The step itself prints nothing (`text-output.md §10.2`), so the
+            // pass-through is read from where the party now stands: on the
+            // seeded `0xE?` variant cell, one turn later.
+            let underfoot = state
+                .grid
+                .get(dungeon_cell_index(0, state.player.x, state.player.y))
+                .copied();
             if state.player.x != 2
                 || state.player.y != 1
                 || state.turn != 1
-                || !state.message.contains("underfoot heavy-door variant")
+                || !state.message.is_empty()
+                || !underfoot.is_some_and(|tile| (0xE0..=0xEF).contains(&tile))
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not pass through the public 0xE? heavy-door variant"

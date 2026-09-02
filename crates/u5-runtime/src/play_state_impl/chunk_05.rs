@@ -49,13 +49,13 @@ impl PlayState {
         let nx = nx.rem_euclid(DUNGEON_SIDE as isize) as usize;
         let ny = ny.rem_euclid(DUNGEON_SIDE as isize) as usize;
         if self.dungeon_active_monster_at(nx, ny).is_some() {
-            self.message = "Blocked!".to_string();
+            self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
         let tile = self.dungeon_cell(level, nx, ny);
         if back_step && dungeon_back_step_rejected(tile) {
-            self.message = "Blocked!".to_string();
+            self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
         if is_dungeon_room_trigger(tile) {
@@ -69,7 +69,7 @@ impl PlayState {
             return Ok(self.apply_dungeon_teleport(scene, entry, direction));
         }
         if !is_dungeon_walkable(tile) {
-            self.message = "Blocked!".to_string();
+            self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -83,11 +83,7 @@ impl PlayState {
         if is_dungeon_bomb_trap(tile) {
             self.grid[dungeon_cell_index(level, nx, ny)] |= 0x08;
             self.advance_turn();
-            self.message = format!(
-                "Moved {} to ({nx}, {ny}) on {} level {level}; triggered bomb trap.",
-                direction.name(),
-                scene.key()
-            );
+            self.message = "Triggered bomb trap.".to_string();
             return Ok(MoveOutcome::Moved);
         }
         if let Some(field) = dungeon_field_effect(tile) {
@@ -103,33 +99,16 @@ impl PlayState {
             }
             let field_report = self.apply_dungeon_field_effect_at(level, nx, ny, tile, field);
             self.advance_turn();
-            self.message = if field == DungeonFieldEffect::Electric {
-                format!(
-                    "Contacted {} {} at ({nx}, {ny}) on {} level {level}; returned to ({origin_x}, {origin_y}); {field_report}.",
-                    direction.name(),
-                    field.label(),
-                    scene.key()
-                )
-            } else {
-                format!(
-                    "Moved {} to ({nx}, {ny}) on {} level {level}; triggered {}; {field_report}.",
-                    direction.name(),
-                    scene.key(),
-                    field.label()
-                )
-            };
+            self.message = format!("Triggered {}; {field_report}.", field.label());
             return Ok(MoveOutcome::Moved);
         }
         if is_dungeon_room_helper_state(tile) {
             return self.resolve_dungeon_room_trigger(game_dir, scene, level, nx, ny, tile);
         }
         self.advance_turn();
-        self.message = format!(
-            "Moved {} to ({nx}, {ny}) on {} level {level}; underfoot {}.",
-            direction.name(),
-            scene.key(),
-            dungeon_cell_class(tile)
-        );
+        // As above: the dungeon loop's own `Advance` echo (`commands.md
+        // §5.2`) is the whole of an ordinary accepted step.
+        self.message = String::new();
         Ok(MoveOutcome::Moved)
     }
 
@@ -767,7 +746,7 @@ impl PlayState {
                         let _ = self.apply_sailing_collision(tile);
                         return Ok(MoveOutcome::Blocked);
                     }
-                    self.message = format!("Blocked by {} at ({nx}, {ny}).", entry.effect.label());
+                    self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
                     // `audio.md §7.4`: terrain impassable for the current
                     // transport is one of the two ways the overworld step is
                     // refused. No blocking object is involved, so the
@@ -781,7 +760,7 @@ impl PlayState {
                     let _ = self.apply_sailing_collision(tile);
                     return Ok(MoveOutcome::Blocked);
                 }
-                self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));
+                self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
                 // `audio.md §7.4`: the other overworld refusal, terrain
                 // impassable for the current transport.
                 self.emit_overworld_blocked_step(false);
@@ -811,15 +790,19 @@ impl PlayState {
                     return Ok(MoveOutcome::Used);
                 }
             }
-            let note = self.terrain_encounter_note(game_dir, plane, object)?;
-            self.message = format!(
-                "Blocked by world object tile {} at ({nx}, {ny}) in slot {object_slot}; {note}.",
-                object.tile
-            );
+            let _note = self.terrain_encounter_note(game_dir, plane, object)?;
             // `audio.md §7.4`: refusal by a blocking object. Aboard a vehicle
             // a whirlpool-class blocker "returns completely silently, with no
-            // message at all", so it is the one arm here that never beeps.
-            self.emit_overworld_blocked_step(is_whirlpool_object(object));
+            // message at all", so it is the one arm here that neither prints
+            // nor beeps; every other arm prints the shared refusal.
+            let whirlpool = is_whirlpool_object(object);
+            let silent_whirlpool = whirlpool && !self.player.transport.is_foot();
+            self.message = if silent_whirlpool {
+                String::new()
+            } else {
+                MOVEMENT_BLOCKED_REFUSAL.to_string()
+            };
+            self.emit_overworld_blocked_step(whirlpool);
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -851,13 +834,15 @@ impl PlayState {
                 }));
             }
         }
-        let verb = "Moved";
-        self.message = format!(
-            "{verb} {} to ({final_x}, {final_y}) on {}; underfoot {}.",
-            direction.name(),
-            plane.key(),
-            tile_class(final_tile)
-        );
+        // `text-output.md §10.2`/§10.3: an accepted step is complete at its
+        // own direction echo - the mode loop has already drawn the prompt
+        // marker and the direction word, and `commands.md §8.1` states of the
+        // movement family that it "never prints tile ids, coordinates,
+        // active-object slot numbers, terrain-class names". Only the
+        // consequences below (damage, status, hourly report) produce a
+        // result line.
+        let _ = (final_tile, direction);
+        self.message = String::new();
         self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);

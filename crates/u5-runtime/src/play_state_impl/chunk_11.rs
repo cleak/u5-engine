@@ -21,7 +21,14 @@ impl PlayState {
     ) -> std::io::Result<ExplorationTurnGateOutcome> {
         match self.party_capability() {
             PartyCapability::CanAct { member_index } => {
-                self.active_player = Some(member_index);
+                // The gate reports who can act; it does not *select* anybody.
+                // `stats-panel.md §4.1`/§11: the active-player marker is drawn
+                // "while a member is selected", the selector is persistent and
+                // is "cleared only by an explicit selection change or by the
+                // dead/sleeping rule", and no published contract has an
+                // ordinary turn set it. Writing it here put the roster arrow
+                // permanently on the first able member - a marker the original
+                // does not show in ordinary overworld play.
                 Ok(ExplorationTurnGateOutcome::Ready { member_index })
             }
             PartyCapability::Sleeping => {

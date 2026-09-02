@@ -1241,7 +1241,10 @@ fn save_game_command_preserves_unmapped_wind_save_byte() {
 
     let mut state = PlayState::load_world_scene(&dir, WorldPlane::Underworld, options).unwrap();
     assert_eq!(state.wind_status_message(), "Winds");
-    assert!(state.message.ends_with("Winds."));
+    // The wind reaches the player through the viewport's bottom ribbon
+    // (`text-output.md §10.7`), not the message window, and the entry itself
+    // prints nothing.
+    assert!(state.message.is_empty());
     assert!(state.z_stats_message().contains("wind Winds;"));
 
     assert_eq!(
@@ -2441,8 +2444,7 @@ fn starvation_warning_appends_after_pass_turn_hour_crossing() {
     assert_eq!(state.clock.hour, 9);
     assert!(state.party[0].hp < hp_before);
     assert!((hp_before - state.party[0].hp) as u16 <= HOURLY_STARVATION_DAMAGE_MAX);
-    assert!(state.message.contains("Passed."));
-    assert!(state.message.contains("Starving!"));
+    assert!(state.message.starts_with("Starving!"));
     assert_eq!(state.message.matches("Starving!").count(), 1);
     assert!(state.pending_hourly_status_message.is_none());
 }

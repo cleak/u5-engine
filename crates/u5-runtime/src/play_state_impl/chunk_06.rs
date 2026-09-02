@@ -27,11 +27,11 @@ impl PlayState {
         let ny = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
         let tile = self.grid[world_cell_index(nx, ny)];
 
-        if let Some(object) = self.world_object_at(nx, ny) {
-            self.message = format!(
-                "Impassable! World object tile {} blocks outdoor climb at ({nx}, {ny}).",
-                object.tile
-            );
+        if self.world_object_at(nx, ny).is_some() {
+            // `doors-and-z-transitions.md §9`: the blocked outdoor climb prints
+            // the bare refusal. The tile id and coordinate this used to name
+            // have no counterpart in the original (`commands.md §8.1`).
+            self.message = "Impassable!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
         if let Some(entry) = self.world_damage_tile_at(game_dir, plane, nx, ny, tile)? {
@@ -53,28 +53,32 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
-        let (checked, falls) = self.apply_outdoor_climb_fall_checks();
+        let (_checked, falls) = self.apply_outdoor_climb_fall_checks();
         self.player.x = nx;
         self.player.y = ny;
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
-        let fall_report = if falls.is_empty() {
-            format!("fall checks passed for {checked} living member(s)")
-        } else {
-            falls.join("; ")
-        };
-        self.message = format!(
-            "Climbed {} to ({nx}, {ny}) on {}; {fall_report}.",
-            direction.name(),
-            plane.key()
-        );
+        let fall_report = falls.join("\n");
+        // `doors-and-z-transitions.md §9`: the outdoor climb's only published
+        // output is `Fell!` for a member whose Dexterity roll failed - "the
+        // successful path calls the resident climb/move helper", printing
+        // nothing of its own. The line this replaced named the destination
+        // coordinate and the plane, neither of which the original prints
+        // (`commands.md §8.1`).
+        self.message = fall_report;
         if let Some(entry) = self.world_plane_transition_at(game_dir, plane, nx, ny)? {
             let to_plane = entry.to_plane;
             let climb_message = self.message.clone();
             self.apply_world_plane_transition(game_dir, entry)?;
             let transition_message = self.message.clone();
-            self.message = format!("{climb_message} {transition_message}");
+            // A clean climb prints nothing, so the separator only belongs
+            // here when a `Fell!` line precedes the transition.
+            self.message = if climb_message.is_empty() {
+                transition_message
+            } else {
+                format!("{climb_message} {transition_message}")
+            };
             return Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
                 from: plane,
                 to: to_plane,
@@ -94,12 +98,12 @@ impl PlayState {
             let roll = self.outdoor_climb_stat_roll();
             if outdoor_klimb_member_falls(self.party[index].climb_stat, roll) {
                 let damage = self.outdoor_climb_damage_roll();
-                let slot = self.party[index].slot;
-                let applied = self.party[index].apply_damage(damage);
-                falls.push(format!(
-                    "Fell! slot {slot} took {applied} HP ({} HP left)",
-                    self.party[index].hp
-                ));
+                let _applied = self.party[index].apply_damage(damage);
+                // `doors-and-z-transitions.md §9`: the printed line is the bare
+                // `Fell!`. The slot number and HP arithmetic that used to
+                // follow it were the engine's own; the panel is where the
+                // player reads the damage (`stats-panel.md §4`).
+                falls.push(OUTDOOR_CLIMB_FALL_REFUSAL.to_string());
             }
         }
         (checked, falls)

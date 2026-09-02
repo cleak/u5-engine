@@ -52,20 +52,38 @@
 //! the same phase as the rotated tiles, which is why separate water regions
 //! were measured transitioning within 0.07–0.41 ms of each other.
 //!
-//! The bitwise form matters and a boolean "pick one side" implementation
-//! would be wrong: the river masks `0x70..=0x7F` hold the value `13`
-//! (`0b1101`), not `15`, so they keep one colour plane of the destination
-//! and take the other three from the source.
+//! ### The mask is one boolean per pixel, broadcast to every plane
+//!
+//! `mask` above is **not** four per-plane bytes. The compositor reads the
+//! mask tile's *intensity-plane* byte only, and ANDs all four source-plane
+//! reads against that same byte before advancing the mask pointer to the
+//! next pixel group. So `m` is a single bit per pixel — the intensity bit
+//! of the mask pixel — used as a boolean and applied identically to every
+//! plane: where it is set the source is taken whole, where it is clear the
+//! destination is kept whole.
+//!
+//! An earlier revision of this module implemented the mask **per plane**,
+//! which is a different rule wherever a mask pixel has its intensity bit
+//! set but some other bit clear. The river masks `0x70..=0x7F` hold colour
+//! `13` (`0b1101`) — intensity set, green clear — so per-plane would keep
+//! the destination's green plane over the flowing water. Applied to shipped
+//! art the two models differ on 738 of 65536 river pixels (1.1%), always
+//! the same substitution: broadcast draws **light cyan** where per-plane
+//! draws **light blue**, i.e. the water's bright highlight pixels. The
+//! coast sets cannot tell the two apart at all — `0xD0..=0xD3` hold only
+//! `0` and `15`, and `15` has every bit set, so both models are
+//! byte-identical there (0 of 16384 pixels differ).
 //!
 //! ### The third set is composited through the complement
 //!
 //! `0xE4..=0xE7` use the *same* mask tiles as `0x34..=0x37`, but a
 //! standalone inversion pass runs between the two composites and flips
-//! those mask tiles' plane-3 bytes, so the third set sees the complement of
-//! the mask the second set used. Applying one uniform rule puts that set
-//! inside-out — water where bank belongs. This engine models it as
-//! [`WaterCompositeSet::mask_inverted`] and never mutates shared state to
-//! get there.
+//! those mask tiles' plane-3 bytes — which, the mask being that plane, is
+//! exactly an inversion of the boolean. The third set therefore sees the
+//! complement of the mask the second set used. Applying one uniform rule
+//! puts that set inside-out — water where bank belongs. This engine models
+//! it as [`WaterCompositeSet::mask_inverted`] and never mutates shared
+//! state to get there.
 //!
 //! ## Why one counter is enough
 //!
@@ -93,7 +111,17 @@
 //! * composing shipped art per this rule reproduces the captured coast
 //!   frames in **540 of 546** frames whose phase could be read (the six
 //!   misses are torn captures, in the same cells the observation session
-//!   reported tearing).
+//!   reported tearing). Note this result does **not** discriminate between
+//!   the broadcast and per-plane mask readings; see above.
+//!
+//! The broadcast reading is **not yet confirmed against a capture**. No
+//! nearest-neighbour capture taken so far contains a river tile — the only
+//! clean water capture holds open sea and the four diagonal-coast ids,
+//! where the two readings are provably identical — and the filtered
+//! captures blend roughly a third of their interior pixels off-palette, so
+//! they cannot settle a single-bit question. The observable that would
+//! settle it in one clean frame: **in a river tile, are the bright water
+//! highlight pixels light cyan (broadcast) or light blue (per-plane)?**
 //!
 //! # Not implemented, deliberately
 //!
@@ -275,18 +303,18 @@ pub fn rotate_tile_rows_down(source: &[u8], shift: usize) -> Option<Vec<u8>> {
     Some(rolled)
 }
 
-/// Stage two: `dest = (dest & !mask) | (source & mask)`, bitwise over the
-/// `plane_mask` colour planes, with `mask_inverted` selecting the
-/// complement of each mask pixel.
+/// Stage two: `dest = (dest & !m) | (source & m)` on every colour plane,
+/// where `m` is one boolean per pixel — the intensity bit of the mask
+/// pixel — and `mask_inverted` flips that boolean.
 ///
-/// Deliberately bitwise rather than a per-pixel choice between two tiles:
-/// the river mask tiles carry `0b1101`, so they keep one plane of the
-/// destination while taking the other three from the source. A "pick a
-/// side" implementation renders those tiles wrong.
+/// The mask is read as a single byte per pixel group and broadcast to all
+/// four planes, so a pixel is taken from the source or kept from the
+/// destination **whole**; it is never blended plane by plane. See the
+/// module docs for why the earlier per-plane reading is withdrawn and what
+/// distinguishes the two.
 ///
-/// `plane_mask` is the atlas depth's plane count expressed as a bit mask —
-/// `0x0F` for the sixteen-colour EGA sheet, `0x03` for the four-colour CGA
-/// one — so the complement never invents planes the sheet does not have.
+/// `intensity_bit` is the atlas depth's top plane bit — `0x08` for the
+/// sixteen-colour EGA sheet, `0x02` for the four-colour CGA one.
 ///
 /// Returns `None` unless all three inputs are exactly one tile.
 pub fn composite_tile_pixels(
@@ -294,7 +322,7 @@ pub fn composite_tile_pixels(
     mask: &[u8],
     source: &[u8],
     mask_inverted: bool,
-    plane_mask: u8,
+    intensity_bit: u8,
 ) -> Option<Vec<u8>> {
     if dest.len() != TILE_ATLAS_TILE_PIXELS
         || mask.len() != TILE_ATLAS_TILE_PIXELS
@@ -304,14 +332,22 @@ pub fn composite_tile_pixels(
     }
     let mut composed = vec![0u8; TILE_ATLAS_TILE_PIXELS];
     for index in 0..TILE_ATLAS_TILE_PIXELS {
-        let m = if mask_inverted {
-            !mask[index] & plane_mask
+        let take_source = ((mask[index] & intensity_bit) != 0) != mask_inverted;
+        composed[index] = if take_source {
+            source[index]
         } else {
-            mask[index] & plane_mask
+            dest[index]
         };
-        composed[index] = (dest[index] & !m) | (source[index] & m);
     }
     Some(composed)
+}
+
+/// The plane bit the composite mask is read from, for an atlas depth.
+///
+/// The intensity plane is the top one: `0x08` of the sixteen-colour EGA
+/// sheet's four planes, `0x02` of the four-colour CGA sheet's two.
+pub const fn composite_mask_intensity_bit(pixel_limit: u8) -> u8 {
+    pixel_limit >> 1
 }
 
 #[cfg(test)]
@@ -467,28 +503,48 @@ mod tests {
         }
     }
 
-    /// The composite is bitwise across colour planes, not a choice between
-    /// two tiles. A mask of `0b1101` must keep plane 1 of the destination
-    /// and take planes 0, 2 and 3 from the source.
+    /// The mask is one boolean per pixel, broadcast to every plane — not a
+    /// per-plane blend. A mask pixel of `0b1101` has its intensity bit set,
+    /// so the source is taken whole, green plane included.
     #[test]
-    fn the_composite_is_bitwise_across_colour_planes() {
+    fn the_composite_mask_is_one_boolean_broadcast_to_every_plane() {
+        let bit = composite_mask_intensity_bit(16);
+        assert_eq!(bit, 0x08);
+
         let dest = vec![0b1111u8; TILE_ATLAS_TILE_PIXELS];
         let source = vec![0b0000u8; TILE_ATLAS_TILE_PIXELS];
-        let mask = vec![0b1101u8; TILE_ATLAS_TILE_PIXELS];
 
-        let composed = composite_tile_pixels(&dest, &mask, &source, false, 0x0F).expect("one tile");
+        // Intensity set, green clear: the whole pixel comes from the source.
+        // A per-plane reading would have kept the destination's green bit
+        // and produced `0b0010`.
+        let river_mask = vec![0b1101u8; TILE_ATLAS_TILE_PIXELS];
+        let composed =
+            composite_tile_pixels(&dest, &river_mask, &source, false, bit).expect("one tile");
         assert!(
-            composed.iter().all(|value| *value == 0b0010),
-            "only the plane the mask leaves clear survives from the destination"
+            composed.iter().all(|value| *value == 0b0000),
+            "the source is taken whole where the intensity bit is set"
         );
 
-        // The complement keeps exactly the other planes.
-        let inverted = composite_tile_pixels(&dest, &mask, &source, true, 0x0F).expect("one tile");
-        assert!(inverted.iter().all(|value| *value == 0b1101));
+        // Intensity clear, every other bit set: the destination is kept
+        // whole, even though three planes of the mask are set.
+        let inverse_mask = vec![0b0111u8; TILE_ATLAS_TILE_PIXELS];
+        let kept =
+            composite_tile_pixels(&dest, &inverse_mask, &source, false, bit).expect("one tile");
+        assert!(
+            kept.iter().all(|value| *value == 0b1111),
+            "only the intensity bit is consulted"
+        );
 
-        // A four-colour sheet must not have planes invented for it.
-        let cga = composite_tile_pixels(&dest, &mask, &source, true, 0x03).expect("one tile");
-        assert!(cga.iter().all(|value| *value == 0b1111 & !0b0010));
+        // The complement inverts that boolean.
+        let inverted =
+            composite_tile_pixels(&dest, &river_mask, &source, true, bit).expect("one tile");
+        assert!(inverted.iter().all(|value| *value == 0b1111));
+
+        // A four-colour sheet reads its own top plane.
+        assert_eq!(composite_mask_intensity_bit(4), 0x02);
+        let cga_mask = vec![0b10u8; TILE_ATLAS_TILE_PIXELS];
+        let cga = composite_tile_pixels(&dest, &cga_mask, &source, false, 0x02).expect("one tile");
+        assert!(cga.iter().all(|value| *value == 0b0000));
     }
 
     /// A solid mask reduces the composite to "take the source there", which
@@ -539,8 +595,8 @@ mod tests {
 
         for shift in 0..TILE_ATLAS_SIDE {
             let rotated = rotate_tile_rows_down(&source, shift).expect("one tile");
-            let a = composite_tile_pixels(&dest_a, &mask, &rotated, false, 0x0F).expect("a");
-            let b = composite_tile_pixels(&dest_b, &mask, &rotated, false, 0x0F).expect("b");
+            let a = composite_tile_pixels(&dest_a, &mask, &rotated, false, 0x08).expect("a");
+            let b = composite_tile_pixels(&dest_b, &mask, &rotated, false, 0x08).expect("b");
             assert_eq!(a, b, "shift {shift}: both destinations show one frame");
             assert_eq!(a, rotated, "and that frame is the rotated source");
         }

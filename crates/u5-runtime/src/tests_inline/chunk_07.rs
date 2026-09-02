@@ -1696,7 +1696,7 @@ fn pass_reports_and_clears_sail_stall_feedback() {
     assert!(!state.sail_stall_pending);
 
     assert_eq!(state.pass_turn(), MoveOutcome::Passed);
-    assert_eq!(state.message, "Passed.");
+    assert!(state.message.is_empty());
 }
 
 #[test]
@@ -1828,7 +1828,7 @@ fn horse_world_movement_uses_one_cell_on_grass_and_path() {
 
     assert_eq!((grass.player.x, grass.player.y), (1, 0));
     assert_eq!(grass.turn, 1);
-    assert!(grass.message.contains("Moved East"));
+    assert_eq!(grass.message, "");
 
     let mut path_grid = open_world_grid();
     path_grid[world_cell_index(1, 0)] = 16;
@@ -1851,7 +1851,7 @@ fn horse_world_movement_uses_one_cell_on_rough_terrain() {
 
     assert_eq!((state.player.x, state.player.y), (1, 0));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Moved East"));
+    assert_eq!(state.message, "");
 }
 
 #[test]
@@ -1994,7 +1994,7 @@ fn horse_world_movement_does_not_accept_second_cell_plane_transition() {
     assert!(matches!(state.area, Area::World { plane: WorldPlane::Britannia }));
     assert!(matches!(state.player.transport, TransportState::Horse { .. }));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Moved East"));
+    assert_eq!(state.message, "");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -2020,7 +2020,7 @@ fn horse_world_movement_does_not_accept_second_cell_waterfall_sidecar() {
 
     assert_eq!((state.player.x, state.player.y), (1, 0));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Moved East to (1, 0)"));
+    assert_eq!(state.message, "");
     assert!(!state.message.contains("waterfall swept"));
     let _ = fs::remove_dir_all(dir);
 }

@@ -45,7 +45,7 @@ fn town_digit_falls_through_to_the_ordinary_dispatcher_when_not_seated() {
     // step east — and an un-seated digit must produce exactly that, turn
     // included.
     play_digits(&mut state, &[6]);
-    assert_eq!(state.message, "Moved to (11, 10).");
+    assert_eq!(state.message, "");
     assert_eq!((state.player.x, state.player.y), (11, 10));
     assert_eq!(state.turn, 1);
 

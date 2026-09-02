@@ -2935,21 +2935,14 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
         }
         CombatPlayerCommandAction::Pass(_) => "Pass.".to_string(),
         CombatPlayerCommandAction::PromptForAttackDirection => "Attack-".to_string(),
-        CombatPlayerCommandAction::StepOrAttack { outcome, .. } => match outcome {
-            CombatStepOrAttackPrimitiveOutcome::InactiveActor => String::new(),
-            CombatStepOrAttackPrimitiveOutcome::OutOfArena { x, y } => {
-                format!("Leaving combat at ({x}, {y}).")
-            }
-            CombatStepOrAttackPrimitiveOutcome::Moved { commit } => {
-                let (x, y) = commit.actor_position_after;
-                format!("Moved to ({x}, {y}).")
-            }
-            CombatStepOrAttackPrimitiveOutcome::Attack { .. } => "Attack.".to_string(),
-            CombatStepOrAttackPrimitiveOutcome::BlockedActor { target_slot } => {
-                format!("Blocked by combatant in slot {target_slot}.")
-            }
-            CombatStepOrAttackPrimitiveOutcome::BlockedWall => "Blocked by wall.".to_string(),
-        },
+        // Every production step-or-attack transcript comes from
+        // `combat_step_or_attack_application_message`, which prints the
+        // `combat.md §3` lines (the direction word, then `Blocked!`,
+        // `Stay with ship!`, `Escape!` or `Leave!`). This arm held a
+        // parallel set that
+        // named arena coordinates and combatant slot numbers; nothing
+        // reached it, and no published line looks like that.
+        CombatPlayerCommandAction::StepOrAttack { .. } => String::new(),
         CombatPlayerCommandAction::InvalidDirection { .. } => "What?".to_string(),
         CombatPlayerCommandAction::EscapeCleanup { application } => match application.decision {
             CombatEscapeCleanupDecision::RefusedNotHere => "Escape-Not here!\n".to_string(),
@@ -3238,6 +3231,7 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
         };
         if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
             state.pending_combat_actor_slot = ready_player_slot_from_input_round_walk(&application);
+            state.select_active_player_for_pending_combat_actor();
         }
 
         let should_stop = !matches!(

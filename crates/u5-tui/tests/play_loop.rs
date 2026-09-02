@@ -528,7 +528,8 @@ fn empty_play_input_repeats_pending_prompt_without_turn() {
     handle_empty_play_input(&mut unprompted, Path::new("")).unwrap();
 
     assert_eq!(unprompted.turn, 1);
-    assert_eq!(unprompted.message, "Passed.");
+    // `commands.md §8.1` row B: the pass prints its echo and no result.
+    assert!(unprompted.message.is_empty());
 }
 
 #[test]
@@ -577,7 +578,7 @@ fn play_script_command_routes_movement_pass_idle_and_quit() {
         PlayInputDisposition::Continue
     );
     assert_eq!(state.turn, 2);
-    assert_eq!(state.message, "Passed.");
+    assert!(state.message.is_empty());
 
     assert_eq!(
         handle_play_script_command(&mut state, "pass", Path::new("")).unwrap(),
@@ -731,9 +732,10 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
     let initial_line = play_script_state_line(&state);
 
     assert!(initial_line.contains("State: CASTLE:0 floor 0"));
-    assert!(initial_line.contains("message-bytes"));
-    assert!(!initial_message.is_empty());
-    assert!(!initial_line.contains(&initial_message));
+    // No `systems/` document publishes a scene-entry narration, so entering a
+    // location prints nothing and the diagnostic line reports an empty slot.
+    assert!(initial_message.is_empty());
+    assert!(initial_line.contains("message-bytes 0 hash"));
 
     let raster_line = raster_diagnostic_line(&mut state, 5, &atlas).unwrap();
     assert!(raster_line.contains("EGA tile atlas"));

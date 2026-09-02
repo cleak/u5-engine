@@ -746,8 +746,22 @@ impl DungeonMovementEcho {
     }
 }
 
-/// `commands.md §5.2` (`#81`) dungeon movement refusals.
-pub const DUNGEON_MOVEMENT_BLOCKED_REFUSAL: &str = "Blocked!";
+/// The refused-step line, shared by every mode that has one.
+///
+/// `audio.md §7.4` censuses it directly: "the game contains exactly five
+/// copies of the `Blocked!` string and exactly five pieces of code that print
+/// one - town (beeps), overworld (beeps, conditionally), two in the dungeon
+/// (both silent), and combat (beeps)". `commands.md §5.2` (`#81`) lists it
+/// among the dungeon movement refusals and `combat.md §3` gives the arena
+/// transcript "North / Blocked!" on two lines.
+///
+/// It was named `DUNGEON_MOVEMENT_BLOCKED_REFUSAL` and had no production
+/// caller; the name claimed a mode scope the census contradicts.
+pub const MOVEMENT_BLOCKED_REFUSAL: &str = "Blocked!";
+/// `doors-and-z-transitions.md §9`: the one line the outdoor climb prints,
+/// once per living member whose Dexterity roll fails. The successful climb
+/// prints nothing at all.
+pub const OUTDOOR_CLIMB_FALL_REFUSAL: &str = "Fell!";
 /// Published as a movement-family refusal: `#81` could not pin it to a
 /// single key, so it is not bound to one here either.
 pub const DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL: &str = "Not in doorway!";

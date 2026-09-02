@@ -262,11 +262,16 @@ fn world_movement_blocks_active_object_without_turn() {
     assert_eq!((state.player.x, state.player.y), (0, 0));
     assert_eq!(state.clock, GameClock::default());
     assert_eq!(state.turn, 0);
-    assert!(state.message.contains("world object tile 170"));
-    assert!(state.message.contains("slot 1"));
-    assert!(state.message.contains("selected BRIT.CBT arena 2"));
-    assert!(state.message.contains("base class Mimic (26)"));
-    assert!(!state.message.contains("out of scope"));
+    // `audio.md §7.4`: a refusal by a blocking object prints the shared
+    // refusal line. The arena/class selection it used to narrate is
+    // asserted directly, where no player-facing string has to carry it.
+    assert_eq!(state.message, "Blocked!");
+    let note = state
+        .terrain_encounter_note(None, WorldPlane::Britannia, state.active_objects[1])
+        .unwrap();
+    assert!(note.contains("selected BRIT.CBT arena 2"), "{note}");
+    assert!(note.contains("base class Mimic (26)"), "{note}");
+    assert!(!note.contains("out of scope"), "{note}");
 }
 
 #[test]

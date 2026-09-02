@@ -2068,6 +2068,13 @@ impl PlayState {
         for effect in entry_effects {
             next.emit_sound_effect(effect);
         }
+        // A scene rebuild constructs `next` from scratch, so every frontend
+        // presentation flag defaults off. `pace_combat_presentations` is set
+        // once by the graphical shell at bootstrap: dropping it here left a
+        // fight entered after any location or gate transition resolving a
+        // whole sixteen-actor round inside one host frame, with the paced
+        // presentation path silently unreachable for the rest of the session.
+        next.pace_combat_presentations = self.pace_combat_presentations;
         *self = next;
         Ok(())
     }

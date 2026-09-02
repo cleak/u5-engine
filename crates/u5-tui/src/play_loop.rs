@@ -400,7 +400,12 @@ pub fn handle_empty_play_input(state: &mut PlayState, game_dir: &Path) -> io::Re
         .resolve_current_dungeon_room_trigger(Some(game_dir))?
         .is_none()
     {
-        state.pass_turn_with_game_dir(Some(game_dir))?;
+        // `commands.md §8.1`: "There is no distinct Pass input: Space is the
+        // key and `Pass` is its echo." Dispatching the key rather than calling
+        // the handler directly is what puts that echo on the transcript; the
+        // pass prints no result of its own, so without the echo the turn left
+        // no trace in the message window at all.
+        let _ = handle_play_key_input(state, ' ', "", game_dir)?;
     }
     Ok(())
 }

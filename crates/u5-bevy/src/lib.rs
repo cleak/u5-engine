@@ -175,10 +175,50 @@ use u5_runtime::{TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS};
 /// its own commit hand-off.
 mod u4_transfer;
 
+/// The on-screen size of a logical frame at `scale`, aspect-corrected.
+///
+/// Horizontal scale is `scale`; vertical scale is `scale *
+/// DISPLAY_PIXEL_ASPECT`, so a 320x200 frame at 3.0 presents 960x720 - a
+/// 4:3 rect rather than the 16:10 one square pixels produce.
+fn aspect_corrected_display_size(frame_width: u32, frame_height: u32, scale: f32) -> Vec2 {
+    Vec2::new(
+        frame_width as f32 * scale,
+        frame_height as f32 * scale * DISPLAY_PIXEL_ASPECT,
+    )
+}
+
+/// Largest aspect-correct rect that fits inside `window`, so a resized or
+/// maximised window letterboxes/pillarboxes against `ClearColor::BLACK`
+/// instead of distorting the frame.
+fn fitted_display_size(frame_width: u32, frame_height: u32, window: Vec2) -> Vec2 {
+    let aspect = (frame_width as f32) / (frame_height as f32 * DISPLAY_PIXEL_ASPECT);
+    if window.x <= 0.0 || window.y <= 0.0 {
+        return aspect_corrected_display_size(frame_width, frame_height, DISPLAY_SCALE);
+    }
+    let width = window.x.min(window.y * aspect);
+    Vec2::new(width, width / aspect)
+}
+
 const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
 const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
+/// Vertical stretch applied to the 320x200 frame so it presents at 4:3.
+///
+/// No `systems/` document states a display aspect - the published display
+/// contracts stop at the 320x200 logical frame (`display-driver-abi.md`,
+/// `text-output.md §4`). The number is measured, not published: under DOSBox
+/// Staging the original's 320x200 frame is rendered into a 1600x1200 rect
+/// inside a 1920x1200 client (5.0x horizontal, 6.0x vertical), and the same
+/// 6/5 ratio falls out independently of the tile grid, which measures
+/// 80x96 physical pixels for a 16x16 logical tile. Pixel aspect 1.20,
+/// display aspect 4:3 - which is what a period EGA monitor did with
+/// 320x200. See the reference measurement in the DOSBox observation pass
+/// (`engine-validation-report.md §11.2`).
+///
+/// Square pixels made everything 20 % wider per unit height than the
+/// original.
+const DISPLAY_PIXEL_ASPECT: f32 = 1.2;
 /// IBM PC/AT default typematic timing: a 500 ms initial delay and roughly
 /// ten make codes per second thereafter. U5 consumes those through the BIOS
 /// buffer and flushes queued type-ahead after each accepted action.
@@ -1173,8 +1213,12 @@ pub fn run_visual_loop(
         rune_font,
     };
 
-    let display_w = VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE;
-    let display_h = VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE;
+    let display = aspect_corrected_display_size(
+        VISUAL_PLAY_FRAME_WIDTH,
+        VISUAL_PLAY_FRAME_HEIGHT,
+        DISPLAY_SCALE,
+    );
+    let (display_w, display_h) = (display.x, display.y);
 
     // Headless screenshot driver: when U5_BEVY_SCREENSHOT is set, the harness
     // waits a few frames (so the swapchain has a real image), takes a
@@ -1210,6 +1254,7 @@ pub fn run_visual_loop(
         (
             drive_visual,
             animate_static_tiles,
+            fit_display_to_window,
             play_speaker_effects,
             expire_speaker_voice,
             screenshot_system,
@@ -2091,10 +2136,10 @@ fn apply_visual_key_route_step(
             Some(PlayInputDisposition::Continue) | None => return Ok(()),
         }
     }
-    if step.key == KeyCode::Escape && should_escape_quit_visual(state) {
-        return Err(io::Error::other(
-            "visual key route Escape would quit outside a prompt",
-        ));
+    if step.key == KeyCode::Escape && escape_is_inert_in_gameplay(state) {
+        // The shell swallows Escape outside a prompt; the route replays the
+        // same nothing rather than dispatching a byte the shell never sends.
+        return Ok(());
     }
     let Some(ch) = key_code_to_char(step.key, step.shift, step.control) else {
         return Ok(());
@@ -9037,7 +9082,11 @@ fn handle_empty_visual_route_input(state: &mut PlayState, game_dir: &Path) -> io
         .resolve_current_dungeon_room_trigger(Some(game_dir))?
         .is_none()
     {
-        state.pass_turn_with_game_dir(Some(game_dir))?;
+        // `commands.md §8.1`: "There is no distinct Pass input: Space is the
+        // key and `Pass` is its echo." The pass prints no result line of its
+        // own, so the echo the dispatcher opens is the turn's only trace in
+        // the message window; calling the handler directly skipped it.
+        let _ = handle_play_key_input(state, ' ', "", game_dir)?;
     }
     Ok(())
 }
@@ -9220,12 +9269,36 @@ fn add_visual_intro_update_systems(app: &mut App) {
             // Inert while the intro owns the framebuffer; after Journey
             // Onward this is the resident idle wait-loop redraw tick.
             animate_static_tiles,
+            fit_display_to_window,
             play_speaker_effects,
             expire_speaker_voice,
             screenshot_system,
         )
             .chain(),
     );
+}
+
+/// Keep the presented frame at the measured 4:3 display aspect whatever
+/// the window is doing.
+///
+/// The window is resizable, so a fixed `custom_size` would either crop or
+/// leave the frame at its launch size. Fitting each frame keeps the
+/// 1.20 pixel aspect of `DISPLAY_PIXEL_ASPECT` exact and lets
+/// `ClearColor::BLACK` supply the letterbox/pillarbox bars.
+fn fit_display_to_window(windows: Query<&Window>, mut sprites: Query<&mut Sprite>) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let size = fitted_display_size(
+        VISUAL_PLAY_FRAME_WIDTH,
+        VISUAL_PLAY_FRAME_HEIGHT,
+        Vec2::new(window.resolution.width(), window.resolution.height()),
+    );
+    for mut sprite in sprites.iter_mut() {
+        if sprite.custom_size != Some(size) {
+            sprite.custom_size = Some(size);
+        }
+    }
 }
 
 /// Register the PC-speaker backend on an app.
@@ -10276,14 +10349,17 @@ fn setup(
     );
     image.sampler = ImageSampler::nearest();
     let image_handle = images.add(image);
-    let display_width = VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE;
-    let display_height = VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE;
+    let display = aspect_corrected_display_size(
+        VISUAL_PLAY_FRAME_WIDTH,
+        VISUAL_PLAY_FRAME_HEIGHT,
+        DISPLAY_SCALE,
+    );
 
     commands.spawn(Camera2d);
     commands.spawn((
         Sprite {
             image: image_handle.clone(),
-            custom_size: Some(Vec2::new(display_width, display_height)),
+            custom_size: Some(display),
             ..default()
         },
         Transform::from_xyz(0.0, 0.0, 0.0),
@@ -10335,8 +10411,18 @@ fn setup_intro(
         Sprite {
             image: image_handle,
             custom_size: Some(Vec2::new(
-                INTRO_FRAMEBUFFER_WIDTH as f32 * INTRO_DISPLAY_SCALE,
-                INTRO_FRAMEBUFFER_HEIGHT as f32 * INTRO_DISPLAY_SCALE,
+                aspect_corrected_display_size(
+                    INTRO_FRAMEBUFFER_WIDTH,
+                    INTRO_FRAMEBUFFER_HEIGHT,
+                    INTRO_DISPLAY_SCALE,
+                )
+                .x,
+                aspect_corrected_display_size(
+                    INTRO_FRAMEBUFFER_WIDTH,
+                    INTRO_FRAMEBUFFER_HEIGHT,
+                    INTRO_DISPLAY_SCALE,
+                )
+                .y,
             )),
             ..default()
         },
@@ -10351,19 +10437,17 @@ fn drive_visual_intro(
     mut images: ResMut<Assets<Image>>,
     mut sprites: Query<&mut Sprite>,
     mut windows: Query<&mut Window>,
-    mut exit: EventWriter<AppExit>,
 ) {
     let Some(mut intro) = intro else {
         return;
     };
     let mut handled = false;
-    if keyboard.just_pressed(KeyCode::Escape) {
-        if cancel_visual_intro_panel(&mut intro) {
-            handled = true;
-        } else {
-            exit.write(AppExit::Success);
-            return;
-        }
+    if keyboard.just_pressed(KeyCode::Escape) && cancel_visual_intro_panel(&mut intro) {
+        // `systems/intro.md §12`: Escape backs out of a panel. With no panel
+        // open it does nothing - the published program exit is the
+        // `Control + E` "Exit to DOS?" prompt of `commands.md §5.1`, never a
+        // bare keypress.
+        handled = true;
     }
 
     let shift_pressed =
@@ -10442,20 +10526,19 @@ fn transition_visual_intro_to_gameplay(
         "",
     );
     replace_visual_image_data(images, &image_handle, rgba, "Journey Onward");
+    let display = aspect_corrected_display_size(
+        VISUAL_PLAY_FRAME_WIDTH,
+        VISUAL_PLAY_FRAME_HEIGHT,
+        DISPLAY_SCALE,
+    );
     for mut sprite in sprites.iter_mut() {
-        sprite.custom_size = Some(Vec2::new(
-            VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE,
-            VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE,
-        ));
+        sprite.custom_size = Some(display);
     }
     let mut window = windows
         .single_mut()
         .expect("Journey Onward requires exactly one Bevy window");
     window.title = "Ultima V".to_string();
-    window.resolution.set(
-        VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE,
-        VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE,
-    );
+    window.resolution.set(display.x, display.y);
     commands.insert_resource(VisualState {
         game_dir,
         state,
@@ -11826,9 +11909,12 @@ fn drive_visual(
     }
     if !visual_modal_prompt_active(&visual.state) {
         match visual.state.party_capability() {
-            PartyCapability::CanAct { member_index } => {
-                visual.state.active_player = Some(member_index);
-            }
+            // Readiness only. The shell used to select the first able member
+            // here on every frame, which pinned the `stats-panel.md §4.1`
+            // active-player marker to that row for the whole session and, in
+            // combat, held the `combat.md §7` cursor box on it instead of the
+            // character being prompted.
+            PartyCapability::CanAct { .. } => {}
             // The animation pump owns these automatic branches at its paced
             // cadence. Input is rejected until it makes the roster ready.
             PartyCapability::Sleeping | PartyCapability::Defeated => return,
@@ -11843,10 +11929,7 @@ fn drive_visual(
         // ready party slot.
         return;
     }
-    if keyboard.just_pressed(KeyCode::Escape) && should_escape_quit_visual(&visual.state) {
-        exit.write(AppExit::Success);
-        return;
-    }
+    let escape_inert = escape_is_inert_in_gameplay(&visual.state);
     let mut handled = false;
     let shift_pressed =
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
@@ -11863,6 +11946,10 @@ fn drive_visual(
         modal_prompt_active,
     );
     for key in keyboard.get_just_pressed() {
+        if *key == KeyCode::Escape && escape_inert {
+            // Inert, not fatal: see `escape_is_inert_in_gameplay`.
+            continue;
+        }
         if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
             let v: &mut VisualState = visual.as_mut();
@@ -16245,7 +16332,6 @@ fn render_integrated_status_framebuffer(
         // result draws both. The slot is appended only when the
         // transcript has not recorded it yet — the line still being
         // composed.
-        //
         let keep = |text: &str| {
             (!text.trim().is_empty()).then(|| visual_display_line(&display_state, text))
         };
@@ -16464,7 +16550,17 @@ fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
     state.advance_endgame_display_frame()
 }
 
-fn should_escape_quit_visual(state: &PlayState) -> bool {
+/// `systems/commands.md §5.1` gives the program exit its own prompt
+/// (`Control + E`, "Exit to DOS?"), and no published input contract gives
+/// Escape a gameplay meaning outside a prompt: `input.md §10` has the
+/// adjacent-tile direction prompt treat it as "another read like any other
+/// rejected key", and `text-output.md §10.6` gives it an erase/cancel role
+/// only inside the typed readers. Outside a prompt it is therefore inert.
+///
+/// This used to be `should_escape_quit_visual`, and the shell wrote
+/// `AppExit` on it: one keypress ended the session with no prompt and no
+/// save. The name asserted a contract nothing published.
+fn escape_is_inert_in_gameplay(state: &PlayState) -> bool {
     !visual_modal_prompt_active(state)
 }
 
@@ -17471,8 +17567,8 @@ mod tests {
             .expect("intro runtime must install an Update schedule");
         assert_eq!(
             update.systems_len(),
-            7,
-            "intro runtime needs both input drivers, both animation pumps, sound playback, sound cleanup, and screenshots"
+            8,
+            "intro runtime needs both input drivers, both animation pumps, the aspect fit, sound playback, sound cleanup, and screenshots"
         );
     }
 
@@ -23192,18 +23288,18 @@ mod tests {
     }
 
     #[test]
-    fn visual_escape_quits_only_when_no_gameplay_prompt_is_active() {
+    fn visual_escape_is_inert_only_when_no_gameplay_prompt_is_active() {
         let mut state = test_state(open_grid(), 1, 1);
-        assert!(should_escape_quit_visual(&state));
+        assert!(escape_is_inert_in_gameplay(&state));
 
         state.start_cast_spell_prompt();
         assert!(state.active_cast.is_some());
-        assert!(!should_escape_quit_visual(&state));
+        assert!(!escape_is_inert_in_gameplay(&state));
 
         let mut chest = test_state(open_grid(), 1, 1);
         chest.start_surface_object_chest_prompt(2, 1, SurfaceChestVerb::Open);
         assert!(chest.active_surface_chest.is_some());
-        assert!(!should_escape_quit_visual(&chest));
+        assert!(!escape_is_inert_in_gameplay(&chest));
     }
 
     #[test]

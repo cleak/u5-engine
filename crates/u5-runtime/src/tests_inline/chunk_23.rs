@@ -16846,6 +16846,28 @@ fn combat_cursor_blink_tick_reports_cursor_and_secondary_marker_cells() {
 }
 
 #[test]
+fn the_idle_redraw_tick_owns_the_combat_cursor_blink() {
+    // `combat.md §7`: the shared tile-painting pass is "run by the idle
+    // redraw tick in *every* mode", and its combat-band tail "toggles a
+    // blink flag each pass". The frontends pump that tick, so the flag has
+    // to move there rather than at a round boundary - otherwise the box the
+    // original blinks stands solid for a whole round.
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.combat_active = true;
+
+    assert!(!state.combat_cursor_blink);
+    state.advance_visual_tick();
+    assert!(state.combat_cursor_blink);
+    state.advance_visual_tick();
+    assert!(!state.combat_cursor_blink);
+
+    // Outside a fight the tail does not run at all.
+    let mut exploring = world_state(open_world_grid(), 10, 20);
+    exploring.advance_visual_tick();
+    assert!(!exploring.combat_cursor_blink);
+}
+
+#[test]
 fn combat_entry_magic_ring_pass_applies_invisibility_and_vanish_clears_it() {
     let mut state = world_state(open_world_grid(), 10, 20);
     state.party_equipment = default_party_equipment(1);

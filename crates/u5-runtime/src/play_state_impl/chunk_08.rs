@@ -1611,6 +1611,13 @@ impl PlayState {
         for effect in entry_effects {
             next.emit_sound_effect(effect);
         }
+        // A scene rebuild constructs `next` from scratch, so every frontend
+        // presentation flag defaults off. `pace_combat_presentations` is set
+        // once by the graphical shell at bootstrap: dropping it here left a
+        // fight entered after any location or gate transition resolving a
+        // whole sixteen-actor round inside one host frame, with the paced
+        // presentation path silently unreachable for the rest of the session.
+        next.pace_combat_presentations = self.pace_combat_presentations;
         *self = next;
         Ok(match target {
             PlayTarget::Town(scene) => {
@@ -1856,14 +1863,14 @@ impl PlayState {
         plane: WorldPlane,
     ) -> io::Result<()> {
         if let Some(report) = self.apply_world_underfoot_damage(game_dir, plane)? {
-            self.message.push_str(&format!(" {report}."));
+            self.append_result_sentence(&format!("{report}."));
         }
         Ok(())
     }
 
     pub fn append_world_status_tile_message(&mut self, plane: WorldPlane) {
         if let Some(report) = self.apply_world_underfoot_status_tick(plane) {
-            self.message.push_str(&format!(" {report}."));
+            self.append_result_sentence(&format!("{report}."));
         }
     }
 
@@ -1943,7 +1950,14 @@ impl PlayState {
             self.mark_visibility_dirty();
             "\nThou art not upon a Sacred Quest!\nPassage denied!\n"
         };
-        self.message.push_str(narrative);
+        // The accepted step no longer leaves a line in the slot, so the
+        // narrative block must not open with the separator newline it used
+        // to need.
+        if self.message.is_empty() {
+            self.message = narrative.trim_start_matches('\n').to_string();
+        } else {
+            self.message.push_str(narrative);
+        }
         true
     }
 }

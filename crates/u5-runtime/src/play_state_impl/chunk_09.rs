@@ -2758,6 +2758,21 @@ impl PlayState {
         }
     }
 
+    /// Append one result sentence to the slot, separated by a space only
+    /// when the slot already holds something.
+    ///
+    /// An accepted step now leaves the slot empty (`text-output.md §10.2`),
+    /// so the consequence lines that used to continue the move narration
+    /// must not open with a stray space.
+    pub(crate) fn append_result_sentence(&mut self, sentence: &str) {
+        if self.message.is_empty() {
+            self.message = sentence.to_string();
+        } else {
+            self.message.push(' ');
+            self.message.push_str(sentence);
+        }
+    }
+
     pub fn append_pending_hourly_status_message(&mut self) {
         let Some(report) = self.pending_hourly_status_message.take() else {
             return;
@@ -3015,6 +3030,13 @@ impl PlayState {
             self.animate_active_object_sprites_only();
         }
         self.advance_animation_clock();
+        // `combat.md §7`: the shared tile-painting pass - "run by the idle
+        // redraw tick in *every* mode" - has a combat-band tail that "toggles
+        // a blink flag each pass and, on the lit pass, draws the player cursor
+        // box". This is that tick, so the toggle belongs here. Without it the
+        // flag only moved at a round boundary, and the box the original blinks
+        // sat solid for a whole round. The helper is inert outside combat.
+        let _ = self.apply_combat_cursor_blink_tick();
     }
 
     pub fn decay_light_counters(&mut self, units: u8) {
@@ -3802,7 +3824,7 @@ impl PlayState {
     /// per-turn epilogue, which runs *before* the command handler writes
     /// its own result, so they must reach the transcript as they are
     /// produced. Assigning the slot here is what lost the broadside
-    /// announcement: the handler's `Passed.` replaced it and "no test of
+    /// announcement: the handler's own result replaced it and "no test of
     /// an individual message" could show it.
     fn push_impact_line(&mut self, line: &str) {
         self.emit_message_line(line);

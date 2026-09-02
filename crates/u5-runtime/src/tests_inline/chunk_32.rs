@@ -49,7 +49,11 @@ fn town_sleep_gate_passes_without_input_and_wakes_before_tile_effects() {
         state.apply_exploration_turn_gate(&dir).unwrap(),
         ExplorationTurnGateOutcome::Ready { member_index: 0 }
     );
-    assert_eq!(state.active_player, Some(0));
+    // The gate reports readiness; it does not select a member.
+    // `stats-panel.md §4.1`/§11 keep the active-player selector persistent
+    // and moved only by an explicit selection change or the dead/sleeping
+    // rule, so an ordinary ready turn leaves it at the none sentinel.
+    assert_eq!(state.active_player, None);
     let _ = fs::remove_dir_all(dir);
 }
 

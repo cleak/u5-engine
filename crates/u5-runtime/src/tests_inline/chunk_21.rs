@@ -126,7 +126,7 @@ fn dungeon_e_cells_are_pass_through_visual_variants_not_openable_doors() {
     assert_eq!(step_state.step(Direction::East), MoveOutcome::Moved);
     assert_eq!((step_state.player.x, step_state.player.y), (2, 1));
     assert_eq!(step_state.turn, 1);
-    assert!(step_state.message.contains("underfoot heavy-door variant"));
+    assert_eq!(step_state.message, "");
 }
 
 #[test]

@@ -1348,7 +1348,8 @@ fn stonegate_load_appends_entry_presentation_notes() {
 
     let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
-    assert!(state.message.contains("Entered KEEP:4"));
+    // The entry itself prints nothing (no published scene-entry narration),
+    // so the presentation notes are the whole of the slot.
     assert!(state.message.contains("Sceptre prelude"));
     assert!(state.message.contains("air of Hatred"));
     assert!(!state.message.contains("air of Falsehood"));

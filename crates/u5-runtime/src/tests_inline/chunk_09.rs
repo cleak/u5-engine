@@ -263,8 +263,9 @@ fn fixed_surface_chasm_underfoot_pass_triggers_without_sidecar_table() {
         (usize::from(SURFACE_CHASM_X), usize::from(SURFACE_CHASM_Y))
     );
     assert_eq!(state.turn, 1);
-    assert!(state.message.starts_with("Passed."));
-    assert!(state.message.contains("F-A-L-L-S"));
+    // `commands.md §8.1`: the pass itself prints no result line, so the
+    // fall narration is the whole of the slot.
+    assert!(state.message.starts_with("F-A-L-L-S"));
     assert_eq!(state.party[0].hp, 9);
     let _ = fs::remove_dir_all(dir);
 }
@@ -330,8 +331,7 @@ fn pass_turn_on_clean_plane_transition_applies_underfoot_transition() {
     );
     assert_eq!((state.player.x, state.player.y), (30, 40));
     assert_eq!(state.turn, 1);
-    assert!(state.message.starts_with("Passed."));
-    assert!(state.message.contains("F-A-L-L-S"));
+    assert!(state.message.starts_with("F-A-L-L-S"));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -787,7 +787,7 @@ fn world_load_from_save_uses_live_active_object_table() {
 }
 
 #[test]
-fn world_load_message_reports_current_wind_status() {
+fn world_load_reports_current_wind_status_through_the_banner_not_the_message() {
     let dir = debug_game_dir();
     let options = PlayOptions {
         target: PlayTarget::World(WorldPlane::Underworld),
@@ -860,7 +860,11 @@ fn world_load_message_reports_current_wind_status() {
 
     let state = PlayState::load_world_scene(&dir, WorldPlane::Underworld, options).unwrap();
 
-    assert!(state.message.contains("Entered UNDERWORLD at (10, 20)."));
-    assert!(state.message.contains("West Winds"));
+    // `text-output.md §10.7`: the prevailing wind is a viewport bottom-ribbon
+    // label, and the entry itself prints nothing. Loading a plane therefore
+    // leaves the message window empty and reports the wind only through the
+    // banner text the chrome draws.
+    assert!(state.message.is_empty());
+    assert_eq!(state.wind_status_message(), "West Winds");
     let _ = fs::remove_dir_all(dir);
 }

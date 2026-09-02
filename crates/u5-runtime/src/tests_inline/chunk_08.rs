@@ -122,7 +122,6 @@
         assert_eq!(state.turn, 1);
         assert!(state.party[0].hp < 12);
         assert_eq!(state.party[1].hp, 9);
-        assert!(state.message.contains("underfoot special"));
         assert!(state.message.contains("lava damage"));
         assert!(state.message.contains("party slot 0"));
         assert!(!state.message.contains("party slot 1"));
@@ -144,7 +143,7 @@
         assert_eq!((state.player.x, state.player.y), (0, 0));
         assert_eq!(state.turn, 0);
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
-        assert_eq!(state.message, "Blocked by lava at (1, 0).");
+        assert_eq!(state.message, "Blocked!");
     }
 
     #[test]
@@ -224,7 +223,6 @@
         assert_eq!((state.player.x, state.player.y), (1, 0));
         assert_eq!(state.turn, 1);
         assert!(state.party[0].hp < 12);
-        assert!(state.message.starts_with("Passed."));
         assert!(state.message.contains("drowning damage"));
         assert!(state.message.contains("party slot 0"));
         let _ = fs::remove_dir_all(dir);
@@ -257,7 +255,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
-            "Moved East to (233, 235) on BRITANNIA; underfoot terrain.\nThou art not upon a Sacred Quest!\nPassage denied!\n"
+            "Thou art not upon a Sacred Quest!\nPassage denied!\n"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -282,7 +280,7 @@
             (NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)
         );
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Passed.\nPass, Seeker!\n");
+        assert_eq!(state.message, "Pass, Seeker!\n");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -366,8 +364,7 @@
             (1, 0)
         );
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Moved East to (1, 0)"));
-        assert!(!state.message.contains("waterfall swept"));
+        assert_eq!(state.message, "");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -390,7 +387,7 @@
 
         assert_eq!((state.player.x, state.player.y), (0, 0));
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Blocked by lava at (1, 0).");
+        assert_eq!(state.message, "Blocked!");
         let _ = fs::remove_dir_all(dir);
     }
 

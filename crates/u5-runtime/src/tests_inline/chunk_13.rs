@@ -17498,8 +17498,7 @@ fn pass_turn_on_gust_art_only_decays_existing_light_counters() {
     assert_eq!(state.torch_counter, 4);
     assert_eq!(state.light_spell_counter, 4);
     assert!(state.visibility_dirty);
-    assert!(state.message.starts_with("Passed."));
-    assert!(!state.message.contains("breeze blows out the torch"));
+    assert!(state.message.is_empty());
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -17543,8 +17542,7 @@ fn ordinary_dungeon_gust_art_uses_underfoot_description() {
     );
 
     assert_eq!(state.torch_counter, 4);
-    assert!(!state.message.contains("breeze blows out the torch"));
-    assert!(state.message.contains("underfoot"));
+    assert_eq!(state.message, "");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -17616,7 +17614,6 @@ fn pass_turn_on_dungeon_teleport_sidecar_changes_level_after_turn() {
     assert_eq!((state.player.x, state.player.y), (4, 5));
     assert_eq!(state.active_objects[0].z, 3);
     assert_eq!(state.turn, 1);
-    assert!(state.message.starts_with("Passed."));
     assert!(state.message.contains("scripted dungeon teleport"));
     let _ = fs::remove_dir_all(dir);
 }
@@ -23945,7 +23942,7 @@ fn dungeon_movement_rejects_diagonals_and_wraps_bounds() {
     assert_eq!(state.step(Direction::North), MoveOutcome::Moved);
     assert_eq!((state.player.x, state.player.y), (0, 7));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Moved North to (0, 7)"));
+    assert_eq!(state.message, "");
 }
 
 #[test]
@@ -24066,7 +24063,7 @@ fn dungeon_period_forward_passes_through_heavy_door_variant_cell() {
 
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("underfoot heavy-door variant"));
+    assert_eq!(state.message, "");
 }
 
 #[test]

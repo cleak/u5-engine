@@ -320,7 +320,7 @@
         };
         state.active_objects[0].z = WorldPlane::Britannia.save_floor();
         state.party = six_member_party(40);
-        state.message = "Passed.".to_string();
+        state.message = String::new();
         state.turn = 1;
         state.active_objects.push(ActiveObject {
             type_byte: 0xe0,
@@ -339,7 +339,7 @@
             .expect("sand-trap reaction should not require optional data");
 
         assert_eq!(outcome, Some(MoveOutcome::Used));
-        assert_eq!(state.message, "Passed.");
+        assert!(state.message.is_empty());
         assert!(state.party.iter().all(|member| member.hp < 40));
         assert_eq!(state.active_objects[1].type_byte, 0xe0);
         let _ = fs::remove_dir_all(dir);
@@ -2577,12 +2577,16 @@
             .iter()
             .position(|text| text.contains("BOOOM"))
             .unwrap_or_else(|| panic!("no broadside announcement in {texts:?}"));
-        let result = texts
+        let echo = texts
             .iter()
-            .position(|text| *text == "Passed.")
-            .unwrap_or_else(|| panic!("no command result in {texts:?}"));
-        assert!(boom < result, "announcement must precede the result: {texts:?}");
-        // `commands.md §5`: the verb echo opens the turn above both.
+            .position(|text| *text == "Pass")
+            .unwrap_or_else(|| panic!("no verb echo in {texts:?}"));
+        // `commands.md §5`: the verb echo opens the turn, and the epilogue's
+        // announcement is written beneath it. `Pass` itself contributes no
+        // result line (`commands.md §8.1` row B), so the announcement is the
+        // last line of the turn rather than the middle one - but it is still
+        // there, which is what the slot-as-record model lost.
+        assert!(echo < boom, "the echo must open the turn: {texts:?}");
         assert!(state.message_entries()[0].is_command_echo);
     }
 
@@ -2606,21 +2610,21 @@
             .iter()
             .position(|row| row.text.contains("BOOOM"))
             .unwrap_or_else(|| panic!("no announcement row in {:?}", layout.rows));
-        let result = layout
+        let echo = layout
             .rows
             .iter()
-            .position(|row| row.text.contains("Passed."))
-            .unwrap_or_else(|| panic!("no result row in {:?}", layout.rows));
+            .position(|row| row.text == "Pass")
+            .unwrap_or_else(|| panic!("no echo row in {:?}", layout.rows));
         assert!(
-            layout.rows[announcement].row < layout.rows[result].row,
-            "announcement must sit above the result: {:?}",
+            layout.rows[echo].row < layout.rows[announcement].row,
+            "the announcement must sit beneath the echo: {:?}",
             layout.rows
         );
         // `text-output.md §10.2`: the verb echo is the only prefixed row
         // of the turn; the announcement and the result are pure output
         // and start unprefixed at column 24.
         assert!(!layout.rows[announcement].prefixed);
-        assert!(!layout.rows[result].prefixed);
+        assert!(layout.rows[echo].prefixed);
     }
 
     #[test]
@@ -2950,9 +2954,10 @@
             PlayInputDisposition::Continue
         );
 
-        // The command's own result still stands in the slot the renderers and
-        // the rest of the suite read.
-        assert_eq!(state.message, "Passed.");
+        // `Pass` prints no result of its own (`commands.md §8.1` row B), so
+        // the slot the handler leaves behind is empty and the announcement
+        // survives on the transcript rather than in it.
+        assert!(state.message.is_empty());
 
         let lines: Vec<&str> = state
             .message_entries()
@@ -2963,12 +2968,12 @@
             .iter()
             .position(|line| line.contains("BOOOM"))
             .unwrap_or_else(|| panic!("broadside line missing from transcript: {lines:?}"));
-        let passed = lines
+        let echo = lines
             .iter()
-            .position(|line| line.contains("Passed."))
-            .unwrap_or_else(|| panic!("pass result missing from transcript: {lines:?}"));
-        // "the announcement first, then the result beneath it".
-        assert!(boom < passed, "wrong order: {lines:?}");
+            .position(|line| *line == "Pass")
+            .unwrap_or_else(|| panic!("verb echo missing from transcript: {lines:?}"));
+        // The echo opens the turn; the epilogue announcement follows it.
+        assert!(echo < boom, "wrong order: {lines:?}");
         // Emitted once, not once per transcribe path.
         assert_eq!(
             lines.iter().filter(|line| line.contains("BOOOM")).count(),
