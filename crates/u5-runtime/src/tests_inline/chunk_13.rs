@@ -21358,10 +21358,31 @@ fn chargen_questionnaire_always_floors_strength_to_twenty() {
     assert_eq!(CHARGEN_STARTING_PARTY_SIZE, 3);
 
     // Empty winners list: STR should still be floored to 20.
+    //
+    // `chargen.md §7` retraction: the dexterity tally "starts from the
+    // shipped seed record's dexterity of `15`", so an unwinnable
+    // questionnaire still commits DEX 15 - "Dexterity itself is still
+    // written with no floor of its own - the 15 is where the tally starts,
+    // not a clamp applied at commit." §7 publishes no upper bound for
+    // questionnaire dexterity, so none is asserted here.
     let stats = chargen_stats_from_winners(&[]);
     assert_eq!(stats.strength, CHARGEN_STR_FLOOR);
-    assert_eq!(stats.dexterity, 0);
+    assert_eq!(CHARGEN_SEED_DEXTERITY, 15);
+    assert_eq!(stats.dexterity, CHARGEN_SEED_DEXTERITY);
     assert_eq!(stats.intelligence, 0);
+
+    // `combat.md §5.1`: "A questionnaire Avatar therefore enters play with
+    // dexterity 15 or better, giving a phase counter of **21 or less**."
+    for virtues in [
+        vec![],
+        vec![ShrineVirtue::Humility; 7],
+        vec![ShrineVirtue::Compassion; 7],
+        vec![ShrineVirtue::Spirituality; 7],
+    ] {
+        let stats = chargen_stats_from_winners(&virtues);
+        assert!(stats.dexterity >= CHARGEN_SEED_DEXTERITY);
+        assert!(COMBAT_PLACEMENT_PHASE_BASE - stats.dexterity <= 21);
+    }
 
     // Worst-case STR contribution (any seven Spirituality wins):
     // chargen_virtue_stat_delta(Spirituality) is INT-only, so STR

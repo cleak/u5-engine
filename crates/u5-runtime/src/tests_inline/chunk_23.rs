@@ -10050,7 +10050,7 @@ fn combat_input_dispatch_push_prompt_cancel_commits_actor_action() {
     );
     assert_eq!(
         state.message,
-        format!("Push-{DIRECTION_PROMPT_LABEL_PASS}")
+        format!("Push-{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
     );
 }
 
@@ -10095,7 +10095,7 @@ fn combat_klimb_cardinal_suffix_moves_actor_inside_arena() {
         (state.active_objects[0].x, state.active_objects[0].y),
         (5, 4)
     );
-    assert_eq!(state.message, "Klimbed North to (5, 4).");
+    assert_eq!(state.message, "Klimbed North to (5, 4).\nAvatar, armed with bare hands:");
     assert!(state.visibility_dirty);
     assert!(state.combat_active);
 }
@@ -10163,7 +10163,10 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
         (cancelled.combat_actors[8].x, cancelled.combat_actors[8].y),
         (9, 10)
     );
-    assert_eq!(cancelled.message, DIRECTION_PROMPT_LABEL_PASS);
+    assert_eq!(
+        cancelled.message,
+        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
+    );
 
     let mut blocked = combat_player_command_state(10, 10);
     blocked.combat_terrain[4][5] = 0x0c;
@@ -10356,7 +10359,10 @@ fn combat_sjog_prompt_cancel_commits_actor_action() {
         (state.combat_actors[8].x, state.combat_actors[8].y),
         (9, 10)
     );
-    assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+    assert_eq!(
+        state.message,
+        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
+    );
 }
 
 #[test]
@@ -10820,7 +10826,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         (move_state.combat_actors[0].x, move_state.combat_actors[0].y),
         (6, 5)
     );
-    assert_eq!(move_state.message, "East\n");
+    assert_eq!(move_state.message, "East\n\nAvatar, armed with bare hands:");
     assert_eq!(move_state.pending_combat_actor_slot, Some(0));
 
     let mut blocked_state = combat_player_command_state(8, 5);
@@ -10853,7 +10859,10 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         ),
         (5, 5)
     );
-    assert_eq!(attack_state.message, "East\nAvatar is poisoned!\n");
+    assert_eq!(
+        attack_state.message,
+        "East\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
+    );
     assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
     let mut quit_state = combat_player_command_state(8, 5);
@@ -10910,7 +10919,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
 
     assert_eq!(
         state.message,
-        "East\nGiant Rat lightly wounded!\nAvatar is poisoned!\n"
+        "East\nGiant Rat lightly wounded!\nAvatar is poisoned!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -10933,7 +10942,7 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "East\nGiant Rat killed!\n");
+    assert_eq!(state.message, "East\nGiant Rat killed!\n\nAvatar, armed with Dagger:");
     assert_eq!(state.party_experience[0], 3);
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
@@ -10949,7 +10958,7 @@ fn combat_input_dispatch_reports_only_original_style_monster_attack_result() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.\nAvatar is poisoned!\n");
+    assert_eq!(state.message, "Pass.\nAvatar is poisoned!\n\nAvatar, armed with bare hands:");
     assert_eq!(state.party[0].status, b'P');
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -11065,7 +11074,7 @@ fn combat_input_dispatch_keeps_internal_monster_movement_out_of_transcript() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.");
+    assert_eq!(state.message, "Pass.\nAvatar, armed with bare hands:");
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -11351,7 +11360,7 @@ fn combat_input_dispatch_yell_word_uses_combat_no_effect_route() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.");
+    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:");
     assert!(!state.message.contains("Word of Power"));
     assert!(state.active_ready.is_none());
     assert!(state.active_z_stats.is_none());
@@ -11382,7 +11391,7 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
     );
 
     assert!(state.active_yell.is_none());
-    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.");
+    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:");
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -11408,7 +11417,10 @@ fn combat_input_dispatch_empty_yell_commits_the_pending_actor_action() {
         PlayInputDisposition::Continue
     );
     assert!(state.active_yell.is_none());
-    assert_eq!(state.message, YELL_NOTHING_SAID_MESSAGE);
+    assert_eq!(
+        state.message,
+        format!("{YELL_NOTHING_SAID_MESSAGE}\nAvatar, armed with bare hands:")
+    );
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -11444,7 +11456,7 @@ fn combat_input_dispatch_uses_pending_round_walker_actor_slot() {
         (4, 6)
     );
     assert_ne!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 6));
-    assert_eq!(state.message, "South\n");
+    assert_eq!(state.message, "South\n\nAvatar, armed with bare hands:");
 }
 
 #[test]
@@ -11464,7 +11476,7 @@ fn combat_input_dispatch_attack_prompt_keeps_pending_actor_for_direction() {
         PlayInputDisposition::Continue
     );
     assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
-    assert_eq!(state.message, "East\n");
+    assert_eq!(state.message, "East\n\nAvatar, armed with bare hands:");
 }
 
 #[test]
@@ -11505,7 +11517,7 @@ fn combat_input_dispatch_action_tail_does_not_run_encounter_ring_vanishal() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.");
+    assert_eq!(state.message, "Pass.\nAvatar, armed with bare hands:");
     assert_eq!(
         state.party_equipment[0][EQUIP_SLOT_RING],
         EQUIPMENT_ID_RING_INVISIBILITY as u8
@@ -11557,7 +11569,7 @@ fn combat_input_dispatch_cast_uses_pending_actor_as_caster() {
     assert_eq!(state.party[1].mana, 0);
     assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
     assert!(state.combat_actors[1].is_hidden_or_unrevealed());
-    assert_eq!(state.message, "Invisibility!");
+    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:");
 }
 
 #[test]
@@ -11683,7 +11695,7 @@ fn combat_input_dispatch_blank_or_escape_cast_prompt_commits_actor_action() {
             COMBAT_INTERFERENCE_NO_SOURCE
         );
         assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
-        assert_eq!(state.message, "None!");
+        assert_eq!(state.message, "None!\nAvatar, armed with bare hands:");
     }
 }
 
@@ -11717,7 +11729,7 @@ fn combat_input_dispatch_cancelled_field_cursor_commits_spent_cast_action() {
             .iter()
             .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE)
     );
-    assert_eq!(state.message, "None!");
+    assert_eq!(state.message, "None!\nAvatar, armed with bare hands:");
 }
 
 #[test]
@@ -11736,7 +11748,7 @@ fn combat_input_dispatch_quickness_does_not_consume_a_player_cast() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Invisibility!");
+    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:");
     assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
     assert!(state.combat_actors[0].is_hidden_or_unrevealed());
@@ -12021,8 +12033,63 @@ fn combat_actor_slot_dispatch_waits_when_phase_counter_is_not_ready() {
     assert_eq!(state.combat_interference_sources[8], 7);
 }
 
+/// `combat.md §7` step 3: "Read the arena terrain under the actor and
+/// compare it against exactly two tile ids - the stocks `0x84` and the
+/// manacles `0x85`. On a match, skip the slot entirely. This happens
+/// **before** the phase decrement in step 4, so a restrained actor's
+/// counter never advances and it never takes a turn at all."
 #[test]
-fn combat_actor_slot_dispatch_skips_actor_standing_on_blocked_arena_cell() {
+fn combat_actor_slot_dispatch_skips_actor_standing_on_a_restraint_cell() {
+    for restraint in [JIMMY_STOCKS_TILE, JIMMY_MANACLES_TILE] {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.combat_actors[8].phase_counter = 1;
+        state.combat_round_counter = 4;
+        state.combat_terrain[5][8] = restraint;
+
+        let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+            8,
+            30,
+            false,
+            false,
+            0,
+            false,
+            1,
+            1,
+            &[],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[1, 2, 3, 4],
+            &[],
+        );
+
+        assert_eq!(
+            application,
+            CombatActorSlotDispatchApplication::Slot {
+                slot: 8,
+                phase_tick: Some(CombatActorPhaseTick::Inactive),
+                action: CombatActorDispatchAction::Inactive,
+                control_after: CombatRoundLoopControl::ContinueActorWalk,
+            }
+        );
+        assert_eq!(state.combat_actors[8].phase_counter, 1);
+        assert_eq!(state.combat_round_counter, 4);
+    }
+}
+
+/// `combat.md §7.1`: "A monster placed on terrain it cannot walk on is not
+/// frozen. It takes its turn every round on schedule; only its *movement*
+/// is constrained." §7 withdraws the earlier "skip wall-cell slots" reading
+/// outright: "water, swamp, mountains, walls and force fields are all
+/// outside the test."
+///
+/// §5.4 makes this the shipped case, not a corner: the water arena "is
+/// authored with **all sixteen** monster placement cells on water tiles",
+/// so a land class fought over water is placed on water by design.
+#[test]
+fn combat_actor_slot_dispatch_still_acts_on_terrain_it_cannot_walk_on() {
     let mut state = combat_ai_turn_state(8, 5);
     state.combat_actors[8].phase_counter = 1;
     state.combat_round_counter = 4;
@@ -12047,17 +12114,24 @@ fn combat_actor_slot_dispatch_skips_actor_standing_on_blocked_arena_cell() {
         &[],
     );
 
-    assert_eq!(
-        application,
-        CombatActorSlotDispatchApplication::Slot {
-            slot: 8,
-            phase_tick: Some(CombatActorPhaseTick::Inactive),
-            action: CombatActorDispatchAction::Inactive,
-            control_after: CombatRoundLoopControl::ContinueActorWalk,
-        }
+    let CombatActorSlotDispatchApplication::Slot {
+        slot,
+        phase_tick,
+        action,
+        ..
+    } = application
+    else {
+        panic!("an actor on unwalkable terrain still occupies its slot");
+    };
+    assert_eq!(slot, 8);
+    assert!(
+        matches!(phase_tick, Some(CombatActorPhaseTick::Ready { .. })),
+        "the phase counter still reaches zero on unwalkable terrain: {phase_tick:?}"
     );
-    assert_eq!(state.combat_actors[8].phase_counter, 1);
-    assert_eq!(state.combat_round_counter, 4);
+    assert!(
+        matches!(action, CombatActorDispatchAction::MonsterAi { .. }),
+        "the actor still takes its turn: {action:?}"
+    );
 }
 
 #[test]
@@ -17441,9 +17515,14 @@ fn dungeon_ambush_arena_synthesises_published_metadata_band() {
     );
 }
 
-/// `dungeon-mode.md §14.1`: the live ambush shuffles all sixteen source
-/// indexes with sixteen independent full-range swaps. Dormant terrain combat
-/// uses the same range but stops after source index fourteen.
+/// `dungeon-mode.md §14.1`: the dungeon room painter shuffles all sixteen
+/// source indexes with sixteen independent full-range swaps. `combat.md §5`
+/// gives the terrain helper's fifteen-transposition branch the same range but
+/// stops it before index fifteen, and publishes both vectors from shared PRNG
+/// state `0x0000`: the sixteen-swap result, and "the fifteen-swap result from
+/// state zero - the permutation the camp-ambush route actually applies". §5
+/// labels that second vector live: "(*Corrected:* this vector was previously
+/// labelled dormant.)"
 #[test]
 fn dungeon_combat_source_shuffles_match_published_draw_order() {
     let mut live = combat_ai_turn_state(8, 5);
@@ -17454,13 +17533,13 @@ fn dungeon_combat_source_shuffles_match_published_draw_order() {
     );
     assert_eq!(live.prng_state, 0x01c0);
 
-    let mut dormant = combat_ai_turn_state(8, 5);
-    dormant.prng_state = 0;
+    let mut camp_ambush = combat_ai_turn_state(8, 5);
+    camp_ambush.prng_state = 0;
     assert_eq!(
-        dormant.dormant_terrain_combat_source_permutation(),
+        camp_ambush.terrain_combat_placement_slot_permutation(),
         [2, 4, 1, 0, 14, 7, 6, 3, 5, 8, 10, 11, 12, 9, 13, 15]
     );
-    assert_eq!(dormant.prng_state, 0x0cf4);
+    assert_eq!(camp_ambush.prng_state, 0x0cf4);
 }
 
 /// `dungeon-mode.md §14.1`: "facing south swaps the east pair;

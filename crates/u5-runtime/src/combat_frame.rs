@@ -974,6 +974,58 @@ impl PlayState {
             .map(|name| name.as_slice())
     }
 
+    /// `combat.md §8.1`, the turn banner. "The actor-and-weapons line is
+    /// **not** Attack's announcement. It is the **turn banner**, emitted at
+    /// the start of every keyboard-driven combatant's turn, *before any key
+    /// is read*: a newline, the actor's name, and - for a party-side actor -
+    /// the clause `, armed with ` followed by the names of that actor's
+    /// readied items separated by `, `, or `bare hands` when none qualifies,
+    /// terminated by a colon."
+    ///
+    /// "A charmed monster acting under player control gets only its name and
+    /// the colon, with no armament clause", which is the non-party arm here.
+    ///
+    /// "Because the banner precedes the keystroke, it appears identically
+    /// whether the player then presses `A`, a direction key, `Space`, or
+    /// anything else." What `A` adds on top is `Attack-` and `Aim! `
+    /// (`§8.2`), which stay with the Attack branch.
+    pub fn combat_turn_banner_for_actor(&self, actor_slot: usize) -> Option<String> {
+        if actor_slot < COMBAT_PARTY_ACTOR_SLOTS {
+            let roster_slot = self.combat_roster_slot_for_actor_slot(actor_slot)?;
+            let name = self
+                .combat_party_name_for_slot(actor_slot)
+                .and_then(party_name_to_string)?;
+            let equipment = self.party_equipment.get(roster_slot).copied();
+            return Some(combat_turn_banner(&name, equipment.as_ref()));
+        }
+        let class = self.combat_actors.get(actor_slot)?.owner_target_class;
+        let name = combat_class_stats(class)?.name;
+        Some(combat_turn_banner(name, None))
+    }
+
+    /// Open a keyboard-driven combatant's turn. `combat.md §8.1` prints the
+    /// turn banner here, "before any key is read", so it is emitted when the
+    /// round walker hands control over rather than when the keystroke
+    /// arrives. The stored copy is consumed by that keystroke's own
+    /// transcript; a free re-prompt reinstates the pending slot directly and
+    /// therefore does not reprint the banner.
+    pub(crate) fn open_pending_combat_player_turn(&mut self, slot: Option<usize>) {
+        self.pending_combat_actor_slot = slot;
+        self.select_active_player_for_pending_combat_actor();
+        let banner = slot.and_then(|slot| self.combat_turn_banner_for_actor(slot));
+        if let Some(banner) = banner.as_deref() {
+            self.message.push_str(banner);
+        }
+        self.pending_combat_turn_banner = banner;
+    }
+
+    /// Consume the `combat.md §8.1` banner emitted when this turn opened, so
+    /// the keystroke's own transcript can carry it in front of the command
+    /// output.
+    pub fn take_pending_combat_turn_banner(&mut self) -> Option<String> {
+        self.pending_combat_turn_banner.take()
+    }
+
     pub(crate) fn combat_target_group_for_slot(&self, slot: usize) -> u8 {
         self.combat_actors
             .get(slot)
@@ -1077,15 +1129,31 @@ impl PlayState {
         morale.fleeing
     }
 
-    fn combat_actor_stands_on_walkable_arena_cell(&self, actor: CombatActorDescriptor) -> bool {
-        if !self.combat_terrain.iter().flatten().any(|tile| *tile != 0) {
-            return true;
-        }
+    /// `combat.md §7` step 3, the restraint skip: "Read the arena terrain
+    /// under the actor and compare it against exactly two tile ids - the
+    /// stocks `0x84` and the manacles `0x85`. On a match, skip the slot
+    /// entirely. [...] No other terrain participates: water, swamp,
+    /// mountains, walls and force fields are all outside the test."
+    ///
+    /// The same section withdraws the earlier reading this site used to
+    /// implement: "Earlier revisions called this step 'skip wall-cell
+    /// slots, a defensive guard against bad placement'. That is withdrawn
+    /// - it is a restraint guard, and reading it as a walkability guard
+    /// freezes actors the original leaves acting." `§7.1` spells out the
+    /// case that matters: a land class fought over water is placed by
+    /// `§5.4` onto one of arena 15's sixteen authored water cells and
+    /// "takes its turn every round on schedule; only its *movement* is
+    /// constrained".
+    ///
+    /// The tile ids are the same two [`JIMMY_STOCKS_TILE`] and
+    /// [`JIMMY_MANACLES_TILE`] the `J` Jimmy release path tests, which is
+    /// what makes the freeze recoverable (`§7.1`).
+    fn combat_actor_stands_on_restraint_arena_cell(&self, actor: CombatActorDescriptor) -> bool {
         let x = actor.x as usize;
         let y = actor.y as usize;
         y < COMBAT_ARENA_SIDE
             && x < COMBAT_ARENA_SIDE
-            && is_combat_arena_tile_walkable(self.combat_terrain[y][x])
+            && combat_arena_tile_is_restraint(self.combat_terrain[y][x])
     }
 
     /// `catalogs/spell-list.md §4`: the active scene byte for the cast
@@ -5297,7 +5365,10 @@ impl PlayState {
             };
         }
 
-        if !self.combat_actor_stands_on_walkable_arena_cell(actor) {
+        // `combat.md §7` step 3: the restraint skip runs *before* the
+        // phase decrement in step 4, "so a restrained actor's counter
+        // never advances and it never takes a turn at all".
+        if self.combat_actor_stands_on_restraint_arena_cell(actor) {
             return CombatActorSlotDispatchApplication::Slot {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
@@ -5865,8 +5936,9 @@ impl PlayState {
                 | CombatRoundWalkStopReason::Exit => application.next_slot,
             };
             if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
-                self.pending_combat_actor_slot = ready_player_slot_from_round_walk(&application);
-                self.select_active_player_for_pending_combat_actor();
+                self.open_pending_combat_player_turn(ready_player_slot_from_round_walk(
+                    &application,
+                ));
             }
             let should_stop = !matches!(
                 application.stop_reason,

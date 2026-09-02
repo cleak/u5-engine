@@ -948,11 +948,14 @@ fn cli_parser_accepts_deterministic_create_character_command() {
             ShrineVirtue::Spirituality,
         ]
     );
+    // `chargen.md 7`: "The running dexterity tally starts from the shipped
+    // seed record's dexterity of `15`", so these seven winners' DEX deltas
+    // (5) are added to that 15 rather than to zero.
     assert_eq!(
         command.stats,
         ChargenStats {
             strength: 20,
-            dexterity: 5,
+            dexterity: CHARGEN_SEED_DEXTERITY + 5,
             intelligence: 5,
         }
     );

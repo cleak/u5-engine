@@ -218,6 +218,13 @@ pub struct PlayState {
     pub pace_combat_presentations: bool,
     pub combat_frame_snapshot: Option<CombatFrameSnapshot>,
     pub pending_combat_actor_slot: Option<usize>,
+    /// `combat.md` 8.1 turn banner, emitted when a keyboard-driven
+    /// combatant's turn opens and consumed by the keystroke that turn
+    /// reads. It is `None` again after that keystroke, which is what
+    /// keeps a free re-prompt on the short form: "a free re-prompt after
+    /// a refusal uses the short form and does **not** reprint the
+    /// banner". Presentation scratch; never serialized.
+    pub pending_combat_turn_banner: Option<String>,
     pub pending_combat_terrain_trigger_slot: Option<usize>,
     /// `town-mode.md §14`: the town NPC-conflict chain's carry-over.
     /// A-Attack on a town actor enters the ordinary terrain arena, and

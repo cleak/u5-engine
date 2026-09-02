@@ -3121,7 +3121,7 @@ Mixed 1 IL charge; stock is 1.");
         );
         assert_eq!(
             state.message,
-            "Cause Fear affected 2 combat actor(s).\nDaemon missed!\n"
+            "Cause Fear affected 2 combat actor(s).\nDaemon missed!\n\nAvatar, armed with bare hands:"
         );
     }
 

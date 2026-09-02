@@ -1843,7 +1843,15 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         (state.combat_actors[actor_slot].x, state.combat_actors[actor_slot].y),
         (6, 7)
     );
-    let result_lines = state.message.lines().collect::<Vec<_>>();
+    // `combat.md §8.1`: the transcript ends with the turn banner for the
+    // next keyboard-driven actor, printed "before any key is read". Trim it
+    // (and its leading blank line) before asserting on the attack result.
+    let result_lines = state
+        .message
+        .lines()
+        .take_while(|line| !line.contains(COMBAT_TURN_BANNER_ARMED_WITH))
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
     assert_eq!(result_lines.first(), Some(&"East"));
     assert!(result_lines.len() > 1);
     assert!(

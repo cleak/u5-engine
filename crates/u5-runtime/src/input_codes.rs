@@ -235,6 +235,46 @@ pub const fn input_keypad_digit_direction_code(digit: u8) -> Option<u8> {
     })
 }
 
+/// `combat.md §8.3` / `input.md §5`, the shared input routine's internal
+/// **numpad flag**. The routine sets it in two ways:
+///
+/// 1. "A key arriving as an extended scancode is matched against a small
+///    table - the four arrow keys plus Home / End / PgUp / PgDn - and
+///    translated to the direction codes; the flag is set."
+/// 2. "A key arriving as one of the ASCII characters `1` through `9` causes
+///    the routine to read the BIOS keyboard shift-status byte and set the
+///    flag if **either shift key is down OR NumLock is currently active**."
+///
+/// This helper is arm 2. `§8.3` closes with the porting rule: "Whether
+/// NumLock is on in a given player's session is an environment fact, not a
+/// game fact; an engine should expose it as one" - hence the second
+/// argument rather than a global. `input.md §5` gives the fallback for a
+/// host that cannot see the lock state: "an implementation that lacks
+/// NumLock state can treat shift held as the trigger."
+pub const fn input_numpad_flag(shift_held: bool, num_lock_active: bool) -> bool {
+    shift_held || num_lock_active
+}
+
+/// `combat.md §8.3`: "When the flag is set, the command reader remaps the
+/// typed digits through a fixed table: `1` south-west, `2` south, `3`
+/// south-east, `4` west, `6` east, `7` north-west, `8` north, `9`
+/// north-east. `5` passes through unchanged, and `0` is outside the window
+/// and is never remapped."
+///
+/// Returns the remapped direction code, or `None` when the digit reaches
+/// the mode loop as an ordinary character - which is the case for every
+/// digit with the flag clear, and for `0` and `5` always. The published
+/// consequences follow directly: with the flag clear a typed digit still
+/// reaches the combat active-player-selection handler, and "member
+/// selection by digit is therefore only reachable with NumLock off"; only
+/// `0` and `5` are unconditionally inert inside the targeting cursor.
+pub const fn input_typed_digit_direction_code(digit: u8, numpad_flag: bool) -> Option<u8> {
+    if !numpad_flag {
+        return None;
+    }
+    input_keypad_digit_direction_code(digit)
+}
+
 /// `input.md §4` keyboard-layer return-byte family. After the peek
 /// routine reads, classifies, and translates a raw byte, the value it
 /// hands the rest of the engine falls into one of these three
@@ -517,6 +557,49 @@ mod tests {
                 "{reserved:?} collides with the cardinal block"
             );
         }
+    }
+
+    /// `combat.md §8.3`: the shared input routine sets its numpad flag when
+    /// an ASCII `1`..`9` arrives and "either shift key is down OR NumLock is
+    /// currently active". "When the flag is set, the command reader remaps
+    /// the typed digits through a fixed table: `1` south-west, `2` south, `3`
+    /// south-east, `4` west, `6` east, `7` north-west, `8` north, `9`
+    /// north-east. `5` passes through unchanged, and `0` is outside the
+    /// window and is never remapped."
+    #[test]
+    fn typed_digits_remap_only_while_the_numpad_flag_is_set() {
+        assert!(!input_numpad_flag(false, false));
+        assert!(input_numpad_flag(true, false));
+        assert!(input_numpad_flag(false, true));
+        assert!(input_numpad_flag(true, true));
+
+        // Flag clear: every digit reaches the mode loop as an ordinary
+        // character, which is what keeps combat member selection by digit
+        // reachable ("Member selection by digit is therefore only reachable
+        // with NumLock off").
+        for digit in 0..=9u8 {
+            assert_eq!(input_typed_digit_direction_code(digit, false), None);
+        }
+
+        // Flag set: eight of the ten digits become direction codes.
+        let remapped = [
+            (1u8, INPUT_CODE_SOUTHWEST),
+            (2, INPUT_CODE_SOUTH),
+            (3, INPUT_CODE_SOUTHEAST),
+            (4, INPUT_CODE_WEST),
+            (6, INPUT_CODE_EAST),
+            (7, INPUT_CODE_NORTHWEST),
+            (8, INPUT_CODE_NORTH),
+            (9, INPUT_CODE_NORTHEAST),
+        ];
+        for (digit, code) in remapped {
+            assert_eq!(input_typed_digit_direction_code(digit, true), Some(code));
+        }
+        assert_eq!(remapped.len(), 8);
+
+        // "Only `0` and `5` are unconditionally inert inside the cursor."
+        assert_eq!(input_typed_digit_direction_code(0, true), None);
+        assert_eq!(input_typed_digit_direction_code(5, true), None);
     }
 
     #[test]

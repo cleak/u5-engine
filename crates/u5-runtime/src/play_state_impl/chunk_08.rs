@@ -260,7 +260,7 @@ impl PlayState {
                 Area::Dungeon { level, .. } => level as i8,
                 Area::Town { floor, .. } => floor,
             };
-            let note = self.enter_sleep_ambush_combat(monster, z)?;
+            let note = self.enter_sleep_ambush_combat(monster, z, game_dir)?;
             self.message.push_str(&format!(" Ambushed! {note}."));
         }
         if let Some(report) = last_world_damage {
