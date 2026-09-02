@@ -1170,7 +1170,13 @@ impl PlayState {
         self.active_direction_prompt
             .as_ref()
             .map(|session| match session.kind {
-                DirectionPromptKind::Attack => "Attack where?".to_string(),
+                // `commands.md §5.4`: "The shared direction prompt prints
+                // **nothing** before waiting. The hyphen at the end of the
+                // verb echo *is* the prompt." §5.2 publishes the surface
+                // Attack literal as `Attack-`, so the prompt renders the
+                // same open verb line every other direction verb does
+                // rather than a bespoke question.
+                DirectionPromptKind::Attack => "Attack-".to_string(),
                 DirectionPromptKind::DungeonLook {
                     party_index: None, ..
                 } => {
@@ -1282,6 +1288,14 @@ impl PlayState {
                     }
                     return Ok(Some(MoveOutcome::PromptDeclined));
                 }
+                // `commands.md §5.4`: `Space` prints `Pass` on the open
+                // verb line - "A cancelled Look therefore renders as the
+                // verb, the hyphen and the cancel word on one line."
+                if matches!(session.kind, DirectionPromptKind::Attack) {
+                    let _ =
+                        self.complete_open_direction_echo("Attack-", DIRECTION_PROMPT_LABEL_PASS);
+                    return Ok(Some(MoveOutcome::PromptDeclined));
+                }
                 self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }
@@ -1366,6 +1380,16 @@ impl PlayState {
             else {
                 continue;
             };
+            // `commands.md §5.3`: for a verb whose echo ends in `-`,
+            // "the chosen direction's name is appended on the same line",
+            // and Attack outside dungeons is in that verb list. §5.4's
+            // prompt table prints the direction word the moment the key is
+            // accepted, *before* the command runs - which is what puts
+            // `>Attack-East` above combat entry's own lines rather than
+            // after them.
+            if matches!(session.kind, DirectionPromptKind::Attack) {
+                let _ = self.complete_open_direction_echo("Attack-", direction.name());
+            }
             let outcome = match session.kind {
                 DirectionPromptKind::Attack => {
                     self.attack_command_with_game_dir(Some(direction), Some(game_dir))?

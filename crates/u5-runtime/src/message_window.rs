@@ -224,13 +224,13 @@ pub fn message_log_from_entries<'a>(
 ) -> GameplayMessageLog {
     let mut log = GameplayMessageLog::new();
     for entry in entries {
-        let Some(text) = render(&entry.text) else {
-            continue;
-        };
-        if entry.is_command_echo {
-            log.end_turn();
-            log.push_command(&text);
-        } else if entry.explicit_blank {
+        // An explicit blank row carries no text, so it is placed before
+        // the renderer is consulted: a caller that drops empty lines - the
+        // Bevy shell's own `keep` filter does - must not be able to erase
+        // a row the producer asked for. `text-output.md` section 10.4
+        // makes the blank row part of the printed sequence, not filler the
+        // window derives.
+        if entry.explicit_blank {
             log.lines.push(MessageLogLine {
                 text: String::new(),
                 glyphs: Vec::new(),
@@ -238,6 +238,14 @@ pub fn message_log_from_entries<'a>(
                 centered: false,
             });
             log.trim();
+            continue;
+        }
+        let Some(text) = render(&entry.text) else {
+            continue;
+        };
+        if entry.is_command_echo {
+            log.end_turn();
+            log.push_command(&text);
         } else if entry.centered && text == entry.text {
             let glyphs = entry.glyphs.clone();
             log.lines.push(MessageLogLine {

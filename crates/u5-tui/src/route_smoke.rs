@@ -6706,7 +6706,7 @@ fn validate_route_smoke_case_state(
                 || !npc_schedule_swept
                 || placed_monsters != 8
                 || !is_cobble_arena
-                || state.message != u5_runtime::COMBAT_BANNER
+                || state.message != u5_runtime::combat_banner_line()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not raise the town alarm and enter the cobble \

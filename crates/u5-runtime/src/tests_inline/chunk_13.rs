@@ -24597,7 +24597,7 @@ fn transcript_is_capped_so_a_long_session_cannot_grow_without_bound() {
 #[test]
 fn top_down_uppercase_command_letters_preempt_vi_movement() {
     for (key, expected) in [
-        ('A', "Attack where?"),
+        ('A', "Attack-"),
         ('C', "Spell name:"),
         ('D', "What?"),
         ('M', MMIX_SPELL_PROMPT_MESSAGE),

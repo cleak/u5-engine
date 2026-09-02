@@ -22617,7 +22617,10 @@ mod tests {
     #[test]
     fn visual_unshifted_letters_reach_original_command_dispatch() {
         for (physical_key, expected_key, expected_message) in [
-            (KeyCode::KeyA, 'A', "Attack where?"),
+            // `commands.md` section 5.2 publishes the surface Attack
+            // literal as `Attack-`, and section 5.4 has the direction
+            // prompt print nothing before waiting.
+            (KeyCode::KeyA, 'A', "Attack-"),
             (KeyCode::KeyG, 'G', "Get-"),
             (KeyCode::KeyJ, 'J', "Jimmy-"),
             (KeyCode::KeyL, 'L', "Look-"),

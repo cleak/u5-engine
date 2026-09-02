@@ -130,6 +130,20 @@ impl PlayState {
         self.message_flushed = text;
     }
 
+    /// [`Self::emit_message_line`] for a line the active window's centre
+    /// flag is set for. `text-output.md §3`: "`0xFC` sets centre-output",
+    /// and §3's window table has "the next call to the wrap-aware string
+    /// printer centres its line within the window's width before
+    /// emitting". The transcript keeps the centring as a per-entry flag
+    /// so the message window can place the row; the compatibility slot
+    /// still receives the raw text.
+    pub fn emit_centered_message_line(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.push_centered_message_entry(text.clone());
+        self.message = text.clone();
+        self.message_flushed = text;
+    }
+
     /// Emit one font-preserving TLK response immediately.
     pub fn emit_tlk_message(&mut self, rendered: TlkRenderedText) {
         self.push_tlk_message_transcript_lines(&rendered);

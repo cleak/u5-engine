@@ -1593,7 +1593,11 @@ fn a_attack_prompts_for_direction_without_turn_or_movement() {
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.turn, 0);
     assert!(state.active_direction_prompt.is_some());
-    assert_eq!(state.message, "Attack where?");
+    // `commands.md` section 5.4: "The shared direction prompt prints
+    // **nothing** before waiting. The hyphen at the end of the verb echo
+    // *is* the prompt." Section 5.2 publishes the surface literal as
+    // `Attack-`, so the bespoke question this used to pin is withdrawn.
+    assert_eq!(state.message, "Attack-");
 }
 
 #[test]
@@ -1733,7 +1737,7 @@ fn a_attack_ordinary_town_npc_enters_the_arena_then_records_removal_on_exit() {
 
     assert_eq!(state.turn, 1);
     assert!(state.combat_active);
-    assert_eq!(state.message, COMBAT_BANNER);
+    assert_eq!(state.message, combat_banner_line());
     // "ordinary town ground resolves to the cobble arena" - selector
     // arena 8 (encounters.md §4: "anything else | 2 when the scene byte
     // is zero (overworld), otherwise 8").
@@ -1790,6 +1794,13 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     }
     fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
     let mut state = test_state(open_grid(), 1, 1);
+    // `combat.md` section 11's corrected to-hit polarity makes a Guard
+    // band (attack cap 30) land most of its blows, so the fixture party
+    // needs enough hit points to survive the round this case is about.
+    for member in state.party.iter_mut() {
+        member.max_hp = 900;
+        member.hp = 900;
+    }
     let slots = [
         NpcSlot {
             slot: 0,
@@ -1816,7 +1827,7 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
 
     assert_eq!(state.turn, 1);
     assert!(state.combat_active);
-    assert_eq!(state.message, COMBAT_BANNER);
+    assert_eq!(state.message, combat_banner_line());
     assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
     assert_eq!(&state.npcs[0].schedule[12..16], &[0, 0, 0, 0]);
 
@@ -1892,7 +1903,7 @@ fn world_attack_adjacent_combat_class_object_selects_brit_cbt_arena() {
     assert_eq!(state.turn, 1);
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
-    assert_eq!(state.message, COMBAT_BANNER);
+    assert_eq!(state.message, combat_banner_line());
     // `combat.md §5`: monster descriptors start at index six, but their
     // active-object records "continue from the first record left free by
     // the seated party", so "the descriptor's active-object link byte is

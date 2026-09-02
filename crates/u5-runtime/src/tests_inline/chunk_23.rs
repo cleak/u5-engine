@@ -3859,18 +3859,89 @@ fn combat_actor_range_uses_truncated_euclidean_arena_distance() {
     assert_eq!(second.range_to(first), 5);
 }
 
+/// `combat.md` section 11: the shared to-hit helper "computes
+/// `(attacker - defender + 30) / 2`, and compares that score against a
+/// uniform random draw. **The hit is accepted when the drawn value is at
+/// or above the score**, so the score behaves as a difficulty number: a
+/// larger score means a *smaller* chance to hit. *An earlier revision
+/// said the opposite - that the hit is accepted when the score beats the
+/// draw - and that is withdrawn.*"
+///
+/// This test previously pinned the withdrawn direction, which is what
+/// made hostile melee land about one blow in twenty instead of about
+/// nineteen in twenty.
 #[test]
-fn combat_hit_roll_uses_strict_public_score_comparison() {
+fn combat_hit_roll_accepts_a_draw_at_or_above_the_published_score() {
     assert_eq!(combat_to_hit_score(30, 10), 25);
-    assert!(resolve_combat_hit(30, 10, 24));
-    assert!(!resolve_combat_hit(30, 10, 25));
+    assert!(!resolve_combat_hit(30, 10, 24));
+    assert!(resolve_combat_hit(30, 10, 25));
+    assert!(resolve_combat_hit(30, 10, 255));
 
+    // A negative score is below every draw, so the attack always lands.
     assert_eq!(combat_to_hit_score(0, 99), -34);
-    assert!(!resolve_combat_hit(0, 99, 0));
+    assert!(resolve_combat_hit(0, 99, 0));
 
+    // A large score is the *hard* case under the published direction.
     assert_eq!(combat_to_hit_score(255, 0), 142);
-    assert!(resolve_combat_hit(255, 0, 141));
-    assert!(!resolve_combat_hit(255, 0, 142));
+    assert!(!resolve_combat_hit(255, 0, 141));
+    assert!(resolve_combat_hit(255, 0, 142));
+}
+
+/// `combat.md` section 11 plus `catalogs/monster-bestiary.md` section 2
+/// (Bat: attack cap 6) and section 12 ("For party-member defenders, the
+/// damage roll reads the cached combat-defense byte in the character
+/// record at offset `+0x18`; factory-seed records carry value `7`").
+///
+/// Exhaustively enumerating the two uniform `0..=255` draws the monster
+/// attack path consumes gives the expected damage one bat lands on a
+/// factory-seed party member per attack. The playtest that motivated
+/// this measured fourteen rounds against roughly fifteen bats costing
+/// the original's Avatar all sixty hit points and the engine two, so the
+/// per-attack expectation is the number to pin.
+#[test]
+fn bat_melee_expected_damage_against_a_factory_seed_party_member() {
+    let bat = combat_class_stats(21).expect("Bat is a published combat class");
+    assert_eq!(bat.attack_cap, 6);
+    const FACTORY_SEED_PARTY_DEFENSE: u8 = 7;
+
+    let score = combat_to_hit_score(bat.attack_cap, FACTORY_SEED_PARTY_DEFENSE);
+    assert_eq!(score, 14);
+
+    let mut hits = 0u32;
+    let mut total_damage = 0u32;
+    for hit_roll in 0..=u8::MAX {
+        if !resolve_combat_hit(bat.attack_cap, FACTORY_SEED_PARTY_DEFENSE, hit_roll) {
+            continue;
+        }
+        hits += 1;
+        for damage_roll in 0..=u8::MAX {
+            let CombatWeaponDamageRoute::Damage { raw_damage } =
+                resolve_combat_weapon_raw_damage(bat.attack_cap, damage_roll)
+            else {
+                panic!("a nonzero attack cap always rolls ordinary damage");
+            };
+            assert!((1..=6).contains(&raw_damage));
+            total_damage += raw_damage as u32;
+        }
+    }
+
+    // 256 - 14 draws land: every value from the score upward.
+    assert_eq!(hits, 242);
+    // Damage is `1 + roll % 6` over a uniform byte, which sums to 892
+    // across the 256 draws (mean 3.484).
+    assert_eq!(total_damage, 242 * 892);
+
+    // Expected damage per attack, scaled by 1000 to stay in integers:
+    // 242/256 landed x 892/256 mean = 3.293 HP.
+    let expected_x1000 = (u64::from(total_damage) * 1000) / (256 * 256);
+    assert_eq!(expected_x1000, 3293);
+
+    // The withdrawn polarity landed only 14 of 256 draws, for
+    // 14/256 x 892/256 = 0.190 HP per attack - the direction and
+    // magnitude of the two hit points the playtest measured over
+    // fourteen rounds where the original killed the Avatar outright.
+    let withdrawn_x1000 = (14u64 * 892 * 1000) / (256 * 256);
+    assert_eq!(withdrawn_x1000, 190);
 }
 
 #[test]
@@ -4456,6 +4527,9 @@ fn weapon_damage_route_resolves_none_fixed_roll_and_special_rows() {
     );
 }
 
+// `combat.md` section 11: the hit is accepted "when the drawn value is at
+// or above the score", so with rating 30 against rating 10 the score is 25
+// and a draw of 25 is the first landing roll.
 #[test]
 fn weapon_attack_resolver_applies_melee_and_ranged_range_gates() {
     assert_eq!(
@@ -4470,28 +4544,28 @@ fn weapon_attack_resolver_applies_melee_and_ranged_range_gates() {
     assert_eq!(resolve_combat_weapon_attack_range_route(2, 0, 7), None);
 
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(18, 1, 30, 10, 24, 7, None),
+        resolve_combat_equipment_weapon_attack(18, 1, 30, 10, 25, 7, None),
         Some(CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Melee,
             raw_damage: 8,
         })
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(17, 4, 30, 10, 24, 5, None),
+        resolve_combat_equipment_weapon_attack(17, 4, 30, 10, 25, 5, None),
         Some(CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 7 },
             raw_damage: 6,
         })
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(17, 5, 30, 10, 24, 5, None),
+        resolve_combat_equipment_weapon_attack(17, 5, 30, 10, 25, 5, None),
         Some(CombatWeaponAttackResolution::OutOfRange {
             target_range: 5,
             range_cap: 4,
         })
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(18, 2, 30, 10, 24, 7, None),
+        resolve_combat_equipment_weapon_attack(18, 2, 30, 10, 25, 7, None),
         Some(CombatWeaponAttackResolution::OutOfRange {
             target_range: 2,
             range_cap: 0,
@@ -4502,7 +4576,7 @@ fn weapon_attack_resolver_applies_melee_and_ranged_range_gates() {
 #[test]
 fn weapon_attack_resolver_tracks_miss_forced_hit_and_non_damage_routes() {
     assert_eq!(
-        resolve_combat_weapon_attack(6, 1, 0, 0, 30, 10, 25, 5, None),
+        resolve_combat_weapon_attack(6, 1, 0, 0, 30, 10, 24, 5, None),
         CombatWeaponAttackResolution::Miss {
             route: CombatWeaponAttackRangeRoute::Melee,
             hit_score: 25,
@@ -10894,7 +10968,11 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     let mut state = combat_player_command_state(6, 5);
     state.party_equipment = default_party_equipment(1);
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
-    state.party_strengths = vec![255];
+    // `combat.md` section 11: the to-hit score "behaves as a difficulty
+    // number: a larger score means a *smaller* chance to hit", so the
+    // attacker rating that guarantees a landed blow is the low one, not
+    // the saturated one this fixture used to pass.
+    state.party_strengths = vec![0];
     state.party_experience = vec![0];
     let mut expected_prng = state.prng_state;
     let _hit_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX));
@@ -10924,7 +11002,11 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     let mut state = combat_player_command_state(6, 5);
     state.party_equipment = default_party_equipment(1);
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
-    state.party_strengths = vec![255];
+    // `combat.md` section 11: the to-hit score "behaves as a difficulty
+    // number: a larger score means a *smaller* chance to hit", so the
+    // attacker rating that guarantees a landed blow is the low one, not
+    // the saturated one this fixture used to pass.
+    state.party_strengths = vec![0];
     state.party_experience = vec![0];
     state.combat_actors[8].hp_or_wound = 1;
 
@@ -11039,7 +11121,11 @@ fn combat_input_dispatch_applies_round_walker_defeat_exit() {
     state.party[0].status = b'G';
     state.party[0].hp = 1;
     state.party[0].max_hp = 20;
-    state.prng_state = 0x0070;
+    // `combat.md` section 11: the corrected to-hit polarity accepts the
+    // hit "when the drawn value is at or above the score", so this
+    // fixture's old seed now draws a miss. 0x0078 is the first seed at or
+    // after it whose hostile roll lands, keeping this a one-blow defeat.
+    state.prng_state = 0x0078;
 
     assert_eq!(
         handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
@@ -13855,7 +13941,9 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
             target_slot,
             30,
             10,
-            0,
+            // `combat.md` section 11: the hit lands when the draw is at
+            // or above the score, which is 25 for rating 30 vs 10.
+            25,
             5,
             None,
             false,
@@ -13925,7 +14013,8 @@ fn combat_weapon_attack_application_leaves_state_unchanged_for_no_hit_routes() {
             target_slot,
             30,
             10,
-            25,
+            // One below the score of 25 is the highest draw that misses.
+            24,
             5,
             None,
             false,
@@ -18478,3 +18567,4 @@ fn tavern_round_table_setting_is_north_first_with_southeast_edge_fallback() {
         TAVERN_SOUTH_FOOD_SETTING_TILE
     );
 }
+

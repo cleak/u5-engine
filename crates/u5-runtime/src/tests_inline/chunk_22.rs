@@ -749,7 +749,7 @@
         assert_eq!(outcome, MoveOutcome::Used);
         assert!(state.combat_active);
         assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
-        assert_eq!(state.message, COMBAT_BANNER);
+        assert_eq!(state.message, combat_banner_line());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -870,7 +870,7 @@
             (state.combat_actors[0].x, state.combat_actors[0].y),
             (entry_x[0], entry_y[0])
         );
-        assert_eq!(state.message, COMBAT_BANNER);
+        assert_eq!(state.message, combat_banner_line());
         let _ = fs::remove_dir_all(dir);
     }
 
