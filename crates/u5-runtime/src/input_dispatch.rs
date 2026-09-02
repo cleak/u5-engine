@@ -2615,7 +2615,13 @@ fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had
     {
         state.apply_combat_round_loop_exit(CombatRoundLoopExit::Defeat);
     } else if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
-        let _ = state.announce_combat_victory_if_needed();
+        // `combat.md §7`: "If party actors remain and foes do not, it
+        // prints `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
+        if state.announce_combat_victory_if_needed() {
+            state
+                .message
+                .push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
+        }
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     } else if state.combat_active {
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
@@ -2934,7 +2940,11 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
             "Active player selected.".to_string()
         }
         CombatPlayerCommandAction::Pass(_) => "Pass.".to_string(),
-        CombatPlayerCommandAction::PromptForAttackDirection => "Attack-".to_string(),
+        // `combat.md §8.1`/`§8.2`: what `A` adds on top of the turn banner
+        // is `Attack-` and, "immediately before the cursor opens", `Aim! `.
+        CombatPlayerCommandAction::PromptForAttackDirection => {
+            format!("{COMBAT_ATTACK_LABEL}{COMBAT_ATTACK_AIM_PROMPT}")
+        }
         // Every production step-or-attack transcript comes from
         // `combat_step_or_attack_application_message`, which prints the
         // `combat.md §3` lines (the direction word, then `Blocked!`,
@@ -3013,6 +3023,16 @@ fn combat_player_command_application_message(
         _ => combat_magic_ring_pass_message(application.ring_pass)
             .unwrap_or_else(|| combat_player_command_message(&application.action)),
     };
+    if application.victory_announced {
+        // `combat.md §7`/`§14`: once the post-action side recount finds no
+        // hostile left, the round loop prints the resident `VICTORY!`
+        // string through the ordinary string printer - one leading and one
+        // trailing newline, one-shot - and then keeps running
+        // (`RETRACTIONS.md` R289).
+        let mut message = message;
+        message.push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
+        return message;
+    }
     message
 }
 

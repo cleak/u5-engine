@@ -125,8 +125,6 @@
 //!
 //! # Not implemented, deliberately
 //!
-//! * **Two further composite destinations**, "two gem ids", are named
-//!   upstream but not yet identified. Pending `#179`.
 //! * **Fire.** Each step XORs fresh pseudo-random noise from a dedicated
 //!   noise tile through a per-fixture mask, admitting noise only on certain
 //!   colour planes. The noise-tile id and the per-fixture plane rules are
@@ -134,9 +132,36 @@
 //!   whoever implements it: the XOR is cumulative and never restored, so a
 //!   pristine-art engine will be statistically equivalent but **not**
 //!   bit-identical — do not write a pixel-parity test against the original.
+//!
+//! `animation.md §12.3` settled the "two gem ids" question the other way:
+//! an interim answer on `#179` named two further composite destinations,
+//! "the verification pass's re-derivation does not carry them, so they are
+//! not published here and **must not be implemented**"
+//! (`RETRACTIONS.md` R303). The three groups above are the whole verified
+//! destination set.
+//!
+//! # Modelled but not wired
+//!
 //! * **Banner and sail row-pair swaps** under per-bit pseudo-random gates,
-//!   a third mechanism again, covering keep/towne/castle banners and four
-//!   ship ids. Unpublished.
+//!   a third mechanism again, covering the keep/towne/castle banners and
+//!   four ship ids. Published in `animation.md §12.5` (`RETRACTIONS.md`
+//!   R301) at confidence *probable*, and modelled here by
+//!   [`banner_sail_row_swap_ids`] and [`apply_banner_sail_row_swaps`].
+//!   `§12.5` is explicit that the trailing gate re-tests the **same**
+//!   pseudo-random bit as the leading one and that an implementation
+//!   "should reproduce the shared gate rather than 'correct' it to two
+//!   independent draws", and that is what those helpers do.
+//!
+//!   **Nothing in the engine calls them, so no banner or sail moves in
+//!   play.** `§12.5` publishes neither the four ship ids nor which row
+//!   pairs the two swaps exchange, and the driver site that would run the
+//!   stage - the composite pass reached from
+//!   [`crate::graphics_io`]'s tile-load path, which consumes
+//!   [`water_composite_mask`] - cannot be wired without inventing both.
+//!   `§12.5` also asks that an implementation "confirm the visual against
+//!   a capture of a keep or a ship under sail before pinning tests to it",
+//!   which has not been done. Treat this as a parked model, not as
+//!   behaviour, until `§12.5` publishes the ids and the row geometry.
 //!
 //! # One caveat on the period
 //!
@@ -235,6 +260,104 @@ pub fn water_composite_mask(tile: u8) -> Option<(u8, bool)> {
 /// Does the water animator touch this tile at all, by either stage?
 pub fn water_pass_animates_tile(tile: u8) -> bool {
     water_pass_rotates_tile(tile) || water_composite_mask(tile).is_some()
+}
+
+/// `animation.md §12.5`: the banner and sail ids the driver's third stage
+/// swaps row pairs within, at published confidence **probable**.
+///
+/// `§12.5` names the affected ids as "`0x12`, `0x14`, `0x15`, `0x3E` and
+/// four ship tiles - the keep, town and castle banners and the ship
+/// sails". The four ship ids are referred to but **not enumerated**, so
+/// they are deliberately absent from this table rather than guessed: an
+/// invented id here would animate the wrong artwork. Add them when `§12.5`
+/// publishes them.
+pub const BANNER_SAIL_ROW_SWAP_TILES: [u8; 4] = [0x12, 0x14, 0x15, 0x3E];
+
+/// Is `tile` one of the published `§12.5` banner/sail ids?
+pub fn banner_sail_row_swap_animates_tile(tile: u8) -> bool {
+    BANNER_SAIL_ROW_SWAP_TILES.contains(&tile)
+}
+
+/// The ids the `§12.5` stage covers, for callers enumerating them.
+pub fn banner_sail_row_swap_ids() -> impl Iterator<Item = u8> {
+    BANNER_SAIL_ROW_SWAP_TILES.into_iter()
+}
+
+/// `animation.md §12.5`: whether the leading and trailing row swaps fire
+/// this step, given the one pseudo-random bit the stage samples.
+///
+/// The section flags one detail "as a probable defect of the original: the
+/// trailing row-swap gate re-tests the **same** pseudo-random bit as the
+/// leading gate rather than a distinct one. Whether that is intentional is
+/// unknown. An implementation should reproduce the shared gate rather than
+/// 'correct' it to two independent draws." So both gates are this one bit,
+/// and the two swaps are never observed to disagree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BannerSailRowSwapGates {
+    pub leading: bool,
+    pub trailing: bool,
+}
+
+/// Resolve both gates from the single sampled bit.
+pub const fn banner_sail_row_swap_gates(gate_bit: bool) -> BannerSailRowSwapGates {
+    BannerSailRowSwapGates {
+        leading: gate_bit,
+        trailing: gate_bit,
+    }
+}
+
+/// `animation.md §12.5`: apply the stage to one tile's pixels.
+///
+/// `leading_pair` and `trailing_pair` are the two row indices each swap
+/// exchanges. **`§12.5` does not publish which rows they are** - it says
+/// only that the stage "swaps row pairs within the banner and sail tiles"
+/// - so this engine refuses to bake a geometry in and takes them from the
+/// caller instead. Everything `§12.5` does establish is here: the id set,
+/// the two-swap shape, and the shared gate.
+///
+/// Returns `None` unless `pixels` is exactly one tile and both pairs are
+/// in range.
+///
+/// **No production path calls this.** The stage is modelled, not wired -
+/// see this module's "Modelled but not wired" note - because `§12.5`
+/// publishes neither the four ship ids nor the row pairs, and the driver
+/// site that would drive it is untouched.
+pub fn apply_banner_sail_row_swaps(
+    pixels: &[u8],
+    leading_pair: (usize, usize),
+    trailing_pair: (usize, usize),
+    gate_bit: bool,
+) -> Option<Vec<u8>> {
+    if pixels.len() != TILE_ATLAS_TILE_PIXELS {
+        return None;
+    }
+    for row in [
+        leading_pair.0,
+        leading_pair.1,
+        trailing_pair.0,
+        trailing_pair.1,
+    ] {
+        if row >= TILE_ATLAS_SIDE {
+            return None;
+        }
+    }
+    let gates = banner_sail_row_swap_gates(gate_bit);
+    let mut swapped = pixels.to_vec();
+    let mut swap_rows = |a: usize, b: usize| {
+        if a == b {
+            return;
+        }
+        for column in 0..TILE_ATLAS_SIDE {
+            swapped.swap(a * TILE_ATLAS_SIDE + column, b * TILE_ATLAS_SIDE + column);
+        }
+    };
+    if gates.leading {
+        swap_rows(leading_pair.0, leading_pair.1);
+    }
+    if gates.trailing {
+        swap_rows(trailing_pair.0, trailing_pair.1);
+    }
+    Some(swapped)
 }
 
 /// The one global counter both stages read.
@@ -600,5 +723,89 @@ mod tests {
             assert_eq!(a, b, "shift {shift}: both destinations show one frame");
             assert_eq!(a, rotated, "and that frame is the rotated source");
         }
+    }
+}
+
+#[cfg(test)]
+mod banner_sail_row_swap_tests {
+    use super::*;
+
+    /// `animation.md §12.5` (`RETRACTIONS.md` R301): the third driver stage
+    /// covers the banner and sail ids. `§12.5` names `0x12`, `0x14`, `0x15`
+    /// and `0x3E` explicitly and refers to "four ship tiles" without
+    /// enumerating them, so this table deliberately stops at the four
+    /// published ids rather than guessing the rest.
+    #[test]
+    fn banner_sail_stage_covers_only_the_published_ids() {
+        assert_eq!(BANNER_SAIL_ROW_SWAP_TILES, [0x12, 0x14, 0x15, 0x3E]);
+        for tile in BANNER_SAIL_ROW_SWAP_TILES {
+            assert!(banner_sail_row_swap_animates_tile(tile));
+        }
+        assert!(!banner_sail_row_swap_animates_tile(0x13));
+        // The standard-of-Britannia family of §6 is a frame-selector
+        // family and is unrelated to this stage.
+        assert!(!banner_sail_row_swap_animates_tile(0x80));
+        // The stage is distinct from the rotation and the composites.
+        for tile in BANNER_SAIL_ROW_SWAP_TILES {
+            assert!(!water_pass_animates_tile(tile));
+        }
+        assert_eq!(
+            banner_sail_row_swap_ids().collect::<Vec<_>>(),
+            BANNER_SAIL_ROW_SWAP_TILES.to_vec()
+        );
+    }
+
+    /// `§12.5`: "the trailing row-swap gate re-tests the **same**
+    /// pseudo-random bit as the leading gate rather than a distinct one …
+    /// An implementation should reproduce the shared gate rather than
+    /// 'correct' it to two independent draws."
+    #[test]
+    fn both_row_swap_gates_read_the_one_sampled_bit() {
+        assert_eq!(
+            banner_sail_row_swap_gates(true),
+            BannerSailRowSwapGates {
+                leading: true,
+                trailing: true
+            }
+        );
+        assert_eq!(
+            banner_sail_row_swap_gates(false),
+            BannerSailRowSwapGates {
+                leading: false,
+                trailing: false
+            }
+        );
+    }
+
+    #[test]
+    fn a_closed_gate_leaves_the_tile_untouched_and_an_open_one_swaps_both_pairs() {
+        let pixels: Vec<u8> = (0..TILE_ATLAS_TILE_PIXELS)
+            .map(|index| (index / TILE_ATLAS_SIDE) as u8)
+            .collect();
+        let row =
+            |tile: &[u8], y: usize| tile[y * TILE_ATLAS_SIDE..(y + 1) * TILE_ATLAS_SIDE].to_vec();
+
+        let closed =
+            apply_banner_sail_row_swaps(&pixels, (0, 1), (14, 15), false).expect("one tile");
+        assert_eq!(closed, pixels);
+
+        let open = apply_banner_sail_row_swaps(&pixels, (0, 1), (14, 15), true).expect("one tile");
+        assert_eq!(row(&open, 0), row(&pixels, 1));
+        assert_eq!(row(&open, 1), row(&pixels, 0));
+        assert_eq!(row(&open, 14), row(&pixels, 15));
+        assert_eq!(row(&open, 15), row(&pixels, 14));
+        // Rows outside the two pairs are untouched.
+        for y in 2..14 {
+            assert_eq!(row(&open, y), row(&pixels, y));
+        }
+
+        assert_eq!(
+            apply_banner_sail_row_swaps(&pixels[1..], (0, 1), (14, 15), true),
+            None
+        );
+        assert_eq!(
+            apply_banner_sail_row_swaps(&pixels, (0, 1), (14, TILE_ATLAS_SIDE), true),
+            None
+        );
     }
 }

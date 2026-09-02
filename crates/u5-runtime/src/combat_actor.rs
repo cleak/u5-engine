@@ -298,6 +298,12 @@ pub const COMBAT_ARENA_CENTER_COORDINATE: u8 = (COMBAT_ARENA_SIDE / 2) as u8;
 
 pub const COMBAT_AI_ATTACK_COMMAND_KEY: char = 'A';
 
+/// `combat.md §9`: "The arm makes **up to four independent attempts**; each
+/// attempt draws one of the four cardinal directions uniformly at random
+/// and tests **only that direction** against the cell predicate, retrying
+/// on rejection."
+pub const COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS: usize = 4;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatStepVector {
     pub dx: i8,
@@ -315,9 +321,28 @@ pub struct CombatStepDestination {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CombatAiMovementOutcome {
-    Teleport { x: u8, y: u8 },
-    Step { direction_code: u8, x: u8, y: u8 },
-    Blocked { surrounded: bool },
+    Teleport {
+        x: u8,
+        y: u8,
+    },
+    Step {
+        direction_code: u8,
+        x: u8,
+        y: u8,
+    },
+    /// `combat.md §9`: every direct axis and all four random-cardinal
+    /// attempts were rejected. `random_cardinal_attempts` is how many
+    /// cardinal draws the fallback actually consumed, which is what an
+    /// engine reproducing the shared PRNG stream needs; it is **not** a
+    /// "surrounded" verdict, because the fallback performs no neighbour
+    /// scan (`RETRACTIONS.md` R311). `§9`: "When all four attempts fail,
+    /// the routine still reports the action as consumed unless the final
+    /// draw happened to be the first direction tried, and the committed
+    /// displacement in that case is zero." That `unless` clause is **not**
+    /// modelled - see [`resolve_combat_ai_movement`] for why.
+    Blocked {
+        random_cardinal_attempts: u8,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1301,12 +1326,32 @@ pub const fn combat_step_or_attack_occupant_is_active(view: CombatTargetCandidat
         && !view.invisible_or_unrevealed
 }
 
+/// `combat.md §8`/`§8.1`: resolve one cardinal step for `moving_slot`.
+///
+/// **A bare direction key is purely a step: there is no bump attack.** The
+/// earlier "step-or-attack primitive: if the cell is occupied by a hostile,
+/// attack instead" reading is withdrawn (`RETRACTIONS.md` R310). Rejection
+/// - "which includes both terrain the mover cannot enter **and a cell
+/// already occupied by a live actor**" - returns [`
+/// CombatStepOrAttackOutcome::BlockedActor`] or `BlockedWall` and costs the
+/// actor nothing.
+///
+/// `attacks_hostile_occupant` is therefore `false` for every direction key.
+/// It is set only by the `A`-Attack targeting cursor's own confirmation.
+/// What that confirmation then does is `§8.2`'s contract, which this
+/// package does not implement: `§8.2` says "the occupancy lookup does not
+/// filter by side, so confirming on a party member's cell attacks that
+/// party member", while the side test below still refuses a party-side
+/// occupant. That divergence is deliberate and unresolved here - see
+/// `§8.2` for the full cursor contract - and this parameter only carries
+/// the one thing `§8.1` does establish: a bare direction never attacks.
 pub fn resolve_combat_step_or_attack_inner_pass(
     candidates: &[CombatTargetCandidateView],
     moving_slot: usize,
     attacker_group: u8,
     destination: CombatStepDestination,
     destination_walkable: bool,
+    attacks_hostile_occupant: bool,
 ) -> CombatStepOrAttackOutcome {
     if !destination.in_bounds {
         return CombatStepOrAttackOutcome::OutOfArena {
@@ -1334,9 +1379,14 @@ pub fn resolve_combat_step_or_attack_inner_pass(
         if passive_occupant {
             return CombatStepOrAttackOutcome::BlockedActor { target_slot: slot };
         }
-        return if combat_target_groups_are_hostile(attacker_group, candidate.group) {
+        return if attacks_hostile_occupant
+            && combat_target_groups_are_hostile(attacker_group, candidate.group)
+        {
             CombatStepOrAttackOutcome::Attack { target_slot: slot }
         } else {
+            // `combat.md §8.1`: "walking into an occupied cell never
+            // produces a to-hit roll, never prints `Attack-` or `Aim! `,
+            // and never resolves damage" - friend or foe alike.
             CombatStepOrAttackOutcome::BlockedActor { target_slot: slot }
         };
     }
@@ -1348,6 +1398,10 @@ pub fn resolve_combat_step_or_attack_inner_pass(
     }
 }
 
+/// See [`resolve_combat_step_or_attack_inner_pass`] for why
+/// `attacks_hostile_occupant` exists: `combat.md §8.1` has no bump attack,
+/// so a direction key passes `false`.
+#[allow(clippy::too_many_arguments)]
 pub fn resolve_combat_step_or_attack_primitive(
     actor: &mut CombatActorDescriptor,
     active_objects: &mut [ActiveObject],
@@ -1356,6 +1410,7 @@ pub fn resolve_combat_step_or_attack_primitive(
     attacker_group: u8,
     direction_code: u8,
     destination_walkable: bool,
+    attacks_hostile_occupant: bool,
 ) -> CombatStepOrAttackPrimitiveOutcome {
     if !combat_actor_is_active_not_dead(*actor) {
         return CombatStepOrAttackPrimitiveOutcome::InactiveActor;
@@ -1368,6 +1423,7 @@ pub fn resolve_combat_step_or_attack_primitive(
         attacker_group,
         destination,
         destination_walkable,
+        attacks_hostile_occupant,
     ) {
         CombatStepOrAttackOutcome::OutOfArena { x, y } => {
             CombatStepOrAttackPrimitiveOutcome::OutOfArena { x, y }
@@ -2003,6 +2059,14 @@ pub const fn resolve_combat_pass_command() -> CombatPassCommandOutcome {
     }
 }
 
+/// `combat.md §5`: one member of the whole-party regeneration sweep.
+///
+/// The sweep draws "one uniform value in `[0, 7]` for every party member
+/// who is alive and wearing the regeneration ring *at that moment*,
+/// including members whose status is neither good nor poisoned". So the
+/// eligibility test here is aliveness, not the good-or-poisoned gate: that
+/// gate decides whether the *step runs at all* for the member being seated,
+/// and it is applied by the caller (`RETRACTIONS.md` R307).
 pub fn combat_ring_regeneration_amount(
     wearer: PartyMember,
     ring_item_id: u8,
@@ -2020,9 +2084,21 @@ pub fn combat_ring_regeneration_amount(
     }
 }
 
+/// `combat.md §5` seating: "if that member wears either the Ring of
+/// Invisibility or the Ring of Regeneration, one uniform draw in `[0, 15]`
+/// is taken. The single outcome `11` destroys the ring".
+///
+/// The outcome is `11`, not `0` (`RETRACTIONS.md` R307). The check runs
+/// **before** the member is placed and before that member's own ring-effect
+/// step, and "one vanish lowers every subsequent count in the same seating
+/// pass".
 pub const fn combat_magic_ring_vanishes(ring_item_id: u8, vanish_roll: u8) -> bool {
-    is_combat_magic_ring_id(ring_item_id) && vanish_roll & 0x0f == 0
+    is_combat_magic_ring_id(ring_item_id) && vanish_roll & 0x0f == COMBAT_MAGIC_RING_VANISH_OUTCOME
 }
+
+/// The single `[0, 15]` outcome that destroys a worn magic ring at combat
+/// entry (`combat.md §5`).
+pub const COMBAT_MAGIC_RING_VANISH_OUTCOME: u8 = 11;
 
 pub const fn is_combat_magic_ring_id(ring_item_id: u8) -> bool {
     matches!(
@@ -3427,17 +3503,38 @@ pub fn commit_combat_ai_movement_outcome(
     }
 }
 
-pub fn combat_ai_cardinal_neighbors_surrounded(
-    legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
-    x: u8,
-    y: u8,
-) -> bool {
-    (1..=4).all(|direction_code| {
-        let destination = resolve_combat_step_destination(x, y, direction_code);
-        !combat_ai_legal_cell(legal_cells, destination.x, destination.y)
-    })
-}
-
+/// `combat.md §9` ordinary AI stepping.
+///
+/// The teleport arm runs first, then the direct target vector on one axis
+/// with randomised axis priority, then the **random-cardinal fallback**.
+///
+/// `RETRACTIONS.md` R311: that fallback "performs **no** neighbour scan. It
+/// makes up to four independent attempts, each drawing one cardinal
+/// uniformly and testing **only that direction**, retrying on rejection,
+/// committing the first accepted one." Two consequences this function
+/// reproduces rather than optimises away, quoting `combat.md §9`: "A
+/// monster with exactly one open
+/// direction can still fail to move within its four attempts, purely
+/// because the draws never landed on it", and "When all four attempts
+/// fail, the routine still reports the action as consumed unless the final
+/// draw happened to be the first direction tried, and the committed
+/// displacement in that case is zero."
+///
+/// **The exception in that second sentence is not implemented.** The
+/// caller sees `Blocked` for every exhausted fallback and treats every
+/// `Blocked` alike, because nothing this engine does with an AI dispatch
+/// branches on consumed-versus-not: the displacement is zero either way,
+/// and `§9` does not say what a *not*-consumed report changes. Modelling
+/// it would add an outcome field no code reads. `random_cardinal_attempts`
+/// still records the draw count, which is the part of `§9` the shared PRNG
+/// stream depends on.
+///
+/// `random_cardinal_direction_codes` supplies those draws in order. At most
+/// four are read and reading stops at the first accepted one, so a caller
+/// driving the shared PRNG must draw lazily; the returned
+/// `Blocked { random_cardinal_attempts }` reports how many were used.
+/// A non-cardinal code is still an attempt: the original tests whatever the
+/// draw produced and retries on rejection.
 pub fn resolve_combat_ai_movement(
     legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     actor_x: u8,
@@ -3456,11 +3553,9 @@ pub fn resolve_combat_ai_movement(
         }
     }
 
-    let surrounded = combat_ai_cardinal_neighbors_surrounded(legal_cells, actor_x, actor_y);
-    if surrounded {
-        return CombatAiMovementOutcome::Blocked { surrounded };
-    }
-
+    // No neighbour scan and no early "surrounded" exit here: `§9` withdrew
+    // both (`RETRACTIONS.md` R311). A fully enclosed actor still runs the
+    // direct axes and then spends its four fallback draws.
     let horizontal = combat_direction_code_for_step(step_vector.dx, 0);
     let vertical = combat_direction_code_for_step(0, step_vector.dy);
     let direct = if horizontal_axis_first {
@@ -3480,11 +3575,16 @@ pub fn resolve_combat_ai_movement(
         }
     }
 
+    let mut random_cardinal_attempts = 0u8;
     for direction_code in random_cardinal_direction_codes
         .iter()
         .copied()
-        .filter(|direction_code| combat_direction_code_is_cardinal(*direction_code))
+        .take(COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS)
     {
+        random_cardinal_attempts += 1;
+        if !combat_direction_code_is_cardinal(direction_code) {
+            continue;
+        }
         let destination = resolve_combat_step_destination(actor_x, actor_y, direction_code);
         if combat_ai_legal_cell(legal_cells, destination.x, destination.y) {
             return CombatAiMovementOutcome::Step {
@@ -3495,7 +3595,9 @@ pub fn resolve_combat_ai_movement(
         }
     }
 
-    CombatAiMovementOutcome::Blocked { surrounded }
+    CombatAiMovementOutcome::Blocked {
+        random_cardinal_attempts,
+    }
 }
 
 pub fn resolve_combat_wound_morale(

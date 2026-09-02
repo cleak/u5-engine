@@ -208,8 +208,23 @@ pub const fn shared_shop_bark_record(
     }
 }
 
+/// `shops.md §8.A`: which Talk-entry shop flows render one of the four
+/// shared entry-greeting records, chosen by a uniform `0..3` draw taken at
+/// the moment the greeting is rendered.
+///
+/// The tavern trigger `0x82` is on this list. `§8.A`'s "Tavern drink flow"
+/// row reads "Shared tavern arrival records `57..60` ... Arrival draws
+/// uniformly from `57..60`", and its transcript row adds that the greeting
+/// "Appends in the inherited conversation text window; there is no entry
+/// clear". The earlier contract - tavern arrival deterministic by menu
+/// state, with a text-window clear before it - is withdrawn
+/// (`RETRACTIONS.md` R294); only the list records `69..72` and the
+/// follow-up records `73..76` are deterministic from the state.
+///
+/// `0x81` arms "does not use this shared entry greeting" and `0x84`/`0x88`
+/// print their own branch text, so all three stay off the list.
 pub const fn talk_entry_uses_shared_preamble(dialog_id: u8) -> bool {
-    matches!(dialog_id, 0x83 | 0x85 | 0x86 | 0x87)
+    matches!(dialog_id, 0x82 | 0x83 | 0x85 | 0x86 | 0x87)
 }
 
 #[cfg(test)]
@@ -394,7 +409,17 @@ mod tests {
     #[test]
     fn talk_entry_preamble_is_limited_to_published_shop_flows() {
         assert!(!talk_entry_uses_shared_preamble(0x81));
-        assert!(!talk_entry_uses_shared_preamble(0x82));
+        // `shops.md §8.A` (`RETRACTIONS.md` R294): tavern arrival is a
+        // uniform draw over the shared entry-greeting row 57..60.
+        assert!(talk_entry_uses_shared_preamble(0x82));
+        assert_eq!(
+            shared_shop_bark_record(0x82, SharedShopBarkKind::Preamble, 0),
+            Some(57)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x82, SharedShopBarkKind::Preamble, 3),
+            Some(60)
+        );
         assert!(talk_entry_uses_shared_preamble(0x83));
         assert!(!talk_entry_uses_shared_preamble(0x84));
         assert!(talk_entry_uses_shared_preamble(0x85));

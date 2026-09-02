@@ -1832,7 +1832,9 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         handle_play_key_input(&mut state, 'A', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "Attack-");
+    // `combat.md §8.2` (`RETRACTIONS.md` R309): `A` prints `Attack-` and
+    // then `Aim! ` immediately before the targeting cursor opens.
+    assert_eq!(state.message, "Attack-Aim! ");
     assert_eq!(state.pending_combat_actor_slot, Some(actor_slot));
 
     assert_eq!(

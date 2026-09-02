@@ -268,7 +268,13 @@ mod tests {
         state.party[0].status = b'G';
         state.party[0].hp = 1;
         state.party[0].max_hp = 20;
-        state.prng_state = 0x0070;
+        // Seed re-chosen after `RETRACTIONS.md` R311 moved the shared
+        // stream: the random-cardinal fallback is drawn lazily instead of
+        // four codes up front, so an AI dispatch that never reaches the
+        // fallback no longer spends four draws. (R308's prologue tick is
+        // presentation-only and draws nothing, so it moves no seed.) This
+        // seed keeps the skeleton's blow lethal.
+        state.prng_state = 0x3270;
         state
     }
 

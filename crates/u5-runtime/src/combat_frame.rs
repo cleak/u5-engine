@@ -136,10 +136,43 @@ pub struct CombatAmbushRevealApplication {
     pub stamped_cells: u8,
 }
 
+/// `combat.md §7`/`§14`: the resident combat string the round loop prints
+/// through the ordinary string printer once every hostile actor has been
+/// killed. "The stored string has one leading and one trailing newline,
+/// and a one-shot guard prevents a duplicate announcement."
+///
+/// Printing it does **not** return from combat: "Party actors remain in
+/// the arena and cleanup continues until they walk out with `Leave!` or
+/// the player invokes the now-accepted Escape-key sweep." The earlier
+/// reading - the loop exited with result one immediately after victory
+/// cleanup - is withdrawn (`RETRACTIONS.md` R289).
+pub const COMBAT_VICTORY_LINE: &str = "\nVICTORY!\n";
+
+/// `combat.md §8`/`§8.2`: the label `A` prints per attack attempt.
+pub const COMBAT_ATTACK_LABEL: &str = "Attack-";
+
+/// `combat.md §8.2`: "Immediately before the cursor opens the engine prints
+/// `Aim! `."
+pub const COMBAT_ATTACK_AIM_PROMPT: &str = "Aim! ";
+
+/// `combat.md §5` / `catalogs/item-list.md`: the line printed when the
+/// entry-time vanish roll destroys a worn magic ring.
+pub const COMBAT_RING_VANISHED_MESSAGE: &str = "A ring has vanished!";
+
+/// `combat.md §14`: the resident defeat string, printed when no party-side
+/// actor remains while at least one foe does and the party control/faint
+/// helper cannot restore an actor. "That stored string begins with a
+/// newline and has no trailing newline before its terminator."
+pub const COMBAT_DEFEAT_LINE: &str = "\nBATTLE IS LOST!";
+
 /// `combat.md §14` round-loop exit outcomes. The framer's restore
 /// phase runs identically for all three; only the result code the
-/// round loop returns to its caller differs. Victory and Escape
-/// both return `1`; Defeat returns `0`.
+/// round loop returns to its caller differs. `§7`/`§14`: the loop
+/// returns word zero when cleanup has emptied both sides and word one
+/// when no party-side actor remains while foes do. The earlier
+/// polarity - one for victory/escape, zero for defeat - is withdrawn
+/// (`RETRACTIONS.md` R292), and the framer discards the word either
+/// way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CombatExitOutcome {
     /// Every hostile actor has been killed.
@@ -152,9 +185,11 @@ pub enum CombatExitOutcome {
 }
 
 impl CombatExitOutcome {
-    /// `combat.md §14` the result code the combat round loop
-    /// returns to the framer's caller. Victory and Escape both use
-    /// `1`; Defeat uses `0`.
+    /// `combat.md §7`/`§14`: the word the combat round loop returns
+    /// to the framer's caller. Zero once cleanup has emptied both
+    /// sides - the path Victory and Escape reach - and one on the
+    /// defeat branch that prints `BATTLE IS LOST!`. The framer
+    /// discards it, so it is not a caller-visible victory boolean.
     pub const fn result_code(self) -> u8 {
         match self {
             Self::Victory | Self::Escape => 0,
@@ -2286,11 +2321,15 @@ impl PlayState {
             .then(|| self.combat_ai_teleport_candidate(actor_slot))
             .flatten();
         let horizontal_axis_first = self.combat_ai_horizontal_axis_first(actor_slot);
-        let random_cardinal_direction_codes =
-            self.combat_ai_random_cardinal_direction_codes(actor_slot);
+        // `combat.md §9` (`RETRACTIONS.md` R311): the random-cardinal
+        // fallback "commits the first accepted direction", so its draws are
+        // taken one at a time and stop there. Pre-rolling four would consume
+        // the shared PRNG on every AI step that never reached the fallback,
+        // and on every fallback that succeeded on its first attempt. `None`
+        // tells the inner path to draw lazily.
         let monster_attack_inputs = self.combat_monster_attack_inputs(actor_slot);
 
-        self.apply_combat_ai_turn_with_inputs(
+        self.apply_combat_ai_turn_with_optional_cardinal_draws(
             actor_slot,
             false,
             0,
@@ -2303,11 +2342,13 @@ impl PlayState {
             false,
             teleport_candidate,
             horizontal_axis_first,
-            &random_cardinal_direction_codes,
+            None,
             Some(monster_attack_inputs),
         )
     }
 
+    /// Deterministic-input entry point: `random_cardinal_direction_codes`
+    /// supplies the `combat.md §9` fallback draws in order.
     #[allow(clippy::too_many_arguments)]
     pub fn apply_combat_ai_turn_with_inputs(
         &mut self,
@@ -2324,6 +2365,45 @@ impl PlayState {
         teleport_candidate: Option<(u8, u8)>,
         horizontal_axis_first: bool,
         random_cardinal_direction_codes: &[u8],
+        monster_attack_inputs: Option<CombatMonsterAttackInputs>,
+    ) -> Option<CombatAiTurnApplication> {
+        self.apply_combat_ai_turn_with_optional_cardinal_draws(
+            actor_slot,
+            possess_candidate_reaches_resistance,
+            possess_target_slot,
+            possess_resistance_blocks,
+            blink_roll,
+            summon_roll,
+            summon_candidate_coordinates,
+            cleanup_fallback_target,
+            mass_charm_roll,
+            fleeing,
+            teleport_candidate,
+            horizontal_axis_first,
+            Some(random_cardinal_direction_codes),
+            monster_attack_inputs,
+        )
+    }
+
+    /// `None` for `random_cardinal_direction_codes` means "draw the
+    /// `combat.md §9` fallback attempts from the shared PRNG, lazily,
+    /// stopping at the first accepted direction".
+    #[allow(clippy::too_many_arguments)]
+    fn apply_combat_ai_turn_with_optional_cardinal_draws(
+        &mut self,
+        actor_slot: usize,
+        possess_candidate_reaches_resistance: bool,
+        possess_target_slot: usize,
+        possess_resistance_blocks: bool,
+        blink_roll: u8,
+        summon_roll: u8,
+        summon_candidate_coordinates: &[(u8, u8)],
+        cleanup_fallback_target: Option<(u8, u8)>,
+        mass_charm_roll: u8,
+        fleeing: bool,
+        teleport_candidate: Option<(u8, u8)>,
+        horizontal_axis_first: bool,
+        random_cardinal_direction_codes: Option<&[u8]>,
         monster_attack_inputs: Option<CombatMonsterAttackInputs>,
     ) -> Option<CombatAiTurnApplication> {
         if !self.combat_active {
@@ -2576,16 +2656,51 @@ impl PlayState {
 
         let legal_cells = self.combat_legal_cell_mask();
         let traits = combat_class_traits(class)?;
+        let teleport_capable = traits.teleport_capable
+            && !negate_magic_aura_active(self.active_effect_tag, self.active_effect_counter);
+        // `combat.md §9` (`RETRACTIONS.md` R311): each fallback attempt is
+        // its own draw, taken only when the previous one was rejected. With
+        // deterministic inputs the caller supplies the sequence; in
+        // production it is drawn here, one attempt at a time, so the shared
+        // stream advances by exactly the attempts the original would take.
+        let drawn_cardinal_codes: Vec<u8> = match random_cardinal_direction_codes {
+            Some(_) => Vec::new(),
+            None => {
+                let mut codes = Vec::with_capacity(COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS);
+                if resolve_combat_ai_movement(
+                    &legal_cells,
+                    actor.x,
+                    actor.y,
+                    step_vector,
+                    teleport_capable,
+                    teleport_candidate,
+                    horizontal_axis_first,
+                    &[],
+                ) == (CombatAiMovementOutcome::Blocked {
+                    random_cardinal_attempts: 0,
+                }) {
+                    for _ in 0..COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS {
+                        let code = self.random_range_u8(1, 4);
+                        codes.push(code);
+                        let destination =
+                            crate::resolve_combat_step_destination(actor.x, actor.y, code);
+                        if crate::combat_ai_legal_cell(&legal_cells, destination.x, destination.y) {
+                            break;
+                        }
+                    }
+                }
+                codes
+            }
+        };
         let movement = resolve_combat_ai_movement(
             &legal_cells,
             actor.x,
             actor.y,
             step_vector,
-            traits.teleport_capable
-                && !negate_magic_aura_active(self.active_effect_tag, self.active_effect_counter),
+            teleport_capable,
             teleport_candidate,
             horizontal_axis_first,
-            random_cardinal_direction_codes,
+            random_cardinal_direction_codes.unwrap_or(&drawn_cardinal_codes),
         );
         let movement_commit = commit_combat_ai_movement_outcome(
             &mut self.combat_actors[actor_slot],
@@ -2956,7 +3071,13 @@ impl PlayState {
         self.combat_active = true;
         self.combat_action_result = 0;
         self.pending_combat_terrain_reveals.clear();
-        self.apply_combat_entry_magic_ring_passes();
+        // `combat.md §5`/`§5.3` step 3 (`RETRACTIONS.md` R307): the
+        // encounter-entry ring hooks belong to **seating**, not to the
+        // framer. The vanish check runs before each member is placed and
+        // the ring-effect step immediately after, both inside
+        // [`PlayState::populate_combat_party_with_positions`] - so they
+        // land before the monster count roll, the mid-setup world tick and
+        // every placement draw rather than after all of them.
         // `visibility.md §12.6`: "combat entry switches the beacon off
         // outright". There is no matching exit trigger; the beacon stays off
         // until a map loader next harvests a source.
@@ -2968,6 +3089,10 @@ impl PlayState {
         self.pending_combat_actor_slot = None;
         self.pending_combat_terrain_trigger_slot = None;
         self.next_combat_actor_slot = 0;
+        // `combat.md §7`: the round loop is entered once per encounter, so
+        // its prologue is owed again for this fight (`RETRACTIONS.md`
+        // R308).
+        self.combat_round_loop_prologue_ran = false;
         Ok(snapshot)
     }
 
@@ -3032,8 +3157,14 @@ impl PlayState {
         exit: CombatRoundLoopExit,
     ) -> CombatRoundLoopExitApplication {
         match exit {
-            CombatRoundLoopExit::Defeat => self.message = "\nBATTLE IS LOST!".to_string(),
-            // `combat.md §14`: there is no separate victory message.
+            CombatRoundLoopExit::Defeat => self.message = COMBAT_DEFEAT_LINE.to_string(),
+            // `combat.md §7`/`§14`: `VICTORY!` is printed by the round loop
+            // at the moment the hostile count first reaches zero - see
+            // [`Self::announce_combat_victory_if_needed`] - and the loop
+            // then *continues*. By the time cleanup has emptied both sides
+            // and this exit runs, the one-shot announcement has already
+            // happened: "If neither side remains, it returns word `0`
+            // without another announcement."
             CombatRoundLoopExit::Victory => self.message.clear(),
             CombatRoundLoopExit::LeaveCombat => {}
         }
@@ -4828,17 +4959,22 @@ impl PlayState {
                     let attacker_group = self.combat_target_group_for_slot(actor_slot);
                     let destination_walkable =
                         self.combat_destination_walkable_for_direction(actor_slot, direction_code)?;
+                    // `combat.md §8`/`§8.1` (`RETRACTIONS.md` R310): a bare
+                    // direction key "is purely a step: there is no bump
+                    // attack". Only the `A` verb's own targeting
+                    // confirmation - which arrives here as
+                    // `AttackDirection` - resolves against an occupant.
+                    let prompted_attack =
+                        matches!(input, CombatPlayerCommandInput::AttackDirection(_));
                     let outcome = self.apply_combat_step_or_attack_primitive(
                         actor_slot,
                         attacker_group,
                         direction_code,
                         destination_walkable,
+                        prompted_attack,
                     );
                     CombatPlayerCommandAction::StepOrAttack {
-                        prompted_attack: matches!(
-                            input,
-                            CombatPlayerCommandInput::AttackDirection(_)
-                        ),
+                        prompted_attack,
                         direction_code,
                         outcome,
                     }
@@ -4876,11 +5012,15 @@ impl PlayState {
             },
         };
 
-        // `audio.md §7.4`: the first of combat's two blocked-step sites, "the
-        // step-or-attack refusal". §7.4 leaves **unresolved** whether a missed
-        // attack roll also beeps - "two private analyses of that query directly
-        // contradict each other" - so this stays on the refusal outcomes the
-        // contract does name and adds no beep to a resolved swing that misses.
+        // `audio.md §7.4`: the first of combat's two blocked-step sites, "a
+        // refused **step** inside the arena". The earlier framing of this site
+        // as the move arm of a shared "step-or-act" handler, and the phrase
+        // "step-or-attack refusal", are withdrawn (`RETRACTIONS.md` R310):
+        // "the beep is what a refused step sounds like, whether the refusal
+        // came from terrain the mover cannot enter or from a cell already
+        // occupied by a live actor", and "it is never the answer to 'your
+        // attack failed'". A missed swing adds no beep - `§7.4`: "there is
+        // **no audio call anywhere** on" the miss arm.
         if matches!(
             action,
             CombatPlayerCommandAction::StepOrAttack {
@@ -5130,6 +5270,14 @@ impl PlayState {
         }
     }
 
+    /// `combat.md §7`/`§14`: the one-shot victory announcement.
+    ///
+    /// The census "counts every descriptor that is non-empty and not
+    /// dead-marked, with **no terrain filter**", so a hostile standing on
+    /// a restraint tile still holds the hostile count above zero and
+    /// suppresses this. Returns whether this call is the one that fires,
+    /// so the caller prints [`COMBAT_VICTORY_LINE`]; the stored guard
+    /// makes every later call return `false`.
     pub fn announce_combat_victory_if_needed(&mut self) -> bool {
         if combat_has_active_not_dead_non_party_actor(&self.combat_actors)
             || !combat_escape_has_unmarked_party_side_actor(&self.combat_actors)
@@ -5256,6 +5404,47 @@ impl PlayState {
         )
     }
 
+    /// `combat.md §7`, "Loop-entry prologue": screen redraw, combat-begin
+    /// overlay refresh, screen flush, per-slot scratch reset, and clearing
+    /// the "any spell cast this round" flag.
+    ///
+    /// **It runs once per encounter, not once per round** - "the prologue
+    /// runs once per entry into the round loop, and the loop is entered
+    /// once per encounter: the sweep restart jumps back past the prologue,
+    /// so the bundle is *not* re-run at the top of each table walk. Any
+    /// earlier reading of this as per-round start-of-round setup is
+    /// **withdrawn**" (`RETRACTIONS.md` R308).
+    ///
+    /// "Second, the prologue's very first action - before any actor slot is
+    /// examined - is a **full world tick**, a variable and unbounded PRNG
+    /// consumer" (`§5.3` step 8). "The prologue's other calls draw nothing,
+    /// directly or transitively." Exactly one such tick therefore sits
+    /// between the last monster placement and the first actor's action.
+    ///
+    /// The world tick this engine runs is the presentation-only one of
+    /// `input.md §2` and `main-loop.md §9`; `§5.3`'s three drawing arms
+    /// (wind drift, the per-object animation roll, the visibility `[0, 3]`
+    /// draw) are the world tick's own contract and are not re-modelled
+    /// here, so this call reproduces the tick's placement and cadence but
+    /// not yet its draw count. On that presentation-only tick the prologue
+    /// draws nothing, so the encounter's PRNG stream is unchanged by it.
+    ///
+    /// Of the bundle's other four items only the redraw has engine-side
+    /// state. The overlay refresh and the flush are the frontend's, and
+    /// nothing here is identified by `§7` as the "per-slot scratch" or the
+    /// "any spell cast this round" flag: this engine's nearest analogue,
+    /// `combat_action_result`, is cleared before **every** dispatch under
+    /// `§6.3`, which is a different lifetime, so no clear is issued here
+    /// rather than asserting a mapping the spec does not make.
+    pub fn run_combat_round_loop_entry_prologue_if_needed(&mut self) {
+        if !self.combat_active || self.combat_round_loop_prologue_ran {
+            return;
+        }
+        self.combat_round_loop_prologue_ran = true;
+        self.advance_visual_tick();
+        self.mark_visibility_dirty();
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn apply_combat_actor_slot_dispatch_internal(
         &mut self,
@@ -5277,6 +5466,9 @@ impl PlayState {
         monster_attack_inputs_by_slot: &[(usize, CombatMonsterAttackInputs)],
         draw_ai_inputs_from_shared_prng: bool,
     ) -> CombatActorSlotDispatchApplication {
+        // `combat.md §7`/`§5.3` step 8: the round loop's entry prologue,
+        // before any actor slot is examined.
+        self.run_combat_round_loop_entry_prologue_if_needed();
         if slot >= COMBAT_ACTOR_SLOTS {
             return CombatActorSlotDispatchApplication::EndOfRound {
                 control: self.combat_round_loop_control(leave_combat_flag, true),
@@ -5810,16 +6002,6 @@ impl PlayState {
         self.random_mod_u8(2) == 0
     }
 
-    pub fn combat_ai_random_cardinal_direction_codes(&mut self, actor_slot: usize) -> [u8; 4] {
-        let _ = actor_slot;
-        [
-            self.random_range_u8(1, 4),
-            self.random_range_u8(1, 4),
-            self.random_range_u8(1, 4),
-            self.random_range_u8(1, 4),
-        ]
-    }
-
     pub fn combat_monster_attack_inputs(
         &mut self,
         attacker_slot: usize,
@@ -5880,12 +6062,16 @@ impl PlayState {
         last_application
     }
 
+    /// `combat.md §8.1`: `attacks_hostile_occupant` is `false` for every
+    /// direction key - "there is **no bump attack**" (`RETRACTIONS.md`
+    /// R310) - and `true` only for the `A`-Attack targeting confirmation.
     pub fn apply_combat_step_or_attack_primitive(
         &mut self,
         moving_slot: usize,
         attacker_group: u8,
         direction_code: u8,
         destination_walkable: bool,
+        attacks_hostile_occupant: bool,
     ) -> CombatStepOrAttackPrimitiveOutcome {
         if moving_slot >= COMBAT_ACTOR_SLOTS {
             return CombatStepOrAttackPrimitiveOutcome::InactiveActor;
@@ -5914,6 +6100,7 @@ impl PlayState {
             attacker_group,
             direction_code,
             destination_walkable,
+            attacks_hostile_occupant,
         );
         if outcome.committed_movement() {
             self.mark_visibility_dirty();
@@ -5961,7 +6148,7 @@ impl PlayState {
         // reaches invisibility or regeneration.
         if combat_magic_ring_vanishes(ring, vanish_roll) {
             outcome.vanished_ring = Some(ring);
-            self.message = "A ring has vanished!".to_string();
+            self.message = COMBAT_RING_VANISHED_MESSAGE.to_string();
             // `audio.md §8.1` terrain-combat-entry path, in its published
             // order: "print `A ring has vanished!`, play the 40-update action
             // snap, then remove the item". The Ready path orders the same
@@ -6002,43 +6189,6 @@ impl PlayState {
         }
 
         Some(outcome)
-    }
-
-    /// Run the encounter-entry-only ring destruction and seating hooks in
-    /// descriptor order. Action-time maintenance deliberately uses the
-    /// separate non-vanishing helper above the command parser.
-    fn apply_combat_entry_magic_ring_passes(&mut self) {
-        for actor_slot in 0..COMBAT_ACTOR_SLOTS {
-            let actor = self.combat_actors[actor_slot];
-            if actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 == 0 || actor.is_marked_dead() {
-                continue;
-            }
-            let wearer_slot = actor.owner_target_class as usize;
-            let Some(ring) = self
-                .party_equipment
-                .get(wearer_slot)
-                .map(|equipment| equipment[EQUIP_SLOT_RING])
-            else {
-                continue;
-            };
-            if ring as usize != EQUIPMENT_ID_RING_INVISIBILITY
-                && ring as usize != EQUIPMENT_ID_RING_REGENERATION
-            {
-                continue;
-            }
-            let vanish_roll = self.combat_magic_ring_vanish_roll(actor_slot);
-            let regeneration_roll =
-                if vanish_roll != 0 && ring as usize == EQUIPMENT_ID_RING_REGENERATION {
-                    self.combat_magic_ring_regeneration_roll(actor_slot)
-                } else {
-                    1
-                };
-            let _ = self.apply_combat_magic_ring_pass_to_slot(
-                actor_slot,
-                regeneration_roll,
-                vanish_roll,
-            );
-        }
     }
 
     pub fn advance_combat_round_counter(&mut self) -> CombatRoundCounterTick {

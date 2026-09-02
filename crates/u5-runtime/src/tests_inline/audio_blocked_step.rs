@@ -309,11 +309,12 @@ fn the_two_ring_vanish_paths_share_the_snap_and_order_it_per_path() {
     entry.combat_actors[0] =
         CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 3, 3]);
     let serial = entry.sound_effect_serial;
-    let outcome = entry.apply_combat_magic_ring_pass_to_slot(0, 1, 0);
+    let outcome =
+        entry.apply_combat_magic_ring_pass_to_slot(0, 1, COMBAT_MAGIC_RING_VANISH_OUTCOME);
     assert_eq!(
         outcome.and_then(|outcome| outcome.vanished_ring),
         Some(EQUIPMENT_ID_RING_REGENERATION as u8),
-        "roll 0 is the 1-in-16 destruction"
+        "`combat.md §5`: outcome 11 of the uniform [0,15] draw is the 1-in-16 destruction (`RETRACTIONS.md` R307)"
     );
     assert_eq!(entry.message, "A ring has vanished!");
     assert_eq!(

@@ -3187,13 +3187,16 @@ impl PlayState {
     /// only once the player passed a turn. Actor movement is therefore
     /// driven by player turns, not by wall-clock time.
     ///
-    /// `input.md §2` agrees for the scheduled half — "NPC schedules and the
-    /// in-world clock do not advance from this idle tick" — while
-    /// `main-loop.md §9` and `animation.md §5` describe ambient wandering
-    /// as something the world tick's animator can do. The measurement is
-    /// the narrower and more direct evidence about what a player sees, so
-    /// the idle tick is presentation-only here and every wander step is
-    /// paid for out of a consumed turn by
+    /// The spec now says the same thing in all three places. `input.md §2`
+    /// reads "**No actor movement of any kind advances from this idle
+    /// tick** - not scheduled NPC schedule-walking, not ambient creature
+    /// wandering, and not the in-world clock"; `main-loop.md §9` withdrew
+    /// its "and eligible ambient wandering" clause and `animation.md §5`
+    /// withdrew "the animator's wandering path covers ambient map
+    /// creatures ... between explicit commands" (`RETRACTIONS.md` R315),
+    /// adopting the measurement above. So the presentation-only idle tick
+    /// is the published contract rather than a divergence from it, and
+    /// every wander step is paid for out of a consumed turn by
     /// [`Self::advance_outdoor_active_objects`] (overworld) or
     /// [`Self::advance_town_free_roaming_active_objects`] (towns). This
     /// mattered little at the frontend's old ~3 Hz pump; at the measured

@@ -154,6 +154,11 @@ pub enum EgaDisplayOperation<'a> {
         atlas: &'a mut TileAtlas,
         saved: &'a EgaLoadedTileGraphicsSave,
     },
+    /// `display-driver-abi.md §10` offset `0x6C`, red/green plane-swap
+    /// mode. Its only real selector is the dungeon look/view code; combat
+    /// never selects it (`RETRACTIONS.md` R304). See
+    /// [`EGA_RED_GREEN_PLANE_SWAP_TILES`] for the published tile set and
+    /// the full five-caller census.
     SwapLoadedTileRedGreenPlanes {
         atlas: &'a mut TileAtlas,
         tile_range: Range<usize>,
@@ -314,6 +319,67 @@ impl EgaLoadedTileGraphicsSave {
         };
         atlas.pixels.clone_from(pixels);
         Ok(())
+    }
+}
+
+/// `display-driver-abi.md §10`, dispatch offset `0x6C`: the exact tile set
+/// the red/green plane-swap mode covers - "tiles `0x05`, `0x1E`, `0x1F`,
+/// `0x4C`, `0xCA`, `0x20..0x26`, `0x30..0x37` and `0x60..0x6F`".
+///
+/// **Caller correction (`RETRACTIONS.md` R304).** An earlier revision
+/// described this mode as "used for combat-style terrain coloration", and
+/// the entry as reached from three resident dispatch sites. Both are
+/// withdrawn: "Those three sites are thin trampolines, not callers." The
+/// five real callers of `0x6C`, and the modes they select, are
+///
+/// 1. the dungeon look/view code, twice - once for the mode that saves
+///    eight bytes of two unrelated tiles and sets a flag, and once for
+///    **this** plane-swap mode, the entry's only selector of it;
+/// 2. the **per-turn clock advance**, which selects the moon/sun phase
+///    painter and edits only the moon/sun phase tiles - "this runs once per
+///    game turn, not at a scene transition, so 'this entry fires only on
+///    scene transitions' is also withdrawn";
+/// 3. the post-combat restore path, which selects the restore-eight-bytes
+///    mode, gated on the flag the dungeon path set;
+/// 4. the endgame sequence, which selects the whole-tileset remap - the
+///    only one of the five that touches fire fixtures, and then only
+///    `0xB0`, `0xB1` and `0xBF`, one-shot and not an animation.
+///
+/// **Combat never selects the plane swap.** The combat framer's own reached
+/// call uses mode value `1`, the restoration step.
+///
+/// "It touches no water tile and no fire fixture directly, but `0x34..0x37`
+/// and `0x60..0x6F` are two of the three destination groups of the per-step
+/// water composite (`animation.md §12.3`), so the swap and the water
+/// animation write to the same bitmaps and interact."
+pub const EGA_RED_GREEN_PLANE_SWAP_TILES: [u8; 36] = [
+    0x05, 0x1E, 0x1F, 0x4C, 0xCA, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x30, 0x31, 0x32, 0x33,
+    0x34, 0x35, 0x36, 0x37, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B,
+    0x6C, 0x6D, 0x6E, 0x6F,
+];
+
+/// Is `tile` covered by the `§10` red/green plane-swap mode?
+pub const fn ega_red_green_plane_swap_covers_tile(tile: u8) -> bool {
+    matches!(
+        tile,
+        0x05 | 0x1E | 0x1F | 0x4C | 0xCA | 0x20..=0x26 | 0x30..=0x37 | 0x60..=0x6F
+    )
+}
+
+/// Apply the plane swap to exactly the `§10` tile set, rather than to a
+/// caller-chosen range. This is the shape the one real selector - the
+/// dungeon look/view path - uses.
+///
+/// **No production path calls this yet.** This engine's dungeon look/view
+/// code does not select the `0x6C` plane-swap mode, so the published tile
+/// set is currently recorded and tested rather than applied.
+pub fn swap_loaded_tile_red_green_planes_over_published_set(atlas: &mut TileAtlas) {
+    for tile in 0u16..=0xFF {
+        let tile = tile as u8;
+        if ega_red_green_plane_swap_covers_tile(tile) {
+            let start = usize::from(tile);
+            swap_loaded_tile_red_green_planes(atlas, start..start + 1);
+        }
     }
 }
 
@@ -964,4 +1030,68 @@ fn assert_display_point_in_bounds(x: i32, y: i32, context: &str) {
             && (0..DISPLAY_SURFACE_HEIGHT as i32).contains(&y),
         "{context} ({x}, {y}) exceeds {DISPLAY_SURFACE_WIDTH}x{DISPLAY_SURFACE_HEIGHT}; clipping is a forbidden fallback"
     );
+}
+
+#[cfg(test)]
+mod red_green_plane_swap_tests {
+    use super::*;
+
+    /// `display-driver-abi.md §10` offset `0x6C` (`RETRACTIONS.md` R304):
+    /// "The plane-swap mode covers tiles `0x05`, `0x1E`, `0x1F`, `0x4C`,
+    /// `0xCA`, `0x20..0x26`, `0x30..0x37` and `0x60..0x6F`."
+    #[test]
+    fn the_plane_swap_mode_covers_exactly_the_published_tile_set() {
+        let covered: Vec<u8> = (0u16..=0xFF)
+            .map(|tile| tile as u8)
+            .filter(|tile| ega_red_green_plane_swap_covers_tile(*tile))
+            .collect();
+        let mut published: Vec<u8> = EGA_RED_GREEN_PLANE_SWAP_TILES.to_vec();
+        published.sort_unstable();
+        assert_eq!(covered, published);
+        assert_eq!(covered.len(), 36);
+
+        // "It touches no water tile and no fire fixture directly."
+        for water in crate::water_scroll::WATER_ROTATED_TILES {
+            assert!(!ega_red_green_plane_swap_covers_tile(water));
+        }
+        for fire in [0xB0u8, 0xB1, 0xBF] {
+            assert!(!ega_red_green_plane_swap_covers_tile(fire));
+        }
+        // "but `0x34..0x37` and `0x60..0x6F` are two of the three
+        // destination groups of the per-step water composite … so the swap
+        // and the water animation write to the same bitmaps and interact."
+        for shared in [0x34u8, 0x35, 0x36, 0x37, 0x60, 0x6F] {
+            assert!(ega_red_green_plane_swap_covers_tile(shared));
+            assert!(crate::water_scroll::water_composite_mask(shared).is_some());
+        }
+    }
+
+    #[test]
+    fn the_published_set_swap_touches_only_covered_tiles() {
+        let mut atlas = TileAtlas {
+            depth: TileGraphicsDepth::Ega16,
+            pixels: (0..256 * TILE_ATLAS_TILE_PIXELS)
+                .map(|index| ((index % 16) as u8) & 0x0f)
+                .collect(),
+            dungeon_billboards: None,
+            dungeon_sprites: None,
+        };
+        let before = atlas.pixels.clone();
+        swap_loaded_tile_red_green_planes_over_published_set(&mut atlas);
+
+        for tile in 0u16..=0xFF {
+            let tile = tile as u8;
+            let start = usize::from(tile) * TILE_ATLAS_TILE_PIXELS;
+            let end = start + TILE_ATLAS_TILE_PIXELS;
+            if end > atlas.pixels.len() {
+                break;
+            }
+            let changed = atlas.pixels[start..end] != before[start..end];
+            if ega_red_green_plane_swap_covers_tile(tile) {
+                assert!(changed, "covered tile 0x{tile:02X} must be rewritten");
+            } else {
+                assert!(!changed, "tile 0x{tile:02X} is outside the published set");
+            }
+        }
+    }
 }

@@ -1283,12 +1283,24 @@ pub fn surface_tile_blocks_projectile(tile: u8) -> bool {
 }
 
 /// `visibility.md` §6: tile identities that fully stop the centre-out sight
-/// carve. These are spec-listed family members (forest 0x09, hill/mountain
-/// /lava-rock 0x0A/0x0C/0x0D, bookshelf/dresser/vanity/trunk 0x4D..=0x4F,
-/// sign-post 0x5A, monster sprite frames Bat 0x97 / Gargoyle 0xB8..=0xB9 /
-/// Insect Swarm 0xBC / Headless 0xD0..=0xD3 / Rot Worm 0xF8 / Shadow Lord
-/// 0xFE..=0xFF). Tiles not in this set or in the orthogonal-only set use
-/// the ordinary propagation rule.
+/// carve. Every one of them is terrain or a fixture: trees 0x09 and tropical
+/// forest 0x0A, mountains 0x0C and high peaks 0x0D, the wall variants
+/// 0x4D..=0x4F, the window shelf 0x5A, the odd door 0x97, the wooden and
+/// locked doors 0xB8/0xB9, the fireplace 0xBC, the diagonal wedge tiles
+/// 0xD0..=0xD3, the sign/poster tile 0xF8, and the wall 0xFE plus the void
+/// tile 0xFF.
+///
+/// This carve reads a **terrain-half byte in 0..=255**. The monster names an
+/// earlier revision of `§6` gave these ids - Bat, Gargoyle, Insect Swarm,
+/// Headless, Rot Worm, Shadow Lord - are withdrawn (`RETRACTIONS.md` R314).
+/// They are real names, but of the **actor-half** atlas entries 0x197,
+/// 0x1B8..=0x1BB, 0x1BC, 0x1D0..=0x1D3, 0x1F8 and 0x1FE..=0x1FF, which the
+/// renderer reaches only after adding 0x100 to an actor byte and which this
+/// classifier can therefore never see. The id membership is unchanged; only
+/// the names were wrong.
+///
+/// Tiles not in this set or in the orthogonal-only set use the ordinary
+/// propagation rule.
 pub const fn tile_blocks_sight_propagation(tile: u8) -> bool {
     matches!(
         tile,
@@ -1305,8 +1317,14 @@ pub const fn tile_blocks_sight_propagation(tile: u8) -> bool {
 }
 
 /// `visibility.md` §6: tile identities that propagate the carve only when
-/// orthogonally adjacent to the centre cell — bookshelf/dresser
-/// 0x4A..=0x4B, Giant Spider frame 0x98, Gargoyle frames 0xBA..=0xBB.
+/// orthogonally adjacent to the centre cell - the arrow slit 0x4A, the
+/// window 0x4B, the odd door 0x98, and the windowed wooden and locked doors
+/// 0xBA..=0xBB. `§6` calls these "the five adjacent-only ids"; four of them
+/// - the arrow slit, the window and the two windowed doors - are also the
+/// "four openings you can only see through from immediately in front",
+/// while the odd door 0x98 shares the rule without being one of them. The creature names an earlier revision gave 0x98
+/// and 0xBA..=0xBB belong to the actor half and are withdrawn
+/// (`RETRACTIONS.md` R314).
 pub const fn tile_propagates_sight_only_when_adjacent(tile: u8) -> bool {
     matches!(tile, 0x4A | 0x4B | 0x98 | 0xBA | 0xBB)
 }
