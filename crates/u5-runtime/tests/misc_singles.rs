@@ -844,49 +844,49 @@ fn a_dungeon_idle_tick_runs_no_world_step_at_all() {
     assert_eq!(surface.fire_flicker.steps(), 1);
 }
 
-/// `timing.md §8.2`: "On the overworld the input helper performs one
-/// scripted step-and-wait — one world step followed by one one-tick wait —
-/// before either entering the command wait or, when sails are set,
-/// performing a bare cursor poll instead; so an **under-sail auto-advance
-/// pass costs two ticks and one world step and never enters the command wait
-/// at all**."
+/// `animation.md §12.4` guard against a silent no-op on the shipped
+/// artwork. Every other fire test here builds a synthetic atlas with a
+/// hand-drawn mask, so all of them would still pass if the real masks
+/// `0xC0..0xC3` / `0xCC..0xCF` were blank and the fire were static in the
+/// actual game.
 ///
-/// So under sail the world advances once per two idle passes. Off sail every
-/// pass is one tick and one world step.
+/// "Each mask is a small shape sitting exactly over its fixture's flame, so
+/// only pixels inside the flame silhouette are ever touched", and a masked
+/// pixel is XORed with `random_bit x (mask_pixel_colour AND planes)`. So a
+/// fixture flickers in play only if its shipped mask has at least one pixel
+/// whose colour intersects that fixture's noise-tile planes. This asserts
+/// exactly that, for all nine published ids, against the shipped tiles.
+///
+/// Gated on local assets being present, like the other clean-asset smokes:
+/// no artwork is committed and nothing is dumped.
 #[test]
-fn an_under_sail_idle_pass_costs_two_ticks_and_one_world_step() {
-    let mut state = world_state(open_world_grid(), 100, 100);
-    state.player.transport = TransportState::Ship {
-        type_byte: 168,
-        tile: 168,
-        sails_hoisted: true,
-        hull: 77,
-        skiffs: 2,
-    };
-    assert!(state.player.transport.is_ship_under_sail());
-
-    for pass in 1..=32u32 {
-        state.advance_visual_tick();
-        assert_eq!(
-            state.fire_flicker.steps(),
-            pass.div_ceil(2),
-            "pass {pass}: one world step per two ticks under sail"
-        );
-        assert_eq!(
-            u32::from(state.water_scroll.phase),
-            pass.div_ceil(2) % u32::from(WATER_SCROLL_PHASE_COUNT)
-        );
+fn shipped_fire_masks_have_pixels_inside_their_noise_planes() {
+    let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join(TILES_EGA_FILE).exists() {
+        return;
     }
+    let atlas = load_tile_atlas(game_dir, TileGraphicsDepth::Ega16).unwrap();
 
-    // Furling the sails restores one world step per tick immediately.
-    state.player.transport = TransportState::Foot;
-    let before = state.fire_flicker.steps();
-    for pass in 1..=8u32 {
-        state.advance_visual_tick();
-        assert_eq!(
-            state.fire_flicker.steps(),
-            before + pass,
-            "pass {pass} on foot"
+    for fixture in FIRE_FIXTURES {
+        let planes = fire_noise_tile_planes(fixture.noise)
+            .expect("every published fixture names a published noise tile");
+        let base = usize::from(fixture.mask) * TILE_ATLAS_TILE_PIXELS;
+        let live = atlas.pixels[base..base + TILE_ATLAS_TILE_PIXELS]
+            .iter()
+            .filter(|colour| **colour & planes != 0)
+            .count();
+        assert!(
+            live > 0,
+            "shipped mask 0x{:02X} for fixture 0x{:02X} has no pixel inside noise planes {planes}: \
+             the fire would be static in play",
+            fixture.mask,
+            fixture.tile
+        );
+        assert!(
+            live < TILE_ATLAS_TILE_PIXELS,
+            "shipped mask 0x{:02X} covers the whole tile; §12.4 calls it \
+             'a small shape sitting exactly over its fixture's flame'",
+            fixture.mask
         );
     }
 }

@@ -533,9 +533,10 @@ impl PlayState {
                 let Some(tile_id) = cell.tile_id() else {
                     continue;
                 };
-                // `cleak/u5-spec#179`: the display driver rotates water and
-                // lava, and composites the river, coast and shore ids from
-                // the rotated shoals tile. A cell
+                // `animation.md §12.2/§12.3`: the display driver rotates
+                // water and lava, and composites the river, coast and shore
+                // ids from the rotated shoals tile. `§12.4` flickers the fire
+                // fixtures off the same driver pass. A cell
                 // whose composed tile is a sprite takes the ordinary path,
                 // exactly as it does for the `§6` families.
                 blit_terrain_tile_to_viewport(
@@ -3041,11 +3042,6 @@ impl PlayState {
         if idle_world_step_suppressed_for_scene(self.current_scene_byte()) {
             return;
         }
-        // `timing.md §8.2`, the under-sail auto-advance pass: two ticks, one
-        // world step. The poll half advances nothing here.
-        if !self.under_sail_idle_pass_steps_the_world() {
-            return;
-        }
         // Combat and endgame own temporary active-object tables. Their
         // presentation ticks must not recreate slot zero from the saved world
         // player after an actor release (the top-down renderer observes the
@@ -3073,33 +3069,20 @@ impl PlayState {
         let _ = self.apply_combat_cursor_blink_tick();
     }
 
-    /// `timing.md §8.2`: is this idle pass the under-sail pass's world step,
-    /// or its bare cursor poll?
-    ///
-    /// "On the overworld the input helper performs one scripted step-and-wait
-    /// - one world step followed by one one-tick wait - before either entering
-    /// the command wait or, when sails are set, performing a bare cursor poll
-    /// instead; so an **under-sail auto-advance pass costs two ticks and one
-    /// world step and never enters the command wait at all**."
-    ///
-    /// So under sail the world advances on one idle pass in two, and the other
-    /// pass costs a tick and does nothing but poll. Off sail every pass is one
-    /// tick and one world step, so the phase is held at its entry value.
-    ///
-    /// The rest of that sentence - that the under-sail pass "never enters the
-    /// command wait at all", i.e. the ship auto-advances without a keystroke -
-    /// is **not** implemented. This engine still requires a command to move a
-    /// ship under sail, which is the conservative behaviour: the published
-    /// text gives the pass's cost, not the step it takes, and inventing an
-    /// auto-advance would move the party without input.
-    fn under_sail_idle_pass_steps_the_world(&mut self) -> bool {
-        if !matches!(self.area, Area::World { .. }) || !self.player.transport.is_ship_under_sail() {
-            self.under_sail_wait_phase = false;
-            return true;
-        }
-        self.under_sail_wait_phase = !self.under_sail_wait_phase;
-        self.under_sail_wait_phase
-    }
+    // `timing.md §8.2` also publishes the under-sail wait pass's cost - "an
+    // **under-sail auto-advance pass costs two ticks and one world step and
+    // never enters the command wait at all**". That sentence is about the
+    // *overworld command-wait helper*, and it is deliberately NOT implemented
+    // here. `advance_visual_tick` is the shared "advance one world tick"
+    // primitive: combat entry preserves `Area::World` and the hoisted-sail
+    // transport, and the `.` pass-turn command routes through it too, so a
+    // half-rate gate at this level would silently halve the combat
+    // presentation beats and the pass-turn command as well. Implementing only
+    // the cost half without the auto-advance would also leave a party sitting
+    // still with sails hoisted running the whole world at half rate, which is
+    // neither the original's behaviour nor anything published. If it is ever
+    // implemented it belongs at the idle pump (`u5-bevy::visual_idle_tick`),
+    // not here.
 
     pub fn decay_light_counters(&mut self, units: u8) {
         self.torch_counter = self.torch_counter.saturating_sub(units);
