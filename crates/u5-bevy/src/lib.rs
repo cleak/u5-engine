@@ -113,7 +113,7 @@ use u5_runtime::{
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
-    hash_bytes, input_function_key_code, input_keypad_digit_direction_code,
+    hash_bytes, input_function_key_code, input_numpad_flag, input_typed_digit_direction_code,
     intro_doorway_paragraph_boxes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_menu_frame_border_start_column, intro_step_has_story6_secondary_pass,
@@ -16673,6 +16673,26 @@ fn key_code_to_command_char(
         .map(char::from)
 }
 
+/// `combat.md §8.3` / `input.md §5`: the second way the shared input
+/// routine raises its numpad flag is "read the BIOS keyboard shift-status
+/// byte and set the flag if **either shift key is down OR NumLock is
+/// currently active**". `§8.3` calls NumLock "an environment fact, not a
+/// game fact; an engine should expose it as one" — but this frontend
+/// cannot: `winit`/Bevy report `KeyCode::NumLock` as a key *press*, never
+/// as a lock state, so there is nothing to read here.
+///
+/// `input.md §5` publishes the fallback this constant takes: "an
+/// implementation that lacks NumLock state can treat shift held as the
+/// trigger." The extended-scancode arm of the flag (arrows, Home/End/
+/// PgUp/PgDn and the numpad keys) is unaffected and is translated in full
+/// by the match below.
+///
+/// The visible gap: with NumLock on and no shift held, the original remaps
+/// eight of the ten digits to directions, so `combat.md §8.3`'s "member
+/// selection by digit is therefore only reachable with NumLock off" reads
+/// here as "only reachable with shift not held".
+const NUM_LOCK_STATE_OBSERVABLE: bool = false;
+
 fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bool) -> Option<u8> {
     use KeyCode::*;
     if control_pressed {
@@ -16682,6 +16702,7 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         };
     }
 
+    let numpad_flag = input_numpad_flag(shift_pressed, NUM_LOCK_STATE_OBSERVABLE);
     let byte = match key {
         Escape => 0x1B,
         Enter | NumpadEnter => 0x0D,
@@ -16712,14 +16733,14 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         F8 => input_function_key_code(8)?,
         F9 => input_function_key_code(9)?,
         F10 => input_function_key_code(10)?,
-        Digit1 if shift_pressed => input_keypad_digit_direction_code(1)?,
-        Digit2 if shift_pressed => input_keypad_digit_direction_code(2)?,
-        Digit3 if shift_pressed => input_keypad_digit_direction_code(3)?,
-        Digit4 if shift_pressed => input_keypad_digit_direction_code(4)?,
-        Digit6 if shift_pressed => input_keypad_digit_direction_code(6)?,
-        Digit7 if shift_pressed => input_keypad_digit_direction_code(7)?,
-        Digit8 if shift_pressed => input_keypad_digit_direction_code(8)?,
-        Digit9 if shift_pressed => input_keypad_digit_direction_code(9)?,
+        Digit1 if numpad_flag => input_typed_digit_direction_code(1, numpad_flag)?,
+        Digit2 if numpad_flag => input_typed_digit_direction_code(2, numpad_flag)?,
+        Digit3 if numpad_flag => input_typed_digit_direction_code(3, numpad_flag)?,
+        Digit4 if numpad_flag => input_typed_digit_direction_code(4, numpad_flag)?,
+        Digit6 if numpad_flag => input_typed_digit_direction_code(6, numpad_flag)?,
+        Digit7 if numpad_flag => input_typed_digit_direction_code(7, numpad_flag)?,
+        Digit8 if numpad_flag => input_typed_digit_direction_code(8, numpad_flag)?,
+        Digit9 if numpad_flag => input_typed_digit_direction_code(9, numpad_flag)?,
         Digit0 | Numpad0 => b'0',
         Digit1 => b'1',
         Digit2 => b'2',

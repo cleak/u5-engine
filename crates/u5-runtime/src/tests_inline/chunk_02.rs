@@ -338,11 +338,14 @@ fn chargen_winner_stats_apply_virtue_deltas_and_strength_floor() {
         ShrineVirtue::Spirituality,
     ]);
 
+    // `chargen.md §7`: "The running dexterity tally starts from the shipped
+    // seed record's dexterity of `15`", so the seven winners' DEX deltas
+    // (0 + 2 + 0 + 1 + 1 + 0 + 1 = 5) land on top of that 15.
     assert_eq!(
         stats,
         ChargenStats {
             strength: 20,
-            dexterity: 5,
+            dexterity: CHARGEN_SEED_DEXTERITY + 5,
             intelligence: 5,
         }
     );

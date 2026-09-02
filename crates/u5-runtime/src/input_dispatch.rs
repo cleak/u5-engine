@@ -2633,6 +2633,11 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         return PlayInputDisposition::Continue;
     }
     let input = combat_player_command_input_from_key_suffix(key, suffix);
+    // `combat.md §8.1`: the banner was already emitted into the transcript
+    // when this turn opened - "before any key is read" - so this keystroke's
+    // own transcript starts with the command output and never reprints it.
+    // The free re-prompt below reinstates the pending slot without reopening
+    // the turn, which is what keeps that path on the short form.
     let Some(application) = state.apply_combat_player_command_with_inputs(actor_slot, input) else {
         state.message.clear();
         return PlayInputDisposition::Continue;
@@ -3230,8 +3235,11 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
             | CombatRoundWalkStopReason::Exit => application.next_slot,
         };
         if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
-            state.pending_combat_actor_slot = ready_player_slot_from_input_round_walk(&application);
-            state.select_active_player_for_pending_combat_actor();
+            // `combat.md §8.1`: opening a keyboard-driven turn prints the
+            // turn banner, before any key is read.
+            state.open_pending_combat_player_turn(ready_player_slot_from_input_round_walk(
+                &application,
+            ));
         }
 
         let should_stop = !matches!(

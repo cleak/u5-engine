@@ -772,7 +772,7 @@
         let mut state = world_state(open_world_grid(), 10, 20);
         state.prng_state = 0x0f0f;
         state
-            .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0)
+            .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0, std::path::Path::new(""))
             .unwrap();
 
         let stats = combat_class_stats(COMBAT_CLASS_BAT).unwrap();
@@ -802,9 +802,12 @@
         // class stat table's speed seed - the value this site used to
         // read - is a monster placement input.
         //
-        // Whether a very low dexterity is floored before the subtraction
-        // is an open question in `cleak/u5-spec#178`; the published raw
-        // contract is what is implemented here.
+        // `combat.md §5.1` settles the floor question: "The seating pass
+        // copies the character's dexterity byte into the actor's base step
+        // verbatim. There is no minimum, no maximum, no level scaling, no
+        // equipment adjustment and no random variation applied on the way."
+        // The floor lives in chargen, not combat, and it is a *starting
+        // point* for the questionnaire tally rather than a clamp.
         let mut state = world_state(open_world_grid(), 10, 20);
         state.prng_state = 0xbeef;
         state.party.truncate(1);
@@ -967,3 +970,162 @@
             "the party must survive eight interleaved turns"
         );
     }
+
+    /// `combat.md §8.1`, the turn banner: "a newline, the actor's name, and -
+    /// for a party-side actor - the clause `, armed with ` followed by the
+    /// names of that actor's readied items separated by `, `, or `bare hands`
+    /// when none qualifies, terminated by a colon."
+    #[test]
+    fn turn_banner_names_the_actor_and_its_qualifying_readied_items() {
+        let mut equipment = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+        assert_eq!(
+            combat_turn_banner("Iolo", Some(&equipment)),
+            "\nIolo, armed with bare hands:"
+        );
+
+        // "Only the helm, weapon-hand and shield-hand slots are scanned, and
+        // only items whose per-item weapon-capability entry is non-zero are
+        // named. Ordinary helms, ordinary shields and all body armour
+        // therefore never appear in the clause."
+        let leather_helm = 0u8;
+        let plate_mail = 14u8;
+        let large_shield = 5u8;
+        let spiked_helm = 3u8;
+        let dagger = 16u8;
+        let spiked_shield = 6u8;
+        assert_eq!(equipment_name(usize::from(leather_helm)), "Leather Helm");
+        assert_eq!(equipment_name(usize::from(plate_mail)), "Plate Mail");
+        assert_eq!(equipment_name(usize::from(large_shield)), "Large Shield");
+        assert_eq!(equipment_name(usize::from(spiked_helm)), "Spiked Helm");
+        assert_eq!(equipment_name(usize::from(dagger)), "Dagger");
+        assert_eq!(equipment_name(usize::from(spiked_shield)), "Spiked Shield");
+        equipment[EQUIP_SLOT_HELM] = leather_helm;
+        equipment[EQUIP_SLOT_ARMOUR] = plate_mail;
+        equipment[EQUIP_SLOT_OFFHAND] = large_shield;
+        assert_eq!(
+            combat_turn_banner("Iolo", Some(&equipment)),
+            "\nIolo, armed with bare hands:"
+        );
+
+        // "- while the **spiked helm and spiked shield do**, because they
+        // carry a non-zero capability entry." Scan order is helm, weapon
+        // hand, shield hand (§8.2).
+        equipment[EQUIP_SLOT_HELM] = spiked_helm;
+        equipment[EQUIP_SLOT_WEAPON] = dagger;
+        equipment[EQUIP_SLOT_OFFHAND] = spiked_shield;
+        assert_eq!(
+            combat_turn_banner("Iolo", Some(&equipment)),
+            "\nIolo, armed with Spiked Helm, Dagger, Spiked Shield:"
+        );
+
+        // "A charmed monster acting under player control gets only its name
+        // and the colon, with no armament clause."
+        assert_eq!(combat_turn_banner("Troll", None), "\nTroll:");
+    }
+
+    /// `combat.md §8.1`: the banner is "emitted at the start of every
+    /// keyboard-driven combatant's turn, *before any key is read*", and
+    /// "appears identically whether the player then presses `A`, a direction
+    /// key, `Space`, or anything else".
+    #[test]
+    fn opening_a_player_turn_prints_the_banner_before_any_key_is_read() {
+        let mut state = combat_frame_conformance_state();
+        state.combat_actors[0] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        state.active_objects[0] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        state.party_equipment[0] = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+        state.message.clear();
+
+        state.ensure_pending_combat_player_turn();
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        let expected = combat_turn_banner(
+            &party_name_to_string(state.combat_party_name_for_slot(0).unwrap()).unwrap(),
+            Some(&state.party_equipment[0]),
+        );
+        assert!(
+            state.message.ends_with(&expected),
+            "banner missing from {:?}",
+            state.message
+        );
+        // "A free re-prompt after a refusal uses the short form and does
+        // **not** reprint the banner": reinstating the pending slot without
+        // reopening the turn must leave the transcript untouched.
+        let after_open = state.message.clone();
+        state.pending_combat_actor_slot = Some(0);
+        state.ensure_pending_combat_player_turn();
+        assert_eq!(state.message, after_open);
+        assert_eq!(state.message.matches(expected.as_str()).count(), 1);
+    }
+
+    /// `combat.md §5` / `§5.3` step 3a: the surface camp ambush "sets and
+    /// forwards the [shuffle] bit ... and draws exactly fifteen uniform
+    /// `[0, 15]` draws, taken after seating and before the banner", and "with
+    /// `N` monsters the permuted order makes them occupy a random `N`-subset
+    /// of the sixteen authored cells in a random order, rather than the first
+    /// `N`".
+    #[test]
+    fn surface_camp_ambush_places_monsters_through_the_fifteen_swap_permutation() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = 0;
+
+        // The published fifteen-swap vector from shared PRNG state `0x0000`.
+        let mut expected_permutation_state = state.clone();
+        expected_permutation_state.prng_state = 0;
+        let permutation =
+            expected_permutation_state.terrain_combat_placement_slot_permutation();
+        assert_eq!(
+            permutation,
+            [2, 4, 1, 0, 14, 7, 6, 3, 5, 8, 10, 11, 12, 9, 13, 15]
+        );
+
+        // Replay the published draw order to predict the monster count: the
+        // fifteen placement draws come first and leave the shared state at
+        // `0x0cf4`, and only then does the count roll happen. If the route
+        // took any other number of placement draws, or took the count roll
+        // first, this predicted count would not match the placed count below.
+        assert_eq!(expected_permutation_state.prng_state, 0x0cf4);
+        let bat_stats = combat_class_stats_for_sprite_byte(sleep_ambush_monster_sprite(
+            SleepAmbushMonster::Bat,
+        ))
+        .unwrap();
+        let expected_count = expected_permutation_state
+            .roll_terrain_combat_setup_count(bat_stats.default_spawn_count, false);
+
+        state
+            .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0, std::path::Path::new(""))
+            .unwrap();
+
+        let placed: Vec<(u8, u8)> = (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS)
+            .map(|slot| state.combat_actors[slot])
+            .filter(|actor| !actor.is_empty())
+            .map(|actor| (actor.x, actor.y))
+            .collect();
+        assert!(!placed.is_empty(), "the ambush must place at least one Bat");
+        assert_eq!(placed.len(), usize::from(expected_count));
+        // With no `BRIT.CBT` on the empty path the route falls back to the
+        // crate-private stand-in grid, so what this asserts is the *ordering*
+        // the permutation imposes on whatever sixteen cells the record
+        // supplies - not arena record 0's authored cells, which are shipped
+        // data this test cannot see.
+        let expected: Vec<(u8, u8)> = permutation
+            .iter()
+            .take(placed.len())
+            .map(|slot| SLEEP_AMBUSH_FALLBACK_PLACEMENT_SLOTS[usize::from(*slot)])
+            .collect();
+        assert_eq!(placed, expected);
+
+        // Identity order would have put the first monster in authored cell 0;
+        // the permutation's first entry is cell 2.
+        assert_ne!(placed[0], SLEEP_AMBUSH_FALLBACK_PLACEMENT_SLOTS[0]);
+    }
+
+    // NOTE: whether the *dungeon* rest interruption also shuffles is an open
+    // spec question (see the scope note in `enter_sleep_ambush_combat`). The
+    // engine's surface-only gate is a conservative stand-in and is
+    // deliberately not pinned by a test here.

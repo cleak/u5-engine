@@ -786,6 +786,79 @@ pub fn readied_equipment_summary(equipment: &[u8; EQUIPMENT_SLOT_COUNT]) -> Stri
     }
 }
 
+/// `combat.md §8.1` / `§8.2`: the readied slots the turn banner names and
+/// the Attack walker scans, in the published order - "helm, weapon hand,
+/// shield hand". Body armour is never scanned.
+pub const COMBAT_ARMAMENT_SCAN_SLOTS: [usize; 3] =
+    [EQUIP_SLOT_HELM, EQUIP_SLOT_WEAPON, EQUIP_SLOT_OFFHAND];
+
+/// `combat.md §8.1`: "only items whose per-item weapon-capability entry is
+/// non-zero are named. Ordinary helms, ordinary shields and all body armour
+/// therefore never appear in the clause - while the **spiked helm and
+/// spiked shield do**, because they carry a non-zero capability entry."
+///
+/// The per-item weapon-capability entry is [`EQUIPMENT_ATTACK_MAXES`];
+/// its Spiked Helm and Spiked Shield rows are non-zero while every other
+/// helm, shield and body-armour row is zero, which is exactly the split
+/// §8.1 describes.
+pub fn equipment_has_weapon_capability(item_id: usize) -> bool {
+    equipment_attack_max(item_id).is_some_and(|capability| capability != 0)
+}
+
+/// `combat.md §8.1` / `§8.2`: the qualifying readied items for one
+/// character, in helm / weapon-hand / shield-hand order. An empty result
+/// is the bare-handed case - one attack attempt with range one for §8.2,
+/// and the `bare hands` clause for the §8.1 banner.
+pub fn combat_armament_item_ids(equipment: &[u8; EQUIPMENT_SLOT_COUNT]) -> Vec<usize> {
+    COMBAT_ARMAMENT_SCAN_SLOTS
+        .into_iter()
+        .filter_map(|slot| equipment.get(slot).copied())
+        .filter(|item| *item != EQUIPMENT_EMPTY)
+        .map(usize::from)
+        .filter(|item| equipment_has_weapon_capability(*item))
+        .collect()
+}
+
+/// `combat.md §8.1`: the banner opens with "a newline".
+pub const COMBAT_TURN_BANNER_LEAD_NEWLINE: &str = "\n";
+/// `combat.md §8.1` armament clause introducer.
+pub const COMBAT_TURN_BANNER_ARMED_WITH: &str = ", armed with ";
+/// `combat.md §8.1` separator between named readied items.
+pub const COMBAT_TURN_BANNER_ITEM_SEPARATOR: &str = ", ";
+/// `combat.md §8.1` stand-in printed "when none qualifies".
+pub const COMBAT_TURN_BANNER_BARE_HANDS: &str = "bare hands";
+/// `combat.md §8.1`: the banner is "terminated by a colon".
+pub const COMBAT_TURN_BANNER_TERMINATOR: &str = ":";
+
+/// `combat.md §8.1`, the turn banner: "a newline, the actor's name, and -
+/// for a party-side actor - the clause `, armed with ` followed by the
+/// names of that actor's readied items separated by `, `, or `bare hands`
+/// when none qualifies, terminated by a colon."
+///
+/// `equipment` is `None` for the other keyboard-driven case the section
+/// names: "A charmed monster acting under player control gets only its
+/// name and the colon, with no armament clause."
+pub fn combat_turn_banner(name: &str, equipment: Option<&[u8; EQUIPMENT_SLOT_COUNT]>) -> String {
+    let mut banner = String::from(COMBAT_TURN_BANNER_LEAD_NEWLINE);
+    banner.push_str(name);
+    if let Some(equipment) = equipment {
+        banner.push_str(COMBAT_TURN_BANNER_ARMED_WITH);
+        let items = combat_armament_item_ids(equipment);
+        if items.is_empty() {
+            banner.push_str(COMBAT_TURN_BANNER_BARE_HANDS);
+        } else {
+            let names = items
+                .into_iter()
+                .map(equipment_name)
+                .collect::<Vec<_>>()
+                .join(COMBAT_TURN_BANNER_ITEM_SEPARATOR);
+            banner.push_str(&names);
+        }
+    }
+    banner.push_str(COMBAT_TURN_BANNER_TERMINATOR);
+    banner
+}
+
 pub fn slot_name(slot: usize) -> &'static str {
     match slot {
         EQUIP_SLOT_HELM => "helm",

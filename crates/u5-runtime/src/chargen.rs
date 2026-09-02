@@ -430,10 +430,19 @@ pub fn chargen_virtue_stat_delta(virtue: ShrineVirtue) -> ChargenStats {
 }
 
 /// `chargen.md §7`: STR floor applied after summing the questionnaire
-/// totals. Because the maximum per-question STR contribution is two and
-/// the questionnaire has seven questions, the floor always fires for the
-/// questionnaire path and every newly-created avatar emerges with exactly
-/// twenty Strength.
+/// totals - "The STR total is written after a one-step floor: if below
+/// twenty, it is replaced with twenty." The floor itself is established:
+/// "The strength floor of twenty applied at commit time is itself
+/// established, as is the fact that dexterity and intelligence receive no
+/// such floor."
+///
+/// What `§7`'s scope caveat withdraws is the *consequence* an earlier
+/// revision drew from it - that "every newly-created questionnaire avatar
+/// emerges with exactly STR twenty". That rested on the same zero-start
+/// reading the dexterity correction falsified for DEX, and "whether the
+/// strength and intelligence tallies likewise start from their seed values
+/// was **not re-derived**". Treat STR-always-twenty as unverified; the
+/// floor value and its commit-time application are not.
 pub const CHARGEN_STR_FLOOR: u8 = 20;
 
 /// `chargen.md §8` factory-seed Avatar header values the seed image
@@ -677,9 +686,29 @@ fn draw_virtue(
     }
 }
 
+/// `chargen.md §7` / `combat.md §5.1`: "The running dexterity tally
+/// starts from the shipped seed record's dexterity of `15`, and every
+/// virtue's dexterity delta is zero or positive, so a
+/// questionnaire-created Avatar always emerges with **dexterity 15 or
+/// better**. Dexterity itself is still written with no floor of its own
+/// - the 15 is where the tally starts, not a clamp applied at commit."
+///
+/// `chargen.md §7` deliberately publishes **no** upper bound for
+/// questionnaire dexterity, so nothing here clamps the tally from above.
+///
+/// `§7`'s scope caveat withdraws the matching zero-start reading for
+/// strength and intelligence only as *unverified*, not as false: "Whether
+/// the strength and intelligence tallies likewise start from their seed
+/// values was **not re-derived**." Those two therefore keep the
+/// conservative zero start until the spec settles them.
+pub const CHARGEN_SEED_DEXTERITY: u8 = 15;
+
+/// `chargen.md §7`: the questionnaire converts the running tallies into
+/// the Avatar's STR/DEX/INT bytes. STR takes the one-step floor of
+/// [`CHARGEN_STR_FLOOR`]; DEX and INT receive no floor of their own.
 pub fn chargen_stats_from_winners(winners: &[ShrineVirtue]) -> ChargenStats {
     let mut strength = 0u8;
-    let mut dexterity = 0u8;
+    let mut dexterity = CHARGEN_SEED_DEXTERITY;
     let mut intelligence = 0u8;
     for winner in winners {
         let delta = chargen_virtue_stat_delta(*winner);

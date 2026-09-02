@@ -1,6 +1,7 @@
 //! Combat setup helpers that bridge encounters, arena records, and class data.
 
 use std::io;
+use std::path::Path;
 
 use crate::*;
 
@@ -181,11 +182,51 @@ pub struct CombatPlacementSlot {
 
 /// `encounters.md §6` sleep-ambush party seats. Ordinary terrain
 /// combat seats the party from the selected arena record's own party
-/// entry coordinates (`combat.md §5`), never from this list; it remains
-/// only as the fallback the sleep-ambush entry uses, which loads no
-/// arena record.
+/// entry coordinates (`combat.md §5`), never from this list.
+///
+/// The camp-ambush entry does load an arena record - `combat.md §5`: "The
+/// camp ambush loads arena record 0" - but it "skips the pre-placement
+/// pass that clears the combat tables and seats the party from the arena
+/// record's party-seat rows", and "**where the party's arena coordinates
+/// come from on that route is not established** [...] do not assume the
+/// arena-record party seats apply there". This list is the engine's
+/// conservative stand-in until that is settled.
 pub const TERRAIN_COMBAT_PARTY_POSITIONS: [(u8, u8); COMBAT_PARTY_ACTOR_SLOTS] =
     [(5, 5), (4, 5), (6, 5), (5, 4), (5, 6), (4, 6)];
+
+/// `combat.md §5`: "The camp ambush loads arena record 0, whose sixteen
+/// monster cells are all distinct and all on grass, spread around the
+/// arena's corners and edges."
+pub const CAMP_AMBUSH_ARENA_INDEX: usize = 0;
+
+/// Stand-in placement cells for the camp-ambush entry when no `BRIT.CBT`
+/// is available to supply arena record 0's authored sixteen (fixtures and
+/// headless harnesses). They are sixteen distinct interior cells on the
+/// even grid, so the `combat.md §5` fifteen-transposition shuffle stays
+/// observable.
+///
+/// These are engine scaffolding, **not** published data and not a spec
+/// contract, so they are crate-private: no frontend or test outside this
+/// crate may treat them as the camp ambush's placement cells. With shipped
+/// assets present the route uses arena record 0's authored cells instead.
+pub(crate) const SLEEP_AMBUSH_FALLBACK_PLACEMENT_SLOTS: [(u8, u8); DUNGEON_ROOM_SOURCE_COUNT] = [
+    (2, 2),
+    (4, 2),
+    (6, 2),
+    (8, 2),
+    (2, 4),
+    (4, 4),
+    (6, 4),
+    (8, 4),
+    (2, 6),
+    (4, 6),
+    (6, 6),
+    (8, 6),
+    (2, 8),
+    (4, 8),
+    (6, 8),
+    (8, 8),
+];
 
 /// `dungeon-mode.md §14.1`: the wandering-monster launch reads no
 /// arena record from disk, so its synthesised record has no bank index.
@@ -952,10 +993,34 @@ impl PlayState {
         permutation
     }
 
-    /// The dormant terrain helper differs by stopping before index fifteen.
-    /// No shipped caller enables it, but keeping the exact algorithm makes the
-    /// clean implementation deterministic for custom callers and tests.
-    pub fn dormant_terrain_combat_source_permutation(&mut self) -> [u8; DUNGEON_ROOM_SOURCE_COUNT] {
+    /// `combat.md §5`, the placement-slot shuffle. **It is live.** The
+    /// section's retraction is explicit: "Earlier revisions of this section
+    /// said the helper's placement-shuffle branch was dormant because 'the
+    /// complete caller census has one caller and it always leaves the branch
+    /// inactive'. That is withdrawn. There are exactly two routes into the
+    /// terrain setup helper and they pass different setup flags" - the
+    /// ordinary wilderness or town encounter leaves the shuffle bit clear
+    /// and places monsters in identity slot order, while the **surface camp
+    /// ambush** (overworld `H` Hole up) "reaches the same setup helper
+    /// through its CMDS wrapper, and reaches it **only** with the shuffle
+    /// bit set".
+    ///
+    /// The permutation is *not* a uniform shuffle and must not be replaced
+    /// by one: "initialise slots `0..15`, then for each current index
+    /// `0..14` draw an independent index from the full inclusive range
+    /// `0..15` and swap the two entries. That is fifteen random
+    /// transpositions, and it does **not** produce a uniform permutation -
+    /// an engine that substitutes a correct Fisher-Yates shuffle will not
+    /// reproduce the original's distribution."
+    ///
+    /// It differs from [`Self::dungeon_ambush_source_permutation`], the room
+    /// painter's own sixteen-swap, only by stopping before index fifteen;
+    /// §5.3 keeps the two mechanisms in separate scopes.
+    ///
+    /// `§5.3` step 3a charges this route "exactly fifteen uniform `[0, 15]`
+    /// draws, taken after seating and before the banner", and the ordinary
+    /// encounter route zero.
+    pub fn terrain_combat_placement_slot_permutation(&mut self) -> [u8; DUNGEON_ROOM_SOURCE_COUNT] {
         let mut permutation = [0u8; DUNGEON_ROOM_SOURCE_COUNT];
         for (index, slot) in permutation.iter_mut().enumerate() {
             *slot = index as u8;
@@ -1046,10 +1111,24 @@ impl PlayState {
         ))
     }
 
+    /// `combat.md §5`: "The camp ambush loads arena record 0, whose sixteen
+    /// monster cells are all distinct and all on grass, spread around the
+    /// arena's corners and edges, so the permutation is observable in play
+    /// rather than a no-op."
+    ///
+    /// The same section says the camp route "skips the pre-placement pass
+    /// that clears the combat tables and seats the party from the arena
+    /// record's party-seat rows", and that "**where the party's arena
+    /// coordinates come from on that route is not established** and should
+    /// be settled by observation before it is implemented; do not assume the
+    /// arena-record party seats apply there". The party therefore keeps the
+    /// engine's conservative [`TERRAIN_COMBAT_PARTY_POSITIONS`] seats rather
+    /// than adopting arena 0's party-entry rows.
     pub fn enter_sleep_ambush_combat(
         &mut self,
         monster: SleepAmbushMonster,
         z: i8,
+        game_dir: &Path,
     ) -> io::Result<String> {
         let tile = sleep_ambush_monster_sprite(monster);
         let stats = combat_class_stats_for_sprite_byte(tile).ok_or_else(|| {
@@ -1058,15 +1137,51 @@ impl PlayState {
                 format!("sleep-ambush monster sprite 0x{tile:02X} has no combat class"),
             )
         })?;
+        // The arena record is optional here so the entry keeps working for
+        // harnesses and fixtures with no `BRIT.CBT` on disk; when it is
+        // missing the fallback grid below stands in for the authored cells.
+        let record = load_brit_cbt(game_dir)
+            .ok()
+            .and_then(|bank| bank.record(CAMP_AMBUSH_ARENA_INDEX).cloned());
+        let placement_slots: Vec<(u8, u8)> = match record.as_ref() {
+            Some(record) => combat_placement_slots_from_record(record)
+                .into_iter()
+                .map(|slot| (slot.x, slot.y))
+                .collect(),
+            None => SLEEP_AMBUSH_FALLBACK_PLACEMENT_SLOTS.to_vec(),
+        };
         let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
         let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
         self.populate_terrain_combat_party(&mut active_objects, &mut actors, z);
 
+        // `combat.md §5.3` step 3a: the surface camp ambush "sets and
+        // forwards the [shuffle] bit ... and draws exactly fifteen uniform
+        // `[0, 15]` draws, taken after seating and before the banner".
+        //
+        // OPEN SPEC QUESTION - do not pin this gate with a test. §5.3 names
+        // the *surface* camp ambush and says the row "does not cover the
+        // dungeon entries", which reads as identity order underground; but
+        // `rest-and-camp.md §6` describes both rest interruptions as reaching
+        // the same CMDS `H` Hole-up alternate setup, and `combat.md §5` says
+        // the terrain setup helper's camp-ambush caller reaches it "only with
+        // the shuffle bit set" - which reads as shuffling on both surfaces.
+        // §5.3's exclusion most plausibly names the dungeon entries that go
+        // through the room painter and never reach this helper at all. The
+        // surface-only gate below is the conservative stand-in until the spec
+        // settles it; it is deliberately left untested so that adopting the
+        // other reading is a one-line change, not a test rewrite.
+        let permutation = matches!(self.area, Area::World { .. })
+            .then(|| self.terrain_combat_placement_slot_permutation());
+
         let requested_count =
             self.roll_terrain_combat_setup_count(stats.default_spawn_count, false);
+        // `combat.md §5` reachable-count invariant: "a conforming engine may
+        // treat the sixteen placement slots as sufficient for every terrain
+        // encounter".
         let placement_count = requested_count
             .min((OOL_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8)
-            .min((COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8);
+            .min((COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8)
+            .min(placement_slots.len() as u8);
         let mut placed = 0u8;
         for spawn in 0..placement_count {
             // `active-objects.md §7`: descriptor from the monster-side
@@ -1076,8 +1191,13 @@ impl PlayState {
             let Some(record_slot) = first_free_combat_active_object_record(&active_objects) else {
                 break;
             };
-            let x = 2 + (spawn % 4) * 2;
-            let y = 2 + (spawn / 4) * 2;
+            // `combat.md §5`: "With `N` monsters the permuted order makes
+            // them occupy a random `N`-subset of the sixteen authored cells
+            // in a random order, rather than the first `N`."
+            let placement_slot = permutation
+                .map(|permutation| usize::from(permutation[usize::from(spawn)]))
+                .unwrap_or(usize::from(spawn));
+            let (x, y) = placement_slots[placement_slot.min(placement_slots.len() - 1)];
             active_objects[record_slot] = ActiveObject {
                 type_byte: tile,
                 tile,
@@ -1103,7 +1223,18 @@ impl PlayState {
         }
         let placement_count = placed;
 
-        self.enter_combat_frame(active_objects, actors)?;
+        match record.as_ref() {
+            Some(record) => {
+                self.enter_combat_frame_with_terrain(
+                    active_objects,
+                    actors,
+                    record.terrain_grid(),
+                )?;
+            }
+            None => {
+                self.enter_combat_frame(active_objects, actors)?;
+            }
+        }
         if let Some(snapshot) = self.combat_frame_snapshot.as_mut() {
             // `combat.md §6.3`: sleep/camp alternate-entry modes 4 and 6
             // carry bit 0x04, which suppresses the faint helper's world tick.

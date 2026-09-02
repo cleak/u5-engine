@@ -115,6 +115,18 @@ pub const fn jimmy_magic_locked_door(tile: u8) -> bool {
     )
 }
 
+/// The stocks/manacles pair, shared by `J` Jimmy's release branch and the
+/// combat round loop.
+///
+/// `combat.md §7` step 3 / `§7.1`: the round loop's restraint skip "fires on
+/// exactly two tiles, the stocks `0x84` and the manacles `0x85`" - the same
+/// two ids Jimmy tests. An actor standing on one of them "never advances its
+/// counter and never acts", and is still a live, targetable combatant for
+/// every other purpose.
+///
+/// This is deliberately *not* a walkability query. `§7` withdraws the earlier
+/// "skip wall-cell slots" reading: "No other terrain participates: water,
+/// swamp, mountains, walls and force fields are all outside the test."
 pub const fn jimmy_restraint_tile(tile: u8) -> bool {
     matches!(tile, JIMMY_STOCKS_TILE | JIMMY_MANACLES_TILE)
 }

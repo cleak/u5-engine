@@ -342,8 +342,9 @@ pub use input_codes::{
     cardinal_direction_prompt_action, direction_prompt_label, free_text_input_action,
     input_byte_class, input_case_fold, input_code_direction, input_direction_code,
     input_function_key_code, input_function_key_index, input_keypad_digit_direction_code,
-    input_prompt_mode_active, numeric_prompt_action, numeric_prompt_apply,
-    party_target_selector_action, party_target_selector_result,
+    input_numpad_flag, input_prompt_mode_active, input_typed_digit_direction_code,
+    numeric_prompt_action, numeric_prompt_apply, party_target_selector_action,
+    party_target_selector_result,
 };
 pub use input_dispatch::{
     PlayInputDisposition, advance_paced_combat_presentation, handle_play_key_input,
