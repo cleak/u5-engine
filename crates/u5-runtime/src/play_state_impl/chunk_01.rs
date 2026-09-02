@@ -223,15 +223,21 @@ impl PlayState {
         // of every cleanup pass".
         save[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET] = self.cleanup_previous_hour;
         // `SAVE_AMPM_DISPLAY_OFFSET` (`0x02DE`) is deliberately NOT written
-        // here. `formats/saved-gam.md §5` and `time.md §13` call it the
-        // twelve-hour display value "recomputed on hour changes", but the DOS
-        // build never writes it: driving the original from a save whose byte
-        // is zero and saving again leaves it zero after no turns, after four
-        // turns that carried 08:59 to 09:03 across an hour boundary, and after
-        // a sixteen-move session. Deriving it at save time was the only clock
-        // byte this engine changed on a no-action load-and-save. The byte
-        // round-trips out of the save template instead. Runtime observation;
-        // the published "recomputed" wording needs a spec question.
+        // here. `time.md §2` has "a 12-hour display hour, recomputed whenever
+        // the hour changes", and `time.md §11` tabulates `0x02DE` as the
+        // "twelve-hour display value recomputed on hour changes" — but the same
+        // section settles what a save writer should do with it: "Only `0x02CE`,
+        // `0x02D7`, `0x02D8`, `0x02D9`, and `0x02DB` are the canonical calendar
+        // fields. The derived and adjacent bytes are still persistent engine
+        // state, so compatibility implementations should round-trip them rather
+        // than regenerating the whole span from the calendar alone." `0x02DE` is
+        // a derived byte, so it round-trips out of the save template instead of
+        // being regenerated from the live clock. The DOS build agrees: driving
+        // the original from a save whose byte is zero and saving again leaves it
+        // zero after no turns, after four turns that carried 08:59 to 09:03
+        // across an hour boundary, and after a sixteen-move session. Deriving it
+        // at save time was the only clock byte this engine changed on a
+        // no-action load-and-save.
         write_u16_at(&mut save, SAVE_FOOD_STOCK_OFFSET, self.food);
         write_u16_at(&mut save, SAVE_GOLD_STOCK_OFFSET, self.gold);
         save[SAVE_KEY_STOCK_OFFSET] = self.keys;
@@ -399,7 +405,7 @@ impl PlayState {
             save[start..start + EQUIPMENT_SLOT_COUNT].copy_from_slice(&roster_record.equipment);
         }
         encode_inn_registry(&mut save, &self.inn_registry);
-        let active_table = encode_active_object_table(&self.saveable_active_objects())?;
+        let active_table = encode_active_object_table(&self.active_objects)?;
         save[SAVE_ACTIVE_OBJECTS_OFFSET..SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN]
             .copy_from_slice(&active_table);
 

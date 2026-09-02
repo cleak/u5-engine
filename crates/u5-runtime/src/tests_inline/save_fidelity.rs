@@ -11,13 +11,17 @@ fn save_fidelity_game_dir(template: Vec<u8>) -> std::path::PathBuf {
     dir
 }
 
-/// `formats/saved-gam.md §5` and `time.md §13` call `0x02DE` the
-/// twelve-hour display value "recomputed on hour changes", but the DOS
-/// build never writes it. Driving the original from a save whose byte is
-/// zero and saving again leaves it zero after no turns and after four
-/// turns that carried 08:59 to 09:03 across an hour boundary. The byte
-/// therefore round-trips out of the template rather than being derived
-/// from the live clock at save time.
+/// `time.md §11` tabulates `0x02DE` as the "twelve-hour display value
+/// recomputed on hour changes" (the rule itself is `time.md §2`), and the
+/// same section says what a save writer owes it: "Only `0x02CE`, `0x02D7`,
+/// `0x02D8`, `0x02D9`, and `0x02DB` are the canonical calendar fields. The
+/// derived and adjacent bytes are still persistent engine state, so
+/// compatibility implementations should round-trip them rather than
+/// regenerating the whole span from the calendar alone." The byte therefore
+/// round-trips out of the template rather than being derived from the live
+/// clock at save time. The DOS build agrees: it left the byte at zero after
+/// no turns and after four turns that carried 08:59 to 09:03 across an hour
+/// boundary.
 #[test]
 fn save_round_trips_the_twelve_hour_display_byte_instead_of_deriving_it() {
     let mut template = saved_game_seed_bytes(17, 0, 15, 15);
@@ -67,10 +71,13 @@ fn save_writes_the_cleanup_pre_cascade_hour_snapshot() {
     assert_eq!(saved[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET], 9);
 }
 
-/// Runtime observation, spec silent: the DOS build leaves the phase byte
-/// of its own slot-zero record at zero. A no-turn load and save of the
-/// shipped file wrote `1C 1C 0F 0F 00 00 00 00` into the first record;
-/// this engine used to stamp the steady marker into byte `+0x06`.
+/// Runtime observation; the spec publishes the field but not the value.
+/// `active-objects.md §5` scopes the per-frame refresh of the player's
+/// record to "bytes 0..4 of slot zero", which does not reach byte `+0x06`,
+/// and the DOS build leaves that byte at zero: a no-turn load and save of
+/// the shipped file wrote `1C 1C 0F 0F 00 00 00 00` into the first record.
+/// This engine used to stamp the steady marker there. See
+/// `PLAYER_ACTIVE_OBJECT_PHASE` for the readers that skip slot zero.
 #[test]
 fn player_active_object_record_saves_a_zero_phase_byte() {
     let mut template = saved_game_seed_bytes(17, 0, 15, 15);
@@ -87,61 +94,6 @@ fn player_active_object_record_saves_a_zero_phase_byte() {
     assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET + 2], 10);
     assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET + 3], 20);
     assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET + 6], 0);
-}
-
-/// Runtime observation, spec silent: `formats/saved-gam.md §8.1` says a
-/// town-family save holds "the on-floor NPC/object cast", but the DOS
-/// build leaves every record above slot zero empty in a dwelling that
-/// has a scheduled actor on the floor. Records this engine links to an
-/// NPC are therefore dropped at save time; unlinked records stay.
-#[test]
-fn town_save_drops_npc_linked_active_object_records() {
-    let mut template = saved_game_seed_bytes(17, 0, 5, 5);
-    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
-    let dir = save_fidelity_game_dir(template);
-
-    let mut state = test_state(open_grid(), 5, 5);
-    let linked = ActiveObject {
-        type_byte: 0x11,
-        tile: 0x11,
-        x: 27,
-        y: 3,
-        z: 0,
-        phase: STEADY_PHASE,
-        aux1: 0,
-        aux3: 0,
-    };
-    let dropped_item = ActiveObject {
-        type_byte: FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE,
-        tile: FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE,
-        x: 9,
-        y: 9,
-        z: 0,
-        phase: STEADY_PHASE,
-        aux1: 0,
-        aux3: 0,
-    };
-    state.active_objects.push(linked);
-    state.active_objects.push(dropped_item);
-    let mut npc = RuntimeNpc::from_resident_shadowlord(1, 27, 3, 8);
-    npc.active_object = Some(1);
-    state.npcs.push(npc);
-
-    assert_eq!(
-        state.save_game_command(&dir, Some(true)).unwrap(),
-        MoveOutcome::Saved
-    );
-
-    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
-    let record1 = SAVE_ACTIVE_OBJECTS_OFFSET + OOL_RECORD_LEN;
-    let record2 = SAVE_ACTIVE_OBJECTS_OFFSET + 2 * OOL_RECORD_LEN;
-    assert_eq!(&saved[record1..record1 + OOL_RECORD_LEN], &[0; 8]);
-    assert_eq!(
-        saved[record2], FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE,
-        "unlinked records must still round-trip"
-    );
-    // The live table is untouched; only the serialized image drops them.
-    assert_eq!(state.active_objects[1], linked);
 }
 
 /// `doors-and-z-transitions.md §5`: the countdown starts at four and the

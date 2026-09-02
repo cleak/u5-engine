@@ -39,36 +39,6 @@ impl PlayState {
         self.door_tracker = Some(tracker);
     }
 
-    /// The active-object table as the save image should carry it.
-    ///
-    /// Runtime observation, spec silent: `formats/saved-gam.md §8.1` says a
-    /// town/castle/keep/dwelling save holds "the on-floor NPC/object cast",
-    /// but the DOS build does not put its scheduled NPCs in this table.
-    /// Loading the shipped save into Iolo's Hut and saving again — with no
-    /// turns, and again after four turns — left every record above slot zero
-    /// zero in the original, while this engine wrote the record it links to
-    /// the hut's scheduled actor. `doors-and-z-transitions.md §13` has town
-    /// floor changes "re-link the NPC table" and `npc-schedules.md` places
-    /// scheduled actors on entry, so the linked records are rebuilt on load
-    /// and nothing depends on persisting them.
-    ///
-    /// Only NPC-linked slots are dropped; dropped items, parked vehicles and
-    /// spawned creatures keep their records.
-    pub fn saveable_active_objects(&self) -> Vec<ActiveObject> {
-        let mut objects = self.active_objects.clone();
-        if !matches!(self.area, Area::Town { .. }) {
-            return objects;
-        }
-        for npc in &self.npcs {
-            if let Some(slot) = npc.active_object {
-                if slot > 0 && slot < objects.len() {
-                    objects[slot] = ActiveObject::empty();
-                }
-            }
-        }
-        objects
-    }
-
     pub fn sync_player_object(&mut self) {
         let z = match self.area {
             Area::Town { floor, .. } => floor,

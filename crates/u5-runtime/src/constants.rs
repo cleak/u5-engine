@@ -315,15 +315,23 @@ pub const STEADY_PHASE: u8 = 0x0f;
 /// Phase byte (`+0x06`) the player's own active-object record
 /// carries in slot zero.
 ///
-/// Runtime observation, spec silent: `formats/saved-gam.md §8.1`
-/// and `active-objects.md §3` publish the field but never say what
-/// the player record seeds it with. Driving the DOS build from the
-/// shipped save and saving again — with no turns, and again after
-/// four turns across an hour boundary — leaves the slot-zero record
-/// as `1C 1C 0F 0F 00 00 00 00`: the original writes zero here, not
-/// the steady marker. Nothing reads it either: `active-objects.md
-/// §8` has the outdoor walker "skip slot zero" and this engine's
-/// animator iterates from slot one, so the byte is save state only.
+/// Runtime observation, spec silent on the value: `formats/saved-gam.md
+/// §8.1` and `active-objects.md §3` publish the field but never say what
+/// the player's record seeds it with, and `active-objects.md §5` scopes
+/// the per-frame refresh of slot zero to "bytes 0..4 of slot zero from
+/// the world-state globals", which does not include byte 6. Driving the
+/// DOS build from the shipped save and saving again — with no turns, and
+/// again after four turns across an hour boundary — leaves the slot-zero
+/// record as `1C 1C 0F 0F 00 00 00 00`: the original holds zero here, not
+/// the steady marker.
+///
+/// The published readers of the byte both pass slot zero over: the town
+/// object walker's eligibility row in `systems/town-mode.md §16` skips
+/// "the avatar's slot-zero record", and `active-objects.md §8` has the
+/// outdoor per-turn walker "skip slot zero". That section's resident
+/// frame animator does walk "from slot zero to slot thirty-one", so this
+/// seed is not provably inert from the spec alone — it is inert in this
+/// engine, whose two `tick_phase` loops start at slot one.
 pub const PLAYER_ACTIVE_OBJECT_PHASE: u8 = 0x00;
 /// `systems/weather.md §7`: "The cadence counter is stored per
 /// active-object slot ... The cadence counter is persisted with the
