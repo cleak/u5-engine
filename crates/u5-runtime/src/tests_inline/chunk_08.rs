@@ -26,11 +26,7 @@
         );
 
         assert_eq!((state.player.x, state.player.y), (0, 0));
-        // `overworld.md §6.2.5`: only the released sailing collision "adds no
-        // ordinary action-time increment and skips the later underfoot,
-        // encounter, and active-object tail"; an ordinary refused
-        // destination pays the §12 outdoor increment.
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         assert!(state.message.contains("Blocked"));
         assert!(!state.message.contains("waterfall swept"));
         let _ = fs::remove_dir_all(dir);
@@ -132,7 +128,7 @@
     }
 
     #[test]
-    fn native_molten_lava_blocks_horse_but_still_spends_the_outdoor_turn() {
+    fn native_molten_lava_blocks_horse_without_spending_turn() {
         let mut grid = open_world_grid();
         grid[world_cell_index(1, 0)] = 0x8f;
         let mut state = world_state(grid, 0, 0);
@@ -145,11 +141,7 @@
         assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
         assert_eq!((state.player.x, state.player.y), (0, 0));
-        // `overworld.md §6.2.5`: only the released sailing collision "adds no
-        // ordinary action-time increment and skips the later underfoot,
-        // encounter, and active-object tail"; an ordinary refused
-        // destination pays the §12 outdoor increment.
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
         assert_eq!(state.message, "Blocked!");
     }
@@ -377,7 +369,7 @@
     }
 
     #[test]
-    fn clean_lava_sidecar_blocks_non_carpet_transport_and_spends_the_outdoor_turn() {
+    fn clean_lava_sidecar_blocks_non_carpet_transport_without_turn() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
@@ -394,11 +386,7 @@
         );
 
         assert_eq!((state.player.x, state.player.y), (0, 0));
-        // `overworld.md §6.2.5`: only the released sailing collision "adds no
-        // ordinary action-time increment and skips the later underfoot,
-        // encounter, and active-object tail"; an ordinary refused
-        // destination pays the §12 outdoor increment.
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         assert_eq!(state.message, "Blocked!");
         let _ = fs::remove_dir_all(dir);
     }

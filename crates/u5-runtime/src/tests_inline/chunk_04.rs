@@ -132,9 +132,12 @@ fn movement_blocks_same_floor_active_object_but_still_spends_the_town_turn() {
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    // `audio.md §7.4`: the town object-occupancy and tile-class refusal
-    // arms "share one tail", so occupancy pays the same `town-mode.md §15`
-    // turn the terrain refusal pays.
+    // `town-mode.md §15` scores the ordinary town refusal at "one normal
+    // town turn". The table names the terrain arm; this occupancy arm is
+    // the same wrapper's other refusal, reaching the same blocked-feedback
+    // tail, so it is charged alike. (`audio.md §7.4`'s "share one tail" is
+    // about the beep and the type-ahead flush, not the clock.) Open spec
+    // question - see `turn-clock-wind-report.md`.
     assert_eq!(state.turn, 1);
 }
 
@@ -243,7 +246,7 @@ fn negate_time_effect_skips_minutes_and_light_but_runs_cleanup() {
 }
 
 #[test]
-fn world_movement_blocks_impassable_tiles_but_still_spends_the_outdoor_turn() {
+fn world_movement_blocks_impassable_tiles_without_turn() {
     let mut grid = open_world_grid();
     grid[world_cell_index(1, 0)] = 0x0c;
     let mut state = world_state(grid, 0, 0);
@@ -251,19 +254,20 @@ fn world_movement_blocks_impassable_tiles_but_still_spends_the_outdoor_turn() {
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
     assert_eq!((state.player.x, state.player.y), (0, 0));
-    // `overworld.md §6.2.5` singles out the released sailing collision as
-    // the path that "adds no ordinary action-time increment and skips the
-    // later underfoot, encounter, and active-object tail" - the ordinary
-    // refusal runs that tail and pays the two-minute outdoor increment of
-    // §12.
-    let mut expected = GameClock::default();
-    expected.advance_minutes(MINUTES_PER_OUTDOOR_TURN);
-    assert_eq!(state.clock, expected);
-    assert_eq!(state.turn, 1);
+    // `movement.md §8`: "Actions that fail before commit do not move the
+    // actor. Whether they consume a turn is owned by the caller; ordinary
+    // rejected movement is generally a consumed movement attempt only when
+    // the mode explicitly treats the bump or attack as a turn-taking
+    // action." Nothing in `overworld.md` makes the outdoor bump such an
+    // action - unlike `town-mode.md §15`, which does - so the refused
+    // overworld step stays free. See the open spec question in
+    // `turn-clock-wind-report.md`.
+    assert_eq!(state.clock, GameClock::default());
+    assert_eq!(state.turn, 0);
 }
 
 #[test]
-fn world_movement_blocks_active_object_but_still_spends_the_outdoor_turn() {
+fn world_movement_blocks_active_object_without_turn() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.active_objects.push(ActiveObject {
         type_byte: 170,
@@ -279,10 +283,8 @@ fn world_movement_blocks_active_object_but_still_spends_the_outdoor_turn() {
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
     assert_eq!((state.player.x, state.player.y), (0, 0));
-    let mut expected = GameClock::default();
-    expected.advance_minutes(MINUTES_PER_OUTDOOR_TURN);
-    assert_eq!(state.clock, expected);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::default());
+    assert_eq!(state.turn, 0);
     // `audio.md §7.4`: a refusal by a blocking object prints the shared
     // refusal line. The arena/class selection it used to narrate is
     // asserted directly, where no player-facing string has to carry it.

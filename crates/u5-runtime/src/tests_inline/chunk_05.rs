@@ -938,15 +938,24 @@ fn rough_seas_hits_each_non_dead_member_after_one_repaint_tick() {
     state.party[2].hp = 0;
     state.prng_state = 0x2468;
     // `overworld.md §6.2.5` puts "one world repaint tick" between the
-    // impact rumble and absorption, and `prng.md §4` says that tick's wind
-    // check draws off the same gameplay stream ("The per-pass wind check
-    // draws once in the common case"). The absorption rolls therefore start
-    // from the post-tick stream position, which this probe reproduces.
-    let mut expected_prng = {
-        let mut probe = state.clone();
-        probe.advance_visual_tick();
-        probe.prng_state
-    };
+    // impact rumble and absorption, and `prng.md §4` fixes what that tick
+    // costs the gameplay stream: "The per-pass wind check draws once in the
+    // common case. On an uncommon result it enters a retry loop that draws
+    // in pairs until it settles". The expected stream position is therefore
+    // spelled out here as exactly one draw of the `weather.md §2` outer
+    // roll over `0..=63`, taken straight from the published PRNG primitive
+    // rather than from the code under test; the assertion below that the
+    // roll is non-zero is what pins this seed to the common case.
+    let mut expected_prng = state.prng_state;
+    let outer_roll = u5_prng_range_u16(
+        &mut expected_prng,
+        0,
+        u16::from(WIND_DRIFT_OUTER_ROLL_MAX),
+    ) as u8;
+    assert!(
+        !WindState::autonomous_drift_outer_accepted(outer_roll),
+        "this fixture's seed must land in `prng.md §4`'s common case,          where the repaint tick's wind check costs exactly one draw"
+    );
     let expected_rolls = [0usize, 1, 3, 4, 5]
         .map(|slot| {
             (

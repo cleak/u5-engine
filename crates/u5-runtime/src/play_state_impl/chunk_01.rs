@@ -1426,13 +1426,24 @@ impl PlayState {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             // `audio.md §7.4`: the town object-occupancy refusal arm.
             self.emit_town_blocked_step();
-            // `town-mode.md §15`: a movement attempt the town wrapper
-            // refuses "Consumes one normal town turn: advance the clock by
-            // one minute, run underfoot/post-action processing, and run one
-            // NPC schedule step". `audio.md §7.4` records that the town
-            // refusal arms - object occupancy and tile class - "share one
-            // tail", so both pay it. Only the leave prompt's accepted `Y`
-            // arm escapes the clock, and that arm is above.
+            // `town-mode.md §15` publishes the town refusal's turn cost:
+            // "Terrain rejected | ... | Consumes one normal town turn:
+            // advance the clock by one minute, run underfoot/post-action
+            // processing, and run one NPC schedule step". The rejection the
+            // table scores is the *ordinary* one - §15 applies "the
+            // ordinary transport-sensitive terrain predicate" and §7 says
+            // "The ordinary passability and occupancy tests run first and
+            // still win, so a destination the classifier rejects prints the
+            // blocked feedback instead of prompting" - so the same wrapper
+            // charges the same turn for an interior refusal.
+            //
+            // NOTE: the table scores only the terrain arm by name. This
+            // occupancy arm reaches the identical blocked-feedback tail
+            // (`audio.md §7.4`: the two town arms "share one tail" - that
+            // sentence is about the beep and the type-ahead flush, not the
+            // clock), so it is charged the same. Open spec question in
+            // `turn-clock-wind-report.md`: does §15's row cover the
+            // occupancy refusal and interior refusals explicitly?
             self.advance_turn();
             return Ok(MoveOutcome::Blocked);
         }
@@ -1481,8 +1492,9 @@ impl PlayState {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             // `audio.md §7.4`: the town tile-class refusal arm.
             self.emit_town_blocked_step();
-            // `town-mode.md §15`, same contract as the occupancy arm above:
-            // "Terrain rejected ... Consumes one normal town turn".
+            // `town-mode.md §15`: "Terrain rejected | ... | Consumes one
+            // normal town turn". This is the ordinary terrain arm the
+            // table scores; see the occupancy arm above for the derivation.
             self.advance_turn();
             Ok(MoveOutcome::Blocked)
         }

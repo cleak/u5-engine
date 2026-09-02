@@ -1882,7 +1882,7 @@ fn overworld_special_underfoot_latch_forces_darkness_and_holds_valid_movement() 
 }
 
 #[test]
-fn overworld_special_underfoot_latch_still_charges_a_blocked_target_probe() {
+fn overworld_special_underfoot_latch_allows_blocked_target_probe_without_turn() {
     let mut grid = open_world_grid();
     grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
     grid[world_cell_index(6, 5)] = 0x28;
@@ -1895,10 +1895,7 @@ fn overworld_special_underfoot_latch_still_charges_a_blocked_target_probe() {
         MoveOutcome::Blocked
     );
     assert_eq!((state.player.x, state.player.y), (5, 5));
-    // The refusal is the ordinary terrain arm, which reaches the step
-    // before the blackout latch branch does; `overworld.md §6.2.5` gives
-    // the turn-free treatment to the released sailing collision alone.
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0);
     assert!(state.world_underfoot_blackout_latched);
 }
 

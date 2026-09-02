@@ -2358,6 +2358,18 @@ impl PlayState {
     /// scan of `visibility.md §12.1`, which explicitly "scan[s] the active
     /// thirty-two by thirty-two map window".
     ///
+    /// OPEN SPEC QUESTION (`turn-clock-wind-report.md`, question 3): the two
+    /// published sentences about an off-floor town read disagree.
+    /// `town-mode.md §15` gives the `(31,31)` substitution above;
+    /// `visibility.md §3` says the world-tile getter's "Out-of-range queries
+    /// to the location/dungeon-explore buffer return a sentinel byte address
+    /// (a fixed location whose contents act as a 'you walked off the map'
+    /// tile)". Applying the §15 reading to the carve as well as to the
+    /// painted terrain makes off-floor cells sight-propagating open ground.
+    /// The original capture shows those rows lit, so the painted half is
+    /// confirmed; if §3's sentinel is a distinct read, the carve should use
+    /// it instead.
+    ///
     /// Without this a party standing within five cells of a town edge sees
     /// the out-of-floor rows painted black; the original paints the corner
     /// terrain there (Britain's is grass).
