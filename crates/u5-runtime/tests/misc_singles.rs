@@ -547,6 +547,13 @@ fn composite_destinations_take_the_rotated_shoals_through_their_mask_tile() {
 /// mix the animation phase into the selector, so a stationary actor on
 /// one of the four-entry terrains re-stamped itself on every animation
 /// tick; at the measured 18.2 Hz world tick that is a visible flicker.
+///
+/// TODO(u5-spec question pending): `visibility.md §8.1` is normative that the
+/// variant is drawn "once per composite pass, per actor" and "never cached",
+/// and `§8.3` (published as *probable*) concludes the sprite changes on about
+/// three idle passes in four. This test pins the opposite, on the strength of
+/// the clean-side capture above. The conflict is being taken back to the spec
+/// as a question; until it is answered the stable variant is kept.
 #[test]
 fn the_compositor_variant_is_stable_across_animation_ticks() {
     let mut grid = open_world_grid();

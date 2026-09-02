@@ -281,6 +281,16 @@ pub fn play_options_from_save_bytes_named(
         // counter is save-backed, so a game saved mid-rise reloads at
         // the same gate height.
         natural_moongate_counter: bytes[SAVE_NATURAL_MOONGATE_COUNTER_OFFSET],
+        // `animation.md §9`: the driver-side animation layer is "transient
+        // in the same sense — nothing about it is saved". A save image
+        // therefore carries no phase to restore, and "Loading a saved game
+        // does not restore pristine artwork" either: a load inside a running
+        // program must inherit the phases the program has already reached.
+        // A caller that loads a save mid-run should overwrite this with the
+        // live [`PlayState::animation_asset_buffer`]; the boot value below is
+        // correct for the only load path the engine currently has, which is
+        // the front end starting a program run (`§6.1`).
+        animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
         avatar_stats,
         torches: bytes[SAVE_TORCH_STOCK_OFFSET],
         torch_counter: bytes[SAVE_TORCH_COUNTER_OFFSET],

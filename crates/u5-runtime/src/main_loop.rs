@@ -149,6 +149,30 @@ pub const SCENE_INTRO_FIRST: u8 = 0x40;
 pub const SCENE_INTRO_LAST: u8 = 0x42;
 pub const SCENE_COMBAT_TEMPORARY: u8 = 0xFF;
 
+/// `timing.md §8.2`: "**The world step is suppressed for a contiguous band
+/// of scene values.** The shared wait tests the current scene value and
+/// performs no world step for values `0x21` through `0x7F` **inclusive**;
+/// both the bound and its inclusiveness are exact."
+pub const IDLE_WORLD_STEP_SUPPRESSED_FIRST_SCENE: u8 = 0x21;
+/// Upper bound of the suppressed band, inclusive. See
+/// [`IDLE_WORLD_STEP_SUPPRESSED_FIRST_SCENE`].
+pub const IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE: u8 = 0x7F;
+
+/// `timing.md §8.2`: does the idle wait skip its per-pass world step for
+/// this scene value?
+///
+/// "Implement the gate as a numeric range test on the scene value, **not**
+/// as an 'is this dungeon mode' test: the band is a strict superset of the
+/// dungeon scenes, and the intro, character-creation and Return-to-View
+/// animation states (`0x40`, `0x41`, `0x42`) also lie inside it."
+///
+/// First-person dungeon scenes occupy `0x21..0x28` and so fall inside the
+/// band; combat sets `0xFF` and therefore does run the world step.
+pub const fn idle_world_step_suppressed_for_scene(scene_byte: u8) -> bool {
+    scene_byte >= IDLE_WORLD_STEP_SUPPRESSED_FIRST_SCENE
+        && scene_byte <= IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE
+}
+
 /// `main-loop.md §3,§4`: route the scene byte to the mode-loop branch
 /// the outer dispatch should run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

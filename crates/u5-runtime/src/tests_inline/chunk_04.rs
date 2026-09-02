@@ -226,7 +226,14 @@ fn negate_time_effect_skips_minutes_and_light_but_runs_cleanup() {
     // Both counters burn, so the brighter spell floor wins (#83).
     assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
     assert!(state.visibility_dirty);
-    assert_eq!(state.animation.frame, 1);
+    // `animation.md §13.1`: "For the effect's full duration nothing advances:
+    // no water rotation, no fire flicker, no fountain, no banner, no clock or
+    // bellows, no object animation ..." and `magic.md §12.1` says "the
+    // overworld epilogue returns before animating anything". A consumed turn
+    // under Negate Time therefore leaves the shared phase counter alone; an
+    // earlier revision asserted `1` here and pinned the withdrawn behaviour.
+    assert_eq!(state.animation.frame, 0);
+    assert_eq!(state.water_scroll.phase, 0);
     assert_eq!(state.turn, 1);
 }
 

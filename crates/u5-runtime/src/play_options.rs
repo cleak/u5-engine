@@ -49,6 +49,16 @@ pub struct PlayOptions {
     /// `SAVED.GAM` offset `0x02E1`. Persistent world state - it
     /// survives turns, mode changes, scene changes and save/load.
     pub natural_moongate_counter: u8,
+    /// `animation.md §9`/`§12`: the driver-side animation layer's state,
+    /// which "lives in the asset buffer for the whole program run" and is
+    /// **not** reset by a scene change or a save load. It is not saved
+    /// state, so nothing in `SAVED.GAM` sets it; it rides here purely so
+    /// that a `PlayState` rebuilt for a new area inherits the phases the
+    /// previous one had reached instead of snapping every fountain, water
+    /// tile, banner and clock back to phase zero. [`Default`] is
+    /// [`AnimationAssetBuffer::AT_BOOT`], which is the correct value for a
+    /// program that is only now starting (`§6.1`).
+    pub animation_asset_buffer: AnimationAssetBuffer,
     pub avatar_stats: AvatarStats,
     pub torches: u8,
     pub torch_counter: u8,
@@ -127,6 +137,7 @@ impl Default for PlayOptions {
             moral_standing: 0,
             toll_progress: 0,
             natural_moongate_counter: 0,
+            animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,

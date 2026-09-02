@@ -18478,3 +18478,203 @@ fn tavern_round_table_setting_is_north_first_with_southeast_edge_fallback() {
         TAVERN_SOUTH_FOOD_SETTING_TILE
     );
 }
+
+/// `animation.md §13.1`: "**Negate Time freezes all of it.** While that timed
+/// effect is active, the world tick forces the gating byte into a skip state
+/// on *every* call, and the spell-effect sweep carries the same test. For the
+/// effect's full duration nothing advances: no water rotation, no fire
+/// flicker, no fountain, no banner, no clock or bellows, no object animation
+/// ..."
+#[test]
+fn negate_time_freezes_every_tile_animation_clock() {
+    let mut grid = open_grid();
+    // A waterfall cell, one of the `animation.md §6` families, so a tick that
+    // did run would show up in the viewport scan as well as in the counters.
+    grid[18 * TOWN_GRID_SIDE + 10] = 0xD4;
+    let mut state = test_state(grid, 10, 20);
+    state.animation = AnimationClock::at_static_tile_phase(3);
+    state.water_scroll = WaterScrollClock::at_phase(7);
+    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 10;
+    state.visibility_dirty = false;
+
+    for _ in 0..40 {
+        state.advance_animation_clock();
+    }
+
+    assert_eq!(state.animation.frame, 3, "no fountain, banner or clock step");
+    assert_eq!(state.water_scroll.phase, 7, "no water rotation");
+    assert!(
+        !state.visibility_dirty,
+        "a frozen pass cannot change the picture, so it must not restage it"
+    );
+
+    // `magic.md §12.1`: the shared `T` tag is what gates it. Clear the tag and
+    // the same call advances again, so the freeze is the effect rather than a
+    // dead code path.
+    state.active_effect_tag = None;
+    state.active_effect_counter = 0;
+    state.advance_animation_clock();
+    assert_eq!(state.animation.frame, 4);
+    assert_eq!(state.water_scroll.phase, 8);
+}
+
+/// `visibility.md §8`: "unless the Negate Time timed effect is active, select
+/// a uniform random entry from the four-value range; while it is active, the
+/// selector short-circuits and returns the first entry for every actor."
+/// `§8.3`: "The appearance freezes on variant 0 for the whole duration of
+/// Negate Time."
+#[test]
+fn active_object_variant_short_circuits_to_zero_under_negate_time() {
+    let mut state = test_state(open_grid(), 10, 20);
+    let actor = ActiveObject {
+        type_byte: 0x90,
+        tile: 0x90,
+        x: 10,
+        y: 19,
+        z: 0,
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    };
+
+    // Sweep the turn counter: without the short-circuit the draw visits more
+    // than one entry, so the freeze below is doing real work.
+    let mut unfrozen = std::collections::BTreeSet::new();
+    for turn in 0..64u64 {
+        state.turn = turn;
+        unfrozen.insert(state.active_object_render_variant(5, 4, actor));
+    }
+    assert!(
+        unfrozen.len() > 1,
+        "the unfrozen selector must not be constant"
+    );
+
+    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 10;
+    for turn in 0..64u64 {
+        state.turn = turn;
+        assert_eq!(
+            state.active_object_render_variant(5, 4, actor),
+            0,
+            "Negate Time returns the first entry for every actor"
+        );
+    }
+}
+
+/// `timing.md §8.2`: "The shared wait tests the current scene value and
+/// performs no world step for values `0x21` through `0x7F` **inclusive**;
+/// both the bound and its inclusiveness are exact. ... Implement the gate as
+/// a numeric range test on the scene value, **not** as an 'is this dungeon
+/// mode' test: the band is a strict superset of the dungeon scenes, and the
+/// intro, character-creation and Return-to-View animation states (`0x40`,
+/// `0x41`, `0x42`) also lie inside it."
+#[test]
+fn idle_world_step_suppression_is_the_published_scene_value_band() {
+    assert_eq!(IDLE_WORLD_STEP_SUPPRESSED_FIRST_SCENE, 0x21);
+    assert_eq!(IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE, 0x7F);
+    for scene in 0u8..=u8::MAX {
+        assert_eq!(
+            idle_world_step_suppressed_for_scene(scene),
+            (0x21..=0x7F).contains(&scene),
+            "scene {scene:#04x}"
+        );
+    }
+
+    // The band is a strict superset of the eight first-person dungeon scenes,
+    // which is exactly why an `Area::Dungeon` match cannot stand in for it.
+    for scene in SCENE_DUNGEON_NAMED_FIRST..=SCENE_DUNGEON_NAMED_LAST {
+        assert!(idle_world_step_suppressed_for_scene(scene));
+    }
+    for scene in SCENE_INTRO_FIRST..=SCENE_INTRO_LAST {
+        assert!(
+            idle_world_step_suppressed_for_scene(scene),
+            "the intro/chargen/Return-to-View states lie inside the band"
+        );
+    }
+    assert!(!idle_world_step_suppressed_for_scene(SCENE_OVERWORLD));
+    for scene in SCENE_TOWN_FAMILY_FIRST..=SCENE_TOWN_FAMILY_LAST {
+        assert!(!idle_world_step_suppressed_for_scene(scene));
+    }
+    assert!(
+        !idle_world_step_suppressed_for_scene(SCENE_COMBAT_TEMPORARY),
+        "combat sets scene value 0xFF and does run the world step"
+    );
+}
+
+/// `animation.md §9`: the driver-side animation layer "is **not** reset ...
+/// its state lives in the asset buffer for the whole program run", and `§10`
+/// adds that it "survives scene changes, save loads, and everything else
+/// short of reloading the asset". So an area constructor must inherit the
+/// running phases rather than start a fresh clock.
+#[test]
+fn area_constructors_inherit_the_animation_asset_buffer() {
+    let dir = debug_game_dir();
+    let carried = AnimationAssetBuffer {
+        animation: AnimationClock::at_static_tile_phase(5),
+        water_scroll: WaterScrollClock::at_phase(9),
+    };
+
+    let world = PlayState::load_world_scene(
+        &dir,
+        WorldPlane::Underworld,
+        PlayOptions {
+            target: PlayTarget::World(WorldPlane::Underworld),
+            floor: -1,
+            start: Some((10, 20)),
+            animation_asset_buffer: carried,
+            ..PlayOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(world.animation, carried.animation);
+    assert_eq!(world.water_scroll, carried.water_scroll);
+    assert_eq!(world.animation_asset_buffer(), carried);
+
+    let town_scene = Scene::new(0x11).unwrap();
+    let town = PlayState::load_town_scene(
+        &dir,
+        town_scene,
+        PlayOptions {
+            target: PlayTarget::Town(town_scene),
+            floor: 0,
+            start: Some((1, 1)),
+            animation_asset_buffer: carried,
+            ..PlayOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(town.animation_asset_buffer(), carried);
+
+    let dungeon_scene = DungeonScene::new(33).unwrap();
+    let dungeon = PlayState::load_dungeon_scene(
+        &dir,
+        dungeon_scene,
+        PlayOptions {
+            target: PlayTarget::Dungeon(dungeon_scene),
+            floor: 0,
+            start: Some((1, 1)),
+            animation_asset_buffer: carried,
+            ..PlayOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(dungeon.animation_asset_buffer(), carried);
+}
+
+/// `animation.md §6.1`: "**It is initialised to the identity map at
+/// startup** ... The shipped phase counter starts at zero." A program that is
+/// only now booting is the one place the buffer legitimately starts fresh.
+#[test]
+fn animation_asset_buffer_boot_value_is_phase_zero() {
+    assert_eq!(AnimationAssetBuffer::AT_BOOT.animation.frame, 0);
+    assert_eq!(AnimationAssetBuffer::AT_BOOT.water_scroll.phase, 0);
+    assert_eq!(
+        AnimationAssetBuffer::default(),
+        AnimationAssetBuffer::AT_BOOT
+    );
+    assert_eq!(
+        PlayOptions::default().animation_asset_buffer,
+        AnimationAssetBuffer::AT_BOOT
+    );
+}

@@ -629,8 +629,15 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            animation: AnimationClock::default(),
-            water_scroll: WaterScrollClock::default(),
+            // `animation.md §9`: the driver-side layer "is **not** reset ...
+            // its state lives in the asset buffer for the whole program
+            // run", and `§10` adds that the mutation "survives scene
+            // changes, save loads, and everything else short of reloading
+            // the asset". These two counters are that layer, so an area
+            // constructor must carry the running phases in rather than
+            // start a fresh clock — see [`AnimationAssetBuffer`].
+            animation: options.animation_asset_buffer.animation,
+            water_scroll: options.animation_asset_buffer.water_scroll,
             dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
@@ -906,8 +913,15 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            animation: AnimationClock::default(),
-            water_scroll: WaterScrollClock::default(),
+            // `animation.md §9`: the driver-side layer "is **not** reset ...
+            // its state lives in the asset buffer for the whole program
+            // run", and `§10` adds that the mutation "survives scene
+            // changes, save loads, and everything else short of reloading
+            // the asset". These two counters are that layer, so an area
+            // constructor must carry the running phases in rather than
+            // start a fresh clock — see [`AnimationAssetBuffer`].
+            animation: options.animation_asset_buffer.animation,
+            water_scroll: options.animation_asset_buffer.water_scroll,
             dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
@@ -1210,8 +1224,15 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            animation: AnimationClock::default(),
-            water_scroll: WaterScrollClock::default(),
+            // `animation.md §9`: the driver-side layer "is **not** reset ...
+            // its state lives in the asset buffer for the whole program
+            // run", and `§10` adds that the mutation "survives scene
+            // changes, save loads, and everything else short of reloading
+            // the asset". These two counters are that layer, so an area
+            // constructor must carry the running phases in rather than
+            // start a fresh clock — see [`AnimationAssetBuffer`].
+            animation: options.animation_asset_buffer.animation,
+            water_scroll: options.animation_asset_buffer.water_scroll,
             dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),

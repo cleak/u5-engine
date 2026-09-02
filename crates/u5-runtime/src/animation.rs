@@ -229,6 +229,51 @@ pub const fn static_tile_animation_pass(phase: u8) -> StaticTileAnimationPass {
 /// and skipping a rendered frame does not advance it." The counter lives
 /// on `PlayState` as save-backed world state instead; see
 /// `crate::moongate_phase`.
+/// `animation.md §9`/`§12`: the whole driver-side animation layer's state,
+/// held together as one value so it can outlive any single [`PlayState`].
+///
+/// `§9` "Persistence": "The driver-side layer of Section 12 is transient in
+/// the same sense — nothing about it is saved — but it is **not** reset, and
+/// that is a behavioural difference rather than a bookkeeping one. It mutates
+/// the loaded tile artwork itself, so **its state lives in the asset buffer
+/// for the whole program run**: the water tiles keep whatever rotation they
+/// have reached, and the fire fixtures keep every noise pattern ever XORed
+/// into them. Loading a saved game does not restore pristine artwork."
+/// `§10` says the same of the mutation: "It survives scene changes, save
+/// loads, and everything else short of reloading the asset." `§6.1` says the
+/// frame-selector table "is transient and global. It is not part of saved
+/// state, it survives map changes and reloads".
+///
+/// This engine keeps pristine artwork and derives each frame from a counter —
+/// the licence `§10` grants for the rotation — so the "asset buffer" here is
+/// the pair of counters below rather than mutated pixels. What matters for
+/// parity is the sentence above: **entering an area, changing scene or
+/// loading a save must not reset them.** They are therefore carried into
+/// every [`PlayState`] through [`crate::PlayOptions`], which is the same
+/// mechanism the natural-moongate presence counter uses, instead of being
+/// re-`default()`ed by each area constructor.
+///
+/// [`AnimationAssetBuffer::AT_BOOT`] is the one legitimate reset: `§6.1`
+/// "**It is initialised to the identity map at startup** ... The shipped
+/// phase counter starts at zero."
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AnimationAssetBuffer {
+    /// `animation.md §6` shared static-tile phase counter.
+    pub animation: AnimationClock,
+    /// `animation.md §12.2` driver-side water rotation phase.
+    pub water_scroll: WaterScrollClock,
+}
+
+impl AnimationAssetBuffer {
+    /// `animation.md §6.1`: the boot state — identity selectors, phase zero.
+    /// The intro/front end is where a program run starts, and it is the only
+    /// place that legitimately installs this.
+    pub const AT_BOOT: Self = Self {
+        animation: AnimationClock { frame: 0 },
+        water_scroll: WaterScrollClock { phase: 0 },
+    };
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AnimationClock {
     /// `animation.md §6` shared phase counter, wrapped at

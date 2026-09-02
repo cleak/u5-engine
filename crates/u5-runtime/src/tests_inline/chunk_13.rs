@@ -14402,12 +14402,27 @@ fn active_object_default_compositor_matches_terrain_aware_spec_cases() {
 #[test]
 fn active_object_composite_dispatches_companion_and_guard_branches() {
     // visibility.md §8
+    // `visibility.md §8`: the selector short-circuits to the first entry
+    // while the global Negate Time timed effect is active, and otherwise
+    // takes the low two bits of the draw. The earlier "active character's
+    // class letter is Tinker" rule is withdrawn — there is no
+    // character-class input to this selector at all.
     assert_eq!(
         active_object_compositor_variant(true, 3),
         0,
-        "Tinker active character forces the first variant"
+        "Negate Time forces the first variant for every actor"
     );
-    assert_eq!(active_object_compositor_variant(false, 7), 3);
+    for selector in 0u8..=255 {
+        assert_eq!(
+            active_object_compositor_variant(true, selector),
+            0,
+            "Negate Time short-circuits regardless of the draw"
+        );
+        assert_eq!(
+            active_object_compositor_variant(false, selector),
+            selector & 0x03
+        );
+    }
 
     assert_eq!(
         active_object_composite(0xE8, 0x44, 0x10, 0x10, None, None, 5, 0),

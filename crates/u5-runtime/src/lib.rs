@@ -142,9 +142,9 @@ pub mod z_stats;
 
 pub use active_object_io::*;
 pub use animation::{
-    ActiveObject, ActiveShipWind, AnimationClock, PhaseTick, STATIC_TILE_ANIMATION_FAMILIES,
-    STATIC_TILE_ANIMATION_PERIOD_TICKS, StaticTileAnimationFamily, StaticTileAnimationFamilySpec,
-    StaticTileAnimationPass, static_tile_animation_pass,
+    ActiveObject, ActiveShipWind, AnimationAssetBuffer, AnimationClock, PhaseTick,
+    STATIC_TILE_ANIMATION_FAMILIES, STATIC_TILE_ANIMATION_PERIOD_TICKS, StaticTileAnimationFamily,
+    StaticTileAnimationFamilySpec, StaticTileAnimationPass, static_tile_animation_pass,
 };
 pub use blackthorn::{
     ActiveBlackthornGuardDemand, BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS,
@@ -477,20 +477,22 @@ pub use main_loop::{
     DUNGEON_ENTRY_SURFACE_Y, DUNGEON_ENTRY_SURFACE_Z, DUNGEON_ENTRY_UNDERWORLD_X,
     DUNGEON_ENTRY_UNDERWORLD_Y, DUNGEON_ENTRY_UNDERWORLD_Z, DUNGEON_FACING_EAST,
     DUNGEON_FACING_NORTH, DUNGEON_FACING_SOUTH, DUNGEON_FACING_WEST, DungeonEntrySeed,
-    DungeonMovementAction, PARTY_SLEEP_LINE, PartyCapability, SCENE_COMBAT_TEMPORARY,
-    SCENE_DUNGEON_FAMILY_FIRST, SCENE_DUNGEON_FAMILY_LAST, SCENE_DUNGEON_NAMED_FIRST,
-    SCENE_DUNGEON_NAMED_LAST, SCENE_INTRO_FIRST, SCENE_INTRO_LAST, SCENE_OVERWORLD,
-    SCENE_TOWN_FAMILY_FIRST, SCENE_TOWN_FAMILY_LAST, SceneRoute, TOWN_SLEEP_WAKE_ROLL_MAX,
-    WORD_OF_POWER_SEALED_TILE, WORD_OF_POWER_SEALS, WORLD_RUINED_SHRINE_TILE,
-    WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WordOfPowerSeal, WordOfPowerTargetOutcome,
-    WorldTickPath, apply_world_quest_tile_substitutions, dungeon_entry_seed,
-    dungeon_facing_back_delta, dungeon_facing_forward_delta, dungeon_facing_left_delta,
-    dungeon_facing_right_delta, dungeon_facing_turn_around, dungeon_facing_turn_left,
-    dungeon_facing_turn_right, dungeon_movement_action, dungeon_record_index,
-    dungeon_resident_name, dungeon_scene_for_word_of_power, dungeon_word_of_power,
-    mode_minute_increment, party_capability, save_scene_byte_normalised, scene_route,
-    shrine_chunk_owner, word_of_power_chunk_owner, word_of_power_seal_for_word,
-    word_of_power_seal_prefix_match, world_tick_path,
+    DungeonMovementAction, IDLE_WORLD_STEP_SUPPRESSED_FIRST_SCENE,
+    IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE, PARTY_SLEEP_LINE, PartyCapability,
+    SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST, SCENE_DUNGEON_FAMILY_LAST,
+    SCENE_DUNGEON_NAMED_FIRST, SCENE_DUNGEON_NAMED_LAST, SCENE_INTRO_FIRST, SCENE_INTRO_LAST,
+    SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST, SCENE_TOWN_FAMILY_LAST, SceneRoute,
+    TOWN_SLEEP_WAKE_ROLL_MAX, WORD_OF_POWER_SEALED_TILE, WORD_OF_POWER_SEALS,
+    WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WordOfPowerSeal,
+    WordOfPowerTargetOutcome, WorldTickPath, apply_world_quest_tile_substitutions,
+    dungeon_entry_seed, dungeon_facing_back_delta, dungeon_facing_forward_delta,
+    dungeon_facing_left_delta, dungeon_facing_right_delta, dungeon_facing_turn_around,
+    dungeon_facing_turn_left, dungeon_facing_turn_right, dungeon_movement_action,
+    dungeon_record_index, dungeon_resident_name, dungeon_scene_for_word_of_power,
+    dungeon_word_of_power, idle_world_step_suppressed_for_scene, mode_minute_increment,
+    party_capability, save_scene_byte_normalised, scene_route, shrine_chunk_owner,
+    word_of_power_chunk_owner, word_of_power_seal_for_word, word_of_power_seal_prefix_match,
+    world_tick_path,
 };
 pub use map_decoders::*;
 pub use map_io::*;

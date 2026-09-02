@@ -1481,6 +1481,12 @@ impl PlayState {
             // `overworld.md §9.1` (spec HEAD c00bf63): the
             // gate-presence counter survives scene changes.
             natural_moongate_counter: self.natural_moongate_counter,
+            // `animation.md §9`/`§10`: the driver-side animation layer is
+            // never reset and "survives scene changes, save loads, and
+            // everything else short of reloading the asset". Carry the live
+            // phases into the rebuilt state so water, fountains, banners and
+            // clocks do not snap back to phase zero on area entry.
+            animation_asset_buffer: self.animation_asset_buffer(),
             avatar_stats: self.avatar_stats,
             torches: self.torches,
             torch_counter: self.torch_counter,

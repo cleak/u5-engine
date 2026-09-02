@@ -1652,8 +1652,14 @@ impl PlayState {
     }
 
     /// `visibility.md §8`'s shared variant selector for a composited
-    /// active object: Tinker takes the first entry, anything else "a
-    /// **uniform random** entry from the four-value range".
+    /// active object: "unless the Negate Time timed effect is active, select
+    /// a uniform random entry from the four-value range; while it is active,
+    /// the selector short-circuits and returns the first entry for every
+    /// actor".
+    ///
+    /// The short-circuit input is the **global timed-magic-effect code**.
+    /// `§8` retracts the earlier "active character's class letter is Tinker"
+    /// reading in full, so no party member is consulted here.
     ///
     /// The animation phase is deliberately **not** an input. It used to be,
     /// which made a stationary actor standing on one of the four-entry
@@ -1663,32 +1669,30 @@ impl PlayState {
     /// `cleak/u5-spec#179`: outside combat nothing of the sort happens.
     /// The party sprite standing on the overworld and the Avatar seated in
     /// a chair indoors were both bit-identical across 160 s idle windows,
-    /// with zero transitions. At the measured 18.2 Hz world tick the old
-    /// selector would have flickered them roughly eighteen times a second.
+    /// with zero transitions.
     ///
-    /// The turn counter stays in the hash, so the draw is re-rolled once
-    /// per consumed turn — the coarsest lifetime that still looks random
-    /// and the one that survives the observation. `#179` question 6 asks
-    /// whether the original re-draws per composite pass or per placement;
-    /// until it is answered, per turn is the conservative reading.
-    /// Combat-mode presentation is untouched: it has its own renderer, and
-    /// the same capture shows combat actors genuinely do re-roll per tick.
-    fn active_object_render_variant(
+    /// TODO(u5-spec question pending): `visibility.md §8.1` is normative
+    /// that the variant is drawn "once per composite pass, per actor" from
+    /// the shared PRNG and "never cached", and `§8.3` (published as
+    /// *probable*) says the sprite therefore changes on about three idle
+    /// passes in four. This engine instead re-rolls a deterministic hash
+    /// once per consumed turn, which contradicts both sentences. The
+    /// clean-side capture above is direct evidence against the published
+    /// idle re-roll, so the conflict is being taken back to the spec as a
+    /// question rather than resolved here; until it is answered the
+    /// once-per-turn draw is kept and this comment records the divergence.
+    pub(crate) fn active_object_render_variant(
         &self,
         cell_x: usize,
         cell_y: usize,
         object: ActiveObject,
     ) -> u8 {
-        let active_character_is_tinker = self
-            .active_player
-            .and_then(|index| self.party.get(index))
-            .is_some_and(|member| member.class_byte == b'T');
         let selector = (self.turn as u8)
             ^ (cell_x as u8).wrapping_mul(3)
             ^ (cell_y as u8).wrapping_mul(5)
             ^ object.type_byte
             ^ object.tile;
-        active_object_compositor_variant(active_character_is_tinker, selector)
+        active_object_compositor_variant(self.negate_time_active(), selector)
     }
 
     /// Visibility + composited terrain/sprite lookup for one cell.
@@ -3019,9 +3023,19 @@ impl PlayState {
         if !self.combat_active && self.endgame.is_none() {
             self.sync_player_object();
         }
+        // `timing.md §8.2`: the idle wait performs no world step for scene
+        // values `0x21..=0x7F` inclusive, and the gate must be that numeric
+        // range test "**not** ... an 'is this dungeon mode' test: the band
+        // is a strict superset of the dungeon scenes, and the intro,
+        // character-creation and Return-to-View animation states (`0x40`,
+        // `0x41`, `0x42`) also lie inside it". An `Area::Dungeon` match
+        // cannot express those three, so the scene value is tested instead.
+        // Combat reports `0xFF` and is outside the band, which is what
+        // §8.2 requires ("Combat sets scene value `0xFF` and does run the
+        // world step").
         if self.time_stop_counter == 0
             && !self.negate_time_active()
-            && !matches!(self.area, Area::Dungeon { .. })
+            && !idle_world_step_suppressed_for_scene(self.current_scene_byte())
         {
             // Presentation only: see
             // [`Self::animate_active_object_sprites_only`]. A visual tick
@@ -3069,6 +3083,17 @@ impl PlayState {
         self.active_effect_counter = 0;
         if changed {
             self.mark_visibility_dirty();
+        }
+    }
+
+    /// `animation.md §9`/`§12`: snapshot the driver-side animation layer so
+    /// a rebuilt [`PlayState`] can carry it forward. Its state "lives in the
+    /// asset buffer for the whole program run" and is not reset by an area
+    /// entry, a scene change or a save load.
+    pub const fn animation_asset_buffer(&self) -> AnimationAssetBuffer {
+        AnimationAssetBuffer {
+            animation: self.animation,
+            water_scroll: self.water_scroll,
         }
     }
 
@@ -3130,6 +3155,35 @@ impl PlayState {
     /// and skipping a rendered frame does not advance it." Only the
     /// once-per-turn refresh in `refresh_natural_moongates` moves it.
     pub fn advance_animation_clock(&mut self) {
+        // `animation.md §13.1` "Two freezes an implementation must
+        // reproduce": "**Negate Time freezes all of it.** While that timed
+        // effect is active, the world tick forces the gating byte into a
+        // skip state on *every* call, and the spell-effect sweep carries the
+        // same test. For the effect's full duration nothing advances: no
+        // water rotation, no fire flicker, no fountain, no banner, no clock
+        // or bellows, no object animation, no AI roll, no wind check, no
+        // moongate refresh, no beacon step, and no shrine/lava ambience
+        // tick. ... An engine that keeps animating during Negate Time is
+        // visibly wrong."
+        //
+        // `magic.md §12.1` names the same tag: "**`T` Negate Time.** The
+        // per-turn cleanup skips the entire time advance ... and the
+        // overworld epilogue returns before animating anything."
+        //
+        // The test lives inside the step rather than at its call sites
+        // precisely because the spec says the gating byte is forced on
+        // *every* call: both the idle world tick and the White-potion
+        // spell-effect sweep reach the §6 pass through here, and §13.1
+        // names both. Scripted scene animation that drives
+        // `AnimationClock::tick_static_tiles` directly (the endgame and the
+        // moongate transit) is not the world tick and is left alone.
+        //
+        // The composite pass is deliberately *not* suppressed with it:
+        // `visibility.md §8.2` says "The composite still runs while Negate
+        // Time is active; it just draws variant 0 every time."
+        if self.negate_time_active() {
+            return;
+        }
         // `animation.md §6`: the pass that is about to run is the one for
         // the counter's *current* value; the counter is incremented once
         // at the end, "whichever path was taken".

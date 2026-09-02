@@ -2508,6 +2508,7 @@ fn town_entry_applies_night_gate_substitution() {
     grid[3 * 32 + 4] = 0x44;
     fs::write(dir.join("CASTLE.DAT"), grid).unwrap();
     let options = PlayOptions {
+        animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
         target: PlayTarget::Town(scene),
         floor: 0,
         start: Some((0, 0)),
