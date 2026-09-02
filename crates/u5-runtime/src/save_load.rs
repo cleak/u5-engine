@@ -277,6 +277,7 @@ pub fn play_options_from_save_bytes_named(
             .expect("fixed shrine-ruin flag slice"),
         moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],
         toll_progress: bytes[SAVE_TOLL_PROGRESS_OFFSET],
+        cleanup_previous_hour: bytes[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET],
         // `overworld.md §9.1` (spec HEAD c00bf63): the gate-presence
         // counter is save-backed, so a game saved mid-rise reloads at
         // the same gate height.

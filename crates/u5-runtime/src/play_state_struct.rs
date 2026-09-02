@@ -33,6 +33,12 @@ pub struct PlayState {
     pub active_objects: Vec<ActiveObject>,
     pub npcs: Vec<RuntimeNpc>,
     pub door_tracker: Option<DoorTracker>,
+    /// Runtime-only latch: the pending auto-close in
+    /// [`Self::door_tracker`] has already fired. The four save bytes at
+    /// `0x03A9..0x03AC` stay resident afterwards (the original never clears
+    /// them), so this flag — not a cleared block — is what keeps the close
+    /// from firing a second time when the countdown wraps.
+    pub door_tracker_closed: bool,
     pub opened_town_doors: Vec<(u8, i8, usize, usize)>,
     pub revealed_town_secret_doors: Vec<(u8, i8, usize, usize)>,
     pub passability: Option<TilePassability>,
@@ -46,6 +52,12 @@ pub struct PlayState {
     /// the hour changing, and the camp loop advances the clock without
     /// entering the pass at all.
     pub status_pass_previous_hour: u8,
+    /// `formats/saved-gam.md §5` / `time.md §2`: the per-turn cleanup's
+    /// pre-cascade hour snapshot at save offset `0x02DA`, "taken at the
+    /// start of every cleanup pass" and compared against the post-cascade
+    /// hour. Distinct from [`Self::status_pass_previous_hour`], which is the
+    /// status/provision pass's own snapshot (`time.md §5`).
+    pub cleanup_previous_hour: u8,
     /// `dungeon-mode.md §15`: the dungeon loop charges one minute at the
     /// head of every iteration, ungated on whether the command consumed a
     /// turn. This flag records that the iteration's minute is already spent so

@@ -44,6 +44,9 @@ pub struct PlayOptions {
     pub shrine_ruin_flags: [u8; SAVE_SHRINE_RUIN_FLAG_COUNT],
     pub moral_standing: u8,
     pub toll_progress: u8,
+    /// `formats/saved-gam.md §5`: saved pre-cascade hour snapshot
+    /// (`0x02DA`) restored from the save image.
+    pub cleanup_previous_hour: u8,
     /// `overworld.md §9.1` (spec HEAD c00bf63): the shared
     /// natural-moongate gate-presence counter, restored from
     /// `SAVED.GAM` offset `0x02E1`. Persistent world state - it
@@ -126,6 +129,7 @@ impl Default for PlayOptions {
             shrine_ruin_flags: [0; SAVE_SHRINE_RUIN_FLAG_COUNT],
             moral_standing: 0,
             toll_progress: 0,
+            cleanup_previous_hour: 0,
             natural_moongate_counter: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,

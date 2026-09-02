@@ -252,6 +252,7 @@ impl PlayState {
                 y: ty,
                 turns_remaining: DOOR_AUTO_CLOSE_TURNS,
             });
+            self.door_tracker_closed = false;
         }
         self.message = "Opened!".to_string();
         Ok(MoveOutcome::DoorOpened)
@@ -1852,6 +1853,7 @@ impl PlayState {
             .is_some_and(|tracker| tracker.x == tx && tracker.y == ty)
         {
             self.door_tracker = None;
+            self.door_tracker_closed = false;
         }
         self.forget_open_town_door(scene, floor, tx, ty);
         self.forget_revealed_town_secret_door(scene, floor, tx, ty);

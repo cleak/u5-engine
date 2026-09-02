@@ -2271,6 +2271,7 @@ impl PlayState {
                 self.record_open_town_door(scene, floor, x, y);
                 self.forget_revealed_town_secret_door(scene, floor, x, y);
                 self.door_tracker = None;
+                self.door_tracker_closed = false;
                 self.mark_visibility_dirty();
                 self.advance_turn_without_door_tick();
                 self.message = format!(
@@ -2968,6 +2969,7 @@ impl PlayState {
             (tracker.x == tx && tracker.y == ty) || (tracker.x == px && tracker.y == py)
         }) {
             self.door_tracker = None;
+            self.door_tracker_closed = false;
         }
         self.player.x = tx;
         self.player.y = ty;

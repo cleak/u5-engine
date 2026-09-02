@@ -312,6 +312,19 @@ pub const NATURAL_MOONGATE_TERRAIN_TILE: u8 = 0xDC;
 pub const NATURAL_MOONGATE_RESTORED_TERRAIN_TILE: u8 = 5;
 pub const NATURAL_MOONGATE_COUNTER_MAX: u8 = 16;
 pub const STEADY_PHASE: u8 = 0x0f;
+/// Phase byte (`+0x06`) the player's own active-object record
+/// carries in slot zero.
+///
+/// Runtime observation, spec silent: `formats/saved-gam.md §8.1`
+/// and `active-objects.md §3` publish the field but never say what
+/// the player record seeds it with. Driving the DOS build from the
+/// shipped save and saving again — with no turns, and again after
+/// four turns across an hour boundary — leaves the slot-zero record
+/// as `1C 1C 0F 0F 00 00 00 00`: the original writes zero here, not
+/// the steady marker. Nothing reads it either: `active-objects.md
+/// §8` has the outdoor walker "skip slot zero" and this engine's
+/// animator iterates from slot one, so the byte is save state only.
+pub const PLAYER_ACTIVE_OBJECT_PHASE: u8 = 0x00;
 /// `systems/weather.md §7`: "The cadence counter is stored per
 /// active-object slot ... The cadence counter is persisted with the
 /// object, so it survives save and reload."

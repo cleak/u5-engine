@@ -168,7 +168,20 @@ fn open_facing_rewrites_door_and_auto_closes_after_four_turns() {
 
     state.advance_turn();
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
-    assert_eq!(state.door_tracker, None);
+    // Was `assert_eq!(state.door_tracker, None)`. The DOS build does not
+    // clear the four-byte block when the door re-closes: a session that
+    // opened one door and then took fourteen turns saved
+    // `0x03A9..0x03AC` as `B8 0F 13 F6`, previous tile / X / Y intact.
+    assert_eq!(
+        state.door_tracker,
+        Some(DoorTracker {
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
+            x: 2,
+            y: 1,
+            turns_remaining: 0,
+        })
+    );
+    assert!(state.door_tracker_closed);
     assert!(state.visibility_dirty);
 }
 

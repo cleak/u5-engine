@@ -72,7 +72,7 @@ fn sync_player_object_recreates_empty_active_object_table() {
             x: 2,
             y: 4,
             z: 3,
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }]

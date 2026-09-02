@@ -144,7 +144,12 @@ fn save_game_command_writes_supported_saved_gam_and_stages_saved_ool_mirrors() {
     assert_eq!(saved[SAVE_DAY_OFFSET], 28);
     assert_eq!(saved[SAVE_HOUR_OFFSET], 18);
     assert_eq!(saved[SAVE_MINUTE_OFFSET], 45);
-    assert_eq!(saved[SAVE_AMPM_DISPLAY_OFFSET], 6);
+    // Removed: this pinned the save writer deriving the twelve-hour
+    // display byte at `0x02DE` from the live clock. The DOS build never
+    // writes that byte - it stayed zero across a no-turn save and across
+    // four turns that crossed an hour - so the engine round-trips it
+    // instead. Covered by
+    // `save_round_trips_the_twelve_hour_display_byte_instead_of_deriving_it`.
     assert_eq!(u16_at(&saved, SAVE_FOOD_STOCK_OFFSET), 1234);
     assert_eq!(u16_at(&saved, SAVE_GOLD_STOCK_OFFSET), 9876);
     assert_eq!(saved[SAVE_KEY_STOCK_OFFSET], 7);
@@ -443,7 +448,7 @@ fn save_game_command_persists_pending_shipwright_delivery_from_town_return_world
             x: 12,
             y: 21,
             z: WorldPlane::Britannia.save_floor(),
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }],
@@ -505,7 +510,7 @@ fn save_game_command_persists_pending_skiff_delivery_from_town_return_world() {
         x: 81,
         y: 106,
         z: WorldPlane::Britannia.save_floor(),
-        phase: STEADY_PHASE,
+        phase: PLAYER_ACTIVE_OBJECT_PHASE,
         aux1: 0,
         aux3: 0,
     }];
@@ -2656,6 +2661,7 @@ fn town_entry_applies_night_gate_substitution() {
     grid[3 * 32 + 4] = 0x44;
     fs::write(dir.join("CASTLE.DAT"), grid).unwrap();
     let options = PlayOptions {
+        cleanup_previous_hour: 0,
         target: PlayTarget::Town(scene),
         floor: 0,
         start: Some((0, 0)),
@@ -2893,7 +2899,7 @@ fn movement_accepts_walkable_tiles_and_ticks_animation() {
             x: 2,
             y: 1,
             z: 0,
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }
