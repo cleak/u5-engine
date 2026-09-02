@@ -149,6 +149,35 @@ pub const SCENE_INTRO_FIRST: u8 = 0x40;
 pub const SCENE_INTRO_LAST: u8 = 0x42;
 pub const SCENE_COMBAT_TEMPORARY: u8 = 0xFF;
 
+/// `timing.md §8.2`: the contiguous scene-value band whose idle pass
+/// performs **no world step**.
+///
+/// "The shared wait tests the current scene value and performs no world
+/// step for values `0x21` through `0x7F` **inclusive**; both the bound and
+/// its inclusiveness are exact. ... Implement the gate as a numeric range
+/// test on the scene value, **not** as an 'is this dungeon mode' test: the
+/// band is a strict superset of the dungeon scenes, and the intro,
+/// character-creation and Return-to-View animation states (`0x40`, `0x41`,
+/// `0x42`) also lie inside it."
+///
+/// The bounds coincide with [`SCENE_DUNGEON_FAMILY_FIRST`] and
+/// [`SCENE_DUNGEON_FAMILY_LAST`], which is why they are anchored to them
+/// rather than restated: `main-loop.md §3`'s dungeon *classification* band
+/// and `timing.md §8.2`'s *suppression* band are the same numbers reached
+/// two different ways, and the doc comments keep them distinguishable.
+pub const IDLE_WORLD_STEP_SUPPRESSED_FIRST: u8 = SCENE_DUNGEON_FAMILY_FIRST;
+pub const IDLE_WORLD_STEP_SUPPRESSED_LAST: u8 = SCENE_DUNGEON_FAMILY_LAST;
+
+/// `timing.md §8.2`: does this scene value suppress the idle pass's world
+/// step?
+///
+/// "First-person dungeon scenes occupy `0x21..0x28` and therefore get no
+/// idle world step - they run their own loop instead ... Combat sets scene
+/// value `0xFF` and does run the world step."
+pub const fn idle_world_step_suppressed_for_scene(scene_byte: u8) -> bool {
+    scene_byte >= IDLE_WORLD_STEP_SUPPRESSED_FIRST && scene_byte <= IDLE_WORLD_STEP_SUPPRESSED_LAST
+}
+
 /// `main-loop.md §3,§4`: route the scene byte to the mode-loop branch
 /// the outer dispatch should run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

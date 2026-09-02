@@ -63,6 +63,13 @@ pub struct PlayState {
     /// `animation.md §6` family pass and nothing else — see
     /// [`crate::water_scroll`].
     pub water_scroll: WaterScrollClock,
+    /// The driver-side fire animator's accumulated state.
+    ///
+    /// `animation.md §12.4`: the fire fixtures animate by a cumulative
+    /// masked-noise XOR with no frame set to enumerate, so unlike
+    /// [`WaterScrollClock`] this cannot be a phase counter. It rides the
+    /// same driver pass on the same tick - see [`crate::fire_flicker`].
+    pub fire_flicker: FireFlickerClock,
     /// `dungeon-mode.md §6.7`: shared three-frame fountain-water phase,
     /// advanced once per point-blank corridor paint.
     pub dungeon_fountain_frame: u8,

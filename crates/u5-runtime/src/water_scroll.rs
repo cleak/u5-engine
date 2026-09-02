@@ -2,11 +2,13 @@
 //!
 //! # Provenance
 //!
-//! The mechanism is published on `cleak/u5-spec#179` (comments of
-//! 2026-09-01 01:48 and the 02:07 correction), as **interim contract pending
-//! the spec commit** — it is still going through an adversarial verification
-//! pass upstream. The cadence and the visible result are independently
-//! measured, black-box, from the shipped build (same issue).
+//! The mechanism is published as `systems/animation.md §12.2` (the vertical
+//! rotation) and `§12.3` (the composites); the interim answers on
+//! `cleak/u5-spec#179` that this module was first written against are
+//! superseded by that section, and where the two disagree the section wins.
+//! The cadence and the visible result are independently measured, black-box,
+//! from the shipped build (same issue). `§12.4`, the third stage of the same
+//! driver pass, lives in [`crate::fire_flicker`].
 //!
 //! This is not the `animation.md §6` tile-id selector pass.
 //! `RETRACTIONS.md` R148 keeps water out of the five published families —
@@ -125,18 +127,19 @@
 //!
 //! # Not implemented, deliberately
 //!
-//! * **Two further composite destinations**, "two gem ids", are named
-//!   upstream but not yet identified. Pending `#179`.
-//! * **Fire.** Each step XORs fresh pseudo-random noise from a dedicated
-//!   noise tile through a per-fixture mask, admitting noise only on certain
-//!   colour planes. The noise-tile id and the per-fixture plane rules are
-//!   unpublished until the upstream adversarial pass completes. Note for
-//!   whoever implements it: the XOR is cumulative and never restored, so a
-//!   pristine-art engine will be statistically equivalent but **not**
-//!   bit-identical — do not write a pixel-parity test against the original.
-//! * **Banner and sail row-pair swaps** under per-bit pseudo-random gates,
-//!   a third mechanism again, covering keep/towne/castle banners and four
-//!   ship ids. Unpublished.
+//! * **The "two gem ids".** An interim answer on `#179` named two further
+//!   composite destinations. `§12.3` withdraws them: "the verification
+//!   pass's re-derivation does not carry them, so they are not published
+//!   here and **must not be implemented**." The three sets above are the
+//!   whole verified destination set.
+//! * **`§12.5`, banner and sail row-pair swaps** under per-bit pseudo-random
+//!   gates, a third mechanism again, covering keep/towne/castle banners and
+//!   four ship ids. Published as *probable*, explicitly awaiting a capture,
+//!   and still absent here.
+//!
+//! `§12.4`, the fire fixtures' cumulative masked-noise XOR, **is**
+//! implemented — in [`crate::fire_flicker`], which needs real accumulated
+//! state rather than a phase counter.
 //!
 //! # One caveat on the period
 //!

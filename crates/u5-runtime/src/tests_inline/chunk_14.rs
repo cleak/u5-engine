@@ -13,6 +13,11 @@
     /// logic").
     ///
     /// The town half is unchanged: its cleanup *is* gated on a consumed turn.
+    ///
+    /// The animation clock does **not** move: `timing.md §8.2` gives the
+    /// dungeon band `0x21..0x7F` no idle world step at all, so neither the
+    /// object animator nor the `§6`/`§12` tile passes run underground. An
+    /// earlier revision asserted `animation.frame == 1` here.
     #[test]
     fn dungeon_unhandled_play_input_uses_sleep_idle_visual_tick_without_turn() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -39,7 +44,7 @@
         assert_eq!(state.clock, GameClock::new(12, 35).unwrap());
         assert_eq!(state.torch_counter, 2);
         assert_eq!(state.light_spell_counter, 1);
-        assert_eq!(state.animation.frame, 1);
+        assert_eq!(state.animation.frame, 0, "no world step underground");
         assert_eq!(state.active_objects[1].phase, 0x22);
 
         let mut town = test_state(open_grid(), 1, 1);

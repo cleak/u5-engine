@@ -41,6 +41,7 @@ pub mod endgame;
 pub mod endgame_cinematic;
 pub mod endmsg_io;
 pub mod equipment;
+pub mod fire_flicker;
 pub mod fonts_io;
 pub mod gameplay_chrome;
 pub mod graphics;
@@ -310,6 +311,13 @@ pub use endmsg_io::{
     parse_endgame_messages, require_endgame_messages,
 };
 pub use equipment::*;
+pub use fire_flicker::{
+    FIRE_FIELD_TILE_COUNT, FIRE_FIELD_TILES, FIRE_FIXTURES, FIRE_FLICKER_DEFAULT_SEED,
+    FIRE_NOISE_PIXELS_PER_BYTE, FIRE_NOISE_PLANES, FIRE_NOISE_TILE, FIRE_SHRINE_NOISE_PLANES,
+    FIRE_SHRINE_NOISE_TILE, FireFixtureSpec, FireFlickerClock, fire_field_tile_slot,
+    fire_fixture_spec, fire_noise_tile_planes, fire_pass_animates_tile,
+    fire_pass_refreshes_field_tile, noise_tile_plane_mask,
+};
 pub use fonts_io::*;
 pub use gameplay_chrome::*;
 pub use graphics::*;
@@ -478,20 +486,21 @@ pub use main_loop::{
     DUNGEON_ENTRY_SURFACE_Y, DUNGEON_ENTRY_SURFACE_Z, DUNGEON_ENTRY_UNDERWORLD_X,
     DUNGEON_ENTRY_UNDERWORLD_Y, DUNGEON_ENTRY_UNDERWORLD_Z, DUNGEON_FACING_EAST,
     DUNGEON_FACING_NORTH, DUNGEON_FACING_SOUTH, DUNGEON_FACING_WEST, DungeonEntrySeed,
-    DungeonMovementAction, PARTY_SLEEP_LINE, PartyCapability, SCENE_COMBAT_TEMPORARY,
-    SCENE_DUNGEON_FAMILY_FIRST, SCENE_DUNGEON_FAMILY_LAST, SCENE_DUNGEON_NAMED_FIRST,
-    SCENE_DUNGEON_NAMED_LAST, SCENE_INTRO_FIRST, SCENE_INTRO_LAST, SCENE_OVERWORLD,
-    SCENE_TOWN_FAMILY_FIRST, SCENE_TOWN_FAMILY_LAST, SceneRoute, TOWN_SLEEP_WAKE_ROLL_MAX,
-    WORD_OF_POWER_SEALED_TILE, WORD_OF_POWER_SEALS, WORLD_RUINED_SHRINE_TILE,
-    WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WordOfPowerSeal, WordOfPowerTargetOutcome,
-    WorldTickPath, apply_world_quest_tile_substitutions, dungeon_entry_seed,
-    dungeon_facing_back_delta, dungeon_facing_forward_delta, dungeon_facing_left_delta,
-    dungeon_facing_right_delta, dungeon_facing_turn_around, dungeon_facing_turn_left,
-    dungeon_facing_turn_right, dungeon_movement_action, dungeon_record_index,
-    dungeon_resident_name, dungeon_scene_for_word_of_power, dungeon_word_of_power,
-    mode_minute_increment, party_capability, save_scene_byte_normalised, scene_route,
-    shrine_chunk_owner, word_of_power_chunk_owner, word_of_power_seal_for_word,
-    word_of_power_seal_prefix_match, world_tick_path,
+    DungeonMovementAction, IDLE_WORLD_STEP_SUPPRESSED_FIRST, IDLE_WORLD_STEP_SUPPRESSED_LAST,
+    PARTY_SLEEP_LINE, PartyCapability, SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST,
+    SCENE_DUNGEON_FAMILY_LAST, SCENE_DUNGEON_NAMED_FIRST, SCENE_DUNGEON_NAMED_LAST,
+    SCENE_INTRO_FIRST, SCENE_INTRO_LAST, SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST,
+    SCENE_TOWN_FAMILY_LAST, SceneRoute, TOWN_SLEEP_WAKE_ROLL_MAX, WORD_OF_POWER_SEALED_TILE,
+    WORD_OF_POWER_SEALS, WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE,
+    WordOfPowerSeal, WordOfPowerTargetOutcome, WorldTickPath, apply_world_quest_tile_substitutions,
+    dungeon_entry_seed, dungeon_facing_back_delta, dungeon_facing_forward_delta,
+    dungeon_facing_left_delta, dungeon_facing_right_delta, dungeon_facing_turn_around,
+    dungeon_facing_turn_left, dungeon_facing_turn_right, dungeon_movement_action,
+    dungeon_record_index, dungeon_resident_name, dungeon_scene_for_word_of_power,
+    dungeon_word_of_power, idle_world_step_suppressed_for_scene, mode_minute_increment,
+    party_capability, save_scene_byte_normalised, scene_route, shrine_chunk_owner,
+    word_of_power_chunk_owner, word_of_power_seal_for_word, word_of_power_seal_prefix_match,
+    world_tick_path,
 };
 pub use map_decoders::*;
 pub use map_io::*;

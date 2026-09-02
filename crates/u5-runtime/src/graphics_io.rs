@@ -116,7 +116,7 @@ pub fn blit_tile_id_to_viewport(
     Ok(())
 }
 
-/// Terrain blit that runs the display driver's water animator.
+/// Terrain blit that runs the display driver's tile-asset animator.
 ///
 /// `cleak/u5-spec#179` (01:48, as corrected at 02:07), interim contract
 /// pending the spec commit. Two stages, both off one counter and neither
@@ -127,8 +127,14 @@ pub fn blit_tile_id_to_viewport(
 /// * the composite destinations are rebuilt from the rotated shoals tile
 ///   through a mask tile out of the same shipped atlas.
 ///
+/// `animation.md §12.4` adds a third stage on the same pass: every fire
+/// fixture takes its shipped artwork XORed with accumulated masked noise,
+/// through the mask tile the section pairs it with. The three stages' id
+/// sets are disjoint, so the order they are tested in here is immaterial.
+///
 /// Every other tile takes the ordinary path untouched. See
-/// [`crate::water_scroll`] for the mechanism and its provenance.
+/// [`crate::water_scroll`] and [`crate::fire_flicker`] for the mechanisms
+/// and their provenance.
 pub fn blit_terrain_tile_to_viewport(
     viewport: &mut TileViewport,
     atlas: &TileAtlas,
@@ -136,6 +142,7 @@ pub fn blit_terrain_tile_to_viewport(
     cell_x: usize,
     cell_y: usize,
     water_scroll: crate::WaterScrollClock,
+    fire: &crate::FireFlickerClock,
 ) -> io::Result<()> {
     let missing = |tile: usize| {
         io::Error::new(
@@ -151,9 +158,25 @@ pub fn blit_terrain_tile_to_viewport(
     };
     let shift = water_scroll.row_shift();
     let Ok(terrain) = u8::try_from(tile) else {
-        // An actor-bank id. Sprites are not touched by either stage.
-        return blit_tile_id_to_viewport(viewport, atlas, tile, cell_x, cell_y);
+        // An actor-bank id. No stage of the `§12.2`/`§12.3` water pass
+        // touches a sprite, but `§12.4` refreshes the four actor-half field
+        // tiles, so the actor path runs its own helper.
+        return blit_actor_tile_to_viewport(viewport, atlas, tile, cell_x, cell_y, fire);
     };
+
+    // `animation.md §12.4`: the fire fixtures. Cumulative masked noise
+    // through the fixture's own mask tile, admitted only on the colour
+    // planes its noise tile occupies.
+    if let Some(fixture) = crate::fire_fixture_spec(terrain) {
+        let mask_id = usize::from(fixture.mask);
+        let pristine = atlas.tile_pixels(tile).ok_or_else(|| missing(tile))?;
+        let mask = atlas.tile_pixels(mask_id).ok_or_else(|| missing(mask_id))?;
+        let planes = fire_noise_tile_planes_in(atlas, fixture.noise)?;
+        let frame = fire
+            .fixture_frame(terrain, pristine, mask, planes)
+            .ok_or_else(|| not_one_tile(tile))?;
+        return blit_tile_pixels_to_viewport(viewport, &frame, cell_x, cell_y);
+    }
 
     // Stage two. Composited even at phase zero: the authored destination's
     // water pixels are start-up art, not a frame of the cycle, so the live
@@ -185,6 +208,52 @@ pub fn blit_terrain_tile_to_viewport(
     let source = atlas.tile_pixels(tile).ok_or_else(|| missing(tile))?;
     let rotated = crate::rotate_tile_rows_down(source, shift).ok_or_else(|| not_one_tile(tile))?;
     blit_tile_pixels_to_viewport(viewport, &rotated, cell_x, cell_y)
+}
+
+/// `animation.md §12.4` part one: an actor-half blit that substitutes live
+/// noise for the four field tiles.
+///
+/// "First the driver refreshes four actor-half 'field' tiles - atlas ids
+/// `0x1E8` (a poison field), `0x1E9` (a sleep field), `0x1EA` and `0x1EB`
+/// (a force field) - with fresh pseudo-random pixel bits ... These are the
+/// combat field-effect tiles, so those fields are themselves re-randomised
+/// on every animation step." Every other actor id takes the ordinary path.
+pub fn blit_actor_tile_to_viewport(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    tile: usize,
+    cell_x: usize,
+    cell_y: usize,
+    fire: &crate::FireFlickerClock,
+) -> io::Result<()> {
+    if crate::fire_pass_refreshes_field_tile(tile) {
+        let planes = fire_noise_tile_planes_in(atlas, tile)?;
+        if let Some(frame) = fire.field_tile_frame(tile, planes) {
+            return blit_tile_pixels_to_viewport(viewport, &frame, cell_x, cell_y);
+        }
+    }
+    blit_tile_id_to_viewport(viewport, atlas, tile, cell_x, cell_y)
+}
+
+/// The colour planes a `§12.4` noise tile writes.
+///
+/// `§12.4` publishes the answer for the two tiles the fixtures read -
+/// `AND 12` for `0x1EA`, `AND 9` for `0x1EB`. It publishes nothing for
+/// `0x1E8` and `0x1E9`, so those fall back to their own shipped plane
+/// occupancy, which is the conservative reading of the section's "leaves
+/// that tile's other two planes at zero, which is also their shipped
+/// state".
+fn fire_noise_tile_planes_in(atlas: &TileAtlas, noise_tile: usize) -> io::Result<u8> {
+    if let Some(planes) = crate::fire_noise_tile_planes(noise_tile) {
+        return Ok(planes);
+    }
+    let pixels = atlas.tile_pixels(noise_tile).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("tile atlas is missing tile {noise_tile}"),
+        )
+    })?;
+    Ok(crate::noise_tile_plane_mask(pixels))
 }
 
 /// Opaque blit of an already-composed tile-sized pixel block, for frames
