@@ -203,8 +203,13 @@ pub const CAMP_AMBUSH_ARENA_INDEX: usize = 0;
 /// is available to supply arena record 0's authored sixteen (fixtures and
 /// headless harnesses). They are sixteen distinct interior cells on the
 /// even grid, so the `combat.md §5` fifteen-transposition shuffle stays
-/// observable; they are engine scaffolding, not published data.
-pub const SLEEP_AMBUSH_FALLBACK_PLACEMENT_SLOTS: [(u8, u8); DUNGEON_ROOM_SOURCE_COUNT] = [
+/// observable.
+///
+/// These are engine scaffolding, **not** published data and not a spec
+/// contract, so they are crate-private: no frontend or test outside this
+/// crate may treat them as the camp ambush's placement cells. With shipped
+/// assets present the route uses arena record 0's authored cells instead.
+pub(crate) const SLEEP_AMBUSH_FALLBACK_PLACEMENT_SLOTS: [(u8, u8); DUNGEON_ROOM_SOURCE_COUNT] = [
     (2, 2),
     (4, 2),
     (6, 2),
@@ -1153,12 +1158,18 @@ impl PlayState {
         // forwards the [shuffle] bit ... and draws exactly fifteen uniform
         // `[0, 15]` draws, taken after seating and before the banner".
         //
-        // Scope: §5.3 names the *surface* camp ambush and says the row "does
-        // not cover the dungeon entries", so the dungeon rest interruption
-        // keeps identity slot order until the spec settles it. That is the
-        // conservative reading; `rest-and-camp.md §6` describes both rest
-        // interruptions as reaching the same CMDS `H` Hole-up alternate
-        // setup, which would put the dungeon route on the shuffle too.
+        // OPEN SPEC QUESTION - do not pin this gate with a test. §5.3 names
+        // the *surface* camp ambush and says the row "does not cover the
+        // dungeon entries", which reads as identity order underground; but
+        // `rest-and-camp.md §6` describes both rest interruptions as reaching
+        // the same CMDS `H` Hole-up alternate setup, and `combat.md §5` says
+        // the terrain setup helper's camp-ambush caller reaches it "only with
+        // the shuffle bit set" - which reads as shuffling on both surfaces.
+        // §5.3's exclusion most plausibly names the dungeon entries that go
+        // through the room painter and never reach this helper at all. The
+        // surface-only gate below is the conservative stand-in until the spec
+        // settles it; it is deliberately left untested so that adopting the
+        // other reading is a one-line change, not a test rewrite.
         let permutation = matches!(self.area, Area::World { .. })
             .then(|| self.terrain_combat_placement_slot_permutation());
 

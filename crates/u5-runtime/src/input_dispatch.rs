@@ -2633,13 +2633,11 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         return PlayInputDisposition::Continue;
     }
     let input = combat_player_command_input_from_key_suffix(key, suffix);
-    // `combat.md §8.1`: the banner was already emitted when this turn
-    // opened - "before any key is read" - so this keystroke's own transcript
-    // starts with the command output, and the consumed banner is not
-    // reprinted. That is also what keeps a free re-prompt on the short form:
-    // a re-prompt reinstates the pending slot without opening a new turn, so
-    // no banner is pending for it.
-    let _ = state.take_pending_combat_turn_banner();
+    // `combat.md §8.1`: the banner was already emitted into the transcript
+    // when this turn opened - "before any key is read" - so this keystroke's
+    // own transcript starts with the command output and never reprints it.
+    // The free re-prompt below reinstates the pending slot without reopening
+    // the turn, which is what keeps that path on the short form.
     let Some(application) = state.apply_combat_player_command_with_inputs(actor_slot, input) else {
         state.message.clear();
         return PlayInputDisposition::Continue;

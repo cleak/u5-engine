@@ -1053,10 +1053,14 @@
             "banner missing from {:?}",
             state.message
         );
-        // The pending copy is what the keystroke consumes; a free re-prompt
-        // leaves it empty and "does **not** reprint the banner".
-        assert_eq!(state.take_pending_combat_turn_banner(), Some(expected));
-        assert_eq!(state.take_pending_combat_turn_banner(), None);
+        // "A free re-prompt after a refusal uses the short form and does
+        // **not** reprint the banner": reinstating the pending slot without
+        // reopening the turn must leave the transcript untouched.
+        let after_open = state.message.clone();
+        state.pending_combat_actor_slot = Some(0);
+        state.ensure_pending_combat_player_turn();
+        assert_eq!(state.message, after_open);
+        assert_eq!(state.message.matches(expected.as_str()).count(), 1);
     }
 
     /// `combat.md §5` / `§5.3` step 3a: the surface camp ambush "sets and
@@ -1080,13 +1084,22 @@
             [2, 4, 1, 0, 14, 7, 6, 3, 5, 8, 10, 11, 12, 9, 13, 15]
         );
 
+        // Replay the published draw order to predict the monster count: the
+        // fifteen placement draws come first and leave the shared state at
+        // `0x0cf4`, and only then does the count roll happen. If the route
+        // took any other number of placement draws, or took the count roll
+        // first, this predicted count would not match the placed count below.
+        assert_eq!(expected_permutation_state.prng_state, 0x0cf4);
+        let bat_stats = combat_class_stats_for_sprite_byte(sleep_ambush_monster_sprite(
+            SleepAmbushMonster::Bat,
+        ))
+        .unwrap();
+        let expected_count = expected_permutation_state
+            .roll_terrain_combat_setup_count(bat_stats.default_spawn_count, false);
+
         state
             .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0, std::path::Path::new(""))
             .unwrap();
-
-        // Fifteen draws were consumed before the count roll, so the shared
-        // state has advanced past the permutation's own end state.
-        assert_ne!(state.prng_state, 0);
 
         let placed: Vec<(u8, u8)> = (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS)
             .map(|slot| state.combat_actors[slot])
@@ -1094,6 +1107,12 @@
             .map(|actor| (actor.x, actor.y))
             .collect();
         assert!(!placed.is_empty(), "the ambush must place at least one Bat");
+        assert_eq!(placed.len(), usize::from(expected_count));
+        // With no `BRIT.CBT` on the empty path the route falls back to the
+        // crate-private stand-in grid, so what this asserts is the *ordering*
+        // the permutation imposes on whatever sixteen cells the record
+        // supplies - not arena record 0's authored cells, which are shipped
+        // data this test cannot see.
         let expected: Vec<(u8, u8)> = permutation
             .iter()
             .take(placed.len())
@@ -1106,30 +1125,7 @@
         assert_ne!(placed[0], SLEEP_AMBUSH_FALLBACK_PLACEMENT_SLOTS[0]);
     }
 
-    /// `combat.md §5.3` scopes the shuffle row to the surface camp ambush:
-    /// "This row does not cover the dungeon entries." The dungeon rest
-    /// interruption therefore keeps identity slot order and draws nothing
-    /// here.
-    #[test]
-    fn dungeon_rest_ambush_keeps_identity_placement_order() {
-        let mut state = world_state(open_world_grid(), 10, 20);
-        state.area = Area::Dungeon {
-            scene: DungeonScene::new(DUNGEON_DOOM_SCENE_BYTE).unwrap(),
-            level: 0,
-        };
-        state.prng_state = 0x0f0f;
-        state
-            .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0, std::path::Path::new(""))
-            .unwrap();
-
-        let placed: Vec<(u8, u8)> = (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS)
-            .map(|slot| state.combat_actors[slot])
-            .filter(|actor| !actor.is_empty())
-            .map(|actor| (actor.x, actor.y))
-            .collect();
-        assert!(!placed.is_empty());
-        assert_eq!(
-            placed,
-            SLEEP_AMBUSH_FALLBACK_PLACEMENT_SLOTS[..placed.len()].to_vec()
-        );
-    }
+    // NOTE: whether the *dungeon* rest interruption also shuffles is an open
+    // spec question (see the scope note in `enter_sleep_ambush_combat`). The
+    // engine's surface-only gate is a conservative stand-in and is
+    // deliberately not pinned by a test here.

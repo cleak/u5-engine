@@ -1004,11 +1004,14 @@ impl PlayState {
     }
 
     /// Open a keyboard-driven combatant's turn. `combat.md §8.1` prints the
-    /// turn banner here, "before any key is read", so it is emitted when the
-    /// round walker hands control over rather than when the keystroke
-    /// arrives. The stored copy is consumed by that keystroke's own
-    /// transcript; a free re-prompt reinstates the pending slot directly and
-    /// therefore does not reprint the banner.
+    /// turn banner here, "before any key is read", so it is appended to the
+    /// live transcript when the round walker hands control over rather than
+    /// when the keystroke arrives.
+    ///
+    /// A free re-prompt after a refusal "uses the short form and does **not**
+    /// reprint the banner" because the re-prompt branch reinstates
+    /// `pending_combat_actor_slot` directly without calling this helper, so
+    /// no second banner is ever emitted for the same turn.
     pub(crate) fn open_pending_combat_player_turn(&mut self, slot: Option<usize>) {
         self.pending_combat_actor_slot = slot;
         self.select_active_player_for_pending_combat_actor();
@@ -1016,14 +1019,6 @@ impl PlayState {
         if let Some(banner) = banner.as_deref() {
             self.message.push_str(banner);
         }
-        self.pending_combat_turn_banner = banner;
-    }
-
-    /// Consume the `combat.md §8.1` banner emitted when this turn opened, so
-    /// the keystroke's own transcript can carry it in front of the command
-    /// output.
-    pub fn take_pending_combat_turn_banner(&mut self) -> Option<String> {
-        self.pending_combat_turn_banner.take()
     }
 
     pub(crate) fn combat_target_group_for_slot(&self, slot: usize) -> u8 {
@@ -1153,7 +1148,7 @@ impl PlayState {
         let y = actor.y as usize;
         y < COMBAT_ARENA_SIDE
             && x < COMBAT_ARENA_SIDE
-            && combat_arena_tile_is_restraint(self.combat_terrain[y][x])
+            && crate::jimmy_restraint_tile(self.combat_terrain[y][x])
     }
 
     /// `catalogs/spell-list.md §4`: the active scene byte for the cast

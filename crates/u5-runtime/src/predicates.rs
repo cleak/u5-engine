@@ -1072,20 +1072,6 @@ pub fn is_combat_arena_tile_walkable(tile: u8) -> bool {
     is_probe_walkable(tile) || matches!(tile, 0x40 | 0x44 | 0x45)
 }
 
-/// `combat.md §7` step 3 / `§7.1`: the round loop's restraint skip
-/// "fires on exactly two tiles, the stocks `0x84` and the manacles
-/// `0x85`". An actor standing on one of them "never advances its
-/// counter and never acts", and is still a live, targetable combatant
-/// for every other purpose.
-///
-/// This predicate is deliberately *not* a walkability query. `§7`
-/// withdraws the earlier "skip wall-cell slots" reading: "No other
-/// terrain participates: water, swamp, mountains, walls and force
-/// fields are all outside the test."
-pub const fn combat_arena_tile_is_restraint(tile: u8) -> bool {
-    matches!(tile, crate::JIMMY_STOCKS_TILE | crate::JIMMY_MANACLES_TILE)
-}
-
 pub fn is_tile_walkable(tile: u8, passability: Option<&TilePassability>) -> bool {
     is_tile_walkable_for_transport(tile, passability, TransportState::Foot)
 }
