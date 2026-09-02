@@ -107,6 +107,17 @@ fn idle_tick_underworld_drift_uses_non_surface_presentation_branch() {
     assert!(state.message.contains("Idle animation tick"));
 }
 
+/// `animation.md §13.1`: "**Negate Time freezes all of it.** ... For the
+/// effect's full duration nothing advances: no water rotation, no fire
+/// flicker, no fountain, no banner, no clock or bellows, no object animation,
+/// no AI roll ... An engine that keeps animating during Negate Time is
+/// visibly wrong."
+///
+/// The shared static-tile phase counter and the driver-side water rotation
+/// are the water/fountain/banner/clock animation in this engine, so an idle
+/// tick under Negate Time must leave both exactly where they were. An earlier
+/// revision of this test asserted `animation.frame == 1` here, pinning the
+/// withdrawn behaviour.
 #[test]
 fn idle_tick_keeps_active_objects_frozen_during_negate_time_without_aging_counter() {
     let mut state = britannia_state(open_world_grid(), 4, 5);
@@ -128,7 +139,8 @@ fn idle_tick_keeps_active_objects_frozen_during_negate_time_without_aging_counte
     assert_eq!(state.turn, 0);
     assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
     assert_eq!(state.active_effect_counter, 3);
-    assert_eq!(state.animation.frame, 1);
+    assert_eq!(state.animation.frame, 0);
+    assert_eq!(state.water_scroll.phase, 0);
     assert_eq!(state.active_objects[1].phase, 0x22);
     assert_eq!(state.active_objects[1].tile, 168);
 }

@@ -210,14 +210,26 @@ pub const fn active_object_default_tile_is_terrain_aware(tile: u8) -> bool {
     tile == 0x1C || (tile >= 0x12 && tile <= 0x15) || (tile >= 0x28 && tile <= 0x2B) || tile >= 0x40
 }
 
-/// `visibility.md §8`: four-entry selector for terrain edge variants. Tinkers
-/// force the first entry; other active characters use the caller-supplied
-/// low-two-bit selector.
-pub const fn active_object_compositor_variant(
-    active_character_is_tinker: bool,
-    selector: u8,
-) -> u8 {
-    if active_character_is_tinker {
+/// `visibility.md §8`: four-entry selector for terrain edge variants —
+/// "**unless the Negate Time timed effect is active, select a uniform random
+/// entry from the four-value range; while it is active, the selector
+/// short-circuits and returns the first entry for every actor.**"
+///
+/// The short-circuit input is the single **global timed-magic-effect code**
+/// byte, not anything about a party member. `visibility.md §8` retracts the
+/// earlier revision that said the first entry is selected "when the current
+/// active character's class letter is Tinker": "There is no character-class
+/// input to this selector. The byte it tests is the single global
+/// timed-magic-effect code, and the value that short-circuits it is the one
+/// Negate Time writes; the resemblance is that both are stored as a letter.
+/// An implementation that wired this to the party's classes will pick variant
+/// 0 for the wrong reason and will animate through Negate Time."
+///
+/// `visibility.md §8.2`: "The composite still runs while Negate Time is
+/// active; it just draws variant 0 every time." — so this is a selector
+/// short-circuit, not a suppression of the stamp.
+pub const fn active_object_compositor_variant(negate_time_active: bool, selector: u8) -> u8 {
+    if negate_time_active {
         0
     } else {
         selector & 0x03

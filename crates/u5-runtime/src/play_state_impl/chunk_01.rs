@@ -629,8 +629,36 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            animation: AnimationClock::default(),
-            water_scroll: WaterScrollClock::default(),
+            // Neither counter restarts on area entry, but for two
+            // different published reasons.
+            //
+            // `water_scroll` is the `animation.md §12` driver-side layer.
+            // `§9`: it "is **not** reset ... its state lives in the asset
+            // buffer for the whole program run", and `§12.1` adds that the
+            // mutation "survives scene changes, save loads, and everything
+            // else short of reloading the asset".
+            //
+            // `animation` is the `§6` frame-selector pass, a different
+            // layer, and `§9` does license resetting it ("Rebuild or reset
+            // transient animation counters during startup or mode entry as
+            // needed"). It is carried anyway on `§6.1`'s own terms: the
+            // selector "is transient and global. It is not part of saved
+            // state, it survives map changes and reloads."
+            //
+            // Either way an area constructor carries the running phases in
+            // rather than starting a fresh clock — see
+            // [`AnimationAssetBuffer`].
+            animation: options.animation_asset_buffer.animation,
+            water_scroll: options.animation_asset_buffer.water_scroll,
+            // GAP: `fire_flicker` is the same `§12` driver-side layer and
+            // `§9` names it explicitly ("the fire fixtures keep every noise
+            // pattern ever XORed into them"), so it should be carried too.
+            // It is not yet, because [`AnimationAssetBuffer`] is a `Copy`
+            // value and [`FireFlickerClock`] holds two 16x16 parity planes
+            // per field tile. Restarting it on area entry only reseeds the
+            // flicker noise, which has no gameplay meaning; the water phase
+            // and the frame selector, which are visible as a cadence, are
+            // carried.
             fire_flicker: FireFlickerClock::default(),
             dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,
@@ -907,8 +935,36 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            animation: AnimationClock::default(),
-            water_scroll: WaterScrollClock::default(),
+            // Neither counter restarts on area entry, but for two
+            // different published reasons.
+            //
+            // `water_scroll` is the `animation.md §12` driver-side layer.
+            // `§9`: it "is **not** reset ... its state lives in the asset
+            // buffer for the whole program run", and `§12.1` adds that the
+            // mutation "survives scene changes, save loads, and everything
+            // else short of reloading the asset".
+            //
+            // `animation` is the `§6` frame-selector pass, a different
+            // layer, and `§9` does license resetting it ("Rebuild or reset
+            // transient animation counters during startup or mode entry as
+            // needed"). It is carried anyway on `§6.1`'s own terms: the
+            // selector "is transient and global. It is not part of saved
+            // state, it survives map changes and reloads."
+            //
+            // Either way an area constructor carries the running phases in
+            // rather than starting a fresh clock — see
+            // [`AnimationAssetBuffer`].
+            animation: options.animation_asset_buffer.animation,
+            water_scroll: options.animation_asset_buffer.water_scroll,
+            // GAP: `fire_flicker` is the same `§12` driver-side layer and
+            // `§9` names it explicitly ("the fire fixtures keep every noise
+            // pattern ever XORed into them"), so it should be carried too.
+            // It is not yet, because [`AnimationAssetBuffer`] is a `Copy`
+            // value and [`FireFlickerClock`] holds two 16x16 parity planes
+            // per field tile. Restarting it on area entry only reseeds the
+            // flicker noise, which has no gameplay meaning; the water phase
+            // and the frame selector, which are visible as a cadence, are
+            // carried.
             fire_flicker: FireFlickerClock::default(),
             dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,
@@ -1212,8 +1268,36 @@ impl PlayState {
             status_pass_previous_hour: options.clock.hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
-            animation: AnimationClock::default(),
-            water_scroll: WaterScrollClock::default(),
+            // Neither counter restarts on area entry, but for two
+            // different published reasons.
+            //
+            // `water_scroll` is the `animation.md §12` driver-side layer.
+            // `§9`: it "is **not** reset ... its state lives in the asset
+            // buffer for the whole program run", and `§12.1` adds that the
+            // mutation "survives scene changes, save loads, and everything
+            // else short of reloading the asset".
+            //
+            // `animation` is the `§6` frame-selector pass, a different
+            // layer, and `§9` does license resetting it ("Rebuild or reset
+            // transient animation counters during startup or mode entry as
+            // needed"). It is carried anyway on `§6.1`'s own terms: the
+            // selector "is transient and global. It is not part of saved
+            // state, it survives map changes and reloads."
+            //
+            // Either way an area constructor carries the running phases in
+            // rather than starting a fresh clock — see
+            // [`AnimationAssetBuffer`].
+            animation: options.animation_asset_buffer.animation,
+            water_scroll: options.animation_asset_buffer.water_scroll,
+            // GAP: `fire_flicker` is the same `§12` driver-side layer and
+            // `§9` names it explicitly ("the fire fixtures keep every noise
+            // pattern ever XORed into them"), so it should be carried too.
+            // It is not yet, because [`AnimationAssetBuffer`] is a `Copy`
+            // value and [`FireFlickerClock`] holds two 16x16 parity planes
+            // per field tile. Restarting it on area entry only reseeds the
+            // flicker noise, which has no gameplay meaning; the water phase
+            // and the frame selector, which are visible as a cadence, are
+            // carried.
             fire_flicker: FireFlickerClock::default(),
             dungeon_fountain_frame: 0,
             natural_moongate_counter: options.natural_moongate_counter,

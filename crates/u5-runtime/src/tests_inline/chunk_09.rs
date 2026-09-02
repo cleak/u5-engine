@@ -679,6 +679,7 @@ fn world_load_from_save_uses_live_active_object_table() {
     under[slot + 4] = 0xff;
     fs::write(dir.join("UNDER.OOL"), under).unwrap();
     let options = PlayOptions {
+        animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),
@@ -790,6 +791,7 @@ fn world_load_from_save_uses_live_active_object_table() {
 fn world_load_reports_current_wind_status_through_the_banner_not_the_message() {
     let dir = debug_game_dir();
     let options = PlayOptions {
+        animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),
