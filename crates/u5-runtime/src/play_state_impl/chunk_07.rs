@@ -3064,6 +3064,16 @@ impl PlayState {
 
         let pre_effect_message = self.message.clone();
         let mut nonterminal_outcome = None;
+        // `overworld.md` Section 8, precedence list item 3: the falls chain
+        // is reached from the post-action pass when a waterfall is underfoot,
+        // and from the top of the input helper when one stands directly
+        // south. Both arms run the same handler, so this one site covers
+        // both trigger cells (`RETRACTIONS.md` R320). It runs ahead of the
+        // sidecar-driven plane transitions because the chain owns its own
+        // plane write.
+        if let Some(transition) = self.apply_world_falls_chain(game_dir, plane)? {
+            return Ok(Some(MoveOutcome::Transition(transition)));
+        }
         if let Some(transition) = self.apply_world_underfoot_plane_transition(game_dir, plane)? {
             let transition_message = self.message.clone();
             // The command that consumed the turn may have printed nothing
@@ -3212,7 +3222,22 @@ impl PlayState {
         // Apply impact before changing planes so absorption sees the restored
         // original transport marker. A frigate therefore takes its hull roll
         // (and can sink) immediately before the durable transition.
+        // `overworld.md` Section 8.1, whirlpool swallow, in print order.
+        // Step 1: the banner, with its leading line feed - one blank row.
+        // "There is **no advance warning line**: the swallow banner ... is the
+        // first and only text."
+        self.emit_message_line(OVERWORLD_WHIRLPOOL_BANNER);
+        // Step 2: the slot is cleared and the party marker is replaced by the
+        // whirlpool sprite.
+        let whirlpool_tile = self.active_objects[whirlpool_slot].tile;
         self.free_active_object_slot(whirlpool_slot);
+        self.party_marker_tile_override = Some(whirlpool_tile);
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        // Step 3: "One world tick, so the player sees a whirlpool where the
+        // party was."
+        self.advance_visual_tick();
+        // Step 4: the long descending sweep.
         // `audio.md §8.9`, second row: "The whirlpool object is cleared,
         // `WHIRLPOOL!` prints, the party sprite is **replaced by the whirlpool
         // sprite**, and the viewport repaints ... **then** the long descent -
@@ -3225,23 +3250,35 @@ impl PlayState {
         // which is the `§9` silence boundary "whirlpool engagement while the
         // party is on foot, which plays no long descent".
         self.emit_sound_effect(SoundEffect::LongDescent);
+        // Step 5: "The party marker is restored", before the impact payload,
+        // which is why a frigate's hull roll can still sink the ship in the
+        // instant before the teleport.
+        self.party_marker_tile_override = None;
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        // Step 6: the Section 6.2.4 impact payload, "which may add
+        // `Ship sunk!` and then either `Abandon ship!` or `DROWNING!!!`".
         self.apply_outdoor_impact();
+        // Step 7: "The plane write and the move to `(34, 18)` ... This runs
+        // **unconditionally** after step 6, including after the drowning
+        // arm." It prints nothing of its own: the banner above is the first
+        // and only text on the path, so the coordinate narration this used to
+        // emit is removed.
         let entry = WorldPlaneTransitionEntry {
             from_plane: plane,
             x: self.player.x,
             y: self.player.y,
             to_plane: WorldPlane::Underworld,
-            to_x: 34,
-            to_y: 18,
+            to_x: WHIRLPOOL_UNDERWORLD_EMERGENCE_X,
+            to_y: WHIRLPOOL_UNDERWORLD_EMERGENCE_Y,
             expected_tile: None,
+            // Section 8.1 publishes the *order* - marker restored, payload,
+            // then the plane write - but says nothing about the durable
+            // marker after the teleport, so the engine's existing foot reset
+            // stands. Only the falls chain is published as preserving it.
+            preserves_transport: false,
         };
         self.apply_world_plane_transition(game_dir, entry)?;
-        self.message = format!(
-            "Whirlpool! Sucked into the underworld at ({}, {}). {}",
-            entry.to_x,
-            entry.to_y,
-            self.wind_status_message()
-        );
         Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
             from: plane,
             to: WorldPlane::Underworld,
@@ -4555,25 +4592,20 @@ impl PlayState {
         if is_dungeon_bomb_trap(tile) {
             self.grid[dungeon_cell_index(level, x, y)] |= 0x08;
             self.mark_visibility_dirty();
-            let trap_message = format!(
-                "Triggered bomb trap at ({x}, {y}) on {} level {level}.",
-                scene.key()
-            );
-            self.message = if self.message.is_empty() {
-                trap_message
-            } else {
-                format!("{} {trap_message}", self.message)
-            };
+            // `dungeon-mode.md` Section 8.1: the two bomb lines, and nothing
+            // else. The post-action pass is a producer that can run alongside
+            // the command handler, so both lines go straight to the transcript
+            // rather than being folded into the compatibility slot.
+            self.emit_message_line(DUNGEON_BOMB_TRAP_LINE);
+            self.emit_message_line(DUNGEON_KABOOM_LINE);
             return Ok(None);
         }
         if let Some(field) = dungeon_field_effect(tile) {
-            let field_report = self.apply_dungeon_field_effect_at(level, x, y, tile, field);
-            let field_message = format!("Triggered {}; {field_report}.", field.label());
-            self.message = if self.message.is_empty() {
-                field_message
-            } else {
-                format!("{} {field_message}", self.message)
-            };
+            // Section 8.1: the field line prints before the per-member rolls.
+            if let Some(line) = dungeon_field_consequence_line(field) {
+                self.emit_message_line(line);
+            }
+            let _ = self.apply_dungeon_field_effect_at(level, x, y, tile, field);
             return Ok(None);
         }
         if let Some(outcome) = self.apply_dungeon_active_monster_step(scene, level)? {

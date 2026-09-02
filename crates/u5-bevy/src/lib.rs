@@ -4011,8 +4011,18 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
     };
     let chasm_fall = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
-        start: Some((SURFACE_CHASM_X as usize, SURFACE_CHASM_Y as usize - 1)),
+        // `RETRACTIONS.md` R320: `(54, 138)` is the landing cell, not a
+        // brink. The party starts on Britannia's one gate-reaching brink,
+        // `(54, 136)`, with the waterfall family in the cell south of it; the
+        // handler then force-steps two cells south onto the gate.
+        start: Some((SURFACE_CHASM_X as usize, SURFACE_CHASM_Y as usize - 2)),
         facing: Some(Direction::South),
+        // Britannia's one gate-reaching brink is river tile `0x60`, which no
+        // party reaches on foot, so this route arrives by skiff.
+        transport: TransportState::Skiff {
+            type_byte: u5_runtime::SKIFF_PARKED_FIRST,
+            tile: u5_runtime::SKIFF_PARKED_FIRST,
+        },
         ..PlayOptions::default()
     };
     let mut whirlpool_forced_underworld = PlayOptions {
@@ -4448,14 +4458,14 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-britannia-chasm-fall-to-underworld",
             frame_kind: "visual route world frame",
             options: chasm_fall.clone(),
-            script: &["s"],
+            script: &["empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-reload-chasm-underworld-pass",
             frame_kind: "visual route world frame",
             options: chasm_fall,
-            script: &["s", "empty"],
+            script: &["empty", "empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -22284,7 +22294,7 @@ mod tests {
         assert!(manifest.contains("route-gate-travel-shipboard-refusal-01-c1prv2"));
         assert!(manifest.contains("route-natural-moongate-trammel-gate-travel-01-idle_1"));
         assert!(manifest.contains("route-natural-moongate-empty-slot-clears-live-tile-01-idle_1"));
-        assert!(manifest.contains("route-britannia-chasm-fall-to-underworld-01-s"));
+        assert!(manifest.contains("route-britannia-chasm-fall-to-underworld-01-empty"));
         assert!(manifest.contains("route-reload-chasm-underworld-pass-02-empty"));
         assert!(
             manifest.contains(

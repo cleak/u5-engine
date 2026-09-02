@@ -37,7 +37,7 @@ fn animation_tick_never_advances_the_gate_presence_counter() {
 /// an hourly effect." Slots 2 and 3 are Dead and Sleeping, which the same
 /// section "skips entirely: they take no poison damage".
 #[test]
-fn world_step_uses_clean_plane_transition_table_for_chasm_fall() {
+fn world_step_uses_clean_plane_transition_table_without_falls_narration() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_PLANE_TRANSITION_TABLE_FILE),
@@ -150,13 +150,13 @@ fn world_step_uses_clean_plane_transition_table_for_chasm_fall() {
     );
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("F-A-L-L-S"));
+    // `RETRACTIONS.md` R320 / `overworld.md` Section 8.1: a sidecar plane
+    // transition is not the falls chain and narrates nothing at all - the
+    // banner belongs to the waterfall handler, and the coordinate/wind/fall
+    // damage prose this used to pin had no counterpart in the original.
+    assert!(!state.message.contains("F-A-L-L-S"));
     assert!(!state.message.contains("fall damage"));
-    assert!(state.message.contains("East Winds"));
-    assert!(!state.message.contains("party slot 0"));
-    assert!(!state.message.contains("party slot 1"));
-    assert!(!state.message.contains("party slot 2"));
-    assert!(!state.message.contains("party slot 3"));
+    assert!(!state.message.contains("East Winds"));
     assert_eq!(state.party[0].hp, 10);
     assert_eq!(state.party[1].hp, 5);
     assert_eq!(state.party[2].hp, 9);
@@ -165,82 +165,16 @@ fn world_step_uses_clean_plane_transition_table_for_chasm_fall() {
 }
 
 #[test]
-fn fixed_surface_chasm_fires_without_sidecar_table() {
+fn falls_chain_fires_on_a_waterfall_south_of_the_party_and_gates_the_plane() {
+    // `overworld.md` Section 8 + `RETRACTIONS.md` R320: the trigger is the
+    // waterfall tile family, here in the cell immediately south of the party.
+    // `(54, 138)` is the *landing* cell the handler tests after its two
+    // forced southward steps, and only a landing there writes the plane.
     let dir = debug_game_dir();
-    let mut under_ool = vec![0; OOL_PLANE_LEN];
-    let slot = OOL_RECORD_LEN;
-    under_ool[slot] = 168;
-    under_ool[slot + 1] = 169;
-    under_ool[slot + 2] = SURFACE_CHASM_X.wrapping_add(1);
-    under_ool[slot + 3] = SURFACE_CHASM_Y;
-    under_ool[slot + 4] = 0xff;
-    under_ool[slot + 6] = 0x22;
-    fs::write(dir.join("UNDER.OOL"), under_ool).unwrap();
-
-    let mut state = world_state(
-        open_world_grid(),
-        usize::from(SURFACE_CHASM_X - 1),
-        usize::from(SURFACE_CHASM_Y),
-    );
-    state.area = Area::World {
-        plane: WorldPlane::Britannia,
-    };
-    state.party[0].hp = 10;
-    state.party[0].climb_stat = 0;
-    state.active_objects[0].z = WorldPlane::Britannia.save_floor();
-    state.sync_player_object();
-
-    assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
-        MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
-            from: WorldPlane::Britannia,
-            to: WorldPlane::Underworld
-        })
-    );
-
-    assert_eq!(
-        state.area,
-        Area::World {
-            plane: WorldPlane::Underworld
-        }
-    );
-    assert_eq!(
-        (state.player.x, state.player.y),
-        (usize::from(SURFACE_CHASM_X), usize::from(SURFACE_CHASM_Y))
-    );
-    assert_eq!(
-        state.active_objects[0].z,
-        WorldPlane::Underworld.save_floor()
-    );
-    assert_eq!(
-        state.active_objects[1],
-        ActiveObject {
-            type_byte: 168,
-            tile: 169,
-            x: usize::from(SURFACE_CHASM_X.wrapping_add(1)),
-            y: usize::from(SURFACE_CHASM_Y),
-            z: -1,
-            phase: 0x22,
-            aux1: 0,
-            aux3: 0,
-        }
-    );
-    assert_eq!(state.party[0].hp, 9);
-    assert!(state.message.contains("F-A-L-L-S"));
-    assert!(state.message.contains("fall damage"));
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn fixed_surface_chasm_underfoot_pass_triggers_without_sidecar_table() {
-    let dir = debug_game_dir();
-    let mut state = britannia_state(
-        open_world_grid(),
-        usize::from(SURFACE_CHASM_X),
-        usize::from(SURFACE_CHASM_Y),
-    );
+    let brink_y = usize::from(SURFACE_CHASM_Y) - 2;
+    let mut grid = open_world_grid();
+    grid[world_cell_index(usize::from(SURFACE_CHASM_X), brink_y + 1)] = WATERFALL_TILE_FIRST;
+    let mut state = britannia_state(grid, usize::from(SURFACE_CHASM_X), brink_y);
     state.party[0].hp = 10;
     state.party[0].climb_stat = 0;
 
@@ -258,16 +192,114 @@ fn fixed_surface_chasm_underfoot_pass_triggers_without_sidecar_table() {
             plane: WorldPlane::Underworld
         }
     );
+    // Two forced one-cell steps south.
     assert_eq!(
         (state.player.x, state.player.y),
         (usize::from(SURFACE_CHASM_X), usize::from(SURFACE_CHASM_Y))
     );
-    assert_eq!(state.turn, 1);
-    // `commands.md §8.1`: the pass itself prints no result line, so the
-    // fall narration is the whole of the slot.
-    assert!(state.message.starts_with("F-A-L-L-S"));
+    // `overworld.md` Section 8.1, the whole player-visible transcript: two
+    // lines, in this order, and no per-member narration.
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .filter(|text| !text.is_empty())
+        .collect();
+    assert_eq!(lines, vec!["F-A-L-L-S!!!", "Falling into underworld!!"]);
+    // Dexterity zero is less than or equal to every roll in `1..30`, so the
+    // one point of damage always lands - and prints nothing.
     assert_eq!(state.party[0].hp, 9);
     let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn falls_chain_fires_underfoot_on_a_brink_that_never_reaches_the_gate() {
+    // `overworld.md` Section 8: "The chain is unconditional; only a landing
+    // on Britannia `(54, 138)` also flips the plane." Britannia's other two
+    // brinks run the whole presentation and change no plane.
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(46, 90)] = WATERFALL_TILE_LAST;
+    let mut state = britannia_state(grid, 46, 90);
+    state.party[0].hp = 10;
+    state.party[0].climb_stat = 0;
+
+    assert_eq!(
+        state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+        MoveOutcome::Passed
+    );
+
+    assert_eq!(
+        state.area,
+        Area::World {
+            plane: WorldPlane::Britannia
+        }
+    );
+    assert_eq!((state.player.x, state.player.y), (46, 92));
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .filter(|text| !text.is_empty())
+        .collect();
+    assert_eq!(lines, vec!["F-A-L-L-S!!!"]);
+    assert_eq!(state.party[0].hp, 9);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn falls_chain_plays_the_published_descending_sweep_once() {
+    // `audio.md` Section 10.6: one site, played once per fall, and it fires
+    // "on every waterfall brink on either plane, including the ones that
+    // produce no plane change".
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(100, 96)] = 0xD6;
+    let mut state = britannia_state(grid, 100, 96);
+    let serial = state.sound_effect_serial;
+
+    assert_eq!(
+        state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+        MoveOutcome::Passed
+    );
+
+    let sweeps = state
+        .sound_effects_after(serial)
+        .into_iter()
+        .filter(|effect| matches!(effect, SoundEffect::SurfaceFallsDescent))
+        .count();
+    assert_eq!(sweeps, 1);
+    let frequencies = crate::audio::surface_falls_descent().frequencies();
+    assert_eq!(frequencies.len(), crate::audio::SURFACE_FALLS_DESCENT_UPDATES);
+    assert_eq!(frequencies[0], crate::audio::SURFACE_FALLS_DESCENT_INITIAL_HZ as u32);
+    assert_eq!(frequencies[1], 2495);
+    assert_eq!(
+        *frequencies.last().unwrap(),
+        crate::audio::SURFACE_FALLS_DESCENT_LAST_HZ
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn falls_damage_uses_the_shared_skewed_roll_and_an_inclusive_gate() {
+    // `RETRACTIONS.md` R321: the draw is the shared skewed closed-interval
+    // `1..30` roll, and damage lands when Dexterity is **less than or equal
+    // to** the roll - not a `0..255` byte with a strictly-greater gate, which
+    // made fall damage nearly impossible.
+    assert_eq!(WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW, 0);
+    assert_eq!(WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH, 60);
+    assert_eq!(WORLD_PLANE_FALL_DAMAGE, 1);
+    for raw in WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW..=WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH {
+        let roll = combat_skewed_roll_1_to_30(raw);
+        assert!((1..=30).contains(&roll), "raw {raw} produced {roll}");
+    }
+    // Inclusive here, strict for outdoor K-Klimb - the two must not share an
+    // implementation (`doors-and-z-transitions.md` Section 12.1).
+    assert!(world_plane_fall_member_takes_damage(20, 20));
+    assert!(world_plane_fall_member_takes_damage(20, 21));
+    assert!(!world_plane_fall_member_takes_damage(20, 19));
+    assert!(!outdoor_klimb_member_falls(20, 20));
+    assert!(outdoor_klimb_member_falls(20, 21));
 }
 
 #[test]
@@ -300,7 +332,9 @@ fn world_plane_transition_table_overrides_base_tile_blocking() {
     );
     assert_eq!((state.player.x, state.player.y), (30, 40));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("F-A-L-L-S"));
+    // `RETRACTIONS.md` R320: a sidecar plane transition is not the falls
+    // chain, and the falls banner belongs to the waterfall handler.
+    assert!(!state.message.contains("F-A-L-L-S"));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -331,7 +365,8 @@ fn pass_turn_on_clean_plane_transition_applies_underfoot_transition() {
     );
     assert_eq!((state.player.x, state.player.y), (30, 40));
     assert_eq!(state.turn, 1);
-    assert!(state.message.starts_with("F-A-L-L-S"));
+    // `RETRACTIONS.md` R320: see above - the sidecar arm narrates nothing.
+    assert!(!state.message.contains("F-A-L-L-S"));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -408,6 +443,7 @@ fn world_plane_transition_preserves_runtime_overlay_cache_between_planes() {
                 to_x: 30,
                 to_y: 40,
                 expected_tile: None,
+                preserves_transport: false,
             },
         )
         .unwrap();
@@ -489,6 +525,7 @@ fn world_plane_transition_save_load_uses_live_table_and_staged_disk_mirrors() {
                 to_x: 30,
                 to_y: 40,
                 expected_tile: None,
+                preserves_transport: false,
             },
         )
         .unwrap();
@@ -868,3 +905,5 @@ fn world_load_reports_current_wind_status_through_the_banner_not_the_message() {
     assert_eq!(state.wind_status_message(), "West Winds");
     let _ = fs::remove_dir_all(dir);
 }
+
+

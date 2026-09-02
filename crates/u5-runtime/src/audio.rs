@@ -647,6 +647,34 @@ pub fn long_descent() -> SpeakerProgram {
     )
 }
 
+/// `audio.md §10.2`/`§10.6` surface falls descent: 300 updates, per-update
+/// delay 1, 2500 Hz stepping -5 Hz against a nominal target of 800 Hz, so the
+/// last tone played is **1005 Hz** - "truncation from -5.67 to -5 leaves a
+/// 205 Hz shortfall".
+pub const SURFACE_FALLS_DESCENT_SPAN: i32 = 300;
+pub const SURFACE_FALLS_DESCENT_DELAY_UNITS: u32 = 1;
+pub const SURFACE_FALLS_DESCENT_INITIAL_HZ: i32 = 2500;
+pub const SURFACE_FALLS_DESCENT_NOMINAL_TARGET_HZ: i32 = 800;
+pub const SURFACE_FALLS_DESCENT_UPDATES: usize = 300;
+/// The realised endpoint, not the nominal target. Pinned so a frontend that
+/// interpolates 2500 Hz to 800 Hz cannot pass for the original.
+pub const SURFACE_FALLS_DESCENT_LAST_HZ: u32 = 1005;
+
+/// `audio.md §10.6`: "One site: the overworld falls chain, played once per
+/// fall, immediately after the banner and the two forced southward steps. It
+/// fires on every waterfall brink on either plane, including the ones that
+/// produce no plane change." Explicitly **not** any dungeon pit fall, which
+/// narrates but plays no sweep, and **not** the dungeon Klimb `Failed!`
+/// refusal, which is a much shorter rising recipe.
+pub fn surface_falls_descent() -> SpeakerProgram {
+    glissando(
+        SURFACE_FALLS_DESCENT_SPAN,
+        SURFACE_FALLS_DESCENT_DELAY_UNITS,
+        SURFACE_FALLS_DESCENT_NOMINAL_TARGET_HZ,
+        SURFACE_FALLS_DESCENT_INITIAL_HZ,
+    )
+}
+
 /// `audio.md §7.4` census row / `§8.8`: 220 Hz for 150 calibrated units, then
 /// 150 Hz for 150 units.
 pub const COMBAT_COMMAND_REFUSED_FIRST_HZ: u32 = 220;
@@ -1565,6 +1593,9 @@ pub enum SoundEffect {
     ///
     /// "Those two sites are the only users of that recipe in the shipped game."
     LongDescent,
+    /// `§10.6` the overworld falls chain's descending sweep — one site, played
+    /// once per fall on every waterfall brink of either plane.
+    SurfaceFallsDescent,
 }
 
 impl SoundEffect {
@@ -1622,6 +1653,7 @@ impl SoundEffect {
             SoundEffect::EndgameTableau => envelope_program(ENDGAME_TABLEAU_ENVELOPE),
             SoundEffect::CombatCommandRefused => combat_command_refused(),
             SoundEffect::LongDescent => long_descent(),
+            SoundEffect::SurfaceFallsDescent => surface_falls_descent(),
         }
     }
 

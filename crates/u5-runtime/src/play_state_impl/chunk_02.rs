@@ -1510,7 +1510,13 @@ impl PlayState {
     /// falling through a catch-all arm.
     pub fn apply_shared_trap_effect_to_slot(&mut self, triggering_slot: usize) -> String {
         self.emit_sound_effect(SoundEffect::TrapRumble);
-        match self.shared_trap_effect_family(triggering_slot) {
+        // `traps.md §3`: the resolver "prints exactly one of `ACID!`,
+        // `POISON!`, `BOMB!` or `GAS!` **before** its effect", and
+        // `dungeon-mode.md §8.1` notes the dungeon chest site adds no notice
+        // of its own, so the word lands directly after that command's prefix.
+        let family = self.shared_trap_effect_family(triggering_slot);
+        self.emit_message_line(trap_effect_message(family));
+        match family {
             TrapEffect::Acid => self.apply_acid_trap_effect(triggering_slot),
             TrapEffect::Poison => self.apply_poison_trap_effect(triggering_slot),
             TrapEffect::Bomb => self.apply_bomb_trap_effect(triggering_slot),

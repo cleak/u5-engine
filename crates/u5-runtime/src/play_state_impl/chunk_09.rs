@@ -295,13 +295,16 @@ impl PlayState {
         game_dir: &Path,
         entry: WorldPlaneTransitionEntry,
     ) -> io::Result<()> {
-        let is_surface_chasm_fall = entry.from_plane == WorldPlane::Britannia
-            && entry.to_plane == WorldPlane::Underworld
-            && entry.x == usize::from(SURFACE_CHASM_X)
-            && entry.y == usize::from(SURFACE_CHASM_Y);
-        let preserve_transport = is_surface_chasm_fall;
-        let pre_fall_transport = self.player.transport;
-        let fall_damage_report = self.apply_world_plane_fall_damage(entry);
+        // `overworld.md` Section 8, forced-movement table: the falls handler
+        // saves the vehicle marker across the damage block and restores it
+        // **before** the coordinate test, "so the plane swap runs with the
+        // original transport in place; the falls handler does not force the
+        // durable post-transition transport marker to foot". Section 8.1 says
+        // nothing about the whirlpool's *durable* marker after the teleport,
+        // so that arm keeps the ordinary reset and only the falls chain sets
+        // this flag.
+        let preserve_transport = entry.preserves_transport;
+        let pre_transition_transport = self.player.transport;
         self.cache_current_world_overlay();
         self.area = Area::World {
             plane: entry.to_plane,
@@ -309,7 +312,7 @@ impl PlayState {
         self.player.x = entry.to_x;
         self.player.y = entry.to_y;
         if preserve_transport {
-            self.player.transport = pre_fall_transport;
+            self.player.transport = pre_transition_transport;
         } else {
             self.force_foot_transport();
         }
@@ -330,80 +333,148 @@ impl PlayState {
         self.active_blackthorn = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
-        self.message = match (entry.from_plane, entry.to_plane) {
-            (WorldPlane::Britannia, WorldPlane::Underworld) => format!(
-                "F-A-L-L-S! Falling into the underworld; landed at ({}, {}){}. {}.",
-                entry.to_x,
-                entry.to_y,
-                fall_damage_report
-                    .map(|report| format!("; {report}"))
-                    .unwrap_or_default(),
-                self.wind_status_message()
-            ),
-            (WorldPlane::Underworld, WorldPlane::Britannia) => format!(
-                "Ascended from the underworld to Britannia at ({}, {}). {}.",
-                entry.to_x,
-                entry.to_y,
-                self.wind_status_message()
-            ),
-            _ => format!(
-                "Changed world plane from {} to {} at ({}, {}). {}.",
-                entry.from_plane.key(),
-                entry.to_plane.key(),
-                entry.to_x,
-                entry.to_y,
-                self.wind_status_message()
-            ),
-        };
+        // `overworld.md` Section 8.1: "Overworld re-initialisation does not
+        // redraw the chrome on either transition", and neither chain's plane
+        // write carries narration of its own - the falls chain's transition
+        // line is printed by the chain before this call, and the whirlpool
+        // prints nothing here at all. The coordinate narration this used to
+        // emit had no counterpart in the original and is removed.
         Ok(())
     }
 
-    pub fn apply_world_plane_fall_damage(
-        &mut self,
-        entry: WorldPlaneTransitionEntry,
-    ) -> Option<String> {
-        if entry.from_plane != WorldPlane::Britannia
-            || entry.to_plane != WorldPlane::Underworld
-            || entry.x != usize::from(SURFACE_CHASM_X)
-            || entry.y != usize::from(SURFACE_CHASM_Y)
-        {
+    /// `overworld.md` Section 8 "Falls (chasm)" / Section 8.1: does a
+    /// waterfall-family tile stand in the cell immediately south of the
+    /// party, or under it?
+    ///
+    /// `RETRACTIONS.md` R320 withdrew the coordinate trigger this engine used
+    /// to key on: `(54, 138)` is the *landing* cell that gates the plane
+    /// flip, not a brink, so keying the chain on it fired the chain at none
+    /// of its real trigger sites. Britannia has exactly three brink cells -
+    /// `(46, 90)`, `(100, 96)` and `(54, 136)` - and the Underworld 116, and
+    /// the chain runs at every one of them on **both** planes.
+    pub fn world_falls_trigger_tile(&self) -> Option<u8> {
+        if !matches!(self.area, Area::World { .. }) {
             return None;
         }
+        let underfoot = self.grid[world_cell_index(self.player.x, self.player.y)];
+        if is_waterfall_tile(underfoot) {
+            return Some(underfoot);
+        }
+        let south_y = (self.player.y + 1) % WORLD_SIDE;
+        let south = self.grid[world_cell_index(self.player.x, south_y)];
+        is_waterfall_tile(south).then_some(south)
+    }
 
-        let mut checked = 0;
-        let mut reports = Vec::new();
+    /// `overworld.md` Section 8.1 "Exact result lines: the falls chain", in
+    /// print order. The chain is unconditional on both planes; only the
+    /// landing coordinate decides whether the plane is also written.
+    ///
+    /// 1. `F-A-L-L-S!!!` + line feed
+    /// 2. Two forced one-cell steps south, with one world tick between them
+    /// 3. The 300-update descending sweep of `audio.md` Section 10.6
+    /// 4. The party marker is hidden; one world tick
+    /// 5. Per living member, the Dexterity check - **no text**
+    /// 6. Two world ticks; the party marker is restored
+    /// 7. `Falling into underworld!!`, only on Britannia `(54, 138)`
+    pub fn apply_world_falls_chain(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<Option<AreaTransition>> {
+        if self.world_falls_trigger_tile().is_none() {
+            return Ok(None);
+        }
+
+        // Step 1. There is no leading blank row: the earlier of the handler's
+        // two entry points runs before the loop's gated newline, and every
+        // overworld command echo already ends with a line feed.
+        self.emit_message_line(OVERWORLD_FALLS_BANNER);
+
+        // Step 2. "pushes the party two cells south, unconditionally, on both
+        // planes, with one world tick between the two steps."
+        for step in 0..OVERWORLD_FALLS_FORCED_STEPS_SOUTH {
+            if step > 0 {
+                self.advance_visual_tick();
+            }
+            self.player.y = (self.player.y + 1) % WORLD_SIDE;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+        }
+
+        // Step 3.
+        self.emit_sound_effect(SoundEffect::SurfaceFallsDescent);
+
+        // Step 4.
+        self.party_marker_tile_override = Some(TRANSPORT_MARKER_SPRITE_SUPPRESSED);
+        self.sync_player_object();
+        self.advance_visual_tick();
+
+        // Step 5. `RETRACTIONS.md` R321: the shared skewed `1..30` roll, and
+        // damage lands when Dexterity is less than **or equal to** it. "There
+        // is no per-member narration anywhere in the chain. An implementation
+        // must not invent one: the fall's per-member feedback is graphical
+        // and audible only" - which is what the shared damage helper emits.
+        self.apply_world_falls_damage_pass();
+
+        // Step 6.
+        self.advance_visual_tick();
+        self.advance_visual_tick();
+        self.party_marker_tile_override = None;
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+
+        // Step 7. The gate never tests the plane (Section 8.1), but no
+        // shipped underworld brink can reach column 54, so this is
+        // unreachable from the Underworld in stock data.
+        if !is_surface_chasm_cell(self.player.x as u8, self.player.y as u8) {
+            return Ok(None);
+        }
+        self.emit_message_line(OVERWORLD_FALLS_UNDERWORLD_NARRATION);
+        let entry = WorldPlaneTransitionEntry {
+            from_plane: plane,
+            x: self.player.x,
+            y: self.player.y,
+            to_plane: WorldPlane::Underworld,
+            to_x: self.player.x,
+            to_y: self.player.y,
+            expected_tile: None,
+            preserves_transport: true,
+        };
+        self.apply_world_plane_transition(game_dir, entry)?;
+        Ok(Some(AreaTransition::ChangedWorldPlane {
+            from: plane,
+            to: WorldPlane::Underworld,
+        }))
+    }
+
+    /// `overworld.md` Section 8, "Surface chasm/falls" row: "Each non-dead
+    /// party member is checked once during the fall presentation."
+    pub fn apply_world_falls_damage_pass(&mut self) {
         for index in 0..self.party.len() {
             if !self.party[index].living() {
                 continue;
             }
-            checked += 1;
             let roll = self.world_plane_fall_save_roll();
-            if self.party[index].climb_stat > roll {
+            if !world_plane_fall_member_takes_damage(self.party[index].climb_stat, roll) {
                 continue;
             }
-            let slot = self.party[index].slot;
-            // `overworld.md §6.2.4` names this row's one-point fall damage
-            // as going through "the same party-damage helper" the impact
-            // payload uses, so it takes the same active-player clear on a
-            // death rather than leaving a stale selection behind.
-            let damage = self.apply_shared_party_damage(index, 1);
-            reports.push(format!(
-                "party slot {slot} failed Dex roll {roll} and took {} HP ({} HP left)",
-                damage.applied, damage.hp_after
-            ));
-        }
-
-        if reports.is_empty() {
-            Some(format!(
-                "fall damage skipped for {checked} living member(s)"
-            ))
-        } else {
-            Some(format!("fall damage: {}", reports.join("; ")))
+            // "That helper is the same per-member application specified in
+            // Section 6.2.4, and it emits a stats-row flash and a short
+            // rumble but **no text**."
+            let _ = self.apply_shared_party_damage(index, WORLD_PLANE_FALL_DAMAGE);
         }
     }
 
+    /// `combat.md` Section 9.1 shared skewed roll, as `RETRACTIONS.md` R321
+    /// requires: a uniform `0..60` draw halved with truncation, zero promoted
+    /// to one. It must **not** be shared with outdoor K-Klimb, which draws a
+    /// flat `1..30` directly and gates strictly.
     pub fn world_plane_fall_save_roll(&mut self) -> u8 {
-        self.random_range_u8(0, WORLD_PLANE_FALL_SAVE_ROLL_MAX)
+        let raw = self.random_range_u8(
+            WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW,
+            WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH,
+        );
+        combat_skewed_roll_1_to_30(raw)
     }
 
     pub fn render_text_frame(&mut self, radius: usize) -> String {

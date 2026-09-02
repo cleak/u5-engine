@@ -2802,9 +2802,18 @@ impl PlayState {
         focus: DungeonLookFocus,
     ) -> MoveOutcome {
         if !self.has_personal_light() {
-            self.message = "You see: darkness.".to_string();
+            // `RETRACTIONS.md` R323: the unlit Search refusal is a *find*
+            // line that breaks after the colon, with a leading blank row -
+            // not a "too dark" message, of which "no ... literal exists
+            // anywhere in the resident data image".
+            self.message = DUNGEON_SEARCH_DARKNESS_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
+        // `dungeon-mode.md` Section 8.1: "Search prints `You find:`
+        // unconditionally, then exactly one outcome line."
+        // `RETRACTIONS.md` R324: `Nothing of note.` is one of those
+        // *outcomes*, not the preamble.
+        self.emit_message_line(DUNGEON_SEARCH_PREAMBLE);
         let (tx, ty) = self.dungeon_look_focus_coord(focus);
         let idx = dungeon_cell_index(level, tx, ty);
         let tile = self.grid[idx];
@@ -2829,10 +2838,9 @@ impl PlayState {
             self.grid[idx] = reveal_cell;
             self.mark_visibility_dirty();
             self.advance_turn();
-            self.message = format!(
-                "Revealed dungeon secret door at ({tx}, {ty}) on {} level {level}.",
-                scene.key()
-            );
+            // Section 8.1: the found-door outcome line, shared with the
+            // `0xD?` wall branch below (`RETRACTIONS.md` R322).
+            self.message = DUNGEON_SEARCH_HIDDEN_DOOR.to_string();
             return MoveOutcome::Searched;
         }
 
@@ -2860,10 +2868,10 @@ impl PlayState {
         y: usize,
     ) -> MoveOutcome {
         self.advance_turn();
-        self.message = format!(
-            "Searched dungeon pit at ({x}, {y}) on {} level {level}; nothing found.",
-            scene.key()
-        );
+        // `dungeon-mode.md` Section 8, `0x60` row: "`Nothing hidden` /
+        // `in the pit.` - the line break is in the data. No state change."
+        let _ = (scene, level, x, y);
+        self.message = DUNGEON_SEARCH_NOTHING_IN_PIT.to_string();
         MoveOutcome::Searched
     }
 
@@ -2879,10 +2887,10 @@ impl PlayState {
         let Some(reveal) = dungeon_search_secret_pit_reveal(tile, level) else {
             return self.search_dungeon_feature(scene, level, x, y, tile);
         };
-        self.message = format!(
-            "Searched dungeon pit at ({x}, {y}) on {} level {level}; found a secret door.",
-            scene.key()
-        );
+        // `RETRACTIONS.md` R322: Search on exact `0x61` reports `A pit!`,
+        // **not** a found secret door - that line belongs to the `0xD?` wall
+        // branch. Every mechanical half of the row re-derived unchanged.
+        self.message = DUNGEON_SEARCH_A_PIT.to_string();
         self.grid[idx] = 0x60;
         if matches!(
             reveal,
@@ -2906,7 +2914,7 @@ impl PlayState {
 
     pub fn search_dungeon_bomb_trap(
         &mut self,
-        scene: DungeonScene,
+        _scene: DungeonScene,
         level: u8,
         x: usize,
         y: usize,
@@ -2924,19 +2932,16 @@ impl PlayState {
         match dungeon_bomb_search_outcome(threshold, roll) {
             DungeonBombSearchOutcome::NothingOnPit => {
                 self.advance_turn();
-                self.message = format!(
-                    "Searched dungeon pit at ({x}, {y}) on {} level {level}; nothing found.",
-                    scene.key()
-                );
+                // `RETRACTIONS.md` R324: "a `0x62` roll at or below the
+                // threshold" takes the `Nothing of note.` **outcome**.
+                self.message = DUNGEON_SEARCH_NOTHING_OF_NOTE.to_string();
             }
             DungeonBombSearchOutcome::SpringBomb => {
                 self.grid[idx] = 0x00;
                 self.mark_visibility_dirty();
                 self.advance_turn();
-                self.message = format!(
-                    "Searched dungeon bomb trap at ({x}, {y}) on {} level {level}; sprung the bomb.",
-                    scene.key()
-                );
+                // `dungeon-mode.md` Section 8, `0x62` row.
+                self.message = DUNGEON_SEARCH_A_BOMB_TRAP.to_string();
             }
         }
         MoveOutcome::Searched
@@ -2956,10 +2961,12 @@ impl PlayState {
                 self.search_dungeon_feature(scene, level, x, y, tile)
             }
             Some(DungeonSearchWallRewrite::ToFlavourFind(reveal_cell)) => {
-                self.message = format!(
-                    "Searched dungeon wall at ({x}, {y}) on {} level {level}; found a hidden passage.",
-                    scene.key()
-                );
+                // `dungeon-mode.md` Section 8: the Doom-flavour `0xC?` branch
+                // "print[s] that nothing is hidden on the skeleton and then
+                // that it crumbles away". Section 8.1 gives the two-line
+                // result exactly.
+                self.emit_message_line(DUNGEON_SEARCH_NOTHING_ON_SKELETON);
+                self.message = DUNGEON_SEARCH_SKELETON_CRUMBLES.to_string();
                 self.grid[idx] = reveal_cell;
                 self.mark_visibility_dirty();
                 self.run_map_viewport_dissolve(MapViewportDissolveSource::DungeonSearchReveal {
@@ -2974,10 +2981,9 @@ impl PlayState {
                 MoveOutcome::Searched
             }
             Some(DungeonSearchWallRewrite::ToHiddenWallReveal(reveal_cell)) => {
-                self.message = format!(
-                    "Searched dungeon wall at ({x}, {y}) on {} level {level}; revealed a hidden wall.",
-                    scene.key()
-                );
+                // `RETRACTIONS.md` R322: `A hidden door!` is the `0xD?` wall
+                // branch's line.
+                self.message = DUNGEON_SEARCH_HIDDEN_DOOR.to_string();
                 self.grid[idx] = reveal_cell;
                 self.mark_visibility_dirty();
                 self.run_map_viewport_dissolve(MapViewportDissolveSource::DungeonSearchReveal {
@@ -3003,12 +3009,19 @@ impl PlayState {
         y: usize,
         tile: u8,
     ) -> MoveOutcome {
-        let description = dungeon_search_description(tile);
         self.advance_turn();
-        self.message = format!(
-            "Searched dungeon cell at ({x}, {y}) on {} level {level}; found {description}.",
-            scene.key()
-        );
+        // `dungeon-mode.md` Section 8.1 "Search outcomes". Classes with no
+        // published outcome literal - the energy fields, which "reuse the
+        // L-Look wording of this section" - keep the descriptive fallback
+        // rather than having a line invented for them.
+        let _ = (scene, level, x, y);
+        self.message = match dungeon_search_outcome_line(tile) {
+            Some(line) => line.to_string(),
+            // Section 8, pit-family table: "Other `0x6?` values | No extra
+            // Search-specific handling beyond the preamble."
+            None if tile >> 4 == 0x6 => String::new(),
+            None => format!("{}.", dungeon_search_description(tile)),
+        };
         MoveOutcome::Searched
     }
 }

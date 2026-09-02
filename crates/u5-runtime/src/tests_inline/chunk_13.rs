@@ -6256,17 +6256,14 @@ fn natural_moongate_counter_night_band_uses_shared_lighting_hours() {
 }
 
 #[test]
-fn world_plane_fall_save_roll_routes_through_named_constant() {
-    // overworld.md §2: chasm and whirlpool plane writers apply a
-    // random fall-damage roll per conscious party member. Promote
-    // the upper bound so world_plane_fall_damage_roll does not
-    // bake `5` as a bare modulus literal.
-    assert_eq!(WORLD_PLANE_FALL_SAVE_ROLL_MAX, u8::MAX);
-    // The roll is `1..=WORLD_PLANE_FALL_DAMAGE_MAX`; every value
-    // produced by the modulo is in that range.
-    for seed in 0u8..=u8::MAX {
-        let roll = seed;
-        assert!((0..=WORLD_PLANE_FALL_SAVE_ROLL_MAX).contains(&roll));
+fn world_plane_fall_save_roll_routes_through_named_constants() {
+    // `RETRACTIONS.md` R321 withdrew the `0..255` byte this used to pin: the
+    // draw is the shared skewed `1..30` roll of `combat.md` Section 9.1, a
+    // uniform `0..60` halved with truncation and zero promoted to one.
+    assert_eq!(WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW, 0);
+    assert_eq!(WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH, 60);
+    for raw in WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW..=WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH {
+        assert!((1..=30).contains(&combat_skewed_roll_1_to_30(raw)));
     }
 }
 

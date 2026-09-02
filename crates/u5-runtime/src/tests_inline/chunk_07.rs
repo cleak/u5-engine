@@ -2043,6 +2043,7 @@ fn parse_world_plane_transition_entries_accepts_optional_tile_guard() {
                 to_x: 30,
                 to_y: 40,
                 expected_tile: Some(0x18),
+                preserves_transport: false,
             },
             WorldPlaneTransitionEntry {
                 from_plane: WorldPlane::Underworld,
@@ -2052,6 +2053,7 @@ fn parse_world_plane_transition_entries_accepts_optional_tile_guard() {
                 to_x: 10,
                 to_y: 20,
                 expected_tile: None,
+                preserves_transport: false,
             }
         ]
     );

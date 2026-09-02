@@ -263,7 +263,15 @@
         );
         assert_eq!(state.player.transport, TransportState::Foot);
         assert_eq!((state.player.x, state.player.y), (34, 18));
-        assert!(state.message.contains("Whirlpool!"));
+        // `overworld.md §8.1`: the banner is the first and only text on the
+        // path; the coordinate narration is gone.
+        let lines: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert!(lines.contains(&"WHIRLPOOL!"));
+        assert!(!state.message.contains("Sucked into the underworld"));
         assert_ne!(state.prng_state, prng_before);
         let _ = fs::remove_dir_all(dir);
     }

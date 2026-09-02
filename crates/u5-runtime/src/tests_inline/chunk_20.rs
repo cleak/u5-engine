@@ -1547,7 +1547,8 @@ fn dungeon_uppercase_s_routes_to_sidecar_secret_search() {
     );
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xF0);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Revealed dungeon secret door"));
+    // `RETRACTIONS.md` R322: the found-door line.
+    assert_eq!(state.message, DUNGEON_SEARCH_HIDDEN_DOOR);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1572,7 +1573,8 @@ fn dungeon_search_prompt_can_target_relative_right() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 2)], 0xF0);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Revealed dungeon secret door"));
+    // `RETRACTIONS.md` R322: the found-door line.
+    assert_eq!(state.message, DUNGEON_SEARCH_HIDDEN_DOOR);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1654,7 +1656,7 @@ fn dungeon_search_bomb_trap_marks_fired_without_level_change() {
     assert!(state.pending_map_viewport_dissolves.is_empty());
     assert_eq!(
         state.message,
-        "Searched dungeon bomb trap at (2, 1) on DUNGEON:0 level 0; sprung the bomb."
+        DUNGEON_SEARCH_A_BOMB_TRAP
     );
     let _ = fs::remove_dir_all(dir);
 }
@@ -1676,7 +1678,9 @@ fn dungeon_search_bomb_trap_can_report_nothing_without_rewrite() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x62);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("nothing found"));
+    // `RETRACTIONS.md` R324: a `0x62` roll at or below the threshold takes
+    // the `Nothing of note.` outcome.
+    assert_eq!(state.message, DUNGEON_SEARCH_NOTHING_OF_NOTE);
     assert!(state.pending_map_viewport_dissolves.is_empty());
     let _ = fs::remove_dir_all(dir);
 }
@@ -1703,7 +1707,9 @@ fn dungeon_search_requires_light_before_revealing_or_mutating() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x30);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "You see: darkness.");
+    // `RETRACTIONS.md` R323: the unlit Search refusal is a *find* line with a
+    // leading blank row - there is no "too dark" literal anywhere.
+    assert_eq!(state.message, DUNGEON_SEARCH_DARKNESS_REFUSAL);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1732,7 +1738,8 @@ fn dungeon_search_secret_pit_rewrites_and_marks_level_below() {
     );
     assert_eq!(state.turn, 1);
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("found a secret door"));
+    // `RETRACTIONS.md` R322: Search on exact `0x61` reports `A pit!`.
+    assert_eq!(state.message, DUNGEON_SEARCH_A_PIT);
     assert_eq!(
         state.take_pending_map_viewport_dissolves(),
         vec![run_map_viewport_dissolve(
@@ -1767,7 +1774,8 @@ fn dungeon_search_wall_rewrite_updates_visit_local_cell() {
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xE8);
     assert_eq!(state.turn, 1);
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("revealed a hidden wall"));
+    // `RETRACTIONS.md` R322: `A hidden door!` is the `0xD?` wall branch.
+    assert_eq!(state.message, DUNGEON_SEARCH_HIDDEN_DOOR);
     assert_eq!(
         state.take_pending_map_viewport_dissolves(),
         vec![run_map_viewport_dissolve(
@@ -1843,7 +1851,9 @@ fn dungeon_search_fall_trap_reports_feature_without_triggering_drop() {
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x69);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("found a pit or trap"));
+    // `dungeon-mode.md §8`, "Other `0x6?` values": "No extra Search-specific
+    // handling beyond the preamble."
+    assert!(state.message.is_empty());
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1877,7 +1887,9 @@ fn dungeon_search_field_reports_feature_without_applying_effect() {
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x89);
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("found poison gas field"));
+    // `dungeon-mode.md §8.1`: "The field classes reuse the L-Look wording of
+    // this section", which this engine has as the field description.
+    assert!(state.message.contains("poison gas field"));
     let _ = fs::remove_dir_all(dir);
 }
 

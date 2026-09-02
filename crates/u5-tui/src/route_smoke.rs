@@ -664,8 +664,18 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
 
     let chasm_fall = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
-        start: Some((SURFACE_CHASM_X as usize, SURFACE_CHASM_Y as usize - 1)),
+        // `RETRACTIONS.md` R320: `(54, 138)` is the landing cell, not a
+        // brink. The party starts on Britannia's one gate-reaching brink,
+        // `(54, 136)`, with the waterfall family in the cell south of it; the
+        // handler then force-steps two cells south onto the gate.
+        start: Some((SURFACE_CHASM_X as usize, SURFACE_CHASM_Y as usize - 2)),
         facing: Some(Direction::South),
+        // Britannia's one gate-reaching brink is river tile `0x60`, which no
+        // party reaches on foot, so this route arrives by skiff.
+        transport: TransportState::Skiff {
+            type_byte: u5_runtime::SKIFF_PARKED_FIRST,
+            tile: u5_runtime::SKIFF_PARKED_FIRST,
+        },
         ..PlayOptions::default()
     };
 
@@ -1137,7 +1147,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "britannia-chasm-fall-to-underworld",
             options: chasm_fall.clone(),
-            script: &["s"],
+            // The chain runs off the post-action pass, so any turn-consuming
+            // command on the brink reaches it; stepping south is refused by
+            // the waterfall tile itself.
+            script: &["empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1145,7 +1158,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "reload-chasm-underworld-pass",
             options: chasm_fall,
-            script: &["s", "empty"],
+            script: &["empty", "empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -5745,7 +5758,7 @@ fn validate_route_smoke_case_state(
                 })
                 || (state.player.x, state.player.y) != (86, 107)
                 || state.return_world.is_some()
-                || !state.message.contains("canonical outdoor table")
+                || !state.message.contains("Exit to")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the fixed-coordinate canonical-OOL town exit"
@@ -6552,7 +6565,7 @@ fn validate_route_smoke_case_state(
                         || object.y != SURFACE_CHASM_Y as usize
                         || object.z != WorldPlane::Underworld.save_floor()
                 })
-                || !state.message.contains("underworld")
+                || !state.message.contains("underworld!!")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not land on the published chasm transition"
@@ -6592,8 +6605,13 @@ fn validate_route_smoke_case_state(
                         || object.y != WHIRLPOOL_EMERGENCE_Y as usize
                         || object.z != WorldPlane::Underworld.save_floor()
                 })
-                || !state.message.contains("Whirlpool")
-                || !state.message.contains("Sucked into the underworld")
+                // `overworld.md §8.1`: the whirlpool banner is the first and
+                // only text on the path, and the coordinate narration is gone.
+                || !state
+                    .message_entries()
+                    .iter()
+                    .any(|entry| entry.text == "WHIRLPOOL!")
+                || state.message.contains("Sucked into the underworld")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the published whirlpool transition"
@@ -7393,9 +7411,11 @@ fn validate_route_smoke_case_state(
             }
         }
         "dungeon-ladder-down-up-route" | "reload-dungeon-ladder-down-up-route" => {
-            // dungeon-mode.md 4.1: the level is presented one-based, so the
-            // zero-based floor 0 reads as  in the message window.
-            if state.current_floor() != Some(0) || !state.message.contains("level 1") {
+            // `dungeon-mode.md` 8.1: an accepted climb narrates only the
+            // direction word - "Applying a climb prints `Up!` or `Down!`
+            // **first**, before any test" - so the level is read from the
+            // state, not from a message the original never prints.
+            if state.current_floor() != Some(0) || state.message != u5_runtime::DUNGEON_KLIMB_UP {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the down/up ladder chain"
                 )));

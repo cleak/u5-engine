@@ -1233,6 +1233,7 @@ pub fn parse_world_plane_transition_entries(
             to_x,
             to_y,
             expected_tile,
+            preserves_transport: false,
         });
     }
     Ok(entries)

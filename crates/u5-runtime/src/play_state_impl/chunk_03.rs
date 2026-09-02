@@ -1465,8 +1465,12 @@ impl PlayState {
                 YesNoPromptKind::DungeonFountainDrink { .. } => {
                     "You see: a fountain. Will you drink?".to_string()
                 }
-                YesNoPromptKind::TownExit { scene, .. } => {
-                    format!("Leave {}?", scene.key())
+                YesNoPromptKind::TownExit { .. } => {
+                    // `doors-and-z-transitions.md` Section 12.1: the exact
+                    // prompt, with its leading line feed and trailing space
+                    // and no line feed of its own. It "does **not** echo, so
+                    // the answer word ... is printed by the handler".
+                    TOWN_EXIT_PROMPT.to_string()
                 }
                 YesNoPromptKind::SaveGame => SAVE_PROMPT_MESSAGE.to_string(),
                 YesNoPromptKind::ExitToDos => "Exit to DOS?".to_string(),
@@ -1513,7 +1517,9 @@ impl PlayState {
                         self.look_dungeon_with_focus(Some(false), Some(party_index), focus);
                     } else if matches!(session.kind, YesNoPromptKind::TownExit { .. }) {
                         let turn_before = self.turn;
-                        self.message = "No.".to_string();
+                        // Section 12.1, declined arm: "`No` and nothing else",
+                        // and it too lands on the prompt's own row.
+                        self.emit_message_line_continuing_row(TOWN_EXIT_DECLINED_NARRATION);
                         self.advance_turn();
                         let _ = self
                             .apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;

@@ -240,7 +240,8 @@
 
         assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
 
-        assert_eq!(state.message, "You see: darkness.");
+        // `RETRACTIONS.md` R323: the stored line breaks after the colon.
+        assert_eq!(state.message, DUNGEON_LOOK_DARKNESS_REFUSAL);
         assert_eq!(state.turn, 0);
     }
 

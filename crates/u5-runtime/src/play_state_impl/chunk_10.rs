@@ -67,6 +67,14 @@ impl PlayState {
         self.active_objects[0].z = player_object.z;
         self.active_objects[0].aux1 = player_object.aux1;
         self.active_objects[0].aux3 = player_object.aux3;
+        // `overworld.md §8.1`: the falls chain hides the marker across its
+        // damage pass and the whirlpool replaces it with the whirlpool
+        // sprite, both restoring it before the state commit. Re-apply the
+        // override last so a world tick taken *inside* one of those
+        // presentations cannot repaint the ordinary marker over it.
+        if let Some(tile) = self.party_marker_tile_override {
+            self.active_objects[0].tile = tile;
+        }
     }
 
     pub fn current_floor(&self) -> Option<i8> {

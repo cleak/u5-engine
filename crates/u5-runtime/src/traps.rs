@@ -73,6 +73,20 @@ pub enum TrapEffect {
     Gas,
 }
 
+/// `traps.md §3`: the exact word each family "prints ... before its effect".
+/// `dungeon-mode.md §8.1` adds that a trapped dungeon chest reaches these
+/// through the shared resolver and that "the dungeon chest site prints no trap
+/// notice of its own, so with a single eligible party member the trap word
+/// lands directly after the prefix: `Open-ACID!`".
+pub const fn trap_effect_message(effect: TrapEffect) -> &'static str {
+    match effect {
+        TrapEffect::Acid => "ACID!\n",
+        TrapEffect::Poison => "POISON!\n",
+        TrapEffect::Bomb => "BOMB!\n",
+        TrapEffect::Gas => "GAS!\n",
+    }
+}
+
 /// `traps.md §3`: classify a resolver effect id into its family.
 pub const fn trap_effect_for_id(effect_id: u8) -> Option<TrapEffect> {
     Some(match effect_id {

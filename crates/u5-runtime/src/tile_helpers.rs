@@ -1562,6 +1562,57 @@ pub fn dungeon_look_description(tile: u8) -> &'static str {
     }
 }
 
+/// `dungeon-mode.md` Section 8.1, "Post-action underfoot consequences": the
+/// exact line an underfoot energy field prints, **before** its per-member
+/// rolls, so the line appears even when nobody is affected.
+///
+/// Electric contact is deliberately absent: it is a movement-time
+/// consequence with its own two-line pair, printed before the
+/// destination-class test. `Energy` - the generic `0x9?`/`0x84..0x8F`
+/// collapse - is the table's "Any other underfoot byte: nothing" row.
+pub const fn dungeon_field_consequence_line(field: DungeonFieldEffect) -> Option<&'static str> {
+    match field {
+        DungeonFieldEffect::Sleep => Some(crate::DUNGEON_SLEEP_FIELD_LINE),
+        DungeonFieldEffect::PoisonGas => Some(crate::DUNGEON_POISON_FIELD_LINE),
+        DungeonFieldEffect::Fire => Some(crate::DUNGEON_FIRE_FIELD_LINE),
+        DungeonFieldEffect::Electric | DungeonFieldEffect::Energy => None,
+    }
+}
+
+/// `dungeon-mode.md` Section 8.1, "Search outcomes": the one outcome line a
+/// class prints after the unconditional `You find:` preamble.
+///
+/// The pit family, the chest class and the two rewriting wall branches are
+/// **not** here - they have their own arms with state changes attached, and
+/// they select from `DUNGEON_SEARCH_A_PIT`, the four trap-tier lines,
+/// `DUNGEON_SEARCH_HIDDEN_DOOR` and the skeleton pair. `None` means "no
+/// published outcome literal for this class".
+///
+/// One hedge, marked rather than hidden: Section 8.1 names both flavour
+/// lines - `Nothing on the stalactite.` and `Nothing in the caved in
+/// passage.` - and Section 8 names the two narrate-only flavour sub-values
+/// `1` and `2`, but the spec never joins one to the other. The pairing below
+/// is this engine's assignment, not a published fact.
+pub const fn dungeon_search_outcome_line(tile: u8) -> Option<&'static str> {
+    match tile >> 4 {
+        0x0 => Some(crate::DUNGEON_SEARCH_NOTHING_OF_NOTE),
+        0x1 | 0x2 | 0x3 => Some(crate::DUNGEON_SEARCH_NOTHING_ON_LADDER),
+        0x5 => Some(crate::DUNGEON_SEARCH_NOTHING_ON_FOUNTAIN),
+        0x7 => Some(crate::DUNGEON_SEARCH_TREASURE),
+        0x9 => Some(crate::DUNGEON_SEARCH_IMPOSSIBLE_TILE),
+        // "for the heavy-door class and for both door-presentation/room
+        // classes".
+        0xA | 0xE | 0xF => Some(crate::DUNGEON_SEARCH_NOTHING_ON_DOOR),
+        0xB => Some(crate::DUNGEON_SEARCH_NOTHING_ON_WALL),
+        0xC => match tile & 0x07 {
+            0x01 => Some(crate::DUNGEON_SEARCH_NOTHING_ON_STALACTITE),
+            0x02 => Some(crate::DUNGEON_SEARCH_NOTHING_IN_CAVED_IN_PASSAGE),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 pub fn dungeon_search_description(tile: u8) -> &'static str {
     if let Some(field) = dungeon_field_effect(tile) {
         return field.label();

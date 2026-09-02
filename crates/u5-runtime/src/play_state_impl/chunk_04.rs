@@ -2127,7 +2127,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !self.has_personal_light() {
-            self.message = "You see: darkness.".to_string();
+            // `RETRACTIONS.md` R323: the stored line breaks after the colon.
+            self.message = DUNGEON_LOOK_DARKNESS_REFUSAL.to_string();
             return MoveOutcome::Observed;
         }
         let (x, y) = self.dungeon_look_focus_coord(focus);
