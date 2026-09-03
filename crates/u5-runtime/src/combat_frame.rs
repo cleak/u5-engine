@@ -414,6 +414,50 @@ pub struct CombatMonsterAttackInputs {
     pub amulet_turning_scatter_roll: u8,
 }
 
+/// Where one monster attack attempt gets its random inputs.
+///
+/// `combat.md §11` puts the to-hit draw "inside the shared to-hit helper,
+/// which is entered once per accepted attempt", and §12 gives the poison gate
+/// only to "classes with the poison/status attack flag cluster". A caller that
+/// supplies all of them up front (the deterministic-input test entry point)
+/// spends nothing from the shared stream; the production entry point takes each
+/// draw at its own site, so a branch that is never reached costs nothing and the
+/// shared stream stays where the original leaves it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatMonsterAttackDraws {
+    Fixed {
+        hit_raw_roll_0_to_60: u8,
+        poison_gate_accepts: bool,
+        poison_damage_roll: u8,
+        forced_hit: Option<bool>,
+    },
+    SharedPrng,
+}
+
+/// Where one automatic-AI dispatch gets the branch-local random inputs
+/// `combat.md §9`'s draw budget charges it for.
+///
+/// The two variants are the two callers, and each one carries exactly the
+/// inputs its mode uses, so a deterministic caller cannot silently have a
+/// supplied value ignored and the production caller cannot silently supply one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatAiTurnDraws<'a> {
+    /// The production driver: the teleport arm's chance roll and cell probe,
+    /// the axis-priority coin, the random-cardinal fallback attempts and the
+    /// attack attempt's own draws are each taken from the shared gameplay PRNG
+    /// at the site `combat.md` places them, so a branch the dispatch never
+    /// enters costs the shared stream nothing.
+    SharedPrng,
+    /// Deterministic-input callers, which supply every one of those values.
+    Fixed {
+        /// `combat.md §9`'s random-cardinal fallback attempts, in order.
+        random_cardinal_direction_codes: &'a [u8],
+        teleport_candidate: Option<(u8, u8)>,
+        horizontal_axis_first: bool,
+        monster_attack_inputs: Option<CombatMonsterAttackInputs>,
+    },
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatPlayerWeaponAttackInputs {
     /// `combat.md §11` "The draw": the inclusive `0..=60` raw draw.
@@ -2387,6 +2431,14 @@ impl PlayState {
         let enemy_magic_suppressed =
             negate_magic_aura_active(self.active_effect_tag, self.active_effect_counter);
 
+        // `combat.md §9` Pass 1, the ordinary monster path: "status/flee gates
+        // run first, then the class-flag special hook, target selection,
+        // movement-direction choice, optional step/teleport logic". The
+        // wound-score classifier is that flee gate and its morale draw, so it
+        // runs here - ahead of the possess/blink/summon hook and ahead of the
+        // target pick - rather than after the target is chosen.
+        let fleeing = self.combat_ai_actor_fleeing(actor_slot);
+
         // `magic.md §8`: the enemy-side Negate Magic/Crown check at the
         // class-special entry is independent of the later movement and
         // ranged-effect checks. It runs before the special flags or any
@@ -2458,20 +2510,24 @@ impl PlayState {
         } else {
             0
         };
-        let traits = combat_class_traits(class)?;
-        let teleport_candidate = (traits.teleport_capable && !enemy_magic_suppressed)
-            .then(|| self.combat_ai_teleport_candidate(actor_slot))
-            .flatten();
-        let horizontal_axis_first = self.combat_ai_horizontal_axis_first(actor_slot);
-        // `combat.md §9` (`RETRACTIONS.md` R311): the random-cardinal
-        // fallback "commits the first accepted direction", so its draws are
-        // taken one at a time and stop there. Pre-rolling four would consume
-        // the shared PRNG on every AI step that never reached the fallback,
-        // and on every fallback that succeeded on its first attempt. `None`
-        // tells the inner path to draw lazily.
-        let monster_attack_inputs = self.combat_monster_attack_inputs(actor_slot);
-
-        self.apply_combat_ai_turn_with_optional_cardinal_draws(
+        // Preserved from the pre-lazy driver, which fetched the class traits
+        // row at this point and ended the dispatch when the class had none.
+        // The special hook above is skipped entirely under a Negate Magic
+        // aura, so without this the guard would be lost for such a class.
+        combat_class_traits(class)?;
+        // `combat.md §9` draw budgets: every remaining random input on this
+        // path belongs to a branch that may never be reached, so none of them
+        // is pre-rolled here. The teleport arm's chance roll and cell probe
+        // run only after the attack path declined the dispatch, the
+        // axis-priority coin belongs to "ordinary stepping" below that, the
+        // random-cardinal fallback "commits the first accepted direction", and
+        // §11's to-hit draw is "taken fresh inside each attempt" while §12's
+        // poison gate exists only for "classes with the poison/status attack
+        // flag cluster". Pre-rolling any of them desynchronises the shared
+        // stream for every dispatch that skips the branch, in exactly the way
+        // §9's own draw-budget paragraph warns about for an engine that draws
+        // too few.
+        self.apply_combat_ai_turn_inner(
             actor_slot,
             false,
             0,
@@ -2481,11 +2537,8 @@ impl PlayState {
             &[],
             None,
             mass_charm_roll,
-            false,
-            teleport_candidate,
-            horizontal_axis_first,
-            None,
-            Some(monster_attack_inputs),
+            fleeing,
+            CombatAiTurnDraws::SharedPrng,
         )
     }
 
@@ -2509,7 +2562,7 @@ impl PlayState {
         random_cardinal_direction_codes: &[u8],
         monster_attack_inputs: Option<CombatMonsterAttackInputs>,
     ) -> Option<CombatAiTurnApplication> {
-        self.apply_combat_ai_turn_with_optional_cardinal_draws(
+        self.apply_combat_ai_turn_inner(
             actor_slot,
             possess_candidate_reaches_resistance,
             possess_target_slot,
@@ -2520,18 +2573,19 @@ impl PlayState {
             cleanup_fallback_target,
             mass_charm_roll,
             fleeing,
-            teleport_candidate,
-            horizontal_axis_first,
-            Some(random_cardinal_direction_codes),
-            monster_attack_inputs,
+            CombatAiTurnDraws::Fixed {
+                random_cardinal_direction_codes,
+                teleport_candidate,
+                horizontal_axis_first,
+                monster_attack_inputs,
+            },
         )
     }
 
-    /// `None` for `random_cardinal_direction_codes` means "draw the
-    /// `combat.md §9` fallback attempts from the shared PRNG, lazily,
-    /// stopping at the first accepted direction".
+    /// `draws` selects between the production shared-PRNG mode and the
+    /// deterministic-input mode; see [`CombatAiTurnDraws`].
     #[allow(clippy::too_many_arguments)]
-    fn apply_combat_ai_turn_with_optional_cardinal_draws(
+    fn apply_combat_ai_turn_inner(
         &mut self,
         actor_slot: usize,
         possess_candidate_reaches_resistance: bool,
@@ -2543,10 +2597,7 @@ impl PlayState {
         cleanup_fallback_target: Option<(u8, u8)>,
         mass_charm_roll: u8,
         fleeing: bool,
-        teleport_candidate: Option<(u8, u8)>,
-        horizontal_axis_first: bool,
-        random_cardinal_direction_codes: Option<&[u8]>,
-        monster_attack_inputs: Option<CombatMonsterAttackInputs>,
+        draws: CombatAiTurnDraws<'_>,
     ) -> Option<CombatAiTurnApplication> {
         if !self.combat_active {
             return None;
@@ -2698,7 +2749,15 @@ impl PlayState {
             }
         };
 
-        let fleeing = fleeing || self.combat_ai_actor_fleeing(actor_slot);
+        // In shared-PRNG mode the flee gate has already run at the head of the
+        // driver, where `combat.md §9` Pass 1 puts it ("status/flee gates run
+        // first, then the class-flag special hook, target selection"), and its
+        // result arrives as this argument; deterministic-input callers still
+        // get the gate evaluated here so their fixture states classify the
+        // same way.
+        let fleeing = fleeing
+            || (matches!(draws, CombatAiTurnDraws::Fixed { .. })
+                && self.combat_ai_actor_fleeing(actor_slot));
         let actor = self.combat_actors[actor_slot];
         let step_vector = combat_ai_step_vector(actor.x, actor.y, target_x, target_y, fleeing);
         let target_range = target_slot.map(|slot| actor.range_to(self.combat_actors[slot]));
@@ -2752,30 +2811,52 @@ impl PlayState {
                 .then_some(target_slot)
                 .flatten()
                 .and_then(|target_slot| {
-                    monster_attack_inputs.and_then(|inputs| {
-                        if matches!(attack_route, Some(CombatAiAttackRoute::RangedEffect { .. }))
-                            && self.combat_monster_amulet_turning_scatter_applies(
-                                actor_slot,
-                                target_slot,
-                            )
-                        {
-                            self.resolve_and_apply_combat_monster_scattered_attack(
-                                actor_slot,
-                                target_slot,
-                                inputs.hit_raw_roll_0_to_60,
-                                inputs.amulet_turning_scatter_roll,
-                            )
-                        } else {
-                            self.resolve_and_apply_combat_monster_attack(
-                                actor_slot,
-                                target_slot,
-                                inputs.hit_raw_roll_0_to_60,
-                                inputs.poison_gate_accepts,
-                                inputs.poison_damage_roll,
-                                inputs.forced_hit,
-                            )
+                    let ranged_effect =
+                        matches!(attack_route, Some(CombatAiAttackRoute::RangedEffect { .. }));
+                    let scattered = ranged_effect
+                        && self
+                            .combat_monster_amulet_turning_scatter_applies(actor_slot, target_slot);
+                    match draws {
+                        CombatAiTurnDraws::SharedPrng => {
+                            if scattered {
+                                let hit_raw_roll_0_to_60 = self.combat_monster_hit_roll();
+                                let scatter_roll = self.combat_monster_scatter_cell_roll();
+                                self.resolve_and_apply_combat_monster_scattered_attack(
+                                    actor_slot,
+                                    target_slot,
+                                    hit_raw_roll_0_to_60,
+                                    scatter_roll,
+                                )
+                            } else {
+                                self.resolve_and_apply_combat_monster_attack_from_shared_prng(
+                                    actor_slot,
+                                    target_slot,
+                                )
+                            }
                         }
-                    })
+                        CombatAiTurnDraws::Fixed {
+                            monster_attack_inputs,
+                            ..
+                        } => monster_attack_inputs.and_then(|inputs| {
+                            if scattered {
+                                self.resolve_and_apply_combat_monster_scattered_attack(
+                                    actor_slot,
+                                    target_slot,
+                                    inputs.hit_raw_roll_0_to_60,
+                                    inputs.amulet_turning_scatter_roll,
+                                )
+                            } else {
+                                self.resolve_and_apply_combat_monster_attack(
+                                    actor_slot,
+                                    target_slot,
+                                    inputs.hit_raw_roll_0_to_60,
+                                    inputs.poison_gate_accepts,
+                                    inputs.poison_damage_roll,
+                                    inputs.forced_hit,
+                                )
+                            }
+                        }),
+                    }
                 });
             return Some(CombatAiTurnApplication {
                 actor_slot,
@@ -2793,17 +2874,72 @@ impl PlayState {
         }
 
         let legal_cells = self.combat_legal_cell_mask();
+        // `combat.md §9` "The two classes refused outright": the Reaper and
+        // the Mimic leave the movement/teleport arm "before the party-side
+        // test, before the class flag, before the suppression tests", so the
+        // refusal sits above the class-traits lookup as well as above every
+        // draw: no teleport draw, no axis coin, no cardinal fallback draw, and
+        // no change of cell.
+        if combat_ai_class_never_moves(class) {
+            return Some(CombatAiTurnApplication {
+                actor_slot,
+                special: None,
+                possess_hook_handled: false,
+                acting_group,
+                target,
+                step_vector: Some(step_vector),
+                attack_route,
+                monster_attack: None,
+                movement: Some(CombatAiMovementOutcome::Blocked {
+                    random_cardinal_attempts: 0,
+                }),
+                command_key: None,
+                movement_commit: None,
+            });
+        }
         let traits = combat_class_traits(class)?;
         let teleport_capable = traits.teleport_capable
             && !negate_magic_aura_active(self.active_effect_tag, self.active_effect_counter);
+        // `combat.md §9`, the teleport arm's draw budget: "**three** draws for
+        // a not-surrounded actor whose chance roll accepts, **one** when that
+        // roll rejects, **two** when the actor is surrounded, and **zero**
+        // when Negate Magic or the Crown suppresses the arm."
+        let teleport_candidate = match draws {
+            CombatAiTurnDraws::SharedPrng => teleport_capable
+                .then(|| {
+                    let proceed =
+                        combat_ai_cardinal_neighbours_blocked(&legal_cells, actor.x, actor.y)
+                            || combat_ai_teleport_chance_accepts(
+                                self.combat_ai_teleport_chance_roll(),
+                            );
+                    proceed
+                        .then(|| self.combat_ai_teleport_probe_draws())
+                        .flatten()
+                })
+                .flatten(),
+            CombatAiTurnDraws::Fixed {
+                teleport_candidate, ..
+            } => teleport_candidate,
+        };
+        // `combat.md §9` "Ordinary stepping first tries the target vector on
+        // one axis, with randomized axis priority": the coin belongs to the
+        // stepping arm, below the attack path and below the teleport arm, so
+        // in shared-PRNG mode it is drawn here and nowhere earlier.
+        let horizontal_axis_first = match draws {
+            CombatAiTurnDraws::SharedPrng => self.combat_ai_horizontal_axis_first(actor_slot),
+            CombatAiTurnDraws::Fixed {
+                horizontal_axis_first,
+                ..
+            } => horizontal_axis_first,
+        };
         // `combat.md §9` (`RETRACTIONS.md` R311): each fallback attempt is
         // its own draw, taken only when the previous one was rejected. With
         // deterministic inputs the caller supplies the sequence; in
         // production it is drawn here, one attempt at a time, so the shared
         // stream advances by exactly the attempts the original would take.
-        let drawn_cardinal_codes: Vec<u8> = match random_cardinal_direction_codes {
-            Some(_) => Vec::new(),
-            None => {
+        let drawn_cardinal_codes: Vec<u8> = match draws {
+            CombatAiTurnDraws::Fixed { .. } => Vec::new(),
+            CombatAiTurnDraws::SharedPrng => {
                 let mut codes = Vec::with_capacity(COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS);
                 if resolve_combat_ai_movement(
                     &legal_cells,
@@ -2838,7 +2974,13 @@ impl PlayState {
             teleport_capable,
             teleport_candidate,
             horizontal_axis_first,
-            random_cardinal_direction_codes.unwrap_or(&drawn_cardinal_codes),
+            match draws {
+                CombatAiTurnDraws::Fixed {
+                    random_cardinal_direction_codes,
+                    ..
+                } => random_cardinal_direction_codes,
+                CombatAiTurnDraws::SharedPrng => &drawn_cardinal_codes,
+            },
         );
         let movement_commit = commit_combat_ai_movement_outcome(
             &mut self.combat_actors[actor_slot],
@@ -4687,6 +4829,42 @@ impl PlayState {
         poison_damage_roll: u8,
         forced_hit: Option<bool>,
     ) -> Option<CombatMonsterAttackApplication> {
+        self.resolve_and_apply_combat_monster_attack_inner(
+            attacker_slot,
+            target_slot,
+            CombatMonsterAttackDraws::Fixed {
+                hit_raw_roll_0_to_60,
+                poison_gate_accepts,
+                poison_damage_roll,
+                forced_hit,
+            },
+        )
+    }
+
+    /// Production entry point. Every random input the attempt needs is drawn
+    /// from the shared PRNG at the point `combat.md` places it: §11's to-hit
+    /// draw "taken fresh inside each attempt", §12's poison gate only for
+    /// "classes with the poison/status attack flag cluster", and that branch's
+    /// small raw damage value only on the arm that actually rolls one. A
+    /// branch the attempt never reaches draws nothing.
+    pub fn resolve_and_apply_combat_monster_attack_from_shared_prng(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+    ) -> Option<CombatMonsterAttackApplication> {
+        self.resolve_and_apply_combat_monster_attack_inner(
+            attacker_slot,
+            target_slot,
+            CombatMonsterAttackDraws::SharedPrng,
+        )
+    }
+
+    fn resolve_and_apply_combat_monster_attack_inner(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        draws: CombatMonsterAttackDraws,
+    ) -> Option<CombatMonsterAttackApplication> {
         if attacker_slot < COMBAT_PARTY_ACTOR_SLOTS || attacker_slot >= COMBAT_ACTOR_SLOTS {
             return None;
         }
@@ -4725,6 +4903,37 @@ impl PlayState {
             attacker.owner_target_class,
             self.combat_target_weight(attacker_slot)?,
         )?;
+        // `combat.md §6.1a`: the controlled actor's fixed magic strike "requires
+        // straight-line distance exactly one", and further away "the turn
+        // produces no action at all". That refusal is a record comparison, not
+        // a branch the original would have drawn for, so it is taken here -
+        // above the attempt's to-hit draw, so an out-of-range controlled
+        // attacker spends nothing from the shared stream on an attempt it
+        // abandons.
+        let controlled_attacker = attacker.is_controlled();
+        if controlled_attacker && target_range != 1 {
+            return None;
+        }
+        // Every early return above is a record lookup or that range refusal,
+        // not a branch the original would have drawn for, so the attempt's own
+        // to-hit draw is taken here - past the last of them and inside the
+        // accepted attempt, which is where `combat.md §11` puts it.
+        //
+        // The draw sits above `§12`'s poison gate below, which is the order the
+        // pre-existing implementation already used; `§12` publishes only that
+        // the status branch is checked "before ordinary melee damage" - i.e.
+        // before the damage roll it replaces - and does not say whether an
+        // accepted status branch spends the attempt's to-hit draw first. That
+        // relative order is unchanged here rather than newly chosen, and it is
+        // filed as an open spec question.
+        let (hit_raw_roll_0_to_60, forced_hit) = match draws {
+            CombatMonsterAttackDraws::Fixed {
+                hit_raw_roll_0_to_60,
+                forced_hit,
+                ..
+            } => (hit_raw_roll_0_to_60, forced_hit),
+            CombatMonsterAttackDraws::SharedPrng => (self.combat_monster_hit_roll(), None),
+        };
 
         // `combat.md §6.1a` "Readers — the attack driver": a controlled actor's
         // attack is a fixed magic strike resolved by the shared
@@ -4737,10 +4946,7 @@ impl PlayState {
         // not published in any current spec document, so no tile marker is
         // stamped here; the damage is fed as magical because the published
         // flavour is a magic strike, not a weapon blow.
-        if attacker.is_controlled() {
-            if target_range != 1 {
-                return None;
-            }
+        if controlled_attacker {
             let mut input = CombatWeaponAttackInput {
                 source: CombatAttackerDamageSource::MonsterFlat {
                     attack_value: attacker_stats.attack_value,
@@ -4780,6 +4986,38 @@ impl PlayState {
 
         let mut poison_status_outcome = None;
         if target_range <= 1 {
+            // `combat.md §12`, "Monster status/effect attacks": the gate
+            // exists only for "classes with the poison/status attack flag
+            // cluster", and the small raw damage value is rolled inside the
+            // helper, on the arm reached for a non-Good party member or a
+            // non-party target - "the Good-to-Poisoned arm consumes none". In
+            // shared-PRNG mode each of those draws is therefore taken only
+            // where the original would have taken it; an ordinary class draws
+            // nothing at all here.
+            let poison_class = combat_class_traits(attacker.owner_target_class)
+                .is_some_and(|traits| traits.poison_status_attack);
+            let (poison_gate_accepts, poison_damage_roll) = match draws {
+                CombatMonsterAttackDraws::Fixed {
+                    poison_gate_accepts,
+                    poison_damage_roll,
+                    ..
+                } => (poison_gate_accepts, poison_damage_roll),
+                CombatMonsterAttackDraws::SharedPrng if poison_class => {
+                    let gate = self.combat_monster_poison_gate_roll();
+                    let takes_status_arm = target_slot < COMBAT_PARTY_ACTOR_SLOTS
+                        && self
+                            .party
+                            .get(target_slot)
+                            .is_some_and(|member| member.living() && member.status == b'G');
+                    let damage_roll = if gate && !takes_status_arm {
+                        self.combat_monster_poison_damage_roll()
+                    } else {
+                        0
+                    };
+                    (gate, damage_roll)
+                }
+                CombatMonsterAttackDraws::SharedPrng => (false, 0),
+            };
             let fallback_raw_damage = combat_field_poison_fallback_damage(poison_damage_roll);
             let poison_outcome = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
                 resolve_poison_status_attack_for_party_target(
@@ -6420,38 +6658,63 @@ impl PlayState {
         self.random_range_u8(0, u8::MAX)
     }
 
-    pub fn combat_ai_teleport_candidate(&mut self, actor_slot: usize) -> Option<(u8, u8)> {
-        let _ = actor_slot;
-        Some((
-            self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8),
-            self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8),
-        ))
+    /// `combat.md §9`, the teleport arm: "The chance roll is one uniform draw
+    /// over the four values zero through three, and the arm continues on the
+    /// three lower values and is abandoned on the maximum."
+    pub fn combat_ai_teleport_chance_roll(&mut self) -> u8 {
+        self.random_mod_u8(COMBAT_AI_TELEPORT_CHANCE_ABANDON_VALUE + 1)
+    }
+
+    /// `combat.md §9`, the teleport arm's cell probe: "**two** independent
+    /// uniform draws over the sixteen values zero through fifteen, taken
+    /// **unconditionally and in X-then-Y order** with no short-circuit between
+    /// them and **no retry loop**", accepted only when both land at ten or
+    /// below. Both draws are always spent, which is why this returns `None`
+    /// for an out-of-span probe rather than skipping the second draw.
+    pub fn combat_ai_teleport_probe_draws(&mut self) -> Option<(u8, u8)> {
+        let x = self.random_range_u8(0, COMBAT_AI_TELEPORT_PROBE_DRAW_MAX);
+        let y = self.random_range_u8(0, COMBAT_AI_TELEPORT_PROBE_DRAW_MAX);
+        combat_ai_teleport_probe_cell(x, y)
+    }
+
+    /// `combat.md §11`: "the roll happens inside the shared to-hit helper,
+    /// which is entered once per accepted attempt". One inclusive `0..60`
+    /// draw, taken by the attempt and by nothing above it.
+    pub fn combat_monster_hit_roll(&mut self) -> u8 {
+        self.random_range_u8(0, COMBAT_SKEWED_ROLL_RAW_MAX)
+    }
+
+    /// `combat.md §11`, scatter mode: "picks a random adjacent impact cell
+    /// around the intended target, retrying until it is not the attacker's
+    /// current cell". The draw belongs to the scatter arm, so it is taken only
+    /// once that arm is entered.
+    ///
+    /// This is the one draw the arm takes: the retry itself is the
+    /// deterministic walk in [`resolve_amulet_turning_scatter_cell`], which
+    /// advances to the next of the eight adjacent offsets rather than re-
+    /// drawing. `§11` does not say which of the two the original does, and the
+    /// two differ in the shared stream, so the pre-existing single-draw
+    /// reading is kept and the choice is filed as an open spec question.
+    pub fn combat_monster_scatter_cell_roll(&mut self) -> u8 {
+        self.random_mod_u8(8)
+    }
+
+    /// `combat.md §12`: "Classes with the poison/status attack flag cluster
+    /// get a random gate". Only those classes take the gate draw.
+    pub fn combat_monster_poison_gate_roll(&mut self) -> bool {
+        self.random_mod_u8(2) == 0
+    }
+
+    /// `combat.md §12`: the status helper "rolls a small raw damage value"
+    /// only on the arm reached for a non-Good party member or a non-party
+    /// target; the Good-to-Poisoned arm consumes no randomness.
+    pub fn combat_monster_poison_damage_roll(&mut self) -> u8 {
+        self.random_mod_u8(20)
     }
 
     pub fn combat_ai_horizontal_axis_first(&mut self, actor_slot: usize) -> bool {
         let _ = actor_slot;
         self.random_mod_u8(2) == 0
-    }
-
-    pub fn combat_monster_attack_inputs(
-        &mut self,
-        attacker_slot: usize,
-    ) -> CombatMonsterAttackInputs {
-        let _ = attacker_slot;
-        // `combat.md §12` stage one, monster row: "the class's **attack
-        // byte, used flat**, with **no random draw at all**", so no
-        // damage draw is taken here - `RETRACTIONS.md` R336.
-        // `combat.md §12` stage two reads the defender's own rating, so
-        // it is taken from the target record at resolution time rather
-        // than pre-drawn here: the AI's target is not chosen yet, and the
-        // rating is a record read, not a draw.
-        CombatMonsterAttackInputs {
-            hit_raw_roll_0_to_60: self.random_range_u8(0, COMBAT_SKEWED_ROLL_RAW_MAX),
-            poison_gate_accepts: self.random_mod_u8(2) == 0,
-            poison_damage_roll: self.random_mod_u8(20),
-            forced_hit: None,
-            amulet_turning_scatter_roll: self.random_mod_u8(8),
-        }
     }
 
     pub fn combat_monster_amulet_turning_roll(

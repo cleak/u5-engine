@@ -261,6 +261,12 @@ pub const COMBAT_CLASS_LORD_BRITISH: u8 = COMBAT_CLASS_BLACKTHORN + 1;
 pub const COMBAT_CLASS_GIANT_RAT: u8 = 20;
 pub const COMBAT_CLASS_GIANT_RAT_SPRITE_BASE: u8 = 0x90;
 pub const COMBAT_CLASS_MIMIC: u8 = 26;
+/// `catalogs/monster-bestiary.md` combat class 27, the row after the Mimic
+/// (see the class stat table in `combat_stats.rs`). `combat.md §9` "The two
+/// classes refused outright": the movement/teleport arm "returns immediately
+/// for two classes, the **Reaper** and the **Mimic**, which are immobile by
+/// design. They never step and never teleport."
+pub const COMBAT_CLASS_REAPER: u8 = COMBAT_CLASS_MIMIC + 1;
 /// `catalogs/monster-bestiary.md §2` consecutive small-monster
 /// combat class ids (Giant Rat 20 / Bat 21 / Giant Spider 22).
 /// Anchor each successor to the chain.
@@ -316,6 +322,13 @@ pub const COMBAT_AI_ATTACK_COMMAND_KEY: char = 'A';
 /// and tests **only that direction** against the cell predicate, retrying
 /// on rejection."
 pub const COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS: usize = 4;
+/// `combat.md §9`, the teleport arm's chance roll: one uniform draw over
+/// `0..=3` that "continues on the three lower values and is abandoned on the
+/// maximum".
+pub const COMBAT_AI_TELEPORT_CHANCE_ABANDON_VALUE: u8 = 3;
+/// `combat.md §9`, the teleport arm's cell probe: "two independent uniform
+/// draws over the sixteen values zero through fifteen".
+pub const COMBAT_AI_TELEPORT_PROBE_DRAW_MAX: u8 = 15;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatStepVector {
@@ -3753,6 +3766,22 @@ pub const fn combat_ai_step_vector(
     CombatStepVector { dx, dy }
 }
 
+/// `combat.md §9` **Target selection**, the descending closest-candidate scan.
+///
+/// The section states the outcome twice in one sentence: "Backwards walk plus
+/// strict less-than comparison means *the lowest-numbered slot among candidates
+/// of equal distance wins*, biasing toward party members (low slots) when
+/// distances tie." Two of the three clauses - the outcome and the gloss - name
+/// **lowest slot wins**, and that is what this engine implements: over the
+/// descending walk below, `<=` keeps updating through the tie, so the last
+/// candidate examined, i.e. the lowest-numbered one, is the pick.
+///
+/// The operator noun in the same sentence is the one clause that points the
+/// other way, because a strict `<` over a descending walk keeps the *first*
+/// candidate at the running minimum, i.e. the highest slot. Only one of the two
+/// readings can be implemented, so this engine implements the published outcome
+/// and the published bias, and the operator/outcome contradiction is filed as a
+/// spec question rather than resolved here.
 pub fn find_combat_ai_target(
     actors: &[CombatTargetCandidateView],
     acting_slot: usize,
@@ -3788,6 +3817,13 @@ pub fn find_combat_ai_target(
             first_five_party_slot_survived = true;
         }
 
+        // `combat.md §9` target selection: the picker "walks the actor table
+        // backwards from slot 31 to slot 0, computes the truncated linear
+        // Euclidean distance to each candidate, and picks the closest one",
+        // and "*the lowest-numbered slot among candidates of equal distance
+        // wins*, biasing toward party members (low slots) when distances tie".
+        // `<=` over this descending walk is what produces that published
+        // outcome. See the doc comment on [`find_combat_ai_target`].
         let range = acting_actor.descriptor.range_to(candidate.descriptor);
         if range <= best_range {
             best_range = range;
@@ -3950,6 +3986,57 @@ pub fn commit_combat_ai_movement_outcome(
             commit_combat_actor_linked_position(actor, active_objects, x, y)
         }
         CombatAiMovementOutcome::Blocked { .. } => None,
+    }
+}
+
+/// `combat.md §9` "The two classes refused outright": "Before any of the above
+/// - before the party-side test, before the class flag, before the suppression
+/// tests - the arm returns immediately for two classes, the **Reaper** and the
+/// **Mimic**, which are immobile by design. They never step and never
+/// teleport."
+pub const fn combat_ai_class_never_moves(class: u8) -> bool {
+    class == COMBAT_CLASS_REAPER || class == COMBAT_CLASS_MIMIC
+}
+
+/// `combat.md §9` "An encirclement bypass the spec had not published": the
+/// teleport arm "asks the shared surrounded predicate whether all four cardinal
+/// neighbours of the actor are blocked. **If they are, the chance roll is not
+/// taken at all**".
+pub fn combat_ai_cardinal_neighbours_blocked(
+    legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    actor_x: u8,
+    actor_y: u8,
+) -> bool {
+    [(1i16, 0i16), (-1, 0), (0, 1), (0, -1)]
+        .into_iter()
+        .all(|(dx, dy)| {
+            !combat_ai_legal_cell(
+                legal_cells,
+                i16::from(actor_x) + dx,
+                i16::from(actor_y) + dy,
+            )
+        })
+}
+
+/// `combat.md §9` "The chance roll is one uniform draw over the four values
+/// zero through three, and the arm continues on the three lower values and is
+/// abandoned on the maximum. That is a flat **three in four**".
+pub const fn combat_ai_teleport_chance_accepts(roll_0_to_3: u8) -> bool {
+    roll_0_to_3 < COMBAT_AI_TELEPORT_CHANCE_ABANDON_VALUE
+}
+
+/// `combat.md §9` "The cell probe is **two** independent uniform draws over the
+/// sixteen values zero through fifteen, taken **unconditionally and in
+/// X-then-Y order** with no short-circuit between them and **no retry loop**.
+/// The candidate is accepted only when both land inside the eleven-cell arena
+/// span, i.e. at ten or below". A rejected probe abandons the arm rather than
+/// re-drawing, so this returns `None` and the caller falls through to ordinary
+/// stepping.
+pub const fn combat_ai_teleport_probe_cell(x_draw: u8, y_draw: u8) -> Option<(u8, u8)> {
+    if (x_draw as usize) < COMBAT_ARENA_SIDE && (y_draw as usize) < COMBAT_ARENA_SIDE {
+        Some((x_draw, y_draw))
+    } else {
+        None
     }
 }
 
