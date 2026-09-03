@@ -5517,14 +5517,17 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             // How far the shared effect slot has aged when the scripted
             // route stops is a property of the route, not of any published
             // rule, so it is re-derived by running the route rather than
-            // read out of the spec. It moved in this change because the
-            // `combat.md §6.1` placement tags a few lines above now stamp
-            // `0x40` instead of `0x80` on the spawned monsters, which
-            // changes how many script steps the fight survives - not
-            // because of Mass Charm's own target-picker override, which
-            // §16.1 says "does not" affect side counting either way. The
-            // expectation is pinned exactly rather than as a range.
-            const MASS_CHARM_ROUTE_AGE_STEPS: u8 = 4;
+            // read out of the spec. It moved when `fix/combat-ai-effects`
+            // merged: `combat.md §12` says the shared counter's "other
+            // values decrement when the committed non-digit action tail
+            // runs" and `magic.md §8` that "the ordinary per-turn clock
+            // cleanup does not age this counter", so the per-turn tail no
+            // longer ages the slot while a fight is up and the route now
+            // spends one step instead of four. Mass Charm's own
+            // target-picker override is not involved - `§16.1` says it
+            // "does not" affect side counting either way. The expectation
+            // is pinned exactly rather than as a range.
+            const MASS_CHARM_ROUTE_AGE_STEPS: u8 = 1;
             if !state.message.starts_with("Mass charm!")
                 || state.active_effect_tag != Some(MASS_CHARM_ACTIVE_EFFECT_TAG)
                 || state.active_effect_counter
