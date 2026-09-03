@@ -594,14 +594,39 @@ pub const SAVE_RESIDENT_SHADOWLORD_OFFSET: usize = 0x03b2;
 /// `formats/saved-gam.md §10`: the "none" marker of the
 /// resident-Shadowlord latch above.
 pub const SAVE_RESIDENT_SHADOWLORD_NONE: u8 = 0xff;
-/// `systems/time.md §11` (spec `0170809`): the ambient-audio tick
-/// decrements the twelve-hour repeat counter at `0x02DE` "on **two of
-/// every eight** of its own calls, using a small free-running sub-tick
-/// counter that is not part of the save image". Eight is that counter's
-/// period; the stride below is what makes two of the eight residues
-/// carry the decrement. Which two is not published.
+/// `systems/time.md §11`: the ambient-audio tick decrements the
+/// twelve-hour repeat counter at `0x02DE` "on **two of every eight** of
+/// its own calls, using a small free-running sub-tick counter that is
+/// not part of the save image". Eight is that counter's period: it
+/// "cycles `0, 1, 2, 3, 4, 5, 6, 7` and wraps back to `0`".
 pub const AMBIENT_AUDIO_SUB_TICK_PERIOD: u8 = 8;
+
+/// `systems/time.md §11` (issue #190): the stride that selects the two
+/// decrementing residues. "The decrement fires on the calls where it
+/// holds **`0` or `4`** on entry. So the two residues are zero and four
+/// of the eight-phase cycle - every fourth call, not two adjacent calls
+/// out of eight." [`AMBIENT_AUDIO_DECREMENT_RESIDUES`] names them.
 pub const AMBIENT_AUDIO_DECREMENT_STRIDE: u8 = 4;
+
+/// `systems/time.md §11` (issue #190): the two sub-tick residues that
+/// carry the decrement, published for the first time by issue #190. The
+/// engine's "low two bits clear" rule already selected exactly this
+/// pair, so the rate and the residues were both already right; what the
+/// answer added is that they are these two, the test order
+/// ([`AMBIENT_AUDIO_RESIDUE_TESTED_BEFORE_ADVANCE`]) and the counter's
+/// phase origin.
+///
+/// "The same two residues also pick the loud envelope in the tick's own
+/// lava/shrine effect branch, so one counter drives both behaviours and
+/// an implementation should not give them separate phases."
+pub const AMBIENT_AUDIO_DECREMENT_RESIDUES: [u8; 2] = [0, 4];
+
+/// `systems/time.md §11` (issue #190): "The residue is tested **before**
+/// the counter advances, so the call on which the counter reads zero is
+/// itself a decrementing call." Kept as a named constant because it is a
+/// phase fact a reader cannot recover from the rate alone, and getting
+/// it backwards shifts every decrement by one call.
+pub const AMBIENT_AUDIO_RESIDUE_TESTED_BEFORE_ADVANCE: bool = true;
 /// `formats/saved-gam.md §10`: durable dungeon room-clear bitmap. The
 /// 16-byte block at `0x033A..0x0349` records which dungeon room
 /// encounters have already been cleared; dungeon mode uses it to

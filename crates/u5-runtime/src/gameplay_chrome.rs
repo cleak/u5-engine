@@ -1163,9 +1163,23 @@ fn fill_rect(
 /// Surface and town-family scenes carry the twelve-cell sky strip and
 /// the prevailing-wind banner. Dungeon-class scenes replace them with
 /// the level label and the party facing (`weather.md §Autonomous Wind
-/// Drift`: the wind helper does not run in dungeon-class scenes). The
-/// Underworld has no published chrome content for either gap, so both
-/// ribbons stay unbroken there rather than inventing one.
+/// Drift`: the wind helper does not run in dungeon-class scenes).
+///
+/// The top gap has a third case, resolved by issue #190: the marker
+/// painter's **erase arm**. `moons.md §2.2` publishes it as live on four
+/// routes - scene 25 (Ararat) by the scene test, and a below-surface
+/// party Z (the Underworld plane, or a below-entry floor inside a
+/// town-family location) by the level test. On the arm "the strip is not
+/// rendered at all": the painter "flat-fills the strip footprint and
+/// rules the scanline under it. Nothing of the hour marker or of either
+/// moon is left on screen, and both end-caps are erased with them",
+/// leaving a plain ribbon. That is [`ChromeGap::Unbroken`].
+///
+/// The Underworld top gap was already unbroken, for want of published
+/// content; it is now unbroken *because* the erase arm says so, and
+/// Ararat and every basement floor join it. The bottom gap is not the
+/// strip's business - the wind banner has its own erase branch in
+/// `weather.md §2.1` - so it is left as it was.
 pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeContent {
     let browser = crate::stats_panel::active_arms_sell_browser(state);
     let stats_label = browser
@@ -1200,6 +1214,19 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
             GameplayChromeContent {
                 top: ChromeGap::Unbroken,
                 bottom: ChromeGap::Unbroken,
+                stats_label,
+                timing_glyph,
+                stats_panel_single_box,
+            }
+        }
+        // `moons.md §2.2`, the erase arm inside the surface/town family:
+        // Ararat by the scene test, a below-entry floor by the level test.
+        // The renderer is reached (so the cached pair is still written by
+        // the callers of §3) but paints no strip.
+        crate::Area::Town { scene, floor } if crate::sky_strip_erase_arm(scene.byte, floor < 0) => {
+            GameplayChromeContent {
+                top: ChromeGap::Unbroken,
+                bottom: ChromeGap::Label(wind_banner_text(wind_banner_direction_name(state))),
                 stats_label,
                 timing_glyph,
                 stats_panel_single_box,

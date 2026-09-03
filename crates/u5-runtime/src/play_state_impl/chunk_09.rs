@@ -3161,28 +3161,56 @@ impl PlayState {
         self.twelve_hour_audio_repeats = display_hour_12h(self.clock.hour);
     }
 
-    /// `time.md §11` (spec `0170809`), the read half of save byte
-    /// `0x02DE`: "The ambient-audio tick is its only consumer. It reads
-    /// the byte as a count of remaining loud repeats ... and decrements it
-    /// toward zero on **two of every eight** of its own calls, using a
-    /// small free-running sub-tick counter that is not part of the save
-    /// image. It never writes any other value."
+    /// `time.md §11`, the read half of save byte `0x02DE`: "The
+    /// ambient-audio tick is its only consumer. It reads the byte as a
+    /// count of remaining loud repeats ... and decrements it toward zero
+    /// on **two of every eight** of its own calls, using a small
+    /// free-running sub-tick counter that is not part of the save image.
+    /// It never writes any other value."
     ///
     /// `RETRACTIONS.md` R338: "An engine that stores a live twelve-hour
     /// value and never decays it diverges from the original on essentially
     /// every daylight save."
     ///
-    /// Two hedges, both published as open:
+    /// *Clarified (issue #190).* "The 'two of every eight' rate was
+    /// already right; what the bullets add for the first time is **which**
+    /// two residues, the order of the test against the counter advance,
+    /// and the counter's phase origin. Nothing published about this byte
+    /// is withdrawn." All three are now pinned here:
     ///
-    /// * *Which* two of the eight sub-ticks carry the decrement is not
-    ///   published. The counter runs free, so any fixed pair of residues
-    ///   gives the stated two-in-eight rate; this takes the two whose low
-    ///   two bits are clear.
+    /// * **Which two.** "The decrement fires on the calls where it holds
+    ///   `0` or `4` on entry" - [`AMBIENT_AUDIO_DECREMENT_RESIDUES`].
+    ///   This engine's "low two bits clear" rule already selected exactly
+    ///   that pair, so the behaviour is unchanged; only the anchor is.
+    /// * **Test before advance.** "The residue is tested **before** the
+    ///   counter advances, so the call on which the counter reads zero is
+    ///   itself a decrementing call." The pre-advance value is what the
+    ///   test below reads.
+    /// * **Free-running, phase origin at program start.** "The counter
+    ///   advances on **every** call, including calls that decrement
+    ///   nothing because the countdown byte is already zero. It is
+    ///   free-running and is never resynchronised to the countdown, so the
+    ///   decrement pattern does not restart when a new countdown is
+    ///   written." The advance below is therefore unconditional, and
+    ///   [`Self::write_twelve_hour_audio_repeats`] deliberately does not
+    ///   touch the counter.
+    ///
+    /// Two hedges remain, and both are the engine's rather than the
+    /// spec's:
+    ///
     /// * The cadence gate on the master redraw-enable byte at `0x02FE`
     ///   ("when that byte is clear the world tick skips its whole body")
     ///   is not modelled, because this engine has no redraw-enable byte -
     ///   its world step is unconditional and `0x02FE` round-trips through
     ///   the save image untouched.
+    /// * §11's phase origin is "**program start** - not save load, not
+    ///   scene entry, and not the hour crossing that wrote the countdown.
+    ///   Loading a save does not reset it." This engine builds a fresh
+    ///   `PlayState` per load, so within a process that loads twice the
+    ///   second load restarts the phase where the original would have
+    ///   carried it. The counter is correctly *outside* the save image and
+    ///   is never resynchronised to the countdown; only the
+    ///   process-lifetime half is approximated.
     /// * The step that reaches this pass is
     ///   [`Self::advance_visual_tick`], and only the Bevy frontend pumps
     ///   it today. A headless `u5-tui` load followed immediately by a
@@ -3197,9 +3225,13 @@ impl PlayState {
     /// long the byte takes to reach zero in wall-clock terms is inferred,
     /// not measured", so no seconds figure is modelled here either.
     pub fn tick_ambient_audio_repeats(&mut self) {
+        // Test before advance, on the pre-advance residue.
         let sub_tick = self.ambient_audio_sub_tick;
+        let decrements = ambient_audio_sub_tick_decrements(sub_tick);
+        // Unconditional: the counter is free-running and advances even on
+        // calls that decrement nothing.
         self.ambient_audio_sub_tick = (sub_tick + 1) % AMBIENT_AUDIO_SUB_TICK_PERIOD;
-        if sub_tick % AMBIENT_AUDIO_DECREMENT_STRIDE == 0 {
+        if decrements {
             self.twelve_hour_audio_repeats = self.twelve_hour_audio_repeats.saturating_sub(1);
         }
     }

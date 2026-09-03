@@ -17028,24 +17028,318 @@ fn blackthorn_entry_families_are_distinct() {
 
 #[test]
 fn sky_strip_renders_only_for_surface_and_town_family() {
-    // moons.md §3
-    // Surface (scene 0) renders only on Britannia, not underworld.
+    // moons.md §2.2. Surface (scene 0) paints on Britannia; a
+    // below-surface party Z takes the erase arm instead.
     assert!(sky_strip_renders(0, false));
     assert!(!sky_strip_renders(0, true));
-    // Town-family scenes render
-    for scene in 1..=32u8 {
-        assert!(sky_strip_renders(scene, false));
+    // Town-family scenes paint - except Ararat, which "reaches the marker
+    // painter but makes it paint the strip's footprint flat instead of
+    // printing it", by the scene test alone.
+    for scene in 1..=SKY_STRIP_LAST_TOWN_FAMILY_SCENE {
+        assert_eq!(
+            sky_strip_renders(scene, false),
+            scene != ARARAT_SCENE_BYTE,
+            "scene {scene}"
+        );
     }
-    // Town-family scenes also do not render on the underworld
-    // plane (they're never reachable there but the predicate
-    // honors the override).
+    // A below-entry floor inside a town-family location takes the erase
+    // arm too.
     assert!(!sky_strip_renders(13, true));
-    // Dungeon-class scenes are suppressed.
+    // Dungeon-class scenes never get past the renderer's scene gate.
     assert!(!sky_strip_renders(33, false));
     assert!(!sky_strip_renders(40, false));
     assert!(!sky_strip_renders(127, false));
     // Combat marker is suppressed.
     assert!(!sky_strip_renders(0xFF, false));
+}
+
+#[test]
+fn sky_strip_scene_gate_and_erase_arm_are_two_different_tests() {
+    // `moons.md §2.2` (issue #190). The scene gate is the renderer's
+    // first test and "precedes the two cache writes"; the erase arm runs
+    // after them and only suppresses painting.
+    //
+    // Scene gate: surface plus the town family, nothing else. "Scenes
+    // outside the surface/town family (combat, intro, and every scene id
+    // at or above the location range, dungeons included) never get past
+    // the renderer's scene gate."
+    assert_eq!(SKY_STRIP_LAST_TOWN_FAMILY_SCENE, 32);
+    for scene in 0..=SKY_STRIP_LAST_TOWN_FAMILY_SCENE {
+        assert!(sky_strip_scene_gate_passes(scene), "scene {scene}");
+    }
+    for scene in [33u8, 40, 0x7F, 0xFF] {
+        assert!(!sky_strip_scene_gate_passes(scene), "scene {scene}");
+    }
+    // The gate does not care about the floor: Ararat and every basement
+    // still reach the renderer, which is why they still cache.
+    assert!(sky_strip_scene_gate_passes(ARARAT_SCENE_BYTE));
+
+    // Erase arm, resolved by issue #190 as "live, and it fires on four
+    // distinct routes in ordinary play". Two tests reach it.
+    assert_eq!(ARARAT_SCENE_BYTE, 25);
+    // Scene test - Ararat, "by the scene test above rather than the level
+    // test, so it fires there whatever the party's floor byte holds".
+    assert!(sky_strip_erase_arm(ARARAT_SCENE_BYTE, false));
+    assert!(sky_strip_erase_arm(ARARAT_SCENE_BYTE, true));
+    // Level test - a below-surface party Z, on the overworld or inside a
+    // location.
+    assert!(sky_strip_erase_arm(0, true));
+    assert!(sky_strip_erase_arm(13, true));
+    // Neither: an ordinary town floor at or above the entry floor.
+    assert!(!sky_strip_erase_arm(13, false));
+    assert!(!sky_strip_erase_arm(0, false));
+}
+
+#[test]
+fn below_surface_and_ararat_refresh_the_cache_but_paint_no_strip() {
+    // `moons.md §2.2` (issue #190): on the erase arm "the strip is not
+    // rendered at all ... it still caches both glyph bytes, still selects
+    // and restores the text window and the runic font, and then
+    // flat-fills the strip footprint and rules the scanline under it."
+    //
+    // §3 is the general rule the cache half rests on: "The cache writes
+    // also precede the erase-arm tests, so a refresh that ends in the
+    // erase arm still updates both bytes."
+    let sentinel = [0xAA, 0xBB];
+    let expected = cached_moon_glyph_bytes_for_day(PLAY_START_DAY).unwrap();
+
+    // Ararat: erase arm by the scene test, on any floor.
+    for floor in [0i8, -1, 2] {
+        let mut ararat = world_state(open_world_grid(), 5, 5);
+        ararat.area = Area::Town {
+            scene: Scene::new(ARARAT_SCENE_BYTE).unwrap(),
+            floor,
+        };
+        ararat.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+        assert!(ararat.sky_strip_scene_entry_refresh_runs(), "floor {floor}");
+        assert!(ararat.sky_strip_paints_erase_arm(), "floor {floor}");
+        ararat.refresh_cached_moon_glyphs_at_scene_entry();
+        assert_eq!(ararat.cached_moon_glyph_bytes, expected, "floor {floor}");
+    }
+
+    // A below-entry (basement) floor inside an ordinary town-family
+    // location: erase arm by the level test.
+    let mut basement = world_state(open_world_grid(), 5, 5);
+    basement.area = Area::Town {
+        scene: Scene::new(13).unwrap(),
+        floor: -1,
+    };
+    basement.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(basement.sky_strip_paints_erase_arm());
+    basement.refresh_cached_moon_glyphs_at_scene_entry();
+    assert_eq!(basement.cached_moon_glyph_bytes, expected);
+
+    // The Underworld plane.
+    let mut underworld = world_state(open_world_grid(), 5, 5);
+    underworld.area = Area::World {
+        plane: WorldPlane::Underworld,
+    };
+    underworld.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(underworld.sky_strip_paints_erase_arm());
+    underworld.refresh_cached_moon_glyphs_at_scene_entry();
+    assert_eq!(underworld.cached_moon_glyph_bytes, expected);
+
+    // The same town at ground level is the normal arm.
+    let mut ground = world_state(open_world_grid(), 5, 5);
+    ground.area = Area::Town {
+        scene: Scene::new(13).unwrap(),
+        floor: 0,
+    };
+    assert!(!ground.sky_strip_paints_erase_arm());
+}
+
+#[test]
+fn the_hour_change_hook_is_the_only_caller_that_cannot_reach_the_erase_arm() {
+    // `moons.md §2.2` (issue #190): "The **hour-change** caller is the
+    // one caller that cannot reach this arm: it pre-tests the same
+    // below-surface condition and skips the call entirely." So below the
+    // surface the pair is refreshed by every §3 caller *except* the hour
+    // hook - "never by the passage of an hour".
+    //
+    // But Ararat is *not* below surface, and the hour hook's gate is the
+    // scene range plus the Z high bit, not "the strip paints". An hour
+    // crossing at Ararat therefore does reach the renderer and does cache.
+    let sentinel = [0xAA, 0xBB];
+    let expected = cached_moon_glyph_bytes_for_day(PLAY_START_DAY).unwrap();
+
+    let mut ararat = world_state(open_world_grid(), 5, 5);
+    ararat.area = Area::Town {
+        scene: Scene::new(ARARAT_SCENE_BYTE).unwrap(),
+        floor: 0,
+    };
+    ararat.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(ararat.sky_strip_hour_refresh_runs());
+    ararat.refresh_cached_moon_glyphs();
+    assert_eq!(
+        ararat.cached_moon_glyph_bytes, expected,
+        "the hour hook's gate is the scene range and the Z high bit, not the erase arm"
+    );
+
+    // Ararat on a basement floor: now the Z high bit is set, so the hour
+    // hook skips and only the other callers refresh.
+    let mut ararat_below = world_state(open_world_grid(), 5, 5);
+    ararat_below.area = Area::Town {
+        scene: Scene::new(ARARAT_SCENE_BYTE).unwrap(),
+        floor: -1,
+    };
+    ararat_below.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    assert!(!ararat_below.sky_strip_hour_refresh_runs());
+    ararat_below.refresh_cached_moon_glyphs();
+    assert_eq!(ararat_below.cached_moon_glyph_bytes, sentinel);
+    ararat_below.refresh_cached_moon_glyphs_at_scene_entry();
+    assert_eq!(ararat_below.cached_moon_glyph_bytes, expected);
+}
+
+#[test]
+fn out_of_range_day_of_month_reads_the_published_bytes_and_is_rejected_at_load() {
+    // `moons.md §2.2` (issue #190, `RETRACTIONS.md` R376). The retracted
+    // sentence was "There is no day zero, so an implementation should
+    // treat a zero or out-of-range day as a save-data error rather than
+    // looking up a twenty-ninth entry", published as the contract. R376:
+    // "The original **does** look one up ... a bare indexed read - table
+    // base plus twice the day - performed once per moon, with no
+    // comparison, mask or clamp." This test replaces the assertions that
+    // pinned the withdrawn sentence.
+    //
+    // Descriptive half: the published rows, exactly.
+    assert_eq!(
+        cached_moon_glyph_bytes_for_day_unchecked(0),
+        Some([
+            MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE,
+            MOON_GLYPH_DAY_ZERO_FELUCCA_BYTE
+        ])
+    );
+    assert_eq!(
+        cached_moon_glyph_bytes_for_day_unchecked(0),
+        Some([0xF0, 0x80])
+    );
+    assert_eq!(
+        cached_moon_glyph_bytes_for_day_unchecked(29),
+        Some([0x04, 0x00])
+    );
+    for day in 30..=32u8 {
+        assert_eq!(
+            cached_moon_glyph_bytes_for_day_unchecked(day),
+            Some([0x00, 0x00]),
+            "day {day}"
+        );
+    }
+    assert_eq!(
+        cached_moon_glyph_bytes_for_day_unchecked(33),
+        Some([0x04, 0x05])
+    );
+    // Legal days agree with the day tables on both accessors.
+    for day in 1..=28u8 {
+        assert_eq!(
+            cached_moon_glyph_bytes_for_day_unchecked(day),
+            cached_moon_glyph_bytes_for_day(day),
+            "day {day}"
+        );
+    }
+    // "larger | whatever lies at that distance past the table" names no
+    // bytes, so nothing is synthesised above the published rows.
+    assert_eq!(MOON_GLYPH_UNCHECKED_LAST_PUBLISHED_DAY, 33);
+    assert_eq!(cached_moon_glyph_bytes_for_day_unchecked(34), None);
+    assert_eq!(cached_moon_glyph_bytes_for_day_unchecked(255), None);
+
+    // "**Neither out-of-range pair is a sentinel.**" The day-zero pair
+    // carries no Moonstone slot, and the day-29 Trammel byte is not a
+    // phase digit either.
+    assert_eq!(
+        moonstone_slot_from_glyph_byte(MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE),
+        None
+    );
+    assert_eq!(moonstone_slot_from_glyph_byte(0x04), None);
+
+    // Prescriptive half, "and it should record that it diverges": this
+    // engine rejects, at load, where the value enters.
+    assert!(!day_of_month_is_in_range(0));
+    assert!(!day_of_month_is_in_range(29));
+    for day in 1..=28u8 {
+        assert!(day_of_month_is_in_range(day), "day {day}");
+    }
+    assert!(GameClock::with_date(139, 4, 0, 8, 0).is_err());
+    assert!(GameClock::with_date(139, 4, 29, 8, 0).is_err());
+    assert!(GameClock::with_date(139, 4, 28, 8, 0).is_ok());
+
+    // The table accessor keeps the legal range and stays the one the
+    // painter uses, so no out-of-range byte reaches the live cache.
+    assert_eq!(cached_moon_glyph_bytes_for_day(0), None);
+    assert_eq!(cached_moon_glyph_bytes_for_day(29), None);
+}
+
+#[test]
+fn ambient_audio_sub_tick_residues_are_zero_and_four_tested_before_the_advance() {
+    // `time.md §11` (issue #190): "The sub-tick counter is a single byte
+    // that cycles `0, 1, 2, 3, 4, 5, 6, 7` and wraps back to `0`, and the
+    // decrement fires on the calls where it holds **`0` or `4`** on
+    // entry. So the two residues are zero and four of the eight-phase
+    // cycle - every fourth call, not two adjacent calls out of eight."
+    assert_eq!(AMBIENT_AUDIO_SUB_TICK_PERIOD, 8);
+    assert_eq!(AMBIENT_AUDIO_DECREMENT_RESIDUES, [0, 4]);
+    let firing: Vec<u8> = (0..AMBIENT_AUDIO_SUB_TICK_PERIOD)
+        .filter(|residue| ambient_audio_sub_tick_decrements(*residue))
+        .collect();
+    assert_eq!(firing, vec![0, 4], "two of every eight, at residues 0 and 4");
+    // "The same two residues also pick the loud envelope in the tick's
+    // own lava/shrine effect branch, so one counter drives both
+    // behaviours and an implementation should not give them separate
+    // phases."
+    for residue in 0..AMBIENT_AUDIO_SUB_TICK_PERIOD {
+        assert_eq!(
+            ambient_audio_sub_tick_selects_loud_envelope(residue),
+            ambient_audio_sub_tick_decrements(residue),
+            "residue {residue}"
+        );
+    }
+
+    // "The residue is tested **before** the counter advances, so the call
+    // on which the counter reads zero is itself a decrementing call."
+    assert!(AMBIENT_AUDIO_RESIDUE_TESTED_BEFORE_ADVANCE);
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.ambient_audio_sub_tick = 0;
+    state.twelve_hour_audio_repeats = 8;
+    state.tick_ambient_audio_repeats();
+    assert_eq!(
+        state.twelve_hour_audio_repeats, 7,
+        "the very first call, on residue zero, decrements"
+    );
+    assert_eq!(state.ambient_audio_sub_tick, 1);
+
+    // "The counter advances on **every** call, including calls that
+    // decrement nothing because the countdown byte is already zero. It is
+    // free-running and is never resynchronised to the countdown."
+    let mut idle = world_state(open_world_grid(), 5, 5);
+    idle.ambient_audio_sub_tick = 0;
+    idle.twelve_hour_audio_repeats = 0;
+    for expected in 1..=AMBIENT_AUDIO_SUB_TICK_PERIOD {
+        idle.tick_ambient_audio_repeats();
+        assert_eq!(
+            idle.ambient_audio_sub_tick,
+            expected % AMBIENT_AUDIO_SUB_TICK_PERIOD
+        );
+        assert_eq!(idle.twelve_hour_audio_repeats, 0);
+    }
+
+    // Writing a fresh countdown does not restart the phase.
+    let mut phased = world_state(open_world_grid(), 5, 5);
+    phased.ambient_audio_sub_tick = 3;
+    phased.write_twelve_hour_audio_repeats();
+    assert_eq!(
+        phased.ambient_audio_sub_tick, 3,
+        "the hour crossing that writes the countdown must not touch the counter"
+    );
+
+    // Two decrements per eight calls, wherever the phase starts.
+    for start in 0..AMBIENT_AUDIO_SUB_TICK_PERIOD {
+        let mut run = world_state(open_world_grid(), 5, 5);
+        run.ambient_audio_sub_tick = start;
+        run.twelve_hour_audio_repeats = 8;
+        for _ in 0..AMBIENT_AUDIO_SUB_TICK_PERIOD {
+            run.tick_ambient_audio_repeats();
+        }
+        assert_eq!(run.twelve_hour_audio_repeats, 6, "start {start}");
+    }
 }
 
 #[test]
@@ -19270,9 +19564,13 @@ fn moon_glyph_tables_match_published_day_index() {
     assert_eq!(cached_moon_glyph_bytes_for_day(5).unwrap()[0], b'2');
     assert_eq!(trammel_moonstone_slot_for_day(5), Some(2));
 
-    // "There is no day zero, so an implementation should treat a zero
-    // or out-of-range day as a save-data error rather than looking up a
-    // twenty-ninth entry."
+    // The day-table accessors cover `1..=28` and nothing else. What the
+    // *original* does with a day outside that range is R376's subject and
+    // is pinned by
+    // `out_of_range_day_of_month_reads_the_published_bytes_and_is_rejected_at_load`;
+    // the comment that used to sit here quoted the sentence R376 withdrew
+    // ("treat a zero or out-of-range day as a save-data error rather than
+    // looking up a twenty-ninth entry") as the contract.
     assert_eq!(cached_moon_glyph_bytes_for_day(0), None);
     assert_eq!(cached_moon_glyph_bytes_for_day(29), None);
     assert_eq!(cached_moon_glyph_bytes_for_day(255), None);
@@ -26107,4 +26405,84 @@ fn outdoor_broadside_attacker_class_is_the_ship_like_facing_family() {
         OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME
     ));
     assert_eq!(OUTDOOR_BREATH_ATTACKER_DRAGON_FIRST_FRAME, 0xDC);
+}
+
+#[test]
+fn the_town_bed_hole_up_arm_repaints_on_its_ten_minute_steps() {
+    // `moons.md §3` (issue #190): "The 'two command handlers' are two
+    // arms of a single command. Both are `H` (Hole up): the
+    // outdoor/dungeon/combat camp handler and the town-bed hours prompt."
+    // The census row for this arm is "On the loop's ten-minute steps".
+    //
+    // Isolated below the surface on purpose: §2.2 says the hour-change
+    // hook "pre-tests the same below-surface condition and skips the call
+    // entirely", so on a basement floor the only caller that can write
+    // the cached pair here is the Hole-up repaint itself.
+    let scene = Scene::new(13).unwrap();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.area = Area::Town { scene, floor: -1 };
+    state.clock = GameClock::new(8, 0).unwrap();
+    state.set_cached_moon_glyph_bytes(0xAA, 0xBB);
+    assert!(
+        !state.sky_strip_hour_refresh_runs(),
+        "the hour hook must be gated out below surface, or this test proves nothing"
+    );
+
+    // The bed check refuses on the step after the first advance, so the
+    // loop stops - but the ten-minute step it already took carries the
+    // repaint.
+    let reached = state.advance_town_rest_until_target_hour(1, None, scene, -1);
+    assert!(!reached);
+    assert_eq!(
+        state.cached_moon_glyph_bytes,
+        cached_moon_glyph_bytes_for_day(state.clock.day).unwrap(),
+        "the town-bed rest loop repaints on its ten-minute steps"
+    );
+}
+
+#[test]
+fn inn_bed_cells_are_the_published_per_inn_table() {
+    // `shops.md §8.4` (issue #190): "The bed the party is moved to is a
+    // **per-inn lookup, not a derivation from the shop's registered cell
+    // and not a fixed offset from anything.** Two parallel six-entry byte
+    // tables in the shared data overlay hold the X and the Y of each
+    // inn's bed, indexed by the inn's ordinal within the innkeeper shop
+    // kind - the same ordinal, in the same order, that Section 8.0's inn
+    // table is listed in."
+    let published: [(Inn, usize, (u8, u8), (u8, u8)); INN_COUNT] = [
+        (Inn::TheWayfarerInn, 0, (21, 10), (22, 10)),
+        (Inn::TheWarriorsStead, 1, (15, 7), (16, 7)),
+        (Inn::TheHauntingInn, 2, (25, 9), (26, 9)),
+        (Inn::HotelBrittany, 3, (20, 1), (21, 1)),
+        (Inn::TheSmugglersInn, 4, (27, 6), (28, 6)),
+        (Inn::TheKingsRansomInn, 5, (7, 26), (8, 26)),
+    ];
+    assert_eq!(INN_COUNT, 6);
+    assert_eq!(INN_BED_CELLS.len(), INN_COUNT);
+    for (inn, ordinal, bed, waking) in published {
+        assert_eq!(inn.ordinal(), ordinal, "{}", inn.display_name());
+        assert_eq!(inn.bed_cell(), bed, "{}", inn.display_name());
+        assert_eq!(INN_BED_CELLS[ordinal], bed, "{}", inn.display_name());
+        // "The party does not wake in the bed. On the completed-rest path
+        // the handler steps the party **one tile east** of the bed cell
+        // before returning."
+        assert_eq!(inn.bed_wake_cell(), waking, "{}", inn.display_name());
+        assert_eq!(waking.0, bed.0 + INN_BED_WAKE_STEP_EAST);
+        assert_eq!(waking.1, bed.1);
+    }
+    assert_eq!(INN_BED_WAKE_STEP_EAST, 1);
+    // "There is no rule to derive these from the map or from the shop
+    // cell; they are authored data and must be carried as data." The six
+    // cells share no step: consecutive ordinals differ by six different
+    // vectors, so no arithmetic rule reproduces the table.
+    let steps: Vec<(i16, i16)> = INN_BED_CELLS
+        .windows(2)
+        .map(|w| (w[1].0 as i16 - w[0].0 as i16, w[1].1 as i16 - w[0].1 as i16))
+        .collect();
+    for (index, step) in steps.iter().enumerate() {
+        assert!(
+            steps.iter().skip(index + 1).all(|other| other != step),
+            "bed cells must not be a fixed offset sequence"
+        );
+    }
 }

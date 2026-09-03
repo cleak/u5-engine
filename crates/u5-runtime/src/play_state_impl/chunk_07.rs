@@ -3826,6 +3826,20 @@ impl PlayState {
             );
             cleanup_ticks += 1;
         }
+        // `moons.md §3` (issue #190): "The town arrest jail relocation
+        // refreshes. The relocation arm - the one that moves the party to
+        // the Yew jail, runs the clock forward to 08:00 in repeated
+        // twenty-minute cleanup calls (`systems/town-mode.md` Section 14)
+        // and sets the floor byte to the entry floor - ends by running the
+        // town entry pass, so it reaches the floor loader and repaints
+        // unconditionally; because it clears the floor byte first, that
+        // repaint takes the **normal** arm rather than the erase arm."
+        //
+        // The entry pass runs at the *end*, so the refresh is here rather
+        // than beside the floor load above: the twenty-minute burst can
+        // cross a day rollover, and the pair the pass caches is the one for
+        // the day the party wakes on.
+        self.refresh_cached_moon_glyphs_at_scene_entry();
         self.message = format!(
             "Surrendered to the guards; jailed in {} at ({}, {}) until {:02}:00.",
             scene.key(),
@@ -3847,6 +3861,30 @@ impl PlayState {
         self.clear_non_player_active_objects();
         self.mark_visibility_dirty();
 
+        // `moons.md §3` (issue #190, `RETRACTIONS.md` R375): "The
+        // Blackthorn audience cutscene repaints once, not twice. The
+        // audience routine contains two repaint calls. The first, on
+        // entry, always paints, and always takes the erase arm: the party
+        // level is forced below surface immediately before it and the
+        // scene is still Blackthorn's castle."
+        //
+        // This is that first call. R375 is the reason there is no matching
+        // call in the routine's tail on the ordinary cutscene path: "on the
+        // ordinary cutscene path the scene byte has been forced out of the
+        // renderer's range earlier in the routine and is not restored until
+        // after that second call, so the renderer returns at its first gate
+        // having painted nothing and cached nothing ... An implementation
+        // that wires both of the routine's own calls paints an extra
+        // erase-arm frame the original never paints." The real
+        // post-cutscene refresh comes from the caller instead - the town
+        // entry pass, whose floor loader repaints (`reload_town_floor`).
+        //
+        // The below-surface level force is presentation-only here: this
+        // engine paints no strip during the cutscene, and which arm the
+        // painter would take does not change the cache write, which
+        // precedes both erase-arm tests (§3).
+        self.refresh_cached_moon_glyphs_at_scene_entry();
+
         // `blackthorn.md §3` step 2: "Select which shrine the interrogation
         // will demand a mantra for: scan the eight shrine ruin flags in
         // shrine order and take the first whose flag is *exactly* clear —
@@ -3855,6 +3893,11 @@ impl PlayState {
         // this eight-slot scan selects a *shrine*, not a party member, and
         // that there is no per-member Blackthorn jail flag.
         let Some(shrine_index) = self.blackthorn_selected_shrine() else {
+            // `moons.md §3` (R375): the routine's *second* repaint "paints
+            // only on the routine's early-exit path". This is one of the
+            // two early exits, so it is wired here and nowhere on the
+            // ordinary cutscene path.
+            self.refresh_cached_moon_glyphs_at_scene_entry();
             let outcome = self.apply_blackthorn_captive_cell_handoff(
                 game_dir,
                 "Blackthorn audience found no un-ruined shrine to interrogate.",
@@ -3867,6 +3910,9 @@ impl PlayState {
         // liveness only - the §3 withdrawal is explicit that "**There is
         // no per-member jail flag.**"
         if self.blackthorn_eligible_party_member_count() == 0 {
+            // `moons.md §3` (R375): the routine's second repaint, on the
+            // other early-exit path. See the shrine-scan exit above.
+            self.refresh_cached_moon_glyphs_at_scene_entry();
             let outcome = self.apply_blackthorn_captive_cell_handoff(
                 game_dir,
                 "Blackthorn audience found no eligible party member.",
@@ -4905,6 +4951,13 @@ impl PlayState {
         let mut ticks: u16 = 0;
         while self.clock.hour != target_hour && ticks < TOWN_REST_TICK_BUDGET {
             self.advance_turn_with_minutes(TOWN_REST_MINUTES_PER_TICK);
+            // `moons.md §3` (issue #190), the second of the two `H` (Hole
+            // up) arms: the census row for "`H` (Hole up), town-bed rest
+            // loop" is "On the loop's ten-minute steps", so the repaint is
+            // per step rather than once at the end. The strip's cell
+            // positions move with the hour and the glyph pair with the day,
+            // and a nine-hour rest crosses both.
+            self.refresh_cached_moon_glyphs_at_scene_entry();
             ticks += 1;
             if !self.town_rest_bed_still_accepts(entries, scene, floor) {
                 return false;

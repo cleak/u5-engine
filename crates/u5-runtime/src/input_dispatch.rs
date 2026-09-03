@@ -939,7 +939,8 @@ fn handle_active_shop_key_input(
                     *s = InnkeeperState::Greeting { inn };
                     match result {
                         Ok(outcome) => {
-                            let message = apply_paid_inn_rest(state, outcome.quote.total_price);
+                            let message =
+                                apply_paid_inn_rest(state, inn, outcome.quote.total_price);
                             let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
@@ -1594,22 +1595,48 @@ fn append_active_shop_surcharge(
 ///
 /// The fixed eight-hour advance this replaces both ended at the wrong hour
 /// and left the roster wherever the walker had taken it.
-fn apply_paid_inn_rest(state: &mut PlayState, cost: u16) -> String {
-    // OPEN SPEC QUESTION. The first of the three effects - "The party's map
-    // position is written to the inn's bed cell for the duration" - is *not*
-    // implemented, because §8.4 names a specific authored cell per inn and no
-    // published table gives it. Any engine-side rule for picking one (nearest
-    // bed tile, first bed tile, the shop's own cells) is an invented
-    // coordinate policy, and this write is persistent world state: guessing
-    // wrong parks the party inside an unrelated building for the rest of the
-    // game. The party therefore stays where it stood until the cell is
-    // published. The other two effects below - the clock run to 06:00 and the
-    // clear-and-re-place pass - are fully specified and are implemented.
+fn apply_paid_inn_rest(state: &mut PlayState, inn: crate::shops::Inn, cost: u16) -> String {
+    // `shops.md §8.4` (issue #190), the first of the three world-state
+    // effects: "The party's map position is written to the inn's bed cell
+    // for the duration, so the party is standing on the bed while the
+    // sequence plays." Which cell was the open question this handler
+    // carried; §8.4 now publishes the two parallel six-entry tables, so
+    // the cell is looked up rather than derived - "there is no rule to
+    // derive these from the map or from the shop cell; they are authored
+    // data and must be carried as data".
+    //
+    // "**The floor byte is not written.** The rest happens on whatever
+    // floor the inn menu was opened from. Do not reset the party to the
+    // entry floor as part of the rest." So only X and Y move here; the
+    // `Area`'s floor is left exactly as it was.
+    //
+    // This is on the **completed** path only. §8.4: "All three of the
+    // handler's early exits - the pre-menu helper declining, an answer
+    // other than `Y` at the confirmation prompt, and gold below the quoted
+    // charge - return without moving the party at all." Each of those
+    // returns before reaching this function.
+    let (bed_x, bed_y) = inn.bed_cell();
+    state.player.x = usize::from(bed_x);
+    state.player.y = usize::from(bed_y);
+    state.sync_player_object();
     state.mark_town_rest_sleepers();
     let hours = state.advance_inn_rest_clock_to_morning();
     let woke = state.wake_town_rest_sleepers();
     let (recovered_hp, recovered_mana, cured) = state.apply_inn_rest_night_recovery();
     state.clear_and_replace_scheduled_npcs();
+    // `shops.md §8.4`: "**The party does not wake in the bed.** On the
+    // completed-rest path the handler steps the party **one tile east** of
+    // the bed cell before returning."
+    //
+    // §8.4 is explicit that it does not claim the bed cell or its eastern
+    // neighbour is walkable on the shipped pages, so no walkability test
+    // is applied here either: "The coordinates are the ones the rest
+    // handler writes, which is what an implementation needs."
+    let (wake_x, wake_y) = inn.bed_wake_cell();
+    state.player.x = usize::from(wake_x);
+    state.player.y = usize::from(wake_y);
+    state.sync_player_object();
+    state.mark_visibility_dirty();
     format!(
         "Rested {hours} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)."
     )

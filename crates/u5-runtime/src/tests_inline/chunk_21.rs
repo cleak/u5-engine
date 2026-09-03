@@ -6370,3 +6370,101 @@ fn escape_is_ignored_at_the_push_direction_prompt() {
 
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn completed_inn_rest_sleeps_in_the_bed_cell_and_wakes_one_tile_east() {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+
+    // `shops.md §8.4` (issue #190), the first of the rest's three
+    // world-state effects: "The party's map position is written to the
+    // inn's bed cell for the duration, so the party is standing on the
+    // bed while the sequence plays", and "on the completed-rest path the
+    // handler steps the party **one tile east** of the bed cell before
+    // returning".
+    //
+    // "**The floor byte is not written.** The rest happens on whatever
+    // floor the inn menu was opened from. Do not reset the party to the
+    // entry floor as part of the rest." The party starts on floor 2 here
+    // for exactly that reason.
+    let inn = Inn::TheSmugglersInn;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 2,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ConfirmRest {
+        inn,
+        base_room_rate: inn.base_room_rate(),
+        total_price: 4,
+    }));
+
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+    assert!(state.message.contains("Rested"), "{}", state.message);
+    let (wake_x, wake_y) = inn.bed_wake_cell();
+    assert_eq!(
+        (state.player.x, state.player.y),
+        (usize::from(wake_x), usize::from(wake_y)),
+        "the party wakes one tile east of the bed cell, not in it"
+    );
+    assert_ne!(
+        (state.player.x, state.player.y),
+        (
+            usize::from(inn.bed_cell().0),
+            usize::from(inn.bed_cell().1)
+        )
+    );
+    assert_eq!(
+        state.area,
+        Area::Town {
+            scene: Scene::new(22).unwrap(),
+            floor: 2,
+        },
+        "the floor byte is not written by the rest"
+    );
+}
+
+#[test]
+fn refused_or_unaffordable_inn_rest_never_moves_the_party() {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+
+    // `shops.md §8.4` (issue #190): "The eastward step is on the
+    // completed path only. All three of the handler's early exits - the
+    // pre-menu helper declining, an answer other than `Y` at the
+    // confirmation prompt, and gold below the quoted charge - return
+    // without moving the party at all. A refused or unaffordable stay
+    // never moves the party into the bed cell at all, and leaves it
+    // exactly where it stood."
+    let inn = Inn::TheWayfarerInn;
+
+    // Answer other than `Y`.
+    let mut declined = test_state(open_grid(), 1, 1);
+    declined.gold = 200;
+    declined.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ConfirmRest {
+        inn,
+        base_room_rate: inn.base_room_rate(),
+        total_price: 2,
+    }));
+    handle_play_key_input(&mut declined, ' ', "n", Path::new("")).unwrap();
+    assert_eq!((declined.player.x, declined.player.y), (1, 1));
+    assert_eq!(declined.gold, 200);
+
+    // Gold below the quoted charge.
+    let mut broke = test_state(open_grid(), 1, 1);
+    broke.gold = 1;
+    broke.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ConfirmRest {
+        inn,
+        base_room_rate: inn.base_room_rate(),
+        total_price: 99,
+    }));
+    handle_play_key_input(&mut broke, 'Y', "", Path::new("")).unwrap();
+    assert_eq!(
+        (broke.player.x, broke.player.y),
+        (1, 1),
+        "an unaffordable stay never moves the party into the bed cell"
+    );
+    assert_eq!(broke.gold, 1);
+}
