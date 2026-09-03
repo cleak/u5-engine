@@ -3050,6 +3050,24 @@ impl PlayState {
     /// so a shell that narrates the idle tick can report it. Every other
     /// caller ignores it.
     pub fn advance_visual_tick(&mut self) -> Option<WindState> {
+        self.advance_visual_tick_inner(true)
+    }
+
+    /// A bare repaint tick: the redraw half of a world step, without the
+    /// per-pass wind check and so without its gameplay-PRNG draw.
+    ///
+    /// `animation.md §13` separates the two: "The viewport rebuild and
+    /// redraw run whenever the master redraw gate is set, regardless of the
+    /// second gate", while §13.2's wind check is one of the things "one
+    /// world step advances" behind both gates. Callers that the spec
+    /// describes as repainting rather than stepping the world take this
+    /// entry point, so their published gameplay-draw counts stay exact -
+    /// see [`Self::apply_rough_seas_if_eligible`] and `overworld.md §6.2.5`.
+    pub fn advance_world_repaint_tick(&mut self) {
+        let _ = self.advance_visual_tick_inner(false);
+    }
+
+    fn advance_visual_tick_inner(&mut self, run_wind_check: bool) -> Option<WindState> {
         // A White-potion repaint advances this same presentation state from
         // `advance_presentation_frame`. Suppress the ordinary frontend tick so
         // one displayed White frame cannot advance objects or tiles twice.
@@ -3080,11 +3098,12 @@ impl PlayState {
         // `weather.md §2`: "The store happens before any scene test, so
         // the state is always updated; only the banner repaint is
         // conditional."
-        let wind_change = if self.time_stop_counter == 0 && !self.negate_time_active() {
-            self.idle_wind_drift()
-        } else {
-            None
-        };
+        let wind_change =
+            if run_wind_check && self.time_stop_counter == 0 && !self.negate_time_active() {
+                self.idle_wind_drift()
+            } else {
+                None
+            };
         self.advance_animation_clock();
         // `combat.md §7`: the shared tile-painting pass - "run by the idle
         // redraw tick in *every* mode" - has a combat-band tail that "toggles
@@ -3621,7 +3640,20 @@ impl PlayState {
         self.push_impact_line("Rough seas!");
         self.outdoor_impact_presentation();
         self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
-        self.advance_visual_tick();
+        // `overworld.md §6.2.5`: "Order is `Rough seas!`, impact figure at
+        // the party cell, impact rumble, one world repaint tick, then
+        // absorption." The same section scopes the whole sequence's cost
+        // over that same order - "`N` damaged members advance the audio
+        // LFSR `300 + 160N` times in all, while consuming exactly `N`
+        // gameplay draws" (the `300` is the impact rumble, which precedes
+        // the tick) - and its conformance vector repeats it: "consume
+        // exactly `N` gameplay draws in `1..8`". So the repaint tick here
+        // must cost the gameplay stream nothing, which is the repaint half
+        // `animation.md §13` separates out ("The viewport rebuild and
+        // redraw run whenever the master redraw gate is set, regardless of
+        // the second gate"), not a full §13.2 world step with its wind
+        // check.
+        self.advance_world_repaint_tick();
         Some(self.apply_outdoor_impact_absorption())
     }
 

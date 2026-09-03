@@ -727,11 +727,19 @@ impl PlayState {
     ///   changes wind while the party is inside a town, which is exactly
     ///   what the paired Britain captures show.
     /// * **Roll source.** The rolls come off the shared gameplay PRNG.
-    ///   `prng.md §4`: "The per-pass wind check draws once in the common
-    ///   case. On an uncommon result it enters a retry loop that draws in
-    ///   pairs until it settles" - and that is given as one of the two
-    ///   reasons "rendering and idling perturb the gameplay stream". A
-    ///   private hash of the clock and position is not that stream.
+    ///   `prng.md §4` names "**The per-pass wind check**, which draws
+    ///   **once** and returns in the common case - sixty-three invocations
+    ///   in sixty-four. On the uncommon result it enters a retry loop taking
+    ///   **one further draw at a time**, so its count per invocation is one,
+    ///   two, three, and so on upward, with each extra iteration continuing
+    ///   at roughly `0.15`" as the second of the **three** per-pass
+    ///   consumers behind "Rendering and idling perturb the gameplay
+    ///   stream". A private hash of the clock and position is not that
+    ///   stream. (The earlier "draws in pairs until it settles" reading is
+    ///   withdrawn by that section's own retraction paragraph, and this
+    ///   loop draws one at a time accordingly: the outer roll, then one
+    ///   candidate draw per iteration plus one confirmation draw only when
+    ///   the candidate is Calm.)
     /// * **Cadence.** It only ran from the TUI `.` key, so no shell running
     ///   the ordinary idle redraw ever changed the wind. It now hangs off
     ///   the world step in [`Self::advance_visual_tick`].

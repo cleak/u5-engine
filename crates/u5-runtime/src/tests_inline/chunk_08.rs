@@ -631,6 +631,11 @@
         );
 
         assert_eq!(state.turn, 0);
+        // `commands.md §4`: `D` is "Default refusal ... it falls through to
+        // the stock \"What?\" response when it reaches this dispatcher",
+        // so this pins that the command really ran rather than being
+        // swallowed before the dispatcher.
+        assert!(state.message.contains("What?"));
         assert_eq!(state.party[0].hp, 12);
         assert!(!state.message.contains("drowning damage"));
         let _ = fs::remove_dir_all(dir);
