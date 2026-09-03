@@ -120,26 +120,26 @@ pub fn combat_attack_attempts(equipment: &[u8; EQUIPMENT_SLOT_COUNT]) -> Vec<Com
         .collect()
 }
 
+/// `combat.md §8.2`: the item-name line is printed only "when two or three
+/// items qualify"; "with exactly one qualifying item, or none, no item-name
+/// line is printed".
+pub const COMBAT_ATTACK_ITEM_NAME_LINE_MIN_ATTEMPTS: usize = 2;
+
 /// `combat.md §8.2`: "When two or three items qualify, each attempt
 /// additionally prints a newline, that item's name, and a colon **on its own
 /// line before its `Attack-`**; with exactly one qualifying item, or none, no
 /// item-name line is printed."
 ///
-/// The layout clause is published twice and is load-bearing. `§8.1` names
-/// the same emission "a per-item name **line**", and `§8.2` puts the name
-/// and colon "on its own line **before** its `Attack-`" - and a row that
-/// `Attack-` continues is not its own line. `§11.1`'s announcement table
-/// settles what terminates it: it republishes the `§8.1` turn banner as
-/// "newline, name, `, armed with ` and the readied item names or `bare
-/// hands`, a colon, **newline**", a trailing newline that `§8.1`'s own
-/// three-part enumeration omits. The item-name line's enumeration is the
-/// same shape, so it is read the same way.
-///
-/// Still filed as a spec question, because `§8.2` enumerates three
-/// emissions and the fourth is read out of the layout clause rather than
-/// stated.
+/// `§8.2` now settles the terminator directly: "**'On its own line' is
+/// literal: the colon carries its own trailing newline**, so each attempt's
+/// `Attack-` starts the row below its item-name line. This is a different
+/// mechanism from the turn banner's line break - there the colon literal
+/// carries no line feed and the turn handler supplies one (Section 8.1) -
+/// but the visible result is the same on both lines, and the two colons are
+/// two separate strings that cannot be served by one shared 'print a colon'
+/// helper." `RETRACTIONS.md` R356 carries the consumer consequence.
 pub fn combat_attack_item_line(attempts: &[CombatAttackAttempt], index: usize) -> Option<String> {
-    if attempts.len() < 2 {
+    if attempts.len() < COMBAT_ATTACK_ITEM_NAME_LINE_MIN_ATTEMPTS {
         return None;
     }
     let item_id = attempts.get(index)?.item_id?;

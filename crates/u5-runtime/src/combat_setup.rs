@@ -809,23 +809,40 @@ pub const COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID: u8 = 1;
 pub const COMBAT_ARENA_CENTRE_CELL: (usize, usize) = (5, 5);
 
 /// `combat.md §5`, "Arena-centre special": "If the loaded arena's centre
-/// cell (row five, column five) holds the magic-field marker tile `0xDC`,
-/// the setup pass converts that cell into a special active object with
-/// setup id one, using the same auxiliary-byte rule the dungeon-room loader
-/// applies to that id. No shipped outdoor arena carries that tile at that
-/// cell, so this is inert for stock `BRIT.CBT` data and is documented only
-/// so a custom arena behaves the same way."
+/// cell (row five, column five) holds terrain byte `0xDC`, the setup pass
+/// converts that cell into a special active object with setup id one."
 ///
-/// Setup id one's auxiliary-byte rule is
-/// [`DungeonRoomSpecialPostWrite::LevelTimesThreePlusSeven`], which draws
-/// nothing - so this conversion is draw-free and does not perturb the
-/// `§5.3` entry stream. Like every marker placement it allocates an
-/// active-object record only and no combat descriptor (`§5`), so the cell
-/// never takes a turn and never reaches the target picker.
+/// Three properties are settled there:
 ///
-/// The published sentence converts the cell into an object and says nothing
-/// about rewriting the arena terrain byte underneath it, so the terrain
-/// grid is left exactly as loaded.
+/// * **The auxiliary-byte rule is setup id one's, and it is draw-free** -
+///   "three times the current level index plus seven, computed
+///   arithmetically, with no random draw of any kind", i.e.
+///   [`DungeonRoomSpecialPostWrite::LevelTimesThreePlusSeven`]. "Do not
+///   generalise it to the sibling id: **setup id two draws**".
+/// * **The destination is the stamped object's quantity/loot byte** - "not
+///   any combat-descriptor field. The object is placed as an ordinary
+///   world-object stamp at arena `(5, 5)` ... so it produces a
+///   world-object row with **no** combat descriptor: nothing acts on that
+///   cell during the round."
+/// * **The arm is gated on the centre cell already holding `0xDC`**; "it is
+///   not an unconditional conversion of the centre cell".
+///
+/// *Retracted (`RETRACTIONS.md` R362).* An earlier revision of this comment
+/// carried `§5`'s "No shipped outdoor arena carries that tile at that cell,
+/// so this is inert for stock `BRIT.CBT` data and is documented only so a
+/// custom arena behaves the same way." **The inertness conclusion is
+/// withdrawn.** The arena-file half is stronger than before - "**No shipped
+/// arena record carries `0xDC` anywhere in its grid**" - but "the
+/// qualifying byte is painted at run time rather than loaded from an arena
+/// record": the dungeon room painter's underfoot-icon table stamps it at
+/// the arena centre for a chest cell, so "the live trigger is ...
+/// *dungeon-room combat entered while the party stands on a chest cell*,
+/// and the step is **not** inert in stock play". Of the three paths that
+/// enter this setup pass "only the dungeon-room path can present a
+/// qualifying centre cell". Confidence there is **probable** for the icon
+/// class and for the runtime sequencing; **established** for everything
+/// this function implements.
+///
 pub fn combat_arena_centre_special_active_object(
     terrain: &[[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     z: i8,
@@ -1153,6 +1170,19 @@ impl PlayState {
             level as i8,
             &setup.party_positions,
         );
+        // `combat.md §5` "Arena-centre special" (`RETRACTIONS.md` R362):
+        // "only the dungeon-room path can present a qualifying centre cell,
+        // because the byte arrives there from the dungeon room painter's
+        // underfoot-icon table", so the arm is wired here as well as on the
+        // outdoor path. The room painter's floor-fill byte is not published
+        // as a value, so no terrain overwrite is performed here.
+        let mut setup_terrain = setup.terrain;
+        self.place_combat_arena_centre_special(
+            &mut setup_terrain,
+            None,
+            level as i8,
+            &mut active_objects,
+        );
         let first_free_record = first_free_combat_active_object_record(&active_objects)
             .unwrap_or(COMBAT_PARTY_ACTOR_SLOTS);
         let instance = dungeon_room_combat_instance_from_setup_after_party(
@@ -1168,7 +1198,7 @@ impl PlayState {
         self.enter_combat_frame_with_terrain(
             instance.active_objects,
             instance.actors,
-            setup.terrain,
+            setup_terrain,
         )?;
         if !enter_endgame_after_successful_absorbable_combat {
             if let Some(snapshot) = &mut self.combat_frame_snapshot {
@@ -1301,6 +1331,20 @@ impl PlayState {
             level as i8,
             &setup.party_positions,
         );
+        // `combat.md §5`: the camp/Hole-up ambush is the third caller. Its
+        // arena is synthesised rather than loaded, so this engine does know
+        // its room floor-fill byte - the corridor fill of
+        // `dungeon-mode.md §14.1` - and can perform the published terrain
+        // overwrite if the arm ever fires. "Whether the camp route can
+        // observe a grid left behind by an earlier dungeon room was not
+        // traced."
+        let mut setup_terrain = setup.terrain;
+        self.place_combat_arena_centre_special(
+            &mut setup_terrain,
+            Some(DUNGEON_AMBUSH_ARENA_FLOOR_TILE),
+            level as i8,
+            &mut active_objects,
+        );
         let first_free_record = first_free_combat_active_object_record(&active_objects)
             .unwrap_or(COMBAT_PARTY_ACTOR_SLOTS);
         let instance = dungeon_room_combat_instance_from_setup_after_party(
@@ -1315,7 +1359,7 @@ impl PlayState {
         self.enter_combat_frame_with_terrain(
             instance.active_objects,
             instance.actors,
-            setup.terrain,
+            setup_terrain,
         )?;
         Ok(format!(
             "entered dungeon combat against {placed_count} of {count} {} from active monster tile {}",
@@ -1601,9 +1645,20 @@ impl PlayState {
         // `combat.md §5` "Arena-centre special", published between the
         // party descriptor seeding above and the monster count below: a
         // `0xDC` centre cell becomes a special active object with setup id
-        // one. Inert for stock `BRIT.CBT` (no shipped record carries that
-        // tile there) and draw-free, so it changes no existing entry.
-        self.place_combat_arena_centre_special(&setup.terrain, object.z, &mut active_objects);
+        // one, draw-free, so it changes no existing entry. The outdoor
+        // terrain path is one of `§5`'s three callers, and the one the
+        // three-caller census says can never present a qualifying centre
+        // cell, so it owns no floor-fill byte (`RETRACTIONS.md` R362
+        // withdraws the "inert for stock `BRIT.CBT`" conclusion this comment
+        // used to draw: the byte is painted at run time on the dungeon-room
+        // path, not loaded from an arena record).
+        let mut setup_terrain = setup.terrain;
+        self.place_combat_arena_centre_special(
+            &mut setup_terrain,
+            None,
+            object.z,
+            &mut active_objects,
+        );
 
         // `active-objects.md §7`: monster records "continue from the
         // first record left free by the seated party". Scanned, not
@@ -1730,7 +1785,7 @@ impl PlayState {
             &mut actors,
             first_free_record,
         )?;
-        self.enter_combat_frame_with_terrain(active_objects, actors, setup.terrain)?;
+        self.enter_combat_frame_with_terrain(active_objects, actors, setup_terrain)?;
         self.pending_combat_terrain_trigger_slot = Some(object_slot);
         Ok(format!(
             "entered terrain combat using BRIT.CBT arena {arena_index}; spawned {} of {} requested {} combatant(s){}",
@@ -1763,15 +1818,36 @@ impl PlayState {
     /// active-object record by the ordinary rule - "the first record whose
     /// tile byte is zero" - and no combat descriptor, which is what `§5`
     /// requires of every marker-only placement.
+    ///
+    /// `room_floor_fill` is the room's floor-fill terrain byte, for `§5`'s
+    /// third settled property: "**The terrain byte under the converted cell
+    /// is not left as loaded.** The step's last act overwrites that centre
+    /// cell with the room's floor-fill terrain byte, erasing the `0xDC` the
+    /// room painter had stamped there. An engine that leaves the grid
+    /// untouched keeps a `0xDC` under the converted object, and every later
+    /// grid consumer - the round loop's restraint test (Section 7.1), the
+    /// step-validity predicate, the standing-cell hazard pass - then reads
+    /// the wrong byte for that cell."
+    ///
+    /// It is `None` for a caller that owns no room floor-fill byte: the
+    /// outdoor terrain path, which `§5`'s three-caller census says can never
+    /// present a qualifying centre cell, and the loaded-room path, whose
+    /// painter fill byte `dungeon-mode.md §14.1` does not publish as a
+    /// value. Filed as a spec question rather than filled in with a guess.
     pub fn place_combat_arena_centre_special(
         &mut self,
-        terrain: &[[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+        terrain: &mut [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+        room_floor_fill: Option<u8>,
         z: i8,
         active_objects: &mut [ActiveObject],
     ) -> Option<usize> {
         let marker = combat_arena_centre_special_active_object(terrain, z, &mut self.prng_state)?;
         let record = first_free_combat_active_object_record(active_objects)?;
         active_objects[record] = marker;
+        if let Some(fill) = room_floor_fill {
+            let (row, column) = COMBAT_ARENA_CENTRE_CELL;
+            terrain[row][column] = fill;
+        }
         Some(record)
     }
 

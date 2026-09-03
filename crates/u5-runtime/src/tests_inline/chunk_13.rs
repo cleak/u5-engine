@@ -12823,18 +12823,76 @@ fn shrine_offering_cost_charges_digit_times_100() {
 }
 
 #[test]
-fn combat_range_effect_is_cast_like_recognises_selector_1() {
-    // combat.md §11
-    assert_eq!(RANGED_EFFECT_CAST_LIKE_SELECTOR, 1);
-    assert!(combat_range_effect_is_cast_like(1));
-    // Other selector values stay on the ordinary attack path.
-    for sel in [0u8, 2, 3, 8, 16, 99, 255] {
+fn dispatcher_selector_one_is_the_melee_sentinel() {
+    // `combat.md §11`, the per-consumer selector table, spell/weapon
+    // dispatcher row: selector `1` is "folded to zero, selecting the
+    // **melee / Aim-cursor arm**", and "a selector above `1`" selects
+    // "the cast/effect arm unconditionally, at every distance including
+    // one". `RETRACTIONS.md` R360 withdraws the inverted polarity this
+    // test used to pin ("value `1` is the zero-damage sentinel that
+    // routes into the cast/effect branch").
+    assert_eq!(RANGED_EFFECT_MELEE_SELECTOR, 1);
+    assert!(!combat_dispatcher_selector_routes_to_cast_effect(0));
+    assert!(!combat_dispatcher_selector_routes_to_cast_effect(1));
+    for sel in [2u8, 3, 8, 16, 99, 255] {
         assert!(
-            !combat_range_effect_is_cast_like(sel),
-            "selector {} should not route cast-like",
+            combat_dispatcher_selector_routes_to_cast_effect(sel),
+            "selector {} should route to the cast/effect arm",
             sel
         );
     }
+}
+
+#[test]
+fn every_class_id_carries_a_dense_side_table_row() {
+    // `catalogs/monster-bestiary.md §3`: "Both side tables are dense
+    // forty-eight-entry arrays with a defined byte for every class id".
+    // "Classes two through eleven all carry selector `1` and payload `0`",
+    // and "Class one (Bard) is the exception ... with selector `3`".
+    for class in 0..COMBAT_CLASS_COUNT as u8 {
+        let row = combat_ranged_effect_stats(class)
+            .unwrap_or_else(|| panic!("class {class} must carry a side-table row"));
+        assert_eq!(row.class, class);
+    }
+    assert_eq!(combat_ranged_effect_stats(1).unwrap().range_effect_selector, 3);
+    assert_eq!(combat_ranged_effect_stats(1).unwrap().payload, 0);
+    for class in 2u8..=11 {
+        let row = combat_ranged_effect_stats(class).unwrap();
+        assert_eq!(row.range_effect_selector, 1, "class {class} selector");
+        assert_eq!(row.payload, 0, "class {class} payload");
+    }
+}
+
+#[test]
+fn classes_two_through_eleven_agree_under_both_consumers() {
+    // `catalogs/monster-bestiary.md §3`: those ten classes "make an
+    // ordinary adjacent melee attempt and nothing else" under both
+    // consumers, while class one (Bard) "must **not** be given one merged
+    // rule": the AI resolver gives it maximum range three.
+    for class in 2u8..=11 {
+        assert_eq!(
+            resolve_combat_ai_attack_route(class, 1),
+            Some(CombatAiAttackRoute::Melee)
+        );
+        assert_eq!(
+            resolve_combat_ai_attack_route(class, 2),
+            Some(CombatAiAttackRoute::OutOfRange)
+        );
+        assert!(!combat_dispatcher_selector_routes_to_cast_effect(
+            combat_ranged_effect_stats(class).unwrap().range_effect_selector
+        ));
+    }
+    assert_eq!(
+        resolve_combat_ai_attack_route(1, 1),
+        Some(CombatAiAttackRoute::Melee)
+    );
+    assert!(matches!(
+        resolve_combat_ai_attack_route(1, 3),
+        Some(CombatAiAttackRoute::RangedEffect { .. })
+    ));
+    assert!(combat_dispatcher_selector_routes_to_cast_effect(
+        combat_ranged_effect_stats(1).unwrap().range_effect_selector
+    ));
 }
 
 #[test]

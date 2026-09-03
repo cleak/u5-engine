@@ -198,11 +198,8 @@ fn advance_combat_round_after_scenario_actor(
             return None;
         }
         let start_slot = state.next_combat_actor_slot.min(crate::COMBAT_ACTOR_SLOTS);
-        let application = state.apply_combat_round_walk_from_slot(
-            start_slot,
-            crate::COMBAT_PHASE_REFRESH_CONSTANT,
-            false,
-        );
+        let application = state
+            .apply_combat_round_walk_from_slot(start_slot, crate::COMBAT_PHASE_REFRESH_CONSTANT);
         state.next_combat_actor_slot = match application.stop_reason {
             CombatRoundWalkStopReason::EndOfRound => 0,
             CombatRoundWalkStopReason::AwaitingPlayer

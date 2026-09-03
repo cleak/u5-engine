@@ -778,7 +778,7 @@ impl PlayState {
                     isize::from(cursor_x) + x_offset,
                     isize::from(cursor_y) + y_offset,
                 );
-                if let Some((marker_x, marker_y)) = self.combat_secondary_marker {
+                if let Some((marker_x, marker_y)) = self.combat_secondary_marker() {
                     draw_combat_secondary_marker_cell(
                         viewport,
                         isize::from(marker_x) + x_offset,
@@ -1435,8 +1435,127 @@ impl PlayState {
                 self.visibility_grid[grid_index] = visibility_marker_for_viewport_cell(col, row);
             }
         }
+        self.composite_combat_active_objects_into_visibility_buffers();
         self.visibility_dirty = false;
         self.visibility_buffers_ready = true;
+    }
+
+    /// `visibility.md` 11, "The post-pass still runs, and combat uses the
+    /// same compositor as every other mode" (`RETRACTIONS.md` R365).
+    ///
+    /// "There is exactly **one** active-object compositor in the shipped
+    /// game, it has exactly one caller - the post-pass - and combat enters
+    /// it through the same per-frame world tick every other mode uses ...
+    /// The combat overlay contains no compositor of its own and makes no
+    /// compositing call at all." The withdrawn text said the post-pass
+    /// "skips combat scenes entirely" and that "combat manages
+    /// active-object compositing through its own round walker"; this
+    /// engine's blat-copy path implemented exactly that, so it composited
+    /// nothing in an arena.
+    ///
+    /// "What a combat scene does differently *inside* the post-pass is a
+    /// fixed list of five skips, not a skipped scene: the slot-zero refresh
+    /// and the fog refinement of Section 7 are skipped for the whole pass,
+    /// and per slot the viewport projection, the floor test and the two
+    /// range tests are skipped." Everything else - "the compositor, its
+    /// whole terrain-substitution table, the empty-slot and missing-sprite
+    /// skips, both grid-cell guards, the three direct-stamp branches, and
+    /// the shared-stream draw accounting - is identical in the two modes."
+    ///
+    /// The walk "treats slot zero like any other slot in both modes", and
+    /// with the refresh skipped "the party record's type, sprite and
+    /// coordinates are **not** refreshed from the transport marker and the
+    /// party position while a fight is live; arena setup owns those fields".
+    fn composite_combat_active_objects_into_visibility_buffers(&mut self) {
+        for slot in (0..self.active_objects.len()).rev() {
+            let object = self.active_objects[slot];
+            self.composite_combat_object_into_visibility_buffers(object);
+        }
+    }
+
+    /// `visibility.md` 8.5, "The neighbouring-row read at an arena edge":
+    /// the terrain reads are against the arena terrain array "in the arena's
+    /// own eleven-row index space", and a probe that leaves the arena record
+    /// is treated as no match - "**Recommended engine behaviour: treat any
+    /// neighbouring-row probe that leaves the arena record as *no match*, on
+    /// every neighbour-testing row.** That reproduces every shipped case
+    /// exactly and cannot diverge on a custom arena in a direction the
+    /// original could not have intended. Do **not** clamp the row back into
+    /// the arena, and do **not** apply the location-floor substitution."
+    fn combat_arena_terrain_at(&self, x: isize, y: isize) -> Option<u8> {
+        let (x, y) = (usize::try_from(x).ok()?, usize::try_from(y).ok()?);
+        let tile = *self.combat_terrain.get(y)?.get(x)?;
+        Some(self.animation.resolve_static_tile(tile))
+    }
+
+    fn composite_combat_object_into_visibility_buffers(&mut self, object: ActiveObject) {
+        if object.is_empty() {
+            return;
+        }
+        // "Per slot the viewport projection, the floor test and the two
+        // range tests are skipped": in an arena the record's own
+        // coordinates are the viewport cell.
+        let (col, row) = (object.x, object.y);
+        let (Some(grid_index), Some(terrain_index)) = (
+            visibility_grid_active_index(row, col),
+            terrain_band_active_index(row, col),
+        ) else {
+            return;
+        };
+        let current_grid_byte = self.visibility_grid[grid_index];
+        let object_x = object.x as isize;
+        let object_y = object.y as isize;
+        let current_terrain = self
+            .combat_arena_terrain_at(object_x, object_y)
+            .unwrap_or(self.terrain_band[terrain_index]);
+        let previous_row_terrain = self.combat_arena_terrain_at(object_x, object_y - 1);
+        let next_row_terrain = self.combat_arena_terrain_at(object_x, object_y + 1);
+        // `visibility.md` 11: "the per-pass draw accounting" is shared
+        // between the modes, so a selecting row costs its one variant draw
+        // in an arena exactly as it does in the world.
+        let variant = if composite_active_object_slot_draws_variant(
+            object.type_byte,
+            object.tile,
+            current_grid_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+        ) {
+            self.draw_active_object_composite_variant()
+        } else {
+            0
+        };
+        match composite_active_object_slot(
+            false,
+            object.type_byte,
+            object.tile,
+            current_grid_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+            row,
+            variant,
+        ) {
+            ActiveObjectCompositeResult::Suppress => {}
+            ActiveObjectCompositeResult::Companion(tile) => {
+                self.terrain_band[terrain_index] = tile;
+                self.visibility_grid[grid_index] = VISIBILITY_USE_COMPANION;
+            }
+            ActiveObjectCompositeResult::Direct(tile) => {
+                self.visibility_grid[grid_index] = tile;
+            }
+            ActiveObjectCompositeResult::PreviousRowDirectAndCompanion {
+                previous_marker,
+                tile,
+            } => {
+                if row > 0 {
+                    let previous_grid_index = visibility_grid_active_index(row - 1, col).unwrap();
+                    self.visibility_grid[previous_grid_index] = previous_marker;
+                }
+                self.terrain_band[terrain_index] = tile;
+                self.visibility_grid[grid_index] = VISIBILITY_USE_COMPANION;
+            }
+        }
     }
 
     fn prepared_top_down_grid_from_visibility_buffers(&self) -> Vec<Option<PreparedTopDownCell>> {
@@ -2736,6 +2855,12 @@ impl PlayState {
         apply_hourly_party_status: bool,
         age_payment_cooldown: bool,
     ) {
+        // `combat.md §7`, "The middle tier's flag is a stats-panel refresh
+        // request" (`RETRACTIONS.md` R358): the outdoor, town and dungeon
+        // mode loops share this per-turn entry point, and each "reads it
+        // once at the top of its per-turn entry point and, if it is set,
+        // redraws the full party stats panel and clears it".
+        let _ = self.take_party_stats_panel_refresh();
         // `dungeon-mode.md §15`: the dungeon loop already charged this
         // iteration's minute at its head, so a turn-consuming dungeon command
         // spends the action but not the ordinary mode increment a second

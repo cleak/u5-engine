@@ -480,6 +480,8 @@ fn a_landed_swing_netting_zero_or_below_grazes_on_both_sides_with_its_cue() {
                 raw_damage,
             }),
             damage_application: Some(damage_application),
+            food_theft: None,
+            sleep_effect: None,
         };
         assert_eq!(
             crate::input_dispatch::combat_monster_attack_result_message(&state, application)
@@ -599,6 +601,8 @@ fn a_party_target_reads_the_flat_hit_line_at_every_wound_level() {
                 raw_damage: 1,
             }),
             damage_application: Some(damage_application),
+            food_theft: None,
+            sleep_effect: None,
         };
         assert_eq!(
             crate::input_dispatch::combat_monster_attack_result_message(&state, application)

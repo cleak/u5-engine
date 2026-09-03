@@ -2467,7 +2467,7 @@ fn combat_ranged_effect_stats_expose_published_side_rows() {
         range_effect_selector,
         payload,
         scene_resistance,
-        cast_like_branch,
+        food_theft_branch,
         pre_gate_bypass,
     ) in EXPECTED_ROWS
     {
@@ -2483,7 +2483,7 @@ fn combat_ranged_effect_stats_expose_published_side_rows() {
             "class {class} scene resistance"
         );
         assert_eq!(
-            stats.cast_like_branch, cast_like_branch,
+            stats.food_theft_branch, food_theft_branch,
             "class {class} cast-like branch"
         );
         assert_eq!(
@@ -2492,7 +2492,14 @@ fn combat_ranged_effect_stats_expose_published_side_rows() {
         );
     }
 
-    assert_eq!(combat_ranged_effect_stats(11), None);
+    // `catalogs/monster-bestiary.md §3`: "**Both side tables are dense
+    // forty-eight-entry arrays with a defined byte for every class id, and
+    // every one of those rows is now published below**" - so class 11 has a
+    // row, and only an index outside the forty-eight-class space has none.
+    assert_eq!(
+        combat_ranged_effect_stats(11).map(|row| (row.range_effect_selector, row.payload)),
+        Some((1, 0))
+    );
     assert_eq!(combat_ranged_effect_stats(48), None);
 }
 
@@ -2660,7 +2667,14 @@ fn amulet_turning_party_target_wrapper_uses_living_status_and_equipment() {
 
 #[test]
 fn combat_ai_attack_route_uses_range_cap_and_adjacent_melee_boundary() {
-    assert_eq!(resolve_combat_ai_attack_route(11, 1), None);
+    // `catalogs/monster-bestiary.md §3` (issue #187 question 9): classes two
+    // through eleven "make an ordinary adjacent melee attempt and nothing
+    // else". The former `None` here read a publication gap in the catalog as
+    // a gap in the data.
+    assert_eq!(
+        resolve_combat_ai_attack_route(11, 1),
+        Some(CombatAiAttackRoute::Melee)
+    );
 
     assert_eq!(
         resolve_combat_ai_attack_route(28, 6),
@@ -2676,7 +2690,7 @@ fn combat_ai_attack_route_uses_range_cap_and_adjacent_melee_boundary() {
             range_effect_selector: 5,
             payload: 6,
             scene_resistance: true,
-            cast_like_branch: false,
+            food_theft_branch: false,
             pre_gate_bypass: false,
         })
     );
@@ -3038,15 +3052,18 @@ fn combat_field_cursor_start_prefers_valid_hint_else_caster_cell() {
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([30, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
 
-    state.combat_secondary_marker = Some((7, 5));
+    // `combat.md §7`/`RETRACTIONS.md` R357: "the world-side Cast command
+    // reads the same pair for its own field placement" - the coordinate,
+    // which "is never cleared", not the gate.
+    state.combat_aim_marker_cell = (7, 5);
     assert_eq!(state.combat_field_cursor_start(0), Some((7, 5)));
 
-    state.combat_secondary_marker = Some((99, 99));
+    state.combat_aim_marker_cell = (99, 99);
     assert_eq!(state.combat_field_cursor_start(0), Some((5, 5)));
 
     state.combat_actors[0].x = 0;
     state.combat_actors[0].y = 0;
-    state.combat_secondary_marker = Some((10, 10));
+    state.combat_aim_marker_cell = (10, 10);
     assert_eq!(state.combat_field_cursor_start(0), Some((0, 0)));
 }
 
@@ -4831,15 +4848,19 @@ fn weapon_attack_resolver_tracks_miss_forced_hit_and_non_damage_routes() {
             route: CombatWeaponAttackRangeRoute::Melee,
         }
     );
-    // `combat.md` Section 12: the monster row uses its class attack byte
-    // flat and still takes stage two's defence subtraction, so a class byte
-    // that happens to read 99 is a very large ordinary blow. The
-    // instant-kill sentinel belongs to the party arm's per-item overrides.
+    // `combat.md §12` (issue #187 question 13): "The sentinel is a property
+    // of the merged attack value, not of the party arm ... the **monster arm
+    // jumps directly onto it**. So a monster class whose attack byte is `99`
+    // returns `99` from the roller with the defence roll skipped".
+    //
+    // *Retracted:* this assertion used to read "a class byte that happens to
+    // read 99 is a very large ordinary blow. The instant-kill sentinel
+    // belongs to the party arm's per-item overrides."
     assert_eq!(
         melee(99, 60, None),
-        CombatWeaponAttackResolution::Hit {
+        CombatWeaponAttackResolution::Special {
             route: CombatWeaponAttackRangeRoute::Melee,
-            raw_damage: 99,
+            shattered: false,
         }
     );
     assert_eq!(
@@ -5160,27 +5181,32 @@ fn combat_round_loop_control_state_wrapper_reads_current_party_and_actor_table()
     ]);
 
     assert_eq!(
-        state.combat_round_loop_control(false, false),
+        state.combat_round_loop_control(false),
         CombatRoundLoopControl::ContinueActorWalk
     );
     assert_eq!(
-        state.combat_round_loop_control(false, true),
+        state.combat_round_loop_control(true),
         CombatRoundLoopControl::StartNextRound
     );
+    // `RETRACTIONS.md` R358: the wrapper used to take a `leave_combat_flag`
+    // and exit here on it. "Nothing leaves combat on that byte" - it is a
+    // party stats-panel refresh request - so a live party with foes left
+    // never exits, whatever that byte holds.
+    state.party_stats_panel_refresh_pending = true;
     assert_eq!(
-        state.combat_round_loop_control(true, true),
-        CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+        state.combat_round_loop_control(true),
+        CombatRoundLoopControl::StartNextRound
     );
 
     state.combat_actors[8].clear();
     assert_eq!(
-        state.combat_round_loop_control(false, false),
+        state.combat_round_loop_control(false),
         CombatRoundLoopControl::ContinueActorWalk
     );
 
     state.combat_actors[0].clear();
     assert_eq!(
-        state.combat_round_loop_control(true, true),
+        state.combat_round_loop_control(true),
         CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
     );
 }
@@ -9914,10 +9940,28 @@ fn negate_magic_skips_enemy_special_hook_but_preserves_ordinary_melee() {
     assert_eq!(application.special, None);
     assert!(!application.possess_hook_handled);
     assert_eq!(application.attack_route, Some(CombatAiAttackRoute::Melee));
-    assert!(application.monster_attack.is_some());
-    assert!(state.party[0].hp < 20);
+    let monster_attack = application
+        .monster_attack
+        .expect("the ordinary melee arm still runs");
+    // `combat.md §12` (`RETRACTIONS.md` R359): the attacker here is a Gazer,
+    // and "the resolver applies the asleep state and returns straight to its
+    // own epilogue: **no damage roll, no defence roll, no HP change, no
+    // experience credit**". The negate-magic contract this test owns is
+    // unchanged - the special hook is skipped and the ordinary attack path
+    // still runs - only the outcome of that path is corrected.
+    assert!(matches!(
+        monster_attack.sleep_effect,
+        Some(CombatSleepEffectOutcome::PartyMemberSlept { .. })
+    ));
+    assert_eq!(state.party[0].hp, 20);
+    assert_eq!(state.party[0].status, b'S');
+    // `combat.md §12`: the sleep application "sets the descriptor's disabled
+    // bit" alongside the status letter, and `§12` flags the asymmetry
+    // deliberately - "the status letter and the presentation byte are inside
+    // the saved-game window, while the descriptor's disabled bit is not".
+    assert!(state.combat_actors[0].is_status_disabled());
     assert_eq!(
-        state.combat_actors[0].flags,
+        state.combat_actors[0].flags & !COMBAT_ACTOR_FLAG_STATUS_DISABLED,
         COMBAT_ACTOR_FLAG_SELECTABLE_80
     );
 }
@@ -10192,7 +10236,7 @@ fn combat_round_walk_production_path_applies_monster_attack_damage() {
     state.party[0].hp = 20;
     state.party[0].max_hp = 20;
 
-    let application = state.apply_combat_round_walk_from_slot(8, 30, false);
+    let application = state.apply_combat_round_walk_from_slot(8, 30);
 
     assert_eq!(
         application.stop_reason,
@@ -10239,7 +10283,7 @@ fn combat_round_walk_production_path_applies_amulet_turning_scatter() {
     state.party_equipment = default_party_equipment(1);
     state.party_equipment[0][EQUIP_SLOT_AMULET] = EQUIPMENT_ID_AMULET_TURNING as u8;
 
-    let application = state.apply_combat_round_walk_from_slot(8, 30, false);
+    let application = state.apply_combat_round_walk_from_slot(8, 30);
 
     assert_eq!(
         application.stop_reason,
@@ -10316,7 +10360,7 @@ fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
     // is picked from that stream, so the impact cell moved with it.
     let mut state = combat_amulet_turning_scatter_state(AMULET_TURNING_SCATTER_SEED);
 
-    let application = state.apply_combat_round_walk_from_slot(8, 30, false);
+    let application = state.apply_combat_round_walk_from_slot(8, 30);
     let monster_attack = application
         .applications
         .iter()
@@ -10554,7 +10598,7 @@ fn combat_input_dispatch_push_prompt_cancel_commits_actor_action() {
     );
     assert_eq!(
         state.message,
-        format!("Push-{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
+        format!("Push-{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
     );
 }
 
@@ -10599,7 +10643,7 @@ fn combat_klimb_cardinal_suffix_moves_actor_inside_arena() {
         (state.active_objects[0].x, state.active_objects[0].y),
         (5, 4)
     );
-    assert_eq!(state.message, "Klimbed North to (5, 4).\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Klimbed North to (5, 4).\nAvatar, armed with bare hands:\n");
     assert!(state.visibility_dirty);
     assert!(state.combat_active);
 }
@@ -10673,7 +10717,7 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
     );
     assert_eq!(
         cancelled.message,
-        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
+        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
     );
 
     let mut blocked = combat_player_command_state(10, 10);
@@ -10869,7 +10913,7 @@ fn combat_sjog_prompt_cancel_commits_actor_action() {
     );
     assert_eq!(
         state.message,
-        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
+        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
     );
 }
 
@@ -11198,7 +11242,10 @@ fn combat_attack_walks_one_cursor_per_qualifying_readied_item() {
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow, reach 7
 
     let opened = state.begin_combat_attack_walk(0, true);
-    assert_eq!(opened.text, "\nSpiked Helm:\nAttack-Aim! ");
+    // `combat.md §8.2`: "When two or three items qualify, the Attack walker
+    // repositions the cursor and emits one space **before the first
+    // attempt's newline**", once per Attack command.
+    assert_eq!(opened.text, " \nSpiked Helm:\nAttack-Aim! ");
     assert!(opened.cursor_open);
     // The Spiked Helm has no range cap, so its cursor is the range-one melee
     // arm.
@@ -11317,7 +11364,7 @@ fn the_remembered_previous_target_belongs_to_one_attacker() {
     // `combat.md §7`: the open cursor is what supplies the "explicit arena
     // X/Y" the overlay tail's second shape is drawn at, so slot 1's freshly
     // opened cursor - on its own cell - is the marked cell.
-    assert_eq!(state.combat_secondary_marker, Some((5, 6)));
+    assert_eq!(state.combat_secondary_marker(), Some((5, 6)));
 }
 
 /// `combat.md §7` combat-overlay tail: on a lit, eligible pass it "draws
@@ -11337,12 +11384,12 @@ fn the_open_targeting_cursor_is_the_arena_marker_the_overlay_tail_draws() {
     state.pending_combat_actor_slot = Some(0);
     state.combat_cursor_blink = true;
 
-    assert_eq!(state.combat_secondary_marker, None);
+    assert_eq!(state.combat_secondary_marker(), None);
     assert_eq!(state.combat_overlay_draw_cells().secondary_marker_cell, None);
 
     // "It starts ... on the attacker's own cell" with nothing remembered.
     assert!(state.begin_combat_attack_walk(0, true).cursor_open);
-    assert_eq!(state.combat_secondary_marker, Some((5, 5)));
+    assert_eq!(state.combat_secondary_marker(), Some((5, 5)));
     let opened = state.combat_overlay_draw_cells();
     assert_eq!(opened.cursor_draw_cell, Some((5, 5)));
     assert_eq!(opened.secondary_marker_cell, Some((5, 5)));
@@ -11354,7 +11401,7 @@ fn the_open_targeting_cursor_is_the_arena_marker_the_overlay_tail_draws() {
         state.active_combat_targeting.as_ref().unwrap().cursor,
         (6, 5)
     );
-    assert_eq!(state.combat_secondary_marker, Some((6, 5)));
+    assert_eq!(state.combat_secondary_marker(), Some((6, 5)));
     assert_eq!(
         state.combat_overlay_draw_cells().secondary_marker_cell,
         Some((6, 5))
@@ -11371,7 +11418,7 @@ fn the_open_targeting_cursor_is_the_arena_marker_the_overlay_tail_draws() {
     // further attempt, ends the walk. No coordinate is left lit.
     let done = state.apply_combat_targeting_cursor_key('\u{1b}').unwrap();
     assert!(!done.cursor_open);
-    assert_eq!(state.combat_secondary_marker, None);
+    assert_eq!(state.combat_secondary_marker(), None);
     assert_eq!(state.combat_overlay_draw_cells().secondary_marker_cell, None);
 }
 
@@ -11588,7 +11635,7 @@ fn combat_targeting_cursor_kill_clears_the_last_foe_for_the_victory_line() {
     assert!(walk.attack.is_some());
     assert!(state.combat_actors[8].is_marked_dead());
     assert_eq!(
-        state.combat_round_loop_control(false, false),
+        state.combat_round_loop_control(false),
         CombatRoundLoopControl::ContinueActorWalk
     );
     assert!(state.announce_combat_victory_if_needed());
@@ -11811,7 +11858,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         (move_state.combat_actors[0].x, move_state.combat_actors[0].y),
         (6, 5)
     );
-    assert_eq!(move_state.message, "East\n\nAvatar, armed with bare hands:");
+    assert_eq!(move_state.message, "East\n\nAvatar, armed with bare hands:\n");
     assert_eq!(move_state.pending_combat_actor_slot, Some(0));
 
     let mut blocked_state = combat_player_command_state(8, 5);
@@ -11875,7 +11922,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // banner, and the Giant Rat's reply sits ahead of it.
     assert_eq!(
         attack_state.message,
-        "Attack-Aim! \nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
+        "Attack-Aim! \nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:\n"
     );
     assert_eq!(attack_state.combat_actors[8].hp_or_wound, 9);
     assert_eq!(attack_state.party_experience[0], 1);
@@ -11963,7 +12010,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     assert!(state.combat_actors[8].hp_or_wound >= 6);
     assert_eq!(
         state.message,
-        "Attack-Aim! \nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
+        "Attack-Aim! \nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:\n"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -12003,7 +12050,7 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     assert_eq!(
         state.message,
         format!(
-            "Attack-Aim! \nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:"
+            "Attack-Aim! \nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:\n"
         )
     );
     assert_eq!(state.party_experience[0], 3);
@@ -12021,7 +12068,7 @@ fn combat_input_dispatch_reports_only_original_style_monster_attack_result() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.\nAvatar is poisoned!\n\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Pass.\nAvatar is poisoned!\n\nAvatar, armed with bare hands:\n");
     assert_eq!(state.party[0].status, b'P');
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -12142,7 +12189,7 @@ fn combat_input_dispatch_keeps_internal_monster_movement_out_of_transcript() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Pass.\nAvatar, armed with bare hands:\n");
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -12389,7 +12436,7 @@ fn combat_input_dispatch_accepts_a_controlled_non_party_actor_turn() {
     // The direction echo of Section 8, then the next actor's turn banner.
     assert_eq!(state.message, "East
 
-Avatar, armed with bare hands:");
+Avatar, armed with bare hands:\n");
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 5));
     assert_eq!(
         (state.active_objects[8].x, state.active_objects[8].y),
@@ -12440,7 +12487,7 @@ fn combat_input_dispatch_yell_word_uses_combat_no_effect_route() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:\n");
     assert!(!state.message.contains("Word of Power"));
     assert!(state.active_ready.is_none());
     assert!(state.active_z_stats.is_none());
@@ -12471,7 +12518,7 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
     );
 
     assert!(state.active_yell.is_none());
-    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:\n");
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -12499,7 +12546,7 @@ fn combat_input_dispatch_empty_yell_commits_the_pending_actor_action() {
     assert!(state.active_yell.is_none());
     assert_eq!(
         state.message,
-        format!("{YELL_NOTHING_SAID_MESSAGE}\nAvatar, armed with bare hands:")
+        format!("{YELL_NOTHING_SAID_MESSAGE}\nAvatar, armed with bare hands:\n")
     );
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
@@ -12536,7 +12583,7 @@ fn combat_input_dispatch_uses_pending_round_walker_actor_slot() {
         (4, 6)
     );
     assert_ne!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 6));
-    assert_eq!(state.message, "South\n\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "South\n\nAvatar, armed with bare hands:\n");
 }
 
 /// `combat.md §8.2`: while the targeting cursor is open it owns the
@@ -12623,7 +12670,7 @@ fn combat_input_dispatch_action_tail_does_not_run_encounter_ring_vanishal() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Pass.\nAvatar, armed with bare hands:\n");
     assert_eq!(
         state.party_equipment[0][EQUIP_SLOT_RING],
         EQUIPMENT_ID_RING_INVISIBILITY as u8
@@ -12675,7 +12722,7 @@ fn combat_input_dispatch_cast_uses_pending_actor_as_caster() {
     assert_eq!(state.party[1].mana, 0);
     assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
     assert!(state.combat_actors[1].is_hidden_or_unrevealed());
-    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:\n");
 }
 
 #[test]
@@ -12801,7 +12848,7 @@ fn combat_input_dispatch_blank_or_escape_cast_prompt_commits_actor_action() {
             COMBAT_INTERFERENCE_NO_SOURCE
         );
         assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
-        assert_eq!(state.message, "None!\nAvatar, armed with bare hands:");
+        assert_eq!(state.message, "None!\nAvatar, armed with bare hands:\n");
     }
 }
 
@@ -12835,7 +12882,7 @@ fn combat_input_dispatch_cancelled_field_cursor_commits_spent_cast_action() {
             .iter()
             .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE)
     );
-    assert_eq!(state.message, "None!\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "None!\nAvatar, armed with bare hands:\n");
 }
 
 #[test]
@@ -12854,7 +12901,7 @@ fn combat_input_dispatch_quickness_does_not_consume_a_player_cast() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:\n");
     assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
     assert!(state.combat_actors[0].is_hidden_or_unrevealed());
@@ -12878,7 +12925,6 @@ fn combat_actor_slot_dispatch_quickness_consumes_an_automatic_actor() {
         let application = state.apply_combat_actor_slot_dispatch_with_inputs(
             8,
             30,
-            false,
             false,
             0,
             false,
@@ -12914,7 +12960,6 @@ fn combat_actor_slot_dispatch_quickness_consumes_an_automatic_actor() {
         let application = state.apply_combat_actor_slot_dispatch_with_inputs(
             8,
             30,
-            false,
             false,
             0,
             false,
@@ -12955,7 +13000,6 @@ fn combat_negate_time_skips_self_acting_actors_but_still_prompts_the_party() {
             8,
             30,
             false,
-            false,
             0,
             false,
             1,
@@ -12995,7 +13039,6 @@ fn combat_negate_time_skips_self_acting_actors_but_still_prompts_the_party() {
         0,
         30,
         false,
-        false,
         0,
         false,
         1,
@@ -13025,7 +13068,6 @@ fn combat_negate_time_skips_self_acting_actors_but_still_prompts_the_party() {
         let application = clear.apply_combat_actor_slot_dispatch_with_inputs(
             8,
             30,
-            false,
             false,
             0,
             false,
@@ -13065,7 +13107,7 @@ fn production_pass_one_gates_precede_all_monster_special_prng_draws() {
         .unwrap();
     quick.prng_state = seed;
 
-    let application = quick.apply_combat_actor_slot_dispatch(8, 30, false);
+    let application = quick.apply_combat_actor_slot_dispatch(8, 30);
 
     assert!(matches!(
         application,
@@ -13083,7 +13125,7 @@ fn production_pass_one_gates_precede_all_monster_special_prng_draws() {
     negate.active_effect_counter = 3;
     negate.prng_state = 0x0357;
 
-    let application = negate.apply_combat_actor_slot_dispatch(8, 30, false);
+    let application = negate.apply_combat_actor_slot_dispatch(8, 30);
 
     assert!(matches!(
         application,
@@ -13105,7 +13147,6 @@ fn combat_actor_slot_dispatch_waits_when_phase_counter_is_not_ready() {
     let application = state.apply_combat_actor_slot_dispatch_with_inputs(
         8,
         30,
-        false,
         false,
         0,
         false,
@@ -13156,7 +13197,6 @@ fn combat_actor_slot_dispatch_skips_actor_standing_on_a_restraint_cell() {
             8,
             30,
             false,
-            false,
             0,
             false,
             1,
@@ -13205,7 +13245,6 @@ fn combat_actor_slot_dispatch_still_acts_on_terrain_it_cannot_walk_on() {
         8,
         30,
         false,
-        false,
         0,
         false,
         1,
@@ -13250,7 +13289,6 @@ fn combat_actor_slot_dispatch_runs_ready_monster_ai_after_phase_refresh() {
     let application = state.apply_combat_actor_slot_dispatch_with_inputs(
         8,
         30,
-        false,
         false,
         0,
         false,
@@ -13319,7 +13357,6 @@ fn combat_actor_slot_dispatch_routes_controlled_non_party_actor_to_player_path()
         8,
         30,
         false,
-        false,
         0,
         false,
         1,
@@ -13360,7 +13397,6 @@ fn combat_actor_slot_dispatch_applies_slot_matched_monster_attack_inputs() {
     let application = state.apply_combat_actor_slot_dispatch_with_inputs(
         8,
         30,
-        false,
         false,
         0,
         false,
@@ -13408,6 +13444,8 @@ fn combat_actor_slot_dispatch_applies_slot_matched_monster_attack_inputs() {
             attacker_slot: 8,
             target_slot: 0,
             resolution: Some(CombatWeaponAttackResolution::Hit { .. }),
+            food_theft: None,
+            sleep_effect: None,
             ..
         })
     ));
@@ -13422,7 +13460,6 @@ fn combat_actor_slot_dispatch_reports_end_of_round_for_exhausted_slots() {
         state.apply_combat_actor_slot_dispatch_with_inputs(
             COMBAT_ACTOR_SLOTS,
             30,
-            false,
             false,
             0,
             false,
@@ -13453,7 +13490,6 @@ fn combat_actor_slot_dispatch_sweeps_dead_party_before_phase_tick() {
     let application = state.apply_combat_actor_slot_dispatch_with_inputs(
         0,
         30,
-        false,
         false,
         0,
         false,
@@ -13490,7 +13526,6 @@ fn combat_round_walk_stops_when_player_slot_is_ready_for_input() {
     let application = state.apply_combat_round_walk_from_slot_with_inputs(
         0,
         30,
-        false,
         false,
         0,
         false,
@@ -13531,7 +13566,6 @@ fn combat_round_walk_continues_through_monster_ai_to_end_of_round() {
     let application = state.apply_combat_round_walk_from_slot_with_inputs(
         1,
         30,
-        false,
         false,
         0,
         false,
@@ -13594,7 +13628,6 @@ fn combat_round_walk_spends_disabled_actor_turn_on_wake_check() {
         8,
         30,
         false,
-        false,
         0,
         false,
         1,
@@ -13641,7 +13674,7 @@ fn combat_disabled_actor_failed_wake_roll_does_not_run_ai() {
         })
         .unwrap();
 
-    let application = state.apply_combat_actor_slot_dispatch(8, 30, false);
+    let application = state.apply_combat_actor_slot_dispatch(8, 30);
 
     assert!(state.combat_actors[8].is_status_disabled());
     assert!(matches!(
@@ -13667,7 +13700,6 @@ fn combat_round_walk_carries_monster_attack_inputs_through_dispatch() {
     let application = state.apply_combat_round_walk_from_slot_with_inputs(
         8,
         30,
-        false,
         false,
         0,
         false,
@@ -13722,7 +13754,6 @@ fn combat_round_walk_stops_on_exit_control_after_death_sweep() {
     let application = state.apply_combat_round_walk_from_slot_with_inputs(
         0,
         30,
-        false,
         false,
         0,
         false,
@@ -15297,6 +15328,8 @@ fn combat_monster_attack_applies_poison_status_before_ordinary_melee_damage() {
             }),
             resolution: None,
             damage_application: None,
+            food_theft: None,
+            sleep_effect: None,
         }
     );
     assert_eq!(state.party[0].status, b'P');
@@ -15359,6 +15392,8 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
                     status_after: b'P',
                 },
             }),
+            food_theft: None,
+            sleep_effect: None,
         }
     );
     assert_eq!(state.party[0].hp, 3);
@@ -15400,6 +15435,8 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
                     status_after: b'G',
                 },
             }),
+            food_theft: None,
+            sleep_effect: None,
         }
     );
     assert_eq!(state.party[0].hp, 9);
@@ -15443,6 +15480,8 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
                     status_after: b'D',
                 },
             }),
+            food_theft: None,
+            sleep_effect: None,
         }
     );
     assert_eq!(state.party[0].hp, 0);
@@ -17725,7 +17764,6 @@ fn doom_absorption_skips_digit_selection_and_automatic_dispatch() {
         8,
         30,
         false,
-        false,
         0,
         false,
         1,
@@ -17894,7 +17932,6 @@ fn automatic_no_action_and_status_disabled_dispatches_run_field_contact() {
         8,
         30,
         false,
-        false,
         0,
         false,
         1,
@@ -17943,7 +17980,6 @@ fn automatic_no_action_and_status_disabled_dispatches_run_field_contact() {
     let application = disabled.apply_combat_actor_slot_dispatch_with_inputs(
         8,
         30,
-        false,
         false,
         0,
         false,
@@ -18102,7 +18138,8 @@ fn combat_cursor_blink_tick_reports_cursor_and_secondary_marker_cells() {
     state.active_player = Some(0);
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 6]);
-    state.combat_secondary_marker = Some((3, 4));
+    state.combat_aim_marker_cell = (3, 4);
+    state.combat_aim_marker_gate = true;
     state.active_objects.push(ActiveObject {
         type_byte: COMBAT_FIELD_KIND_FIRE,
         tile: COMBAT_FIELD_KIND_FIRE,
@@ -18125,7 +18162,8 @@ fn combat_cursor_blink_tick_reports_cursor_and_secondary_marker_cells() {
     assert_eq!(state.party, party_before);
 
     state.combat_cursor_blink = false;
-    state.combat_secondary_marker = Some((99, 99));
+    state.combat_aim_marker_cell = (99, 99);
+    state.combat_aim_marker_gate = true;
     let unclipped_report = state.apply_combat_cursor_blink_tick();
     assert_eq!(unclipped_report.cursor_draw_cell, Some((5, 6)));
     assert_eq!(unclipped_report.secondary_marker_cell, Some((99, 99)));

@@ -282,7 +282,7 @@
         );
 
         let application = state.apply_combat_actor_slot_dispatch_with_inputs(
-            0, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
+            0, 30, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
             &[],
         );
         let CombatActorSlotDispatchApplication::Slot { action, .. } = application else {
@@ -298,7 +298,7 @@
         // controlled monster still lands in the party's group.
         let mut clear = combat_ai_turn_state(8, 5);
         let application = clear.apply_combat_actor_slot_dispatch_with_inputs(
-            0, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
+            0, 30, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
             &[],
         );
         if let CombatActorSlotDispatchApplication::Slot { action, .. } = application {
@@ -956,7 +956,7 @@
                 break;
             }
             let application =
-                state.apply_combat_round_walk_from_slot(slot, COMBAT_PHASE_REFRESH_CONSTANT, false);
+                state.apply_combat_round_walk_from_slot(slot, COMBAT_PHASE_REFRESH_CONSTANT);
             for entry in &application.applications {
                 if let CombatActorSlotDispatchApplication::Slot {
                     slot: acted,
@@ -1025,7 +1025,7 @@
         let mut equipment = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
         assert_eq!(
             combat_turn_banner("Iolo", Some(&equipment)),
-            "\nIolo, armed with bare hands:"
+            "\nIolo, armed with bare hands:\n"
         );
 
         // "Only the helm, weapon-hand and shield-hand slots are scanned, and
@@ -1049,7 +1049,7 @@
         equipment[EQUIP_SLOT_OFFHAND] = large_shield;
         assert_eq!(
             combat_turn_banner("Iolo", Some(&equipment)),
-            "\nIolo, armed with bare hands:"
+            "\nIolo, armed with bare hands:\n"
         );
 
         // "- while the **spiked helm and spiked shield do**, because they
@@ -1060,12 +1060,12 @@
         equipment[EQUIP_SLOT_OFFHAND] = spiked_shield;
         assert_eq!(
             combat_turn_banner("Iolo", Some(&equipment)),
-            "\nIolo, armed with Spiked Helm, Dagger, Spiked Shield:"
+            "\nIolo, armed with Spiked Helm, Dagger, Spiked Shield:\n"
         );
 
         // "A charmed monster acting under player control gets only its name
         // and the colon, with no armament clause."
-        assert_eq!(combat_turn_banner("Troll", None), "\nTroll:");
+        assert_eq!(combat_turn_banner("Troll", None), "\nTroll:\n");
     }
 
     /// `combat.md §8.1`: the banner is "emitted at the start of every
@@ -1477,7 +1477,7 @@
         state.combat_actors[bat_slot].phase_counter = 1;
         let hp_before = state.party[0].hp;
         let application = state
-            .apply_combat_actor_slot_dispatch(bat_slot, COMBAT_PHASE_REFRESH_CONSTANT, false);
+            .apply_combat_actor_slot_dispatch(bat_slot, COMBAT_PHASE_REFRESH_CONSTANT);
         let monster_attack = match application {
             CombatActorSlotDispatchApplication::Slot {
                 action:
@@ -1686,6 +1686,8 @@
                             raw_damage: soaked,
                         }),
                         damage_application: Some(application),
+                        food_theft: None,
+                        sleep_effect: None,
                     },
                 )
                 .as_deref(),
@@ -1710,6 +1712,8 @@
                         hit_score: 7,
                     }),
                     damage_application: None,
+                    food_theft: None,
+                    sleep_effect: None,
                 },
             ),
             None,
@@ -1734,10 +1738,17 @@
             Some("Bat missed!"),
         );
 
-        // No line this engine can emit from an attack outcome is
-        // attacker-named: "An engine that prints the attacker's name in
-        // the miss line produces a transcript that is wrong on every line
-        // it emits."
+        // No *result line* this engine can emit is attacker-named: "An
+        // engine that prints the attacker's name in the miss line produces
+        // a transcript that is wrong on every line it emits."
+        //
+        // The one line that names the acting creature is not a result line:
+        // `combat.md §11`'s food-theft branch "replaces the entire damage
+        // and narration chain: no damage roll, no defence roll, no HP
+        // change, **no result line**", and prints `A <monster> stole some
+        // food!` with the creature's own name (`RETRACTIONS.md` R361). It is
+        // bound as `acting_creature_name`, the spec's own wording, so this
+        // grep still catches an attacker-named *result* line.
         assert!(
             !std::include_str!("../input_dispatch.rs").contains("attacker_name"),
             "R353's own suggested check: grep the narration module for any              attacker-named combat line"
@@ -1911,6 +1922,8 @@
                                 status_after: b'G',
                             },
                         }),
+                        food_theft: None,
+                        sleep_effect: None,
                     },
                 )
                 .as_deref(),

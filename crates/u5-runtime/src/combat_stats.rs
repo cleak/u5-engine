@@ -20,18 +20,30 @@ pub const COMBAT_SPAWN_COUNT_CAP: u8 = 26;
 /// shared cap clamp.
 pub const COMBAT_SPAWN_COUNT_EXACT_VALUES: [u8; 3] = [1, 8, 16];
 
-/// `combat.md §11` zero-damage sentinel value the COMSUBS spell/weapon
-/// dispatcher uses to route a class-indexed range/effect selector
-/// into the cast-like ranged/effect branch instead of the ordinary
-/// melee path.
-pub const RANGED_EFFECT_CAST_LIKE_SELECTOR: u8 = 1;
+/// `combat.md §11` / `catalogs/monster-bestiary.md §3`: the **melee**
+/// sentinel value of the class-indexed range/effect selector. On the
+/// shared spell/weapon dispatcher's non-party-side arm "value `1` is
+/// folded to zero and selects the **melee / Aim-cursor arm**".
+///
+/// `RETRACTIONS.md` R360 inverts the polarity this constant used to
+/// carry: it was published as "the zero-damage sentinel that routes into
+/// the cast/effect branch", and that reading is withdrawn. It is a *non*-
+/// zero selector above the melee value that routes into the
+/// projectile/effect arm.
+pub const RANGED_EFFECT_MELEE_SELECTOR: u8 = 1;
 
-/// `combat.md §11`: returns `true` when the per-class
-/// range/effect selector byte should route through the cast-like
-/// ranged/effect branch (selector value `1` is the published
-/// zero-damage sentinel).
-pub const fn combat_range_effect_is_cast_like(selector: u8) -> bool {
-    selector == RANGED_EFFECT_CAST_LIKE_SELECTOR
+/// `combat.md §11`, the per-consumer selector table, **spell/weapon
+/// dispatcher** row: selector `1` is "folded to zero, selecting the
+/// **melee / Aim-cursor arm**", while "a selector above `1`" selects
+/// "the **cast/effect arm unconditionally, at every distance including
+/// one** - this routine contains no distance test at all".
+///
+/// This is the dispatcher's contract only. The AI attack resolver reads
+/// the same byte as an inclusive maximum range and routes distance one to
+/// melee ([`crate::resolve_combat_ai_attack_route`]); `combat.md §11`
+/// forbids merging the two into one rule.
+pub const fn combat_dispatcher_selector_routes_to_cast_effect(selector: u8) -> bool {
+    selector > RANGED_EFFECT_MELEE_SELECTOR
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,7 +106,7 @@ pub struct CombatRangedEffectStats {
     pub range_effect_selector: u8,
     pub payload: u8,
     pub scene_resistance: bool,
-    pub cast_like_branch: bool,
+    pub food_theft_branch: bool,
     pub pre_gate_bypass: bool,
 }
 
@@ -147,14 +159,14 @@ macro_rules! stats {
 }
 
 macro_rules! ranged {
-    ($class:literal, $name:literal, $selector:literal, $payload:literal, $scene_resistance:literal, $cast_like:literal, $pre_gate_bypass:literal) => {
+    ($class:literal, $name:literal, $selector:literal, $payload:literal, $scene_resistance:literal, $theft:literal, $pre_gate_bypass:literal) => {
         CombatRangedEffectStats {
             class: $class,
             name: $name,
             range_effect_selector: $selector,
             payload: $payload,
             scene_resistance: $scene_resistance,
-            cast_like_branch: $cast_like,
+            food_theft_branch: $theft,
             pre_gate_bypass: $pre_gate_bypass,
         }
     };
@@ -364,6 +376,17 @@ pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
 pub fn combat_ranged_effect_stats(class: u8) -> Option<CombatRangedEffectStats> {
     match class {
         0 => Some(ranged!(0, "Mage", 7, 4, true, false, false)),
+        1 => Some(ranged!(1, "Bard", 3, 0, false, false, false)),
+        2 => Some(ranged!(2, "Fighter", 1, 0, false, false, false)),
+        3 => Some(ranged!(3, "Avatar", 1, 0, false, false, false)),
+        4 => Some(ranged!(4, "Villager", 1, 0, false, false, false)),
+        5 => Some(ranged!(5, "Merchant", 1, 0, false, false, false)),
+        6 => Some(ranged!(6, "Jester", 1, 0, false, false, false)),
+        7 => Some(ranged!(7, "Bard (second row)", 1, 0, false, false, false)),
+        8 => Some(ranged!(8, "Pirate", 1, 0, false, false, false)),
+        9 => Some(ranged!(9, "Unnamed reserved", 1, 0, false, false, false)),
+        10 => Some(ranged!(10, "Child", 1, 0, false, false, false)),
+        11 => Some(ranged!(11, "Beggar", 1, 0, false, false, false)),
         12 => Some(ranged!(12, "Guard", 15, 2, false, false, false)),
         13 => Some(ranged!(13, "Wanderer", 9, 4, true, false, false)),
         14 => Some(ranged!(14, "Blackthorn", 9, 3, true, false, false)),

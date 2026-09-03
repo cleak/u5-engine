@@ -3420,7 +3420,8 @@ fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
 
     state.enter_combat_frame_with_terrain(active_objects, actors, terrain)?;
     state.combat_cursor_blink = true;
-    state.combat_secondary_marker = Some((3, 4));
+    state.combat_aim_marker_cell = (3, 4);
+    state.combat_aim_marker_gate = true;
     state.message = "Combat marker gallery".to_string();
     validate_visual_combat_marker_gallery_state(state)?;
     Ok(())
@@ -3527,7 +3528,7 @@ fn validate_visual_combat_marker_gallery_state(state: &PlayState) -> io::Result<
             "combat marker gallery cursor blink is not visible",
         ));
     }
-    if state.combat_secondary_marker != Some((3, 4)) {
+    if state.combat_secondary_marker() != Some((3, 4)) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "combat marker gallery secondary marker is not at (3,4)",
@@ -10171,6 +10172,31 @@ impl Default for VisualIntroAnimationPump {
 /// constraint and nothing more. Gating those actions on the BIOS user tick
 /// instead would be a 55 ms delay of the shell's own choosing, which is the
 /// same invention as the 80 ms one it replaced.
+///
+/// `combat.md §7`, "The automatic round walk has no pacing of its own",
+/// now settles that directly: "There is no published wall-clock or frame
+/// interval between two automatic actions in the same round because there
+/// is none in the original. The combat overlay makes **no call to any of
+/// the four resident delay primitives**, and the round walker's per-actor
+/// body issues no wait and no frame of its own on the ordinary dispatch
+/// path", so "one render per dispatched action, no further delay" is
+/// "very nearly the whole contract". `systems/timing.md §4` states the
+/// same from the timing side.
+///
+/// Three qualifications this shell inherits rather than models:
+///
+/// * "*The walker is not render-free in general.*" The dead-party sweep
+///   and the defeat arm each render; the victory arm does not.
+/// * "*'Exactly one frame per action' is an approximation, not a rule.*"
+///   A kill of a remains-leaving class, or a damaging hazard tier, can
+///   render twice. "Model the renders as belonging to the helpers, and let
+///   the count fall out" - which is what a per-frame pump does.
+/// * "*The caveat: sound is the de-facto pacing.*" "An engine that models
+///   'no delay' literally *and* plays its sounds asynchronously will run
+///   the automatic round walk visibly faster than the original." That
+///   consequence is labelled **inferred** in the specification, and the
+///   audio envelopes belong to `systems/audio.md`; this shell does not
+///   convert them into a walk delay of its own.
 ///
 /// The visibility sweep still overrides, because `catalogs/item-list.md
 /// §7.2` does publish that presentation's per-frame pause.

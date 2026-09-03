@@ -261,6 +261,73 @@ pub const COMBAT_CLASS_LORD_BRITISH: u8 = COMBAT_CLASS_BLACKTHORN + 1;
 pub const COMBAT_CLASS_GIANT_RAT: u8 = 20;
 pub const COMBAT_CLASS_GIANT_RAT_SPRITE_BASE: u8 = 0x90;
 pub const COMBAT_CLASS_MIMIC: u8 = 26;
+/// `combat.md §11` / `catalogs/monster-bestiary.md §3`: the one class in
+/// the shipped forty-eight-class table carrying the food-theft branch
+/// flag - "**class 25, the Gremlin**" (`RETRACTIONS.md` R361).
+pub const COMBAT_CLASS_GREMLIN: u8 = COMBAT_CLASS_MIMIC - 1;
+/// `catalogs/monster-bestiary.md §2`: the Reaper's combat class id. With
+/// the Mimic it is one of the two classes `combat.md §9` refuses outright
+/// at the top of the movement arm: "the arm returns immediately for two
+/// classes, the **Reaper** and the **Mimic**, which are immobile by design.
+/// They never step and never teleport."
+pub const COMBAT_CLASS_REAPER: u8 = 27;
+
+/// `combat.md §9`, "The teleport arm's odds and draw budget": the two
+/// classes refused "before any of the above - before the party-side test,
+/// before the class flag, before the suppression tests".
+pub const fn combat_movement_arm_refuses_class(class: u8) -> bool {
+    class == COMBAT_CLASS_REAPER || class == COMBAT_CLASS_MIMIC
+}
+
+/// `combat.md §9`: "**The chance roll** is one uniform draw over the four
+/// values zero through three, and the arm continues on the three lower
+/// values and is abandoned on the maximum. That is a flat **three in
+/// four**, with no modulo skew."
+pub const COMBAT_TELEPORT_CHANCE_SPAN: u8 = 4;
+pub const COMBAT_TELEPORT_CHANCE_REJECTS_AT: u8 = COMBAT_TELEPORT_CHANCE_SPAN - 1;
+
+/// `combat.md §9`: "**The cell probe** is **two** independent uniform draws
+/// over the sixteen values zero through fifteen, taken **unconditionally
+/// and in X-then-Y order** with no short-circuit between them and **no retry
+/// loop**. The candidate is accepted only when both land inside the
+/// eleven-cell arena span, i.e. at ten or below."
+pub const COMBAT_TELEPORT_PROBE_DRAW_HIGH: u8 = 15;
+
+/// `combat.md §9`: the chance roll "continues on the three lower values and
+/// is abandoned on the maximum".
+pub const fn combat_teleport_chance_accepts(roll_0_to_3: u8) -> bool {
+    roll_0_to_3 % COMBAT_TELEPORT_CHANCE_SPAN != COMBAT_TELEPORT_CHANCE_REJECTS_AT
+}
+
+/// `combat.md §9`: the probe "is accepted only when both land inside the
+/// eleven-cell arena span, i.e. at ten or below, so the probe succeeds with
+/// probability 121/256, about 47.3 %. A rejected probe abandons the arm; it
+/// does not re-draw."
+pub const fn combat_teleport_probe_accepts(x: u8, y: u8) -> bool {
+    (x as usize) < COMBAT_ARENA_SIDE && (y as usize) < COMBAT_ARENA_SIDE
+}
+
+/// `combat.md §12`, "The Gazer branch is a sleep application": the
+/// attacker class whose landed attack applies sleep in place of ordinary
+/// damage (`RETRACTIONS.md` R359).
+pub const COMBAT_CLASS_GAZER: u8 = 28;
+
+/// `combat.md §11`, the Gremlin food-theft branch: "Draw one uniform value
+/// over zero through three and accept on three of the four - a flat three
+/// in four. **This draw is taken before the food test, so it is spent even
+/// when the party has no food**, which matters for stream parity."
+pub const COMBAT_FOOD_THEFT_ROLL_SPAN: u8 = 4;
+/// The one rejecting value of that draw: the arm accepts on "three of the
+/// four".
+pub const COMBAT_FOOD_THEFT_ROLL_REJECTS_AT: u8 = COMBAT_FOOD_THEFT_ROLL_SPAN - 1;
+/// `combat.md §11`: the branch "subtract[s] five from the party's food
+/// supply, saturating at zero".
+pub const COMBAT_FOOD_THEFT_AMOUNT: u16 = 5;
+
+/// `combat.md §11`: whether the Gremlin food-theft draw accepts.
+pub const fn combat_food_theft_roll_accepts(roll_0_to_3: u8) -> bool {
+    roll_0_to_3 % COMBAT_FOOD_THEFT_ROLL_SPAN != COMBAT_FOOD_THEFT_ROLL_REJECTS_AT
+}
 /// `catalogs/monster-bestiary.md §2` consecutive small-monster
 /// combat class ids (Giant Rat 20 / Bat 21 / Giant Spider 22).
 /// Anchor each successor to the chain.
@@ -820,7 +887,7 @@ pub enum CombatAiAttackRoute {
         range_effect_selector: u8,
         payload: u8,
         scene_resistance: bool,
-        cast_like_branch: bool,
+        food_theft_branch: bool,
         pre_gate_bypass: bool,
     },
 }
@@ -1615,13 +1682,28 @@ pub fn resolve_combat_attacker_raw_damage(
 ) -> Option<CombatAttackerRawDamage> {
     let (route, shattered) = match source {
         // `combat.md §12` stage one, monster row: the class byte is used
-        // flat and stage two's defence subtraction still runs on it. The
-        // instant-kill short-circuit belongs to the *party* arm's two
-        // per-item overrides, so a class attack byte that happens to read
-        // 99 is a very large ordinary blow, not a sentinel.
+        // flat, and stage two's defence subtraction runs on it - **except**
+        // on the sentinel. "The sentinel is a property of the merged attack
+        // value, not of the party arm ... the **monster arm jumps directly
+        // onto it**. So a monster class whose attack byte is `99` returns
+        // `99` from the roller with the defence roll skipped, and the
+        // damage-and-status endpoint ... kills outright. It does **not**
+        // resolve as an ordinary very large blow that still takes the
+        // stage-two defence subtraction." Two shipped classes carry it,
+        // Wanderer and Lord British.
+        //
+        // *Retracted:* this arm previously read "a class attack byte that
+        // happens to read 99 is a very large ordinary blow, not a
+        // sentinel". Modelling it that way "diverges *behaviourally*
+        // against a defender whose class flags halve or zero physical
+        // damage ... and it diverges *in the PRNG stream*, because the
+        // original takes no defender draw on a sentinel."
         CombatAttackerDamageSource::MonsterFlat { attack_value } => (
             match attack_value {
                 0 => CombatWeaponDamageRoute::NoOrdinaryDamage,
+                value if i16::from(value) == COMBAT_INSTANT_KILL_DAMAGE => {
+                    CombatWeaponDamageRoute::Special
+                }
                 value => CombatWeaponDamageRoute::Damage {
                     raw_damage: value as i16,
                 },
@@ -2321,14 +2403,23 @@ pub fn resolve_combat_defeat(party: &[PartyMember], actors: &[CombatActorDescrip
     !(0..COMBAT_PARTY_ACTOR_SLOTS).any(|slot| combat_party_slot_can_continue(slot, actors, party))
 }
 
+/// `combat.md §7` post-dispatch and table-terminal checks.
+///
+/// *Retracted (`RETRACTIONS.md` R358).* The second parameter used to be
+/// named `leave_combat_flag`, after the byte `§7` step 7's middle hazard
+/// tier was said to raise. **Nothing leaves combat on that byte** - it is a
+/// party stats-panel refresh request with four readers, none of which
+/// "returns, breaks a loop, writes a scene byte or touches any combat-exit
+/// state" - so the parameter is renamed to the condition that actually
+/// produces this exit: no party-side actor remains unmarked.
 pub const fn resolve_combat_round_loop_control(
     defeat_flag: bool,
-    leave_combat_flag: bool,
+    party_side_exhausted: bool,
     exhausted_slots: bool,
 ) -> CombatRoundLoopControl {
     if defeat_flag {
         CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
-    } else if leave_combat_flag {
+    } else if party_side_exhausted {
         CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
     } else if exhausted_slots {
         CombatRoundLoopControl::StartNextRound
@@ -3060,7 +3151,7 @@ pub fn resolve_combat_ai_attack_route(class: u8, target_range: u8) -> Option<Com
         range_effect_selector: ranged.range_effect_selector,
         payload: ranged.payload,
         scene_resistance: ranged.scene_resistance,
-        cast_like_branch: ranged.cast_like_branch,
+        food_theft_branch: ranged.food_theft_branch,
         pre_gate_bypass: ranged.pre_gate_bypass,
     })
 }
