@@ -1,4 +1,4 @@
-// Exact player-visible result lines and their fifteen-column rendering.
+// Exact player-visible result lines and their sixteen-column rendering.
 //
 // `overworld.md` Section 8.1, `doors-and-z-transitions.md` Section 12.1 and
 // `dungeon-mode.md` Section 8.1 publish these as literal transcripts, with
@@ -21,19 +21,57 @@ fn rendered_rows(text: &str) -> Vec<String> {
 }
 
 #[test]
-fn the_message_window_wraps_at_fifteen_columns() {
-    // `overworld.md §8.1`, "About the fifteen-column figure": "The printer's
-    // wrap test uses the difference between the window's right and left
-    // columns, which is fifteen."
-    assert_eq!(MESSAGE_WINDOW_WIDTH, 15);
+fn the_message_window_wraps_at_sixteen_columns() {
+    // `text-output.md §4`: "The gameplay message window spans columns 24
+    // through 39 and so holds **sixteen** characters per row."
+    //
+    // *(Re-derived: `RETRACTIONS.md` R347 withdraws "the fifteen-column
+    // gameplay message window" and "the message window's word wrap at
+    // width fifteen", and R344 withdraws the width rule behind them.
+    // Measured on `playtest/orig/cbt3/r6.png`, whose message pane draws
+    // `with Long Sword:` - sixteen cells - on one row, and on
+    // `cbt3/r13.png` / `cbt2/o8.png`, which draw `Iolo, armed with`.)*
+    assert_eq!(MESSAGE_WINDOW_WIDTH, 16);
+    assert_eq!(
+        MESSAGE_WINDOW_WIDTH,
+        usize::from(MESSAGE_WINDOW_RIGHT - MESSAGE_WINDOW_LEFT) + 1
+    );
+}
+
+/// The two rows the width question turns on, from the original's own
+/// combat captures: both are exactly sixteen cells and both wrap one word
+/// later than a fifteen-column window would allow.
+#[test]
+fn the_combat_turn_banner_wraps_as_the_original_draws_it() {
+    assert_eq!(
+        rendered_rows("Avatar, armed with Long Sword:"),
+        vec!["Avatar, armed".to_string(), "with Long Sword:".to_string()]
+    );
+    assert_eq!(
+        rendered_rows("Iolo, armed with Main Gauche, Short Sword:"),
+        vec![
+            "Iolo, armed with".to_string(),
+            "Main Gauche,".to_string(),
+            "Short Sword:".to_string(),
+        ]
+    );
+    // `combat.md §4.1`: the conflict banner "fills the message window edge
+    // to edge, absolute columns 24 through 39, on one row."
+    assert_eq!(rendered_rows("*** CONFLICT ***"), vec![
+        "*** CONFLICT ***".to_string()
+    ]);
 }
 
 #[test]
 fn the_falls_chain_renders_as_the_published_three_rows() {
     // `overworld.md §8.1`: "the full chain reads" F-A-L-L-S!!! / Falling into
     // / underworld!! - "The break inside `Falling into underworld!!` is **not**
-    // in the data. It is produced by the message window's word wrap at width
-    // fifteen: the printer breaks on the space after `into`."
+    // in the data. It is produced by the message window's word wrap ... the
+    // printer breaks on the space after `into`."
+    //
+    // *(The published width in that sentence, fifteen, is withdrawn by
+    // `RETRACTIONS.md` R347; the rendered rows are unchanged, "a
+    // coincidence of these particular strings".)*
     assert_eq!(
         rendered_rows(OVERWORLD_FALLS_BANNER),
         vec!["F-A-L-L-S!!!".to_string()]
@@ -60,8 +98,15 @@ fn the_dungeon_exit_renders_blank_verb_plane_blank() {
     // `doors-and-z-transitions.md §12.1`: the two prints compose to a blank
     // row, `Exit to`, the plane name, and a trailing blank row. "The break
     // between `Exit to` and the plane name is **not** in the data": the first
-    // string leaves the cursor at column eight and the plane name has no space
-    // to break on, so the printer restarts the word at column zero.
+    // string leaves the cursor at column eight, and with eight of sixteen
+    // columns left the printer "collects the eight characters that still
+    // fit, finds no break byte, keeps that chunk, emits a line feed because
+    // the cursor is not at the left edge, prints the chunk from column 0,
+    // and the **next** chunk continues on the same row at column eight."
+    //
+    // *(The former "restarts the word at column zero" mechanism is
+    // withdrawn by `RETRACTIONS.md` R349 - identical pixels for this
+    // string, different mechanism.)*
     assert_eq!(
         rendered_rows(DUNGEON_EXIT_TO_UNDERWORLD_NARRATION),
         vec![

@@ -10418,7 +10418,11 @@ fn text_window_system_scrolls_the_row_below_into_the_vacated_bottom() {
     for byte in b"ijkl" {
         system.emit_byte(*byte);
     }
-    system.set_window_rect(0, 0, 0, 4, 1);
+    // `text-output.md §4` (`RETRACTIONS.md` R344): both corner columns
+    // are inclusive, so a `0..=3` rectangle is the four-cell row this test
+    // needs; the former `0..=4` rectangle held four cells only under the
+    // withdrawn `bottom_right_x - top_left_x` width rule.
+    system.set_window_rect(0, 0, 0, 3, 1);
     system.set_active_cursor(0, 0);
 
     for byte in b"abcd" {
@@ -22752,13 +22756,15 @@ fn wrap_text_breaks_a_prompt_line_at_the_last_space() {
 }
 
 #[test]
-fn wrap_text_matches_the_observed_fifteen_cell_message_window_wrap() {
-    // §5, observed in the original's 15-cell dungeon message window: every
-    // break lands on a space, never mid-word.
-    let lines = wrap_text("Wielding the Sceptre of Lord British...", 15, 0);
+fn wrap_text_matches_the_observed_message_window_wrap() {
+    // §5, observed in the original's message window: every break lands on
+    // a space, never mid-word. The rows are the same under the corrected
+    // sixteen-cell capacity (`RETRACTIONS.md` R344/R347) as under the
+    // withdrawn fifteen, which is why the observation still holds.
+    let lines = wrap_text("Wielding the Sceptre of Lord British...", 16, 0);
     assert_eq!(lines, vec!["Wielding the", "Sceptre of Lord", "British..."]);
     for line in &lines {
-        assert!(line.len() <= 15, "line {line:?} crosses the right edge");
+        assert!(line.len() <= 16, "line {line:?} crosses the right edge");
     }
 }
 

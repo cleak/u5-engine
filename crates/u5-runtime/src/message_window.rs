@@ -19,11 +19,20 @@ use crate::gameplay_chrome::{
     MESSAGE_WINDOW_BOTTOM, MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_RIGHT, MESSAGE_WINDOW_TOP,
 };
 
-/// Cells available to an unprefixed output line, columns 24..=38.
-/// `text-output.md §4` defines a window's printable width as
-/// `bottom_right_x - top_left_x`, excluding the trailing column, so
-/// the window's right edge at column 39 is never printed into.
-pub const MESSAGE_WINDOW_WIDTH: usize = (MESSAGE_WINDOW_RIGHT - MESSAGE_WINDOW_LEFT) as usize;
+/// Cells available to an unprefixed output line, columns 24..=39.
+///
+/// `text-output.md §4`: "A window's **capacity** in cells is
+/// `bottom_right_x - top_left_x + 1`: both corner columns are
+/// inclusive, so the trailing column is usable and a glyph is written
+/// into it normally. ... The gameplay message window spans columns 24
+/// through 39 and so holds **sixteen** characters per row."
+///
+/// *(Corrected: this constant was `bottom_right_x - top_left_x` = 15,
+/// on the withdrawn reading that the trailing column is never printed
+/// into. `RETRACTIONS.md` R344 and R347 withdraw "the fifteen-column
+/// gameplay message window" and "the message window's word wrap at
+/// width fifteen".)*
+pub const MESSAGE_WINDOW_WIDTH: usize = (MESSAGE_WINDOW_RIGHT - MESSAGE_WINDOW_LEFT) as usize + 1;
 /// Cells available to a prefixed line, whose text starts at column 25.
 pub const MESSAGE_WINDOW_PREFIXED_WIDTH: usize = MESSAGE_WINDOW_WIDTH - 1;
 /// Rows in the window (11..=23), the last of which is the live input.
@@ -361,9 +370,13 @@ pub fn layout_message_window_with_open_prompt(
         rows.push(MessageWindowRow {
             row: (first_row + offset) as u8,
             column: if line.centered {
+                // `combat.md §4.1`: "In the sixteen-column message
+                // window that is `floor((16 - length) / 2)`, and the
+                // absolute column is 24 plus it - so `BATS` occupies
+                // absolute columns 30..33".
                 MESSAGE_WINDOW_LEFT
                     + crate::text_window_centred_start_column(
-                        16,
+                        MESSAGE_WINDOW_WIDTH as u8,
                         line.glyphs.len().min(u8::MAX as usize) as u8,
                     )
             } else {

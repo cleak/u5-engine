@@ -10926,7 +10926,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // which roll the reply takes.
     assert_eq!(
         attack_state.message,
-        "East\nGiant Rat missed!\n\nAvatar, armed with bare hands:"
+        "East\n\nAvatar, armed with bare hands:"
     );
     assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
@@ -10984,7 +10984,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
 
     assert_eq!(
         state.message,
-        "East\nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
+        "East\nGiant Rat lightly wounded!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));

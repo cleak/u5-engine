@@ -3135,12 +3135,28 @@ fn combat_monster_attack_result_message(
     ) {
         return Some(format!("{target_name} is poisoned!"));
     }
+    // A monster whose swing misses narrates **nothing**. Measured on the
+    // original in a controlled side-by-side run over twenty keys against
+    // the same save: the message pane shows only monster hits and kills
+    // (`playtest/orig/cbt3/r6.png` `Avatar hit!`, `r13.png`
+    // `Avatar killed!`) and never a monster-side miss line, while the
+    // engine used to narrate every one of them (`Bat missed!`).
+    //
+    // `combat.md` §12 says only that a zero-or-negative result "read[s] as
+    // a miss" and that the handler "narrate[s] the result"; it does not
+    // publish which outcomes print on which side, and the attack-outcome
+    // narration census is still open on `cleak/u5-spec#185`. The
+    // conservative reading of the measurement is that the monster side
+    // prints on damage only, so the miss arm falls through to `None`.
+    //
+    // *runtime observation, spec open* - the party-side miss line is a
+    // different path (see [`combat_weapon_attack_result_message`]) and is
+    // deliberately left alone.
     if matches!(
         attack.resolution,
         Some(CombatWeaponAttackResolution::Miss { .. })
     ) {
-        let attacker_name = combat_actor_display_name(state, attack.attacker_slot);
-        return Some(format!("{attacker_name} missed!"));
+        return None;
     }
     match attack.damage_application {
         Some(CombatWeaponDamageApplication::Party { damage, .. }) => Some(if damage.killed {

@@ -21,19 +21,43 @@ pub const TEXT_WINDOW_COUNT: usize = 4;
 pub const TEXT_SCREEN_COLUMNS: u8 = 40;
 pub const TEXT_SCREEN_ROWS: u8 = 25;
 
-/// `text-output.md §4` text-window inner width in cells:
-/// `bottom_right_x - top_left_x`. The trailing column is excluded —
-/// a window whose corners are columns 6 and 33 has width 27 (27
-/// characters fit before wrapping is forced). The wrap-aware
-/// printer's word-break logic and the centring helper both consume
-/// this figure. Returns 0 when the corners are inverted (callers
-/// should normalise the descriptor before calling).
+/// `text-output.md §4` text-window **inclusive-endpoint budget**:
+/// `bottom_right_x - top_left_x`. This is the *last legal
+/// window-local column*, which the printer's wrap and centring
+/// arithmetic genuinely carry in that form — it is **one less than
+/// the number of cells a row holds and must never be used as a
+/// character count**. Use [`text_window_capacity`] for the count.
+/// Returns 0 when the corners are inverted (callers should normalise
+/// the descriptor before calling).
+///
+/// *(Corrected: an earlier revision called this the window's width,
+/// said it "does not include the trailing column", and gave the 6..33
+/// window twenty-seven characters before a forced wrap. That is
+/// withdrawn — twenty-eight fit. `RETRACTIONS.md` R344.)*
 pub const fn text_window_inner_width(top_left_x: u8, bottom_right_x: u8) -> u8 {
     if bottom_right_x > top_left_x {
         bottom_right_x - top_left_x
     } else {
         0
     }
+}
+
+/// `text-output.md §4` text-window **capacity** in cells:
+/// "A window's **capacity** in cells is `bottom_right_x - top_left_x
+/// + 1`: both corner columns are inclusive, so the trailing column is
+/// usable and a glyph is written into it normally. A window whose
+/// corners are columns 6 and 33 therefore holds **twenty-eight**
+/// characters on one row, and the twenty-ninth is what forces the
+/// wrap."
+///
+/// This is the figure the wrap-aware printer accepts on a row and the
+/// figure the per-cell emitter writes before wrapping — §6: "The
+/// number of characters the printer will actually accept on the row
+/// is that value **plus one** ... which is exactly the number of
+/// cells the per-cell emitter accepts before wrapping, so the two
+/// primitives agree and neither carries an off-by-one."
+pub const fn text_window_capacity(top_left_x: u8, bottom_right_x: u8) -> u8 {
+    text_window_inner_width(top_left_x, bottom_right_x) + 1
 }
 
 /// `text-output.md §5` centred-line starting column for a line
@@ -211,12 +235,15 @@ impl TextWindowDescriptor {
         text_window_inner_width(self.top_left_x, self.bottom_right_x)
     }
 
-    /// `text-output.md §5` `columns_in_window`:
-    /// `bottom_right_x - top_left_x + 1`. This is the figure the
-    /// centre branch measures against, one more than the wrap width
-    /// returned by [`Self::inner_width`].
+    /// `text-output.md §4`/§5 `columns_in_window`, i.e. the row's
+    /// **capacity**: `bottom_right_x - top_left_x + 1`. This is the
+    /// figure the centre branch measures against, the number of
+    /// characters the wrap-aware printer accepts on a row, and the
+    /// number of cells the per-cell emitter writes before it wraps —
+    /// one more than the inclusive-endpoint budget returned by
+    /// [`Self::inner_width`] (`RETRACTIONS.md` R344, R345).
     pub const fn column_count(self) -> u8 {
-        self.inner_width() + 1
+        text_window_capacity(self.top_left_x, self.bottom_right_x)
     }
 
     pub const fn height(self) -> u8 {
@@ -393,7 +420,12 @@ impl TextWindowSystem {
             return;
         }
         let window = self.active_window();
-        let width = usize::from(window.inner_width()).max(1);
+        // `text-output.md §6` (`RETRACTIONS.md` R345): the row accepts
+        // the window's *capacity*, `bottom_right_x - top_left_x + 1`,
+        // not the inclusive-endpoint budget. "An implementation that
+        // treats the available-width figure directly as a character
+        // count loses the last column of every row."
+        let width = usize::from(window.column_count()).max(1);
         // `text-output.md §5`: the centre branch measures the columns
         // still available on the row *as the printer was entered*.
         let entry_cursor_x = window.cursor_x;
@@ -463,7 +495,11 @@ impl TextWindowSystem {
     }
 
     fn advance_cursor_after_glyph(&mut self) {
-        let printable_width = self.active_window().inner_width().max(1);
+        // `text-output.md §5`: the emitter wraps only when the advance
+        // "would carry the cursor past `bottom_right_x`" - the cell at
+        // the right column is written normally, so a row takes the
+        // window's full capacity before wrapping (`RETRACTIONS.md` R344).
+        let printable_width = self.active_window().column_count().max(1);
         let window = &mut self.windows[self.active_window];
         window.cursor_x = window.cursor_x.saturating_add(1);
         if window.cursor_x >= printable_width {

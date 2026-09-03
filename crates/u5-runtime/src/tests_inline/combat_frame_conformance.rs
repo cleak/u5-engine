@@ -764,6 +764,36 @@
         assert_ne!(actor.phase_counter, 0);
     }
 
+    /// `combat.md` §4.1: the conflict banner "is **unconditional**. The test
+    /// that precedes it cannot fail, so every terrain-setup entry prints it."
+    /// The camp ambush is "the one entry that reaches setup without passing
+    /// through" the world-side terrain-combat entry step, so it "prints the
+    /// conflict banner below but **no** group name".
+    #[test]
+    fn the_camp_ambush_prints_the_conflict_banner_and_no_group_name() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = 0x0f0f;
+        state.message_transcript.clear();
+        state
+            .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0, std::path::Path::new(""))
+            .unwrap();
+
+        let printed: Vec<String> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        assert_eq!(
+            printed.iter().filter(|text| **text == combat_banner_line()).count(),
+            1,
+            "transcript was {printed:?}"
+        );
+        assert!(
+            !printed.iter().any(|text| text == "BATS"),
+            "the camp ambush prints no group name: {printed:?}"
+        );
+    }
+
     #[test]
     fn sleep_ambush_placement_seeds_base_step_and_phase_like_any_other_placement() {
         // `combat.md §5`: the alternate rest/camp entry modes seat the
