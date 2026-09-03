@@ -228,6 +228,12 @@ mod tests {
     fn adjacent_skeleton_combat_state() -> PlayState {
         let mut state = crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5);
         state.combat_active = true;
+        // `combat.md` Section 5.3 step 8's round-loop entry prologue - one full
+        // world tick, of "variable and unbounded" draw cost - is a once-per-
+        // encounter event. This fixture assembles a fight already under way, so
+        // the prologue is already spent and its world tick's gameplay draw does
+        // not sit in front of the seeded rolls below.
+        state.combat_round_loop_prologue_ran = true;
         state.combat_terrain = [[0x04; crate::COMBAT_ARENA_SIDE]; crate::COMBAT_ARENA_SIDE];
         state.active_objects = vec![crate::ActiveObject::empty(); crate::OOL_SLOTS];
         state.active_objects[0] = crate::ActiveObject {

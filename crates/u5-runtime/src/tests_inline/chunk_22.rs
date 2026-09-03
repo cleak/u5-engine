@@ -853,7 +853,7 @@
             .collect();
         let banner_at = texts
             .iter()
-            .position(|text| *text == COMBAT_BANNER)
+            .position(|text| *text == combat_banner_line())
             .expect("the conflict banner is printed");
         let line_at = texts
             .iter()

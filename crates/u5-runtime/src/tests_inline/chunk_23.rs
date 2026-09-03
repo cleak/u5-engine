@@ -8958,6 +8958,14 @@ fn combat_ai_target_picker_allows_status_disabled_targets() {
 fn combat_ai_turn_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = world_state(open_world_grid(), 10, 20);
     state.combat_active = true;
+    // `combat.md` Section 5.3 step 8 runs the round-loop entry prologue - one
+    // full world tick, whose draw count that table marks "variable and
+    // unbounded" - once per encounter, before any actor slot is examined.
+    // This fixture assembles a fight that is already under way rather than
+    // entering one, so the prologue is already spent; leaving it owing would
+    // put its world tick's gameplay draw in front of every roll these tests
+    // pin.
+    state.combat_round_loop_prologue_ran = true;
     state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
     state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
     state.active_objects[0] = ActiveObject {
@@ -10912,9 +10920,13 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         ),
         (5, 5)
     );
+    // `combat.md` Section 8.1 closes the turn with the unconditional turn
+    // banner. The Giant Rat's reply ahead of it is the stream re-baselined
+    // by `RETRACTIONS.md` R311: the lazily drawn cardinal fallback changes
+    // which roll the reply takes.
     assert_eq!(
         attack_state.message,
-        "East\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
+        "East\nGiant Rat missed!\n\nAvatar, armed with bare hands:"
     );
     assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
@@ -10972,7 +10984,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
 
     assert_eq!(
         state.message,
-        "East\nGiant Rat lightly wounded!\nAvatar is poisoned!\n\nAvatar, armed with Dagger:"
+        "East\nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -10995,7 +11007,15 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "East\nGiant Rat killed!\n\nAvatar, armed with Dagger:");
+    // `combat.md` Section 7 / Section 14 (`RETRACTIONS.md` R289): the round
+    // loop prints the resident `VICTORY!` string - one leading and one
+    // trailing newline, one-shot - once the post-action recount finds no
+    // hostile left, and then keeps running, so Section 8.1's turn banner for
+    // the next keyboard-driven turn still follows it.
+    assert_eq!(
+        state.message,
+        format!("East\nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:")
+    );
     assert_eq!(state.party_experience[0], 3);
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
