@@ -21,6 +21,7 @@ pub mod combat_frame;
 pub mod combat_scenario;
 pub mod combat_setup;
 pub mod combat_stats;
+pub mod combat_targeting;
 pub mod commands;
 pub mod common_words_io;
 pub mod constants;
@@ -225,6 +226,7 @@ pub use combat_arena::*;
 pub use combat_frame::*;
 pub use combat_setup::*;
 pub use combat_stats::*;
+pub use combat_targeting::*;
 pub use commands::{
     Command, CommandEcho, CommandEchoJoin, CommandEchoMode, DEATH_VISION_LOOK_TILE,
     DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW, DIRECTION_PROMPT_CANCEL_LITERAL,
@@ -513,7 +515,7 @@ pub use main_loop::{
     DUNGEON_FACING_NORTH, DUNGEON_FACING_SOUTH, DUNGEON_FACING_WEST, DungeonEntrySeed,
     DungeonMovementAction, IDLE_WORLD_STEP_SUPPRESSED_FIRST,
     IDLE_WORLD_STEP_SUPPRESSED_FIRST_SCENE, IDLE_WORLD_STEP_SUPPRESSED_LAST,
-    IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE, PARTY_SLEEP_LINE, PartyCapability,
+    IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE, IdleWaitPass, PARTY_SLEEP_LINE, PartyCapability,
     SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST, SCENE_DUNGEON_FAMILY_LAST,
     SCENE_DUNGEON_NAMED_FIRST, SCENE_DUNGEON_NAMED_LAST, SCENE_INTRO_FIRST, SCENE_INTRO_LAST,
     SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST, SCENE_TOWN_FAMILY_LAST, SceneRoute,
@@ -541,17 +543,17 @@ pub use miscmsg_io::{
     render_miscmsg_tile_glyph_text, tile_glyph_digraph,
 };
 pub use moongate::{
-    FELUCCA_GLYPH_BY_DAY, FELUCCA_OFF_HORIZON_SENTINEL, MOON_GLYPH_CACHE_NO_GATE,
-    MOON_GLYPH_DAYS_PER_MONTH, MOONSTONE_BURIAL_BAND_FIRST, MOONSTONE_BURIAL_BAND_LAST,
-    MOONSTONE_BURIAL_TILE_EXTRA_A, MOONSTONE_BURIAL_TILE_EXTRA_B, MOONSTONE_GATE_INVALID_SCENE,
-    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE,
-    NATURAL_MOONGATE_UNDERLYING_TILE, NaturalMoongateCounterStep,
-    OVERWORLD_FALLS_FORCED_STEPS_SOUTH, SURFACE_CHASM_X, SURFACE_CHASM_Y, TRAMMEL_GLYPH_BY_DAY,
-    TRAMMEL_OFF_HORIZON_SENTINEL, WATERFALL_TILE_FIRST, WATERFALL_TILE_LAST,
-    WHIRLPOOL_UNDERWORLD_EMERGENCE_X, WHIRLPOOL_UNDERWORLD_EMERGENCE_Y, WORLD_PLANE_FALL_DAMAGE,
-    WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH, WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW,
-    cached_moon_glyph_bytes_for_day, felucca_moonstone_slot_for_day, is_surface_chasm_cell,
-    is_waterfall_tile, moonstone_burial_tile_accepted, moonstone_slot_from_glyph_byte,
+    FELUCCA_GLYPH_BY_DAY, FELUCCA_OFF_HORIZON_SENTINEL, MOON_GLYPH_DAYS_PER_MONTH,
+    MOONSTONE_BURIAL_BAND_FIRST, MOONSTONE_BURIAL_BAND_LAST, MOONSTONE_BURIAL_TILE_EXTRA_A,
+    MOONSTONE_BURIAL_TILE_EXTRA_B, MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X,
+    NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE, NATURAL_MOONGATE_UNDERLYING_TILE,
+    NaturalMoongateCounterStep, OVERWORLD_FALLS_FORCED_STEPS_SOUTH, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, TRAMMEL_GLYPH_BY_DAY, TRAMMEL_OFF_HORIZON_SENTINEL, WATERFALL_TILE_FIRST,
+    WATERFALL_TILE_LAST, WHIRLPOOL_UNDERWORLD_EMERGENCE_X, WHIRLPOOL_UNDERWORLD_EMERGENCE_Y,
+    WORLD_PLANE_FALL_DAMAGE, WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH,
+    WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW, cached_moon_glyph_bytes_for_day,
+    felucca_moonstone_slot_for_day, is_surface_chasm_cell, is_waterfall_tile,
+    moonstone_burial_tile_accepted, moonstone_slot_from_glyph_byte,
     natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,
     natural_moongate_counter_step, natural_moongate_dispatches_meditate,
     natural_moongate_slot_eligible, trammel_moonstone_slot_for_day,
@@ -785,11 +787,12 @@ pub use text_wrap::{
     TEXT_WINDOW_DEFAULT_ACTIVE_INDEX, TEXT_WINDOW_DEFAULT_BACKGROUND,
     TEXT_WINDOW_DEFAULT_FOREGROUND, TEXT_WINDOW_FLAG_CENTRE, TEXT_WINDOW_FLAG_INVERSE,
     TEXT_WINDOW_FLAG_UNDERLINE, TextCell, TextControlByte, TextWindowDescriptor, TextWindowSystem,
-    WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine, format_signed_number, paragraph_byte_kind,
-    proportional_renderer_byte_kind, text_color_background, text_color_foreground,
-    text_control_byte, text_emitter_byte_kind, text_window_centred_start_column,
-    text_window_centred_start_column_from_cursor, text_window_clamp_rectangle,
-    text_window_default_color_byte, text_window_inner_width, wrap_byte_kind, wrap_text,
+    WRAP_MIN_LINE_BUFFER, WrapByteKind, WrapChunk, WrappedLine, format_signed_number,
+    paragraph_byte_kind, proportional_renderer_byte_kind, text_color_background,
+    text_color_foreground, text_control_byte, text_emitter_byte_kind,
+    text_window_centred_start_column, text_window_centred_start_column_from_cursor,
+    text_window_clamp_rectangle, text_window_default_color_byte, text_window_inner_width,
+    wrap_byte_kind, wrap_text, wrap_text_chunks,
 };
 pub use tile_classes::{
     TILE_BARRIER_FIRST, TILE_BARRIER_LAST, TILE_DECORATION_FIRST, TILE_DECORATION_LAST,
@@ -800,7 +803,7 @@ pub use tile_classes::{
     TILE_WATER_LAST, TileClass, TileSuperCategory, coarse_tile_class, tile_super_category,
 };
 pub use tile_helpers::*;
-pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
+pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag, WalkerEffectGate};
 pub use tlk_control_codes::{
     CASTLE_TLK_NPCS, COMMON_WORD_DICTIONARY_ENTRIES, COMMON_WORD_DICTIONARY_NULL_REFERENCES,
     CONVERSATION_SHARED_NO_SLOT_SENTINEL, DWELLING_TLK_NPCS, KEEP_TLK_NPCS,
@@ -907,20 +910,24 @@ pub use u4_transfer::*;
 pub use u4_transfer_preview::*;
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use visibility::{
-    ActiveObjectCompositeResult, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,
+    ACTIVE_OBJECT_VARIANT_RANGE_HIGH, ACTIVE_OBJECT_VARIANT_RANGE_LOW,
+    ACTIVE_OBJECT_VARIANT_TRANSITION_PROBABILITY, ActiveObjectCompositeResult,
+    ActiveObjectCompositeStep, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,
     LOCAL_LIGHT_MASK_SIDE, LOCAL_LIGHT_SOURCE_CELL_COUNT, LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD,
-    LightRadiusBranch, TERRAIN_BAND_LEN, TERRAIN_BAND_ROW_STRIDE, VEHICLE_AVATAR_UNDERLAY_MARKER,
-    VIEWPORT_CENTER, VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW,
-    VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
+    LightRadiusBranch, SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN,
+    SINGLE_SPRITE_FAMILY_SEATED_FRAME_FALLTHROUGH_DECREMENT, TERRAIN_BAND_LEN,
+    TERRAIN_BAND_ROW_STRIDE, VIEWPORT_CENTER, VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL,
+    VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
     VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY,
     VISIBILITY_GRID_LEN, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION, VisibilityMarker,
-    active_object_composite, active_object_composite_for_player, active_object_compositor_branch,
-    active_object_compositor_variant, active_object_default_composite,
-    active_object_default_tile_is_terrain_aware, composite_active_object_slot,
-    fog_refine_folded_coord, fog_refine_inside_clear_core, fog_refine_squared_distance,
-    is_local_light_source_tile, light_radius_branch, terrain_band_active_index,
-    visibility_cheap_path_needs_refill, visibility_grid_active_index, visibility_in_radius,
-    visibility_marker,
+    active_object_composite, active_object_composite_for_player, active_object_composite_step,
+    active_object_compositor_branch, active_object_compositor_variant,
+    active_object_default_composite, active_object_default_tile_is_terrain_aware,
+    active_object_default_variant_base, composite_active_object_slot,
+    composite_active_object_slot_draws_variant, fog_refine_folded_coord,
+    fog_refine_inside_clear_core, fog_refine_squared_distance, is_local_light_source_tile,
+    light_radius_branch, terrain_band_active_index, visibility_cheap_path_needs_refill,
+    visibility_grid_active_index, visibility_in_radius, visibility_marker,
 };
 pub use visual_asset_audit::*;
 pub use water_scroll::{
@@ -934,7 +941,7 @@ pub use wind::{
     PLAYER_SAIL_WAIT_TICKS_INTO_WIND, PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR,
     PLAYER_SAIL_WAIT_TICKS_WITH_WIND, WIND_DRIFT_CALM_ACCEPT_MIN, WIND_DRIFT_CANDIDATE_MODULUS,
     WIND_DRIFT_OUTER_ROLL_MASK, WIND_DRIFT_OUTER_ROLL_MAX, WindSetterOutcome, WindState,
-    wind_setter_outcome, wind_status_message_from_save_byte,
+    autonomous_wind_drift_with_draws, wind_setter_outcome, wind_status_message_from_save_byte,
     wind_status_message_from_state_and_save_byte,
 };
 pub use world_chunk_buffer::*;
@@ -1003,7 +1010,9 @@ mod tests {
     include!("tests_inline/npc_schedules_conformance.rs");
     include!("tests_inline/save_fidelity.rs");
     include!("tests_inline/spec_conformance_chunk_07.rs");
+    include!("tests_inline/variant_rescope.rs");
     include!("tests_inline/combat_frame_conformance.rs");
     include!("tests_inline/combat_descriptors_conformance.rs");
     include!("tests_inline/result_lines_conformance.rs");
+    include!("tests_inline/town_turn_loop_conformance.rs");
 }

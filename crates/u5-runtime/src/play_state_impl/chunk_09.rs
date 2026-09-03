@@ -331,6 +331,14 @@ impl PlayState {
         self.return_world = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
+        // `moons.md §3`, refresh cadence: the strip renderer's callers are
+        // "every overworld scene entry; every town-family scene entry; the
+        // per-turn cleanup pass, when that pass observes the hour changing".
+        // This is an overworld scene entry, so the cached pair is rewritten
+        // here as well - a town or dungeon exit that left the restored pair
+        // standing would send the next natural gate to the wrong Moonstone
+        // slot (`formats/saved-gam.md §5.1`).
+        self.refresh_cached_moon_glyphs_at_scene_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         // `overworld.md` Section 8.1: "Overworld re-initialisation does not
@@ -1490,16 +1498,41 @@ impl PlayState {
         let grid_index = visibility_grid_active_index(row, col).unwrap();
         let terrain_index = terrain_band_active_index(row, col).unwrap();
         let current_grid_byte = self.visibility_grid[grid_index];
-        let current_terrain = self.terrain_band[terrain_index];
-        let previous_row_terrain = (row > 0).then(|| {
-            let index = terrain_band_active_index(row - 1, col).unwrap();
-            self.terrain_band[index]
-        });
-        let next_row_terrain = (row + 1 < VIEWPORT_SIDE).then(|| {
-            let index = terrain_band_active_index(row + 1, col).unwrap();
-            self.terrain_band[index]
-        });
-        let variant = self.active_object_render_variant(col, row, object);
+        // `visibility.md §8`: "Terrain-aware stamps use the live
+        // world/combat tile at the object's coordinate, plus one
+        // neighbouring row for a few edge shapes." The read is against the map
+        // at the object's own world coordinate - not against the eleven-by-
+        // eleven companion terrain band, which has no row outside the viewport
+        // and which this pass overwrites as it walks slots thirty-one down to
+        // zero. See [`Self::top_down_live_terrain_at`].
+        let object_x = object.x as isize;
+        let object_y = object.y as isize;
+        let current_terrain = self
+            .top_down_live_terrain_at(area, object_x, object_y)
+            .unwrap_or(self.terrain_band[terrain_index]);
+        let previous_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y - 1);
+        let next_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y + 1);
+        // `visibility.md §8.1`, normative: "For an actor whose composite
+        // lands on one of the five selecting rows of the Section 8 table, the
+        // variant is drawn **once per composite pass** - not once per
+        // placement - and **it is never cached anywhere.** For every other
+        // composited actor, **no draw is taken at all.**" The skips above have
+        // already run, and `§8.1` is explicit that "every skip is evaluated
+        // before the compositor is invoked, so a skipped actor costs no draw
+        // at all. An implementation must not draw speculatively for an actor
+        // it is about to skip".
+        let variant = if composite_active_object_slot_draws_variant(
+            object.type_byte,
+            object.tile,
+            current_grid_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+        ) {
+            self.draw_active_object_composite_variant()
+        } else {
+            0
+        };
         match composite_active_object_slot(
             player_slot,
             object.type_byte,
@@ -1607,10 +1640,7 @@ impl PlayState {
                 ) {
                     return None;
                 }
-                // `town-mode.md §15`: cells beyond the 32-by-32 floor take
-                // the loaded floor's southeast-corner terrain, not a hole.
-                let tile = self.surface_viewport_tile(x, y, false)?;
-                let terrain = self.animation.resolve_static_tile(tile);
+                let terrain = self.top_down_live_terrain_at(area, x, y)?;
                 Some((terrain, None))
             }
             TopDownRenderArea::World(_) => {
@@ -1628,14 +1658,44 @@ impl PlayState {
                 ) {
                     return None;
                 }
-                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
-                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-                let terrain = self
-                    .animation
-                    .resolve_static_tile(self.world_live_tile_at(wx, wy));
+                let terrain = self.top_down_live_terrain_at(area, x, y)?;
                 Some((terrain, None))
             }
         }
+    }
+
+    /// `visibility.md §8`: the live map tile at one world coordinate, with no
+    /// lighting or visibility gate and with no composited sprite over it.
+    ///
+    /// The terrain-aware rows of the `§8` compositor table are defined against
+    /// this read, not against the companion terrain band: "Terrain-aware
+    /// stamps use the live world/combat tile at the object's coordinate, plus
+    /// one neighbouring row for a few edge shapes." The band is not a
+    /// substitute for it on either half of that sentence. It spans only the
+    /// eleven-by-eleven viewport, so the neighbouring row of an object on an
+    /// edge row is simply not in it; and every `Companion` stamp the pass has
+    /// already made has *overwritten* the band cell it wrote, so an actor
+    /// composited onto a laden-table cell erases the neighbour id a later slot
+    /// would read. Either way `§8.1`'s draw count is the casualty - "an engine
+    /// that draws from the shared stream on any other row advances the single
+    /// global generator when the original does not, and its stream position
+    /// diverges permanently" - and so is the stamped tile.
+    ///
+    /// This is the same accessor [`Self::top_down_render_cell_base`] uses once
+    /// its visibility gates have passed, so for a lit, un-composited viewport
+    /// cell the two agree byte for byte.
+    fn top_down_live_terrain_at(&self, area: TopDownRenderArea, x: isize, y: isize) -> Option<u8> {
+        let tile = match area {
+            // `town-mode.md §15`: cells beyond the 32-by-32 floor take
+            // the loaded floor's southeast-corner terrain, not a hole.
+            TopDownRenderArea::Town => self.surface_viewport_tile(x, y, false)?,
+            TopDownRenderArea::World(_) => {
+                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
+                self.world_live_tile_at(wx, wy)
+            }
+        };
+        Some(self.animation.resolve_static_tile(tile))
     }
 
     fn composite_top_down_object(
@@ -1658,21 +1718,41 @@ impl PlayState {
         let Some(cell) = prepared.get(index).and_then(|cell| *cell) else {
             return;
         };
-        let previous_row_terrain = (cell_y > 0)
-            .then(|| prepared[index - cells])
-            .flatten()
-            .map(|cell| cell.terrain);
-        let next_row_terrain = (cell_y + 1 < cells)
-            .then(|| prepared[index + cells])
-            .flatten()
-            .map(|cell| cell.terrain);
-        let variant = self.active_object_render_variant(cell_x, cell_y, object);
+        // The same live-map read the buffer pass takes - `visibility.md §8`:
+        // "Terrain-aware stamps use the live world/combat tile at the
+        // object's coordinate, plus one neighbouring row for a few edge
+        // shapes." Reading `prepared` instead would lose the neighbouring row
+        // of an object on an edge row and would see earlier slots' stamps
+        // rather than the map.
+        let object_x = object.x as isize;
+        let object_y = object.y as isize;
+        let current_terrain = self
+            .top_down_live_terrain_at(area, object_x, object_y)
+            .unwrap_or(cell.terrain);
+        let previous_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y - 1);
+        let next_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y + 1);
+        // This helper is `&self`: it answers *queries* about the composed
+        // grid (the text view, the outdoor ranged line-of-sight trace, and
+        // non-viewport radii), not the redraw's composite pass. `§8.1`
+        // charges one draw per selecting actor "per composite pass", so a
+        // query must take none - drawing here would advance the single global
+        // gameplay stream on a frame the original never composites.
+        // The canonical pass is
+        // [`Self::composite_top_down_object_into_visibility_buffers`].
+        //
+        // Recorded consequence: a caller that renders *only* through this
+        // helper - the text view, the visibility-sweep repaint, any radius
+        // that is not the viewport's - shows the first entry of a selecting
+        // row permanently, while the buffer path re-rolls it every pass. The
+        // no-draw side is what `§8.1` charges; which of the two a non-viewport
+        // presentation should show is not published, and is a spec question.
+        let variant = 0;
         match composite_active_object_slot(
             player_slot,
             object.type_byte,
             object.tile,
             cell.grid,
-            cell.terrain,
+            current_terrain,
             previous_row_terrain,
             next_row_terrain,
             cell_y,
@@ -1740,42 +1820,58 @@ impl PlayState {
     /// the selector short-circuits and returns the first entry for every
     /// actor".
     ///
-    /// The short-circuit input is the **global timed-magic-effect code**.
-    /// `§8` retracts the earlier "active character's class letter is Tinker"
-    /// reading in full, so no party member is consulted here.
+    /// **This is a fresh draw from the shared gameplay stream on every
+    /// composite pass, and it is never cached.** `§8.1` is normative: the
+    /// selector "is a helper that takes no arguments and stores nothing of
+    /// its own: it returns a value in `0..3` which the caller consumes
+    /// immediately. Its one side effect is the generator advance inside the
+    /// shared draw itself, which is unconditional whenever the selector is
+    /// entered on its random arm." And: "**There is no cache to find.** ...
+    /// there is no per-actor variant field, no scratch table keyed by actor,
+    /// and no frame counter anywhere in the path."
     ///
-    /// The animation phase is deliberately **not** an input. It used to be,
-    /// which made a stationary actor standing on one of the four-entry
-    /// terrains (`0x84`, `0x85`, `0x90`, `0x92`, `0x9D`, `0x9E`) re-stamp
-    /// itself on every animation tick — and correlated with the animation
-    /// phase rather than random. Runtime observation,
-    /// `cleak/u5-spec#179`: outside combat nothing of the sort happens.
-    /// The party sprite standing on the overworld and the Avatar seated in
-    /// a chair indoors were both bit-identical across 160 s idle windows,
-    /// with zero transitions.
+    /// The caller must therefore have already established that this actor
+    /// lands on one of the five selecting rows - see
+    /// [`composite_active_object_slot_draws_variant`] - because `§8.1` charges
+    /// "**zero draws for everything else**" and an engine that draws on any
+    /// other row "advances the single global generator when the original does
+    /// not, and its stream position diverges permanently".
     ///
-    /// TODO(u5-spec question pending): `visibility.md §8.1` is normative
-    /// that the variant is drawn "once per composite pass, per actor" from
-    /// the shared PRNG and "never cached", and `§8.3` (published as
-    /// *probable*) says the sprite therefore changes on about three idle
-    /// passes in four. This engine instead re-rolls a deterministic hash
-    /// once per consumed turn, which contradicts both sentences. The
-    /// clean-side capture above is direct evidence against the published
-    /// idle re-roll, so the conflict is being taken back to the spec as a
-    /// question rather than resolved here; until it is answered the
-    /// once-per-turn draw is kept and this comment records the divergence.
-    pub(crate) fn active_object_render_variant(
-        &self,
-        cell_x: usize,
-        cell_y: usize,
-        object: ActiveObject,
-    ) -> u8 {
-        let selector = (self.turn as u8)
-            ^ (cell_x as u8).wrapping_mul(3)
-            ^ (cell_y as u8).wrapping_mul(5)
-            ^ object.type_byte
-            ^ object.tile;
-        active_object_compositor_variant(self.negate_time_active(), selector)
+    /// The short-circuit input is the **shared timed-effect register byte**,
+    /// not a boolean and not a character class. `§8` retracts the "active
+    /// character's class letter is Tinker" reading in full, and its producer
+    /// census (`RETRACTIONS.md` R333) finds "**one site that installs a
+    /// different timed-effect code into the same byte** - this is a shared
+    /// timed-effect register that other effects also write, not a Negate Time
+    /// flag". [`Self::negate_time_active`] reads that whole byte and compares
+    /// it against the Negate Time code, so an install of some other effect's
+    /// code leaves the selector on its random arm. The code has two
+    /// producers: the spell at ten turns and the scroll at twenty.
+    ///
+    /// The short-circuit arm takes **no** draw: `§8.1` makes the generator
+    /// advance conditional on the selector being "entered on its random arm".
+    ///
+    /// *Retracted in this engine:* until `cleak/u5-spec#182` was answered
+    /// (spec commit `210aa41`, `RETRACTIONS.md` R329) this was a
+    /// deterministic hash of the turn counter, the cell and the actor's
+    /// bytes, re-rolled once per consumed turn. That was adopted because a
+    /// clean-side capture saw a seated Avatar never change tile; R329
+    /// explains the capture - the seat used was a fall-through, and "a seated
+    /// actor that never changes tile is the expected result for the majority
+    /// of seats, not a defect". A named-cell recapture then timed four
+    /// qualifying seats at 0.695, 0.709, 0.742 and 0.753 transitions per tick
+    /// and three fall-throughs at 0.000, which is the fresh per-pass draw.
+    pub fn draw_active_object_composite_variant(&mut self) -> u8 {
+        if self.negate_time_active() {
+            // `§8.2`: "The composite still runs while Negate Time is active;
+            // it just draws variant 0 every time."
+            return active_object_compositor_variant(true, 0);
+        }
+        let selector = self.random_range_u8(
+            ACTIVE_OBJECT_VARIANT_RANGE_LOW,
+            ACTIVE_OBJECT_VARIANT_RANGE_HIGH,
+        );
+        active_object_compositor_variant(false, selector)
     }
 
     /// Visibility + composited terrain/sprite lookup for one cell.
@@ -2618,8 +2714,14 @@ impl PlayState {
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
         }
-        if self.clock.hour != previous_hour {
-            self.refresh_cached_moon_glyphs();
+        // `time.md §11` (spec `0170809`): the bundle's gate is the
+        // snapshot at `0x02DA` disagreeing with the hour at `0x02D9`.
+        // Inside a time-advancing pass the snapshot was taken from the
+        // pre-cascade hour a few lines above, so here it is the ordinary
+        // hour-crossing test; the stale-snapshot case the published rule
+        // turns on is the mode-zero call in [`Self::mode_zero_cleanup`].
+        if self.cleanup_previous_hour != self.clock.hour {
+            self.fire_hour_change_bundle();
             self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
         }
         self.decay_light_counters(effective_minutes);
@@ -2669,7 +2771,6 @@ impl PlayState {
         }
         self.apply_pending_town_object_epilogue();
         let negate_time_active = self.negate_time_active();
-        let turn_before = self.turn;
         let effective_minutes = if negate_time_active {
             0
         } else {
@@ -2710,8 +2811,17 @@ impl PlayState {
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
         }
-        if self.clock.hour != previous_hour {
-            self.refresh_cached_moon_glyphs();
+        // `time.md §11` (spec `0170809`) / `RETRACTIONS.md` R338: the
+        // hour-change bundle's gate is the **saved-hour snapshot** at
+        // `0x02DA` disagreeing with the hour at `0x02D9`, "not ... a
+        // wall-clock hour boundary as such". Inside a time-advancing pass
+        // the snapshot was taken from the pre-cascade hour a few lines
+        // above, so here the snapshot form and the plain hour-crossing
+        // test coincide. The case that separates them - a snapshot the
+        // pass never refreshed - belongs to the mode-zero call, and lives
+        // in [`Self::mode_zero_cleanup`].
+        if self.cleanup_previous_hour != self.clock.hour {
+            self.fire_hour_change_bundle();
             // `rest-and-camp.md §5`: the camp cooldown counter is
             // "reduced by one, floored at zero, at every hour rollover".
             self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
@@ -2750,23 +2860,69 @@ impl PlayState {
         self.advance_light_beacon();
         self.refresh_natural_moongates();
         self.sync_player_object();
+        self.world_walkers_ran_this_turn = false;
         if self.time_stop_counter != 0 {
             self.time_stop_counter = self.time_stop_counter.saturating_sub(1);
-        } else if !negate_time_active && !self.combat_active {
-            let world_object_epilogue_runs = !matches!(self.area, Area::World { .. })
-                || TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
-                    .world_object_epilogue_runs(turn_before);
+        } else if !self.combat_active {
+            // `npc-schedules.md §5` / `encounters.md §2.1`: the same three
+            // effect gates guard both modes' per-turn walkers, tested in
+            // opposite orders, and each mode gets its own routine because
+            // "an engine that shares one gate routine between them will
+            // eventually put NPC and creature movement on the wrong turns".
+            // The dungeon loop invokes neither walker block
+            // (`npc-schedules.md §5`: "The overworld and dungeon mode loops
+            // do not invoke this scheduler"), so it keeps the plain
+            // Negate-Time freeze of `magic.md §8`.
+            let gate = match self.area {
+                Area::World { .. } => self.overworld_walker_effect_gates(),
+                Area::Town { .. } => self.town_walker_effect_gates(),
+                Area::Dungeon { .. } => {
+                    if negate_time_active {
+                        WalkerEffectGate::SkippedByNegateTime
+                    } else {
+                        WalkerEffectGate::Run
+                    }
+                }
+            };
+            self.world_walkers_ran_this_turn = gate.walkers_run();
             let ordinary_town_turn =
                 matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
-            if ordinary_town_turn || defer_stonegate_epilogue {
-                self.pending_town_npc_schedule_pass = true;
-                self.pending_town_active_object_pass =
-                    advance_active_objects && world_object_epilogue_runs;
-            } else {
-                self.advance_npc_schedules();
-                if advance_active_objects && world_object_epilogue_runs {
-                    self.advance_active_objects();
+            let deferred_town_tail = ordinary_town_turn || defer_stonegate_epilogue;
+            // `npc-schedules.md §5` gates "**both** town walkers — the object
+            // walker that moves loose horse-family objects and this schedule
+            // processor". The town animator is **not** one of the two: it
+            // moves nothing (`RETRACTIONS.md` R316: "The animator's complete
+            // set of record writes is the displayed-tile byte and the packed
+            // phase/facing byte; it never writes a slot's column or row") and
+            // `npc-schedules.md §12` has it "run independently each render
+            // frame". So it is deliberately outside the gate, and only the
+            // Negate-Time freeze of `animation.md §13.1` ("no object
+            // animation") stops it. Bundling it into the gated call froze
+            // town sprites on half of all turns for a mounted or carpet-borne
+            // party and for one under Quickness.
+            let run_town_animator = matches!(self.area, Area::Town { .. })
+                && advance_active_objects
+                && !negate_time_active;
+            if run_town_animator && !deferred_town_tail {
+                self.animate_active_objects();
+            }
+            if gate.walkers_run() {
+                if deferred_town_tail {
+                    self.pending_town_npc_schedule_pass = true;
+                    self.pending_town_active_object_pass = advance_active_objects;
+                } else {
+                    // `town-mode.md §7` step 4 (R328): "the walker runs
+                    // between the slot-zero coordinate copy and the schedule
+                    // processor". The deferred town tail below keeps the same
+                    // order; this is the direct-call arm.
+                    if advance_active_objects {
+                        self.advance_active_object_walkers();
+                    }
+                    self.advance_npc_schedules();
                 }
+            }
+            if run_town_animator && deferred_town_tail {
+                self.pending_town_active_object_animate_pass = true;
             }
         }
         self.age_active_effect();
@@ -2980,7 +3136,95 @@ impl PlayState {
         }
     }
 
+    /// `time.md §5`, "Hour tick triggers a side bundle": the cached
+    /// twelve-hour value is rewritten from the new hour, and the sky-strip
+    /// renderer runs - which, "before it decides whether either moon glyph
+    /// is on screen, also rewrites the two cached moon-phase digits in the
+    /// save image (`formats/saved-gam.md` Section 5.1) from the day of the
+    /// month".
+    ///
+    /// The camp cooldown is deliberately **not** in here.
+    /// `rest-and-camp.md §5` ties it to an hour rollover, and the
+    /// mode-zero firing below crosses no hour, so it stays on the two
+    /// time-advancing paths that do.
+    fn fire_hour_change_bundle(&mut self) {
+        self.refresh_cached_moon_glyphs();
+        self.write_twelve_hour_audio_repeats();
+    }
+
+    /// `time.md §11` (spec `0170809`), the write half of save byte
+    /// `0x02DE`: "On a cleanup call whose snapshot at `0x02DA` disagrees
+    /// with the hour at `0x02D9`, the byte takes the twelve-hour form of
+    /// the hour (Section 2). That is the whole write rule; there is no
+    /// second writer."
+    pub fn write_twelve_hour_audio_repeats(&mut self) {
+        self.twelve_hour_audio_repeats = display_hour_12h(self.clock.hour);
+    }
+
+    /// `time.md §11` (spec `0170809`), the read half of save byte
+    /// `0x02DE`: "The ambient-audio tick is its only consumer. It reads
+    /// the byte as a count of remaining loud repeats ... and decrements it
+    /// toward zero on **two of every eight** of its own calls, using a
+    /// small free-running sub-tick counter that is not part of the save
+    /// image. It never writes any other value."
+    ///
+    /// `RETRACTIONS.md` R338: "An engine that stores a live twelve-hour
+    /// value and never decays it diverges from the original on essentially
+    /// every daylight save."
+    ///
+    /// Two hedges, both published as open:
+    ///
+    /// * *Which* two of the eight sub-ticks carry the decrement is not
+    ///   published. The counter runs free, so any fixed pair of residues
+    ///   gives the stated two-in-eight rate; this takes the two whose low
+    ///   two bits are clear.
+    /// * The cadence gate on the master redraw-enable byte at `0x02FE`
+    ///   ("when that byte is clear the world tick skips its whole body")
+    ///   is not modelled, because this engine has no redraw-enable byte -
+    ///   its world step is unconditional and `0x02FE` round-trips through
+    ///   the save image untouched.
+    /// * The step that reaches this pass is
+    ///   [`Self::advance_visual_tick`], and only the Bevy frontend pumps
+    ///   it today. A headless `u5-tui` load followed immediately by a
+    ///   Q-save therefore flushes the scene-entry write unattenuated,
+    ///   where the measured DOS file - taken after idle time had run -
+    ///   holds zero. That is a missing idle driver in the shell, not a
+    ///   different rule here; the chain from the entry write through the
+    ///   world step to the saved byte is pinned by
+    ///   `twelve_hour_byte_reaches_the_original_zero_over_shipped_idle_world_ticks`.
+    ///
+    /// `time.md §11` also states the limit on the cadence itself: "How
+    /// long the byte takes to reach zero in wall-clock terms is inferred,
+    /// not measured", so no seconds figure is modelled here either.
+    pub fn tick_ambient_audio_repeats(&mut self) {
+        let sub_tick = self.ambient_audio_sub_tick;
+        self.ambient_audio_sub_tick = (sub_tick + 1) % AMBIENT_AUDIO_SUB_TICK_PERIOD;
+        if sub_tick % AMBIENT_AUDIO_DECREMENT_STRIDE == 0 {
+            self.twelve_hour_audio_repeats = self.twelve_hour_audio_repeats.saturating_sub(1);
+        }
+    }
+
+    /// `time.md §3`, the mode-zero call: "Recompute the daylight value
+    /// and refresh the visible clock; do not advance time."
+    ///
+    /// `time.md §5`: "Because a mode-zero call performs the comparison
+    /// without refreshing the snapshot, **a stale snapshot fires the
+    /// bundle once at scene entry**, with no turn consumed. The shipped
+    /// factory seed is exactly such a save - its snapshot is zero against
+    /// a start hour of eight - so the first town-family entry after a new
+    /// game or a Journey Onward writes the twelve-hour value and refreshes
+    /// the moon digits before the player has taken a step. From the first
+    /// time-advancing turn or party-upkeep pass onward the snapshot equals
+    /// the hour and the bundle stops firing until the next real crossing."
+    ///
+    /// The snapshot at `0x02DA` is deliberately not written here.
+    /// `time.md §11`: it is "Written at the head of the time-advancing
+    /// path, before the minute increment, and again by the per-turn
+    /// party-upkeep pass; **not** written by a mode-zero call."
     pub fn mode_zero_cleanup(&mut self) {
+        if self.cleanup_previous_hour != self.clock.hour {
+            self.fire_hour_change_bundle();
+        }
         self.recompute_daylight();
         self.refresh_natural_moongates_for_current_counter();
     }
@@ -3304,6 +3548,26 @@ impl PlayState {
             } else {
                 None
             };
+        // `time.md §11` (spec `0170809`): "The audio tick runs once per idle
+        // world tick". It is a body-of-the-tick pass rather than part of the
+        // redraw half, so it rides the same `run_wind_check` flag that marks
+        // a full world step.
+        //
+        // It carries the Negate Time freeze as well, exactly like the wind
+        // check above. `animation.md §13.1`: while that effect is active
+        // "the world tick forces the gating byte into a skip state on
+        // *every* call ... For the effect's full duration nothing advances:
+        // no water rotation, no fire flicker, no fountain, no banner, no
+        // clock or bellows, no object animation, no AI roll, no wind check,
+        // no moongate refresh, no beacon step, and **no shrine/lava
+        // ambience tick**." `§13.2` names that tick as the pass that "on
+        // two of every eight enabled steps, decrements a shared countdown
+        // byte" - the decrement `time.md §11` attributes to the audio tick
+        // and save byte `0x02DE`. Freezing the tick therefore freezes that
+        // byte, which is what a save taken under Negate Time must show.
+        if run_wind_check && self.time_stop_counter == 0 && !self.negate_time_active() {
+            self.tick_ambient_audio_repeats();
+        }
         self.advance_animation_clock();
         // `combat.md §7`: the shared tile-painting pass - "run by the idle
         // redraw tick in *every* mode" - has a combat-band tail that "toggles
@@ -3315,20 +3579,87 @@ impl PlayState {
         wind_change
     }
 
-    // `timing.md §8.2` also publishes the under-sail wait pass's cost - "an
-    // **under-sail auto-advance pass costs two ticks and one world step and
-    // never enters the command wait at all**". That sentence is about the
-    // *overworld command-wait helper*, and it is deliberately NOT implemented
-    // here. `advance_visual_tick` is the shared "advance one world tick"
-    // primitive: combat entry preserves `Area::World` and the hoisted-sail
-    // transport, and the `.` pass-turn command routes through it too, so a
-    // half-rate gate at this level would silently halve the combat
-    // presentation beats and the pass-turn command as well. Implementing only
-    // the cost half without the auto-advance would also leave a party sitting
-    // still with sails hoisted running the whole world at half rate, which is
-    // neither the original's behaviour nor anything published. If it is ever
-    // implemented it belongs at the idle pump (`u5-bevy::visual_idle_tick`),
-    // not here.
+    /// `timing.md §8.2`: does the overworld input helper take the under-sail
+    /// auto-advance route this pass?
+    ///
+    /// The route is the sails-set arm of the *command-wait helper*, so it is
+    /// deliberately not a gate inside [`Self::advance_visual_tick`]:
+    /// `advance_visual_tick` is the shared "advance one world tick"
+    /// primitive, combat entry preserves `Area::World` and the hoisted-sail
+    /// transport, and the `.` pass-turn command routes through it too. A
+    /// half-rate gate down there would silently halve the combat
+    /// presentation beats and the pass-turn command with them. The route
+    /// therefore lives here, at the idle wait, and excludes combat by name.
+    ///
+    /// The suppressed scene band is excluded for the same reason §8.2 states
+    /// it: the shared wait "performs no world step for values `0x21` through
+    /// `0x7F` **inclusive**", and there is no world step to schedule when the
+    /// band applies.
+    ///
+    /// A **cached sail direction** is required, not merely hoisted sails.
+    /// `overworld.md §5` step 3 is what the route rests on - "under sail on
+    /// the wind-driven cadence, this step does not read the keyboard at all:
+    /// the input helper returns the cached sail direction instead, which is
+    /// how a ship keeps moving with no keypress" - and `weather.md §5` only
+    /// lets the helper "synthesize repeated movement commands from the
+    /// cached direction" once one exists. With no cache there is nothing to
+    /// synthesize, so the loop reads a command and pays the ordinary
+    /// one-tick pass; a ship that has hoisted its sails but not yet been
+    /// steered therefore runs the world at the ordinary rate.
+    pub fn under_sail_wait_pass_applies(&self) -> bool {
+        matches!(self.area, Area::World { .. })
+            && self.player.transport.is_ship_under_sail()
+            && self.sail_cached_direction.is_some()
+            && !self.combat_active
+            && !idle_world_step_suppressed_for_scene(self.current_scene_byte())
+    }
+
+    /// One pass of the input helper's idle wait (`timing.md §8.2`).
+    ///
+    /// "On the overworld the input helper performs one scripted step-and-wait
+    /// - one world step followed by one one-tick wait - before either
+    /// entering the command wait or, when sails are set, performing a bare
+    /// cursor poll instead; so an **under-sail auto-advance pass costs two
+    /// ticks and one world step and never enters the command wait at all**."
+    ///
+    /// The under-sail pass is therefore two calls into this helper:
+    ///
+    /// 1. [`IdleWaitPass::UnderSailWorldStep`] - the scripted step-and-wait:
+    ///    one world step, one tick.
+    /// 2. [`IdleWaitPass::UnderSailCursorPoll`] - the bare cursor poll: one
+    ///    tick, **no** world step ("two further idle pumps share the one-tick
+    ///    wait but not the world step"), and then, instead of entering the
+    ///    command wait, the helper "returns the cached sail direction"
+    ///    (`overworld.md §5` step 3) and the loop dispatches it as this
+    ///    pass's movement command. That synthesized command is the
+    ///    auto-advance: it either pays a wind-cadence wait pass or releases
+    ///    the ship's step, exactly as a keyed movement command would
+    ///    (`weather.md §5`).
+    ///
+    /// Every other caller gets the ordinary single step-and-wait and then
+    /// enters the command wait, exactly as before.
+    pub fn idle_wait_pass(&mut self, game_dir: Option<&Path>) -> io::Result<IdleWaitPass> {
+        if !self.under_sail_wait_pass_applies() {
+            self.under_sail_wait_cursor_poll_pending = false;
+            self.advance_visual_tick();
+            return Ok(IdleWaitPass::CommandWait);
+        }
+        if self.under_sail_wait_cursor_poll_pending {
+            self.under_sail_wait_cursor_poll_pending = false;
+            let direction = self
+                .sail_cached_direction
+                .expect("under_sail_wait_pass_applies requires a cached sail direction");
+            // `weather.md §5`: the synthesized command goes through the
+            // ordinary movement dispatcher, so the wind gate owns the
+            // cadence counter and the release, and `overworld.md §6.2.5`
+            // owns what a released step does when its destination refuses.
+            self.step_with_game_dir(direction, game_dir)?;
+            return Ok(IdleWaitPass::UnderSailCursorPoll);
+        }
+        self.advance_visual_tick();
+        self.under_sail_wait_cursor_poll_pending = true;
+        Ok(IdleWaitPass::UnderSailWorldStep)
+    }
 
     pub fn decay_light_counters(&mut self, units: u8) {
         self.torch_counter = self.torch_counter.saturating_sub(units);
@@ -3379,6 +3710,72 @@ impl PlayState {
             && self.active_effect_counter != 0
     }
 
+    /// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3, in
+    /// isolation: flip the stored transport parity bit and report whether it
+    /// came up set. Returns `false` without flipping when the marker is
+    /// outside the published four-value window, because the whole gate is
+    /// introduced by "**While** the party's transport marker is one of the
+    /// four values `0x12..0x15`".
+    fn transport_walker_gate_fires(&mut self) -> bool {
+        if !transport_marker_gates_per_turn_walkers(self.player.transport.save_marker()) {
+            return false;
+        }
+        self.transport_walker_gate_parity = !self.transport_walker_gate_parity;
+        self.transport_walker_gate_parity
+    }
+
+    /// `npc-schedules.md §5` gate 3 / `encounters.md §2.1` gate 2: the
+    /// Quickness parity bit. Only the `Q` effect arms it; with no effect
+    /// active the gate is not reached and its bit does not move.
+    fn quickness_walker_gate_fires(&mut self) -> bool {
+        if self.active_effect_timing_status() != TimingStatusTag::HalfTime {
+            return false;
+        }
+        self.quickness_walker_gate_parity = !self.quickness_walker_gate_parity;
+        self.quickness_walker_gate_parity
+    }
+
+    /// `npc-schedules.md §5`, "**Gates the town turn loop applies before the
+    /// processor runs at all.** These sit in the town loop's per-turn
+    /// epilogue, ahead of both town walkers ... In the order the town loop
+    /// tests them: 1. **Transport marker.** ... 2. **Negate Time.** ...
+    /// 3. **Quickness.**"
+    ///
+    /// Each arm returns immediately, which is what leaves the later gates'
+    /// parity bits un-flipped; see [`WalkerEffectGate`]. This routine is
+    /// deliberately *not* shared with
+    /// [`Self::overworld_walker_effect_gates`].
+    pub fn town_walker_effect_gates(&mut self) -> WalkerEffectGate {
+        if self.transport_walker_gate_fires() {
+            return WalkerEffectGate::SkippedByTransportMarker;
+        }
+        if self.negate_time_active() {
+            return WalkerEffectGate::SkippedByNegateTime;
+        }
+        if self.quickness_walker_gate_fires() {
+            return WalkerEffectGate::SkippedByQuickness;
+        }
+        WalkerEffectGate::Run
+    }
+
+    /// `encounters.md §2.1`, "**The three effect gates, in the order the
+    /// outdoor block tests them.** All three sit ahead of the encounter probe
+    /// *and* ahead of the outdoor creature walker ... 1. **Negate Time.** ...
+    /// 2. **Quickness.** ... 3. **The transport marker.**" - the reverse of
+    /// the town order above.
+    pub fn overworld_walker_effect_gates(&mut self) -> WalkerEffectGate {
+        if self.negate_time_active() {
+            return WalkerEffectGate::SkippedByNegateTime;
+        }
+        if self.quickness_walker_gate_fires() {
+            return WalkerEffectGate::SkippedByQuickness;
+        }
+        if self.transport_walker_gate_fires() {
+            return WalkerEffectGate::SkippedByTransportMarker;
+        }
+        WalkerEffectGate::Run
+    }
+
     pub fn has_personal_light(&self) -> bool {
         self.torch_counter != 0 || self.light_spell_counter != 0
     }
@@ -3410,14 +3807,36 @@ impl PlayState {
     /// tick, and is not driven by the animator." The dungeon loop runs
     /// neither. Neither pass returns a report: §8.1 forbids a pruning event
     /// that other systems observe.
+    ///
+    /// **Test-only.** No published turn tail calls the animator and the
+    /// walkers together: `npc-schedules.md §5`'s three effect gates sit ahead
+    /// of the walkers alone and `RETRACTIONS.md` R316 keeps the animator out
+    /// of that pair, so the town epilogue calls the two halves separately and
+    /// under different conditions. This bundled entry point survives only as
+    /// the shorthand a batch of `active-objects.md §8.1` tests was written
+    /// against; it is not a contract any mode loop implements.
+    #[cfg(test)]
     pub fn advance_active_objects(&mut self) {
+        if matches!(self.area, Area::Town { .. }) {
+            self.animate_active_objects();
+        }
+        self.advance_active_object_walkers();
+    }
+
+    /// The gated half of [`Self::advance_active_objects`]: the per-turn
+    /// walkers only.
+    ///
+    /// `npc-schedules.md §5`'s three effect gates sit "ahead of both town
+    /// walkers — the object walker that moves loose horse-family objects and
+    /// this schedule processor", and `encounters.md §2.1`'s sit ahead of the
+    /// outdoor creature walker. The town animator is in neither list, so the
+    /// per-turn epilogue calls this rather than the bundled entry point and
+    /// runs the animator outside the gate.
+    pub fn advance_active_object_walkers(&mut self) {
         match self.area {
             Area::Dungeon { .. } => return,
             Area::World { .. } => self.advance_outdoor_active_objects(),
-            Area::Town { .. } => {
-                self.animate_active_objects();
-                self.advance_town_free_roaming_active_objects();
-            }
+            Area::Town { .. } => self.advance_town_free_roaming_active_objects(),
         }
         self.prune_far_overworld_objects();
     }
@@ -3593,13 +4012,37 @@ impl PlayState {
                     ActiveShipWind::None
                 };
             let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
+            // `active-objects.md §8`: "**There is no outdoor equivalent of
+            // the town wander gate.** An ordinary land monster has no
+            // per-turn 'do I move at all' roll: every turn the walker runs,
+            // an eligible slot goes straight to the directed step planner.
+            // The per-turn randomness an implementation has to reproduce
+            // outdoors is only these, and they are all downstream of the
+            // decision to move: the fair coin that picks **which axis to
+            // attempt first** - an ordering roll, never a gate; the
+            // destination-terrain cadence gates in the step committer ...;
+            // the class-specific pacing of the whirlpool parity bit and the
+            // wind cadence for ship-like frames."
+            //
+            // This used to gate the whole planner on the slot's animation
+            // phase reaching zero and then reseed that phase to two on a
+            // committed step - a two-turn pacing gate applied to every class,
+            // which is exactly the "do I move at all" test the section
+            // denies. The class pacing that survives is the ship wind cadence
+            // handled above and the whirlpool parity inside the committer.
+            //
+            // What survives of the old phase test is only the steady marker.
+            // §8's phase table gives the all-ones nibble as "Steady; do not
+            // animate this slot. The animator skips", and this walker "applies
+            // only to the outdoor animated/monster predicate", so a slot
+            // flagged as not animated is not one of its slots at all. That is
+            // what keeps a parked frigate, skiff or carpet - written with the
+            // steady marker when the party disembarks - sitting where it was
+            // left.
             let wandered = movement_allowed
                 && !ship_wind_changed
-                && (self.active_objects[slot].phase & 0x0f) == 0
+                && !matches!(tick, PhaseTick::Steady)
                 && self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated);
-            if wandered {
-                self.active_objects[slot].phase = (self.active_objects[slot].phase & 0xf0) | 0x02;
-            }
             if ship_wind_changed
                 || wandered
                 || matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint)
@@ -3841,6 +4284,10 @@ impl PlayState {
         };
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
+        // `overworld.md §6.2.5`: "The step remains refused, party
+        // coordinates do not change, and the cached sail direction is
+        // cleared." That is what stops the auto-advance route on impact.
+        self.sail_cached_direction = None;
         self.mark_visibility_dirty();
         self.emit_sound_effect(SoundEffect::ShipCollisionRumble);
         self.apply_outdoor_impact_absorption()
@@ -4622,9 +5069,17 @@ impl PlayState {
         Ok(Some(MoveOutcome::Used))
     }
 
-    pub fn world_object_epilogue_runs_for_turn(&self, turn_before: u64) -> bool {
-        TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
-            .world_object_epilogue_runs(turn_before)
+    /// `encounters.md §2.1`: the three effect gates "sit ahead of the
+    /// encounter probe *and* ahead of the outdoor creature walker, so a gate
+    /// that fires costs the turn its probe as well as its creature movement".
+    ///
+    /// The gates were already tested once this turn, inside the clock
+    /// routine, and each arm that fired flipped a *stored* parity bit. Both
+    /// consumers therefore read that single decision; re-testing the gates
+    /// here would advance the same bits twice per turn and put the walker and
+    /// the probe on opposite phases.
+    pub const fn world_object_epilogue_runs_for_turn(&self, _turn_before: u64) -> bool {
+        self.world_walkers_ran_this_turn
     }
 
     /// `active-objects.md §8.1` overworld off-screen prune pass. Invoked by

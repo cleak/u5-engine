@@ -44,13 +44,14 @@ pub const fn monster_kill_xp_reward(class_max_hp: u16) -> u16 {
 /// fleeing/morale decisions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MonsterWoundBucket {
-    /// HP `< 1/4 max` — always-fleeing critical band.
+    /// Below one truncated quarter — always-fleeing critical band.
     Critical,
-    /// HP in `[1/4, 1/2)` — morale-check band; fleeing on 252/256.
+    /// One to just under two truncated quarters — morale-check band;
+    /// fleeing on 252/256.
     Wounded,
-    /// HP in `[1/2, 3/4)` — light wounds.
+    /// Two to just under three truncated quarters — light wounds.
     LightlyWounded,
-    /// HP `>= 3/4 max` — healthy.
+    /// Three truncated quarters or more — healthy.
     Healthy,
 }
 
@@ -61,18 +62,25 @@ pub const WOUND_MORALE_FLEE_THRESHOLD: u16 = 252;
 
 /// `combat.md §9` monster wound-score classifier. Returns the
 /// four-bucket wound classification.
+///
+/// `§11.1` publishes the arithmetic behind this classifier for the first
+/// time, and it is not the exact-fraction comparison the band names suggest:
+/// "The quarter is the class maximum divided by four with truncation, and the
+/// three thresholds are one, two and three of those truncated quarters, so the
+/// boundaries sit slightly low for maxima that are not multiples of four."
+/// `§11.1` also states that the graded wound lines use "the same four-bucket
+/// wound score the flee classifier of Section 9 computes", so the two must
+/// agree: at class maximum 10 both read 2/4/6, not 2/5/7.
 pub const fn monster_wound_bucket(current_hp: u16, class_max_hp: u16) -> MonsterWoundBucket {
     if class_max_hp == 0 {
         return MonsterWoundBucket::Critical;
     }
     let quarter = class_max_hp / 4;
-    let half = class_max_hp / 2;
-    let three_quarters = (class_max_hp * 3) / 4;
     if current_hp < quarter {
         MonsterWoundBucket::Critical
-    } else if current_hp < half {
+    } else if current_hp < quarter * 2 {
         MonsterWoundBucket::Wounded
-    } else if current_hp < three_quarters {
+    } else if current_hp < quarter * 3 {
         MonsterWoundBucket::LightlyWounded
     } else {
         MonsterWoundBucket::Healthy
@@ -273,6 +281,11 @@ pub const COMBAT_CLASS_GIANT_SPIDER: u8 = COMBAT_CLASS_BAT + 1;
 pub const COMBAT_CLASS_INSECT_SWARM: u8 = 31;
 pub const COMBAT_CLASS_PYTHON: u8 = 34;
 pub const COMBAT_CLASS_DAEMON: u8 = 38;
+/// `combat.md §11.1`: the one attacker class whose landed hit on a party
+/// target replaces the flat `hit!` line - "Ordinary landed hit, **party**
+/// target, attacker is a **Corpser** (class 45) | monster attacker |
+/// `<target> dragged under!` in place of `hit!`".
+pub const COMBAT_CLASS_CORPSER: u8 = 45;
 /// `catalogs/monster-bestiary.md §2`: Dragon (39) follows Daemon
 /// (38) consecutively. Anchor DRAGON to DAEMON + 1.
 pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;
@@ -445,6 +458,10 @@ pub enum CombatWeaponAttackResolution {
     },
     Special {
         route: CombatWeaponAttackRangeRoute,
+        /// `combat.md §12`: set only on the Glass Sword arm, which
+        /// "narrates `Thy sword hath shattered!` and substitutes the
+        /// instant-kill sentinel `99`".
+        shattered: bool,
     },
 }
 
@@ -770,7 +787,17 @@ pub struct CombatMonsterDamageOutcome {
     pub class: u8,
     pub raw_damage: i16,
     pub applied_damage: u8,
-    pub missed: bool,
+    /// `combat.md §12`: "The result may be zero or negative, and **both
+    /// are narrated as a graze, not as a miss**." `RETRACTIONS.md` R352
+    /// keeps the mechanical half of the withdrawn text - "same marker on
+    /// both routes, no HP change, the experience block the only
+    /// difference" - and withdraws the miss wording and the miss flag:
+    /// "There is no miss flag ... Neither reader is a miss." The bit this
+    /// models has "exactly two writers, both of them this zero-or-negative
+    /// condition". Narration lives in `input_dispatch`; see the §11.1
+    /// census row "Damage zero or negative | both | `<target> grazed!`
+    /// **and nothing else**".
+    pub grazed: bool,
     pub instant_kill: bool,
     pub killed: bool,
     pub return_value: u8,
@@ -781,7 +808,11 @@ pub struct CombatMonsterDamageOutcome {
 pub struct CombatPartyDamageOutcome {
     pub raw_damage: i16,
     pub applied_damage: u16,
-    pub missed: bool,
+    /// `combat.md §12`, the party-defender route: "Against a **party**
+    /// defender a negative result short-circuits early ... Both routes
+    /// raise the same shared result marker". The narration is
+    /// `<target> grazed!` (`§11.1`), never a miss - `RETRACTIONS.md` R352.
+    pub grazed: bool,
     pub instant_kill: bool,
     pub killed: bool,
     pub status_before: u8,
@@ -1177,9 +1208,22 @@ impl CombatActorDescriptor {
     ) -> Option<CombatMonsterDamageOutcome> {
         let stats = combat_class_stats(self.owner_target_class)?;
         let traits = combat_class_traits(self.owner_target_class)?;
-        let missed = raw_damage < 0;
+        // `combat.md §12`: "The result may be zero or negative, and
+        // **both are narrated as a graze, not as a miss**." Zero is
+        // included deliberately - the marker's two writers are "both the
+        // zero-or-negative-damage condition", so the predicate is `<= 0`
+        // and not `< 0`. The damage-modifier paragraph in the same
+        // section states the clamp - "Negative damage is clamped to zero
+        // and the shared result marker's graze bit is raised, so the
+        // narration reads `<target> grazed!` and every later result line
+        // is suppressed (Section 11.1)" - and only has to speak of the
+        // negative half because zero needs no clamp. `RETRACTIONS.md`
+        // R352 confirms this mechanical half and withdraws the former
+        // miss reading. The instant-kill sentinel is decimal 99 and
+        // cannot collide with the graze predicate.
+        let grazed = raw_damage <= 0;
         let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
-        let damage = if missed {
+        let damage = if grazed {
             0
         } else if instant_kill {
             self.hp_or_wound
@@ -1221,7 +1265,7 @@ impl CombatActorDescriptor {
             class: stats.class,
             raw_damage,
             applied_damage,
-            missed,
+            grazed,
             instant_kill,
             killed,
             return_value,
@@ -1235,9 +1279,16 @@ pub fn apply_combat_party_damage(
     raw_damage: i16,
 ) -> CombatPartyDamageOutcome {
     let status_before = member.status;
-    let missed = raw_damage < 0;
+    // Same zero-or-negative graze condition as the monster arm above.
+    // `combat.md §12`: "The result may be zero or negative, and **both
+    // are narrated as a graze, not as a miss**." Against a party
+    // defender the negative result "short-circuits early", but both
+    // routes "raise the same shared result marker" and are
+    // "gameplay-identical - one printed graze line and no HP change"
+    // (`RETRACTIONS.md` R352).
+    let grazed = raw_damage <= 0;
     let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
-    let applied_damage = if missed {
+    let applied_damage = if grazed {
         0
     } else if instant_kill {
         let applied = member.hp;
@@ -1251,7 +1302,7 @@ pub fn apply_combat_party_damage(
     CombatPartyDamageOutcome {
         raw_damage,
         applied_damage,
-        missed,
+        grazed,
         instant_kill,
         killed: member.hp == 0,
         status_before,
@@ -1570,6 +1621,10 @@ pub const fn combat_spell_damage_roll(roll: u8, max_damage: u8) -> i16 {
     }
 }
 
+/// `combat.md §12` stage one, **party** row: "the readied action item's
+/// `Attack max` value; when that value is greater than `1` and is not the
+/// instant-kill sentinel `99`, it is replaced by an inclusive `1..value`
+/// draw. Values `0` and `1` pass through unchanged".
 pub const fn resolve_combat_weapon_raw_damage(attack_max: u8, roll: u8) -> CombatWeaponDamageRoute {
     match attack_max {
         0 => CombatWeaponDamageRoute::NoOrdinaryDamage,
@@ -1579,6 +1634,119 @@ pub const fn resolve_combat_weapon_raw_damage(attack_max: u8, roll: u8) -> Comba
             raw_damage: combat_spell_damage_roll(roll, max_damage),
         },
     }
+}
+
+/// `combat.md §12` "The ordinary attack damage roll", stage one. "It runs
+/// in two stages, and the two sides are not symmetric."
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatAttackerDamageSource {
+    /// "Monster | the class's **attack byte, used flat**, with **no random
+    /// draw at all**" - `RETRACTIONS.md` R336: "A Bat brings exactly 6
+    /// every time. An engine that rolls `1..attack` for monsters delivers
+    /// about 39 % of the original's damage."
+    MonsterFlat { attack_value: u8 },
+    /// The party arm, keyed by the readied action item id so the two
+    /// per-item overrides below run before the roll.
+    PartyItem { item_id: usize },
+    /// `combat.md §12`: "bare hands are a flat `1`".
+    PartyBareHands,
+}
+
+/// `combat.md §12` stage one result, carrying the Glass Sword narration
+/// flag alongside the route.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatAttackerRawDamage {
+    pub route: CombatWeaponDamageRoute,
+    /// `combat.md §12`: "The **Glass Sword** id narrates `Thy sword hath
+    /// shattered!` and substitutes the instant-kill sentinel `99`."
+    pub shattered: bool,
+}
+
+/// `combat.md §12` stage one for either side. "Two per-item overrides run
+/// before the roll on the party side. The **Glass Sword** id narrates `Thy
+/// sword hath shattered!` and substitutes the instant-kill sentinel `99`;
+/// the **Jeweled Sword** id forces the raw value to `0` whatever its table
+/// entry says."
+pub fn resolve_combat_attacker_raw_damage(
+    source: CombatAttackerDamageSource,
+    damage_roll: u8,
+) -> Option<CombatAttackerRawDamage> {
+    let (route, shattered) = match source {
+        // `combat.md §12` stage one, monster row: the class byte is used
+        // flat and stage two's defence subtraction still runs on it. The
+        // instant-kill short-circuit belongs to the *party* arm's two
+        // per-item overrides, so a class attack byte that happens to read
+        // 99 is a very large ordinary blow, not a sentinel.
+        CombatAttackerDamageSource::MonsterFlat { attack_value } => (
+            match attack_value {
+                0 => CombatWeaponDamageRoute::NoOrdinaryDamage,
+                value => CombatWeaponDamageRoute::Damage {
+                    raw_damage: value as i16,
+                },
+            },
+            false,
+        ),
+        CombatAttackerDamageSource::PartyBareHands => {
+            (CombatWeaponDamageRoute::Damage { raw_damage: 1 }, false)
+        }
+        CombatAttackerDamageSource::PartyItem { item_id } => {
+            if item_id == EQUIPMENT_GLASS_SWORD {
+                (CombatWeaponDamageRoute::Special, true)
+            } else if item_id == EQUIPMENT_JEWELED_SWORD {
+                // `combat.md §12`: the override "forces the raw value to
+                // `0` whatever its table entry says" - a raw *value*, not
+                // a zero-damage dispatcher row. Only the instant-kill
+                // sentinel "short-circuits the whole roller and returns
+                // immediately - **before the defender's defence byte is
+                // read**", so this attempt still runs stage two.
+                // `catalogs/item-list.md §5.1`: "Id 40 carries `1`, which
+                // the same roller overrides to `0` before any roll" - the
+                // dispatcher therefore never sees a zero row for it.
+                (CombatWeaponDamageRoute::Damage { raw_damage: 0 }, false)
+            } else {
+                (
+                    resolve_combat_weapon_raw_damage(equipment_attack_max(item_id)?, damage_roll),
+                    false,
+                )
+            }
+        }
+    };
+    Some(CombatAttackerRawDamage { route, shattered })
+}
+
+/// `combat.md §12` stage two: "**When that rating is non-zero the roller
+/// subtracts an inclusive `1..rating` draw; when it is zero it takes no
+/// draw at all and subtracts nothing.**" Skipping the draw on a zero
+/// rating "is part of PRNG parity, not an optimisation".
+pub const fn combat_defence_draw_taken(defence_rating: u8) -> bool {
+    defence_rating != 0
+}
+
+/// `combat.md §12` stage two, the inclusive `1..rating` draw. A flat
+/// subtraction "is not a near-miss but a different game (against the
+/// shipped party defence of 7 it makes every Bat swing land for `6 - 7`,
+/// i.e. exactly zero HP, forever)".
+pub const fn combat_defence_subtraction(defence_rating: u8, defence_roll: u8) -> u8 {
+    if defence_rating == 0 {
+        0
+    } else {
+        1 + defence_roll % defence_rating
+    }
+}
+
+/// `combat.md §12`: the whole two-stage roller for one landed swing.
+/// "The result may be zero or negative, and **both are narrated as a
+/// graze, not as a miss**." The
+/// instant-kill sentinel "short-circuits the whole roller and returns
+/// immediately - **before the defender's defence byte is read** - so an
+/// instant kill takes no defence draw", which is why `Special` never
+/// reaches this function.
+pub const fn resolve_combat_damage_after_defence(
+    raw_damage: i16,
+    defence_rating: u8,
+    defence_roll: u8,
+) -> i16 {
+    raw_damage - combat_defence_subtraction(defence_rating, defence_roll) as i16
 }
 
 pub fn resolve_combat_equipment_weapon_raw_damage(
@@ -1605,44 +1773,201 @@ pub const fn resolve_combat_weapon_attack_range_route(
     }
 }
 
-pub const fn resolve_combat_weapon_attack(
-    attack_max: u8,
-    target_range: u8,
-    range_cap: u8,
-    effect_code: u8,
-    attacker_rating: u8,
-    defender_rating: u8,
-    hit_roll: u8,
-    damage_roll: u8,
-    forced_hit: Option<bool>,
+/// `combat.md §11` / `§12` inputs for one ordinary melee or
+/// ranged/effect attempt. The two ratings feed the to-hit score, the
+/// separate `defence_rating` feeds stage two of the damage roller - §13
+/// (R337): "The **defense** byte reaches the damage roller directly and
+/// never through the selector."
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatWeaponAttackInput {
+    pub source: CombatAttackerDamageSource,
+    pub target_range: u8,
+    pub range_cap: u8,
+    pub effect_code: u8,
+    /// `combat.md §11` selector, attacker side.
+    pub attacker_rating: u8,
+    /// `combat.md §11` selector, defender side: "every ordinary melee and
+    /// ranged/effect attack, party or monster | that actor's **combat
+    /// weight**".
+    pub defender_rating: u8,
+    /// `combat.md §12` stage two: "class defense byte for a monster and
+    /// the cached character combat-defense byte for a party member".
+    pub defence_rating: u8,
+    /// The inclusive `0..=60` raw draw behind the skewed `1..30` roll.
+    pub hit_raw_roll_0_to_60: u8,
+    pub damage_roll: u8,
+    pub defence_roll: u8,
+    pub forced_hit: Option<bool>,
+}
+
+/// `combat.md §11.1` "Order, stated once": the to-hit decides first, and
+/// "damage application" is step 4. The damage roller is one roller that
+/// "runs in two stages" (`§12`), so an attempt that the to-hit rejects
+/// reaches neither stage and spends neither draw - see
+/// [`combat_weapon_attack_reaches_damage_roller`], which the callers use
+/// to decide whether to spend them. The dispatcher's own routing - "A zero
+/// damage row routes to spell or special effect handling; a nonzero damage
+/// row routes to target selection and attack application" (`§11`) - and
+/// the two per-item overrides that "run before the roll" are table reads,
+/// not draws, so they are resolved here ahead of the score.
+pub fn resolve_combat_weapon_attack(
+    input: CombatWeaponAttackInput,
 ) -> CombatWeaponAttackResolution {
-    let Some(route) =
-        resolve_combat_weapon_attack_range_route(target_range, range_cap, effect_code)
-    else {
+    let Some(route) = resolve_combat_weapon_attack_range_route(
+        input.target_range,
+        input.range_cap,
+        input.effect_code,
+    ) else {
         return CombatWeaponAttackResolution::OutOfRange {
-            target_range,
-            range_cap,
+            target_range: input.target_range,
+            range_cap: input.range_cap,
         };
     };
 
-    match resolve_combat_weapon_raw_damage(attack_max, damage_roll) {
+    let Some(raw) = resolve_combat_attacker_raw_damage(input.source, input.damage_roll) else {
+        return CombatWeaponAttackResolution::NoOrdinaryDamage { route };
+    };
+
+    match raw.route {
         CombatWeaponDamageRoute::NoOrdinaryDamage => {
             CombatWeaponAttackResolution::NoOrdinaryDamage { route }
         }
-        CombatWeaponDamageRoute::Special => CombatWeaponAttackResolution::Special { route },
+        CombatWeaponDamageRoute::Special => CombatWeaponAttackResolution::Special {
+            route,
+            shattered: raw.shattered,
+        },
         CombatWeaponDamageRoute::Damage { raw_damage } => {
-            let hit_score = combat_to_hit_score(attacker_rating, defender_rating);
-            let hit = match forced_hit {
+            let hit_score = combat_to_hit_score(input.attacker_rating, input.defender_rating);
+            let hit = match input.forced_hit {
                 Some(hit) => hit,
-                None => hit_score > hit_roll as i16,
+                None => combat_to_hit_accepts(
+                    hit_score,
+                    combat_skewed_roll_1_to_30(input.hit_raw_roll_0_to_60),
+                ),
             };
             if hit {
-                CombatWeaponAttackResolution::Hit { route, raw_damage }
+                CombatWeaponAttackResolution::Hit {
+                    route,
+                    raw_damage: resolve_combat_damage_after_defence(
+                        raw_damage,
+                        input.defence_rating,
+                        input.defence_roll,
+                    ),
+                }
             } else {
                 CombatWeaponAttackResolution::Miss { route, hit_score }
             }
         }
     }
+}
+
+/// `combat.md §12` stage one: whether this attempt takes the party-side
+/// inclusive `1..Attack max` draw. The monster row is "the class's
+/// **attack byte, used flat**, with **no random draw at all**"; on the
+/// party side "Values `0` and `1` pass through unchanged, and bare hands
+/// are a flat `1`", and the Glass Sword and Jeweled Sword overrides "run
+/// before the roll", so only an ordinary readied item whose `Attack max`
+/// is above `1` and short of the sentinel reaches a draw. Like the
+/// defence skip this is PRNG parity, not an optimisation.
+pub fn combat_attacker_damage_draw_taken(source: CombatAttackerDamageSource) -> bool {
+    match source {
+        CombatAttackerDamageSource::MonsterFlat { .. }
+        | CombatAttackerDamageSource::PartyBareHands => false,
+        CombatAttackerDamageSource::PartyItem { item_id } => {
+            if item_id == EQUIPMENT_GLASS_SWORD || item_id == EQUIPMENT_JEWELED_SWORD {
+                return false;
+            }
+            match equipment_attack_max(item_id) {
+                // "when that value is greater than `1` and is not the
+                // instant-kill sentinel `99`, it is replaced by an
+                // inclusive `1..value` draw".
+                Some(attack_max) => {
+                    attack_max > 1 && i16::from(attack_max) != COMBAT_INSTANT_KILL_DAMAGE
+                }
+                None => false,
+            }
+        }
+    }
+}
+
+/// `combat.md §12`: whether this attempt reaches the ordinary attack
+/// damage roller at all. `§11.1`'s ordered contract puts "damage
+/// application" at step 4, after the to-hit roll of step 0 and the impact
+/// presentation of step 2, so an attempt that misses, that is out of
+/// range, that carries a zero damage row or that short-circuits on the
+/// instant-kill sentinel never enters the roller.
+///
+/// This is one roller running "in two stages", so both of its draws are
+/// taken together or not at all: an attempt that does not reach it spends
+/// neither the party-side stage-one `1..Attack max` draw nor the
+/// stage-two `1..rating` defence draw.
+pub fn combat_weapon_attack_reaches_damage_roller(input: CombatWeaponAttackInput) -> bool {
+    matches!(
+        resolve_combat_weapon_attack(CombatWeaponAttackInput {
+            defence_rating: 0,
+            defence_roll: 0,
+            ..input
+        }),
+        CombatWeaponAttackResolution::Hit { .. }
+    )
+}
+
+/// `combat.md §12` stage one: whether this attempt spends the party-side
+/// inclusive `1..Attack max` draw. It must reach the roller (above) and
+/// the source must be one of the rows that rolls at all.
+pub fn combat_weapon_attack_takes_damage_draw(input: CombatWeaponAttackInput) -> bool {
+    combat_weapon_attack_reaches_damage_roller(input)
+        && combat_attacker_damage_draw_taken(input.source)
+}
+
+/// `combat.md §12` stage two: whether this attempt spends the defender's
+/// inclusive `1..rating` draw. It must reach the roller, and the rating
+/// must be non-zero: "when it is zero it takes no draw at all and
+/// subtracts nothing", which "is part of PRNG parity, not an
+/// optimisation".
+pub fn combat_weapon_attack_takes_defence_draw(input: CombatWeaponAttackInput) -> bool {
+    combat_weapon_attack_reaches_damage_roller(input)
+        && combat_defence_draw_taken(input.defence_rating)
+}
+
+/// `combat.md §11` / `§12` inputs for one readied-item attempt, with the
+/// per-item range cap, effect code and always-hit arm resolved from
+/// `catalogs/item-list.md`.
+#[allow(clippy::too_many_arguments)]
+pub fn combat_equipment_weapon_attack_input(
+    item_id: usize,
+    target_range: u8,
+    attacker_rating: u8,
+    defender_rating: u8,
+    defence_rating: u8,
+    hit_raw_roll_0_to_60: u8,
+    damage_roll: u8,
+    defence_roll: u8,
+    forced_hit: Option<bool>,
+) -> Option<CombatWeaponAttackInput> {
+    Some(CombatWeaponAttackInput {
+        source: CombatAttackerDamageSource::PartyItem { item_id },
+        target_range,
+        range_cap: equipment_weapon_range_cap(item_id)?,
+        effect_code: equipment_weapon_effect_code(item_id)?,
+        attacker_rating,
+        defender_rating,
+        defence_rating,
+        hit_raw_roll_0_to_60,
+        damage_roll,
+        defence_roll,
+        // `catalogs/item-list.md §5.1`: an attempt with one of the three
+        // always-hit ids `combat.md §11` names "skips the to-hit score
+        // entirely"; a caller-supplied force still wins.
+        //
+        // With the shipped `Attack max` values ids 35 and 39 "both carry
+        // the instant-kill sentinel `99`", so they leave stage one on the
+        // `Special` route and never reach the score the flag would skip;
+        // the flag changes no outcome for those two. Id 40's override
+        // forces a raw *value* of `0` and still enters the roller, so on
+        // that id the flag is live.
+        forced_hit: forced_hit.or_else(|| equipment_attack_is_always_hit(item_id).then_some(true)),
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1651,20 +1976,24 @@ pub fn resolve_combat_equipment_weapon_attack(
     target_range: u8,
     attacker_rating: u8,
     defender_rating: u8,
-    hit_roll: u8,
+    defence_rating: u8,
+    hit_raw_roll_0_to_60: u8,
     damage_roll: u8,
+    defence_roll: u8,
     forced_hit: Option<bool>,
 ) -> Option<CombatWeaponAttackResolution> {
     Some(resolve_combat_weapon_attack(
-        equipment_attack_max(item_id)?,
-        target_range,
-        equipment_weapon_range_cap(item_id)?,
-        equipment_weapon_effect_code(item_id)?,
-        attacker_rating,
-        defender_rating,
-        hit_roll,
-        damage_roll,
-        forced_hit,
+        combat_equipment_weapon_attack_input(
+            item_id,
+            target_range,
+            attacker_rating,
+            defender_rating,
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll,
+            defence_roll,
+            forced_hit,
+        )?,
     ))
 }
 
@@ -3069,6 +3398,12 @@ pub const fn resolve_combat_possess_resistance_outcome(
     }
 }
 
+/// `combat.md §11` "The draw" / `§9.1`: the inclusive upper bound of the
+/// raw draw behind the shared skewed `1..30` combat roll - "one inclusive
+/// `0..60` draw halved with truncation, with a zero result promoted to
+/// one".
+pub const COMBAT_SKEWED_ROLL_RAW_MAX: u8 = 60;
+
 /// `combat.md §9.1` shared combat roll. One inclusive `0..=60` raw
 /// draw is halved, with results zero and one both promoted to one.
 pub const fn combat_skewed_roll_1_to_30(raw_roll_0_to_60: u8) -> u8 {
@@ -3315,37 +3650,125 @@ pub fn find_combat_actor_at_field_coordinate_skipping(
         .map(|(slot, _)| slot)
 }
 
-/// `catalogs/item-list.md §5.3` shared combat to-hit score bias.
-/// The shared to-hit helper computes the score as
-/// `(attacker - defender + COMBAT_TO_HIT_BIAS) / 2` and compares it
-/// against a uniform random byte. The +30 bias balances the score
-/// so that two equal-rating actors clear the median of `0..=255`.
+/// `combat.md §11` "The score" shared combat to-hit bias:
+/// `S = truncate_toward_zero((D - A + 30) / 2)`.
 pub const COMBAT_TO_HIT_BIAS: i16 = 30;
 
+/// `combat.md §11` "The score": "With `A` the attacker's rating and `D`
+/// the defender's rating, `S = truncate_toward_zero((D - A + 30) / 2)`.
+/// **The defender's rating is the added term and the attacker's is the
+/// subtracted one** - the same way round as the shared spell-resistance
+/// predicate in Section 9". Rust's signed division truncates toward zero,
+/// which is the published rounding.
+///
+/// *(`RETRACTIONS.md` R334 withdraws the earlier `(attacker - defender +
+/// 30) / 2`: "The operands are the other way round". The neighbouring
+/// combat-weight sentence survives and is confirmed.)*
 pub const fn combat_to_hit_score(attacker_rating: u8, defender_rating: u8) -> i16 {
-    ((attacker_rating as i16 - defender_rating as i16) + COMBAT_TO_HIT_BIAS) / 2
+    ((defender_rating as i16 - attacker_rating as i16) + COMBAT_TO_HIT_BIAS) / 2
 }
 
-/// **Held pending a spec answer - do not flip this comparison alone.**
-///
-/// `combat.md §11`, restated in `RETRACTIONS.md` R232, publishes the
-/// opposite direction to the one below: the hit is accepted when the
-/// drawn value is at or above the score, so the score reads as a
-/// difficulty number. The same retraction publishes, in the same breath,
-/// that "the attacker/defender labelling of the two operands feeding the
-/// score is now suspect and was not re-derived", and that the draw's own
-/// range is unverified.
-///
-/// Adopting the published direction while keeping this engine's own
-/// unverified operand selection was tried and backed out: with the
-/// attacker's rating in the minuend it makes a *low* rating the accurate
-/// one, so Strength, armour and every monster's attack cap all work
-/// backwards. Half of R232 is a worse model than neither half, so the
-/// engine keeps its existing comparison until the operand pair is
-/// published; the play-test's under-damaging hostile melee (defect 7) is
-/// blocked on that answer, filed as `cleak/u5-spec#183`.
-pub const fn resolve_combat_hit(attacker_rating: u8, defender_rating: u8, roll: u8) -> bool {
-    combat_to_hit_score(attacker_rating, defender_rating) > roll as i16
+/// `combat.md §11` "The comparison": "**The hit is accepted when `R >=
+/// S`.** The score is a difficulty number: a larger score is a *worse*
+/// chance to hit." The two boundaries fall out of the arithmetic rather
+/// than any clamp - "a score of `1` or less always hits, and a score of
+/// `31` or more always misses" - because `R` lives in `1..=30`.
+pub const fn combat_to_hit_accepts(score: i16, roll_1_to_30: u8) -> bool {
+    roll_1_to_30 as i16 >= score
+}
+
+/// `combat.md §11` "The draw": "One standard skewed combat roll `R` in
+/// `1..30` - the same shared helper used by the drop gate (Section 6.3),
+/// the resistance predicate and the Tremor/Poison Wind gate". Callers
+/// pass the underlying inclusive `0..=60` draw so the PRNG shape stays
+/// the published one; `RETRACTIONS.md` R335 warns that "an engine that
+/// 'fixes' the draw to be uniform over `1..30` is close but not
+/// parity-exact".
+pub const fn resolve_combat_hit_from_raw_roll(
+    attacker_rating: u8,
+    defender_rating: u8,
+    hit_raw_roll_0_to_60: u8,
+) -> bool {
+    combat_to_hit_accepts(
+        combat_to_hit_score(attacker_rating, defender_rating),
+        combat_skewed_roll_1_to_30(hit_raw_roll_0_to_60),
+    )
+}
+
+/// `combat.md §11` strength arm: "Five equipment ids select Strength
+/// instead of the attacker's combat weight ... **Spiked Helm, Spiked
+/// Shield, Club, Mace and 2H Hammer** - the catalog's own names for ids
+/// 3, 6, 18, 24 and 31: the blunt/impact family."
+pub const COMBAT_TO_HIT_STRENGTH_ARM_ITEM_IDS: [usize; 5] = [3, 6, 18, 24, 31];
+
+/// `combat.md §11`: "Every other readied item, and bare hands, leaves the
+/// attacker term as Dexterity, so on the shipped starting weapon a
+/// character's Strength does not affect accuracy at all."
+pub const fn combat_to_hit_item_selects_strength(item_id: usize) -> bool {
+    let mut index = 0;
+    while index < COMBAT_TO_HIT_STRENGTH_ARM_ITEM_IDS.len() {
+        if COMBAT_TO_HIT_STRENGTH_ARM_ITEM_IDS[index] == item_id {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+/// `combat.md §11` rating selector, party attacker arm: "party member
+/// attacking with one of the five strength-arm items | the character's
+/// **Strength**"; "party member with any other readied item, or
+/// bare-handed | its own **combat weight**". A bare-handed attempt has no
+/// item id, so it takes the combat-weight arm.
+pub const fn combat_party_attacker_rating(
+    readied_item_id: Option<usize>,
+    strength: u8,
+    combat_weight: u8,
+) -> u8 {
+    match readied_item_id {
+        Some(item_id) if combat_to_hit_item_selects_strength(item_id) => strength,
+        _ => combat_weight,
+    }
+}
+
+/// `combat.md §11` rating selector, monster attacker arm: "monster whose
+/// class carries the `zero-selector stat row` trait | the class **combat
+/// tier**"; "any other monster | its own **combat weight**". §13 (R337):
+/// "an ordinary melee or ranged/effect to-hit reads **neither** of these
+/// bytes for forty-two of the forty-eight classes".
+pub fn combat_monster_attacker_rating(monster_class: u8, combat_weight: u8) -> Option<u8> {
+    let traits = combat_class_traits(monster_class)?;
+    if traits.zero_selector_stat_row {
+        Some(combat_class_stats(monster_class)?.tier)
+    } else {
+        Some(combat_weight)
+    }
+}
+
+/// `combat.md §11` "Boundary: an automatic-driver party attacker has a
+/// fixed score of 15." The neutral selector value the automatic driver
+/// passes "is normalised on the selector's monster arm ... but there is no
+/// matching normalisation on its party arm", so the helper "returns a
+/// stale value which, by the order of its two calls, is precisely the
+/// defender rating it returned a moment earlier. The score therefore
+/// collapses to `(D - D + 30) / 2 = 15`". Published as *probable* for one
+/// route only - the shipped traitor roster identity of §9 - and
+/// deliberately **not** published for the controlled/charmed actors §6.1a
+/// routes through the same driver, so this helper is keyed to that single
+/// identity rather than to the controlled bit.
+pub const COMBAT_AUTOMATIC_DRIVER_PARTY_ATTACKER_SCORE: i16 = 15;
+
+/// `combat.md §11`: the shared to-hit helper with the draw already
+/// reduced to its published `1..=30` band.
+pub const fn resolve_combat_hit(
+    attacker_rating: u8,
+    defender_rating: u8,
+    roll_1_to_30: u8,
+) -> bool {
+    combat_to_hit_accepts(
+        combat_to_hit_score(attacker_rating, defender_rating),
+        roll_1_to_30,
+    )
 }
 
 pub const fn resolve_mass_charm_target_group(normal_group: u8, threshold: u8, roll: u8) -> u8 {
@@ -3429,8 +3852,18 @@ pub fn resolve_combat_target_group_for_actor(
 /// "monster AI drives its turns ... the player never gets to move it"
 /// is withdrawn by `RETRACTIONS.md` R354. A slot index test would
 /// re-impose the withdrawn reading, so there is none here.
+///
+/// An empty or death-marked descriptor takes neither path: `§6.1` "A
+/// descriptor whose flags byte is entirely zero is a free slot", and the
+/// group resolver answers `COMBAT_TARGET_GROUP_PARTY` for a death-marked
+/// descriptor for the friendly-fire filter's sake, which is not a
+/// dispatch decision.
 pub fn combat_slot_takes_player_command_path(slot: usize, actor: CombatActorDescriptor) -> bool {
-    resolve_combat_target_group_for_actor(actor, slot, None) == COMBAT_TARGET_GROUP_PARTY
+    if actor.is_empty() || actor.is_marked_dead() {
+        return false;
+    }
+    resolve_combat_target_group(slot, actor.owner_target_class, actor.team_toggled())
+        == COMBAT_TARGET_GROUP_PARTY
 }
 
 /// Reaching the combined command handler and being *prompted* by it are
@@ -3882,18 +4315,31 @@ pub fn resolve_combat_wound_morale_for_class(
     ))
 }
 
+/// `combat.md` 11.1, "The graded wound lines are monster-target only": "The
+/// quarter is the class maximum divided by four with truncation, and the three
+/// thresholds are one, two and three of those truncated quarters, so the
+/// boundaries sit slightly low for maxima that are not multiples of four."
+///
+/// That sentence is a first publication of the arithmetic behind 9's
+/// four-bucket classifier, and it is **not** the exact-fraction comparison an
+/// implementation reaches for first: at class maximum 10 the truncated quarter
+/// is 2, so the thresholds are 2/4/6, while `hp * 4 < max` and its siblings put
+/// them at 2.5/5/7.5 and mis-grade five of the eleven possible HP values.
 pub fn combat_wound_score_bucket(current_hp: u8, max_hp: u8) -> CombatWoundScoreBucket {
     if max_hp == 0 {
+        // Degenerate input the spec does not cover: no shipped class row has a
+        // zero maximum. Kept on the pre-existing answer rather than letting the
+        // published arithmetic (every threshold zero, so every HP grades as
+        // "three quarters or more") decide an unpublished case.
         return CombatWoundScoreBucket::UnderOneQuarter;
     }
-    let hp = current_hp.min(max_hp) as u16;
-    let max = max_hp as u16;
-    let scaled = hp * 4;
-    if scaled < max {
+    let hp = current_hp.min(max_hp);
+    let quarter = max_hp / 4;
+    if hp < quarter {
         CombatWoundScoreBucket::UnderOneQuarter
-    } else if hp * 2 < max {
+    } else if hp < quarter * 2 {
         CombatWoundScoreBucket::OneQuarterToUnderHalf
-    } else if scaled < max * 3 {
+    } else if hp < quarter * 3 {
         CombatWoundScoreBucket::HalfToUnderThreeQuarters
     } else {
         CombatWoundScoreBucket::ThreeQuartersOrMore

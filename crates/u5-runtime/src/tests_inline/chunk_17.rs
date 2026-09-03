@@ -1079,7 +1079,7 @@ Mixed 1 IL charge; stock is 1.");
     }
 
     #[test]
-    fn active_yes_no_prompt_routes_save_cancel_and_dungeon_exit() {
+    fn active_yes_no_prompt_routes_save_cancel_in_every_scene() {
         let dir = debug_game_dir();
         fs::write(dir.join("SAVED.GAM"), saved_game_seed_bytes(0, 0xff, 10, 20)).unwrap();
         let mut state = world_state(open_world_grid(), 10, 20);
@@ -1100,19 +1100,24 @@ Mixed 1 IL charge; stock is 1.");
         assert!(!dir.join("SAVED.OOL").exists());
         assert_eq!(state.turn, 0);
 
+        // `dungeon-mode.md` Section 10: the dungeon letter takes the same
+        // save route, not the program exit - "`Q` is the ordinary save-game
+        // route; the "Exit to DOS?" prompt is a Control binding in the
+        // mode-local table, not a letter."
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
         assert_eq!(
             handle_play_key_input(&mut dungeon, 'Q', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(dungeon.active_yes_no_prompt.is_some());
-        assert_eq!(dungeon.message, "Exit to DOS?");
+        assert_eq!(dungeon.message, SAVE_PROMPT_MESSAGE);
         assert_eq!(
-            handle_play_key_input(&mut dungeon, 'Y', "", &dir).unwrap(),
-            PlayInputDisposition::Quit
+            handle_play_key_input(&mut dungeon, 'N', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
         assert!(dungeon.active_yes_no_prompt.is_none());
-        assert_eq!(dungeon.message, "Yes. Exiting to DOS.");
+        assert_eq!(dungeon.message, "No.");
+        assert!(!dir.join("SAVED.OOL").exists());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -3214,9 +3219,20 @@ Mixed 1 IL charge; stock is 1.");
             state.combat_actors[8].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
+        // The Daemon's own turn follows and its to-hit fails. `combat.md`
+        // 11.1: an ordinary hostile's melee miss prints "nothing at all - no
+        // newline, no name, no line, no tone", so the next actor's turn
+        // banner - which "opens with a newline" (8.1) - follows this
+        // diagnostic directly.
         assert_eq!(
             state.message,
-            "Cause Fear affected 2 combat actor(s).\nDaemon missed!\n\nAvatar, armed with bare hands:"
+            // The Daemon's reply re-baselines with the shared stream:
+            // `RETRACTIONS.md` R334 flips which side the score
+            // favours, R335 narrows the to-hit draw to the skewed
+            // roll's `0..=60` raw draw, and R336 makes the monster's
+            // attack value flat, so a Daemon that used to miss now
+            // lands on this seed.
+            "Cause Fear affected 2 combat actor(s).\nAvatar hit!\n\nAvatar, armed with bare hands:"
         );
     }
 

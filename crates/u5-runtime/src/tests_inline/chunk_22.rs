@@ -20,7 +20,12 @@
             .find(|object| object.type_byte == 192)
             .unwrap();
         assert_eq!((object.x, object.y), (4, 5));
-        assert_eq!(object.phase, 0x62);
+        // `active-objects.md §8`: the walker's only record writes on a
+        // committed step are the position and the packed facing. The engine
+        // used to reseed the phase's low nibble to two here, which is the
+        // "do I move at all" pacing the section denies outdoors; the
+        // countdown nibble is the animator's and is left alone.
+        assert_eq!(object.phase, 0x60);
         assert_eq!(object.tile, 192);
     }
 
@@ -58,12 +63,21 @@
             (state.active_objects[2].x, state.active_objects[2].y),
             (6, 4)
         );
-        assert_eq!(state.active_objects[1].phase, 0x62);
-        assert_eq!(state.active_objects[2].phase, 0x02);
+        assert_eq!(state.active_objects[1].phase, 0x60);
+        assert_eq!(state.active_objects[2].phase, 0x00);
     }
 
     #[test]
-    fn ambient_world_actor_countdown_animates_without_wandering() {
+    fn ambient_world_actor_moves_on_every_walker_turn_whatever_its_countdown() {
+        // `active-objects.md §8`: "**There is no outdoor equivalent of the
+        // town wander gate.** An ordinary land monster has no per-turn 'do I
+        // move at all' roll: every turn the walker runs, an eligible slot
+        // goes straight to the directed step planner."
+        //
+        // This test previously asserted the opposite - that a slot with a
+        // non-zero animation countdown "animates without wandering" - which
+        // is the pacing gate that sentence withdraws. The countdown still
+        // ticks; it just does not decide whether the actor moves.
         let mut state = world_state(open_world_grid(), 0, 0);
         state.active_objects.push(ActiveObject {
             type_byte: 192,
@@ -83,9 +97,37 @@
             .iter()
             .find(|object| object.type_byte == 192)
             .unwrap();
+        assert_eq!((object.x, object.y), (4, 5));
+        assert_eq!(object.phase & 0x0f, 0x01, "the countdown still ticked");
+    }
+
+    #[test]
+    fn steady_marked_outdoor_slot_is_not_one_of_the_walker_s_slots() {
+        // `active-objects.md §8` phase table: the all-ones nibble is
+        // "Steady; do not animate this slot. The animator skips", and the
+        // outdoor walker "applies only to the outdoor animated/monster
+        // predicate". A parked vehicle carries that marker and stays put.
+        let mut state = world_state(open_world_grid(), 0, 0);
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_turn();
+
+        let object = state
+            .active_objects
+            .iter()
+            .find(|object| object.type_byte == 192)
+            .unwrap();
         assert_eq!((object.x, object.y), (5, 5));
-        assert_eq!(object.phase, 0x21);
-        assert_eq!(object.tile, 193);
+        assert_eq!(object.phase, STEADY_PHASE);
     }
 
     #[test]
@@ -104,13 +146,31 @@
             aux3: 0,
         });
 
+        // `encounters.md §2.1` gate 2: the Quickness parity bit "flips each
+        // turn and the block returns on the turns it comes up set". What
+        // §2.1 publishes about a gate that fires is only that the three
+        // gates "sit ahead of the encounter probe *and* ahead of the outdoor
+        // creature walker, so a gate that fires costs the turn its probe as
+        // well as its creature movement" - the position assertion below.
+        //
+        // The phase assertion is *not* a published claim about the animator.
+        // R315/R316 move the animator off the movement path entirely, and
+        // this engine's outdoor per-turn walker ticks the countdown nibble
+        // itself as the first step of its own pass, so a gated-out walker
+        // leaves the nibble alone as a consequence of the walker not running.
+        // The separately published per-render-frame animator
+        // (`active-objects.md §8`) is not on this path at all.
         state.advance_turn();
         assert_eq!(state.active_objects[1].phase, 0x22);
         assert_eq!(state.active_objects[1].tile, 192);
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
 
+        // On the alternate turn the whole block runs: the countdown ticks and
+        // the walker takes its step, with no separate "do I move" roll
+        // (`active-objects.md §8`).
         state.advance_turn();
-        assert_eq!(state.active_objects[1].phase, 0x21);
-        assert_eq!(state.active_objects[1].tile, 193);
+        assert_eq!(state.active_objects[1].phase & 0x0f, 0x01);
+        assert_ne!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
     }
 
     #[test]
@@ -158,7 +218,7 @@
             .find(|object| object.type_byte == 192)
             .unwrap();
         assert_eq!((object.x, object.y), (5, 4));
-        assert_eq!(object.phase, 0x02);
+        assert_eq!(object.phase, 0x00);
 
         let mut player_blocked = world_state(open_world_grid(), 4, 5);
         player_blocked.active_objects.push(ActiveObject {
@@ -724,7 +784,7 @@
         );
         assert_eq!(state.active_objects[1].type_byte, 0x2f);
         assert_eq!(state.active_objects[1].tile, 0x2f);
-        assert_eq!(state.active_objects[1].phase, 0x62);
+        assert_eq!(state.active_objects[1].phase, 0x60);
     }
 
     #[test]
@@ -844,7 +904,21 @@
         assert_eq!(state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX], 0);
 
         // Step 1: the exact published line, with no terminating period, and
-        // printed after the conflict banner rather than before it.
+        // printed *between* the two banners.
+        //
+        // `combat.md §4.1` publishes the whole entry transcript as echo /
+        // blank / group name / blank / `*** CONFLICT ***` "with `The Sceptre
+        // is reclaimed!` inserted after the group name on the Shadow Lord
+        // branch when the sceptre is held" - row 3 is the group name and row
+        // 5 is the conflict banner, so the line lands under `SHADOW LORD`
+        // and above `*** CONFLICT ***`. §4.1 also states that this fight
+        // "announces `SHADOW LORD`" and that "the sceptre line of
+        // `systems/encounters.md` Section 4 is printed after it", while
+        // `encounters.md §4` puts the line "after the class banner that names
+        // the opponent, which is printed for this encounter whether or not
+        // the sceptre is held" and runs the whole branch "entirely inside
+        // encounter setup, before the combat scene is entered" - i.e. before
+        // the framer prints banner two.
         assert_eq!(SCEPTRE_RECLAIMED_LINE, "The Sceptre is reclaimed!");
         let texts: Vec<&str> = state
             .message_entries()
@@ -859,7 +933,17 @@
             .iter()
             .position(|text| *text == SCEPTRE_RECLAIMED_LINE)
             .expect("the sceptre line is printed");
-        assert!(banner_at < line_at, "{texts:?}");
+        let group_at = texts
+            .iter()
+            .position(|text| *text == "SHADOW LORD")
+            .expect("the group name is printed");
+        assert!(group_at < line_at && line_at < banner_at, "{texts:?}");
+        let banner = combat_banner_line();
+        assert_eq!(
+            &texts[group_at..=banner_at],
+            &["SHADOW LORD", "", SCEPTRE_RECLAIMED_LINE, banner.as_str()],
+            "{texts:?}"
+        );
 
         // Step 2: the sting. `audio.md §8.4.1` — "It is the only caller of
         // this recipe."
@@ -1183,5 +1267,5 @@
             .find(|object| object.type_byte == 192)
             .unwrap();
         assert_eq!((object.x, object.y), (15, 0));
-        assert_eq!(object.phase, 0x62);
+        assert_eq!(object.phase, 0x60);
     }

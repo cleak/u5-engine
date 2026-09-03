@@ -2000,6 +2000,7 @@ impl PlayState {
             party_experience: self.party_experience.clone(),
             party_stay_counters: self.party_stay_counters.clone(),
             party_strengths: self.party_strengths.clone(),
+            party_combat_defense: self.party_combat_defense.clone(),
             party_intelligence: self.party_intelligence.clone(),
             party_equipment: self.party_equipment.clone(),
             party_roster: self.synced_party_roster(),
@@ -2024,6 +2025,9 @@ impl PlayState {
             moral_standing: self.moral_standing,
             toll_progress: self.toll_progress,
             cleanup_previous_hour: self.cleanup_previous_hour,
+            twelve_hour_audio_repeats: self.twelve_hour_audio_repeats,
+            cached_moon_glyph_bytes: self.cached_moon_glyph_bytes,
+            ambient_light: self.ambient_light,
             // `overworld.md §9.1` (spec HEAD c00bf63): the
             // gate-presence counter survives scene changes.
             natural_moongate_counter: self.natural_moongate_counter,

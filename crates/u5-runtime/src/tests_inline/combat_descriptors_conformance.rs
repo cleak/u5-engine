@@ -445,8 +445,21 @@
         state.party_strengths = vec![255];
         state.party_experience = vec![0];
         state.combat_actors[8].hp_or_wound = 1;
+        // `combat.md §5.1` / `§11`: the shared fixture seats a base-step-1
+        // actor, which after `RETRACTIONS.md` R334 is a Dexterity-1
+        // character who essentially never lands a blow. This test needs the
+        // blow to land, so it seats a fast one.
+        state.combat_actors[0].base_step = 30;
 
-        handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap();
+        // `combat.md §8.2`: `A` opens a targeting cursor, and the attempt
+        // resolves on the confirm, not on the direction key.
+        handle_play_key_input(
+            &mut state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir,
+        )
+        .unwrap();
 
         let transcript = combat_descriptor_transcript(&state);
         // The branch-specific line is still printed.
@@ -503,8 +516,21 @@
             5,
             8,
         ]);
+        // `combat.md §5.1` / `§11`: the shared fixture seats a base-step-1
+        // actor, which after `RETRACTIONS.md` R334 is a Dexterity-1
+        // character who essentially never lands a blow. This test needs the
+        // blow to land, so it seats a fast one.
+        state.combat_actors[0].base_step = 30;
 
-        handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap();
+        // `combat.md §8.2`: `A` opens a targeting cursor, and the attempt
+        // resolves on the confirm, not on the direction key.
+        handle_play_key_input(
+            &mut state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir,
+        )
+        .unwrap();
 
         let transcript = combat_descriptor_transcript(&state);
         assert!(
@@ -740,7 +766,10 @@
         assert!(!reaches(CombatWeaponAttackResolution::NoOrdinaryDamage {
             route
         }));
-        assert!(!reaches(CombatWeaponAttackResolution::Special { route }));
+        assert!(!reaches(CombatWeaponAttackResolution::Special {
+            route,
+            shattered: false,
+        }));
 
         // End to end: a party melee miss still prints its line with the
         // vanish bit standing.
@@ -751,7 +780,13 @@
         miss.combat_actors[8].base_step = 30;
         miss.combat_action_result = COMBAT_ACTION_RESULT_VANISH_NARRATED;
         miss.prng_state = 0xFFFF;
-        handle_play_key_input(&mut miss, 'A', "6", game_dir).unwrap();
+        handle_play_key_input(
+            &mut miss,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir,
+        )
+        .unwrap();
         let transcript = combat_descriptor_transcript(&miss);
         assert!(
             transcript.contains("missed!"),
@@ -856,9 +891,7 @@
             };
         }
         let strike = CombatMonsterAttackInputs {
-            party_defender_rating: 7,
             forced_hit: Some(true),
-            damage_roll: 200,
             ..CombatMonsterAttackInputs::default()
         };
 
@@ -905,5 +938,128 @@
             state.message.contains("hit!"),
             "message was {:?}",
             state.message
+        );
+    }
+
+    /// `combat.md §11.1` announcement table, the two monster-side rows read
+    /// against each other:
+    ///
+    /// | **Ordinary hostile monster** | **nothing whatsoever** ... and on a
+    ///   melee miss no line either |
+    /// | Monster carrying the controlled/charmed bit (Section 6.1a) | the
+    ///   **reduced** banner ... then one fixed attempt: `Attack-`, `Aim! `,
+    ///   and on a failed roll `<target> missed!` |
+    ///
+    /// The line that does print obeys rule 1 - "**Every result line names the
+    /// target, never the attacker.** ... An engine that prints the attacker's
+    /// name in the miss line produces a transcript that is wrong on every line
+    /// it emits." - and §11.1's scope note says the difference between the two
+    /// rows is which routine runs, not which actor runs it: "Note the scoping:
+    /// *party-side helper* describes the routine, not the actor - Section
+    /// 6.1a's controlled bit lets a monster reach it and lets a party member
+    /// bypass it."
+    fn controlled_monster_miss_state() -> PlayState {
+        let mut state = controlled_monster_dispatch_state(7, 5);
+        state.party_names = default_party_names(1);
+        // Attacker and target must have different class names, or a
+        // target-named line and an attacker-named line read the same.
+        state.combat_actors[8].owner_target_class = COMBAT_CLASS_GIANT_SPIDER;
+        state
+    }
+
+    fn walk_controlled_monster_slot(
+        state: &mut PlayState,
+        inputs: CombatMonsterAttackInputs,
+    ) -> String {
+        let walk = state.apply_combat_round_walk_from_slot_with_inputs(
+            8,
+            30,
+            false,
+            false,
+            0,
+            false,
+            1,
+            1,
+            &[(7, 5)],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[],
+            &[(8, inputs)],
+        );
+        crate::input_dispatch::append_combat_round_walk_messages(state, &walk);
+        state.message.clone()
+    }
+
+    #[test]
+    fn the_controlled_monster_dispatch_narrates_its_miss_through_the_target_named_producer() {
+        let missed = CombatMonsterAttackInputs {
+            forced_hit: Some(false),
+            ..CombatMonsterAttackInputs::default()
+        };
+
+        let mut controlled = controlled_monster_miss_state();
+        let attacker_name = combat_class_stats(COMBAT_CLASS_GIANT_SPIDER).unwrap().name;
+        let target_name = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().name;
+        let message = walk_controlled_monster_slot(&mut controlled, missed);
+
+        assert!(
+            message.contains(&format!("{target_name} missed!")),
+            "message was {message:?}"
+        );
+        assert!(
+            !message.contains(&format!("{attacker_name} missed!")),
+            "message was {message:?}"
+        );
+
+        // The same slot without the controlled bit is an ordinary hostile,
+        // and §11.1 gives its melee miss "nothing at all" - "no newline, no
+        // name, no line, no tone".
+        let mut hostile = controlled_monster_miss_state();
+        hostile.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_CONTROLLED;
+        let hostile_message = walk_controlled_monster_slot(&mut hostile, missed);
+        assert!(
+            !hostile_message.contains("missed!"),
+            "message was {hostile_message:?}"
+        );
+    }
+
+    #[test]
+    fn the_controlled_monster_dispatch_narrates_its_hit_through_the_shared_wound_grader() {
+        // `combat.md §11.1` "The graded wound lines are monster-target only":
+        // the controlled monster resolves to group 0, so `§16.1` target
+        // selection gives it a group-1 monster, and the landed hit is graded
+        // "by the target's remaining HP against its class maximum". The
+        // quarter is "the class maximum divided by four with truncation, and
+        // the three thresholds are one, two and three of those truncated
+        // quarters".
+        let landed = CombatMonsterAttackInputs {
+            forced_hit: Some(true),
+            ..CombatMonsterAttackInputs::default()
+        };
+
+        let mut state = controlled_monster_miss_state();
+        let message = walk_controlled_monster_slot(&mut state, landed);
+
+        let stats = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap();
+        let remaining = state.combat_actors[9].hp_or_wound;
+        assert!(remaining < stats.max_hp, "the attempt must land damage");
+        assert!(remaining > 0, "this case is a wound, not a kill");
+        let quarter = stats.max_hp / 4;
+        let expected = if remaining >= quarter * 3 {
+            "barely wounded"
+        } else if remaining >= quarter * 2 {
+            "lightly wounded"
+        } else if remaining >= quarter {
+            "heavily wounded"
+        } else {
+            "critical"
+        };
+        assert!(
+            message.contains(&format!("{} {expected}!", stats.name)),
+            "remaining {remaining} of {}; message was {message:?}",
+            stats.max_hp
         );
     }

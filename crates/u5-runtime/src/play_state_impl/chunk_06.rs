@@ -125,6 +125,13 @@ impl PlayState {
             self.message = "Sails need a cardinal heading.".to_string();
             return Some(MoveOutcome::Blocked);
         }
+        // `weather.md §5`: a hoisted-sail movement command "first establishes
+        // or changes the ship's heading", and from then on "the input helper
+        // can synthesize repeated movement commands from the cached direction
+        // until the cache is cleared or replaced". This is where the cache is
+        // written, so it covers the player's own command and the
+        // auto-advance route's synthesized repeat alike.
+        self.sail_cached_direction = Some(direction);
 
         let Some(wait_ticks) = self.wind.player_sail_wait_ticks(direction) else {
             self.sail_cadence = 0;

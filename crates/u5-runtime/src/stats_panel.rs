@@ -21,10 +21,16 @@ pub const PROMPT_TEXT_WINDOW_INDEX: usize = MESSAGE_TEXT_WINDOW_INDEX;
 pub const UNUSED_TEXT_WINDOW_INDEX: usize = 3;
 pub const MESSAGE_TEXT_WINDOW_RIGHT: u8 = MESSAGE_WINDOW_RIGHT;
 pub const STATS_PANEL_TEXT_LEFT: u8 = 24;
-/// `text-output.md §4`: a window's printable width is
-/// `bottom_right_x - top_left_x`, excluding the trailing column. The
-/// right edge therefore sits one column past the last painted cell so
-/// all fifteen cells (columns 24..=38) are printable.
+/// `text-output.md §10.1`: the stats window is cells `(24, 1)-(39, 9)`,
+/// so its right edge is column 39 - inclusive, and therefore a capacity
+/// of sixteen (`text-output.md §4`, `RETRACTIONS.md` R344). The panel
+/// itself only ever paints the fifteen cells 24..=38, which is a
+/// separately derived pixel-rule figure for the chrome boxes
+/// ([`STATS_PANEL_WIDTH`]) and not the window's width.
+///
+/// *(Corrected: this constant was justified by the withdrawn rule that a
+/// window's printable width is `bottom_right_x - top_left_x` and that the
+/// trailing column is never printed into. The value is unchanged.)*
 pub const STATS_PANEL_TEXT_RIGHT: u8 = STATS_PANEL_TEXT_LEFT + STATS_PANEL_WIDTH as u8;
 /// Roster rows 1..=6, then the divider band at row 7, then the
 /// food/gold and calendar rows 8..=9. Row 7 is chrome and is never
@@ -529,12 +535,13 @@ pub fn paint_stats_panel_text_window(
     //
     // These two rows emit their trailing blanks trimmed. The window was
     // just cleared, so the cells are already blank and the output is
-    // identical - but emitting a full fifteen glyphs into a
-    // fifteen-column window wraps the cursor onto the next row, and
-    // from the window's own last row that wrap scrolls the whole panel
-    // up by one. The roster rows above can wrap harmlessly and must not
-    // be trimmed, because a highlighted row's inverse video has to
-    // cover all fifteen cells.
+    // identical - and the trim also keeps the cursor clear of the row
+    // edge, which from the window's own last row would scroll the whole
+    // panel up by one. The roster rows above are not trimmed, because a
+    // highlighted row's inverse video has to cover all fifteen cells.
+    // (With the corrected sixteen-cell capacity - `RETRACTIONS.md` R344 -
+    // fifteen glyphs no longer reach the wrap at all; the trim is kept
+    // because the fifteen-cell paint field is what the panel owns.)
     let counter_row = STATS_COUNTER_TOP - STATS_PANEL_TEXT_TOP;
     let date_row = STATS_COUNTER_BOTTOM - STATS_PANEL_TEXT_TOP;
     for (row, line) in [

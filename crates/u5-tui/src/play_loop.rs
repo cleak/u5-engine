@@ -13,11 +13,11 @@ use u5_runtime::stats_panel::transcribe_cell_frame_for_plain_text;
 use u5_runtime::{
     Area, Direction, ExplorationTurnGateOutcome, INPUT_CODE_EAST, INPUT_CODE_NORTH,
     INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST, INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST,
-    INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST, PLAY_IGNORED_INPUT_KEY, PLAY_MUSIC_TOGGLE_KEY,
-    PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY, PlayInputDisposition, PlayOptions,
-    PlayState, TileAtlas, TileGraphicsDepth, handle_play_key_input, hash_bytes,
-    hash_palette_indices, input_function_key_code, load_tile_atlas,
-    run_potion_flash_soundless_timing,
+    INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST, PLAY_EXIT_TO_DOS_KEY, PLAY_IGNORED_INPUT_KEY,
+    PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY,
+    PlayInputDisposition, PlayOptions, PlayState, TileAtlas, TileGraphicsDepth,
+    handle_play_key_input, hash_bytes, hash_palette_indices, input_function_key_code,
+    load_tile_atlas, run_potion_flash_soundless_timing,
 };
 
 pub fn run_play_loop(
@@ -303,6 +303,9 @@ pub fn play_input_key_and_suffix(input: &str) -> Option<(char, String)> {
     if is_music_toggle_token(input) {
         return Some((PLAY_MUSIC_TOGGLE_KEY, String::new()));
     }
+    if is_program_exit_token(input) {
+        return Some((PLAY_EXIT_TO_DOS_KEY, String::new()));
+    }
     if let Some(key) = ansi_navigation_key(input) {
         return Some((key, String::new()));
     }
@@ -350,6 +353,16 @@ pub fn is_music_toggle_token(input: &str) -> bool {
     matches!(
         input.trim().to_ascii_lowercase().as_str(),
         "music" | "sound" | "ctrl-s" | "control-s"
+    )
+}
+
+/// `commands.md` Section 9's Control + `E` row. A real terminal delivers the
+/// chord as the raw control byte, which already dispatches, so this token only
+/// gives scripts and the keyless harness the same reach.
+pub fn is_program_exit_token(input: &str) -> bool {
+    matches!(
+        input.trim().to_ascii_lowercase().as_str(),
+        "ctrl-e" | "control-e" | "exit-to-dos"
     )
 }
 
@@ -423,6 +436,9 @@ pub fn handle_play_script_command(
     }
     if is_music_toggle_token(command) {
         return handle_play_key_input(state, PLAY_MUSIC_TOGGLE_KEY, "", game_dir);
+    }
+    if is_program_exit_token(command) {
+        return handle_play_key_input(state, PLAY_EXIT_TO_DOS_KEY, "", game_dir);
     }
     // Endgame tableau movement and the gate presentation are driven by
     // rendered frames, not keypresses. Scripted acceptance routes use this

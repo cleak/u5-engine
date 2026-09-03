@@ -180,6 +180,7 @@ pub fn play_options_from_save_bytes_named(
     let party_experience = decode_party_experience(bytes, party.len());
     let party_stay_counters = decode_party_stay_counters(bytes, party.len());
     let party_strengths = decode_party_strengths(bytes, party.len());
+    let party_combat_defense = decode_party_combat_defense(bytes, party.len());
     let party_intelligence = decode_party_intelligence(bytes, party.len());
     let party_equipment = decode_party_equipment(bytes, party.len());
     let party_roster = decode_party_roster(bytes);
@@ -247,6 +248,7 @@ pub fn play_options_from_save_bytes_named(
         party_experience,
         party_stay_counters,
         party_strengths,
+        party_combat_defense,
         party_intelligence,
         party_equipment,
         party_roster,
@@ -278,6 +280,23 @@ pub fn play_options_from_save_bytes_named(
         moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],
         toll_progress: bytes[SAVE_TOLL_PROGRESS_OFFSET],
         cleanup_previous_hour: bytes[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET],
+        // `time.md §11` (spec `0170809`): the byte at `0x02DE` is written
+        // on a snapshot mismatch and then "counted down toward zero by the
+        // ambient-audio tick"; it is save-backed state, not a value to
+        // rederive from the clock.
+        twelve_hour_audio_repeats: bytes[SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET],
+        // `formats/saved-gam.md §5.1` (spec `0170809`): "An engine that
+        // treats the pair as disposable, or that recomputes the phase by a
+        // different route on load, sends the party through the wrong gate."
+        cached_moon_glyph_bytes: [
+            bytes[SAVE_CACHED_TRAMMEL_GLYPH_OFFSET],
+            bytes[SAVE_CACHED_FELUCCA_GLYPH_OFFSET],
+        ],
+        // `formats/saved-gam.md §10` (spec `0170809`): a stored ambient
+        // value of 51 or higher "makes the recompute skip entirely and
+        // freezes ambient light for that call", so the saved byte has to
+        // reach the recompute rather than being replaced by a fresh zero.
+        ambient_light: bytes[SAVE_AMBIENT_LIGHT_OFFSET],
         // `overworld.md §9.1` (spec HEAD c00bf63): the gate-presence
         // counter is save-backed, so a game saved mid-rise reloads at
         // the same gate height.
@@ -400,6 +419,21 @@ pub fn decode_party_stay_counters(bytes: &[u8], party_size: usize) -> Vec<u8> {
         .map(|slot| {
             let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
             bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET]
+        })
+        .collect()
+}
+
+/// `combat.md §12`: "For party-member defenders, the damage roll reads
+/// the cached combat-defense byte in the character record at offset
+/// `+0x18`; factory-seed records carry value `7`. This is not one of the
+/// stat bytes earlier in the record". The byte is read per record, not
+/// assumed constant across the roster: `7` is the value a factory-seed
+/// record carries, not a rule about every record.
+pub fn decode_party_combat_defense(bytes: &[u8], party_size: usize) -> Vec<u8> {
+    (0..party_size)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            bytes[record + SAVE_CHARACTER_DEFENSE_BYTE_OFFSET]
         })
         .collect()
 }

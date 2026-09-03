@@ -550,6 +550,7 @@ mod tests {
             crate::PLAY_IGNORED_INPUT_KEY,
             crate::PLAY_TYPEAHEAD_TOGGLE_KEY,
             crate::PLAY_MUSIC_TOGGLE_KEY,
+            crate::PLAY_EXIT_TO_DOS_KEY,
         ] {
             let byte = reserved as u32;
             assert!(

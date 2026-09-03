@@ -751,6 +751,10 @@ fn world_load_from_save_uses_live_active_object_table() {
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
         cleanup_previous_hour: 0,
+        twelve_hour_audio_repeats: 0,
+        // `formats/saved-gam.md §5.1` factory seed: both bytes zero.
+        cached_moon_glyph_bytes: [0, 0],
+        ambient_light: 0,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),
@@ -766,6 +770,7 @@ fn world_load_from_save_uses_live_active_object_table() {
         party_experience: default_party_experience(1),
         party_stay_counters: default_party_stay_counters(1),
         party_strengths: default_party_strengths(1),
+        party_combat_defense: default_party_combat_defense(1),
         party_intelligence: default_party_intelligence(1),
         party_equipment: default_party_equipment(1),
         party_roster: default_party_roster(1),
@@ -864,6 +869,10 @@ fn world_load_reports_current_wind_status_through_the_banner_not_the_message() {
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
         cleanup_previous_hour: 0,
+        twelve_hour_audio_repeats: 0,
+        // `formats/saved-gam.md §5.1` factory seed: both bytes zero.
+        cached_moon_glyph_bytes: [0, 0],
+        ambient_light: 0,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),
@@ -879,6 +888,7 @@ fn world_load_reports_current_wind_status_through_the_banner_not_the_message() {
         party_experience: default_party_experience(1),
         party_stay_counters: default_party_stay_counters(1),
         party_strengths: default_party_strengths(1),
+        party_combat_defense: default_party_combat_defense(1),
         party_intelligence: default_party_intelligence(1),
         party_equipment: default_party_equipment(1),
         party_roster: default_party_roster(1),

@@ -180,6 +180,13 @@ impl PlayState {
     /// still receives the raw text.
     pub fn emit_centered_message_line(&mut self, text: impl Into<String>) {
         let text = text.into();
+        // Same safety net as [`Self::emit_message_line`], and for the same
+        // reason: this assigns both `message` and `message_flushed`, so a
+        // line a handler had written straight into the slot and not yet
+        // flushed would be dropped instead of printed above this one.
+        // `text-output.md §11`: "a second line produced in the same turn
+        // prints beneath" the first, never instead of it.
+        self.flush_message_slot();
         self.push_centered_message_entry(text.clone());
         self.message = text.clone();
         self.message_flushed = text;
