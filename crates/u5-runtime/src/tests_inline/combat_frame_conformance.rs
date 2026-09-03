@@ -2307,3 +2307,99 @@
             Some("Bat grazed!")
         );
     }
+
+    #[test]
+    fn a_glass_sword_kill_of_a_vanish_class_monster_narrates_no_kill_line() {
+        // `combat.md §11.1` census: "Monster dies, vanish class | party
+        // attacker | `<monster> vanishes!` - **no trailing newline** -
+        // printed inside the damage handler, **which then suppresses the
+        // kill line**". `§6.3` is the mechanism: the vanish branch
+        // "replace[s] the shared combat action-result/narration field with
+        // `0x02`", and while that bit stands the common narrator "skips the
+        // generic killed/slept/hit chain, produces no message or sound, and
+        // clears `0x02` in cleanup".
+        //
+        // The Glass Sword reaches that chain over the `Special` resolution
+        // rather than `Hit`, and it carries a second line of its own that
+        // `§11.1` prints "**inside** the damage roll, so it lands between
+        // the hit newline and the result line" - ahead of the narrator the
+        // gate halts. So the gate must withhold the result line without
+        // withholding `Thy sword hath shattered!` with it. Gating the pair
+        // as one string would lose the shatter line; gating neither prints
+        // the duplicate `<monster> killed!` this row forbids.
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let shadow_lord = combat_class_stats(COMBAT_CLASS_SHADOW_LORD).unwrap();
+        assert_eq!(shadow_lord.name, "Shadow Lord");
+        let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        state.combat_actors[target_slot] = CombatActorDescriptor::from_row([
+            shadow_lord.max_hp,
+            20,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_SHADOW_LORD,
+            8,
+            0,
+            6,
+            5,
+        ]);
+        state.party_experience = vec![0];
+        state.message.clear();
+
+        let application = state
+            .resolve_and_apply_combat_equipment_weapon_attack(
+                EQUIPMENT_GLASS_SWORD,
+                0,
+                target_slot,
+                0,
+                u8::MAX,
+                0,
+                0,
+                None,
+                false,
+            )
+            .expect("the Glass Sword resolves through the sentinel path");
+        assert!(
+            matches!(
+                application.resolution,
+                CombatWeaponAttackResolution::Special {
+                    shattered: true,
+                    ..
+                }
+            ),
+            "the Glass Sword is the only `Special` route: {:?}",
+            application.resolution
+        );
+        // `§6.3` steps 1 and 2, in order: the line, then the field.
+        assert_eq!(state.message, "Shadow Lord vanishes!");
+        assert_eq!(
+            state.combat_action_result,
+            COMBAT_ACTION_RESULT_VANISH_NARRATED
+        );
+
+        // The ungated producer still assembles both lines - the shatter
+        // line is a prefix to the result line, not a replacement.
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                target_slot,
+                application,
+            )
+            .as_deref(),
+            Some("Thy sword hath shattered!\nShadow Lord killed!")
+        );
+
+        // What the dispatch actually prints keeps the damage roll's line
+        // and drops the narrator's.
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_narrated_result_message(
+                &mut state,
+                target_slot,
+                application,
+            )
+            .as_deref(),
+            Some("Thy sword hath shattered!"),
+        );
+        assert_eq!(
+            state.combat_action_result, 0,
+            "the narrator clears `0x02` in cleanup"
+        );
+    }

@@ -2658,10 +2658,23 @@ impl PlayState {
     /// which [`Self::resolve_and_apply_combat_monster_attack`] already
     /// implements for a controlled attacker.
     ///
-    /// Two things §11.1 lists are deliberately not emitted here, because
-    /// they are the turn-banner and targeting rows of `§8.1`/`§8.2` rather
-    /// than this dispatch decision: the reduced banner itself, and the
-    /// `Attack-` / `Aim! ` prompts.
+    /// Two things §11.1's announcement row lists are **not** emitted, here
+    /// or anywhere else, and the transcript is incomplete by exactly that
+    /// much: the reduced banner itself, and the `Attack-` / `Aim! `
+    /// prompts. They are withheld rather than deferred. `§8.1` emits the
+    /// banner "at the start of every **keyboard-driven** combatant's turn,
+    /// *before any key is read*", and whether this slot is keyboard-driven
+    /// is the open question `§16.1` and `RETRACTIONS.md` R354/R364
+    /// disagree about - §16.1 has the combined command handler "prompt[]
+    /// only for an eligible selected party member, while a monster
+    /// descriptor that control moved to group 0 still synthesizes an
+    /// automatic action", while R354 gives that slot `Nothing!` "on a
+    /// cancelled confirm" and R364 says it "is driven from the player's
+    /// prompt". Emitting the banner from this synthesized path would
+    /// double-print it under the R354/R364 reading, where
+    /// [`Self::open_pending_combat_player_turn`] is the producer. Nothing
+    /// prints them today, so no line is lost; the row is satisfied once
+    /// that ruling lands, and the question is filed with it.
     ///
     /// The rolls are drawn only when the attempt actually reaches the
     /// strike. No published order covers this path, and consuming the

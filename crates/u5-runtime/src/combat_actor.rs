@@ -3883,6 +3883,26 @@ pub fn combat_slot_takes_player_command_path(slot: usize, actor: CombatActorDesc
 /// records that "What the player can usefully do with such a creature
 /// beyond that attack path is not established here", so no ordinary
 /// command is accepted for it.
+///
+/// **Open spec question, unresolved at spec HEAD.** Two published
+/// statements disagree, and this predicate follows the first of them.
+/// `§16.1` synthesizes: the handler "prompts only for an eligible
+/// selected party member, while a monster descriptor that control moved
+/// to group 0 still **synthesizes an automatic action**". `RETRACTIONS.md`
+/// R354 prompts: a monster carrying the bit "is dispatched to the
+/// keystroke/command path and takes its turns under player control,
+/// printing the reduced turn banner ... then `Attack-`, `Aim! `,
+/// `Nothing!` on a **cancelled confirm**, and `<target> missed!` on a
+/// failed roll" - and a cancelled confirm presupposes a player confirm.
+/// R364 says the same slot "is driven from the player's prompt".
+///
+/// Refusing the keystroke here therefore re-establishes, in outcome, the
+/// reading R354 withdrew: the player cannot move the slot. The refusal is
+/// kept because §16.1 is the section that describes this dispatch
+/// decision directly and because the alternative would have to invent the
+/// whole command surface `magic.md` says "is not established here" - but
+/// it is a choice between two current published texts, not a reading of
+/// one, and it needs a ruling before it can be called settled.
 pub fn combat_slot_prompts_for_player_command(slot: usize, actor: CombatActorDescriptor) -> bool {
     combat_slot_takes_player_command_path(slot, actor) && actor.is_party_side()
 }

@@ -5518,7 +5518,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             // route stops is a property of the route, not of any published
             // rule, so it is re-derived by running the route rather than
             // read out of the spec. It moved in this change because the
-            // `combat.md §16.1` placement tags a few lines above now stamp
+            // `combat.md §6.1` placement tags a few lines above now stamp
             // `0x40` instead of `0x80` on the spawned monsters, which
             // changes how many script steps the fight survives - not
             // because of Mass Charm's own target-picker override, which

@@ -3249,38 +3249,59 @@ fn combat_apply_attack_narrator_gate(
 }
 
 /// `combat.md §11.1`: the generic chain is the "kill, sleep, hit and
-/// wound chain". A failed to-hit takes the separate miss producer, and
-/// the resolutions that print nothing never reach the narrator.
+/// wound chain" - every result line [`combat_landed_damage_result_line`]
+/// produces. Both the `Hit` and the `Special` resolutions end there, so
+/// both are inside the gate's scope. A failed to-hit takes the separate
+/// miss producer - "The routine that prints a miss line has exactly two
+/// call sites, both inside party-side attack helpers" - and the
+/// resolutions that print nothing never reach the narrator at all, so
+/// `§6.3` leaves their field to "the combat walker[, which] replaces the
+/// whole field with zero before the next actor dispatch".
 ///
-/// The `Special` resolution stays outside it as well, and that is a known
-/// narrowing rather than a claim. `§11.1` prints `Thy sword hath
-/// shattered!` "**inside** the damage roll, so it lands between the hit
-/// newline and the result line" - ahead of the narrator this gate halts -
-/// but [`combat_attack_result_message`] returns the shatter line and the
-/// result line as one string, so gating the pair would withhold the
-/// shatter line too. Splitting them so the gate covers only the result
-/// line belongs with `§11.1`'s Glass Sword row; leaving the arm ungated
-/// can only print a line, never lose one.
+/// The `Special` arm's own `Thy sword hath shattered!` is **not** in
+/// scope: `§11.1` prints it "**inside** the damage roll, so it lands
+/// between the hit newline and the result line", ahead of the narrator
+/// this gate halts. [`combat_attack_result_narration`] therefore keeps it
+/// separate from the result line, so a standing `0x02` can withhold the
+/// result line without swallowing the shatter line with it.
 pub(crate) fn combat_weapon_resolution_reaches_generic_chain(
     resolution: CombatWeaponAttackResolution,
 ) -> bool {
-    matches!(resolution, CombatWeaponAttackResolution::Hit { .. })
+    matches!(
+        resolution,
+        CombatWeaponAttackResolution::Hit { .. } | CombatWeaponAttackResolution::Special { .. }
+    )
 }
 
 /// The party-side result line with `combat.md §6.3`'s narrator gate
 /// applied. The party melee path resolves its attack and assembles its
 /// transcript inside one dispatch, so the gate runs here, at the one point
 /// per attack where the generic chain would emit its line.
+///
+/// The gate covers the result line only. `§11.1`'s Glass Sword row puts
+/// `Thy sword hath shattered!` inside the damage roll, before the
+/// narrator, so it survives a standing `0x02` - and it must, because the
+/// vanish branch that raised `0x02` has already printed `<monster>
+/// vanishes!` and `§6.3` says the narrator then "skips the generic
+/// killed/slept/hit chain, produces no message or sound". A Glass Sword
+/// kill of a vanish-class monster therefore reads `<monster> vanishes!`
+/// then `Thy sword hath shattered!`, and never also `<monster> killed!`.
 pub(crate) fn combat_weapon_attack_narrated_result_message(
     state: &mut PlayState,
     target_slot: usize,
     attack: CombatWeaponAttackApplication,
 ) -> Option<String> {
-    let line = combat_weapon_attack_result_message(state, target_slot, attack);
+    let mut narration = combat_attack_result_narration(state, target_slot, None, attack);
     let narrates_kill = combat_weapon_damage_application_killed(attack.damage_application);
     let reaches_generic_chain =
-        line.is_some() && combat_weapon_resolution_reaches_generic_chain(attack.resolution);
-    combat_apply_attack_narrator_gate(state, line, narrates_kill, reaches_generic_chain)
+        narration.result.is_some() && narration.result_reaches_generic_chain;
+    narration.result = combat_apply_attack_narrator_gate(
+        state,
+        narration.result.take(),
+        narrates_kill,
+        reaches_generic_chain,
+    );
+    narration.into_message()
 }
 
 /// The narrator gate for a monster-side attack already ran, inside the
@@ -3334,6 +3355,12 @@ pub(crate) enum CombatMonsterAttackNarration {
 /// attacker's name in the miss line produces a transcript that is wrong on
 /// every line it emits." Rule 2: the two sides "share the to-hit roll, the
 /// impact presentation, the damage roller and the result narrator".
+///
+/// This is the producer alone, without `§6.3`'s narrator gate; the
+/// dispatch prints [`combat_weapon_attack_narrated_result_message`]
+/// instead. Only conformance tests that assert on the unsuppressed census
+/// rows call it directly.
+#[cfg(test)]
 pub(crate) fn combat_weapon_attack_result_message(
     state: &PlayState,
     target_slot: usize,
@@ -3348,8 +3375,52 @@ fn combat_attack_result_message(
     attacker_slot: Option<usize>,
     attack: CombatWeaponAttackApplication,
 ) -> Option<String> {
+    combat_attack_result_narration(state, target_slot, attacker_slot, attack).into_message()
+}
+
+/// One attack outcome's printed lines, split where `combat.md §6.3`'s
+/// narrator gate cuts.
+///
+/// `§11.1` puts two different things into one transcript: lines printed
+/// "**inside** the damage roll" - the Glass Sword row's `Thy sword hath
+/// shattered!` - and the result line the shared narrator emits after it.
+/// `§6.3` gives the gate only the second of those: while `0x02` stands
+/// the narrator "skips the generic killed/slept/hit chain, produces no
+/// message or sound", and it says nothing about the damage roll's own
+/// prints. Keeping the two apart is what lets a Glass Sword kill of a
+/// vanish-class monster read `<monster> vanishes!` then `Thy sword hath
+/// shattered!` without also printing `<monster> killed!` beside it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CombatAttackResultNarration {
+    /// Printed inside the damage roll, ahead of the result narrator.
+    inside_damage_roll: Option<String>,
+    /// The result line, when this outcome narrates one.
+    result: Option<String>,
+    /// Whether [`Self::result`] is the generic killed/slept/hit/wound
+    /// chain's line - the only line the gate withholds.
+    result_reaches_generic_chain: bool,
+}
+
+impl CombatAttackResultNarration {
+    fn into_message(self) -> Option<String> {
+        match (self.inside_damage_roll, self.result) {
+            (Some(inside), Some(result)) => Some(format!("{inside}\n{result}")),
+            (Some(line), None) | (None, Some(line)) => Some(line),
+            (None, None) => None,
+        }
+    }
+}
+
+fn combat_attack_result_narration(
+    state: &PlayState,
+    target_slot: usize,
+    attacker_slot: Option<usize>,
+    attack: CombatWeaponAttackApplication,
+) -> CombatAttackResultNarration {
+    let result_reaches_generic_chain =
+        combat_weapon_resolution_reaches_generic_chain(attack.resolution);
     let target_name = combat_actor_display_name(state, target_slot);
-    match attack.resolution {
+    let (inside_damage_roll, result) = match attack.resolution {
         // `combat.md §11.1` census, "To-hit fails | **party melee** |
         // `<target> missed!`, following the newline already printed before
         // the roll". The line is target-named: "`Bat missed!` is a real
@@ -3361,33 +3432,36 @@ fn combat_attack_result_message(
         // reports nobody **and** the originally aimed cell held a real
         // actor". This engine models no scatter on that arm, so every
         // failed party ranged roll is that case.
-        CombatWeaponAttackResolution::Miss { .. } => Some(format!("{target_name} missed!")),
-        CombatWeaponAttackResolution::Hit { .. } => match attack.damage_application {
-            Some(application) => {
-                combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
-            }
-            None => Some(format!("{target_name} hit!")),
-        },
+        CombatWeaponAttackResolution::Miss { .. } => (None, Some(format!("{target_name} missed!"))),
+        CombatWeaponAttackResolution::Hit { .. } => (
+            None,
+            match attack.damage_application {
+                Some(application) => {
+                    combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
+                }
+                None => Some(format!("{target_name} hit!")),
+            },
+        ),
         // `combat.md §11.1` census: "Glass Sword swing | party melee |
         // `Thy sword hath shattered!`, printed **inside** the damage roll,
         // so it lands between the hit newline and the result line". The
         // ordinary result line then follows - for the sentinel that is
         // "Target dies | both | `<target> killed!`" - so the shatter line
-        // is a prefix, not a replacement.
-        CombatWeaponAttackResolution::Special { shattered, .. } => {
-            let mut lines = Vec::new();
-            if shattered {
-                lines.push(COMBAT_GLASS_SWORD_SHATTER_LINE.to_string());
-            }
-            if let Some(result) = attack.damage_application.and_then(|application| {
+        // is a prefix, not a replacement, and it sits on the damage roll's
+        // side of `§6.3`'s narrator gate rather than the narrator's.
+        CombatWeaponAttackResolution::Special { shattered, .. } => (
+            shattered.then(|| COMBAT_GLASS_SWORD_SHATTER_LINE.to_string()),
+            attack.damage_application.and_then(|application| {
                 combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
-            }) {
-                lines.push(result);
-            }
-            (!lines.is_empty()).then(|| lines.join("\n"))
-        }
+            }),
+        ),
         CombatWeaponAttackResolution::OutOfRange { .. }
-        | CombatWeaponAttackResolution::NoOrdinaryDamage { .. } => None,
+        | CombatWeaponAttackResolution::NoOrdinaryDamage { .. } => (None, None),
+    };
+    CombatAttackResultNarration {
+        inside_damage_roll,
+        result,
+        result_reaches_generic_chain,
     }
 }
 

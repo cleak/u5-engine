@@ -766,7 +766,13 @@
         assert!(!reaches(CombatWeaponAttackResolution::NoOrdinaryDamage {
             route
         }));
-        assert!(!reaches(CombatWeaponAttackResolution::Special {
+        // The `Special` route's *result* line is the same generic chain -
+        // it is produced by the same landed-damage narrator the `Hit` route
+        // uses - so it is inside the gate. Its `Thy sword hath shattered!`
+        // is not: `§11.1` prints that "**inside** the damage roll", ahead
+        // of the narrator, and the producer keeps the two apart so the gate
+        // can withhold one without the other.
+        assert!(reaches(CombatWeaponAttackResolution::Special {
             route,
             shattered: false,
         }));

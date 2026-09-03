@@ -12387,6 +12387,15 @@ fn combat_input_dispatch_never_prompts_a_controlled_non_party_actor() {
     // "What the player can usefully do with such a creature beyond that
     // attack path is not established here" - so no ordinary command is
     // accepted for it.
+    //
+    // The two halves do not sit together comfortably: R354 also gives the
+    // slot "`Nothing!` on a cancelled confirm", which presupposes a player
+    // confirm, and R364 says it "is driven from the player's prompt", so
+    // refusing the keystroke re-establishes in outcome what R354 withdrew.
+    // This test pins the §16.1 reading, which
+    // `combat_slot_prompts_for_player_command` documents as an open spec
+    // question; if the ruling goes the other way, this is the test that
+    // must change with it.
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
