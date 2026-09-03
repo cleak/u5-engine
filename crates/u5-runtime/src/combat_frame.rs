@@ -1025,17 +1025,17 @@ pub const fn combat_player_command_action_reprompt_shape(
         | CombatPlayerCommandAction::Branch {
             party_side_gate: CombatCommandPartySideGate::RefusedMonsterSide,
             ..
+        }
+        | CombatPlayerCommandAction::Branch {
+            branch:
+                CombatCommandBranch::SceneMessageAbort(_)
+                | CombatCommandBranch::DWhatRefusal
+                | CombatCommandBranch::WWhatRefusal,
+            ..
         } => Some(CombatCommandRepromptShape::FullBanner),
-        CombatPlayerCommandAction::Branch { branch, .. } => match branch {
-            CombatCommandBranch::SceneMessageAbort(_)
-            | CombatCommandBranch::DWhatRefusal
-            | CombatCommandBranch::WWhatRefusal => Some(CombatCommandRepromptShape::FullBanner),
-            // "the two toggles Ctrl-S and Ctrl-B, and a refused step or
-            // refused climb", plus the unrecognised-key stub.
-            _ => Some(CombatCommandRepromptShape::Short),
-        },
-        // An unrecognised key (`What?`), a rejected diagonal (which takes "the
-        // stock `What?` refusal"), and a refused step.
+        // "the two toggles Ctrl-S and Ctrl-B, and a refused step or refused
+        // climb", plus the unrecognised-key stub, a rejected diagonal (which
+        // takes "the stock `What?` refusal"), and a refused step.
         _ => Some(CombatCommandRepromptShape::Short),
     }
 }
@@ -3177,8 +3177,15 @@ impl PlayState {
                 // separately "the 'invisible / not-yet-revealed' flag is
                 // still rejected after the phase/hidden check. This
                 // ordinary invisibility filter is not the same as the
-                // special suppression-filter bypass above." `§6.1` gives
-                // them different bits: `0x10` phase/blink, `0x04` hidden.
+                // special suppression-filter bypass above." `§6.1` names the
+                // two bits `0x10` "**Invisible / phase-hidden.**" and `0x04`
+                // "**Dragged-under (Corpser-held).**", and records that the
+                // §9 prose separating a "phased/blinked" state from a
+                // "hidden/not-yet-revealed" one "predates this correction and
+                // has not been re-derived against the bit layout"
+                // (`RETRACTIONS.md` R380). The second filter is therefore fed
+                // by the dragged-under bit, which is the only `0x04` reading
+                // the spec still publishes.
                 self.combat_target_candidate_view(
                     descriptor,
                     slot,

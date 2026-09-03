@@ -1349,34 +1349,21 @@ impl CombatActorDescriptor {
     }
 }
 
-pub fn apply_combat_party_damage(
-    member: &mut PartyMember,
-    raw_damage: i16,
-) -> CombatPartyDamageOutcome {
-    apply_combat_party_damage_inner(member, raw_damage, true)
-}
-
-/// `combat.md §6.3`, the party-member death row's published write order: "HP
-/// to zero, **marked-dead bit**, `'D'`, corpse tile, sentinel reset,
-/// stats-panel redraw". The descriptor bit therefore lands between the HP
-/// write and the roster letter, and the caller that owns the descriptor has
-/// to interleave the two.
+/// `combat.md §6.3`, the party-member death row: "In this exact order:
+/// character HP forced to zero; marked-dead bit ORed into the descriptor
+/// flags byte; roster status byte set to `'D'`; the corpse tile written into
+/// both tile bytes; active-player sentinel set to `0xFF` if the dead
+/// character was active; **a full stats-panel redraw**." The descriptor bit
+/// therefore lands between the HP write and the roster letter, and the caller
+/// that owns the descriptor has to interleave the two.
 ///
 /// *(**Corrected.** `§6.3` previously published "roster status byte set to
 /// `'D'`, marked-dead bit ORed in"; "the two status writes were published in
 /// the wrong order: the **marked-dead bit precedes the `'D'` roster letter**,
-/// not the other way round" - `RETRACTIONS.md` R379.)*
+/// not the other way round" - `combat.md §6.3`, `RETRACTIONS.md` R379.)*
 pub fn apply_combat_party_damage_deferring_death_letter(
     member: &mut PartyMember,
     raw_damage: i16,
-) -> CombatPartyDamageOutcome {
-    apply_combat_party_damage_inner(member, raw_damage, false)
-}
-
-fn apply_combat_party_damage_inner(
-    member: &mut PartyMember,
-    raw_damage: i16,
-    write_death_letter: bool,
 ) -> CombatPartyDamageOutcome {
     let status_before = member.status;
     // Same zero-or-negative graze condition as the monster arm above.
@@ -1403,7 +1390,7 @@ fn apply_combat_party_damage_inner(
     // bit (`§6.3`, `RETRACTIONS.md` R379). `status_after` still reports the
     // letter the arm ends on, because that write happens before any observer
     // runs.
-    if killed && !write_death_letter {
+    if killed {
         member.status = status_before;
     }
 
@@ -2925,13 +2912,13 @@ pub const fn resolve_combat_command_party_side_gate(
 /// re-issued at no cost".
 pub const COMBAT_PARTY_SIDE_REFUSAL: &str = "Can't!";
 
-/// `combat.md §8.1`: "the dragged-under (Corpser-held) arm that prints
-/// `ARGH!`". `§6.1` bit `0x04`: "Its own turn arm prints `ARGH!` and rolls
-/// for release in place of a command."
 /// `combat.md` §8, the `C` row: "The branch first prints `Cast...` and then
 /// applies its own copy of the shape-A **party-side** test."
 pub const COMBAT_CAST_COMMAND_LABEL: &str = "Cast...";
 
+/// `combat.md §8.1`: "the dragged-under (Corpser-held) arm that prints
+/// `ARGH!`". `§6.1` bit `0x04`: "Its own turn arm prints `ARGH!` and rolls
+/// for release in place of a command."
 pub const COMBAT_DRAGGED_UNDER_TURN_LINE: &str = "ARGH!";
 
 /// `combat.md §8.1`: "the asleep arm that prints `Zzzzz...`".

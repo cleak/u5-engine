@@ -110,10 +110,12 @@
     }
 
     #[test]
-    fn blink_phase_uses_the_phase_filter_bit_not_ordinary_invisibility() {
-        // `combat.md §6.1`: `0x10` is the phase/blink filter and `0x04` is
-        // "Hidden / not-yet-revealed (invisible)". `§9` keeps them apart:
-        // only the phase filter has a bypass.
+    fn blink_phase_uses_the_invisibility_bit_not_the_dragged_under_bit() {
+        // `combat.md §6.1`: `0x10` is "**Invisible / phase-hidden.** The
+        // phase/blink filter", and `0x04` is "**Dragged-under
+        // (Corpser-held).**" - that row's earlier name "Hidden /
+        // not-yet-revealed (invisible)" is withdrawn (`RETRACTIONS.md`
+        // R380). Blinking writes the phase/blink bit and nothing else.
         let mut actor = CombatActorDescriptor::from_row([
             10,
             1,
@@ -142,16 +144,20 @@
     }
 
     #[test]
-    fn the_doom_suppression_bypass_does_not_reach_ordinary_invisibility() {
+    fn the_doom_suppression_bypass_does_not_reach_the_dragged_under_filter() {
         // `combat.md §9`: after the bypassable phase/hidden test, "the
         // 'invisible / not-yet-revealed' flag is still rejected after the
         // phase/hidden check. This ordinary invisibility filter is not the
-        // same as the special suppression-filter bypass above." The engine
-        // fed `0x04` into the bypassable test, so a Doom-scene monster
-        // happily targeted an invisible party member.
+        // same as the special suppression-filter bypass above." `§6.1` names
+        // the second bit `0x04` "**Dragged-under (Corpser-held).**" and
+        // records that the §9 two-state prose "predates this correction and
+        // has not been re-derived against the bit layout" (`RETRACTIONS.md`
+        // R380), so `0x04` is what the unbypassable filter reads. The engine
+        // fed `0x04` into the bypassable test instead, so a Doom-scene
+        // monster happily targeted a dragged-under party member.
         let mut state = combat_ai_turn_state(8, 5);
         state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
-        // A second, plainly visible party member so the assertion below
+        // A second, plainly targetable party member so the assertion below
         // pins that the picker *chose the visible candidate*, not merely
         // that it failed to choose anybody.
         state.combat_actors[1] =
@@ -211,7 +217,7 @@
                 x: 7,
                 y: 5,
             },
-            "ordinary invisibility is rejected even in the Doom bypass context,              so the visible party member is the chosen target"
+            "the dragged-under filter is rejected even in the Doom bypass              context, so the unflagged party member is the chosen target"
         );
     }
 
@@ -1331,7 +1337,7 @@
     }
 
     /// `combat.md` §8.2's seed gate: "that slot must be neither dead-marked nor
-    /// **blink-hidden**". Bit `0x04` is the dragged-under state and is not on
+    /// blink-hidden". Bit `0x04` is the dragged-under state and is not on
     /// that list (`RETRACTIONS.md` R380).
     #[test]
     fn the_melee_cursor_seed_gate_rejects_blink_hidden_not_dragged_under() {

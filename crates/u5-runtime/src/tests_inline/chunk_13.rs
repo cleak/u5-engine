@@ -20654,7 +20654,7 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
 }
 
 #[test]
-fn summoned_creatures_reach_the_command_handler_but_are_never_prompted() {
+fn summoned_creatures_reach_the_command_handler_and_are_prompted_by_it() {
     // combat.md §6.1a writer 3: summoned creatures "are still placed
     // through the ordinary monster placement path, so their class byte
     // is the monster-side one - but the bit **does** hand the creature

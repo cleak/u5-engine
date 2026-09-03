@@ -14871,7 +14871,7 @@ fn combat_party_damage_grazes_on_zero_or_negative_and_uses_saturating_hp_counter
     // the three sentences that called this outcome a miss and states "There is
     // no miss flag". Zero is asserted alongside negative because the marker's
     // "two writers [are] both this zero-or-negative condition".
-    let graze = apply_combat_party_damage(&mut member, -1);
+    let graze = apply_combat_party_damage_deferring_death_letter(&mut member, -1);
     assert!(graze.grazed);
     assert!(!graze.instant_kill);
     assert!(!graze.killed);
@@ -14881,28 +14881,31 @@ fn combat_party_damage_grazes_on_zero_or_negative_and_uses_saturating_hp_counter
     assert_eq!(member.hp, 12);
     assert_eq!(member.status, b'G');
 
-    let zero_graze = apply_combat_party_damage(&mut member, 0);
+    let zero_graze = apply_combat_party_damage_deferring_death_letter(&mut member, 0);
     assert!(zero_graze.grazed);
     assert_eq!(zero_graze.applied_damage, 0);
     assert_eq!(member.hp, 12);
 
-    let hit = apply_combat_party_damage(&mut member, 5);
+    let hit = apply_combat_party_damage_deferring_death_letter(&mut member, 5);
     assert!(!hit.grazed);
     assert_eq!(hit.applied_damage, 5);
     assert!(!hit.killed);
     assert_eq!(member.hp, 7);
     assert_eq!(member.status, b'G');
 
-    let death = apply_combat_party_damage(&mut member, 30);
+    let death = apply_combat_party_damage_deferring_death_letter(&mut member, 30);
     assert_eq!(death.applied_damage, 7);
     assert!(death.killed);
     assert_eq!(death.status_after, b'D');
     assert_eq!(member.hp, 0);
-    assert_eq!(member.status, b'D');
+    // `combat.md §6.3` orders the marked-dead bit ahead of the `'D'` roster
+    // letter (`RETRACTIONS.md` R379), so this helper leaves the letter to the
+    // caller that owns the descriptor.
+    assert_eq!(member.status, b'G', "the letter is deferred to the caller");
 }
 
 #[test]
-fn combat_party_damage_instant_kill_forces_death_status() {
+fn combat_party_damage_instant_kill_reports_death_status() {
     let mut member = PartyMember {
         slot: 1,
         class_byte: 1,
@@ -14914,7 +14917,7 @@ fn combat_party_damage_instant_kill_forces_death_status() {
         level: 1,
     };
 
-    let kill = apply_combat_party_damage(&mut member, COMBAT_INSTANT_KILL_DAMAGE);
+    let kill = apply_combat_party_damage_deferring_death_letter(&mut member, COMBAT_INSTANT_KILL_DAMAGE);
 
     assert!(kill.instant_kill);
     assert!(kill.killed);
@@ -14922,7 +14925,10 @@ fn combat_party_damage_instant_kill_forces_death_status() {
     assert_eq!(kill.status_before, b'S');
     assert_eq!(kill.status_after, b'D');
     assert_eq!(member.hp, 0);
-    assert_eq!(member.status, b'D');
+    // The reported `status_after` is the letter the arm ends on; the write
+    // itself belongs to the caller, after the marked-dead bit (`§6.3`,
+    // `RETRACTIONS.md` R379).
+    assert_eq!(member.status, b'S', "the letter is deferred to the caller");
 }
 
 #[test]
@@ -18754,8 +18760,11 @@ fn combat_seating_runs_the_ring_vanish_check_before_the_ring_effect_step() {
     assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
     // The wearer is seated, and visible: the ring-effect step's
     // invisibility arm never runs for a ring that has just vanished.
+    // Invisibility is bit `0x10` (`RETRACTIONS.md` R380), so
+    // `is_phase_suppressed()` is the bit to read back - `is_dragged_under()`
+    // (`0x04`) has no writer on any invisibility path and could not fail here.
     assert!(!actors[0].is_empty());
-    assert!(!actors[0].is_dragged_under());
+    assert!(!actors[0].is_phase_suppressed());
     // Exactly one draw: the vanish check. Seating itself charges none.
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.message, "A ring has vanished!");

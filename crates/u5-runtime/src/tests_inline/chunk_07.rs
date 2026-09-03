@@ -773,8 +773,8 @@ fn combat_orange_wake_dispatch_restores_status_and_retained_display_tile() {
 /// linked presentation record") and for the Ring of Invisibility ("when worn by
 /// a combatant, it marks that combatant hidden/suppressed"), followed by the
 /// Orange sleep/wake pair: wake "selects the retained base/type tile as the
-/// display tile, **except that an actor still under the combat invisibility
-/// state uses tile `0x1D`**". Every invisibility writer sets bit `0x10`
+/// display tile, except that an actor still under the combat invisibility
+/// state uses tile `0x1D`". Every invisibility writer sets bit `0x10`
 /// (`RETRACTIONS.md` R380), so the wake branch has to read that bit.
 #[test]
 fn combat_invisibility_writers_all_reach_the_orange_wake_hidden_tile() {

@@ -288,8 +288,8 @@ pub const fn combat_targeting_direction_delta(direction: InputDirection) -> (i32
 /// otherwise."
 ///
 /// `§8.2` states the seed's five-part validity gate outright: "the remembered
-/// value must name a real slot, that slot must be neither **dead-marked nor
-/// blink-hidden**, it must not be an empty slot, its linked presentation
+/// value must name a real slot, that slot must be neither dead-marked nor
+/// blink-hidden, it must not be an empty slot, its linked presentation
 /// record must be displayed, and its distance from the attacker must not
 /// exceed this attempt's maximum range."
 ///
