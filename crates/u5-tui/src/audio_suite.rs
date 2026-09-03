@@ -505,6 +505,39 @@ mod tests {
         assert_eq!(sorted.len(), before, "case names must be unique");
     }
 
+    /// `audio.md §2`: an implementation "must stop the speaker at every
+    /// specified effect end". The visual shell honours that by giving its one
+    /// voice exactly `SpeakerProgram::duration` and then retiring it, so every
+    /// render has to land on its own program's duration to within one sample.
+    /// A longer render is a tail the speaker can never reach; a shorter one is
+    /// a voice holding an exhausted sink.
+    ///
+    /// This is the whole published inventory, in both sound states. It is the
+    /// assertion that would have caught the per-operation rounding that made
+    /// `§8.6.1`'s gated reveal render 12.44% long and `§7.1`'s ignition burst
+    /// 7.25% long.
+    #[test]
+    fn every_case_renders_to_its_own_program_duration() {
+        let sample_secs = 1.0 / f64::from(SAMPLE_RATE);
+        for audible in [true, false] {
+            let mut jitter = RumbleJitter::new();
+            for case in audio_suite_cases() {
+                let program = case.lower(&mut jitter);
+                let rendered = render_program(&program, audible);
+                let program_secs = program.total_nanos(audible) as f64 / 1.0e9;
+                let error = rendered.duration_secs() - program_secs;
+                assert!(
+                    error.abs() <= sample_secs,
+                    "{} audible={audible}: rendered {:.6} s against a {:.6} s program ({:+.3}%)",
+                    case.name,
+                    rendered.duration_secs(),
+                    program_secs,
+                    error / program_secs * 100.0,
+                );
+            }
+        }
+    }
+
     #[test]
     fn only_the_far_drip_band_renders_silence() {
         let mut jitter = RumbleJitter::new();
