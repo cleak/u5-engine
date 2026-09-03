@@ -976,6 +976,10 @@ pub const DUNGEON_KLIMB_FAILED: &str = "Failed!\n";
 /// line feed, so Jimmy's results all start with a bare `\n` and Open's last
 /// two arms deliberately do not.
 pub const DUNGEON_CHEST_JIMMY_NO_KEYS: &str = "\nNo keys!\n";
+/// `combat.md §7.1`: combat `J` "first requires the party to hold at least one
+/// key: with a key count of zero it prints `No keys!` and returns immediately,
+/// before the direction prompt and before any tile is examined."
+pub const COMBAT_JIMMY_NO_KEYS_MESSAGE: &str = "No keys!";
 pub const DUNGEON_CHEST_JIMMY_KEY_BROKE: &str = "\nKey broke!\n";
 pub const DUNGEON_CHEST_JIMMY_UNLOCKED: &str = "\nChest unlocked\n";
 pub const DUNGEON_CHEST_JIMMY_ALREADY_OPEN: &str = "\nAlready open!\n";

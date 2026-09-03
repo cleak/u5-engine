@@ -139,6 +139,13 @@ pub struct CombatClassTraits {
     pub poison_status_attack: bool,
     pub turnable_attack: bool,
     pub teleport_capable: bool,
+    /// `combat.md §9` / `magic.md §8` / `catalogs/monster-bestiary.md §4`:
+    /// "Repel Undead is the same sweep with one extra condition: the
+    /// actor's class must also carry the undead class-flag bit." The
+    /// bestiary marks exactly two shipped classes as undead encounters -
+    /// Ghost (23, "Undead or spectral encounter") and Skeleton (33,
+    /// "Undead encounter") - so those two rows carry the bit here.
+    pub undead: bool,
 }
 
 macro_rules! stats {
@@ -211,6 +218,7 @@ impl CombatClassTraits {
             poison_status_attack: false,
             turnable_attack: false,
             teleport_capable: false,
+            undead: false,
         }
     }
 }
@@ -277,6 +285,29 @@ pub fn combat_class_stats(class: u8) -> Option<CombatClassStats> {
 pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
     match class {
         0 => Some(traits!(0, "Mage", turnable_attack)),
+        // `combat.md §13`: the per-class flag word is "Sixteen bits per
+        // class" over the same forty-eight-row class space as the stat
+        // record, and "party combat classes, special NPC classes, and
+        // monsters share the same eight-byte row shape". Classes 1..11 are
+        // the remaining party sprites and the townsfolk/NPC actor rows;
+        // `catalogs/monster-bestiary.md §4` records "only the class traits
+        // confirmed by the damage, spell, target-picker, movement, and
+        // monster-special readers" and confirms none for these rows, so
+        // their flag word is all zero. It is **not** absent: a consumer that
+        // propagates a missing row instead of reading an all-zero flag word
+        // leaves class 1 - the `encounters.md §4` ship/pirate family's combat
+        // class - unable to be damaged or to attack.
+        1 => Some(traits!(1, "Bard")),
+        2 => Some(traits!(2, "Fighter")),
+        3 => Some(traits!(3, "Avatar")),
+        4 => Some(traits!(4, "Villager")),
+        5 => Some(traits!(5, "Merchant")),
+        6 => Some(traits!(6, "Jester")),
+        7 => Some(traits!(7, "Bard (second row)")),
+        8 => Some(traits!(8, "Pirate")),
+        9 => Some(traits!(9, "Unnamed reserved")),
+        10 => Some(traits!(10, "Child")),
+        11 => Some(traits!(11, "Beggar")),
         12 => Some(traits!(12, "Guard")),
         13 => Some(traits!(
             13,
@@ -312,7 +343,14 @@ pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
         20 => Some(traits!(20, "Giant Rat", poison_status_attack)),
         21 => Some(traits!(21, "Bat", incorporeal)),
         22 => Some(traits!(22, "Giant Spider", poison_status_attack)),
-        23 => Some(traits!(23, "Ghost", physical_half, incorporeal, blink)),
+        23 => Some(traits!(
+            23,
+            "Ghost",
+            physical_half,
+            incorporeal,
+            blink,
+            undead
+        )),
         24 => Some(traits!(24, "Slime", splits, incorporeal)),
         25 => Some(traits!(25, "Gremlin")),
         26 => Some(traits!(26, "Mimic", zero_selector_stat_row)),
@@ -339,7 +377,7 @@ pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
         )),
         31 => Some(traits!(31, "Insect Swarm", incorporeal)),
         32 => Some(traits!(32, "Orc", zero_selector_stat_row)),
-        33 => Some(traits!(33, "Skeleton", physical_half)),
+        33 => Some(traits!(33, "Skeleton", physical_half, undead)),
         34 => Some(traits!(34, "Python", poison_status_attack)),
         35 => Some(traits!(35, "Ettin", zero_selector_stat_row)),
         36 => Some(traits!(36, "Headless", zero_selector_stat_row)),

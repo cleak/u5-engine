@@ -249,7 +249,7 @@ impl PlayState {
         let _ = self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
         let _ = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
         let _ = self.age_active_effect();
-        let exit = match self.combat_round_loop_control(false) {
+        let exit = match self.combat_round_loop_control(true, false) {
             CombatRoundLoopControl::Exit(exit) => exit,
             CombatRoundLoopControl::ContinueActorWalk | CombatRoundLoopControl::StartNextRound => {
                 CombatRoundLoopExit::LeaveCombat

@@ -65,6 +65,28 @@ fn the_attack_walk_leads_with_one_space_only_when_two_or_three_items_qualify() {
         "no leading space with one qualifying item, got {:?}",
         single.text
     );
+
+    // "before the first attempt's newline" - so the space needs an attempt
+    // behind it. An acting slot whose descriptor holds no arena cell opens
+    // nothing and prints nothing, and a bare space with no attempt after it
+    // is not the byte this sentence publishes.
+    let mut off_arena = combat_player_command_state(6, 5);
+    off_arena.party_equipment = default_party_equipment(1);
+    off_arena.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow
+    off_arena.party_equipment[0][EQUIP_SLOT_HELM] = 3; // Spiked Helm
+    off_arena.combat_actors[0].x = COMBAT_ARENA_SIDE as u8;
+    assert_eq!(off_arena.combat_actor_cell(0), None);
+    assert_eq!(
+        off_arena.combat_attack_attempts_for_actor(0).len(),
+        2,
+        "two items still qualify"
+    );
+    let stranded = off_arena.begin_combat_attack_walk(0, true);
+    assert!(!stranded.cursor_open);
+    assert_eq!(
+        stranded.text, "",
+        "no attempt printed, so no leading space either"
+    );
 }
 
 /// `combat.md §7`, "What owns that coordinate" (`RETRACTIONS.md` R357): the
@@ -249,27 +271,22 @@ fn the_hazard_tier_raises_a_stats_panel_refresh_and_never_leaves_combat() {
     // Nothing leaves combat on it: with a live party the control is still an
     // ordinary walk.
     assert_eq!(
-        state.combat_round_loop_control(false),
+        state.combat_round_loop_control(false, false),
         CombatRoundLoopControl::ContinueActorWalk
     );
 
-    // The mode loop's per-turn entry point redraws and clears.
-    let redraws_before = state.pending_party_stats_panel_redraws;
+    // The mode loop's per-turn entry point reads it once and clears it.
     assert!(state.take_party_stats_panel_refresh());
     assert!(!state.party_stats_panel_refresh_pending);
-    assert_eq!(
-        state.pending_party_stats_panel_redraws,
-        redraws_before + 1,
-        "the reader redraws the full party stats panel"
-    );
     assert!(!state.take_party_stats_panel_refresh(), "and clears it");
 }
 
 /// `combat.md §12`, "The Gazer branch is a sleep application, and it replaces
 /// ordinary damage" (`RETRACTIONS.md` R359): "no damage roll, no defence roll,
 /// no HP change, no experience credit", the status byte becomes `'S'`, the
-/// descriptor's disabled bit is set, the active-player sentinel is cleared,
-/// and the shared narrator prints `<target> slept!`.
+/// descriptor's disabled bit is set, "the presentation record shows the prone
+/// marker", the active-player sentinel is cleared, and the shared narrator
+/// prints `<target> slept!`.
 #[test]
 fn a_gazer_attack_sleeps_the_defender_instead_of_damaging_it() {
     let mut state = combat_ai_turn_state(6, 5);
@@ -290,6 +307,12 @@ fn a_gazer_attack_sleeps_the_defender_instead_of_damaging_it() {
     assert_eq!(state.party[0].hp, hp_before);
     assert_eq!(state.party[0].status, b'S');
     assert!(state.combat_actors[0].is_status_disabled());
+    // "the presentation record shows the prone marker" - the same byte the
+    // potion / Sword-of-Chaos sleep path writes.
+    assert_eq!(
+        state.active_objects[usize::from(state.combat_actors[0].active_object_slot)].tile,
+        COMBAT_POTION_SLEEP_DISPLAY_TILE,
+    );
     assert_eq!(state.active_player, None);
     assert_eq!(
         crate::input_dispatch::combat_monster_attack_result_message(&state, attack).as_deref(),
@@ -391,9 +414,13 @@ fn a_landed_gremlin_attack_steals_food_instead_of_dealing_damage() {
     // cast-failure envelope, not the 40-update action snap that starts at
     // 1200 Hz - and `audio.md §11`'s action-snap census enumerates that
     // recipe's sites by name without the theft among them.
+    // `combat.md §11.1`'s "Swing begins" row gives a monster attacker "the
+    // swing sweep, played **before** the roll", and the theft branch sits
+    // after the to-hit roll, so the swing has already sounded when the cue
+    // plays.
     assert_eq!(
         state.sound_effects_after(sound_before),
-        vec![SoundEffect::CastFailure]
+        vec![SoundEffect::MonsterAttackSwing, SoundEffect::CastFailure]
     );
 
     assert_eq!(
@@ -406,10 +433,25 @@ fn a_landed_gremlin_attack_steals_food_instead_of_dealing_damage() {
     assert_eq!(state.food, 7, "five, saturating at zero");
     assert!(attack.resolution.is_none(), "no damage chain runs");
     assert_eq!(state.party[0].hp, hp_before);
+    // The narrator returns the row bare, like every sibling line it owns;
+    // `append_combat_result_line` is what supplies the newline on each side.
     assert_eq!(
         crate::input_dispatch::combat_monster_attack_result_message(&state, attack).as_deref(),
-        Some("\nA Gremlin stole some food!\n")
+        Some("A Gremlin stole some food!")
     );
+
+    // And the production transcript that consumer builds: `combat.md {S}11`
+    // step 2 prints "a newline, `A `, the acting creature's name, and `
+    // stole some food!` with its own trailing newline - i.e. `A <monster>
+    // stole some food!` **on its own row**". One newline on each side, so
+    // the row carries no blank line above or below it.
+    let mut transcript = String::from("Pass.");
+    crate::input_dispatch::append_combat_result_line(
+        &mut transcript,
+        &crate::input_dispatch::combat_monster_attack_result_message(&state, attack)
+            .expect("the theft narrates"),
+    );
+    assert_eq!(transcript, "Pass.\nA Gremlin stole some food!\n");
 
     // "the draw is taken **before** the food test, so it is spent even with an
     // empty larder", and the attack then falls through to ordinary melee.

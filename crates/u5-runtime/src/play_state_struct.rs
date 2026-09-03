@@ -364,19 +364,6 @@ pub struct PlayState {
     /// frontend drains it by issuing
     /// [`crate::EgaDisplayOperation::RestoreLoadedTileGraphics`].
     pub pending_driver_tile_graphics_restores: usize,
-    /// `combat.md §7`, "What owns that coordinate": the arena aim marker's
-    /// X/Y pair. "The secondary marker's arena X/Y **is the Section 8.2
-    /// targeting cursor's current cell**, and the cursor owns it outright
-    /// ... it **seeds** them when it opens, and it **rewrites** them on
-    /// every accepted move. A rejected move ... leaves them exactly as they
-    /// were", and "**The coordinate itself is never cleared** - after the
-    /// cursor closes it still holds the last cell the cursor stood on, and
-    /// only the lowered gate stops it being drawn."
-    ///
-    /// `RETRACTIONS.md` R357 withdraws the earlier "read only by that same
-    /// painting pass" claim: the pair has three further readers, so it is
-    /// not write-only presentation state and must not be recomputed at draw
-    /// time.
     /// `combat.md §7`, "The middle tier's flag is a stats-panel refresh
     /// request, not a leave-combat flag" (`RETRACTIONS.md` R358).
     ///
@@ -394,16 +381,6 @@ pub struct PlayState {
     ///
     /// Transient display state, never serialized.
     pub party_stats_panel_refresh_pending: bool,
-    /// Party stats-panel redraws a mode loop has taken off
-    /// [`Self::party_stats_panel_refresh_pending`] and owes a frontend.
-    ///
-    /// `combat.md §7`: the four mode loops each read the latch "once at the
-    /// top of [their] per-turn entry point and, if it is set, redraw the
-    /// full party stats panel and clear it". The runtime paints no panel of
-    /// its own, so - exactly as with
-    /// [`Self::pending_driver_tile_graphics_restores`] - it records the
-    /// redraw in the published order and a frontend drains it.
-    pub pending_party_stats_panel_redraws: usize,
     /// `combat.md §7`, "What owns that coordinate": the aim marker's arena
     /// X/Y pair. The `§8.2` targeting cursor is its only writer - it
     /// "**seeds** them when it opens", "**rewrites** them on every accepted

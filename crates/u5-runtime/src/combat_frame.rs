@@ -37,6 +37,58 @@ pub struct PendingDungeonRoomClear {
 pub const COMBAT_TERRAIN_REVEAL_PIXEL_COUNT: usize = 16 * 16;
 pub const COMBAT_TERRAIN_REVEAL_WORLD_TICKS: u8 = 31;
 
+/// `combat.md §9`: on a successful monster summon "the new actor's linked
+/// sprite plays the brief flame transition before settling on the Daemon
+/// tile". `audio.md §8.3.1` is where that transition is specified: "The
+/// monster summon and the player Summon spell use an identical construct:
+/// play the envelope cue, set the new actor's tile to a placeholder, run the
+/// converge on the flash tile, then set the actor's tile to the real creature
+/// sprite."
+///
+/// The converge is "**one pass of 256 plots**, with no outer repeat", in the
+/// same pseudorandom order this engine already models as
+/// [`crate::return_to_view::return_to_view_single_cell_write_coordinates`],
+/// with "an input/redraw poll after every eighth completed step - 31
+/// checkpoints, and none after the final step", and "in combat that poll runs
+/// the world tick".
+///
+/// The placeholder tile the object is set to before the converge is described
+/// only as "a universal placeholder" whose depiction was read from rendered
+/// pixels; **no id is published**, so this playback records the flash tile and
+/// the settle tile and does not name it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CombatSummonFlashPlayback {
+    pub actor_slot: usize,
+    pub active_object_slot: usize,
+    pub arena_cell: (u8, u8),
+    /// `audio.md §8.3.1`: "flash tile = creature class x 4 + 320".
+    pub flash_tile: u16,
+    /// `audio.md §8.3.1`: "the settle tile that replaces it is
+    /// creature class x 4 + 64".
+    pub settle_tile: u8,
+    pub write_order: Vec<(u8, u8)>,
+    pub world_tick_after_operations: Vec<u16>,
+}
+
+pub fn combat_summon_flash_playback(
+    class: u8,
+    actor_slot: usize,
+    active_object_slot: usize,
+    arena_cell: (u8, u8),
+) -> CombatSummonFlashPlayback {
+    CombatSummonFlashPlayback {
+        actor_slot,
+        active_object_slot,
+        arena_cell,
+        flash_tile: combat_class_summon_flash_tile(class),
+        settle_tile: combat_class_sprite_byte(class),
+        write_order: crate::return_to_view::return_to_view_single_cell_write_coordinates().to_vec(),
+        world_tick_after_operations: (1..=COMBAT_TERRAIN_REVEAL_WORLD_TICKS)
+            .map(|step| u16::from(step) * 8)
+            .collect(),
+    }
+}
+
 /// Completed `combat.md §6.3` vanish-on-death cell reveal.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CombatTerrainRevealPlayback {
@@ -158,9 +210,14 @@ pub const COMBAT_ATTACK_WALK_LEADING_SPACE: char = ' ';
 
 /// `combat.md §11`, the Gremlin food-theft branch: the line is "a newline,
 /// `A `, the acting creature's name, and ` stole some food!` with its own
-/// trailing newline" (`RETRACTIONS.md` R361).
-pub const COMBAT_FOOD_THEFT_LINE_LEAD: &str = "\nA ";
-pub const COMBAT_FOOD_THEFT_LINE_TAIL: &str = " stole some food!\n";
+/// trailing newline" (`RETRACTIONS.md` R361) - i.e. `A <monster> stole
+/// some food!` "on its own row". The two newlines are deliberately **not**
+/// part of these constants: the monster-side narrator returns every line
+/// bare and `append_combat_result_line` supplies the leading newline and
+/// the trailing one, so a lead/tail carrying newlines of its own would
+/// render the row with a blank line above it and another below it.
+pub const COMBAT_FOOD_THEFT_LINE_LEAD: &str = "A ";
+pub const COMBAT_FOOD_THEFT_LINE_TAIL: &str = " stole some food!";
 
 /// `combat.md §8.2`: "Immediately before the cursor opens the engine prints
 /// `Aim! `."
@@ -422,6 +479,15 @@ pub struct CombatMonsterAttackApplication {
     /// (`RETRACTIONS.md` R359): the sleep this attack applied "instead of
     /// damage".
     pub sleep_effect: Option<CombatSleepEffectOutcome>,
+    /// `combat.md §6.3`: the common attack result narrator read the shared
+    /// action-result field and "skips the generic killed/slept/hit chain"
+    /// when the vanish bit `0x02` survived. That field's lifetime is one
+    /// actor dispatch - "the combat walker replaces the whole field with
+    /// zero before the next actor dispatch" - so the gate is run here,
+    /// where the attack resolves, and its verdict travels with the
+    /// application instead of being recomputed once a later slot's
+    /// dispatch has already zeroed the field.
+    pub generic_chain_suppressed: bool,
 }
 
 /// `combat.md §11`, the Gremlin food-theft branch (`RETRACTIONS.md` R361).
@@ -455,6 +521,34 @@ pub enum CombatSleepEffectOutcome {
     /// narration status is set to the sleep code, the record's spare byte is
     /// marked, and one frame renders."
     NonPartyDisabled,
+}
+
+/// `combat.md §11.1`: the shared result field's wider reader "halts the
+/// narrator before the kill, sleep, hit and wound chain". Only that chain
+/// is gated: the miss line "has exactly two call sites" of its own, `§11.1`
+/// prints the poison line "**inside** damage resolution ... and the
+/// ordinary result line is then suppressed", and the out-of-range /
+/// no-ordinary-damage / special resolutions print nothing at all.
+pub fn combat_monster_attack_reaches_generic_chain(
+    attack: &CombatMonsterAttackApplication,
+) -> bool {
+    !matches!(
+        attack.poison_status_outcome,
+        Some(CombatPoisonStatusAttackOutcome::PoisonedPartyMember { .. })
+    ) && matches!(
+        attack.resolution,
+        Some(CombatWeaponAttackResolution::Hit { .. })
+    ) && attack.damage_application.is_some()
+}
+
+pub fn combat_weapon_damage_application_killed(
+    damage_application: Option<CombatWeaponDamageApplication>,
+) -> bool {
+    match damage_application {
+        Some(CombatWeaponDamageApplication::Party { damage, .. }) => damage.killed,
+        Some(CombatWeaponDamageApplication::Monster { damage, .. }) => damage.killed,
+        None => false,
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -557,9 +651,79 @@ pub enum CombatPostDispatchContactSource {
     PlacedMarker { active_object_slot: usize },
 }
 
+/// `combat.md §7` step 7: the standing-cell hazard pass recognises "Three
+/// damaging kinds ... each with its own effect".
+///
+/// Two of the three are keyed by `§11`'s per-marker table, which is the more
+/// specific statement of the same hook and names each field kind's result
+/// outright:
+///
+/// - **Poison** is the low tier. `§11`: "Reject contact when the target's
+///   linked active-object tile/class byte is at least `0x80`" - `§7`'s "only
+///   while the actor's own object entry is an ordinary live entry" - and
+///   otherwise the shared damage/status endpoint "with no attacker credit",
+///   `§7`'s no-attacker sentinel.
+/// - **Fire** is the middle tier. `§11`: "Pass a rolled raw value directly to
+///   the shared damage/status endpoint, then run the ordinary no-attacker
+///   finalization and status-panel refresh."
+///
+/// [`CombatHazardTier::Top`] is published by `§7` and **is not reachable in
+/// this engine**, because the only remaining field kinds are excluded by
+/// `§11` from being a damaging tier at all: Sleep "write[s] asleep status ...
+/// or the combat sleep/disabled bit" with "no hook-local draw", and the Energy
+/// marker "is not recognized by this contact hook" and has "no contact-path
+/// draw and no zero-valued damage dispatch". Nothing else published keys the
+/// top tier, so keying it to Energy would contradict `§11` rather than
+/// implement `§7`. The variant is kept so the published tier has a name; see
+/// the spec question recorded with this change.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatHazardTier {
+    /// "A low tier that applies the party status/damage path with the
+    /// no-attacker sentinel and plays the hit sound, but only while the
+    /// actor's own object entry is an ordinary live entry."
+    Low,
+    /// "A middle tier that plays the hit sound, rolls a small random amount,
+    /// feeds it to the damage-and-status resolver, runs the shared finalize
+    /// hook and **requests a party stats-panel refresh**." (`RETRACTIONS.md`
+    /// R358 withdrew "raises the leave-combat flag" for this tier: "Nothing
+    /// leaves combat on that byte".)
+    Middle,
+    /// "A top tier that routes the actor into the same **sleep** effect a
+    /// Gazer's gaze applies." (`RETRACTIONS.md` R359 withdrew the former
+    /// "petrify-style special effect": "The effect is **sleep**, and nothing
+    /// in the shipped game petrifies or stones anything.") Never produced by
+    /// [`combat_hazard_tier_for_field`] - see the type comment.
+    Top,
+}
+
+/// `combat.md §7` step 7: "A cell with none of these kinds costs the actor
+/// nothing." Sleep and Energy are not damaging tiers (`§11`), so neither one
+/// reaches the hit sound, runs the finalize hook, or requests the stats-panel
+/// refresh - Sleep still applies its own published status result and Energy
+/// is not recognised by the hook at all.
+pub const fn combat_hazard_tier_for_field(field: CombatArenaFieldKind) -> Option<CombatHazardTier> {
+    match field {
+        CombatArenaFieldKind::Poison => Some(CombatHazardTier::Low),
+        CombatArenaFieldKind::Fire => Some(CombatHazardTier::Middle),
+        CombatArenaFieldKind::Sleep | CombatArenaFieldKind::Energy => None,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CombatPostDispatchContactApplication {
     pub source: CombatPostDispatchContactSource,
+    /// `combat.md §7` step 7 damaging tier this cell resolved to, or `None`
+    /// for a recognised but non-damaging kind.
+    pub tier: Option<CombatHazardTier>,
+    /// `combat.md §7` step 7: the low and middle tiers both "play the hit
+    /// sound", the low tier "only while the actor's own object entry is an
+    /// ordinary live entry". No document publishes a program for that sound,
+    /// so this records that the tier reached it; nothing is emitted.
+    pub hit_sound_played: bool,
+    /// `combat.md §7` step 7: the middle tier "runs the shared finalize hook
+    /// and raises the leave-combat flag".
+    pub finalize_hook_ran: bool,
+    pub raises_leave_combat_flag: bool,
     pub field_contact: CombatArenaFieldContactApplication,
 }
 
@@ -645,6 +809,9 @@ pub enum CombatAiSpecialApplication {
     SummonDaemon {
         actor_slot: usize,
         summon: CombatSummonApplication,
+        /// `combat.md §9`: "the new actor's linked sprite plays the brief
+        /// flame transition before settling on the Daemon tile."
+        flash: CombatSummonFlashPlayback,
     },
 }
 
@@ -832,6 +999,15 @@ pub const fn combat_player_command_action_reprompts(action: &CombatPlayerCommand
     }
 }
 
+/// `combat.md §16.1`'s synthesized turn for a monster descriptor that
+/// control moved to group 0: one attack attempt and nothing else.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CombatControlledMonsterAttemptApplication {
+    pub actor_slot: usize,
+    pub target: CombatAiTargetResolution,
+    pub monster_attack: Option<CombatMonsterAttackApplication>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CombatActorDispatchAction {
     Inactive,
@@ -851,6 +1027,15 @@ pub enum CombatActorDispatchAction {
     NegateTimeSkipped,
     MonsterAi {
         ai_turn: Option<CombatAiTurnApplication>,
+    },
+    /// `combat.md §16.1`: "Group-0 actors enter the combined command
+    /// handler; it prompts only for an eligible selected party member,
+    /// while a monster descriptor that control moved to group 0 still
+    /// synthesizes an automatic action." This is that arm - the slot
+    /// reached the command handler (`§6.1a` writer 3, `RETRACTIONS.md`
+    /// R354) but is never asked for a keystroke.
+    ControlledMonsterAttempt {
+        attempt: Option<CombatControlledMonsterAttemptApplication>,
     },
 }
 
@@ -1037,9 +1222,7 @@ impl PlayState {
     /// "the magic/effect attack tile whose effect id selects sleep, and the
     /// standing-hazard top tier of Section 7 step 7".
     ///
-    /// Returns `None` when the target slot does not resolve. The prone
-    /// presentation marker is the one element of the party arm with no field
-    /// in this engine, and is filed as a spec question rather than invented.
+    /// Returns `None` when the target slot does not resolve.
     pub fn apply_combat_sleep_effect_to_target(
         &mut self,
         target_slot: usize,
@@ -1058,7 +1241,20 @@ impl PlayState {
                 status_before,
                 status_after,
             } => {
-                self.set_combat_actor_status_disabled(target_slot);
+                // `combat.md §12`'s party-defender row: "the status byte
+                // becomes `'S'`, the descriptor's disabled bit is set, **the
+                // presentation record shows the prone marker**".
+                // [`Self::apply_combat_party_sleep_presentation`] is that
+                // pair - it sets the disabled bit and switches the linked
+                // active object's tile to
+                // [`crate::COMBAT_POTION_SLEEP_DISPLAY_TILE`] - and is the
+                // same writer the potion / Sword-of-Chaos sleep path uses,
+                // so the two sleep sources leave identical presentation
+                // state. It refuses outside a live arena or without a linked
+                // object, and the descriptor bit is still owed on that path.
+                if !self.apply_combat_party_sleep_presentation(target_slot) {
+                    self.set_combat_actor_status_disabled(target_slot);
+                }
                 if self.active_player == Some(roster_slot) {
                     self.active_player = None;
                 }
@@ -1108,12 +1304,18 @@ impl PlayState {
         // `No effect!` scenes), so playing it here names an envelope, not a
         // cast.
         self.emit_sound_effect(SoundEffect::CastFailure);
-        // The direct redraw, deliberately *not*
-        // [`Self::request_party_stats_panel_refresh`]: "the distinction is
-        // load-bearing now that the latch is published, so do not merge the
-        // two".
-        self.pending_party_stats_panel_redraws =
-            self.pending_party_stats_panel_redraws.saturating_add(1);
+        // `combat.md §11` step 4 also has this arm "redraw the party stats
+        // panel immediately - this arm calls the redraw directly and does
+        // **not** raise the Section 7 refresh latch". The half that needs
+        // engine state is the negative, and it is honoured by omission: no
+        // [`Self::request_party_stats_panel_refresh`] call here. The redraw
+        // itself needs no queue in this engine, because both frontends
+        // repaint the panel from live state on every frame they draw
+        // (`paint_stats_panel_text_window`, u5-tui `save_frame` and u5-bevy),
+        // so an "immediate" redraw and a latched one are already
+        // indistinguishable downstream; what is *not* indistinguishable, and
+        // is what this comment guards, is raising the shared latch, which
+        // would survive into a later mode-loop turn.
         CombatFoodTheftOutcome::Stole {
             food_before,
             food_after: self.food,
@@ -1147,12 +1349,7 @@ impl PlayState {
     /// breaks a loop, writes a scene byte, or touches any combat-exit
     /// state."
     pub fn take_party_stats_panel_refresh(&mut self) -> bool {
-        let pending = std::mem::take(&mut self.party_stats_panel_refresh_pending);
-        if pending {
-            self.pending_party_stats_panel_redraws =
-                self.pending_party_stats_panel_redraws.saturating_add(1);
-        }
-        pending
+        std::mem::take(&mut self.party_stats_panel_refresh_pending)
     }
 
     /// `combat.md §8.2`, "The remembered previous target": the memory "is
@@ -2127,6 +2324,14 @@ impl PlayState {
         {
             return false;
         }
+        // `combat.md §7.1`: a restrained actor "is returned by the
+        // cell-occupancy lookup, so it can be targeted, attacked and killed
+        // normally. The one exception is the Charm spell, whose own cursor
+        // explicitly refuses restraint cells." The two restraint tiles are the
+        // stocks `0x84` and the manacles `0x85`.
+        if self.combat_actor_stands_on_restraint_arena_cell(actor) {
+            return false;
+        }
         actor.is_controlled() || self.combat_target_group_for_slot(target_slot) != caster_group
     }
 
@@ -2386,7 +2591,7 @@ impl PlayState {
             if let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 class,
                 z,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                combat_summoned_actor_flags(class),
                 legal_cells,
                 &[(x, y)],
             ) {
@@ -2407,10 +2612,15 @@ impl PlayState {
             if usize::from(x) >= COMBAT_ARENA_SIDE || usize::from(y) >= COMBAT_ARENA_SIDE {
                 continue;
             }
+            // `combat.md §6.1a` writer 3: "Summon's rebound branch is the
+            // one exception: it leaves the Daemon on the arena with the bit
+            // clear", so placement stamps only the ordinary monster-side
+            // tag here and the caller ORs `0x01` in on the success arm.
+            // `§6.1`: "Monster and object descriptors never carry" `0x80`.
             if let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 COMBAT_CLASS_DAEMON,
                 z,
-                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                combat_monster_placement_flags(COMBAT_CLASS_DAEMON),
                 legal_cells,
                 &[(x, y)],
             ) {
@@ -2435,7 +2645,7 @@ impl PlayState {
         self.apply_combat_summon_class_with_legal_mask(
             class,
             self.combat_actor_z(center_slot),
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(class),
             &legal_cells,
             &candidates,
         )
@@ -2455,7 +2665,7 @@ impl PlayState {
         self.apply_combat_summon_class_with_legal_mask(
             class,
             self.combat_actor_z(center_slot),
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(class),
             &legal_cells,
             &candidates,
         )
@@ -2473,7 +2683,7 @@ impl PlayState {
         self.apply_combat_summon_class_with_legal_mask(
             class,
             z,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(class),
             &legal_cells,
             &candidates,
         )
@@ -2516,10 +2726,13 @@ impl PlayState {
             return None;
         }
         let legal_cells = self.combat_legal_cell_mask();
+        // `combat.md §6.1a`: "The monster AI's own summon-daemon ability
+        // does *not* set this bit", and `§6.1` keeps `0x80` off every
+        // monster descriptor, so the hostile placement tag stands alone.
         let summon = self.apply_combat_summon_class_with_legal_mask(
             COMBAT_CLASS_DAEMON,
             self.combat_actor_z(actor_slot),
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(COMBAT_CLASS_DAEMON),
             &legal_cells,
             candidate_coordinates,
         )?;
@@ -2538,7 +2751,23 @@ impl PlayState {
         // `combat_class_sprite_byte`. No runtime channel carries visual
         // presentation events yet, so the flash is not emitted here.
         self.emit_sound_effect(SoundEffect::MonsterSummon);
-        Some(CombatAiSpecialApplication::SummonDaemon { actor_slot, summon })
+        // `combat.md §9`: "the new actor's linked sprite plays the brief flame
+        // transition before settling on the Daemon tile". `audio.md §8.3.1`
+        // specifies that transition. As with the `§6.3` vanish reveal, the
+        // converge itself is a driver-side blit, so this records the published
+        // playback - flash tile, settle tile, plot order and the 31 world-tick
+        // checkpoints - rather than executing it here.
+        let flash = combat_summon_flash_playback(
+            COMBAT_CLASS_DAEMON,
+            summon.actor_slot,
+            summon.active_object_slot,
+            (summon.x, summon.y),
+        );
+        Some(CombatAiSpecialApplication::SummonDaemon {
+            actor_slot,
+            summon,
+            flash,
+        })
     }
 
     pub fn apply_combat_ai_possess_special_with_inputs(
@@ -2569,11 +2798,7 @@ impl PlayState {
                 )
             })
             .collect::<Vec<_>>();
-        let target_slot = resolve_combat_possess_candidate_slot(
-            &candidates,
-            random_target_slot,
-            self.active_player,
-        )?;
+        let target_slot = resolve_combat_possess_candidate_slot(&candidates, random_target_slot)?;
         let target_flags_before = self.combat_actors[target_slot].flags;
         let outcome = resolve_combat_possess_resistance_outcome(
             // `combat.md §9`: the sentinel is "compared against the
@@ -2812,6 +3037,160 @@ impl PlayState {
         )
     }
 
+    /// `combat.md §9` target selection, shared by the automatic actor
+    /// driver and by `§16.1`'s synthesized turn for a controlled monster -
+    /// `§6.1a` says the controlled attack driver "still picks a target the
+    /// normal way".
+    fn resolve_combat_actor_target_scan(
+        &mut self,
+        actor_slot: usize,
+        acting_group: u8,
+        class: u8,
+        cleanup_fallback_target: Option<(u8, u8)>,
+    ) -> CombatAiTargetResolution {
+        let candidates = self
+            .combat_actors
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(slot, descriptor)| {
+                // `combat.md §9`, target eligibility: "Not in a suppressed
+                // phase/hidden state, except that ... Doom ... and ...
+                // Shadow Lord bypass this extra suppression filter", then
+                // separately "the 'invisible / not-yet-revealed' flag is
+                // still rejected after the phase/hidden check. This
+                // ordinary invisibility filter is not the same as the
+                // special suppression-filter bypass above." `§6.1` gives
+                // them different bits: `0x10` phase/blink, `0x04` hidden.
+                self.combat_target_candidate_view(
+                    descriptor,
+                    slot,
+                    descriptor.is_phase_suppressed(),
+                    descriptor.is_hidden_or_unrevealed(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let bypass_suppression_filter = self.combat_suppression_filter_bypassed_for_class(class);
+        let pick = find_combat_ai_target(
+            &candidates,
+            actor_slot,
+            acting_group,
+            bypass_suppression_filter,
+        );
+        resolve_combat_ai_target_after_scan(&mut self.combat_actors, pick, cleanup_fallback_target)
+    }
+
+    /// `combat.md §16.1`: "Group-0 actors enter the combined command
+    /// handler; it prompts only for an eligible selected party member,
+    /// while a monster descriptor that control moved to group 0 still
+    /// synthesizes an automatic action." This is that synthesized action.
+    ///
+    /// `§11.1`'s announcement table publishes the whole of the turn such a
+    /// slot gets: a "Monster carrying the controlled/charmed bit (Section
+    /// 6.1a)" prints "the **reduced** banner - newline, name, colon,
+    /// newline, with **no** `, armed with ` clause - then one fixed
+    /// attempt: `Attack-`, `Aim! `, and on a failed roll `<target>
+    /// missed!`". One attempt and nothing else - the Section 9 special
+    /// abilities belong to the automatic actor driver, and `§6.1a` writer 3
+    /// is explicit that this slot "is dispatched to the keystroke/command
+    /// path, **not to the automatic driver**" (`RETRACTIONS.md` R354).
+    ///
+    /// `§6.1a`'s attack-driver reader defines the attempt: the driver
+    /// "still picks a target the normal way", the chosen target "must be at
+    /// straight-line distance exactly one", and further away "the actor's
+    /// turn produces **no action at all**: the driver does not fall through
+    /// to the ranged branch, does not consult the class's
+    /// maximum-attack-range byte, and does not step". The strike is the
+    /// fixed magic strike the shared attack-application primitive resolves,
+    /// which [`Self::resolve_and_apply_combat_monster_attack`] already
+    /// implements for a controlled attacker.
+    ///
+    /// Two things §11.1's announcement row lists are **not** emitted, here
+    /// or anywhere else, and the transcript is incomplete by exactly that
+    /// much: the reduced banner itself, and the `Attack-` / `Aim! `
+    /// prompts. They are withheld rather than deferred. `§8.1` emits the
+    /// banner "at the start of every **keyboard-driven** combatant's turn,
+    /// *before any key is read*", and whether this slot is keyboard-driven
+    /// is the open question `§16.1` and `RETRACTIONS.md` R354/R364
+    /// disagree about - §16.1 has the combined command handler "prompt[]
+    /// only for an eligible selected party member, while a monster
+    /// descriptor that control moved to group 0 still synthesizes an
+    /// automatic action", while R354 gives that slot `Nothing!` "on a
+    /// cancelled confirm" and R364 says it "is driven from the player's
+    /// prompt". Emitting the banner from this synthesized path would
+    /// double-print it under the R354/R364 reading, where
+    /// [`Self::open_pending_combat_player_turn`] is the producer. Nothing
+    /// prints them today, so no line is lost; the row is satisfied once
+    /// that ruling lands, and the question is filed with it.
+    ///
+    /// The rolls are drawn only when the attempt actually reaches the
+    /// strike. No published order covers this path, and consuming the
+    /// shared PRNG on a turn `§6.1a` says "produces no action at all" is
+    /// the more damaging of the two possible errors.
+    pub fn apply_combat_controlled_monster_command_attempt(
+        &mut self,
+        actor_slot: usize,
+        monster_attack_inputs: Option<CombatMonsterAttackInputs>,
+        draw_inputs_from_shared_prng: bool,
+    ) -> Option<CombatControlledMonsterAttemptApplication> {
+        if !self.combat_active {
+            return None;
+        }
+        let actor = *self.combat_actors.get(actor_slot)?;
+        if !combat_actor_is_active_not_dead(actor) {
+            return None;
+        }
+        // A seated party member is prompted instead; only the monster-side
+        // descriptor control moved to group 0 lands here.
+        if actor.is_party_side()
+            || self.combat_target_group_for_slot(actor_slot) != COMBAT_TARGET_GROUP_PARTY
+        {
+            return None;
+        }
+
+        // `§16.1`: target selection "rejects candidates in the acting
+        // slot's group", and this actor's resolved group is 0, so its
+        // targets are the hostile side.
+        let target = self.resolve_combat_actor_target_scan(
+            actor_slot,
+            COMBAT_TARGET_GROUP_PARTY,
+            actor.owner_target_class,
+            None,
+        );
+        let target_slot = match target {
+            CombatAiTargetResolution::ChosenActor { slot, .. } => Some(slot),
+            CombatAiTargetResolution::CleanupFallback { .. }
+            | CombatAiTargetResolution::CenterFallback { .. }
+            | CombatAiTargetResolution::NoUsableTarget => None,
+        };
+        let monster_attack = target_slot.and_then(|target_slot| {
+            let attacker = *self.combat_actors.get(actor_slot)?;
+            let defender = *self.combat_actors.get(target_slot)?;
+            if attacker.range_to(defender) != 1 {
+                return None;
+            }
+            let inputs = if draw_inputs_from_shared_prng {
+                self.combat_monster_attack_inputs(actor_slot)
+            } else {
+                monster_attack_inputs?
+            };
+            self.resolve_and_apply_combat_monster_attack(
+                actor_slot,
+                target_slot,
+                inputs.hit_raw_roll_0_to_60,
+                inputs.poison_gate_accepts,
+                inputs.poison_damage_roll,
+                inputs.forced_hit,
+            )
+        });
+
+        Some(CombatControlledMonsterAttemptApplication {
+            actor_slot,
+            target,
+            monster_attack,
+        })
+    }
+
     /// `None` for `random_cardinal_direction_codes` means "draw the
     /// `combat.md §9` fallback attempts from the shared PRNG, lazily,
     /// stopping at the first accepted direction".
@@ -2935,30 +3314,10 @@ impl PlayState {
             normal_group
         };
 
-        let candidates = self
-            .combat_actors
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(slot, descriptor)| {
-                self.combat_target_candidate_view(
-                    descriptor,
-                    slot,
-                    descriptor.is_hidden_or_unrevealed(),
-                    false,
-                )
-            })
-            .collect::<Vec<_>>();
-        let bypass_suppression_filter = self.combat_suppression_filter_bypassed_for_class(class);
-        let pick = find_combat_ai_target(
-            &candidates,
+        let target = self.resolve_combat_actor_target_scan(
             actor_slot,
             acting_group,
-            bypass_suppression_filter,
-        );
-        let target = resolve_combat_ai_target_after_scan(
-            &mut self.combat_actors,
-            pick,
+            class,
             cleanup_fallback_target,
         );
 
@@ -3120,6 +3479,7 @@ impl PlayState {
                     &[],
                 ) == (CombatAiMovementOutcome::Blocked {
                     random_cardinal_attempts: 0,
+                    action_consumed: true,
                 }) {
                     for _ in 0..COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS {
                         let code = self.random_range_u8(1, 4);
@@ -3202,7 +3562,7 @@ impl PlayState {
             let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 COMBAT_CLASS_INSECT_SWARM,
                 z,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                combat_summoned_actor_flags(COMBAT_CLASS_INSECT_SWARM),
                 legal_cells,
                 &[(accepted_x, accepted_y)],
             ) else {
@@ -3748,6 +4108,37 @@ impl PlayState {
         let roster_slot = self.combat_roster_slot_for_actor_slot(slot)?;
         let outcome = apply_combat_party_damage(self.party.get_mut(roster_slot)?, raw_damage);
         if outcome.killed {
+            // `combat.md §6.3` party-member death row: "Character HP forced
+            // to zero, roster status byte set to `'D'`, marked-dead bit
+            // ORed in, death audio played, active-player sentinel set to
+            // `0xFF` if the dead character was active"; `§6.1` bit `0x20`
+            // adds "party death ORs it in". The OR happens here, on the
+            // death itself, not on a later dispatch's sweep.
+            //
+            // The audio half is implemented on `§11.1`, which is the
+            // later and more specific publication: it opens by declaring
+            // itself "the complete printed-and-audible census of one attack
+            // outcome in the arena, in both directions", and its "Target
+            // dies" row reads "no cue of its own; the party death arm runs
+            // a full stats redraw, the monster death arms write their tiles
+            // (Section 6.3)". A complete audible census that names this
+            // arm's outcome and gives it no cue settles the question
+            // against `§6.3`'s unqualified "death audio played" - which
+            // names no envelope, no sweep and no recipe, and which
+            // `audio.md` backs with no combat party-death trigger row of
+            // any kind. So this arm emits no `SoundEffect`, deliberately
+            // and by citation, not for want of a program to play. The
+            // wording conflict between the two sections is reported as an
+            // open spec question.
+            //
+            // The redraw `§11.1` does name is emitted: the engine's
+            // panel/viewport refresh signal is the visibility-dirty mark,
+            // the same one the `§6.3` sleep helper's "redraws the full
+            // stats panel" uses.
+            self.mark_visibility_dirty();
+            if let Some(actor) = self.combat_actors.get_mut(slot) {
+                actor.mark_dead();
+            }
             if self.active_player == Some(roster_slot) {
                 self.active_player = None;
             }
@@ -3821,9 +4212,15 @@ impl PlayState {
         true
     }
 
-    /// `combat.md §6.3`: the vanish tail scans party combat descriptors in
-    /// slot order and handles only the first party-side controlled actor.
-    fn apply_combat_vanish_party_control_faint_tail(&mut self) -> Option<usize> {
+    /// `combat.md §6.3`: "It examines party combat slots zero through five
+    /// in order and stops at the first descriptor carrying both the
+    /// party-side and controlled/charmed bits."
+    ///
+    /// Two callers reach it: the vanish death arm of `§6.3`, which ignores
+    /// the return value, and the `§14` defeat transition, which runs it
+    /// first and only prints the loss line if it "cannot restore an
+    /// actor".
+    pub(crate) fn apply_combat_party_control_faint_scan(&mut self) -> Option<usize> {
         let actor_slot = (0..COMBAT_PARTY_ACTOR_SLOTS).find(|slot| {
             let flags = self.combat_actors[*slot].flags;
             flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0
@@ -3921,7 +4318,7 @@ impl PlayState {
                     .unwrap_or(0);
                 self.run_combat_terrain_reveal(target_slot, (actor.x, actor.y), terrain_tile);
                 self.release_combat_actor_slot_negative(target_slot);
-                let _ = self.apply_combat_vanish_party_control_faint_tail();
+                let _ = self.apply_combat_party_control_faint_scan();
                 changed = true;
             }
             CombatMonsterDeathPath::Incorporeal => {
@@ -4001,7 +4398,12 @@ impl PlayState {
                         actor.x,
                         actor.y,
                         death_z,
-                        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                        // `combat.md §6.3`: the Gazer branch seeds its
+                        // Insect Swarm "exactly as any other monster
+                        // placement would (§ 5): ... **the hostile faction
+                        // tag**, class id `31`". `§6.1` keeps `0x80` off
+                        // every monster descriptor.
+                        combat_monster_placement_flags(COMBAT_CLASS_INSECT_SWARM),
                     )
                     .is_some()
                 {
@@ -4057,17 +4459,40 @@ impl PlayState {
             .get(usize::from(parent.active_object_slot))
             .map(|object| object.z)
             .unwrap_or_default();
+        // `combat.md §6.1`: "Monster and object descriptors never carry"
+        // `0x80`; `§16.1` maps every non-passive placed class to the
+        // ordinary hostile tag `0x40`.
         let child = self.place_combat_monster_at_arena_cell(
             placement.class,
             parent.x,
             parent.y,
             z,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(placement.class),
         )?;
         if let Some(stats) = combat_class_stats(placement.class) {
             self.message = format!("{} divides!", stats.name);
         }
         Some(child)
+    }
+
+    /// `combat.md §6.1`, bit `0x80`: "It is the discriminator the
+    /// damage/death resolver uses to choose the party-death branch over
+    /// the monster-death branch, so an engine that also sets it for live
+    /// monsters routes every monster death through the party path."
+    ///
+    /// The slot index is consulted only when the target has no seated
+    /// descriptor to discriminate on, which is not a state production
+    /// combat reaches: `§5` seats every party member's descriptor with
+    /// `0x80` before the round loop starts. Making the bit test
+    /// unconditional would hand a *free* slot - `§6.1`: "A descriptor whose
+    /// flags byte is entirely zero is a free slot" - to the monster damage
+    /// branch, which is a change to what an unseated slot means and belongs
+    /// with that row, not this one.
+    fn combat_damage_target_takes_party_branch(&self, target_slot: usize) -> bool {
+        match self.combat_actors.get(target_slot).copied() {
+            Some(actor) if !actor.is_empty() => actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0,
+            _ => target_slot < COMBAT_PARTY_ACTOR_SLOTS,
+        }
     }
 
     /// `combat.md` 11.1, census row "Damage zero or negative | both |
@@ -4097,7 +4522,7 @@ impl PlayState {
         raw_damage: i16,
         magical: bool,
     ) -> Option<CombatWeaponDamageApplication> {
-        if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
+        if self.combat_damage_target_takes_party_branch(target_slot) {
             let damage = self.apply_combat_party_damage_to_slot(target_slot, raw_damage)?;
             self.emit_combat_graze_cue(raw_damage);
             return Some(CombatWeaponDamageApplication::Party {
@@ -4736,10 +5161,25 @@ impl PlayState {
             variant: audio::spell_circle(REPEL_UNDEAD_SPELL_INDEX),
         });
 
-        let accepted = collect_repel_undead_actor_slots(&self.combat_actors)
-            .into_iter()
-            .filter(|slot| !self.combat_resistance_blocks(caster_index, *slot))
-            .collect::<Vec<_>>();
+        // `combat.md §9`: "Repel Undead is exactly the same sweep with one
+        // extra condition" - so it collects through the Cause Fear sweep's own
+        // live / monster-side / not-protected test, narrowed by the undead
+        // class-flag bit, and not through the directed-spell cursor predicate.
+        let mut groups = [0u8; COMBAT_ACTOR_SLOTS];
+        for (slot, group) in groups.iter_mut().enumerate() {
+            *group = self.combat_target_group_for_slot(slot);
+        }
+        let protected_or_immune = [false; COMBAT_ACTOR_SLOTS];
+        let caster_group = groups.get(caster_index).copied().unwrap_or(1);
+        let accepted = collect_repel_undead_actor_slots(
+            &self.combat_actors,
+            &groups,
+            caster_group,
+            &protected_or_immune,
+        )
+        .into_iter()
+        .filter(|slot| !self.combat_resistance_blocks(caster_index, *slot))
+        .collect::<Vec<_>>();
         let affected = apply_cause_fear_critical_hp_setup(&mut self.combat_actors, &accepted);
 
         self.advance_turn();
@@ -4893,6 +5333,11 @@ impl PlayState {
         self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)
     }
 
+    /// `combat.md §7` step 7, the standing-cell hazard pass: it "reads the
+    /// arena terrain under the actor that just acted, and - if that terrain is
+    /// not itself damaging - scans the object table for any object other than
+    /// the actor's own sitting on the same cell", then applies whichever of
+    /// the three damaging kinds it found.
     pub fn apply_combat_post_dispatch_contact_for_actor_position(
         &mut self,
         actor_slot: usize,
@@ -4906,25 +5351,72 @@ impl PlayState {
             .get(usize::from(actor.y))?
             .get(usize::from(actor.x))?;
         if let Some(field) = combat_arena_terrain_contact_kind(terrain) {
-            let field_contact =
-                self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)?;
-            return Some(CombatPostDispatchContactApplication {
-                source: CombatPostDispatchContactSource::ArenaTerrain { tile: terrain },
-                field_contact,
-            });
+            return self.apply_combat_hazard_tier_for_actor_position(
+                actor_slot,
+                field,
+                CombatPostDispatchContactSource::ArenaTerrain { tile: terrain },
+            );
         }
         let (active_object_slot, field) = self.find_combat_arena_field_marker_excluding(
             actor.x,
             actor.y,
             Some(actor.active_object_slot as usize),
         )?;
-        if field == CombatArenaFieldKind::Energy {
-            return None;
-        }
+        self.apply_combat_hazard_tier_for_actor_position(
+            actor_slot,
+            field,
+            CombatPostDispatchContactSource::PlacedMarker { active_object_slot },
+        )
+    }
+
+    fn apply_combat_hazard_tier_for_actor_position(
+        &mut self,
+        actor_slot: usize,
+        field: CombatArenaFieldKind,
+        source: CombatPostDispatchContactSource,
+    ) -> Option<CombatPostDispatchContactApplication> {
+        let tier = combat_hazard_tier_for_field(field);
+        // `combat.md §7` step 7: both damaging tiers "play the hit sound", the
+        // low tier "only while the actor's own object entry is an ordinary
+        // live entry". The only linked-entry test any document publishes is
+        // `§11`'s Poison row - "reject contact when the target's linked
+        // active-object tile/class byte is at least `0x80`" - so the flag uses
+        // exactly that predicate rather than adding an unpublished emptiness
+        // conjunct on top of it; one published clause, one predicate, shared
+        // with the contact path below.
+        //
+        // **No cue is emitted here.** "The hit sound" (`§7` step 7) and "the
+        // target sound" (`§11`'s molten-lava row) name a sound without
+        // publishing a recipe: `audio.md` carries no standing-hazard row in
+        // its trigger inventory or its blocking-tone census, and `§11.1` lists
+        // "the standing-hazard tier's trigger conditions" under **Not
+        // covered**. Attaching `audio.md §7.4`'s attack-application swing to
+        // it would be inventing a cue identity, so the tier is **recorded**
+        // (`hit_sound_played`) and left silent until a document names the
+        // program. See the spec question recorded with this change.
+        let ordinary_live_entry = self
+            .active_objects
+            .get(
+                self.combat_actors
+                    .get(actor_slot)
+                    .copied()?
+                    .active_object_slot as usize,
+            )
+            .is_some_and(|object| object.tile < 0x80);
+        let hit_sound_played = match tier {
+            Some(CombatHazardTier::Low) => ordinary_live_entry,
+            Some(CombatHazardTier::Middle) => true,
+            _ => false,
+        };
         let field_contact =
             self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)?;
+        let middle = tier == Some(CombatHazardTier::Middle);
         Some(CombatPostDispatchContactApplication {
-            source: CombatPostDispatchContactSource::PlacedMarker { active_object_slot },
+            source,
+            tier,
+            hit_sound_played,
+            finalize_hook_ran: middle,
+            raises_leave_combat_flag: middle,
             field_contact,
         })
     }
@@ -4974,6 +5466,36 @@ impl PlayState {
             0,
             forced_hit,
         )?;
+        // `combat.md §11.1` publishes two different party swing cues, keyed by
+        // the arm the resolver's own range routing selects: party **melee**
+        // gets "the same swing sweep in the opposite direction, roughly 400 Hz
+        // toward 750 Hz (`audio.md` section 7.4)", while party **ranged or
+        // thrown** gets "a descending sweep, roughly 1300 Hz toward 300 Hz,
+        // after `Aim! ` and a confirmed cursor". The route is therefore read
+        // off the very `CombatWeaponAttackInput` that
+        // [`resolve_combat_weapon_attack`] routes on below, so the cue and the
+        // resolution cannot disagree.
+        //
+        // `audio.md §7.4` keeps the cue "unconditional[], before the to-hit
+        // roll, and only then branches" - the miss arm that follows has "no
+        // audio call anywhere on it" - so it still precedes the roll on both
+        // arms, and ahead of the stage-two defence draw. It is withheld only
+        // where the route resolves to nothing at all, which is the
+        // `OutOfRange` resolution: that attempt reaches no attack application
+        // and therefore no attack-application cue.
+        match resolve_combat_weapon_attack_range_route(
+            input.target_range,
+            input.range_cap,
+            input.effect_code,
+        ) {
+            Some(CombatWeaponAttackRangeRoute::Melee) => {
+                self.emit_sound_effect(SoundEffect::PartyMeleeAttackSwing)
+            }
+            Some(CombatWeaponAttackRangeRoute::Ranged { .. }) => {
+                self.emit_sound_effect(SoundEffect::PartyRangedAttackSwing)
+            }
+            None => {}
+        }
         if combat_weapon_attack_takes_defence_draw(input) {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
@@ -5010,6 +5532,36 @@ impl PlayState {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// `combat.md §6.3`: the common attack result narrator "first clears
+    /// the field's kill-narrated bit `0x01`; when `0x02` is still present,
+    /// the combined suppression test skips the generic killed/slept/hit
+    /// chain". `§11.1` scopes that reader to "the kill, sleep, hit and
+    /// wound chain" and keeps the miss line a separate producer, so a
+    /// miss, a poison line and the resolutions that print nothing never
+    /// reach the gate and never touch the field - `§6.3` leaves those to
+    /// the walker's own zeroing.
+    ///
+    /// The gate runs *here*, inside the dispatch that resolved the attack.
+    /// `§6.3`: "If that narrator is not reached, the combat walker
+    /// replaces the whole field with zero before the next actor dispatch",
+    /// so the field only ever describes the slot currently being
+    /// dispatched. Running it later - once a round walk has visited more
+    /// slots - would read a field a subsequent dispatch had already
+    /// zeroed, and the suppression would silently not fire.
+    fn apply_combat_monster_attack_narrator_gate(
+        &mut self,
+        mut attack: CombatMonsterAttackApplication,
+    ) -> CombatMonsterAttackApplication {
+        if !combat_monster_attack_reaches_generic_chain(&attack) {
+            return attack;
+        }
+        let narrates_kill = combat_weapon_damage_application_killed(attack.damage_application);
+        let gate = resolve_combat_attack_narrator_gate(self.combat_action_result, narrates_kill);
+        self.combat_action_result = gate.result_after;
+        attack.generic_chain_suppressed = !gate.run_generic_chain;
+        attack
+    }
+
     pub fn resolve_and_apply_combat_monster_attack(
         &mut self,
         attacker_slot: usize,
@@ -5031,6 +5583,14 @@ impl PlayState {
         let attacker_stats = combat_class_stats(attacker.owner_target_class)?;
         let ranged = combat_ranged_effect_stats(attacker.owner_target_class)?;
         let target_range = attacker.range_to(target);
+        // `combat.md §11.1`: the monster swing row covers "monster, melee and
+        // ranged" and is "played **before** the roll, running **downwards**
+        // (roughly 750 Hz toward 400 Hz)", against the party-melee row's "the
+        // same swing sweep in the opposite direction". `audio.md §7.4` keeps
+        // the cue unconditional ahead of the to-hit roll, and its miss arm
+        // "returns silently ... with no narration at all, **on its melee
+        // arm**".
+        self.emit_sound_effect(SoundEffect::MonsterAttackSwing);
         // `magic.md §7`: ordinary automatic adjacent attacks install their
         // source before the hit test, so misses and poison-special returns
         // record exactly like ordinary hits. `combat.md §6.1a`: the
@@ -5110,15 +5670,18 @@ impl PlayState {
                 | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
                 | CombatWeaponAttackResolution::Miss { .. } => None,
             };
-            return Some(CombatMonsterAttackApplication {
-                attacker_slot,
-                target_slot,
-                poison_status_outcome: None,
-                resolution: Some(resolution),
-                damage_application,
-                food_theft: None,
-                sleep_effect: None,
-            });
+            return Some(self.apply_combat_monster_attack_narrator_gate(
+                CombatMonsterAttackApplication {
+                    attacker_slot,
+                    target_slot,
+                    poison_status_outcome: None,
+                    resolution: Some(resolution),
+                    damage_application,
+                    food_theft: None,
+                    sleep_effect: None,
+                    generic_chain_suppressed: false,
+                },
+            ));
         }
 
         let mut poison_status_outcome = None;
@@ -5155,15 +5718,18 @@ impl PlayState {
                     // exit cascade" an earlier revision named
                     // (`RETRACTIONS.md` R358).
                     self.request_party_stats_panel_refresh();
-                    return Some(CombatMonsterAttackApplication {
-                        attacker_slot,
-                        target_slot,
-                        poison_status_outcome: Some(poison_outcome),
-                        resolution: None,
-                        damage_application: None,
-                        food_theft: None,
-                        sleep_effect: None,
-                    });
+                    return Some(self.apply_combat_monster_attack_narrator_gate(
+                        CombatMonsterAttackApplication {
+                            attacker_slot,
+                            target_slot,
+                            poison_status_outcome: Some(poison_outcome),
+                            resolution: None,
+                            damage_application: None,
+                            food_theft: None,
+                            sleep_effect: None,
+                            generic_chain_suppressed: false,
+                        },
+                    ));
                 }
                 CombatPoisonStatusAttackOutcome::FallbackDamage { raw_damage } => {
                     let damage_application = self.apply_combat_weapon_damage_to_target(
@@ -5172,15 +5738,18 @@ impl PlayState {
                         raw_damage as i16,
                         true,
                     );
-                    return Some(CombatMonsterAttackApplication {
-                        attacker_slot,
-                        target_slot,
-                        poison_status_outcome: Some(poison_outcome),
-                        resolution: None,
-                        damage_application,
-                        food_theft: None,
-                        sleep_effect: None,
-                    });
+                    return Some(self.apply_combat_monster_attack_narrator_gate(
+                        CombatMonsterAttackApplication {
+                            attacker_slot,
+                            target_slot,
+                            poison_status_outcome: Some(poison_outcome),
+                            resolution: None,
+                            damage_application,
+                            food_theft: None,
+                            sleep_effect: None,
+                            generic_chain_suppressed: false,
+                        },
+                    ));
                 }
                 CombatPoisonStatusAttackOutcome::NotPoisonStatusClass
                 | CombatPoisonStatusAttackOutcome::GateRejected => {
@@ -5214,6 +5783,11 @@ impl PlayState {
                 damage_application: None,
                 food_theft: None,
                 sleep_effect: Some(sleep_effect),
+                // `combat.md §6.3`'s vanish gate scopes itself to "the
+                // generic killed/slept/hit chain" reached from ordinary
+                // damage; this arm resolves nothing and takes the field's
+                // default.
+                generic_chain_suppressed: false,
             });
         }
 
@@ -5251,6 +5825,7 @@ impl PlayState {
                     damage_application: None,
                     food_theft: Some(outcome),
                     sleep_effect: None,
+                    generic_chain_suppressed: false,
                 });
             }
             // "If either the draw or the food test fails, the attack falls
@@ -5283,15 +5858,18 @@ impl PlayState {
             | CombatWeaponAttackResolution::Miss { .. } => None,
         };
 
-        Some(CombatMonsterAttackApplication {
-            attacker_slot,
-            target_slot,
-            poison_status_outcome,
-            resolution: Some(resolution),
-            damage_application,
-            food_theft,
-            sleep_effect: None,
-        })
+        Some(
+            self.apply_combat_monster_attack_narrator_gate(CombatMonsterAttackApplication {
+                attacker_slot,
+                target_slot,
+                poison_status_outcome,
+                resolution: Some(resolution),
+                damage_application,
+                food_theft,
+                sleep_effect: None,
+                generic_chain_suppressed: false,
+            }),
+        )
     }
 
     pub fn combat_monster_amulet_turning_scatter_applies(
@@ -5382,6 +5960,7 @@ impl PlayState {
                 damage_application: None,
                 food_theft: None,
                 sleep_effect: None,
+                generic_chain_suppressed: false,
             });
         }
 
@@ -5399,8 +5978,21 @@ impl PlayState {
                 damage_application: None,
                 food_theft: None,
                 sleep_effect: None,
+                generic_chain_suppressed: false,
             });
         };
+        // `audio.md §7.4`, as corrected by `RETRACTIONS.md` R355: when a
+        // self-acting actor's ranged shot scatters and "the scattered cell
+        // turns out to hold an actor, the ordinary hit chain runs against that
+        // actor with its full narration and **its own sounds**". The ordinary
+        // hit chain's own sound is the swing cue, played "unconditionally,
+        // before the to-hit roll". The same paragraph says "the ranged arm is
+        // silent only when the scatter lands on nobody", so the cue sits after
+        // the impact-cell occupancy test above and before the roll below.
+        // `combat.md §11.1`'s swing row covers "monster, melee and ranged"
+        // with one downward sweep, so the ranged arm plays the same monster
+        // cue the melee arm does.
+        self.emit_sound_effect(SoundEffect::MonsterAttackSwing);
         let defender_rating = self.combat_target_weight(target_slot)?;
         let defence_rating = self.combat_actor_defence_rating(target_slot)?;
         let attacker_rating = combat_monster_attacker_rating(
@@ -5449,15 +6041,18 @@ impl PlayState {
             | CombatWeaponAttackResolution::Miss { .. } => None,
         };
 
-        Some(CombatMonsterAttackApplication {
-            attacker_slot,
-            target_slot,
-            poison_status_outcome: None,
-            resolution: Some(resolution),
-            damage_application,
-            food_theft: None,
-            sleep_effect: None,
-        })
+        Some(
+            self.apply_combat_monster_attack_narrator_gate(CombatMonsterAttackApplication {
+                attacker_slot,
+                target_slot,
+                poison_status_outcome: None,
+                resolution: Some(resolution),
+                damage_application,
+                food_theft: None,
+                sleep_effect: None,
+                generic_chain_suppressed: false,
+            }),
+        )
     }
 
     pub fn apply_combat_active_player_digit(
@@ -5667,11 +6262,21 @@ impl PlayState {
         }
         // `combat.md §6.1a`: the round walker picks the keystroke path
         // through the slot-to-group helper, so a party-side actor
-        // carrying the controlled bit runs on the automatic driver and a
-        // monster-side actor carrying it runs on the prompt. `magic.md
-        // §8`: a stamped creature "takes its turns at the player's
-        // prompt" (`RETRACTIONS.md` R354).
-        if !combat_slot_takes_player_command_path(actor_slot, active_actor) {
+        // carrying the controlled bit runs on the automatic driver while
+        // a monster-side slot carrying it "is dispatched to the
+        // keystroke/command path, not to the automatic driver"
+        // (`RETRACTIONS.md` R354).
+        //
+        // Reaching the handler is not the same as being prompted by it.
+        // `§16.1`: it "prompts only for an eligible selected party member,
+        // while a monster descriptor that control moved to group 0 still
+        // synthesizes an automatic action" - which the walker does at
+        // dispatch time through
+        // `apply_combat_controlled_monster_command_attempt`. So no
+        // player-typed command is ever accepted for such a slot; `§11.1`
+        // gives it one fixed attempt, and `magic.md` records that what a
+        // player could otherwise do with it "is not established here".
+        if !combat_slot_prompts_for_player_command(actor_slot, active_actor) {
             return None;
         }
 
@@ -5808,7 +6413,12 @@ impl PlayState {
                         ..
                     },
             } => CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat),
-            _ => self.combat_round_loop_control(false),
+            // `combat.md §7` places the recount that owns the party
+            // control/faint restore "after a dispatched action". This
+            // provisional read happens before the weapon attack below has
+            // been applied, so it takes the read-only census; the mutating
+            // recount is the post-action one further down.
+            _ => self.combat_round_loop_control_census(false, false),
         };
         let weapon_attack = self.apply_combat_player_weapon_attack_for_action(
             actor_slot,
@@ -5827,8 +6437,9 @@ impl PlayState {
         // closes; free refusals and actor-selection digits bypass it entirely.
         let digit_selection = matches!(action, CombatPlayerCommandAction::ActivePlayerSelection(_));
         let maintenance_deferred = combat_player_command_action_defers_maintenance(&action);
+        let dispatched_action = !(reprompt || digit_selection || maintenance_deferred);
         let (absorbable_contact, post_dispatch_contact, ring_pass, active_effect_age) =
-            if reprompt || digit_selection || maintenance_deferred {
+            if !dispatched_action {
                 (None, None, None, None)
             } else {
                 let absorbable_contact =
@@ -5843,16 +6454,50 @@ impl PlayState {
                     Some(self.age_active_effect()),
                 )
             };
-        if post_dispatch_contact.is_some()
-            && !matches!(
+        // `combat.md §7` step 7 says the middle damaging tier "raises the
+        // leave-combat flag" and names no reader for it; §11's more specific
+        // statements of the same Fire result - the arena-terrain row ("play the
+        // target sound, pass a rolled raw value ..., run no-attacker
+        // finalization, and request a status-panel refresh") and the per-marker
+        // Fire row - list no leave-combat consequence at all. `RETRACTIONS.md`
+        // R288 withdrew an earlier reading that mapped another combat event
+        // onto the leave-combat path and ended the round loop. So the flag is
+        // **recorded** on the contact record (`raises_leave_combat_flag`) and
+        // deliberately not wired to a round-loop exit: standing on lava does
+        // not end the fight until a document names the flag's reader. The
+        // monster dispatch path (`apply_combat_actor_slot_dispatch_internal`)
+        // treats it the same way, so one published tier has one behaviour on
+        // both paths. See the spec question recorded with this change.
+        //
+        // The re-evaluation below is **not** that flag's reader and predates
+        // this change: the hazard pass can mutate actor state, so the
+        // round-loop control is recomputed from the state the pass left, with
+        // the leave-combat request the player's own action already produced
+        // carried across.
+        if post_dispatch_contact.is_some() {
+            let leave_combat = matches!(
                 control_after,
                 CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+            );
+            control_after = self.combat_round_loop_control(leave_combat, false);
+        }
+        // `combat.md §7`: this is the post-dispatched-action recount, so it
+        // is the one that "first gives the party control/faint helper a
+        // chance to restore one actor". A provisional defeat from the
+        // read-only census above therefore has to be re-resolved here.
+        //
+        // It is scoped to arms that actually dispatched an action - a free
+        // re-prompt, an active-player digit and a multi-stage command still
+        // awaiting its continuation keep the read-only census, exactly as
+        // the round walker's no-action slot visits do.
+        if dispatched_action
+            && matches!(
+                control_after,
+                CombatRoundLoopControl::ContinueActorWalk
+                    | CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
             )
         {
-            control_after = self.combat_round_loop_control(false);
-        }
-        if matches!(control_after, CombatRoundLoopControl::ContinueActorWalk) {
-            control_after = self.combat_round_loop_control(false);
+            control_after = self.combat_round_loop_control(false, false);
         }
         let victory_announced = !reprompt
             && matches!(control_after, CombatRoundLoopControl::ContinueActorWalk)
@@ -6104,7 +6749,12 @@ impl PlayState {
             if let Some(object) = self.active_objects.get_mut(active_object_slot)
                 && !object.is_empty()
             {
-                *object = ActiveObject::empty();
+                // `combat.md §6.3`: "the negative-form release used by a
+                // vanishing monster **or fled actor** ... zeros linked
+                // active-object bytes 0 through 5 while preserving that
+                // record's two trailing auxiliary bytes. ... an all-zero
+                // record is not required."
+                object.clear_record_prefix();
                 cleared_active_object = true;
             }
         }
@@ -6127,10 +6777,17 @@ impl PlayState {
     /// suppresses this. Returns whether this call is the one that fires,
     /// so the caller prints [`COMBAT_VICTORY_LINE`]; the stored guard
     /// makes every later call return `false`.
+    ///
+    /// `§16.1` makes side counting one contract for both halves - "Group 1
+    /// counts as foes and group 0 as friends. Control and the traitor
+    /// identity therefore affect victory detection" - so the friendly half
+    /// runs the same group resolver rather than the raw `0x80` scan. The
+    /// `§14` Escape handler keeps its own raw party-side test; it looks for
+    /// "any party-side descriptor whose marked-dead bit is clear", which is
+    /// a flag test and not a side count.
     pub fn announce_combat_victory_if_needed(&mut self) -> bool {
-        if combat_has_active_not_dead_non_party_actor(&self.combat_actors)
-            || !combat_escape_has_unmarked_party_side_actor(&self.combat_actors)
-        {
+        let census = combat_side_census(&self.combat_actors);
+        if census.foes_remain() || !census.friends_remain() {
             return false;
         }
         let Some(snapshot) = &mut self.combat_frame_snapshot else {
@@ -6194,31 +6851,68 @@ impl PlayState {
         )
     }
 
-    /// `combat.md §7` post-dispatch checks.
+    /// `combat.md §16.1`: "Side counting skips empty, dead, and passive
+    /// descriptors, then uses the same group resolver. Group 1 counts as
+    /// foes and group 0 as friends. Control and the traitor identity
+    /// therefore affect victory detection." A charmed monster is group 0
+    /// and stops counting as a foe; a charmed party member - or the
+    /// shipped traitor identity - is group 1 and stops counting as a
+    /// friend.
     ///
-    /// *Retracted (`RETRACTIONS.md` R358).* This helper used to take a
-    /// `leave_combat_flag` and exit the round loop on it. **Nothing leaves
-    /// combat on that byte**: "It is a one-bit 'the party stats panel is
-    /// stale' request with a single consumer shape: each of the four
-    /// world/combat mode loops ... reads it once at the top of its per-turn
-    /// entry point and, if it is set, redraws the full party stats panel and
-    /// clears it ... No reader returns, breaks a loop, writes a scene byte,
-    /// or touches any combat-exit state." The latch now lives on
-    /// [`PlayState::party_stats_panel_refresh_pending`], and the only
-    /// `LeaveCombat` exits left here are the published ones - no party-side
-    /// actor remains, or an accepted Escape cleanup.
-    pub fn combat_round_loop_control(&self, exhausted_slots: bool) -> CombatRoundLoopControl {
-        let foes_remain = combat_has_active_not_dead_non_party_actor(&self.combat_actors);
-        let party_remains = combat_escape_has_unmarked_party_side_actor(&self.combat_actors);
-        if !party_remains && foes_remain {
+    /// This is the read-only form, and it is what every slot visit that
+    /// dispatches no action uses. `§14` requires the defeat transition to
+    /// run the party control/faint helper before conceding, so the
+    /// post-dispatched-action recount takes the mutating
+    /// [`Self::combat_round_loop_control`] instead.
+    pub fn combat_round_loop_control_census(
+        &self,
+        leave_combat_flag: bool,
+        exhausted_slots: bool,
+    ) -> CombatRoundLoopControl {
+        let census = combat_side_census(&self.combat_actors);
+        if !census.friends_remain() && census.foes_remain() {
             CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
-        } else if !party_remains {
+        } else if !census.friends_remain() || leave_combat_flag {
             CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
         } else if exhausted_slots {
             CombatRoundLoopControl::StartNextRound
         } else {
             CombatRoundLoopControl::ContinueActorWalk
         }
+    }
+
+    /// `combat.md §14` **Defeat**: "When no party-side actor remains while
+    /// at least one foe does, the engine **first runs the party
+    /// control/faint helper**. If it cannot restore an actor, the engine
+    /// prints `BATTLE IS LOST!` ... and returns word `1`."
+    ///
+    /// The helper restores an actor exactly when it matches: clearing the
+    /// controlled/charmed bit moves that party descriptor from group 1
+    /// back to group 0 (`§16.1`), so the recount below finds a friend and
+    /// the round loop continues instead of conceding.
+    ///
+    /// This form mutates - the faint tail prints `<name> passes out!`,
+    /// plays the blocking faint envelope, removes the Sword of Chaos and
+    /// sleeps the member, and the sleep arm advances a world tick - so it
+    /// belongs only on the recount `§7` places "after a dispatched
+    /// action". Every other recount site takes
+    /// [`Self::combat_round_loop_control_census`].
+    pub fn combat_round_loop_control(
+        &mut self,
+        leave_combat_flag: bool,
+        exhausted_slots: bool,
+    ) -> CombatRoundLoopControl {
+        let control = self.combat_round_loop_control_census(leave_combat_flag, exhausted_slots);
+        if !matches!(
+            control,
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+        ) {
+            return control;
+        }
+        if self.apply_combat_party_control_faint_scan().is_none() {
+            return control;
+        }
+        self.combat_round_loop_control_census(leave_combat_flag, exhausted_slots)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -6380,7 +7074,7 @@ impl PlayState {
         self.run_combat_round_loop_entry_prologue_if_needed();
         if slot >= COMBAT_ACTOR_SLOTS {
             return CombatActorSlotDispatchApplication::EndOfRound {
-                control: self.combat_round_loop_control(true),
+                control: self.combat_round_loop_control_census(false, true),
             };
         }
 
@@ -6400,7 +7094,7 @@ impl PlayState {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
                 action: CombatActorDispatchAction::Inactive,
-                control_after: self.combat_round_loop_control(false),
+                control_after: self.combat_round_loop_control_census(false, false),
             };
         }
 
@@ -6412,7 +7106,7 @@ impl PlayState {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
                 action: CombatActorDispatchAction::Inactive,
-                control_after: self.combat_round_loop_control(false),
+                control_after: self.combat_round_loop_control_census(false, false),
             };
         }
 
@@ -6428,7 +7122,7 @@ impl PlayState {
                 slot,
                 phase_tick: None,
                 action: CombatActorDispatchAction::PartyDeathSweep,
-                control_after: self.combat_round_loop_control(false),
+                control_after: self.combat_round_loop_control_census(false, false),
             };
         }
 
@@ -6437,7 +7131,7 @@ impl PlayState {
                 slot,
                 phase_tick: None,
                 action: CombatActorDispatchAction::Inactive,
-                control_after: self.combat_round_loop_control(false),
+                control_after: self.combat_round_loop_control_census(false, false),
             };
         };
         if !phase_tick.actor_should_dispatch() {
@@ -6445,24 +7139,16 @@ impl PlayState {
                 slot,
                 phase_tick: Some(phase_tick),
                 action: CombatActorDispatchAction::Waiting,
-                control_after: self.combat_round_loop_control(false),
+                control_after: self.combat_round_loop_control_census(false, false),
             };
         }
 
-        if actor.is_status_disabled() {
-            let wake_roll = self.combat_sleep_wake_roll(slot);
-            let wake = self
-                .apply_combat_sleep_wake_dispatch(slot, wake_roll)
-                .expect("status-disabled actor should produce a wake dispatch");
-            let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
-            self.clear_combat_interference_for_completed_action(slot);
-            return CombatActorSlotDispatchApplication::Slot {
-                slot,
-                phase_tick: Some(phase_tick),
-                action: CombatActorDispatchAction::StatusDisabledWake { wake },
-                control_after: self.combat_round_loop_control(false),
-            };
-        }
+        // `combat.md §9`: "Both gates precede the invisibility, sleep-wake and
+        // flee checks, so a skipped dispatch does not run the wake roll." The
+        // sleep-wake roll therefore cannot sit ahead of the automatic actor
+        // driver's Negate Time and Quickness gates; it is evaluated below,
+        // after the group split has decided whether this dispatch reaches the
+        // driver at all.
 
         // `combat.md §6.1a` Writers #4, "The Sword of Chaos
         // compulsion": "On the player-driven branch, if the slot is
@@ -6518,12 +7204,19 @@ impl PlayState {
         // is explicit about the monster-side half: the bit "**does** hand a
         // monster to the player's prompt ... a monster carrying the bit is
         // dispatched to the keystroke/command path and takes its turns
-        // under player control". That is why an ordinary hostile's melee
-        // miss is silent while a controlled monster's prints `<target>
-        // missed!` - the two reach different narrators, not different
-        // strings.
-        let action = if self.combat_target_group_for_slot(slot) == COMBAT_TARGET_GROUP_PARTY {
-            CombatActorDispatchAction::PlayerReady
+        // under player control". Only the reading that *every* slot carrying
+        // the bit reaches the player parser stays withdrawn - for a
+        // party-side slot the routing is the other way round. That is why an
+        // ordinary hostile's melee miss is silent while a controlled
+        // monster's prints `<target> missed!` - the two reach different
+        // narrators, not different strings.
+        let dispatch_group = self.combat_target_group_for_slot(slot);
+        // `combat.md §9`: the Negate Time and Quickness gates live "at the head
+        // of the automatic actor driver", so they are read only for the group
+        // the walker routes to that driver, and they are read **before** the
+        // sleep-wake roll below.
+        let driver_gate = if dispatch_group == COMBAT_TARGET_GROUP_PARTY {
+            None
         } else if resolve_negate_time_dispatch_skipped(
             self.active_effect_tag,
             self.active_effect_counter,
@@ -6531,7 +7224,7 @@ impl PlayState {
             // `magic.md` tag `T`: the automatic actor driver returns
             // immediately while Negate Time is live, so every self-acting
             // actor's turn is skipped outright.
-            CombatActorDispatchAction::NegateTimeSkipped
+            Some(CombatActorDispatchAction::NegateTimeSkipped)
         } else if resolve_quickness_dispatch_consumed(
             self.active_effect_tag,
             self.active_effect_counter,
@@ -6540,7 +7233,43 @@ impl PlayState {
             // `combat.md §8`: the single Quickness gate sits at the head of the
             // automatic actor driver, so a self-acting slot forfeits about half
             // its dispatches while the effect is live.
-            CombatActorDispatchAction::QuicknessSkipped
+            Some(CombatActorDispatchAction::QuicknessSkipped)
+        } else {
+            None
+        };
+
+        let action = if let Some(gate) = driver_gate {
+            gate
+        } else if actor.is_status_disabled() {
+            // `combat.md §6.2`: the wake check is owned by the acting slot's
+            // dispatch and spends it either way - but only on a dispatch the
+            // gates above did not already skip (`§9`).
+            let wake_roll = self.combat_sleep_wake_roll(slot);
+            let wake = self
+                .apply_combat_sleep_wake_dispatch(slot, wake_roll)
+                .expect("status-disabled actor should produce a wake dispatch");
+            CombatActorDispatchAction::StatusDisabledWake { wake }
+        } else if dispatch_group == COMBAT_TARGET_GROUP_PARTY {
+            if self.combat_actors[slot].is_party_side() {
+                CombatActorDispatchAction::PlayerReady
+            } else {
+                // `combat.md §16.1`: the combined command handler "prompts
+                // only for an eligible selected party member, while a
+                // monster descriptor that control moved to group 0 still
+                // synthesizes an automatic action". The slot is in the
+                // handler either way - that is what `§6.1a` writer 3 and
+                // `RETRACTIONS.md` R354 corrected - but it never reaches a
+                // keystroke.
+                let monster_attack_inputs = monster_attack_inputs_by_slot
+                    .iter()
+                    .find_map(|&(input_slot, inputs)| (input_slot == slot).then_some(inputs));
+                let attempt = self.apply_combat_controlled_monster_command_attempt(
+                    slot,
+                    monster_attack_inputs,
+                    draw_ai_inputs_from_shared_prng,
+                );
+                CombatActorDispatchAction::ControlledMonsterAttempt { attempt }
+            }
         } else {
             let monster_attack_inputs = monster_attack_inputs_by_slot
                 .iter()
@@ -6569,15 +7298,38 @@ impl PlayState {
         };
 
         if !matches!(action, CombatActorDispatchAction::PlayerReady) {
+            // `combat.md §7` step 7's hazard pass follows every dispatched
+            // action, monster or player alike. The middle tier's published
+            // "raises the leave-combat flag" has no published reader, so the
+            // returned record is observed by neither path's loop control - see
+            // the note on the player command tail.
             let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
             self.clear_combat_interference_for_completed_action(slot);
         }
 
+        // `combat.md §7`: the recount that "first gives the party
+        // control/faint helper a chance to restore one actor" is the one
+        // taken after a *dispatched action*. Only the automatic driver's
+        // turn is one here: `PlayerReady` has not read a command yet, and
+        // the Negate Time / Quickness arms skip the turn outright, so those
+        // take the read-only census.
+        // `§16.1`'s synthesized attempt is a dispatched action too, so it
+        // takes the same post-action recount the automatic driver's turn
+        // does.
+        let control_after = if matches!(
+            action,
+            CombatActorDispatchAction::MonsterAi { .. }
+                | CombatActorDispatchAction::ControlledMonsterAttempt { .. }
+        ) {
+            self.combat_round_loop_control(false, false)
+        } else {
+            self.combat_round_loop_control_census(false, false)
+        };
         CombatActorSlotDispatchApplication::Slot {
             slot,
             phase_tick: Some(phase_tick),
             action,
-            control_after: self.combat_round_loop_control(false),
+            control_after,
         }
     }
 
@@ -6832,6 +7584,9 @@ impl PlayState {
                                 | CombatActorDispatchAction::QuicknessSkipped
                                 | CombatActorDispatchAction::NegateTimeSkipped
                                 | CombatActorDispatchAction::MonsterAi { ai_turn: Some(_) }
+                                | CombatActorDispatchAction::ControlledMonsterAttempt {
+                                    attempt: Some(_)
+                                }
                         )
                     {
                         Some(CombatRoundWalkStopReason::AutomaticAction)
@@ -6888,7 +7643,7 @@ impl PlayState {
         else {
             return false;
         };
-        combat_possess_candidate_reaches_resistance(target_slot, candidate, self.active_player)
+        combat_possess_candidate_reaches_resistance(target_slot, candidate)
     }
 
     pub fn combat_ai_blink_roll(&mut self, actor_slot: usize) -> u8 {
@@ -7317,7 +8072,11 @@ impl PlayState {
         // first attempt's newline**. It sits outside the per-attempt loop,
         // so it appears **once per Attack command**, not once per attempt,
         // and not at all when fewer than two items qualify."
-        if leads_with_space {
+        // "before the first attempt's newline" - so it needs a first
+        // attempt. `open_combat_attack_attempt` returns empty text when the
+        // acting slot has no arena cell, and a bare space with nothing behind
+        // it is not what the sentence describes.
+        if leads_with_space && !walk.text.is_empty() {
             walk.text.insert(0, COMBAT_ATTACK_WALK_LEADING_SPACE);
         }
         walk
@@ -7397,12 +8156,12 @@ impl PlayState {
             // two overlays coincide". The open `§8.2` targeting cursor is
             // what supplies that coordinate: it is the one arena X/Y the
             // published contract lets the player move independently of the
-            // acting character's own cell, and §7 asks a flag with no
-            // reader or no producer to be treated as evidence the contract
-            // is not real. Filed as a spec question all the same, because
-            // §7 names the reader and not the producer.
-            // `combat.md §7`: the cursor "**seeds** them when it opens", and
-            // raises the gate as its first act.
+            // acting character's own cell. `§7` "What owns that
+            // coordinate" and `RETRACTIONS.md` R357 name the producer
+            // outright - the cursor "**seeds** them when it opens", and
+            // "**rewrites** them on every accepted move" - so this is the
+            // published writer, not an inferred one. The gate goes up as the
+            // cursor's first act.
             self.combat_aim_marker_cell = Some(cursor);
             self.combat_aim_marker_gate = true;
             self.mark_visibility_dirty();
@@ -7634,7 +8393,7 @@ mod combat_death_batch_tests {
             active_object_slot as u8,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(class),
             0,
         );
         state.active_objects[active_object_slot] = ActiveObject {
@@ -7747,6 +8506,19 @@ mod combat_death_batch_tests {
             0,
             0,
             5,
+            5,
+        ]);
+        // `combat.md §16.1`: the compelled slot resolves to group 1 once the
+        // controlled bit lands, so a second uncharmed party descriptor keeps
+        // the `§14` post-dispatch recount away from its defeat/faint arm.
+        state.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            1,
+            1,
+            0,
+            6,
             5,
         ]);
         state.active_player = Some(0);

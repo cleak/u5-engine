@@ -921,6 +921,97 @@ pub fn combat_template_impact() -> SpeakerProgram {
     glissando(20, 1, 350, 1300)
 }
 
+/// `combat.md §11.1` / `audio.md §7.4` the **party melee** swing cue: "the same
+/// swing sweep in the opposite direction, roughly 400 Hz toward 750 Hz", i.e.
+/// `§7.4`'s "rising sweep - 400 Hz toward 750 Hz, 30 updates, roughly 130 ms".
+///
+/// `§5.2` gives the glissando its `(span, delay, target, initial)` shape and
+/// `updates = ceil(span / delay)`, so "30 updates" fixes `span / delay = 30`.
+/// The absolute pair is **not published** - `§5.2` says of this recipe and the
+/// impact fall that "their span and per-update delay were not established" -
+/// but every pair with that ratio yields the same played sequence, because the
+/// increment `(750 - 400) * delay / span` truncates to 11 Hz for all of them.
+/// The realised run is therefore 400, 411, ... 719 Hz, which honours `§5.2`'s
+/// rule that the recipe "stop[s] ... strictly below 750 Hz" and "must not be
+/// implemented as reaching those values".
+///
+/// The ratio leaves one free choice, and only the *duration* discriminates
+/// between the pairs that satisfy it. `§5.2` "In real time" and `§10.2` both
+/// price one update at `delay x 0.88 ms + 0.17 ms`, which is what
+/// [`sweep_tone_nanos`] implements. Setting 30 updates against `§7.4`'s
+/// "roughly 130 ms" gives `130 / 30 = 4.33 ms` per update, hence
+/// `delay = (4.33 - 0.17) / 0.88 = 4.73` calibrated units. `delay` is an
+/// integer count of those units and its two neighbours are not equivalent:
+/// `delay = 4` runs `30 x (4 x 0.88 + 0.17) = 111 ms`, about 15 percent short
+/// and **outside** the plus-or-minus-10-percent band `§10` publishes for its
+/// own durations (117 to 143 ms), while `delay = 5` runs
+/// `30 x (5 x 0.88 + 0.17) = 137 ms`, inside it. `§10` allows an
+/// implementation to "vary any duration below within its stated band" but
+/// "must not vary the counts", so the delay is the one that lands in the band
+/// and the span follows from the published count: `ceil(150 / 5) = 30`.
+///
+/// This is a choice inside a published tolerance, not a published pair. Every
+/// `(span, delay)` with the same ratio plays the same 30 frequencies; this one
+/// also puts the cue's wall clock where `§7.4` puts it.
+pub const ATTACK_SWING_SPAN: i32 = 150;
+pub const ATTACK_SWING_DELAY: u32 = 5;
+pub const ATTACK_SWING_LOW_HZ: i32 = 400;
+pub const ATTACK_SWING_HIGH_HZ: i32 = 750;
+/// `audio.md §7.4`: "30 updates".
+pub const ATTACK_SWING_UPDATES: usize = 30;
+
+pub fn party_melee_attack_swing() -> SpeakerProgram {
+    glissando(
+        ATTACK_SWING_SPAN,
+        ATTACK_SWING_DELAY,
+        ATTACK_SWING_HIGH_HZ,
+        ATTACK_SWING_LOW_HZ,
+    )
+}
+
+/// `combat.md §11.1` the **monster** swing cue, melee and ranged alike: "the
+/// swing sweep, played **before** the roll, running **downwards** (roughly
+/// 750 Hz toward 400 Hz)", against the party-melee row's "the same swing sweep
+/// in the opposite direction".
+///
+/// It is therefore the same recipe as [`party_melee_attack_swing`] with the
+/// endpoints exchanged: the same 30 updates `audio.md §7.4` publishes for the
+/// swing cue, run from 750 Hz down. `§11.1`'s evidence block marks the sweep
+/// **directions** as the one thing that pass established - "only the sweep
+/// **directions** were established in this pass, and the monster swing runs
+/// opposite to the party's" - while the absolute frequencies are inherited
+/// from the `audio.md` census. The increment `(400 - 750) * 5 / 150` truncates
+/// to -11 Hz, so the realised run is 750, 739, ... 431 Hz, which stops
+/// strictly above 400 Hz as `§5.2` requires.
+pub fn monster_attack_swing() -> SpeakerProgram {
+    glissando(
+        ATTACK_SWING_SPAN,
+        ATTACK_SWING_DELAY,
+        ATTACK_SWING_LOW_HZ,
+        ATTACK_SWING_HIGH_HZ,
+    )
+}
+
+/// `combat.md §11.1` the **party ranged or thrown** swing cue: "a descending
+/// sweep, roughly 1300 Hz toward 300 Hz, after `Aim! ` and a confirmed
+/// cursor". It is a different cue from the melee swing, which is why it has its
+/// own program here.
+///
+/// **The recipe is an identification, not a published row.** `§11.1` says of
+/// its own numbers that "the absolute frequencies quoted for the swing sweeps
+/// and cues are inherited from the existing `audio.md` census rather than
+/// re-derived here", and the census holds exactly one descending glissando
+/// starting at 1300 Hz: `§6.1`'s "**descending** glissando, 20 updates from
+/// 1300 Hz down toward 350 Hz" (`§5.2` lists it as the "20-update
+/// 1300-to-350 Hz impact fall"). This cue is therefore played with that
+/// recipe's shape. Neither document states that the two are one recipe, and
+/// `§5.2` says the impact fall's own "span and per-update delay were not
+/// established", so the update count here is inherited rather than published.
+/// See the spec question recorded with this change.
+pub fn party_ranged_attack_swing() -> SpeakerProgram {
+    combat_template_impact()
+}
+
 /// `audio.md §6.1`: a spell's circle, `floor(id / 6) + 1`.
 pub const fn spell_circle(spell_id: usize) -> u8 {
     (spell_id / 6 + 1) as u8
@@ -1534,6 +1625,24 @@ pub enum SoundEffect {
     /// `§6.1` combat effect template impact: a descending 20-update glissando
     /// from 1300 Hz toward 350 Hz, played only on a resolved effect.
     CombatTemplateImpact,
+    /// `§7.4` / `combat.md §11.1` the **party melee** swing cue: "The
+    /// attack-application path plays its own rising sweep - 400 Hz toward
+    /// 750 Hz, 30 updates, roughly 130 ms ... **unconditionally, before the
+    /// to-hit roll**, and only then branches." The miss arm prints its line
+    /// and returns with "**no audio call anywhere on it**", so a miss is not
+    /// silent overall but adds nothing.
+    PartyMeleeAttackSwing,
+    /// `combat.md §11.1` the **monster** swing cue, melee and ranged alike:
+    /// "the swing sweep, played **before** the roll, running **downwards**
+    /// (roughly 750 Hz toward 400 Hz)". It is the party melee sweep with its
+    /// endpoints exchanged, and `§11.1` marks the direction as established.
+    MonsterAttackSwing,
+    /// `combat.md §11.1` the **party ranged or thrown** swing cue: "a
+    /// descending sweep, roughly 1300 Hz toward 300 Hz, after `Aim! ` and a
+    /// confirmed cursor". See [`party_ranged_attack_swing`] for why its
+    /// program is the census's 1300-to-350 Hz descending recipe and what about
+    /// that is an identification rather than a published row.
+    PartyRangedAttackSwing,
     /// `§8.3` monster possession success.
     Possession,
     /// `combat.md §6.3` controlled-party faint after a Vanish death. The
@@ -1629,6 +1738,9 @@ impl SoundEffect {
             SoundEffect::SharedVariant { variant } => shared_variant(*variant, jitter),
             SoundEffect::CircleRumbleLead { circle } => circle_rumble_lead(*circle, jitter),
             SoundEffect::CombatTemplateImpact => combat_template_impact(),
+            SoundEffect::PartyMeleeAttackSwing => party_melee_attack_swing(),
+            SoundEffect::MonsterAttackSwing => monster_attack_swing(),
+            SoundEffect::PartyRangedAttackSwing => party_ranged_attack_swing(),
             SoundEffect::Possession => envelope_program(POSSESSION_ENVELOPE),
             SoundEffect::ControlledPartyFaint => envelope_program(POSSESSION_ENVELOPE),
             SoundEffect::SceptreReclaimed => envelope_program(SCEPTRE_RECLAIMED_ENVELOPE),

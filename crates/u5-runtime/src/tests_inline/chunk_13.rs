@@ -13963,11 +13963,17 @@ fn spawn_terrain_branch_classifier_matches_spec_table() {
         usize::from(SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH) + 1
     );
 
-    // Surface tile 1 -> whirlpool/aquatic special branch.
+    // `encounters.md §4` names the tile-1 row "Surface tile 1 **after the
+    // low-tile allowance gate**", and tile 1 is inside the low-tile family, so
+    // the classifier routes it to the allowance die first and the special
+    // branch is reached only once that die accepts.
     assert_eq!(
         spawn_terrain_branch(0x01, false),
-        SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic
+        SpawnTerrainBranch::LowTileAllowance
     );
+    assert!(spawn_surface_tile1_special_after_allowance(0x01, false));
+    assert!(!spawn_surface_tile1_special_after_allowance(0x01, true));
+    assert!(!spawn_surface_tile1_special_after_allowance(0x02, false));
     // Underworld tile 4 -> Rot Worm direct branch; surface tile 4
     // continues to the land bucket selected by plane.
     assert_eq!(
@@ -20648,14 +20654,19 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
 }
 
 #[test]
-fn the_controlled_bit_alone_decides_the_player_command_path() {
-    // magic.md §8: "That bit **is** a transfer of control ... a
-    // monster-side slot carrying the bit fails the self-acting test, so the
-    // round walker sends it to the keystroke/command path instead of to the
-    // automatic actor driver. It takes its turns at the player's prompt".
-    // The former reading - "monster AI drives its turns exactly as it drives
-    // any other monster ... the player never gets to move it" - is withdrawn
-    // by RETRACTIONS.md R354.
+fn summoned_creatures_reach_the_command_handler_but_are_never_prompted() {
+    // combat.md §6.1a writer 3: summoned creatures "are still placed
+    // through the ordinary monster placement path, so their class byte
+    // is the monster-side one - but the bit **does** hand the creature
+    // to the player's prompt: a monster-side slot carrying it is
+    // dispatched to the keystroke/command path, not to the automatic
+    // driver". magic.md, Summoning and conjuration, carries the matching
+    // correction: "That bit **is** a transfer of control ... a
+    // monster-side slot carrying the bit fails the self-acting test, so
+    // the round walker sends it to the keystroke/command path instead of
+    // to the automatic actor driver." RETRACTIONS.md R354 withdraws the
+    // earlier "monster AI drives its turns ... the player never gets to
+    // move it" reading this test used to assert.
     //
     // combat.md §6.1a: "The walker sends the group ordinarily occupied
     // by seated party members to the keystroke/command path (Section 8)
@@ -20689,20 +20700,26 @@ fn the_controlled_bit_alone_decides_the_player_command_path() {
     );
     assert!(!combat_slot_takes_player_command_path(0, controlled_party));
 
-    // An ordinary monster is driven by monster AI.
-    let monster = descriptor(COMBAT_ACTOR_FLAG_SELECTABLE_80, 20);
+    // combat.md §6.1: "Monster and object descriptors never carry"
+    // 0x80; an ordinary monster is the hostile placement tag and is
+    // driven by monster AI.
+    let monster = descriptor(combat_monster_placement_flags(20), 20);
+    assert_eq!(monster.flags, COMBAT_ACTOR_FLAG_SELECTABLE_40);
     assert!(!combat_slot_takes_player_command_path(
         COMBAT_PARTY_ACTOR_SLOTS,
         monster
     ));
 
-    // Conjure / Swarm / Summon stamp COMBAT_SUMMONED_ACTOR_FLAGS into a
-    // monster-side slot. magic.md §8: the bit groups the creature with the
-    // party for the same-faction filter *and* hands it to the player's
-    // prompt - "It takes its turns at the player's prompt, printing the
-    // reduced turn banner". The round walker already dispatches such a slot
-    // to PlayerReady, so this helper has to agree with it.
-    let summoned = descriptor(COMBAT_SUMMONED_ACTOR_FLAGS, 20);
+    // Conjure / Swarm / Summon stamp the summoned-actor flags into a
+    // monster-side slot: 0x40 | 0x01, never 0x80. §16.1 resolves that
+    // descriptor to group 0, and "Group-0 actors enter the combined
+    // command handler", so every monster-side slot carrying the bit
+    // reaches the keystroke path.
+    let summoned = descriptor(combat_summoned_actor_flags(20), 20);
+    assert_eq!(
+        summoned.flags,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_CONTROLLED
+    );
     assert!(summoned.is_controlled());
     assert_eq!(
         resolve_combat_target_group_for_actor(summoned, COMBAT_PARTY_ACTOR_SLOTS, None),
@@ -20711,15 +20728,15 @@ fn the_controlled_bit_alone_decides_the_player_command_path() {
     for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
         assert!(
             combat_slot_takes_player_command_path(slot, summoned),
-            "summoned creature in slot {slot} was refused the player command path"
+            "summoned creature in slot {slot} missed the player command path"
         );
     }
 
     // A dead or empty descriptor takes no path at all, whatever its group:
     // the group helper answers "party" for a dead actor, and that must not
-    // be read as a prompt.
+    // be read as a dispatch decision.
     let dead_summoned = descriptor(
-        COMBAT_SUMMONED_ACTOR_FLAGS | COMBAT_ACTOR_FLAG_MARKED_DEAD,
+        combat_summoned_actor_flags(20) | COMBAT_ACTOR_FLAG_MARKED_DEAD,
         20,
     );
     assert!(!combat_slot_takes_player_command_path(
@@ -20727,10 +20744,32 @@ fn the_controlled_bit_alone_decides_the_player_command_path() {
         dead_summoned
     ));
 
+    // Summon's rebound branch leaves the bit clear, and that Daemon is
+    // "really hostile and AI-driven" (magic.md, Summoning and
+    // conjuration).
+    let rebound = descriptor(combat_monster_placement_flags(38), 38);
+    for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+        assert!(!combat_slot_takes_player_command_path(slot, rebound));
+    }
+
     // combat.md §9: the traitor-roster override applies "for both the
     // friendly-fire filter and the player-versus-AI dispatch gate".
     let traitor = descriptor(COMBAT_ACTOR_FLAG_SELECTABLE_80, TRAITOR_ROSTER_RECORD);
     assert!(!combat_slot_takes_player_command_path(1, traitor));
+
+    // Reaching the handler is not being prompted by it. §16.1: it
+    // "prompts only for an eligible selected party member, while a
+    // monster descriptor that control moved to group 0 still synthesizes
+    // an automatic action" - so the keystroke gate is narrower than the
+    // dispatch gate by exactly the summoned/charmed monster.
+    assert!(combat_slot_prompts_for_player_command(0, party));
+    assert!(!combat_slot_prompts_for_player_command(0, controlled_party));
+    for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+        assert!(
+            !combat_slot_prompts_for_player_command(slot, summoned),
+            "summoned creature in slot {slot} was offered the prompt"
+        );
+    }
 }
 
 #[test]

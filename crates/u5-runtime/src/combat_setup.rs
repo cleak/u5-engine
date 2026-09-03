@@ -2320,6 +2320,7 @@ mod combat_setup_batch_tests {
         state.party_experience = default_party_experience(len);
         state.party_stay_counters = default_party_stay_counters(len);
         state.party_strengths = default_party_strengths(len);
+        state.party_combat_defense = default_party_combat_defense(len);
         state.party_intelligence = default_party_intelligence(len);
         state.party_equipment = default_party_equipment(len);
         state.party_roster = default_party_roster(len);

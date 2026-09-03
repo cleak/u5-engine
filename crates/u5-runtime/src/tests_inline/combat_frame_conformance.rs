@@ -53,8 +53,9 @@
         assert_eq!(swarm.hp_or_wound, stats.max_hp);
         assert_eq!((swarm.x, swarm.y), (4, 5));
         assert!(!swarm.is_marked_dead());
-        // Hostile faction tag, never the controlled/summoned flags.
-        assert_eq!(swarm.flags, COMBAT_ACTOR_FLAG_SELECTABLE_80);
+        // `combat.md §6.3`: "the hostile faction tag", and `§6.1`:
+        // "Monster and object descriptors never carry" `0x80`.
+        assert_eq!(swarm.flags, COMBAT_ACTOR_FLAG_SELECTABLE_40);
         assert!(!swarm.is_controlled());
         // Base-step is the speed seed under the `[-4, +3]` adjustment, and the
         // phase counter is thirty-six minus that base-step.
@@ -85,7 +86,7 @@
                 state.combat_actors[slot] = CombatActorDescriptor::from_row([
                     10,
                     1,
-                    COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                    COMBAT_ACTOR_FLAG_SELECTABLE_40,
                     COMBAT_CLASS_GIANT_RAT,
                     slot as u8,
                     0,
@@ -232,7 +233,9 @@
         let child = state.combat_actors[child_slot];
         assert_eq!(child.owner_target_class, 24);
         assert_eq!(child.hp_or_wound, stats.max_hp);
-        assert_eq!(child.flags, COMBAT_ACTOR_FLAG_SELECTABLE_80);
+        // `combat.md §6.1`: "Monster and object descriptors never carry"
+        // the party-side bit; `§16.1` maps every non-passive class to `0x40`.
+        assert_eq!(child.flags, COMBAT_ACTOR_FLAG_SELECTABLE_40);
         assert_eq!(
             (child.x, child.y),
             (
@@ -1688,6 +1691,7 @@
                         damage_application: Some(application),
                         food_theft: None,
                         sleep_effect: None,
+                        generic_chain_suppressed: false,
                     },
                 )
                 .as_deref(),
@@ -1714,6 +1718,7 @@
                     damage_application: None,
                     food_theft: None,
                     sleep_effect: None,
+                    generic_chain_suppressed: false,
                 },
             ),
             None,
@@ -1797,6 +1802,7 @@
                             damage_application,
                             food_theft: None,
                             sleep_effect: None,
+                            generic_chain_suppressed: false,
                         },
                     );
                     assert!(
@@ -1934,9 +1940,20 @@
                 .unwrap()
                 .vanish_branch
         );
+        // `combat.md §6.3` names the mechanism behind that census row: the
+        // vanish branch "replace[s] the shared combat action-result/narration
+        // field with `0x02`", and the common narrator, "when `0x02` is still
+        // present, ... skips the generic killed/slept/hit chain". So the
+        // suppression is asserted through the narrating entry point, which is
+        // the one that reads that field. It is not folded into the line
+        // producer, because `§6.3` publishes a case where the same producer's
+        // line *does* print: when the faint tail's sleep helper "replaces the
+        // whole result field with sleep bit `0x04`, losing `0x02`", the
+        // narrator "appends the vanished target's `<name> killed!` line".
+        state.combat_action_result = COMBAT_ACTION_RESULT_VANISH_NARRATED;
         assert_eq!(
-            crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+            crate::input_dispatch::combat_weapon_attack_narrated_result_message(
+                &mut state,
                 target_slot,
                 landed_monster_target_attack(
                     target_slot,
@@ -1999,6 +2016,7 @@
                         }),
                         food_theft: None,
                         sleep_effect: None,
+                        generic_chain_suppressed: false,
                     },
                 )
                 .as_deref(),
@@ -2059,24 +2077,30 @@
         state.party_equipment[0][EQUIP_SLOT_HELM] = SPIKED_HELM;
         state.party_equipment[0][EQUIP_SLOT_WEAPON] = HALBERD;
 
-        assert!(state.begin_combat_attack_walk(0, true).cursor_open);
-        let held = state
-            .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
-            .expect("the cursor accepts the move");
-        assert!(held.cursor_open);
-        let walk = state
-            .apply_combat_targeting_cursor_key_with_inputs(
-                '\r',
-                Some(CombatPlayerWeaponAttackInputs {
+        // This is the single direction-keyed swing entry
+        // ([`PlayState::apply_combat_player_weapon_attack_for_action`]), not
+        // the `§8.2` multi-attempt cursor walk: it is the weapon-hand
+        // priority this test exercises, not the cursor's scan-order attempt
+        // list.
+        let action = CombatPlayerCommandAction::StepOrAttack {
+            direction_code: 2,
+            outcome: CombatStepOrAttackPrimitiveOutcome::Attack {
+                target_slot: COMBAT_PARTY_ACTOR_SLOTS,
+            },
+        };
+        let application = state
+            .apply_combat_player_weapon_attack_for_action(
+                0,
+                &action,
+                CombatPlayerWeaponAttackInputs {
                     // `1 + 10 % 30 = 11` for the halberd against
                     // `1 + 10 % 4 = 3` for the spiked helm.
                     damage_roll: Some(10),
                     forced_hit: Some(true),
                     ..CombatPlayerWeaponAttackInputs::default()
-                }),
+                },
             )
-            .expect("the confirm resolves");
-        let (_, application) = walk.attack.expect("confirmation resolves an attack");
+            .expect("the attack resolves");
 
         assert!(
             matches!(
@@ -2376,5 +2400,101 @@
             )
             .as_deref(),
             Some("Bat grazed!")
+        );
+    }
+
+    #[test]
+    fn a_glass_sword_kill_of_a_vanish_class_monster_narrates_no_kill_line() {
+        // `combat.md §11.1` census: "Monster dies, vanish class | party
+        // attacker | `<monster> vanishes!` - **no trailing newline** -
+        // printed inside the damage handler, **which then suppresses the
+        // kill line**". `§6.3` is the mechanism: the vanish branch
+        // "replace[s] the shared combat action-result/narration field with
+        // `0x02`", and while that bit stands the common narrator "skips the
+        // generic killed/slept/hit chain, produces no message or sound, and
+        // clears `0x02` in cleanup".
+        //
+        // The Glass Sword reaches that chain over the `Special` resolution
+        // rather than `Hit`, and it carries a second line of its own that
+        // `§11.1` prints "**inside** the damage roll, so it lands between
+        // the hit newline and the result line" - ahead of the narrator the
+        // gate halts. So the gate must withhold the result line without
+        // withholding `Thy sword hath shattered!` with it. Gating the pair
+        // as one string would lose the shatter line; gating neither prints
+        // the duplicate `<monster> killed!` this row forbids.
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let shadow_lord = combat_class_stats(COMBAT_CLASS_SHADOW_LORD).unwrap();
+        assert_eq!(shadow_lord.name, "Shadow Lord");
+        let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        state.combat_actors[target_slot] = CombatActorDescriptor::from_row([
+            shadow_lord.max_hp,
+            20,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_SHADOW_LORD,
+            8,
+            0,
+            6,
+            5,
+        ]);
+        state.party_experience = vec![0];
+        state.message.clear();
+
+        let application = state
+            .resolve_and_apply_combat_equipment_weapon_attack(
+                EQUIPMENT_GLASS_SWORD,
+                0,
+                target_slot,
+                0,
+                u8::MAX,
+                0,
+                0,
+                None,
+                false,
+            )
+            .expect("the Glass Sword resolves through the sentinel path");
+        assert!(
+            matches!(
+                application.resolution,
+                CombatWeaponAttackResolution::Special {
+                    shattered: true,
+                    ..
+                }
+            ),
+            "the Glass Sword is the only `Special` route: {:?}",
+            application.resolution
+        );
+        // `§6.3` steps 1 and 2, in order: the line, then the field.
+        assert_eq!(state.message, "Shadow Lord vanishes!");
+        assert_eq!(
+            state.combat_action_result,
+            COMBAT_ACTION_RESULT_VANISH_NARRATED
+        );
+
+        // The ungated producer still assembles both lines - the shatter
+        // line is a prefix to the result line, not a replacement.
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                target_slot,
+                application,
+            )
+            .as_deref(),
+            Some("Thy sword hath shattered!\nShadow Lord killed!")
+        );
+
+        // What the dispatch actually prints keeps the damage roll's line
+        // and drops the narrator's.
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_narrated_result_message(
+                &mut state,
+                target_slot,
+                application,
+            )
+            .as_deref(),
+            Some("Thy sword hath shattered!"),
+        );
+        assert_eq!(
+            state.combat_action_result, 0,
+            "the narrator clears `0x02` in cleanup"
         );
     }
