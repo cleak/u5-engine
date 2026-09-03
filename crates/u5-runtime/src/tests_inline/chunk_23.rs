@@ -4001,6 +4001,7 @@ fn combat_step_or_attack_inner_pass_classifies_move_attack_and_blocks() {
             COMBAT_TARGET_GROUP_PARTY,
             resolve_combat_step_destination(5, 5, 2),
             true,
+            true,
         ),
         CombatStepOrAttackOutcome::Attack { target_slot: 6 }
     );
@@ -4010,6 +4011,7 @@ fn combat_step_or_attack_inner_pass_classifies_move_attack_and_blocks() {
             0,
             COMBAT_TARGET_GROUP_PARTY,
             resolve_combat_step_destination(5, 5, 3),
+            true,
             true,
         ),
         CombatStepOrAttackOutcome::BlockedActor { target_slot: 7 }
@@ -4021,6 +4023,7 @@ fn combat_step_or_attack_inner_pass_classifies_move_attack_and_blocks() {
             COMBAT_TARGET_GROUP_PARTY,
             resolve_combat_step_destination(5, 5, 4),
             true,
+            true,
         ),
         CombatStepOrAttackOutcome::Move { x: 5, y: 6 }
     );
@@ -4031,6 +4034,7 @@ fn combat_step_or_attack_inner_pass_classifies_move_attack_and_blocks() {
             COMBAT_TARGET_GROUP_PARTY,
             resolve_combat_step_destination(5, 5, 1),
             false,
+            true,
         ),
         CombatStepOrAttackOutcome::BlockedWall
     );
@@ -4040,6 +4044,7 @@ fn combat_step_or_attack_inner_pass_classifies_move_attack_and_blocks() {
             0,
             COMBAT_TARGET_GROUP_PARTY,
             resolve_combat_step_destination(0, 0, 1),
+            true,
             true,
         ),
         CombatStepOrAttackOutcome::OutOfArena { x: -1, y: 0 }
@@ -4092,6 +4097,7 @@ fn combat_step_or_attack_inner_pass_ignores_suppressed_hidden_or_dead_occupants(
             COMBAT_TARGET_GROUP_PARTY,
             resolve_combat_step_destination(5, 5, 2),
             true,
+            true,
         ),
         CombatStepOrAttackOutcome::Move { x: 6, y: 5 }
     );
@@ -4121,6 +4127,7 @@ fn combat_step_or_attack_primitive_commits_only_empty_walkable_movement() {
         0,
         COMBAT_TARGET_GROUP_PARTY,
         2,
+        true,
         true,
     );
 
@@ -4179,6 +4186,7 @@ fn combat_step_or_attack_primitive_reports_attack_block_and_escape_without_commi
             COMBAT_TARGET_GROUP_PARTY,
             2,
             false,
+            true,
         ),
         CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 6 }
     );
@@ -4193,6 +4201,7 @@ fn combat_step_or_attack_primitive_reports_attack_block_and_escape_without_commi
         0,
         COMBAT_TARGET_GROUP_PARTY,
         3,
+        true,
         true,
     );
     assert_eq!(
@@ -4212,6 +4221,7 @@ fn combat_step_or_attack_primitive_reports_attack_block_and_escape_without_commi
             COMBAT_TARGET_GROUP_PARTY,
             1,
             false,
+            true,
         ),
         CombatStepOrAttackPrimitiveOutcome::BlockedWall
     );
@@ -4231,6 +4241,7 @@ fn combat_step_or_attack_primitive_reports_attack_block_and_escape_without_commi
             COMBAT_TARGET_GROUP_PARTY,
             1,
             true,
+            true,
         ),
         CombatStepOrAttackPrimitiveOutcome::OutOfArena { x: -1, y: 0 }
     );
@@ -4248,6 +4259,7 @@ fn combat_step_or_attack_primitive_reports_attack_block_and_escape_without_commi
             0,
             COMBAT_TARGET_GROUP_PARTY,
             2,
+            true,
             true,
         ),
         CombatStepOrAttackPrimitiveOutcome::InactiveActor
@@ -4850,7 +4862,7 @@ fn combat_step_or_attack_state_wrapper_commits_movement_and_marks_visibility_dir
         CombatActorDescriptor::from_row([20, 7, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
 
     let outcome =
-        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true);
+        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true, true);
 
     assert!(outcome.committed_movement());
     assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
@@ -4936,7 +4948,7 @@ fn combat_post_step_ambush_reveal_fires_after_committed_movement() {
     ));
 
     let outcome =
-        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true);
+        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true, true);
 
     assert!(outcome.committed_movement());
     assert_eq!(state.combat_ambush_reveals[0], None);
@@ -4966,7 +4978,7 @@ fn combat_ambush_reveal_does_not_fire_on_attack_or_blocked_step() {
     state.combat_ambush_reveals[0] = Some(reveal);
 
     assert_eq!(
-        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true),
+        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true, true),
         CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 6 }
     );
     assert_eq!(state.combat_ambush_reveals[0], Some(reveal));
@@ -4978,7 +4990,7 @@ fn combat_ambush_reveal_does_not_fire_on_attack_or_blocked_step() {
 
     state.combat_actors[6].clear();
     assert_eq!(
-        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 1, false),
+        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 1, false, true),
         CombatStepOrAttackPrimitiveOutcome::BlockedWall
     );
     assert_eq!(state.combat_ambush_reveals[0], Some(reveal));
@@ -5195,14 +5207,14 @@ fn combat_step_or_attack_state_wrapper_reports_non_movement_without_dirtying_vis
     ]);
 
     assert_eq!(
-        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true),
+        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true, true),
         CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 6 }
     );
     assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
     assert!(!state.visibility_dirty);
 
     assert_eq!(
-        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 1, false),
+        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 1, false, true),
         CombatStepOrAttackPrimitiveOutcome::BlockedWall
     );
     assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
@@ -5213,6 +5225,7 @@ fn combat_step_or_attack_state_wrapper_reports_non_movement_without_dirtying_vis
             COMBAT_ACTOR_SLOTS,
             COMBAT_TARGET_GROUP_PARTY,
             2,
+            true,
             true,
         ),
         CombatStepOrAttackPrimitiveOutcome::InactiveActor
@@ -8518,6 +8531,7 @@ fn passive_classes_keep_physical_occupancy_but_leave_targeting_and_side_counts()
             COMBAT_TARGET_GROUP_PARTY,
             resolve_combat_step_destination(5, 5, 2),
             true,
+            true,
         ),
         CombatStepOrAttackOutcome::Attack { target_slot: 6 }
     ));
@@ -8527,6 +8541,7 @@ fn passive_classes_keep_physical_occupancy_but_leave_targeting_and_side_counts()
             0,
             COMBAT_TARGET_GROUP_PARTY,
             resolve_combat_step_destination(6, 5, 2),
+            true,
             true,
         ),
         CombatStepOrAttackOutcome::BlockedActor { target_slot: 7 }
@@ -9858,7 +9873,12 @@ fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
     let mut state = combat_ai_turn_state(8, 5);
     state.combat_actors[8].owner_target_class = 28;
     state.combat_actors[8].phase_counter = 1;
-    state.prng_state = 0x0003;
+    // Seed re-chosen after `RETRACTIONS.md` R311 moved the shared stream:
+    // the random-cardinal fallback is drawn lazily instead of four codes up
+    // front, so an AI dispatch that never reaches the fallback no longer
+    // spends four draws. R308's prologue world tick is the presentation-only
+    // one and draws nothing, so it is not why this seed changed.
+    state.prng_state = 0x004e;
     state.party[0].status = b'G';
     state.party[0].hp = 20;
     state.party[0].max_hp = 20;
@@ -9925,9 +9945,10 @@ fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
 
 fn advance_expected_giant_rat_ai_input_prng(expected_prng: &mut u16) {
     let _ = u5_prng_range_u16(expected_prng, 0, 1);
-    for _ in 0..4 {
-        let _ = u5_prng_range_u16(expected_prng, 1, 4);
-    }
+    // `combat.md §9` (`RETRACTIONS.md` R311): the random-cardinal fallback
+    // draws one attempt at a time and commits the first accepted one, so
+    // nothing is pre-rolled here - and an AI dispatch that resolves an
+    // attack never reaches the movement arm at all.
     let _ = u5_prng_range_u16(expected_prng, 0, u16::from(u8::MAX));
     let _ = u5_prng_range_u16(expected_prng, 0, u16::from(u8::MAX));
     let _ = u5_prng_range_u16(expected_prng, 0, 1);
@@ -11080,7 +11101,12 @@ fn combat_input_dispatch_applies_round_walker_defeat_exit() {
     state.party[0].status = b'G';
     state.party[0].hp = 1;
     state.party[0].max_hp = 20;
-    state.prng_state = 0x0070;
+    // Seed re-chosen after `RETRACTIONS.md` R311 moved the shared stream:
+    // the random-cardinal fallback is drawn lazily instead of four codes up
+    // front, so an AI dispatch that never reaches the fallback no longer
+    // spends four draws. R308's prologue world tick is the presentation-only
+    // one and draws nothing, so it is not why this seed changed.
+    state.prng_state = 0x3270;
 
     assert_eq!(
         handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
@@ -11502,7 +11528,9 @@ fn combat_input_dispatch_attack_prompt_keeps_pending_actor_for_direction() {
         handle_play_key_input(&mut state, 'A', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "Attack-");
+    // `combat.md §8.2` (`RETRACTIONS.md` R309): `A` prints `Attack-` and
+    // then `Aim! ` immediately before the targeting cursor opens.
+    assert_eq!(state.message, "Attack-Aim! ");
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 
     assert_eq!(
@@ -13137,7 +13165,9 @@ fn combat_ai_movement_commit_skips_blocked_or_inactive_actors() {
         commit_combat_ai_movement_outcome(
             &mut actor,
             &mut active_objects,
-            CombatAiMovementOutcome::Blocked { surrounded: true },
+            CombatAiMovementOutcome::Blocked {
+                random_cardinal_attempts: 4,
+            },
         ),
         None
     );
@@ -13153,15 +13183,21 @@ fn combat_ai_movement_commit_skips_blocked_or_inactive_actors() {
     assert_eq!((active_objects[1].x, active_objects[1].y), (5, 5));
 }
 
+/// `combat.md §9` (`RETRACTIONS.md` R311): the random-cardinal fallback
+/// runs **no** neighbour scan and takes up to four independent draws,
+/// testing only the drawn direction and committing the first accepted one.
+/// A monster with exactly one open direction can still fail to move because
+/// the draws never landed on it, and the routine still reports the action
+/// consumed.
 #[test]
-fn combat_ai_movement_reports_surrounded_blocked_cells() {
+fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
     let mut legal = [[false; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
     legal[0][0] = true;
     legal[0][1] = true;
     assert!(combat_ai_legal_cell(&legal, 0, 0));
     assert!(!combat_ai_legal_cell(&legal, -1, 0));
-    assert!(!combat_ai_cardinal_neighbors_surrounded(&legal, 0, 0));
-
+    // Cell (1,0) east is open, yet two draws of west and north both miss
+    // it, so the actor spends both attempts and does not move.
     assert_eq!(
         resolve_combat_ai_movement(
             &legal,
@@ -13173,11 +13209,13 @@ fn combat_ai_movement_reports_surrounded_blocked_cells() {
             true,
             &[1, 3],
         ),
-        CombatAiMovementOutcome::Blocked { surrounded: false }
+        CombatAiMovementOutcome::Blocked {
+            random_cardinal_attempts: 2
+        }
     );
 
-    legal[0][1] = false;
-    assert!(combat_ai_cardinal_neighbors_surrounded(&legal, 0, 0));
+    // The first accepted direction commits, and the remaining draws are not
+    // taken.
     assert_eq!(
         resolve_combat_ai_movement(
             &legal,
@@ -13187,9 +13225,32 @@ fn combat_ai_movement_reports_surrounded_blocked_cells() {
             false,
             None,
             true,
-            &[1, 3],
+            &[1, 2, 3, 4],
         ),
-        CombatAiMovementOutcome::Blocked { surrounded: true }
+        CombatAiMovementOutcome::Step {
+            direction_code: 2,
+            x: 1,
+            y: 0
+        }
+    );
+
+    // A fully enclosed actor is no longer short-circuited: it still spends
+    // its four attempts.
+    legal[0][1] = false;
+    assert_eq!(
+        resolve_combat_ai_movement(
+            &legal,
+            0,
+            0,
+            CombatStepVector { dx: -1, dy: -1 },
+            false,
+            None,
+            true,
+            &[1, 3, 2, 4],
+        ),
+        CombatAiMovementOutcome::Blocked {
+            random_cardinal_attempts: 4
+        }
     );
 }
 
@@ -16828,7 +16889,7 @@ fn combat_step_defers_field_contact_until_completed_dispatch_without_consuming_m
     };
     let prng_before_step = state.prng_state;
 
-    let outcome = state.apply_combat_step_or_attack_primitive(0, 1, COMBAT_DIRECTION_EAST, true);
+    let outcome = state.apply_combat_step_or_attack_primitive(0, 1, COMBAT_DIRECTION_EAST, true, true);
 
     assert!(outcome.committed_movement());
     assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 3));
@@ -17003,7 +17064,9 @@ fn combat_entry_magic_ring_pass_applies_invisibility_and_vanish_clears_it() {
 
     state.visibility_dirty = false;
     assert_eq!(
-        state.apply_combat_magic_ring_pass_to_slot(0, 7, 0),
+        // `combat.md §5`: the vanish outcome is 11, not 0
+        // (`RETRACTIONS.md` R307).
+        state.apply_combat_magic_ring_pass_to_slot(0, 7, COMBAT_MAGIC_RING_VANISH_OUTCOME),
         Some(CombatMagicRingPassOutcome {
             invisibility_applied: false,
             regeneration_applied: 0,
@@ -17038,7 +17101,9 @@ fn combat_entry_magic_ring_pass_regenerates_living_wearers_and_can_vanish() {
     assert_eq!(state.party[0].hp, 9);
 
     assert_eq!(
-        state.apply_combat_magic_ring_pass_to_slot(0, 7, 0),
+        // `combat.md §5`: the vanish outcome is 11, not 0
+        // (`RETRACTIONS.md` R307).
+        state.apply_combat_magic_ring_pass_to_slot(0, 7, COMBAT_MAGIC_RING_VANISH_OUTCOME),
         Some(CombatMagicRingPassOutcome {
             invisibility_applied: false,
             regeneration_applied: 0,
@@ -17050,33 +17115,73 @@ fn combat_entry_magic_ring_pass_regenerates_living_wearers_and_can_vanish() {
     assert_eq!(state.message, "A ring has vanished!");
 }
 
+/// `combat.md §5`/`§5.3` step 3 (`RETRACTIONS.md` R307): the ring vanish
+/// check belongs to **seating**, runs *before* the member is placed and
+/// before that member's own ring-effect step, and destroys the ring on the
+/// single `[0, 15]` outcome 11. A destroyed ring never reaches the
+/// invisibility arm.
 #[test]
-fn combat_frame_entry_runs_vanish_before_invisibility_seating_hook() {
+fn combat_seating_runs_the_ring_vanish_check_before_the_ring_effect_step() {
     let mut state = world_state(open_world_grid(), 10, 20);
-    state.party_equipment = default_party_equipment(1);
+    state.party_equipment = default_party_equipment(state.party.len());
     state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
-    state.prng_state = 0x0070;
+    state.prng_state = seed_whose_first_uniform_0_15_is(COMBAT_MAGIC_RING_VANISH_OUTCOME);
     let mut expected_prng = state.prng_state;
-    assert_eq!(u5_prng_range_u16(&mut expected_prng, 0, 15), 0);
-    let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
-    active_objects[0] = ActiveObject {
-        type_byte: PLAYER_TILE,
-        tile: PLAYER_TILE,
-        x: 4,
-        y: 4,
-        ..ActiveObject::empty()
-    };
-    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-    actors[0] =
-        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 4]);
+    assert_eq!(
+        u5_prng_range_u16(&mut expected_prng, 0, 15),
+        u16::from(COMBAT_MAGIC_RING_VANISH_OUTCOME)
+    );
 
-    state.enter_combat_frame(active_objects, actors).unwrap();
+    let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    state.populate_terrain_combat_party(&mut active_objects, &mut actors, 0);
 
     assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
-    assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
-    assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
+    // The wearer is seated, and visible: the ring-effect step's
+    // invisibility arm never runs for a ring that has just vanished.
+    assert!(!actors[0].is_empty());
+    assert!(!actors[0].is_hidden_or_unrevealed());
+    // Exactly one draw: the vanish check. Seating itself charges none.
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.message, "A ring has vanished!");
+}
+
+/// `combat.md §5`: a surviving Ring of Regeneration runs the ring-effect
+/// step's **whole-party** sweep, one uniform `[0, 7]` draw per living
+/// wearer, and the step runs only for a seated member whose status is
+/// exactly `'G'` or `'P'`.
+#[test]
+fn combat_seating_ring_effect_step_is_gated_and_sweeps_the_whole_party() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.party_equipment = default_party_equipment(state.party.len());
+    state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+    state.party[0].status = b'A';
+    state.party[0].hp = 5;
+    state.party[0].max_hp = 20;
+    // Status `'A'` is neither good nor poisoned, so the step is skipped and
+    // the only draw is the vanish check.
+    state.prng_state = seed_whose_first_uniform_0_15_is(0);
+    let mut expected_prng = state.prng_state;
+    assert_eq!(u5_prng_range_u16(&mut expected_prng, 0, 15), 0);
+
+    let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    state.populate_terrain_combat_party(&mut active_objects, &mut actors, 0);
+
+    assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_ID_RING_REGENERATION as u8);
+    assert_eq!(state.prng_state, expected_prng);
+    assert_eq!(state.party[0].hp, 5);
+}
+
+/// The first PRNG seed whose next uniform `[0, 15]` result is `wanted`.
+fn seed_whose_first_uniform_0_15_is(wanted: u8) -> u16 {
+    for seed in 0..=u16::MAX {
+        let mut scratch = seed;
+        if u5_prng_range_u16(&mut scratch, 0, 15) == u16::from(wanted) {
+            return seed;
+        }
+    }
+    panic!("no seed produces {wanted}");
 }
 
 #[test]
@@ -18790,4 +18895,108 @@ fn animation_asset_buffer_boot_value_is_phase_zero() {
         PlayOptions::default().animation_asset_buffer,
         AnimationAssetBuffer::AT_BOOT
     );
+}
+
+/// `combat.md §8`/`§8.1` (`RETRACTIONS.md` R310): "**A direction key is
+/// purely a step: there is no bump attack.**" Rejection - terrain the mover
+/// cannot enter *and* a cell already occupied by a live actor - prints
+/// `Blocked!`, plays the low bump tone, and re-prompts the same actor
+/// without spending the turn.
+#[test]
+fn a_bare_direction_key_into_a_hostile_is_blocked_not_a_bump_attack() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_player_command_state(6, 5);
+    state.active_player = Some(0);
+    let hostile_hp_before = state.combat_actors[8].hp_or_wound;
+    let serial = state.sound_effect_serial;
+
+    assert_eq!(
+        handle_play_key_input(&mut state, 'd', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert!(
+        state.message.starts_with("East\nBlocked!\n"),
+        "unexpected transcript: {:?}",
+        state.message
+    );
+    assert!(!state.message.contains("Attack-"));
+    assert!(!state.message.contains("Aim! "));
+    assert_eq!(state.combat_actors[8].hp_or_wound, hostile_hp_before);
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+    // `audio.md §7.4`: a refused step beeps; it is never the answer to a
+    // failed attack.
+    assert!(
+        state
+            .sound_effects_after(serial)
+            .contains(&SoundEffect::BlockedStep)
+    );
+    // Free re-prompt: the same actor still owes a keystroke.
+    assert_eq!(state.pending_combat_actor_slot, Some(0));
+}
+
+/// `combat.md §8.1`: the primitive itself refuses to attack on a bare
+/// direction, and only the `A` targeting confirmation asks it to.
+#[test]
+fn the_step_primitive_only_attacks_when_the_attack_cursor_asks_it_to() {
+    let mut candidates =
+        [combat_target_view(CombatActorDescriptor::empty(), 0); COMBAT_ACTOR_SLOTS];
+    candidates[6] = combat_target_view(
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_40, 0, 6, 0, 6, 5]),
+        COMBAT_TARGET_GROUP_MONSTER,
+    );
+
+    // A direction key.
+    assert_eq!(
+        resolve_combat_step_or_attack_inner_pass(
+            &candidates,
+            0,
+            COMBAT_TARGET_GROUP_PARTY,
+            resolve_combat_step_destination(5, 5, 2),
+            true,
+            false,
+        ),
+        CombatStepOrAttackOutcome::BlockedActor { target_slot: 6 }
+    );
+    // `A` and its targeting cursor.
+    assert_eq!(
+        resolve_combat_step_or_attack_inner_pass(
+            &candidates,
+            0,
+            COMBAT_TARGET_GROUP_PARTY,
+            resolve_combat_step_destination(5, 5, 2),
+            true,
+            true,
+        ),
+        CombatStepOrAttackOutcome::Attack { target_slot: 6 }
+    );
+}
+
+/// `combat.md §7`/`§5.3` step 8 (`RETRACTIONS.md` R308): the round loop's
+/// entry prologue runs **once per encounter**, not once per round, and its
+/// first action - before any actor slot is examined - is a full world tick.
+#[test]
+fn the_round_loop_entry_prologue_runs_once_per_encounter() {
+    let mut state = combat_player_command_state(8, 5);
+    state.combat_round_loop_prologue_ran = false;
+    let frame_before = state.animation.frame;
+
+    state.run_combat_round_loop_entry_prologue_if_needed();
+    assert!(state.combat_round_loop_prologue_ran);
+    let frame_after = state.animation.frame;
+    assert_ne!(
+        frame_after, frame_before,
+        "the prologue's first action is a world tick"
+    );
+
+    // The sweep restart jumps back past the prologue, so a second call - and
+    // every later table walk - re-runs nothing.
+    state.run_combat_round_loop_entry_prologue_if_needed();
+    assert_eq!(state.animation.frame, frame_after);
+
+    // Entering a new encounter owes the prologue again.
+    let active_objects = state.active_objects.clone();
+    let actors = state.combat_actors;
+    state.enter_combat_frame(active_objects, actors).unwrap();
+    assert!(!state.combat_round_loop_prologue_ran);
 }

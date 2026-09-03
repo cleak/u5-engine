@@ -251,6 +251,11 @@ pub struct PlayState {
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     pub combat_magic_effects: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     pub combat_cursor_blink: bool,
+    /// `combat.md §7`/`§5.3` step 8: has this encounter's round-loop entry
+    /// prologue already run? The prologue "runs once per entry into the
+    /// round loop, and the loop is entered once per encounter: the sweep
+    /// restart jumps back past the prologue" (`RETRACTIONS.md` R308).
+    pub combat_round_loop_prologue_ran: bool,
     pub combat_secondary_marker: Option<(u8, u8)>,
     pub combat_ambush_reveals: [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],

@@ -1612,6 +1612,14 @@ impl PlayState {
             if member.status == PARTY_STATUS_DEAD {
                 continue;
             }
+            // `combat.md §5`/`§5.3` step 3: "The ring vanish check runs
+            // **before** the member is placed: one uniform draw in
+            // `[0, 15]` if the member wears the Ring of Invisibility or the
+            // Ring of Regeneration, destroying the ring on the single
+            // outcome `11`." The ordering is load-bearing for PRNG
+            // reproduction - "one vanish lowers every subsequent count in
+            // the same seating pass" (`RETRACTIONS.md` R307).
+            self.apply_combat_seating_ring_vanish_check(roster_slot);
             let record_slot = packed_slot;
             packed_slot += 1;
             let (x, y) = positions[roster_slot];
@@ -1686,9 +1694,101 @@ impl PlayState {
                 x,
                 y,
             ]);
+            // `combat.md §5`: "After the member is placed, a ring-effect
+            // step runs - but **only** for members whose status byte is
+            // exactly `'G'` (good) or `'P'` (poisoned)."
+            if matches!(member.status, b'G' | b'P') {
+                self.apply_combat_seating_ring_effect_step(
+                    roster_slot,
+                    record_slot,
+                    active_objects,
+                    actors,
+                );
+            }
         }
         if cleared_active_player {
             self.active_player = None;
+        }
+    }
+
+    /// `combat.md §5`/`§5.3` step 3.2: the pre-placement vanish check for
+    /// one roster slot. Draws nothing unless that member wears one of the
+    /// two magic rings.
+    fn apply_combat_seating_ring_vanish_check(&mut self, roster_slot: usize) {
+        let Some(ring) = self
+            .party_equipment
+            .get(roster_slot)
+            .map(|equipment| equipment[EQUIP_SLOT_RING])
+        else {
+            return;
+        };
+        if !crate::is_combat_magic_ring_id(ring) {
+            return;
+        }
+        let vanish_roll = self.combat_magic_ring_vanish_roll(roster_slot);
+        if !crate::combat_magic_ring_vanishes(ring, vanish_roll) {
+            return;
+        }
+        // `audio.md §8.1` terrain-combat-entry path, in its published
+        // order: print the line, play the 40-update action snap, then
+        // remove the item.
+        self.message = COMBAT_RING_VANISHED_MESSAGE.to_string();
+        self.emit_sound_effect(SoundEffect::ActionSnap);
+        self.party_equipment[roster_slot][EQUIP_SLOT_RING] = EQUIPMENT_EMPTY;
+    }
+
+    /// `combat.md §5`: the post-placement ring-effect step for the member
+    /// just seated, gated by the caller on status exactly `'G'` or `'P'`.
+    ///
+    /// The Invisibility arm marks that one member hidden. The Regeneration
+    /// arm is a **whole-party regeneration sweep**, "not a single tick for
+    /// the member that triggered it: it draws one uniform value in
+    /// `[0, 7]` for every party member who is alive and wearing the
+    /// regeneration ring *at that moment*, including members whose status
+    /// is neither good nor poisoned" (`RETRACTIONS.md` R307). With two
+    /// eligible wearers in good condition the entry pass therefore runs two
+    /// sweeps of two draws each.
+    fn apply_combat_seating_ring_effect_step(
+        &mut self,
+        roster_slot: usize,
+        record_slot: usize,
+        active_objects: &mut [ActiveObject],
+        actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+    ) {
+        let Some(ring) = self
+            .party_equipment
+            .get(roster_slot)
+            .map(|equipment| equipment[EQUIP_SLOT_RING])
+        else {
+            return;
+        };
+        if ring as usize == EQUIPMENT_ID_RING_INVISIBILITY {
+            if let Some(actor) = actors.get_mut(record_slot) {
+                let _ = crate::apply_combat_linked_invisibility(actor, active_objects);
+            }
+            return;
+        }
+        if ring as usize != EQUIPMENT_ID_RING_REGENERATION {
+            return;
+        }
+        let sweep: Vec<usize> = (0..self.party.len())
+            .filter(|&slot| {
+                self.party[slot].living()
+                    && self.party_equipment.get(slot).is_some_and(|equipment| {
+                        equipment[EQUIP_SLOT_RING] == EQUIPMENT_ID_RING_REGENERATION as u8
+                    })
+            })
+            .collect();
+        for slot in sweep {
+            let regeneration_roll = self.combat_magic_ring_regeneration_roll(slot);
+            let amount = crate::combat_ring_regeneration_amount(
+                self.party[slot],
+                EQUIPMENT_ID_RING_REGENERATION as u8,
+                regeneration_roll,
+            );
+            if amount != 0 {
+                let _ = self.party[slot].heal_by(amount);
+            }
         }
     }
 
