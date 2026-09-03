@@ -335,6 +335,18 @@ pub struct PlayState {
     pub active_wishing_well: Option<crate::z_stats::WishingWellSession>,
     pub active_view_overlay: Option<ViewOverlay>,
     pub visibility_sweep: Option<VisibilitySweep>,
+    /// `overworld.md §8.1`: the two scripted swallow presentations replace or
+    /// suppress the party marker for part of their run - the falls chain
+    /// "hides" it across the damage pass, and the whirlpool swaps in the
+    /// whirlpool sprite before the long descent - and both restore it before
+    /// the state commit. `vehicles.md §2` marker `0x00` is the
+    /// sprite-suppressed party, which is what "hidden" means here.
+    ///
+    /// This is presentation only: it never reaches the durable transport
+    /// marker, and [`PlayState::sync_player_object`] re-applies it after the
+    /// ordinary slot-zero refresh so a tick inside the presentation cannot
+    /// undo it.
+    pub party_marker_tile_override: Option<u8>,
     pub active_direction_prompt: Option<crate::z_stats::DirectionPromptSession>,
     pub active_yes_no_prompt: Option<crate::z_stats::YesNoPromptSession>,
     pub town_npc_mutations: Vec<TownNpcMutation>,

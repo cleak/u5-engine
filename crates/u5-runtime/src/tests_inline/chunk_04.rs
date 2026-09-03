@@ -170,7 +170,7 @@ fn movement_out_of_bounds_starts_prompt_before_return_resolution() {
     assert_eq!((state.player.x, state.player.y), (0, 3));
     assert_eq!(state.active_objects[0].z, 0);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "Leave CASTLE:0?");
+    assert_eq!(state.message, TOWN_EXIT_PROMPT);
 }
 
 #[test]

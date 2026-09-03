@@ -6256,17 +6256,14 @@ fn natural_moongate_counter_night_band_uses_shared_lighting_hours() {
 }
 
 #[test]
-fn world_plane_fall_save_roll_routes_through_named_constant() {
-    // overworld.md §2: chasm and whirlpool plane writers apply a
-    // random fall-damage roll per conscious party member. Promote
-    // the upper bound so world_plane_fall_damage_roll does not
-    // bake `5` as a bare modulus literal.
-    assert_eq!(WORLD_PLANE_FALL_SAVE_ROLL_MAX, u8::MAX);
-    // The roll is `1..=WORLD_PLANE_FALL_DAMAGE_MAX`; every value
-    // produced by the modulo is in that range.
-    for seed in 0u8..=u8::MAX {
-        let roll = seed;
-        assert!((0..=WORLD_PLANE_FALL_SAVE_ROLL_MAX).contains(&roll));
+fn world_plane_fall_save_roll_routes_through_named_constants() {
+    // `RETRACTIONS.md` R321 withdrew the `0..255` byte this used to pin: the
+    // draw is the shared skewed `1..30` roll of `combat.md` Section 9.1, a
+    // uniform `0..60` halved with truncation and zero promoted to one.
+    assert_eq!(WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW, 0);
+    assert_eq!(WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH, 60);
+    for raw in WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW..=WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH {
+        assert!((1..=30).contains(&combat_skewed_roll_1_to_30(raw)));
     }
 }
 
@@ -7748,19 +7745,29 @@ fn dungeon_field_base_byte_pairs_effect_with_published_byte() {
         Some(DUNGEON_FIELD_ELECTRIC_BASE)
     );
     assert_eq!(dungeon_field_base_byte(DungeonFieldEffect::Energy), None);
-    // The visit-marker variants round-trip through the existing
-    // classifier: base | 0x08 reclassifies to the same effect.
+    // Three of the four visit-marker variants round-trip through the
+    // existing classifier: base | 0x08 reclassifies to the same effect.
     for base in [
         DUNGEON_FIELD_SLEEP_BASE,
         DUNGEON_FIELD_POISON_GAS_BASE,
         DUNGEON_FIELD_FIRE_BASE,
-        DUNGEON_FIELD_ELECTRIC_BASE,
     ] {
         assert_eq!(
             dungeon_field_effect(base),
             dungeon_field_effect(base | DUNGEON_VISIT_MARKER_BIT)
         );
     }
+    // `dungeon-mode.md §8` / §8.1: the electric marker variant is the
+    // published exception - "`0x8B` alone triggers nothing" - so it must
+    // **not** round-trip onto `Electric`.
+    assert_ne!(
+        dungeon_field_effect(DUNGEON_FIELD_ELECTRIC_BASE),
+        dungeon_field_effect(DUNGEON_FIELD_ELECTRIC_BASE | DUNGEON_VISIT_MARKER_BIT)
+    );
+    assert_eq!(
+        dungeon_field_effect(DUNGEON_FIELD_ELECTRIC_BASE | DUNGEON_VISIT_MARKER_BIT),
+        Some(DungeonFieldEffect::Energy)
+    );
 }
 
 #[test]
@@ -17770,10 +17777,11 @@ fn dungeon_energy_field_marker_variants_keep_subtype_reaction() {
         Some(DungeonFieldEffect::PoisonGas)
     );
     assert_eq!(dungeon_field_effect(0x8a), Some(DungeonFieldEffect::Fire));
-    assert_eq!(
-        dungeon_field_effect(0x8b),
-        Some(DungeonFieldEffect::Electric)
-    );
+    // `dungeon-mode.md §8.1`: "**Byte `0x8B` - the marked electric variant -
+    // is inert.** ... the byte therefore triggers nothing on either path, no
+    // line and no effect." It collapses to the generic energy band, which is
+    // the table's "Any other underfoot byte: nothing" row.
+    assert_eq!(dungeon_field_effect(0x8b), Some(DungeonFieldEffect::Energy));
     assert_eq!(dungeon_field_effect(0x84), Some(DungeonFieldEffect::Energy));
     assert_eq!(dungeon_field_effect(0x8f), Some(DungeonFieldEffect::Energy));
     assert_eq!(dungeon_field_effect(0x90), None);

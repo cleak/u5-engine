@@ -848,6 +848,7 @@ impl PlayState {
             active_wishing_well: None,
             active_view_overlay: None,
             visibility_sweep: None,
+            party_marker_tile_override: None,
             active_direction_prompt: None,
             active_yes_no_prompt: None,
             town_npc_mutations: options.town_npc_mutations,
@@ -1157,6 +1158,7 @@ impl PlayState {
             active_wishing_well: None,
             active_view_overlay: None,
             visibility_sweep: None,
+            party_marker_tile_override: None,
             active_direction_prompt: None,
             active_yes_no_prompt: None,
             town_npc_mutations: options.town_npc_mutations,
@@ -1487,6 +1489,7 @@ impl PlayState {
             active_wishing_well: None,
             active_view_overlay: None,
             visibility_sweep: None,
+            party_marker_tile_override: None,
             active_direction_prompt: None,
             active_yes_no_prompt: None,
             town_npc_mutations: options.town_npc_mutations,
@@ -1740,11 +1743,20 @@ impl PlayState {
         };
 
         self.restore_world_from_town_mirror(game_dir, plane, entry.x, entry.y)?;
-        self.message = format!(
-            "Yes. Left {} for {} via the canonical outdoor table.",
-            scene.key(),
-            plane.key()
-        );
+        // `doors-and-z-transitions.md` Section 12.1, accepted arm: `Yes`, a
+        // blank row, `Exit to`, then the plane name on its own row - here the
+        // break before the plane name **is** in the data. Ararat (`0x19`) is
+        // the only town-family location on the underworld plane.
+        // The prompt left the cursor after its trailing space, so `Yes` lands
+        // on that same row - "to leave? Yes" - and the blank row the data
+        // carries then falls before `Exit to`.
+        self.emit_message_line_continuing_row(format!(
+            "{TOWN_EXIT_ACCEPTED_NARRATION}{}",
+            match plane {
+                WorldPlane::Britannia => TOWN_EXIT_TO_BRITANNIA_NARRATION,
+                WorldPlane::Underworld => TOWN_EXIT_TO_UNDERWORLD_NARRATION,
+            }
+        ));
         Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
             scene,
         )))

@@ -148,6 +148,12 @@ pub struct WorldPlaneTransitionEntry {
     pub to_x: usize,
     pub to_y: usize,
     pub expected_tile: Option<u8>,
+    /// `overworld.md` Section 8: the two scripted plane writers - the falls
+    /// chain and the whirlpool - both reach the transition with the party's
+    /// original transport marker deliberately restored, and neither "forces
+    /// the durable post-transition transport marker to foot". Sidecar-driven
+    /// transitions keep the ordinary reset.
+    pub preserves_transport: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -90,8 +90,28 @@ impl PlayState {
     /// Append a handler message as continuation lines. Embedded newlines
     /// become separate transcript entries, matching the per-cell
     /// emitter's treatment of line-feed bytes (`text-output.md §5`).
+    ///
+    /// The published transcripts of `overworld.md §8.1`,
+    /// `doors-and-z-transitions.md §12.1` and `dungeon-mode.md §8.1` all
+    /// state that "`\n` is one line feed and is part of the string, so a
+    /// leading `\n` produces a **blank row**" and a trailing `\n\n`
+    /// "produces a blank row after the text". That makes the split's
+    /// segments mean two different things: every segment *before* the
+    /// last is a completed row - an empty one is a blank row the player
+    /// sees - while the last segment is only where the cursor is left, so
+    /// an empty tail is the ordinary "line terminated" case and draws
+    /// nothing. Emitting an ordinary empty entry for a leading `\n` lost
+    /// the blank row, because the window's log drops empty output lines.
     pub fn push_message_transcript_lines(&mut self, text: &str) {
-        for line in text.split('\n') {
+        let mut segments = text.split('\n').peekable();
+        while let Some(line) = segments.next() {
+            let is_last = segments.peek().is_none();
+            if line.is_empty() {
+                if !is_last {
+                    self.push_explicit_blank_message_entry();
+                }
+                continue;
+            }
             self.push_message_entry(line, false);
         }
     }
@@ -125,6 +145,13 @@ impl PlayState {
     /// harness take the newest line from it.
     pub fn emit_message_line(&mut self, text: impl Into<String>) {
         let text = text.into();
+        // A handler that wrote the slot directly earlier in the same turn has
+        // not reached a composition boundary yet. Flush it first, or taking
+        // the slot here silently drops it - which is exactly what the
+        // per-turn epilogue's consequence lines did to the command's own
+        // line. `text-output.md §11`: "a second line produced in the same
+        // turn prints beneath" the first, never instead of it.
+        self.flush_message_slot();
         self.push_message_transcript_lines(&text);
         self.message = text.clone();
         self.message_flushed = text;
@@ -154,6 +181,52 @@ impl PlayState {
     pub fn emit_centered_message_line(&mut self, text: impl Into<String>) {
         let text = text.into();
         self.push_centered_message_entry(text.clone());
+        self.message = text.clone();
+        self.message_flushed = text;
+    }
+
+    /// Emit one line that *continues* the row the cursor was left on.
+    ///
+    /// A prompt whose stored string ends without a line feed - the town-family
+    /// exit's `\nDost thou wish to leave? ` of
+    /// `doors-and-z-transitions.md §12.1` is the published case - leaves the
+    /// cursor mid-row, and the handler's answer word therefore lands on that
+    /// same row. Emitting the answer as its own line renders it one row lower
+    /// than the original. Only the first segment continues; every line feed
+    /// inside `text` behaves exactly as it does in
+    /// [`Self::push_message_transcript_lines`].
+    pub fn emit_message_line_continuing_row(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.flush_message_slot();
+        let mut segments = text.split('\n').peekable();
+        if let Some(first) = segments.next() {
+            let more_follow = segments.peek().is_some();
+            if first.is_empty() {
+                if more_follow {
+                    self.push_explicit_blank_message_entry();
+                }
+            } else if let Some(last) = self
+                .message_transcript
+                .last_mut()
+                .filter(|entry| !entry.explicit_blank)
+            {
+                last.text.push_str(first);
+                last.glyphs.extend(ordinary_glyphs_from_engine_text(first));
+                self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+            } else {
+                self.push_message_entry(first, false);
+            }
+        }
+        while let Some(line) = segments.next() {
+            let is_last = segments.peek().is_none();
+            if line.is_empty() {
+                if !is_last {
+                    self.push_explicit_blank_message_entry();
+                }
+                continue;
+            }
+            self.push_message_entry(line, false);
+        }
         self.message = text.clone();
         self.message_flushed = text;
     }

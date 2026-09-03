@@ -698,7 +698,9 @@
         );
         assert_eq!((state.player.x, state.player.y), (30, 40));
         assert!(state.message.contains("Ignited a torch"));
-        assert!(state.message.contains("F-A-L-L-S"));
+        // `RETRACTIONS.md` R320: the sidecar plane transition narrates
+        // nothing; the falls banner belongs to the waterfall handler.
+        assert!(!state.message.contains("F-A-L-L-S"));
         let _ = fs::remove_dir_all(dir);
     }
 

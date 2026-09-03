@@ -58,6 +58,49 @@ impl PlayState {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        // `dungeon-mode.md` Section 8.1, "Electric contact": it "prints
+        // `Ouch!` then `Electric field!` **before** the destination-class
+        // test, so those two lines precede any `Blocked!` the same step later
+        // produces". The screen flash, rumble, one-cell push-back and
+        // whole-party damage follow.
+        if matches!(
+            dungeon_field_effect(tile),
+            Some(DungeonFieldEffect::Electric)
+        ) {
+            self.emit_message_line(DUNGEON_ELECTRIC_OUCH_LINE);
+            self.emit_message_line(DUNGEON_ELECTRIC_FIELD_LINE);
+            // Section 8: "electric contact first commits the requested
+            // adjacent field cell for the flash presentation, then reverses
+            // that exact one-cell displacement" back to the just-vacated
+            // origin, with no obstruction test on the reversal.
+            self.player.x = nx;
+            self.player.y = ny;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+            self.player.x = origin_x;
+            self.player.y = origin_y;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+            let _ = self.apply_dungeon_field_effect_at(
+                level,
+                nx,
+                ny,
+                tile,
+                DungeonFieldEffect::Electric,
+            );
+            self.advance_turn();
+            // Section 8.1: the two lines "precede any `Blocked!` the same
+            // step later produces", so the destination-class test still runs
+            // after them rather than being short-circuited. On shipped data
+            // the field class `0x8` is always walkable, so this arm is a
+            // published-ordering guard rather than a reachable path.
+            if !is_dungeon_walkable(tile) {
+                self.emit_message_line(MOVEMENT_BLOCKED_REFUSAL);
+                return Ok(MoveOutcome::Blocked);
+            }
+            self.message = DUNGEON_ELECTRIC_FIELD_LINE.to_string();
+            return Ok(MoveOutcome::Moved);
+        }
         if is_dungeon_room_trigger(tile) {
             self.player.x = nx;
             self.player.y = ny;
@@ -83,23 +126,22 @@ impl PlayState {
         if is_dungeon_bomb_trap(tile) {
             self.grid[dungeon_cell_index(level, nx, ny)] |= 0x08;
             self.advance_turn();
-            self.message = "Triggered bomb trap.".to_string();
+            // `dungeon-mode.md` Section 8.1, bomb trap `0x62`/`0x6A`.
+            self.emit_message_line(DUNGEON_BOMB_TRAP_LINE);
+            self.message = DUNGEON_KABOOM_LINE.to_string();
             return Ok(MoveOutcome::Moved);
         }
         if let Some(field) = dungeon_field_effect(tile) {
-            if field == DungeonFieldEffect::Electric {
-                // `dungeon-mode.md §8`: electric contact temporarily reaches
-                // the adjacent field for the flash, then reverses the exact
-                // one-cell displacement to the just-vacated origin. The
-                // origin is not subjected to another obstruction test.
-                self.player.x = origin_x;
-                self.player.y = origin_y;
-                self.sync_player_object();
-                self.mark_visibility_dirty();
+            // Section 8.1: "Both field lines print **before** their per-member
+            // rolls, so the line appears even when nobody is affected."
+            let line = dungeon_field_consequence_line(field);
+            if let Some(line) = line {
+                self.emit_message_line(line);
             }
-            let field_report = self.apply_dungeon_field_effect_at(level, nx, ny, tile, field);
+            let _ = self.apply_dungeon_field_effect_at(level, nx, ny, tile, field);
             self.advance_turn();
-            self.message = format!("Triggered {}; {field_report}.", field.label());
+            // "Any other underfoot byte: nothing."
+            self.message = line.unwrap_or_default().to_string();
             return Ok(MoveOutcome::Moved);
         }
         if is_dungeon_room_helper_state(tile) {
@@ -570,6 +612,13 @@ impl PlayState {
             self.grid[current] &= !0x08;
             self.mark_visibility_dirty();
             drops += 1;
+            // `dungeon-mode.md` Section 8.1: the three-line pit group is
+            // printed **once per descent step**, in this order, with the
+            // level change and view repaint between `Falling...` and the
+            // splat. "A two-deep fall chain prints the three-line pit group
+            // twice."
+            self.emit_message_line(DUNGEON_PIT_TRAP_LINE);
+            self.emit_message_line(DUNGEON_FALLING_LINE);
             let Some(next_level) = level.checked_add(1).filter(|next| *next <= 7) else {
                 return self.resolve_dungeon_fall_off_bottom(
                     scene,
@@ -589,6 +638,9 @@ impl PlayState {
             if self.grid[destination] < 0x90 {
                 self.grid[destination] |= 0x08;
             }
+            // "then the level change and view repaint, then
+            // `      ...splat!` - **six leading spaces**".
+            self.emit_message_line(DUNGEON_SPLAT_LINE);
         }
 
         self.area = Area::Dungeon { scene, level };
@@ -597,12 +649,12 @@ impl PlayState {
         if advance_turn {
             self.advance_turn();
         }
-        self.message = format!(
-            "Fell {drops} level(s) through pit trap to {} ({}) level {}.",
-            scene.key(),
-            scene.name(),
-            dungeon_display_level(level)
-        );
+        // Section 8.1: "the arrival on the lower level narrates nothing of its
+        // own beyond `      ...splat!`". The per-drop group above is the whole
+        // of the chain's narration; the level/coordinate summary this used to
+        // print has no counterpart in the original.
+        let _ = drops;
+        self.message = DUNGEON_SPLAT_LINE.to_string();
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel { scene, level },
         ))

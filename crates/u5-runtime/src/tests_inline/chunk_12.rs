@@ -26,9 +26,10 @@ fn routed_world_k_plane_transition_does_not_retrigger_reciprocal_landing_row() {
     );
     assert_eq!((state.player.x, state.player.y), (30, 40));
     assert_eq!(state.turn, 1);
-    // `doors-and-z-transitions.md §9`: a clean climb prints nothing, so the
-    // underfoot transition it lands on owns the whole line.
-    assert!(state.message.starts_with("F-A-L-L-S"));
+    // `doors-and-z-transitions.md §9`: a clean climb prints nothing, and
+    // `RETRACTIONS.md` R320 removed the invented narration the sidecar plane
+    // transition used to add, so nothing at all reaches the slot here.
+    assert!(!state.message.contains("F-A-L-L-S"));
     assert!(!state.message.contains("Ascended from the underworld"));
     let _ = fs::remove_dir_all(dir);
 }
@@ -170,7 +171,9 @@ fn town_exit_uses_clean_location_table_when_no_return_snapshot() {
     assert_eq!((state.player.x, state.player.y), (10, 20));
     assert_eq!(state.active_objects[0].z, 0);
     assert_eq!(state.grid[world_cell_index(10, 20)], 5);
-    assert!(state.message.contains("canonical outdoor table"));
+    // `doors-and-z-transitions.md §12.1` accepted town-family exit.
+    assert!(state.message.contains(TOWN_EXIT_ACCEPTED_NARRATION));
+    assert!(state.message.ends_with(TOWN_EXIT_TO_BRITANNIA_NARRATION));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -893,7 +896,16 @@ fn consumed_dungeon_action_on_fall_trap_applies_underfoot_fall_after_turn() {
     assert_eq!(state.grid[dungeon_cell_index(1, 1, 1)], 0x08);
     assert_eq!(state.turn, 1);
     assert!(state.message.contains("Ignited a torch"));
-    assert!(state.message.contains("pit trap"));
+    // `dungeon-mode.md §8.1`: the three-line pit group, once per descent
+    // step, ending on the six-space splat.
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(lines.contains(&"Pit Trap!"));
+    assert!(lines.contains(&"Falling..."));
+    assert!(lines.contains(&"      ...splat!"));
 }
 
 #[test]
@@ -929,7 +941,8 @@ fn pass_turn_on_dungeon_fall_trap_applies_underfoot_fall_after_turn() {
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.grid[dungeon_cell_index(1, 1, 1)], 0x08);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("pit trap"));
+    // `dungeon-mode.md §8.1` pit group.
+    assert_eq!(state.message, DUNGEON_SPLAT_LINE);
 }
 
 #[test]
@@ -952,8 +965,15 @@ fn inline_cast_on_dungeon_bomb_trap_marks_underfoot_without_extra_turn() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert!(state.message.contains("Light!"));
-    assert!(state.message.contains("bomb trap"));
+    // `dungeon-mode.md §8.1`: `Bomb Trap!` then `KABOOM!!`.
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(lines.iter().any(|line| line.contains("Light!")));
+    assert!(lines.contains(&"Bomb Trap!"));
+    assert!(lines.contains(&"KABOOM!!"));
 }
 
 #[test]
@@ -990,9 +1010,9 @@ fn dungeon_poison_field_entry_poison_living_party_without_blocking_movement() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.party[0].status, b'P');
     assert_eq!(state.party[1].status, b'D');
-    assert!(state.message.contains("poison gas field"));
-    assert!(state.message.contains("set 1 living member(s) to poisoned"));
-    assert!(!state.message.contains("out of scope"));
+    // `dungeon-mode.md §8.1`: the field line is the whole of the narration,
+    // and it prints before the per-member rolls.
+    assert_eq!(state.message, DUNGEON_POISON_FIELD_LINE);
 }
 
 #[test]
@@ -1009,9 +1029,8 @@ fn dungeon_generic_energy_field_moves_without_status_damage_or_placeholder() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.party[0].hp, 10);
-    assert!(state.message.contains("energy field"));
-    assert!(state.message.contains("no contact effect"));
-    assert!(!state.message.contains("first-playable"));
+    // `dungeon-mode.md §8.1`, "Any other underfoot byte: nothing".
+    assert!(state.message.is_empty());
 }
 
 #[test]
@@ -1068,8 +1087,8 @@ fn dungeon_sleep_field_marker_variant_sets_living_party_asleep_and_clears_cell()
         state.grid[dungeon_cell_index(0, 2, 1)],
         DUNGEON_VISIT_MARKER_BIT
     );
-    assert!(state.message.contains("sleep field"));
-    assert!(state.message.contains("asleep"));
+    // `dungeon-mode.md §8.1` sleep field.
+    assert_eq!(state.message, DUNGEON_SLEEP_FIELD_LINE);
 }
 
 #[test]
@@ -1121,11 +1140,15 @@ fn dungeon_fire_and_electric_fields_damage_living_party_members() {
     assert_eq!(fire.party[0].hp, 10 - expected_fire_damage as u16);
     assert_eq!(fire.party[1].hp, 9);
     assert_eq!(fire.prng_state, expected_fire_prng);
-    assert!(fire.message.contains("wall of fire"));
-    assert!(fire.message.contains("slot 0 took"));
+    // `dungeon-mode.md §8.1`: `Fire!!`, two exclamation marks, and no
+    // per-member damage narration.
+    assert_eq!(fire.message, DUNGEON_FIRE_FIELD_LINE);
 
+    // `dungeon-mode.md §8`: the movement-time electric test "is an exact
+    // comparison against `0x83`", so the base byte - not the marker variant -
+    // is the case that reacts.
     let mut electric_grid = open_dungeon_record();
-    electric_grid[dungeon_cell_index(0, 2, 1)] = 0x8b;
+    electric_grid[dungeon_cell_index(0, 2, 1)] = 0x83;
     let mut electric = dungeon_state(electric_grid, 0, 1, 1);
     electric.party[0].hp = 10;
     electric.prng_state = 0;
@@ -1137,7 +1160,41 @@ fn dungeon_fire_and_electric_fields_damage_living_party_members() {
     assert_eq!(electric.party[0].hp, 10 - expected_electric_damage as u16);
     assert_eq!(electric.prng_state, expected_electric_prng);
     assert_eq!((electric.player.x, electric.player.y), (1, 1));
-    assert!(electric.message.contains("electric field"));
+    // `dungeon-mode.md §8.1`: `Ouch!` then `Electric field!`, both printed
+    // before the destination-class test.
+    assert_eq!(electric.message, DUNGEON_ELECTRIC_FIELD_LINE);
+}
+
+/// `dungeon-mode.md §8.1`: "**Byte `0x8B` - the marked electric variant - is
+/// inert.** The movement-time test is an exact comparison against `0x83` on
+/// the raw cell byte, and the post-action pass has no `0x8B` arm; the byte
+/// therefore triggers nothing on either path, no line and no effect."
+#[test]
+fn dungeon_marked_electric_variant_is_inert_on_contact() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x8b;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.party[0].hp = 10;
+    state.party[0].status = b'G';
+    state.prng_state = 0;
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+    // No line: neither the electric pair nor any post-action field line.
+    assert_eq!(state.message, "");
+    assert!(!state
+        .message_transcript
+        .iter()
+        .any(|entry| entry.text.contains("Ouch!") || entry.text.contains("Electric field!")));
+    // No effect: no damage, no status change, no PRNG draw, and the cell
+    // byte is left exactly as it was.
+    assert_eq!(state.party[0].hp, 10);
+    assert_eq!(state.party[0].status, b'G');
+    assert_eq!(state.prng_state, 0);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x8b);
+    // No displacement reversal either - the step completes onto the cell,
+    // exactly as any other inert underfoot byte.
+    assert_eq!((state.player.x, state.player.y), (2, 1));
 }
 
 #[test]
@@ -1190,9 +1247,13 @@ fn consumed_dungeon_action_on_field_applies_underfoot_field_after_turn() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.party[0].status, b'P');
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert!(state.message.contains("Ignited a torch"));
-    assert!(state.message.contains("poison gas field"));
-    assert!(state.message.contains("poisoned"));
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(lines.iter().any(|line| line.contains("Ignited a torch")));
+    assert!(lines.contains(&"Poison!"));
 }
 
 #[test]
@@ -1208,9 +1269,16 @@ fn consumed_dungeon_action_on_sleep_field_clears_underfoot_field_after_turn() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.party[0].status, b'S');
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x00);
-    assert!(state.message.contains("Ignited a torch"));
-    assert!(state.message.contains("sleep field"));
-    assert!(state.message.contains("asleep"));
+    // `dungeon-mode.md §8.1` sleep field. The consequence line owns the
+    // compatibility slot, so the command's own line is checked on the
+    // transcript instead.
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(lines.iter().any(|line| line.contains("Ignited a torch")));
+    assert!(lines.contains(&"Sleep spell!"));
 }
 
 #[test]
@@ -1248,8 +1316,12 @@ fn pass_turn_on_dungeon_fire_field_damages_without_extra_turn() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.party[0].hp, 20 - expected_damage as u16);
     assert_eq!(state.prng_state, expected_prng);
-    assert!(state.message.contains("wall of fire"));
-    assert!(state.message.contains("slot 0 took"));
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(lines.contains(&"Fire!!"));
 }
 
 #[test]

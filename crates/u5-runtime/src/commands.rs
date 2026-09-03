@@ -808,8 +808,173 @@ pub const REST_NO_WATCH_LITERAL: &str = "None posted!\n\n";
 /// `Entered <name> level N at (x, y).` has no counterpart in the
 /// original; these two lines are the ones that do exist.
 pub const DUNGEON_ROOM_ENTRY_NARRATION: &str = "Entering room...\n";
+/// `doors-and-z-transitions.md §12.1`, dungeon exit: two prints, `\nExit to `
+/// with a trailing space and no line feed of its own, then the plane name with
+/// `\n\n`. Silent: no key wait and no sound at all. Rendered into the
+/// fifteen-column window the plane name lands whole on its own row.
 pub const DUNGEON_EXIT_TO_BRITANNIA_NARRATION: &str = "\nExit to Britannia!\n\n";
 pub const DUNGEON_EXIT_TO_UNDERWORLD_NARRATION: &str = "\nExit to Underworld!\n\n";
+
+/// `doors-and-z-transitions.md §12.1`, town-family boundary exit — the only
+/// key wait on any plane-change path. The prompt re-polls until `Y`, `N` or
+/// Escape, discards every other key, and does **not** echo, so the answer word
+/// below is printed by the handler.
+pub const TOWN_EXIT_PROMPT: &str = "\nDost thou wish to leave? ";
+/// The accepted answer plus the exit preamble. Unlike the dungeon form the
+/// break before the plane name **is** in the data, and the blank row sits
+/// before `Exit to` rather than after the plane name.
+pub const TOWN_EXIT_ACCEPTED_NARRATION: &str = "Yes\n\nExit to\n";
+/// `§12.1`: scene `0x19` (Ararat) is the only location on the underworld
+/// plane, so it is the only town-family exit that names the Underworld.
+pub const TOWN_EXIT_TO_UNDERWORLD_NARRATION: &str = "Underworld!\n";
+pub const TOWN_EXIT_TO_BRITANNIA_NARRATION: &str = "Britannia!\n";
+/// `§12.1`: declining (`N` or Escape) prints `No\n` and nothing else.
+pub const TOWN_EXIT_DECLINED_NARRATION: &str = "No\n";
+
+/// `overworld.md §8.1` falls chain, step 1. There is no leading blank row and
+/// no trailing blank row, and the chain carries **no per-member narration**
+/// at all: the fall's per-member feedback is a stats-row flash and a rumble.
+pub const OVERWORLD_FALLS_BANNER: &str = "F-A-L-L-S!!!\n";
+/// `overworld.md §8.1` falls chain, step 7 — printed **only** when the party
+/// now stands on Britannia `(54, 138)`. Rendered into the fifteen-column
+/// window the printer breaks it on the space after `into`.
+pub const OVERWORLD_FALLS_UNDERWORLD_NARRATION: &str = "Falling into underworld!!\n";
+/// `overworld.md §8.1` whirlpool swallow, step 1 — "note the leading line
+/// feed, which costs one blank row". It is the first and only text on the
+/// path; there is no advance warning line.
+pub const OVERWORLD_WHIRLPOOL_BANNER: &str = "\nWHIRLPOOL!\n";
+
+/// `dungeon-mode.md §8.1` post-action underfoot consequences, in print order
+/// per event. None of these carries a leading `\n` of its own: the blank line
+/// the player sees before each message is the render-and-poll step's line feed
+/// plus border repaint, "not the string's", and "an implementation that adds
+/// one per message will double the spacing".
+pub const DUNGEON_SLEEP_FIELD_LINE: &str = "Sleep spell!\n";
+pub const DUNGEON_POISON_FIELD_LINE: &str = "Poison!\n";
+/// Two exclamation marks.
+pub const DUNGEON_FIRE_FIELD_LINE: &str = "Fire!!\n";
+/// `§8.1` fall trap `0x61` / `0x69`, **once per descent step**: this line,
+/// then `Falling...`, then the level change and view repaint, then the splat.
+pub const DUNGEON_PIT_TRAP_LINE: &str = "Pit Trap!\n";
+pub const DUNGEON_FALLING_LINE: &str = "Falling...\n";
+/// **Six leading spaces**, and they are significant.
+pub const DUNGEON_SPLAT_LINE: &str = "      ...splat!\n";
+pub const DUNGEON_BOMB_TRAP_LINE: &str = "Bomb Trap!\n";
+pub const DUNGEON_KABOOM_LINE: &str = "KABOOM!!\n";
+/// `§8.1` electric contact is a movement-time consequence: these two lines
+/// print **before** the destination-class test, so they precede any
+/// `Blocked!` the same step later produces.
+pub const DUNGEON_ELECTRIC_OUCH_LINE: &str = "Ouch!\n";
+pub const DUNGEON_ELECTRIC_FIELD_LINE: &str = "Electric field!\n";
+
+/// `dungeon-mode.md §8.1` darkness refusals — both break after the colon
+/// (`RETRACTIONS.md` R323). There is no "too dark" literal anywhere; the
+/// Search form is a *find* line with a leading blank row.
+pub const DUNGEON_LOOK_DARKNESS_REFUSAL: &str = "You see:\ndarkness.\n";
+pub const DUNGEON_SEARCH_DARKNESS_REFUSAL: &str = "\nYou find:\ndarkness.\n";
+
+/// `dungeon-mode.md §8.1`: Search prints this preamble **unconditionally**,
+/// then exactly one outcome line. `Nothing of note.` is an *outcome*, not the
+/// preamble (`RETRACTIONS.md` R324).
+pub const DUNGEON_SEARCH_PREAMBLE: &str = "You find:\n";
+pub const DUNGEON_SEARCH_NOTHING_OF_NOTE: &str = "Nothing of note.\n";
+/// The line break is in the data.
+pub const DUNGEON_SEARCH_NOTHING_IN_PIT: &str = "Nothing hidden\nin the pit.\n";
+pub const DUNGEON_SEARCH_NOTHING_ON_LADDER: &str = "Nothing hidden on the ladder.\n";
+pub const DUNGEON_SEARCH_NOTHING_ON_FOUNTAIN: &str = "Nothing hidden on the fountain.\n";
+pub const DUNGEON_SEARCH_NOTHING_ON_DOOR: &str = "Nothing hidden on the door.\n";
+pub const DUNGEON_SEARCH_NOTHING_ON_WALL: &str = "Nothing hidden on the wall.\n";
+pub const DUNGEON_SEARCH_TREASURE: &str = "Treasure!\n";
+pub const DUNGEON_SEARCH_IMPOSSIBLE_TILE: &str = "This tile is impossible.\n";
+pub const DUNGEON_SEARCH_NOTHING_ON_STALACTITE: &str = "Nothing on the stalactite.\n";
+pub const DUNGEON_SEARCH_NOTHING_IN_CAVED_IN_PASSAGE: &str = "Nothing in the caved in passage.\n";
+pub const DUNGEON_SEARCH_NOTHING_ON_SKELETON: &str = "Nothing hidden on the skeleton.\n";
+pub const DUNGEON_SEARCH_SKELETON_CRUMBLES: &str = "It crumbles away.\n";
+/// `RETRACTIONS.md` R322: `A hidden door!` belongs to the `0xD?` **wall**
+/// branch, and `A pit!` is the exact-`0x61` outcome — the two were swapped.
+pub const DUNGEON_SEARCH_HIDDEN_DOOR: &str = "A hidden door!\n";
+pub const DUNGEON_SEARCH_A_PIT: &str = "A pit!\n";
+pub const DUNGEON_SEARCH_A_BOMB_TRAP: &str = "A bomb trap!\n";
+/// The four trap-tier lines, **none of which carries a terminal period**.
+/// Selected by `dungeon_chest_search_trap_line` from the tier the dungeon
+/// chest Search detection roll computes (`dungeon-mode.md` Section 8).
+pub const DUNGEON_SEARCH_NO_TRAP: &str = "No trap\n";
+pub const DUNGEON_SEARCH_SIMPLE_TRAP: &str = "A simple trap\n";
+pub const DUNGEON_SEARCH_GENERIC_TRAP: &str = "A trap\n";
+pub const DUNGEON_SEARCH_COMPLEX_TRAP: &str = "A complex trap\n";
+
+/// **PUBLISHED, UNWIRED.** The seven literals below are transcribed from the
+/// spec and pinned by the conformance test, but no handler reads them yet:
+/// the dungeon fountain drink path still renders this engine's own diagnostic
+/// prose. They are kept as the published record of the text, deliberately and
+/// visibly ahead of the wiring - see the convention note at
+/// [`DUNGEON_KLIMB_PROMPT_BOTH`]. Nothing here may be read as a claim that
+/// the engine already prints them.
+///
+/// `dungeon-mode.md §8.1` fountain drink flow. The prompt blocks until `Y` or
+/// `N`; the accepted answer carries **two spaces** after the period.
+pub const DUNGEON_FOUNTAIN_DRINK_PROMPT: &str = "Will you drink?\n";
+pub const DUNGEON_FOUNTAIN_DECLINED: &str = "No.\n";
+pub const DUNGEON_FOUNTAIN_ACCEPTED: &str = "Yes.  Gulp!\n";
+pub const DUNGEON_FOUNTAIN_CURED: &str = "Cured!\n";
+pub const DUNGEON_FOUNTAIN_HEALED: &str = "Healed!\n";
+pub const DUNGEON_FOUNTAIN_POISONED: &str = "Poisoned!\n";
+pub const DUNGEON_FOUNTAIN_BAD_TASTE: &str = "Bad taste.\n";
+
+/// **PUBLISHED, UNWIRED - and the convention note for that marker.** A
+/// literal carrying this marker is transcribed from the spec and pinned by
+/// the conformance test, but has no reader in any handler, because the engine
+/// does not yet reach the situation that prints it. Deleting such a literal
+/// until its handler lands would lose the transcription and invite a later
+/// re-invention of the text, so the constants stay, marked. The project's own
+/// "does anything read this?" check should treat a marked constant as a
+/// known, disclosed gap and an unmarked one with no reader as a defect.
+///
+/// Unwired here: the three prompt forms and the Space answer.
+/// `DUNGEON_KLIMB_WHAT_REFUSAL`, `DUNGEON_KLIMB_UP`, `DUNGEON_KLIMB_DOWN` and
+/// `DUNGEON_KLIMB_FAILED` below **are** wired.
+///
+/// `dungeon-mode.md §8.1` Klimb prompts. `Klimb-U/D-` blocks until up or down
+/// is chosen and Space answers `Pass\n\n`; `Klimb-` is the one-direction form;
+/// `Klimb-\nWith What?\n` is the climb-with-equipment refusal — whether it is
+/// specifically the *no-grapple* refusal is **probable, not established**, so
+/// no caller may treat the gating byte as confirmed to be the grapple count.
+pub const DUNGEON_KLIMB_PROMPT_BOTH: &str = "Klimb-U/D-";
+pub const DUNGEON_KLIMB_PROMPT_ONE: &str = "Klimb-";
+pub const DUNGEON_KLIMB_WITH_WHAT_REFUSAL: &str = "Klimb-\nWith What?\n";
+pub const DUNGEON_KLIMB_WHAT_REFUSAL: &str = "Klimb-what?\n";
+pub const DUNGEON_KLIMB_PASS: &str = "Pass\n\n";
+/// Applying a climb prints the direction word **first**, before any test.
+pub const DUNGEON_KLIMB_UP: &str = "Up!\n";
+pub const DUNGEON_KLIMB_DOWN: &str = "Down!\n";
+/// `§8.1`: an impassable destination adds this, with the short **rising**
+/// sweep — the same recipe the spell-failure tail uses, not the falls descent.
+pub const DUNGEON_KLIMB_FAILED: &str = "Failed!\n";
+
+/// **PUBLISHED, UNWIRED.** The twelve chest literals below have no reader in
+/// any handler yet - the dungeon Jimmy/Open/Get arms still render this
+/// engine's own prose, and wiring them means also reproducing the resident
+/// dispatcher's `Jimmy-`/`Open-` prefix row. Marked per the convention note
+/// at [`DUNGEON_KLIMB_PROMPT_BOTH`].
+///
+/// `dungeon-mode.md §8.1` chest lines. The resident dispatcher's prefix and
+/// the overlay's line share a row unless the overlay's line begins with a
+/// line feed, so Jimmy's results all start with a bare `\n` and Open's last
+/// two arms deliberately do not.
+pub const DUNGEON_CHEST_JIMMY_NO_KEYS: &str = "\nNo keys!\n";
+pub const DUNGEON_CHEST_JIMMY_KEY_BROKE: &str = "\nKey broke!\n";
+pub const DUNGEON_CHEST_JIMMY_UNLOCKED: &str = "\nChest unlocked\n";
+pub const DUNGEON_CHEST_JIMMY_ALREADY_OPEN: &str = "\nAlready open!\n";
+pub const DUNGEON_CHEST_JIMMY_WHAT: &str = "\nWhat?\n";
+pub const DUNGEON_CHEST_OPENED: &str = "\nChest opened\n";
+/// Capital `O` — a **different** literal from Jimmy's, and it carries no
+/// leading line feed, so it renders on the prefix's own row.
+pub const DUNGEON_CHEST_OPEN_ALREADY_OPEN: &str = "Already Open!\n";
+pub const DUNGEON_CHEST_OPEN_WHAT: &str = "What?\n";
+pub const DUNGEON_CHEST_GET_ECHO: &str = "Get\n";
+pub const DUNGEON_CHEST_GET_MUST_OPEN_FIRST: &str = "Must open first!\n";
+pub const DUNGEON_CHEST_GET_NOT_HERE: &str = "Not here!\n";
+pub const DUNGEON_CHEST_GET_CONTENTS: &str = "contents\nof chest\nYou find:\n";
 
 /// `commands.md §5.2` (`cleak/u5-spec#81`): surface and town movement
 /// keys echo the direction's name plus a newline — the same four words

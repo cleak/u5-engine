@@ -261,18 +261,57 @@ pub const fn moonstone_burial_tile_accepted(tile_id: u8) -> bool {
 /// written into the destination-scene byte of an unused Moonstone slot.
 pub const MOONSTONE_GATE_INVALID_SCENE: u8 = 0xFF;
 
-/// `catalogs/gazetteer.md §8`: confirmed surface chasm at Britannia
-/// `(54, 138)` — stepping onto this cell damages the party, swaps the
-/// plane to the Underworld, and reseeds active objects.
+/// `overworld.md §8` / `§8.1`: Britannia `(54, 138)` is **not** the falls
+/// trigger. It is the cell the handler tests *after* it has already printed
+/// the banner and force-stepped the party two cells south, and the only
+/// coordinate on either plane whose landing also writes the underworld plane
+/// (`RETRACTIONS.md` R320). The trigger itself is [`is_waterfall_tile`].
 pub const SURFACE_CHASM_X: u8 = 54;
 pub const SURFACE_CHASM_Y: u8 = 138;
+/// Whether a *landing* coordinate opens the plane gate. `§8.1` notes the gate
+/// "never tests the plane", which is harmless in stock data because no
+/// underworld brink can reach column 54.
 pub const fn is_surface_chasm_cell(x: u8, y: u8) -> bool {
     x == SURFACE_CHASM_X && y == SURFACE_CHASM_Y
 }
 
-/// `overworld.md Section 8`: maximum Dexterity-save byte rolled when
-/// the Britannia chasm/falls handler checks each living party member.
-/// This cap is for the Dexterity save roll, not for damage amount.
-/// The runtime draws a uniform byte and applies one point of damage
-/// unless the member's Dexterity byte is greater than the roll.
-pub const WORLD_PLANE_FALL_SAVE_ROLL_MAX: u8 = u8::MAX;
+/// `catalogs/tile-catalog.md §3.1`: the waterfall family, a four-frame
+/// animated run. `overworld.md §8` makes any of the four the falls trigger,
+/// "either south of the party or under it ... on **both** planes"
+/// (`RETRACTIONS.md` R320).
+pub const WATERFALL_TILE_FIRST: u8 = 0xD4;
+pub const WATERFALL_TILE_LAST: u8 = 0xD7;
+pub const fn is_waterfall_tile(tile: u8) -> bool {
+    tile >= WATERFALL_TILE_FIRST && tile <= WATERFALL_TILE_LAST
+}
+
+/// `overworld.md §8` "Whirlpool": the fixed underworld emergence coordinate
+/// an outdoor whirlpool engagement forces a non-foot party to.
+pub const WHIRLPOOL_UNDERWORLD_EMERGENCE_X: usize = 34;
+pub const WHIRLPOOL_UNDERWORLD_EMERGENCE_Y: usize = 18;
+
+/// `overworld.md §8`, forced-movement table, "Surface chasm/falls" row: the
+/// handler pushes the party **two cells south**, with one world tick between
+/// the two steps.
+pub const OVERWORLD_FALLS_FORCED_STEPS_SOUTH: usize = 2;
+
+/// `overworld.md §8` + `RETRACTIONS.md` R321: the per-member fall check draws
+/// the shared skewed closed-interval `1..30` roll — a uniform `0..60` halved
+/// with truncation and zero promoted to one, the helper `combat.md §9.1`
+/// publishes — and applies `1 HP` when the member's Dexterity byte is **less
+/// than or equal to** the roll.
+///
+/// The earlier `0..255` byte with a strictly-greater gate made fall damage
+/// nearly impossible, where a Dexterity-20 member is really hit about one
+/// time in three.
+pub const WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW: u8 = 0;
+pub const WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH: u8 = 60;
+/// `overworld.md §8`: the flat one point of damage a failed check applies.
+pub const WORLD_PLANE_FALL_DAMAGE: u8 = 1;
+/// Inclusive, deliberately: this is **not** the outdoor K-Klimb contract,
+/// which draws a flat `1..30` and gates strictly
+/// (`doors-and-z-transitions.md §12.1`, "Do not share one implementation
+/// between the two").
+pub const fn world_plane_fall_member_takes_damage(dexterity: u8, roll_1_to_30: u8) -> bool {
+    dexterity <= roll_1_to_30
+}

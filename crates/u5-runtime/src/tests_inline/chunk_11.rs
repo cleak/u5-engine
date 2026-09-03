@@ -417,7 +417,9 @@
         );
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
         assert_eq!((state.player.x, state.player.y), (0, 0));
-        assert_eq!(state.message, "Leave CASTLE:0?");
+        // `doors-and-z-transitions.md §12.1`: the exact prompt, leading line
+        // feed and trailing space included. It does not echo the answer.
+        assert_eq!(state.message, TOWN_EXIT_PROMPT);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
@@ -440,9 +442,11 @@
         assert!(state.return_world.is_none());
         assert_eq!(state.turn, 0);
         assert!(state.visibility_dirty);
+        // `§12.1`, accepted arm: `Yes`, a blank row, `Exit to`, then the
+        // plane name - here the break before the plane name is in the data.
         assert_eq!(
             state.message,
-            "Yes. Left CASTLE:0 for BRITANNIA via the canonical outdoor table."
+            format!("{TOWN_EXIT_ACCEPTED_NARRATION}{TOWN_EXIT_TO_BRITANNIA_NARRATION}")
         );
 
         assert_eq!(
@@ -639,7 +643,9 @@
         );
         assert_eq!(state.area, Area::Town { scene, floor: 0 });
         assert_eq!((state.player.x, state.player.y), (31, 0));
-        assert_eq!(state.message, "Leave CASTLE:0?");
+        // `doors-and-z-transitions.md §12.1`: the exact prompt, leading line
+        // feed and trailing space included. It does not echo the answer.
+        assert_eq!(state.message, TOWN_EXIT_PROMPT);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
@@ -653,9 +659,11 @@
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.turn, 0);
+        // `§12.1`, accepted arm: `Yes`, a blank row, `Exit to`, then the
+        // plane name - here the break before the plane name is in the data.
         assert_eq!(
             state.message,
-            "Yes. Left CASTLE:0 for BRITANNIA via the canonical outdoor table."
+            format!("{TOWN_EXIT_ACCEPTED_NARRATION}{TOWN_EXIT_TO_BRITANNIA_NARRATION}")
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -761,7 +769,8 @@
             assert_eq!((state.player.x, state.player.y), (0, 9));
             assert_eq!(state.active_yes_no_prompt, None);
             assert_eq!(state.turn, 1);
-            assert_eq!(state.message, "No.");
+            // `§12.1`, declined arm: "`No` and nothing else".
+            assert_eq!(state.message, TOWN_EXIT_DECLINED_NARRATION);
         }
         let _ = fs::remove_dir_all(dir);
     }
@@ -819,7 +828,9 @@
         );
         assert_eq!(state.turn, 0);
         assert!(state.active_yes_no_prompt.is_some());
-        assert_eq!(state.message, "Leave CASTLE:0?");
+        // `doors-and-z-transitions.md §12.1`: the exact prompt, leading line
+        // feed and trailing space included. It does not echo the answer.
+        assert_eq!(state.message, TOWN_EXIT_PROMPT);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1800,6 +1811,8 @@
         assert_eq!((state.player.x, state.player.y), (30, 40));
         assert_eq!(state.player.transport, TransportState::Foot);
         assert_eq!(state.turn, 1);
-        assert!(state.message.starts_with("F-A-L-L-S"));
+        // `RETRACTIONS.md` R320: the sidecar plane transition narrates
+        // nothing.
+        assert!(!state.message.contains("F-A-L-L-S"));
         let _ = fs::remove_dir_all(dir);
     }

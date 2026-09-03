@@ -855,7 +855,11 @@ impl PlayState {
                     }
                     DungeonKlimbApply::TwoWayPrompt => Ok(self.start_klimb_direction_prompt()),
                     DungeonKlimbApply::NoLevelChange => {
-                        self.message = "Not climbable!".to_string();
+                        // `dungeon-mode.md` Section 8.1 Klimb prompts:
+                        // `Klimb-what?` "when neither [direction] is [available]
+                        // and the cell has no climbable feature at all". There
+                        // is no "you are at the top/bottom level" refusal.
+                        self.message = DUNGEON_KLIMB_WHAT_REFUSAL.to_string();
                         Ok(MoveOutcome::Blocked)
                     }
                 }
@@ -1020,8 +1024,31 @@ impl PlayState {
         // and is contradicted by the shipped `DUNGEON.DAT`: Deceit level
         // zero carries `0x60` at (1, 3) and Destard level zero at (7, 3)
         // and (1, 7), where klimbing descends to level one.
+        // `dungeon-mode.md` Section 8.1: "Applying a climb prints `Up!` or
+        // `Down!` **first**, before any test."
+        self.emit_message_line(match intent {
+            ClimbIntent::Up => DUNGEON_KLIMB_UP,
+            ClimbIntent::Down => DUNGEON_KLIMB_DOWN,
+        });
         let Some(delta) = dungeon_ladder_delta(tile, intent) else {
-            self.message = "Not climbable!".to_string();
+            // "an impassable destination then adds `Failed!` with the short
+            // **rising** sweep ... the same recipe the spell-failure tail
+            // uses" - not the falls-style descent.
+            //
+            // **Engine assignment, not a published pairing** - marked rather
+            // than hidden, the same way `dungeon_search_outcome_line` marks
+            // its stalactite/caved-in flavour pairing. Section 8.1 attaches
+            // `Failed!` to "an impassable **destination**", while §13.1 and
+            // `doors-and-z-transitions.md §9` state a climb "never tests the
+            // cell it lands on". No published sentence joins the line to the
+            // predicate used here, which is the *underfoot* cell not offering
+            // the requested direction - the residual case the prompt-form
+            // dispatcher (which answers `Klimb-what?` when the cell offers
+            // neither direction) does not already cover. It is kept because
+            // it is the nearest published refusal for a climb that cannot
+            // apply; it is not evidence about the original's condition.
+            self.message = DUNGEON_KLIMB_FAILED.to_string();
+            self.emit_sound_effect(SoundEffect::CastFailure);
             return Ok(MoveOutcome::Blocked);
         };
         let next_level = level as i8 + delta;
@@ -1055,12 +1082,13 @@ impl PlayState {
         self.setup_dungeon_active_monster_fresh();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Changed to {} ({}) level {}.",
-            scene.key(),
-            scene.name(),
-            dungeon_display_level(next_level)
-        );
+        // Section 8.1: the direction word above is the whole of an accepted
+        // climb's narration; there is no level or coordinate line.
+        self.message = match intent {
+            ClimbIntent::Up => DUNGEON_KLIMB_UP,
+            ClimbIntent::Down => DUNGEON_KLIMB_DOWN,
+        }
+        .to_string();
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel {
                 scene,
@@ -1832,20 +1860,13 @@ impl PlayState {
         x: usize,
         y: usize,
     ) -> io::Result<Option<WorldPlaneTransitionEntry>> {
-        if plane == WorldPlane::Britannia
-            && x == usize::from(SURFACE_CHASM_X)
-            && y == usize::from(SURFACE_CHASM_Y)
-        {
-            return Ok(Some(WorldPlaneTransitionEntry {
-                from_plane: WorldPlane::Britannia,
-                x,
-                y,
-                to_plane: WorldPlane::Underworld,
-                to_x: x,
-                to_y: y,
-                expected_tile: None,
-            }));
-        }
+        // `RETRACTIONS.md` R320: the surface chasm is **not** a coordinate
+        // trigger. `(54, 138)` is the cell the falls handler tests after its
+        // two forced southward steps, and the whole chain - banner, steps,
+        // sweep, damage pass and only then the plane write - belongs to
+        // `PlayState::apply_world_falls_chain`. Keying an underfoot plane
+        // transition on the coordinate fired at none of the real brink cells
+        // and skipped the forced steps everywhere, so that arm is gone.
         let tile = self.grid[world_cell_index(x, y)];
         Ok(
             load_world_plane_transition_entries(game_dir)?.and_then(|entries| {

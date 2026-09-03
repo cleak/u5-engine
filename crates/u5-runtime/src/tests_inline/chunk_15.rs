@@ -410,7 +410,9 @@
 
         assert!(state.handle_dungeon_key('k', Path::new("")).unwrap());
 
-        assert_eq!(state.message, "Not climbable!");
+        // `dungeon-mode.md §8.1` Klimb prompts: `Klimb-what?` when the cell
+        // has no climbable feature at all.
+        assert_eq!(state.message, DUNGEON_KLIMB_WHAT_REFUSAL);
         assert_eq!(state.turn, 0);
     }
 
