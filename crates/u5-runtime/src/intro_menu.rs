@@ -238,6 +238,24 @@ impl IntroMenu {
         result: IntroSubflowResult,
     ) -> IntroMenuOutput {
         self.idle_passes = 0;
+        // `intro.md §6.2`: "the menu ... returns to the same state after
+        // every non-play sub-screen finishes", and "**The initial highlight
+        // is row 0, `Journey Onward`**".
+        //
+        // Runtime observation (spec does not say this explicitly): in the
+        // original, every way into the Return-to-View preview leaves the bar
+        // on `Journey Onward` when the preview is aborted — the one-shot
+        // automatic preview, the two-hundred-pass idle timeout, and an
+        // explicit `R`. Measured three ways against DOS Ultima V under DOSBox
+        // (`machine=ega`, `cycles=max`): abort the automatic preview and the
+        // bar is row 0; let the idle timeout re-enter it, abort, and Enter
+        // loads the save rather than replaying the preview; move the bar to
+        // row 2 with the arrows, press `R`, abort, and the bar is back on row
+        // 0 with Enter again loading the save. So the reset is real state, not
+        // just a stale restored image.
+        if matches!(sub, IntroSubflow::ReturnToView) {
+            self.highlight_row = INTRO_MENU_INITIAL_HIGHLIGHT_ROW;
+        }
         match (sub, result) {
             (IntroSubflow::JourneyOnward, IntroSubflowResult::SaveReady) => {
                 self.phase = IntroMenuPhase::LaunchedGameplay;
@@ -303,6 +321,34 @@ mod tests {
             menu.step(b'c'),
             IntroMenuOutput::EnterSubflow(IntroSubflow::CharacterCreation)
         );
+    }
+
+    /// `intro.md §6.2`: "`J`, `C`, `T`, `U`, `A`, `R` (folded to uppercase) |
+    /// Move the highlight to that row **and** commit it in the same pass."
+    /// Every published letter commits on its own, in either case.
+    #[test]
+    fn every_published_letter_commits_its_row_in_one_pass() {
+        let expected = [
+            (b'J', IntroSubflow::JourneyOnward),
+            (b'C', IntroSubflow::CharacterCreation),
+            (b'T', IntroSubflow::UltimaIvTransfer),
+            (b'U', IntroSubflow::StorySlides),
+            (b'A', IntroSubflow::Acknowledgements),
+            (b'R', IntroSubflow::ReturnToView),
+        ];
+        for (row, (letter, subflow)) in expected.into_iter().enumerate() {
+            for key in [letter, letter.to_ascii_lowercase()] {
+                let mut menu = IntroMenu::new();
+                menu.dismiss_title();
+                assert_eq!(
+                    menu.step(key),
+                    IntroMenuOutput::EnterSubflow(subflow),
+                    "key {}",
+                    key as char
+                );
+                assert_eq!(menu.highlight_row, row as u8, "key {}", key as char);
+            }
+        }
     }
 
     #[test]
@@ -448,6 +494,60 @@ mod tests {
         );
         assert_eq!(menu.idle_passes, 0);
         assert_eq!(menu.idle_pass(), IntroMenuOutput::PresentMenu);
+    }
+
+    /// Runtime observation of the original (spec silent): whichever way the
+    /// Return-to-View preview was entered, aborting it leaves the bar on
+    /// `Journey Onward`, and Enter then loads the save rather than replaying
+    /// the preview.
+    #[test]
+    fn return_to_view_return_restores_the_journey_onward_highlight() {
+        // Explicit `R` from a row the arrows moved to.
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        menu.step(crate::INPUT_CODE_SOUTH);
+        menu.step(crate::INPUT_CODE_SOUTH);
+        assert_eq!(menu.highlight_row, 2);
+        menu.step(b'R');
+        menu.complete_subflow(
+            IntroSubflow::ReturnToView,
+            IntroSubflowResult::ReturnedToMenu,
+        );
+        assert_eq!(menu.highlight_row, INTRO_MENU_INITIAL_HIGHLIGHT_ROW);
+        assert_eq!(menu.highlight(), IntroSubflow::JourneyOnward);
+        // Enter therefore commits Journey Onward, not another preview.
+        assert_eq!(
+            menu.step(b'\r'),
+            IntroMenuOutput::EnterSubflow(IntroSubflow::JourneyOnward)
+        );
+
+        // The two-hundred-pass idle timeout ends the same way.
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        for _ in 0..INTRO_MENU_IDLE_TIMEOUT_PASSES {
+            menu.idle_pass();
+        }
+        assert_eq!(menu.highlight_row, 5);
+        menu.complete_subflow(
+            IntroSubflow::ReturnToView,
+            IntroSubflowResult::ReturnedToMenu,
+        );
+        assert_eq!(menu.highlight_row, INTRO_MENU_INITIAL_HIGHLIGHT_ROW);
+    }
+
+    /// The reset is specific to Return-to-View; the other sub-flows keep the
+    /// row they committed, which is what `enter_key_commits_the_highlighted_row`
+    /// above relies on.
+    #[test]
+    fn other_subflow_returns_keep_their_committed_row() {
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        menu.step(b'A');
+        menu.complete_subflow(
+            IntroSubflow::Acknowledgements,
+            IntroSubflowResult::ReturnedToMenu,
+        );
+        assert_eq!(menu.highlight_row, 4);
     }
 
     #[test]

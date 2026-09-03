@@ -1095,6 +1095,26 @@ const INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES: u16 = u5_runtime::INTRO_MENU_IDLE_T
 /// not ~11 s, and the flame band advances once per pass rather than
 /// once per BIOS tick.
 const INTRO_MENU_IDLE_POLL_BIOS_TICKS: u16 = 2;
+/// `formats/location-dat.md §11` "Return-to-View preview tick": one
+/// preview tick fires an intro title tick (step 2) and then waits one
+/// hardware tick (step 7). The title-tick helper "has that one-tick
+/// wait built into its body" (`systems/intro.md §5`), so a preview
+/// tick costs the same two DOS BIOS user-ticks a no-key menu poll pass
+/// does, and the idle band advances once per preview tick rather than
+/// once per BIOS tick.
+///
+/// Two independent measurements of the original agree (DOSBox Staging,
+/// `machine=ega`, `cycles=max`):
+///
+/// - Reveal geometry, which no capture tearing can distort. `0x06`
+///   opens the strip one column each side every second preview tick,
+///   so the revealed span dates the tick count exactly. 0.8 s after
+///   the attract demo starts, the span is columns `5..13` — ticks
+///   9-10, i.e. ~100 ms per preview tick. At one BIOS tick per preview
+///   tick the strip would already be at `1..17`.
+/// - ROI hashing of the band: 105.0 ms per change during the demo and
+///   108.3 ms at the settled menu — the same cadence, not half of it.
+const INTRO_PREVIEW_TICK_BIOS_TICKS: u16 = INTRO_MENU_IDLE_POLL_BIOS_TICKS;
 
 const CREATE_OPENING_PANEL: ImagePanelSpec = ImagePanelSpec {
     stem: "CREATE",
@@ -10921,6 +10941,21 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         if matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)) {
             return advance_visual_intro_acknowledgements(intro);
         }
+        // One Return-to-View preview tick spans two BIOS ticks, so the pump
+        // has to fold pairs of ticks into a single preview step — otherwise
+        // both the preview and the idle band above it run at twice the
+        // published rate. See [`INTRO_PREVIEW_TICK_BIOS_TICKS`].
+        if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
+            let preview_tick = intro.menu_idle_bios_ticks + 1 >= INTRO_PREVIEW_TICK_BIOS_TICKS;
+            intro.menu_idle_bios_ticks = if preview_tick {
+                0
+            } else {
+                intro.menu_idle_bios_ticks + 1
+            };
+            if !preview_tick {
+                return false;
+            }
+        }
         let mut title_tick_frame = intro.title_tick_frame;
         let title_tick_visible_frame = intro.title_tick_frame;
         if !advance_visual_intro_panel_animation(&mut intro.panel, &mut title_tick_frame) {
@@ -13260,6 +13295,20 @@ fn render_return_to_view_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         .expect("Return-to-View requires preserved intro backing surface")
         .clone();
 
+    // `formats/location-dat.md §11` "Return-to-View preview tick", step 2:
+    // "Fire one intro title tick, so the menu's idle animation band keeps
+    // moving while the preview owns the lower window." `systems/intro.md §5`
+    // fixes what that tick paints: "one clear-carry title tick draws the
+    // current frame strip over the start/menu screen at pixel `(0, 65)` with
+    // size `320 x 49`", and `§12` confirms "the banner logo and the idle
+    // animation band above it are untouched" by the preview.
+    //
+    // The preserved backing froze the band on whichever frame the preview was
+    // entered on, so the band has to be redrawn from the live counter on every
+    // preview tick instead of being inherited from that snapshot.
+    let title_tick_frame = intro.title_tick_visible_frame;
+    let title_tick_frames = ensure_title_tick_frames(&mut *intro).clone();
+
     let VisualIntroPanel::ReturnToView {
         preview_frames,
         frame_metadata,
@@ -13300,6 +13349,7 @@ fn render_return_to_view_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     };
 
     let mut buffer = backing;
+    buffer.draw_title_tick(title_tick_frame, &title_tick_frames);
     paint_out_intro_menu_select_caption(&mut buffer);
     buffer.blit_return_to_view_preview_buffer(strip, RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y);
     if let ReturnToViewFrameKind::FixedWipeRectangle { step } = current_meta.kind {
@@ -24914,7 +24964,26 @@ mod tests {
         surface.clear(backing);
         intro.modal_backing = Some(surface);
         intro.title_tick_visible_frame = 0;
+        // `formats/location-dat.md §11` preview tick step 2 fires a title
+        // tick per preview tick, so the preview renderer needs the four-frame
+        // strip. The debug game dir carries no `ULTIMA` archive, so install a
+        // synthetic strip whose frame N is a solid palette index N + 1.
+        intro.title_tick_frames = Some(synthetic_title_tick_frames());
         intro
+    }
+
+    /// Four solid title-tick frames, frame `N` painted in palette index
+    /// `N + 1`, so a renderer test can tell which frame reached the band.
+    fn synthetic_title_tick_frames() -> TitleTickFrameSet {
+        let mut pixels = Vec::with_capacity(u5_runtime::TITLE_TICK_FRAME_SET_BYTES);
+        for frame in 0..u5_runtime::TITLE_TICK_FRAME_COUNT {
+            pixels.extend(std::iter::repeat_n(
+                frame + 1,
+                u5_runtime::TITLE_TICK_FRAME_PIXELS,
+            ));
+        }
+        TitleTickFrameSet::from_palette_indices(pixels, "synthetic title-tick strip")
+            .expect("synthetic title-tick strip is the published size and palette range")
     }
 
     fn return_to_view_test_panel(kind: ReturnToViewFrameKind) -> VisualIntroPanel {
@@ -24963,6 +25032,13 @@ mod tests {
         // `cleak/u5-spec#122`: the per-preview reader consumes the key and
         // discards its identity. A `C` used to abort cannot immediately enter
         // character creation after the saved menu page is restored.
+        //
+        // The highlight assertion below used to demand `ReturnToView`. That
+        // pinned the defect: the bar stayed on row 5, so the very next Enter
+        // or Space replayed the preview. The original leaves the bar on
+        // `Journey Onward` after every abort (see
+        // `IntroMenu::complete_subflow`), which is what is asserted now — and
+        // it still witnesses that the aborting `C` did not dispatch.
         let dir = debug_game_dir();
         let mut intro = return_to_view_intro_state(
             dir.clone(),
@@ -24976,7 +25052,106 @@ mod tests {
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert_eq!(
             visual_intro_menu_highlight(&intro),
-            IntroSubflow::ReturnToView
+            IntroSubflow::JourneyOnward
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `formats/location-dat.md §11` "Return-to-View preview tick", step 2:
+    /// "Fire one intro title tick, so the menu's idle animation band keeps
+    /// moving while the preview owns the lower window." `systems/intro.md §5`
+    /// puts that strip at `(0, 65)`, `320 x 49`.
+    ///
+    /// The renderer used to clone the preserved backing untouched, so the band
+    /// froze on whatever frame the preview was entered on — measured as zero
+    /// band changes across 11 s of attract demo while the original cycles four
+    /// frames at ~110 ms.
+    #[test]
+    fn return_to_view_frame_redraws_the_idle_band_from_the_live_counter() {
+        let dir = debug_game_dir();
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
+
+        let band_pixel = |intro: &VisualIntroState| {
+            let y = usize::from(u5_runtime::TITLE_TICK_FRAME_Y);
+            intro.surface.pixels[y * intro.surface.width]
+        };
+
+        for frame in 0..u5_runtime::TITLE_TICK_FRAME_COUNT {
+            intro.title_tick_visible_frame = frame;
+            let _ = render_intro_frame(&mut intro);
+            // The synthetic strip paints frame N in palette index N + 1.
+            assert_eq!(
+                band_pixel(&intro),
+                frame + 1,
+                "preview tick must repaint the band with title-tick frame {frame}"
+            );
+        }
+
+        // The row above the band still carries the preserved backing: the
+        // preview repaints the band, not the logo.
+        let above = usize::from(u5_runtime::TITLE_TICK_FRAME_Y) - 1;
+        assert_eq!(intro.surface.pixels[above * intro.surface.width], 3);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The preview's own animation step advances the shared title-tick
+    /// counter, so consecutive preview ticks present consecutive band frames —
+    /// and one preview tick spans [`INTRO_PREVIEW_TICK_BIOS_TICKS`] pump
+    /// ticks, which is what keeps the band on the original's ~110 ms cadence
+    /// instead of running it twice as fast.
+    #[test]
+    fn return_to_view_preview_tick_spans_two_bios_ticks_and_advances_the_band() {
+        let dir = debug_game_dir();
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
+        intro.title_tick_frame = 0;
+        intro.title_tick_visible_frame = 0;
+        intro.menu_idle_bios_ticks = 0;
+
+        let mut seen = Vec::new();
+        let pump_ticks = u32::from(u5_runtime::TITLE_TICK_FRAME_COUNT)
+            * u32::from(INTRO_PREVIEW_TICK_BIOS_TICKS);
+        for _ in 0..pump_ticks {
+            if advance_visual_intro_animation_tick(&mut intro) {
+                seen.push(intro.title_tick_visible_frame);
+            }
+        }
+
+        assert_eq!(seen, vec![0, 1, 2, 3]);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §3`: the one-shot automatic preview runs "before
+    /// polling the menu", so it is not a menu command and must not leave the
+    /// bar parked on `Return to the View`.
+    #[test]
+    fn automatic_preview_returns_to_the_menu_on_journey_onward() {
+        let dir = debug_game_dir();
+        let mut intro = return_to_view_intro_state(
+            dir.clone(),
+            return_to_view_test_panel(ReturnToViewFrameKind::PreviewTick),
+            3,
+        );
+        intro.dispatch.dismiss_title();
+        intro.pending_auto_return_to_view = true;
+        intro.panel = VisualIntroPanel::Menu;
+
+        assert!(advance_visual_intro_auto_return_to_view(&mut intro));
+        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
+
+        assert!(step_visual_intro(&mut intro, ' '));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
         );
         let _ = fs::remove_dir_all(dir);
     }
