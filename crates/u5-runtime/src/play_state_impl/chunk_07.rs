@@ -3456,8 +3456,16 @@ impl PlayState {
     pub(crate) fn apply_pending_town_object_epilogue(&mut self) {
         let run_npc_schedule = std::mem::take(&mut self.pending_town_npc_schedule_pass);
         let run_active_objects = std::mem::take(&mut self.pending_town_active_object_pass);
+        // `npc-schedules.md §5` gates "**both** town walkers", which the
+        // animator is not one of (`npc-schedules.md §12`; `RETRACTIONS.md`
+        // R316), so the animate half carries its own flag and is not skipped
+        // by a turn the transport or Quickness parity gated out.
+        let run_animator = std::mem::take(&mut self.pending_town_active_object_animate_pass);
+        if run_animator {
+            self.animate_active_objects();
+        }
         if run_active_objects {
-            self.advance_active_objects();
+            self.advance_active_object_walkers();
         }
         if run_npc_schedule && self.pending_town_arrest.is_none() {
             self.advance_npc_schedules();

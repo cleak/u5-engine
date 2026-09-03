@@ -127,6 +127,14 @@ pub struct PlayState {
     /// separate because some low-level time calls deliberately suppress that
     /// pass while still owing the NPC scheduler. Never serialized.
     pub pending_town_active_object_pass: bool,
+    /// Whether the deferred town tail also owes the per-slot **animator**
+    /// pass. It is a separate flag from the walker pass above because
+    /// `npc-schedules.md §5`'s three effect gates skip "**both** town walkers
+    /// — the object walker that moves loose horse-family objects and this
+    /// schedule processor" and the animator is neither: it "moves no actor"
+    /// (`RETRACTIONS.md` R316) and `npc-schedules.md §12` runs it
+    /// "independently each render frame". Never serialized.
+    pub pending_town_active_object_animate_pass: bool,
     /// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3: "While
     /// the party's transport marker is one of the four values `0x12..0x15`,
     /// a stored parity bit flips each turn and the loop skips **both** town

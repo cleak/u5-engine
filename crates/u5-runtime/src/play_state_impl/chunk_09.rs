@@ -2774,10 +2774,29 @@ impl PlayState {
                 }
             };
             self.world_walkers_ran_this_turn = gate.walkers_run();
+            let ordinary_town_turn =
+                matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
+            let deferred_town_tail = ordinary_town_turn || defer_stonegate_epilogue;
+            // `npc-schedules.md §5` gates "**both** town walkers — the object
+            // walker that moves loose horse-family objects and this schedule
+            // processor". The town animator is **not** one of the two: it
+            // moves nothing (`RETRACTIONS.md` R316: "The animator's complete
+            // set of record writes is the displayed-tile byte and the packed
+            // phase/facing byte; it never writes a slot's column or row") and
+            // `npc-schedules.md §12` has it "run independently each render
+            // frame". So it is deliberately outside the gate, and only the
+            // Negate-Time freeze of `animation.md §13.1` ("no object
+            // animation") stops it. Bundling it into the gated call froze
+            // town sprites on half of all turns for a mounted or carpet-borne
+            // party and for one under Quickness.
+            let run_town_animator = matches!(self.area, Area::Town { .. })
+                && advance_active_objects
+                && !negate_time_active;
+            if run_town_animator && !deferred_town_tail {
+                self.animate_active_objects();
+            }
             if gate.walkers_run() {
-                let ordinary_town_turn =
-                    matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
-                if ordinary_town_turn || defer_stonegate_epilogue {
+                if deferred_town_tail {
                     self.pending_town_npc_schedule_pass = true;
                     self.pending_town_active_object_pass = advance_active_objects;
                 } else {
@@ -2786,10 +2805,13 @@ impl PlayState {
                     // processor". The deferred town tail below keeps the same
                     // order; this is the direct-call arm.
                     if advance_active_objects {
-                        self.advance_active_objects();
+                        self.advance_active_object_walkers();
                     }
                     self.advance_npc_schedules();
                 }
+            }
+            if run_town_animator && deferred_town_tail {
+                self.pending_town_active_object_animate_pass = true;
             }
         }
         self.age_active_effect();
@@ -3370,11 +3392,17 @@ impl PlayState {
     /// ticks and one world step and never enters the command wait at all**."
     ///
     /// So the under-sail route is two calls: the scripted world step, then a
-    /// bare poll that costs its tick and steps nothing. The second call
-    /// returns without a command wait, which is the auto-advance itself - the
-    /// caller loops rather than blocking on a keystroke. Every other caller
+    /// bare poll that costs its tick and steps nothing. Every other caller
     /// gets the ordinary single step-and-wait followed by the command wait,
     /// exactly as before.
+    ///
+    /// What this models is the **cadence** half of that sentence - two idle
+    /// passes per world step while sails are set. The "never enters the
+    /// command wait" half is a property of a caller that *blocks* on a key,
+    /// and this engine has no such caller: the frontend idle pump is already
+    /// non-blocking and keystrokes arrive as events. The returned
+    /// [`IdleWaitPass`] classification is published for a blocking caller;
+    /// nothing in the engine auto-advances off it today.
     pub fn idle_wait_pass(&mut self) -> IdleWaitPass {
         if !self.under_sail_wait_pass_applies() {
             self.under_sail_wait_cursor_poll_pending = false;
@@ -3537,13 +3565,26 @@ impl PlayState {
     /// neither. Neither pass returns a report: §8.1 forbids a pruning event
     /// that other systems observe.
     pub fn advance_active_objects(&mut self) {
+        if matches!(self.area, Area::Town { .. }) {
+            self.animate_active_objects();
+        }
+        self.advance_active_object_walkers();
+    }
+
+    /// The gated half of [`Self::advance_active_objects`]: the per-turn
+    /// walkers only.
+    ///
+    /// `npc-schedules.md §5`'s three effect gates sit "ahead of both town
+    /// walkers — the object walker that moves loose horse-family objects and
+    /// this schedule processor", and `encounters.md §2.1`'s sit ahead of the
+    /// outdoor creature walker. The town animator is in neither list, so the
+    /// per-turn epilogue calls this rather than the bundled entry point and
+    /// runs the animator outside the gate.
+    pub fn advance_active_object_walkers(&mut self) {
         match self.area {
             Area::Dungeon { .. } => return,
             Area::World { .. } => self.advance_outdoor_active_objects(),
-            Area::Town { .. } => {
-                self.animate_active_objects();
-                self.advance_town_free_roaming_active_objects();
-            }
+            Area::Town { .. } => self.advance_town_free_roaming_active_objects(),
         }
         self.prune_far_overworld_objects();
     }

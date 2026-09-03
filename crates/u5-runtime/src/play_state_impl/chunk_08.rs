@@ -604,36 +604,16 @@ impl PlayState {
         (recovered_hp, recovered_mana)
     }
 
-    /// `shops.md §8.4`, the inn's `R` action: "The party's map position is
-    /// written to the inn's bed cell for the duration, so the party is
-    /// standing on the bed while the sequence plays."
-    ///
-    /// Which cell is *the* bed of a given inn is not published, so this picks
-    /// the nearest bed-family cell on the displayed floor (ties broken
-    /// row-major). Only the published fact - that the rest is not a pure
-    /// presentation and does move the party onto a bed - is being
-    /// implemented; the exact cell is an open spec question.
-    pub fn inn_rest_bed_cell(&self) -> Option<(usize, usize)> {
-        if !matches!(self.area, Area::Town { .. }) {
-            return None;
-        }
-        let mut best: Option<((usize, usize), usize)> = None;
-        for y in 0..TOWN_GRID_SIDE {
-            for x in 0..TOWN_GRID_SIDE {
-                let Some(tile) = self.grid.get(y * TOWN_GRID_SIDE + x).copied() else {
-                    continue;
-                };
-                if !is_town_rest_bed_tile(tile) {
-                    continue;
-                }
-                let distance = self.player.x.abs_diff(x) + self.player.y.abs_diff(y);
-                if best.is_none_or(|(_, best_distance)| distance < best_distance) {
-                    best = Some(((x, y), distance));
-                }
-            }
-        }
-        best.map(|(cell, _)| cell)
-    }
+    // OPEN SPEC QUESTION (`shops.md §8.4`, inn `R`): "The party's map
+    // position is written to the inn's bed cell for the duration, so the
+    // party is standing on the bed while the sequence plays." Which cell is
+    // *the* bed of a given inn is a per-inn authored coordinate that is not
+    // published, so no bed-cell write is implemented here; see
+    // `input_dispatch::apply_paid_inn_rest`. A scan for the nearest
+    // bed-family tile was tried and backed out: it is an invented coordinate
+    // rule, it is not bounded to the inn's own rooms, and the write is
+    // persistent, so on a map with beds in nearby residences it stranded the
+    // party in an unrelated building.
 
     /// `shops.md §8.4`: "The clock is then run forward in paced steps until
     /// the hour byte reads **six** - the rest always ends at 06:00, whatever

@@ -574,3 +574,83 @@ fn the_under_sail_route_does_not_leak_into_combat_or_a_furled_ship() {
     assert!(!town.under_sail_wait_pass_applies());
     assert_eq!(town.idle_wait_pass(), IdleWaitPass::CommandWait);
 }
+
+#[test]
+fn the_town_animator_is_not_one_of_the_two_gated_walkers() {
+    // `npc-schedules.md §5`: the three effect gates "sit in the town loop's
+    // per-turn epilogue, ahead of both town walkers - the object walker that
+    // moves loose horse-family objects and this schedule processor". The
+    // animator is neither of those two: `npc-schedules.md §12` has "the
+    // active-object animator, run independently each render frame", and
+    // `RETRACTIONS.md` R316 gives its whole contract as "the displayed-tile
+    // byte and the packed phase/facing byte; it never writes a slot's column
+    // or row". So a turn the transport-marker gate skips still animates the
+    // town's sprites - otherwise a mounted or carpet-borne party, or one
+    // under Quickness, would see town sprites freeze on half of all turns.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.player.transport = mounted_horse_transport();
+    state.npcs.push(wandering_npc(1, 9, 9, (9, 9)));
+    // Type `192` is outside the loose-horse family `0x10..0x11`, so it is the
+    // animator's slot and not the town object walker's.
+    state.active_objects.push(ActiveObject {
+        type_byte: 192,
+        tile: 192,
+        x: 3,
+        y: 3,
+        z: 0,
+        phase: 0x22,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    state.advance_turn();
+    state.apply_pending_town_status_provision_pass();
+    state.apply_pending_town_object_epilogue();
+
+    assert_eq!(
+        (state.npcs[0].x, state.npcs[0].y),
+        (9, 9),
+        "the transport gate skipped the schedule processor this turn"
+    );
+    assert_eq!(
+        state.active_objects[1].phase, 0x21,
+        "the animator still ticked the countdown on a gated turn"
+    );
+    assert_eq!(
+        state.active_objects[1].tile, 193,
+        "the animator still advanced the displayed frame on a gated turn"
+    );
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (3, 3),
+        "the animator moves nothing (R316)"
+    );
+}
+
+#[test]
+fn negate_time_stops_the_town_animator_too() {
+    // `animation.md §13.1`: "**Negate Time freezes all of it.** ... For the
+    // effect's full duration nothing advances: no water rotation, no fire
+    // flicker, ... no object animation". That freeze is a separate rule from
+    // the walker gates and is the one thing that does stop the animator.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 10;
+    state.active_objects.push(ActiveObject {
+        type_byte: 192,
+        tile: 192,
+        x: 3,
+        y: 3,
+        z: 0,
+        phase: 0x22,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    state.advance_turn();
+    state.apply_pending_town_status_provision_pass();
+    state.apply_pending_town_object_epilogue();
+
+    assert_eq!(state.active_objects[1].phase, 0x22);
+    assert_eq!(state.active_objects[1].tile, 192);
+}

@@ -16663,11 +16663,18 @@ fn visual_idle_tick(state: &mut PlayState) -> bool {
         return false;
     }
     // `timing.md §8.2`: this is the input helper's idle wait, so it owns the
-    // scripted step-and-wait and - when sails are set - the under-sail
-    // auto-advance route that replaces the command wait with a bare cursor
-    // poll. `idle_wait_pass` performs the world step on the first half of
-    // that route and nothing but the tick on the second.
-    let _pass = state.idle_wait_pass();
+    // scripted step-and-wait and - when sails are set - the under-sail route,
+    // where "an **under-sail auto-advance pass costs two ticks and one world
+    // step and never enters the command wait at all**". `idle_wait_pass`
+    // performs the world step on the first pump of that pass and nothing but
+    // the tick on the second, which is the two-ticks-per-world-step cadence.
+    //
+    // The "never enters the command wait" half is not observable from this
+    // frontend: this pump is already non-blocking and keystrokes arrive as
+    // events, so there is no command wait here to skip. The returned pass
+    // classification is for callers that do block on a key; nothing here
+    // needs it.
+    state.idle_wait_pass();
     true
 }
 

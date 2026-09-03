@@ -1589,12 +1589,16 @@ fn append_active_shop_surcharge(
 /// The fixed eight-hour advance this replaces both ended at the wrong hour
 /// and left the roster wherever the walker had taken it.
 fn apply_paid_inn_rest(state: &mut PlayState, cost: u16) -> String {
-    if let Some((bed_x, bed_y)) = state.inn_rest_bed_cell() {
-        state.player.x = bed_x;
-        state.player.y = bed_y;
-        state.sync_player_object();
-        state.mark_visibility_dirty();
-    }
+    // OPEN SPEC QUESTION. The first of the three effects - "The party's map
+    // position is written to the inn's bed cell for the duration" - is *not*
+    // implemented, because §8.4 names a specific authored cell per inn and no
+    // published table gives it. Any engine-side rule for picking one (nearest
+    // bed tile, first bed tile, the shop's own cells) is an invented
+    // coordinate policy, and this write is persistent world state: guessing
+    // wrong parks the party inside an unrelated building for the rest of the
+    // game. The party therefore stays where it stood until the cell is
+    // published. The other two effects below - the clock run to 06:00 and the
+    // clear-and-re-place pass - are fully specified and are implemented.
     state.mark_town_rest_sleepers();
     let hours = state.advance_inn_rest_clock_to_morning();
     let woke = state.wake_town_rest_sleepers();

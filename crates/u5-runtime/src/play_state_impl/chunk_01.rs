@@ -717,6 +717,7 @@ impl PlayState {
             world_walkers_ran_this_turn: false,
             under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
+            pending_town_active_object_animate_pass: false,
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
                 .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
             food: options.food,
@@ -1031,6 +1032,7 @@ impl PlayState {
             world_walkers_ran_this_turn: false,
             under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
+            pending_town_active_object_animate_pass: false,
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
                 .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
             food: options.food,
@@ -1372,6 +1374,7 @@ impl PlayState {
             world_walkers_ran_this_turn: false,
             under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
+            pending_town_active_object_animate_pass: false,
             cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
                 .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
             food: options.food,

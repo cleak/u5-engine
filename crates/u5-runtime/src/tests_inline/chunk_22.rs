@@ -147,9 +147,19 @@
         });
 
         // `encounters.md §2.1` gate 2: the Quickness parity bit "flips each
-        // turn and the block returns on the turns it comes up set", so the
-        // first turn under `Q` skips both the walker and the animator - the
-        // slot's countdown does not even tick.
+        // turn and the block returns on the turns it comes up set". What
+        // §2.1 publishes about a gate that fires is only that the three
+        // gates "sit ahead of the encounter probe *and* ahead of the outdoor
+        // creature walker, so a gate that fires costs the turn its probe as
+        // well as its creature movement" - the position assertion below.
+        //
+        // The phase assertion is *not* a published claim about the animator.
+        // R315/R316 move the animator off the movement path entirely, and
+        // this engine's outdoor per-turn walker ticks the countdown nibble
+        // itself as the first step of its own pass, so a gated-out walker
+        // leaves the nibble alone as a consequence of the walker not running.
+        // The separately published per-render-frame animator
+        // (`active-objects.md §8`) is not on this path at all.
         state.advance_turn();
         assert_eq!(state.active_objects[1].phase, 0x22);
         assert_eq!(state.active_objects[1].tile, 192);
