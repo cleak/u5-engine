@@ -66,6 +66,11 @@ fn a_refused_under_sail_overworld_step_stays_silent() {
     };
     assert!(state.player.transport.is_ship_under_sail());
     // Take the wind out of the sail gate so the step reaches the tile test.
+    // `weather.md §5.1`, "**The one setter.**": the store "runs only when the
+    // requested heading **differs** from the cached one, and it is the same
+    // step that zeroes the sailing counter", so a released pass is one whose
+    // heading is *already* cached - the auto-advance repeat.
+    state.sail_cached_direction = Some(Direction::East);
     state.wind = WindState::East;
     state.sail_cadence = u8::MAX;
     let serial = state.sound_effect_serial;

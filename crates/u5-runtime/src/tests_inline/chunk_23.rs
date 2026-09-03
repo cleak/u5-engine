@@ -1174,7 +1174,6 @@ fn play_state_shipwright_purchase_restores_pending_delivery_to_world() {
         y: 20,
         transport: TransportState::Foot,
         sail_cadence: 0,
-        sail_stall_pending: false,
         grid: open_world_grid(),
         active_objects: vec![ActiveObject {
             type_byte: PLAYER_TILE,

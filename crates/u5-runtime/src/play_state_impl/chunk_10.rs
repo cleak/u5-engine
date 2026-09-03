@@ -1029,21 +1029,64 @@ impl PlayState {
             // either failed or **was not attempted**". This is the
             // not-attempted arm - §7's per-tick latch, "at most one NPC per
             // tick may start a fresh search", has already spent the tick's
-            // one search.
+            // one search. No draw is spent here and, per `RETRACTIONS.md`
+            // R367, the counter is untouched: "the recovery stepper never
+            // touches the counter table on any of its three rejection
+            // paths."
+            //
+            // **Unresolved mapping, not a published equivalence.** This
+            // engine folds its spent per-tick search latch into this arm, but
+            // §9.1's own budget condition - "the tick's heavy-work budget must
+            // still be unspent (a spent budget diverts the walker to the
+            // cached-waypoint escape hatch instead)" - names a *different*
+            // published arm: §6's cheap arm, "which re-checks the floor and
+            // then enters the AI dispatch after all - using its **cached**
+            // waypoint index rather than the freshly resolved one". That is
+            // not this cap-zero recovery stepper, and `RETRACTIONS.md` R369
+            // sharpens the difference - "a diverted NPC stands still
+            // *without* aging", where this stepper can commit a move.
+            // Whether the two arms coincide in the original is unresolved, so
+            // do not read this call site as implementing the escape hatch.
             return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         }
-        // `npc-schedules.md §9.1`: "when the NPC's stuck counter is non-zero
-        // the walker only re-plans on a **one-in-three** draw and otherwise
-        // ages the counter for that turn." The draw is taken before the
-        // search latch is spent, so a stalled NPC does not deny the tick's
-        // one search to a later slot on the turns it does not replan.
-        if self.npcs[npc_index].stuck_counter != 0 && !self.town_npc_stuck_replan_draw_passes() {
-            self.npcs[npc_index].note_failed_progress();
-            return NpcScheduleStepOutcome::Stalled;
+        // `npc-schedules.md §9.1`, "The replan gate and the stuck counter's
+        // three bands": the counter "does not gate movement; it gates
+        // **replanning**, and it does so differently in three disjoint
+        // bands".
+        match npc_stuck_counter_band(self.npcs[npc_index].stuck_counter) {
+            // "`0` | The NPC re-plans **unconditionally**. No draw is taken,
+            // and no draw is spent."
+            NpcStuckBand::ReplanUnconditionally => {}
+            // "`1` .. `199` | The **one-in-three replan draw** below. On a
+            // pass the NPC re-plans; on a failure the NPC's turn simply ends.
+            // **The counter is not aged, incremented or otherwise touched on
+            // a failure.**" `RETRACTIONS.md` R368 withdraws the aging half
+            // this arm used to carry.
+            NpcStuckBand::ReplanDraw => {
+                if !self.town_npc_stuck_replan_draw_passes() {
+                    return NpcScheduleStepOutcome::Stalled;
+                }
+            }
+            // "`200` .. `204` | No draw and no replan. The counter is
+            // incremented, and once the increment carries it past `204` the
+            // same pass zeroes it." `RETRACTIONS.md` R369: the band is "five
+            // consecutive turns of complete stillness", after which "the
+            // **sixth** turn sees a counter of `0` and re-plans
+            // unconditionally with no draw".
+            NpcStuckBand::Aging => {
+                self.npcs[npc_index].age_high_band_stuck_counter();
+                return NpcScheduleStepOutcome::Stalled;
+            }
         }
         *searched = true;
         let Some(route) = self.npc_path_route(npc_index, start, target, floor) else {
-            // The other published route-recovery entry: the replan failed.
+            // `npc-schedules.md §9.1`: the value `200` "is **assigned**
+            // outright when a replan is attempted and the pathfinder fails to
+            // reach the waypoint", and "**The turn on which the counter is
+            // set to `200` is not a still turn.** That turn falls straight
+            // through into the cap-zero recovery step described above, which
+            // can and does commit a move".
+            self.npcs[npc_index].assign_failed_replan_stuck_value();
             return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         };
         self.npcs[npc_index].set_move_queue(route);
@@ -1067,9 +1110,15 @@ impl PlayState {
     /// way the AI dispatch does - position plus sprite sync - and leaves the
     /// state byte, the move queue and the cached waypoint alone, because none
     /// of §7's route bookkeeping applies to a step the route did not choose.
-    /// The failed route step is still counted against the stuck counter
-    /// (§5 step 7, "if the NPC fails to make progress, the stuck counter is
-    /// bumped"); recovering sideways is not progress along the route.
+    ///
+    /// It also **never touches the stuck counter**. `RETRACTIONS.md` R367:
+    /// "Neither cap-zero route-recovery step of Section 9.1 can increment it
+    /// - not the queued-route replay's recovery step and not the
+    /// exhausted-queue arm's - because the increment happens *before* the
+    /// recovery step runs and nothing afterwards inspects how that step
+    /// ended, and the recovery stepper never touches the counter table on any
+    /// of its three rejection paths." The queued-replay caller does that one
+    /// increment ahead of this call; the other two callers do none.
     fn npc_route_recovery_wander(
         &mut self,
         npc_index: usize,
@@ -1077,7 +1126,6 @@ impl PlayState {
         target_x: usize,
         target_y: usize,
     ) -> NpcScheduleStepOutcome {
-        self.npcs[npc_index].note_failed_progress();
         let Some((nx, ny)) = self.town_npc_wander_step(
             npc_index,
             floor,
@@ -1093,14 +1141,23 @@ impl PlayState {
         NpcScheduleStepOutcome::Moved
     }
 
-    /// `npc-schedules.md §9.1`: "when the NPC's stuck counter is non-zero the
-    /// walker only re-plans on a **one-in-three** draw and otherwise ages the
-    /// counter for that turn."
+    /// `npc-schedules.md §9.1`, "**The draw's exact form.**": "The
+    /// one-in-three gate is a **uniform range draw over the three values
+    /// `0`, `1`, `2`, accepted on exactly the middle value**. It is *not* a
+    /// byte-and-mask draw, and it must not be modelled with the same
+    /// primitive as the one-in-two wander coin of stage 1 above, which *is* a
+    /// byte draw with a single bit tested. Both consume one advance of the
+    /// shared generator, so a mask model would keep the advance count right
+    /// and still select a different third of the stream, desynchronising
+    /// every later roll."
     ///
-    /// Only the rate is published. The draw form here is the same range
-    /// primitive the wander gate uses, over `0..2`, accepted on one value.
+    /// The engine's range primitive performs the same fifteen-bit fold, so
+    /// the slight over-representation of the accepted value
+    /// (`10923/32768 = 0.3333435`) falls out of the primitive rather than
+    /// being modelled here. `RETRACTIONS.md` R368.
     fn town_npc_stuck_replan_draw_passes(&mut self) -> bool {
-        self.random_range_u8(0, TOWN_NPC_STUCK_REPLAN_DRAW_MAX) == 0
+        self.random_range_u8(0, TOWN_NPC_STUCK_REPLAN_DRAW_MAX)
+            == TOWN_NPC_STUCK_REPLAN_DRAW_ACCEPTED
     }
 
     /// `npc-schedules.md §7` state 8 and the unexpected-state default:
@@ -1159,10 +1216,17 @@ impl PlayState {
         // route-recovery entries is "the queued-route replay **when its next
         // queued step is refused**". Both refusal arms below are that case -
         // an unusable direction code and a cell the §10 checks reject.
+        //
+        // §5 step 7 (`RETRACTIONS.md` R367): this refusal is the **one** event
+        // in the whole walker that increments the stuck counter, and "it is
+        // incremented *before* the recovery step runs and without ever
+        // inspecting how the recovery step ends".
         let Some((nx, ny)) = npc_step_from_direction_code(start, code) else {
+            self.npcs[npc_index].note_refused_queued_route_step();
             return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         };
         if !self.npc_can_step_toward(npc_index, nx, ny, floor, target_x, target_y) {
+            self.npcs[npc_index].note_refused_queued_route_step();
             return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         }
         self.npcs[npc_index].advance_move_queue_direction();
@@ -1497,7 +1561,9 @@ impl PlayState {
                 );
             }
             if *searched {
-                self.npcs[npc_index].note_failed_progress();
+                // `RETRACTIONS.md` R367: only a refused queued route step
+                // increments the counter, so a slot diverted by the tick's
+                // spent heavy-work budget stalls without aging.
                 return false;
             }
             *searched = true;
@@ -1511,7 +1577,8 @@ impl PlayState {
                 self.npcs[npc_index].stuck_counter = 0;
                 return true;
             }
-            self.npcs[npc_index].note_failed_progress();
+            // `RETRACTIONS.md` R367: a failed floor-link search is not a
+            // refused queued route step, so the counter stands.
             return false;
         }
 
@@ -1521,12 +1588,11 @@ impl PlayState {
             // `0xC8` for an NPC above, `0xC9` for one below.
             let marker = npc_floor_link_marker_toward(floor, npc_z);
             if *searched {
-                self.npcs[npc_index].note_failed_progress();
+                // `RETRACTIONS.md` R367, as above: no counter change.
                 return false;
             }
             *searched = true;
             let Some((x, y)) = self.nearest_npc_floor_link_to(marker, target_x, target_y) else {
-                self.npcs[npc_index].note_failed_progress();
                 return false;
             };
             self.npcs[npc_index].x = x;
@@ -1704,9 +1770,13 @@ const TOWN_NPC_BOUNDED_WANDER_CAP: usize = 3;
 /// `npc-schedules.md §9` value `2`: "the waypoint-radius test switched off
 /// entirely (cap zero)".
 const TOWN_NPC_UNBOUNDED_WANDER_CAP: usize = 0;
-/// `npc-schedules.md §9.1`: the stuck-counter replan draw is "a
-/// **one-in-three** draw", so the range primitive runs over `0..2`.
+/// `npc-schedules.md §9.1`: the stuck-counter replan draw is "a **uniform
+/// range draw over the three values `0`, `1`, `2`**", so the range primitive
+/// runs over `0..2`.
 const TOWN_NPC_STUCK_REPLAN_DRAW_MAX: u8 = 2;
+/// `npc-schedules.md §9.1`: that draw is "accepted on exactly the middle
+/// value" (`RETRACTIONS.md` R368).
+const TOWN_NPC_STUCK_REPLAN_DRAW_ACCEPTED: u8 = 1;
 /// `npc-schedules.md §9.1` stage 2: the direction draw is "a uniform value
 /// over the sixty-five integers `0..64`".
 const TOWN_NPC_WANDER_DIRECTION_DRAW_MAX: u8 = 64;

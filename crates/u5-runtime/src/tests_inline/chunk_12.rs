@@ -306,7 +306,6 @@ fn return_world_restore_repairs_missing_player_slot_without_shifting_objects() {
         y: 20,
         transport: TransportState::Foot,
         sail_cadence: 0,
-        sail_stall_pending: false,
         grid: open_world_grid(),
         active_objects: vec![
             ActiveObject {
@@ -368,7 +367,6 @@ fn debug_enter_town_preserves_ship_marker_without_a_return_snapshot() {
     state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
     state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
     state.sync_player_object();
     assert_eq!(
         state
@@ -419,7 +417,6 @@ fn debug_enter_town_preserves_ship_marker_without_a_return_snapshot() {
     );
     assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(
         state.active_objects[0].tile,
         TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 3
@@ -449,7 +446,6 @@ fn debug_enter_dungeon_surface_reset_uses_published_plane_coordinate_and_foot() 
     state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
     state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
     state.sync_player_object();
     assert_eq!(
         state
@@ -464,12 +460,11 @@ fn debug_enter_dungeon_surface_reset_uses_published_plane_coordinate_and_foot() 
     );
     assert_eq!(state.area, Area::Dungeon { scene, level: 7 });
     assert_eq!(
-        state.return_world.as_ref().map(|ret| (
-            ret.transport,
-            ret.sail_cadence,
-            ret.sail_stall_pending
-        )),
-        Some((transport, 1, true))
+        state
+            .return_world
+            .as_ref()
+            .map(|ret| (ret.transport, ret.sail_cadence)),
+        Some((transport, 1))
     );
     assert_eq!(
         state.active_effect_timing_status(),
@@ -504,7 +499,6 @@ fn debug_enter_dungeon_surface_reset_uses_published_plane_coordinate_and_foot() 
     );
     assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
 
     assert_eq!(
@@ -789,7 +783,6 @@ fn dungeon_fall_trap_chain_restores_snapshot_grid_without_exterior_coordinate_re
             tile: 184,
         },
         sail_cadence: 3,
-        sail_stall_pending: true,
         grid: world_grid,
         active_objects: vec![ActiveObject {
             type_byte: PLAYER_TILE,
@@ -822,7 +815,6 @@ fn dungeon_fall_trap_chain_restores_snapshot_grid_without_exterior_coordinate_re
     assert_eq!(state.player.transport, TransportState::Foot);
     assert_eq!(state.active_effect_timing_status(), TimingStatusTag::Normal);
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(state.grid[world_cell_index(2, 1)], 7);
     assert_eq!(state.grid[world_cell_index(10, 20)], 9);
     assert_eq!(state.active_objects[0].x, 2);

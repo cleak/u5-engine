@@ -339,6 +339,10 @@ impl PlayState {
         // standing would send the next natural gate to the wrong Moonstone
         // slot (`formats/saved-gam.md §5.1`).
         self.refresh_cached_moon_glyphs_at_scene_entry();
+        // `weather.md §5.1`, clear one: "Entering outdoor mode | The
+        // outdoor-mode entry pass clears the cache in its opening block, so
+        // no cached heading survives a scene change into the overworld."
+        self.clear_sail_cache_on_outdoor_mode_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         // `overworld.md` Section 8.1: "Overworld re-initialisation does not
@@ -2894,8 +2898,15 @@ impl PlayState {
             // moves nothing (`RETRACTIONS.md` R316: "The animator's complete
             // set of record writes is the displayed-tile byte and the packed
             // phase/facing byte; it never writes a slot's column or row") and
-            // `npc-schedules.md §12` has it "run independently each render
-            // frame". So it is deliberately outside the gate, and only the
+            // `npc-schedules.md §12` has it running "independently of the
+            // scheduler, once per world tick rather than once per player
+            // turn", selecting frames while "the drawing itself belongs to
+            // the shared visibility post-pass" (`RETRACTIONS.md` R373
+            // withdrew the older "run independently each render frame" and
+            // "draws the per-NPC sprites" wording; §12 also answers issue
+            // #189 that the cadence is **descriptive**, so once per consumed
+            // turn is a defensible frontend choice). So it is deliberately
+            // outside the gate, and only the
             // Negate-Time freeze of `animation.md §13.1` ("no object
             // animation") stops it. Bundling it into the gated call froze
             // town sprites on half of all turns for a mounted or carpet-borne
@@ -3591,36 +3602,81 @@ impl PlayState {
     /// presentation beats and the pass-turn command with them. The route
     /// therefore lives here, at the idle wait, and excludes combat by name.
     ///
-    /// The suppressed scene band is excluded for the same reason §8.2 states
-    /// it: the shared wait "performs no world step for values `0x21` through
-    /// `0x7F` **inclusive**", and there is no world step to schedule when the
-    /// band applies.
+    /// The suppressed scene band is **not** excluded. `RETRACTIONS.md` R371
+    /// and `timing.md §8.2` publish the under-sail world step as "**One world
+    /// step, unconditionally,** from the paced world-step helper. It is not
+    /// subject to the scene-band suppression described below, because it does
+    /// not come from the shared command wait" - and name the mistake by hand:
+    /// "An event-driven engine that 'idles' by reusing its ordinary command
+    /// pump inherits that suppression and stops stepping the world in every
+    /// scene inside the band."
+    ///
+    /// *How much that costs here, stated honestly.* The route is already
+    /// confined to [`Area::World`], and
+    /// [`Self::current_scene_byte`](crate::PlayState::current_scene_byte)
+    /// answers `SCENE_OVERWORLD` for every world area, which is outside the
+    /// band - so the pass's world step still runs through the shared band
+    /// test in [`Self::advance_visual_tick`] and that test simply never fires
+    /// on this route. Not excluding the band here is therefore correct but
+    /// vacuous rather than load-bearing: what actually protects the engine
+    /// from R371's named mistake is that the under-sail pass has its own
+    /// entry point instead of reusing a suppressed command pump.
     ///
     /// A **cached sail direction** is required, not merely hoisted sails.
-    /// `overworld.md §5` step 3 is what the route rests on - "under sail on
-    /// the wind-driven cadence, this step does not read the keyboard at all:
-    /// the input helper returns the cached sail direction instead, which is
-    /// how a ship keeps moving with no keypress" - and `weather.md §5` only
-    /// lets the helper "synthesize repeated movement commands from the
-    /// cached direction" once one exists. With no cache there is nothing to
-    /// synthesize, so the loop reads a command and pays the ordinary
-    /// one-tick pass; a ship that has hoisted its sails but not yet been
-    /// steered therefore runs the world at the ordinary rate.
+    /// `overworld.md §5` step 3 is what the route rests on - "Under sail on
+    /// the wind-driven cadence, this step does not enter the command wait:
+    /// the input helper runs its own auto-advance loop and returns the cached
+    /// sail direction, which is how a ship keeps moving with no keypress" -
+    /// and `weather.md §5` only lets the helper "synthesize repeated movement
+    /// commands from the cached direction" once one exists. With no cache
+    /// there is nothing to synthesize, so the loop reads a command and pays
+    /// the ordinary one-tick pass; a ship that has hoisted its sails but not
+    /// yet been steered therefore runs the world at the ordinary rate.
+    ///
+    /// (`RETRACTIONS.md` R372 withdrew the older "does not read the keyboard
+    /// at all" half of that step: the loop polls one key per pass. See
+    /// [`Self::under_sail_key_is_swallowed`].)
     pub fn under_sail_wait_pass_applies(&self) -> bool {
         matches!(self.area, Area::World { .. })
             && self.player.transport.is_ship_under_sail()
             && self.sail_cached_direction.is_some()
             && !self.combat_active
-            && !idle_world_step_suppressed_for_scene(self.current_scene_byte())
+    }
+
+    /// `timing.md §8.2`, the under-sail pass's keyboard poll, and
+    /// `RETRACTIONS.md` R372.
+    ///
+    /// "**One keyboard poll.** Every pass polls exactly one key. No key runs
+    /// the advance body. A key whose translated code **equals the cached sail
+    /// heading is swallowed** - discarded, with the advance body running
+    /// anyway - which is why pressing the arrow you are already sailing does
+    /// nothing. Any other key ends the loop and becomes that turn's command."
+    ///
+    /// R372: "An engine built on the old text either buffers a keystroke the
+    /// original discards or cannot break out of the loop the way the original
+    /// does."
+    pub fn under_sail_key_is_swallowed(&self, direction: Option<Direction>) -> bool {
+        self.under_sail_wait_pass_applies()
+            && direction.is_some()
+            && direction == self.sail_cached_direction
     }
 
     /// One pass of the input helper's idle wait (`timing.md §8.2`).
     ///
-    /// "On the overworld the input helper performs one scripted step-and-wait
-    /// - one world step followed by one one-tick wait - before either
-    /// entering the command wait or, when sails are set, performing a bare
-    /// cursor poll instead; so an **under-sail auto-advance pass costs two
-    /// ticks and one world step and never enters the command wait at all**."
+    /// Per pass the under-sail route costs "**One world step,
+    /// unconditionally**", "**Zero, one or two one-tick waits - not two
+    /// flat**", "**One fully consumed game turn**" and "**One keyboard
+    /// poll**". `RETRACTIONS.md` R371 withdraws the older "costs two ticks"
+    /// figure: "**Two ticks is a maximum, not a cost.** The cursor poll waits
+    /// only on its **no-key** branch, so a pass entered by a keypress -
+    /// including the same-direction key the loop swallows - pays **one**; and
+    /// both waits are subject to the Section 8.3 fast path, so on a machine
+    /// whose boot calibration is at or below the threshold a pass pays
+    /// **none**. The entry step carries no wait of its own."
+    ///
+    /// The tick count is a pacing figure the frontend owns; what this helper
+    /// reproduces is the per-pass work, which R371 does not disturb: one
+    /// world step and one fully consumed game turn.
     ///
     /// The under-sail pass is therefore two calls into this helper:
     ///
@@ -3634,7 +3690,9 @@ impl PlayState {
     ///    pass's movement command. That synthesized command is the
     ///    auto-advance: it either pays a wind-cadence wait pass or releases
     ///    the ship's step, exactly as a keyed movement command would
-    ///    (`weather.md §5`).
+    ///    (`weather.md §5`). Because it is that turn's command, the
+    ///    `weather.md §5.1` post-command marker guard runs behind it, exactly
+    ///    as it does behind a keyed command.
     ///
     /// Every other caller gets the ordinary single step-and-wait and then
     /// enters the command wait, exactly as before.
@@ -3654,11 +3712,42 @@ impl PlayState {
             // cadence counter and the release, and `overworld.md §6.2.5`
             // owns what a released step does when its destination refuses.
             self.step_with_game_dir(direction, game_dir)?;
+            self.apply_outdoor_sail_cache_marker_guard();
             return Ok(IdleWaitPass::UnderSailCursorPoll);
         }
         self.advance_visual_tick();
         self.under_sail_wait_cursor_poll_pending = true;
         Ok(IdleWaitPass::UnderSailWorldStep)
+    }
+
+    /// The advance body of one under-sail auto-advance pass, run to
+    /// completion because the pass's keyboard poll swallowed a key.
+    ///
+    /// `timing.md §8.2` / `RETRACTIONS.md` R372: "A key whose translated code
+    /// **equals the cached sail heading is swallowed** - discarded, with the
+    /// advance body running anyway - which is why pressing the arrow you are
+    /// already sailing does nothing." §8.2 names that swallow "observable
+    /// behaviour rather than a timing detail", so discarding the key is only
+    /// half of it: the pass's work - the world step, the fully consumed game
+    /// turn and the synthesized movement command - still has to land, or the
+    /// key becomes a no-op the original never has.
+    ///
+    /// A swallowed key **completes the pass it was polled in** rather than
+    /// adding a pass. R371: "a pass entered by a keypress - including the
+    /// same-direction key the loop swallows - pays **one**" tick where a
+    /// no-key pass pays two, so such a pass simply ends early. A frontend
+    /// with its own idle pump therefore begins a fresh pass on its next tick
+    /// instead of finishing this one twice, and a frontend with no idle pump
+    /// (the terminal shell) still gets the whole pass from the keypress.
+    pub fn run_under_sail_advance_body(&mut self, game_dir: Option<&Path>) -> io::Result<()> {
+        // At most two halves remain: the paced world step, then the cursor
+        // poll that dispatches the synthesized command and ends the pass.
+        for _ in 0..2 {
+            if self.idle_wait_pass(game_dir)? == IdleWaitPass::UnderSailCursorPoll {
+                break;
+            }
+        }
+        Ok(())
     }
 
     pub fn decay_light_counters(&mut self, units: u8) {
@@ -3703,6 +3792,45 @@ impl PlayState {
             animation: self.animation,
             water_scroll: self.water_scroll,
         }
+    }
+
+    /// `weather.md §5.1`, clear one: "Entering outdoor mode | The
+    /// outdoor-mode entry pass clears the cache in its opening block, so no
+    /// cached heading survives a scene change into the overworld."
+    ///
+    /// The counter is deliberately left alone: §5.1 enumerates the counter's
+    /// resets separately (a heading change, the release, and a wind change),
+    /// and outdoor entry is not among them.
+    pub fn clear_sail_cache_on_outdoor_mode_entry(&mut self) {
+        self.sail_cached_direction = None;
+    }
+
+    /// `weather.md §5.1`, clear four - "**The marker guard is the answer to
+    /// the command question.**"
+    ///
+    /// "After **every** outdoor command handler returns, and before the next
+    /// input is read, the loop clears the cache unless the transport marker
+    /// is still a hoisted frigate." So "Furling, boarding, disembarking,
+    /// mounting a horse or a carpet, and anything else that moves the
+    /// transport marker out of the hoisted-frigate run are covered by that
+    /// single guard, on the same turn. None of those command handlers
+    /// references the sail cache at all". And equally: "the guard is ... the
+    /// reason a Look, a Ztats, or any other marker-neutral command under sail
+    /// does **not** interrupt sailing: the marker is unchanged, so the guard
+    /// leaves the cache alone."
+    ///
+    /// "An engine that implements per-command clears will agree with the
+    /// original on the commands it thought of and disagree on the ones it did
+    /// not," which is why this is a loop-level guard rather than a line in
+    /// each handler.
+    pub fn apply_outdoor_sail_cache_marker_guard(&mut self) {
+        if !matches!(self.area, Area::World { .. }) {
+            return;
+        }
+        if is_ship_transport_hoisted(self.player.transport.save_marker()) {
+            return;
+        }
+        self.sail_cached_direction = None;
     }
 
     pub fn negate_time_active(&self) -> bool {
@@ -3953,6 +4081,44 @@ impl PlayState {
     /// "no blocking presentation runs the town NPC schedule processor, the
     /// town object walker ..., or the outdoor per-turn creature walker.
     /// **Exceptions: none.**"
+    ///
+    /// # Declared divergence: the random-stream accounting is not reproduced
+    ///
+    /// `active-objects.md §8`, "**Random-stream accounting**", is the other
+    /// half of issue #189's answer about what a turn-based frontend must carry
+    /// beyond drawing, and this pass does **not** carry it. The published per
+    /// pass cost is "one advance for every slot that survives early-outs 1-5
+    /// and whose class is neither of the two exempt classes - spent whether or
+    /// not the slot then goes on to animate, because the draw is taken before
+    /// the skip decision it feeds", "no advance at all for the two exempt
+    /// classes", and "plus one advance for each execution of the two random
+    /// script steps - the reseed step and the redirect step". Those draws come
+    /// off the shared generator: "the generator it draws from is the one
+    /// shared by the wander coin, the NPC replan gate, the encounter roll and
+    /// every combat roll", which is why the section calls this "the animator's
+    /// main coupling into gameplay". This engine's pass draws nothing at all.
+    ///
+    /// It is **not implemented because the published text does not carry the
+    /// values it needs.** Early-out 5 is "A slot whose class lies **below the
+    /// sprite-class floor**, or in either of two excluded classes, is skipped"
+    /// and early-out 6 is "unless the class is one of two exempt classes, the
+    /// animator draws one random value and skips the slot on the low half of
+    /// the range" - the floor, the two excluded classes, the two exempt
+    /// classes, the width of "the low half of the range", and the trigger and
+    /// loop structure of the two random script steps are all named but never
+    /// given as values anywhere in `§8`. Guessing any of them would put draws
+    /// on the shared stream in the wrong quantity, which is worse for the
+    /// coupled systems than drawing none. Early-out 4's hidden and
+    /// prone/sleeping frame values are unpublished for the same reason.
+    ///
+    /// The divergence is bounded by the section itself: "no cadence choice
+    /// reconciles this with the original, which fires the animator from a
+    /// wall-clock idle pump: **full-session roll-sequence parity is
+    /// unachievable**, and an engine should not distort its animation cadence
+    /// chasing it". So the missing draws cost stream *phase*, which was never
+    /// recoverable, not a published gameplay rule - but the per-pass count is
+    /// published and this engine's count is zero, so it is recorded here
+    /// rather than left to be read off the code.
     pub fn animate_active_objects(&mut self) {
         for slot in 1..self.active_objects.len() {
             if self.active_objects[slot].is_empty()
@@ -3961,6 +4127,18 @@ impl PlayState {
             {
                 continue;
             }
+            // `active-objects.md §8`'s phase table, mid-cycle row: a slot
+            // whose phase nibble is non-zero has it "Decrement[ed] and
+            // write[n] back - **and nothing else for that slot on that
+            // pass**, so its frame byte is not touched ... The renderer
+            // combines the phase with the tile class to pick a frame."
+            //
+            // The `tile` field written below is that *renderer* combination,
+            // materialised eagerly - the engine has no separate stored frame
+            // byte for the animator to leave alone - so the corrected
+            // early-out 3 published under issue #189 does not suppress it.
+            // Suppressing it here would freeze the countdown animation the
+            // same sentence says the renderer keeps deriving.
             let tick = self.active_objects[slot].tick_phase();
             if matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint) {
                 if let Some(tile) = active_object_frame_tile(
@@ -4283,7 +4461,6 @@ impl PlayState {
             "COLLISION!".to_string()
         };
         self.sail_cadence = 0;
-        self.sail_stall_pending = false;
         // `overworld.md §6.2.5`: "The step remains refused, party
         // coordinates do not change, and the cached sail direction is
         // cleared." That is what stops the auto-advance route on impact.

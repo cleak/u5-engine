@@ -807,7 +807,6 @@ fn world_enter_uses_clean_location_table_for_town() {
     state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
     state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
     state.sync_player_object();
 
     assert_eq!(
@@ -822,7 +821,6 @@ fn world_enter_uses_clean_location_table_for_town() {
         TimingStatusTag::HalfTime
     );
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(state.active_objects[0].tile, transport.save_marker());
     assert!(state.return_world.is_none());
     assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
@@ -997,7 +995,6 @@ fn world_enter_uses_clean_location_table_for_dungeon_seed() {
     state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
     state.active_effect_counter = 10;
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
     state.sync_player_object();
 
     assert_eq!(
@@ -1014,15 +1011,13 @@ fn world_enter_uses_clean_location_table_for_dungeon_seed() {
         TimingStatusTag::NoMinuteLight
     );
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
     assert_eq!(
-        state.return_world.as_ref().map(|ret| (
-            ret.transport,
-            ret.sail_cadence,
-            ret.sail_stall_pending
-        )),
-        Some((transport, 1, true))
+        state
+            .return_world
+            .as_ref()
+            .map(|ret| (ret.transport, ret.sail_cadence)),
+        Some((transport, 1))
     );
     assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
     assert_eq!(state.message, "dungeon\n");

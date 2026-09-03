@@ -148,7 +148,10 @@ pub struct PlayState {
     /// — the object walker that moves loose horse-family objects and this
     /// schedule processor" and the animator is neither: it "moves no actor"
     /// (`RETRACTIONS.md` R316) and `npc-schedules.md §12` runs it
-    /// "independently each render frame". Never serialized.
+    /// "independently of the scheduler, once per world tick rather than once
+    /// per player turn" (`RETRACTIONS.md` R373 withdrew the older "each
+    /// render frame" wording; §12 also answers issue #189 that the cadence is
+    /// **descriptive**). Never serialized.
     pub pending_town_active_object_animate_pass: bool,
     /// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3: "While
     /// the party's transport marker is one of the four values `0x12..0x15`,
@@ -357,24 +360,46 @@ pub struct PlayState {
     pub combat_secondary_marker: Option<(u8, u8)>,
     pub combat_ambush_reveals: [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+    /// `weather.md §5`'s **sailing counter**: the count of wait passes the
+    /// hoisted-sail ship has already paid against the wind/heading table's
+    /// threshold. Cleared by a heading change, by the release, and by a wind
+    /// change (`§5.1`, "**A fourth reset of the sailing counter.**").
+    ///
+    /// There is deliberately no second `sail_stall_pending`-style flag beside
+    /// it. `weather.md §6` says the sailing refusal state is "short-lived" and
+    /// that "The next pass command can report that the ship is stalled by the
+    /// wind, then clears that state", and `§5.1`'s third clear states the Pass
+    /// condition exactly: "Only while the outdoor scene is current and the
+    /// cache is non-zero; it prints the stalled-sailing line first, then
+    /// clears." The cache **is** the state Pass reports on, so an extra flag
+    /// would be a second source of truth with no reader.
     pub sail_cadence: u8,
-    pub sail_stall_pending: bool,
-    /// `weather.md §5` / `overworld.md §5` step 3: the hoisted-sail ship's
-    /// **cached sail direction**. "Once the requested direction matches the
-    /// cached heading, the input helper can synthesize repeated movement
+    /// `weather.md §5`/`§5.1` and `overworld.md §5` step 3: the hoisted-sail
+    /// ship's **cached sail direction**. "Once the requested direction matches
+    /// the cached heading, the input helper can synthesize repeated movement
     /// commands from the cached direction until the cache is cleared or
-    /// replaced", and at the loop's input step "under sail on the
-    /// wind-driven cadence, this step does not read the keyboard at all: the
-    /// input helper returns the cached sail direction instead, which is how a
-    /// ship keeps moving with no keypress".
+    /// replaced", and at the loop's input step, "Under sail on the wind-driven
+    /// cadence, this step does not enter the command wait: the input helper
+    /// runs its own auto-advance loop and returns the cached sail direction"
+    /// (`RETRACTIONS.md` R372 withdrew the older "does not read the keyboard
+    /// at all"; the loop polls one key per pass and swallows the
+    /// same-direction one).
+    ///
+    /// `weather.md §5.1` publishes the lifecycle as **one setter and four
+    /// clears**, and the rule is marker-conditioned rather than a command
+    /// list. The setter is a movement command taken while the marker is a
+    /// hoisted frigate, and it runs only when the heading differs. The clears
+    /// are: entering outdoor mode; the under-sail step refusal (one decision
+    /// point with three narration arms - breaking up, docking, collision); the
+    /// Pass command; and the post-command marker guard, which clears the cache
+    /// after every outdoor command handler unless the marker is still a
+    /// hoisted frigate. That last one is what covers Furl, board, X-it,
+    /// mounting a horse or a carpet - "An engine that implements per-command
+    /// clears will agree with the original on the commands it thought of and
+    /// disagree on the ones it did not."
     ///
     /// `None` means there is nothing to synthesize, so the loop reads a
-    /// command as usual. Docking, a sailing collision, furling, boarding or
-    /// leaving the ship, and the Pass command's stall report all clear it
-    /// (`overworld.md §6.2.5`, `vehicles.md` "Ship Sails", `weather.md §6`);
-    /// a wind change resets the counter but not the cache ("the next released
-    /// movement uses the same cadence again unless the wind, heading, or
-    /// cache changes"). Never serialized.
+    /// command as usual. Never serialized.
     pub sail_cached_direction: Option<Direction>,
     /// Exact queued shipwright-delivery bytes from `SAVED.GAM`. The packed
     /// class is cleared only when world setup successfully delivers it.
@@ -566,7 +591,6 @@ pub struct WorldReturn {
     pub y: usize,
     pub transport: TransportState,
     pub sail_cadence: u8,
-    pub sail_stall_pending: bool,
     pub grid: Vec<u8>,
     pub active_objects: Vec<ActiveObject>,
     pub pending_vehicle: Option<PendingVehicleAcquisition>,

@@ -84,6 +84,17 @@ impl WindState {
     /// before the hoisted-sail player ship is released to move in
     /// `sail_heading` under this wind. Returns `None` for Calm wind
     /// (movement never released) and for non-cardinal headings.
+    ///
+    /// "**Why crosswind is the fastest point of sail.** ... The engine counts
+    /// the axes on which the requested heading disagrees with the wind's push
+    /// vector, starting the count at one, and takes that count modulo three.
+    /// Downwind disagrees on no axis and yields one; upwind disagrees on
+    /// exactly one axis and yields two; crosswind disagrees on both and
+    /// yields three, which folds to **zero**. A crosswind heading therefore
+    /// releases on the very first pass, strictly faster than downwind. It
+    /// reads like an off-by-one in the original ... The table above already
+    /// encodes it; the note is here so nobody 'fixes' the table." The three
+    /// constants below are that fold, tabulated.
     pub fn player_sail_wait_ticks(self, sail_heading: Direction) -> Option<u8> {
         let wind = self.direction()?;
         let heading = match sail_heading {

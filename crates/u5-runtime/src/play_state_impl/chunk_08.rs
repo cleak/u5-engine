@@ -1633,7 +1633,6 @@ impl PlayState {
             y: self.player.y,
             transport: self.player.transport,
             sail_cadence: self.sail_cadence,
-            sail_stall_pending: self.sail_stall_pending,
             grid: self.grid.clone(),
             active_objects: self.active_objects.clone(),
             pending_vehicle: self.pending_vehicle_save.acquisition(),
@@ -1862,7 +1861,6 @@ impl PlayState {
         self.player.y = return_world.y;
         self.player.transport = return_world.transport;
         self.sail_cadence = return_world.sail_cadence;
-        self.sail_stall_pending = return_world.sail_stall_pending;
         self.grid = return_world.grid;
         if let Err(err) = self.rebuild_world_live_chunks_from_grid(plane) {
             self.message = err.to_string();
@@ -1895,6 +1893,10 @@ impl PlayState {
         // standing would send the next natural gate to the wrong Moonstone
         // slot (`formats/saved-gam.md §5.1`).
         self.refresh_cached_moon_glyphs_at_scene_entry();
+        // `weather.md §5.1`, clear one: "Entering outdoor mode | The
+        // outdoor-mode entry pass clears the cache in its opening block, so
+        // no cached heading survives a scene change into the overworld."
+        self.clear_sail_cache_on_outdoor_mode_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         true
@@ -1967,6 +1969,10 @@ impl PlayState {
         // standing would send the next natural gate to the wrong Moonstone
         // slot (`formats/saved-gam.md §5.1`).
         self.refresh_cached_moon_glyphs_at_scene_entry();
+        // `weather.md §5.1`, clear one: "Entering outdoor mode | The
+        // outdoor-mode entry pass clears the cache in its opening block, so
+        // no cached heading survives a scene change into the overworld."
+        self.clear_sail_cache_on_outdoor_mode_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(())
@@ -2026,6 +2032,10 @@ impl PlayState {
         // standing would send the next natural gate to the wrong Moonstone
         // slot (`formats/saved-gam.md §5.1`).
         self.refresh_cached_moon_glyphs_at_scene_entry();
+        // `weather.md §5.1`, clear one: "Entering outdoor mode | The
+        // outdoor-mode entry pass clears the cache in its opening block, so
+        // no cached heading survives a scene change into the overworld."
+        self.clear_sail_cache_on_outdoor_mode_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(())

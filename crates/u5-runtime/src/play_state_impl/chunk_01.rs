@@ -848,7 +848,6 @@ impl PlayState {
             combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
-            sail_stall_pending: false,
             sail_cached_direction: None,
             pending_vehicle_save: options
                 .pending_vehicle
@@ -1196,7 +1195,6 @@ impl PlayState {
             combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
-            sail_stall_pending: false,
             sail_cached_direction: None,
             pending_vehicle_save: options
                 .pending_vehicle
@@ -1561,7 +1559,6 @@ impl PlayState {
             combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
-            sail_stall_pending: false,
             sail_cached_direction: None,
             pending_vehicle_save,
             turn: 0,

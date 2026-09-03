@@ -5980,7 +5980,6 @@ fn end_to_end_shipwright_frigate_queues_published_dock_delivery() {
         y: 21,
         transport: TransportState::Foot,
         sail_cadence: 0,
-        sail_stall_pending: false,
         grid: open_world_grid(),
         active_objects: vec![ActiveObject {
             type_byte: PLAYER_TILE,

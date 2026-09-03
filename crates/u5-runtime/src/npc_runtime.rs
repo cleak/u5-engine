@@ -502,6 +502,39 @@ pub const fn npc_stuck_counter_forces_replan(counter: u16) -> bool {
     counter > NPC_STUCK_REPLAN_THRESHOLD
 }
 
+/// `npc-schedules.md §9.1`, "The replan gate and the stuck counter's three
+/// bands": which of the three disjoint bands a counter value falls in when
+/// the walker reaches its replan decision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NpcStuckBand {
+    /// `0` - "The NPC re-plans **unconditionally**. No draw is taken, and no
+    /// draw is spent."
+    ReplanUnconditionally,
+    /// `1..=199` - "The **one-in-three replan draw** ... On a pass the NPC
+    /// re-plans; on a failure the NPC's turn simply ends. **The counter is
+    /// not aged, incremented or otherwise touched on a failure.**"
+    ReplanDraw,
+    /// `200..=204` - "No draw and no replan. The counter is incremented, and
+    /// once the increment carries it past `204` the same pass zeroes it."
+    Aging,
+}
+
+/// `npc-schedules.md §9.1`: classify a stuck-counter value into its band.
+///
+/// Values above the aging band cannot be produced by the published rules -
+/// `200` is reached by assignment and the band zeroes itself on the pass
+/// that carries it past `204` - so they are folded into the aging band,
+/// which is the arm that clears them.
+pub const fn npc_stuck_counter_band(counter: u16) -> NpcStuckBand {
+    if counter == 0 {
+        NpcStuckBand::ReplanUnconditionally
+    } else if counter < NPC_STUCK_HIGH_BAND_ENTRY {
+        NpcStuckBand::ReplanDraw
+    } else {
+        NpcStuckBand::Aging
+    }
+}
+
 /// `npc-schedules.md §8.2`: coordinate effect of one BFS direction
 /// code (`(dx, dy)` to add to the current cell). Returns `(0, 0)` for
 /// any code outside `1..=4`.
@@ -647,6 +680,17 @@ pub const fn npc_floor_link_arrival_accepts(tile: u8, marker: u8) -> bool {
 /// and a fresh route is requested on a later tick.
 pub const NPC_STUCK_REPLAN_THRESHOLD: u16 = 3;
 
+/// `npc-schedules.md §9.1`, "The aging band, `200..204`": "The value `200`
+/// is never *counted* into: it is **assigned** outright when a replan is
+/// attempted and the pathfinder fails to reach the waypoint."
+pub const NPC_STUCK_HIGH_BAND_ENTRY: u16 = 200;
+
+/// `npc-schedules.md §9.1`: "entry values `200, 201, 202, 203, 204` are five
+/// consecutive passes on which the NPC does nothing at all, and the
+/// **sixth** turn sees a counter of `0` and re-plans unconditionally with no
+/// draw."
+pub const NPC_STUCK_HIGH_BAND_LAST: u16 = 204;
+
 /// Per `npc-schedules.md §10` movement constraint: dynamic-obstacle scan
 /// radius. An occupied active-object cell is reported as blocked only when
 /// the occupant is within Manhattan distance less than this value from the
@@ -722,6 +766,10 @@ pub struct RuntimeNpc {
     pub cached_wp: usize,
     pub move_queue: Vec<u8>,
     pub move_queue_pos: usize,
+    /// `npc-schedules.md §4`: "It is incremented on exactly one kind of
+    /// failure: a **queued route step refused by the per-step cell check**
+    /// (Section 5 step 7). It is not a general 'failed to make progress'
+    /// tally" (`RETRACTIONS.md` R367).
     pub stuck_counter: u16,
     pub active_object: Option<usize>,
 }
@@ -874,7 +922,23 @@ impl RuntimeNpc {
         self.stuck_counter = 0;
     }
 
-    pub fn note_failed_progress(&mut self) {
+    /// `npc-schedules.md §5` step 7, corrected by `RETRACTIONS.md` **R367**:
+    /// "**The stuck counter is reserved for one event: the queued route step
+    /// being refused by the per-step cell check of Section 10.** On that
+    /// refusal the counter is incremented, and it is incremented *before* the
+    /// recovery step runs and without ever inspecting how the recovery step
+    /// ends."
+    ///
+    /// R367 withdraws the old "incremented every tick the NPC fails to make
+    /// progress" reading: "**Exactly one event increments the counter: a
+    /// queued route step refused by the per-step cell check.** Neither
+    /// cap-zero route-recovery step of Section 9.1 can increment it ... and
+    /// the recovery stepper never touches the counter table on any of its
+    /// three rejection paths."
+    ///
+    /// The `> 3` arm is unchanged: "A value greater than three resets the
+    /// queue read pointer and clears the counter so the NPC can replan".
+    pub fn note_refused_queued_route_step(&mut self) {
         self.stuck_counter = self.stuck_counter.saturating_add(1);
         if npc_stuck_counter_forces_replan(self.stuck_counter) {
             self.move_queue.clear();
@@ -884,6 +948,33 @@ impl RuntimeNpc {
                 self.state = NPC_STATE_IDLE;
             }
         }
+    }
+
+    /// `npc-schedules.md §9.1`: "The value `200` is never *counted* into: it
+    /// is **assigned** outright when a replan is attempted and the pathfinder
+    /// fails to reach the waypoint." The turn that makes the assignment "is
+    /// **not** a still turn" - the caller falls straight through into the
+    /// cap-zero recovery step.
+    pub fn assign_failed_replan_stuck_value(&mut self) {
+        self.stuck_counter = NPC_STUCK_HIGH_BAND_ENTRY;
+    }
+
+    /// `npc-schedules.md §9.1`, the aging band: "The counter is incremented,
+    /// and once the increment carries it past `204` the same pass zeroes
+    /// it."
+    ///
+    /// Nothing is returned. `RETRACTIONS.md` R369 makes the band "five
+    /// consecutive turns of complete stillness", so every turn that reaches
+    /// this arm is a still turn and the caller stalls unconditionally; the
+    /// released sixth turn is the one that never reaches here, because the
+    /// zeroing done above has already moved the counter out of the band.
+    pub fn age_high_band_stuck_counter(&mut self) {
+        let aged = self.stuck_counter.saturating_add(1);
+        self.stuck_counter = if aged > NPC_STUCK_HIGH_BAND_LAST {
+            0
+        } else {
+            aged
+        };
     }
 }
 

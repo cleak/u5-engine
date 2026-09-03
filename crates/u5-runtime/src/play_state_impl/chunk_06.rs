@@ -125,17 +125,62 @@ impl PlayState {
             self.message = "Sails need a cardinal heading.".to_string();
             return Some(MoveOutcome::Blocked);
         }
-        // `weather.md §5`: a hoisted-sail movement command "first establishes
-        // or changes the ship's heading", and from then on "the input helper
-        // can synthesize repeated movement commands from the cached direction
-        // until the cache is cleared or replaced". This is where the cache is
-        // written, so it covers the player's own command and the
-        // auto-advance route's synthesized repeat alike.
-        self.sail_cached_direction = Some(direction);
+        // `weather.md §5.1`, "**The one setter.**": "A movement command taken
+        // while the party's transport marker is a hoisted frigate
+        // (`0x20`-`0x23`) stores the requested heading into the cache." Two
+        // published details: "The stored value is always a real movement
+        // direction and is **never zero**, so **a new heading replaces the
+        // cache rather than clearing it.** An engine that clears first and
+        // then re-sets exposes a momentarily empty cache the original never
+        // has." And: "The store runs only when the requested heading
+        // **differs** from the cached one, and it is the same step that
+        // zeroes the sailing counter. Repeating the heading already cached
+        // changes neither the cache nor the counter, and in particular does
+        // not restart the wait."
+        //
+        // This is where the cache is written, so it covers the player's own
+        // command and the auto-advance route's synthesized repeat alike - and
+        // the synthesized repeat always matches the cache, which is exactly
+        // why it must not reset the wait counter.
+        //
+        // `weather.md §5` bounds what that store may do on the same command:
+        // "When sails are hoisted, a movement command first establishes or
+        // changes the ship's heading. If the requested heading differs from
+        // the current cached sail direction, the ship turns and clears the
+        // sailing counter; **that action does not also move the ship.** Once
+        // the requested direction matches the cached heading, the input
+        // helper can synthesize repeated movement commands from the cached
+        // direction until the cache is cleared or replaced." So the
+        // heading-establishing command returns here without reaching the
+        // release test below - which matters most on a crosswind heading,
+        // where §5's "**Why crosswind is the fastest point of sail**" fold
+        // makes `player_sail_wait_ticks` zero and the release test would
+        // otherwise fire on the turning command itself.
+        //
+        // `weather.md §4`: "Turning to a new heading is observable as a
+        // command action, and movement along the current heading is handled
+        // by the movement routines after the heading/state gate accepts it."
+        // The turn is an accepted command action, not a refusal, so it
+        // consumes the sailing turn like the wait passes around it; the
+        // per-turn tail of a heading change is not separately published (see
+        // the spec question raised with this change). Note that `step` has
+        // already applied the facing to the transport marker, whose low two
+        // bits are the ship heading (`weather.md §4`), so the visible turn is
+        // done by the time this gate runs.
+        if self.sail_cached_direction != Some(direction) {
+            self.sail_cached_direction = Some(direction);
+            self.sail_cadence = 0;
+            self.advance_sailing_wait_turn();
+            // No result line is published for a heading change, and
+            // `weather.md §6`'s stalled-sailing feedback belongs to "an
+            // invalid or stalled wind condition", which a turn is not. The
+            // slot is left empty rather than invented.
+            self.message = String::new();
+            return Some(MoveOutcome::SailTurned);
+        }
 
         let Some(wait_ticks) = self.wind.player_sail_wait_ticks(direction) else {
             self.sail_cadence = 0;
-            self.sail_stall_pending = true;
             self.advance_sailing_wait_turn();
             self.message = "Sails hang slack in calm wind.".to_string();
             return Some(MoveOutcome::SailStalled);
@@ -143,13 +188,11 @@ impl PlayState {
 
         if self.sail_cadence >= wait_ticks {
             self.sail_cadence = 0;
-            self.sail_stall_pending = false;
             return None;
         }
 
         self.sail_cadence = self.sail_cadence.saturating_add(1);
         self.advance_sailing_wait_turn();
-        self.sail_stall_pending = true;
         self.message = format!(
             "Sails stalled by {} wind while heading {}.",
             self.wind.name(),

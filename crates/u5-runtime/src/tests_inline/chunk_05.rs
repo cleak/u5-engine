@@ -440,7 +440,6 @@ fn exit_vehicle_parks_boardable_object_and_returns_to_foot() {
         skiffs: 2,
     };
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
     state.sync_player_object();
     state.active_objects.push(ActiveObject::empty());
     state.active_objects.push(ActiveObject {
@@ -459,7 +458,6 @@ fn exit_vehicle_parks_boardable_object_and_returns_to_foot() {
     assert_eq!(state.player.transport, TransportState::Foot);
     assert_eq!(state.active_effect_timing_status(), TimingStatusTag::Normal);
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
     assert_eq!(state.active_objects.len(), 3);
@@ -797,21 +795,17 @@ fn ship_sail_toggle_resets_wind_cadence_and_stall_feedback() {
         skiffs: 2,
     };
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
 
     assert_eq!(state.toggle_sails(), MoveOutcome::SailToggled);
 
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(state.message, "HOIST!");
 
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
 
     assert_eq!(state.toggle_sails(), MoveOutcome::SailToggled);
 
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(state.message, "FURL!");
     assert_eq!(state.turn, 2);
 }
@@ -828,9 +822,12 @@ fn under_sail_ship_auto_furls_only_on_exact_pier_tile() {
         hull: 77,
         skiffs: 2,
     };
+    // `weather.md §5.1`, "**The one setter.**": a heading that differs from
+    // the cache is stored and zeroes the sailing counter without moving the
+    // ship, so a released pass is one whose heading is already cached.
+    state.sail_cached_direction = Some(Direction::East);
     state.wind = WindState::East;
     state.sail_cadence = u8::MAX;
-    state.sail_stall_pending = true;
 
     assert_eq!(
         state
@@ -843,7 +840,6 @@ fn under_sail_ship_auto_furls_only_on_exact_pier_tile() {
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert!(!state.player.transport.is_ship_under_sail());
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(state.turn, 0);
     assert_eq!(state.message, "Docked!");
 
@@ -857,6 +853,7 @@ fn under_sail_ship_auto_furls_only_on_exact_pier_tile() {
         hull: 77,
         skiffs: 2,
     };
+    neighbor.sail_cached_direction = Some(Direction::East);
     neighbor.wind = WindState::East;
     neighbor.sail_cadence = u8::MAX;
 
@@ -882,9 +879,9 @@ fn refused_hoisted_frigate_step_runs_exact_collision_payload_without_a_turn() {
             hull: 100,
             skiffs: 0,
         };
+        state.sail_cached_direction = Some(Direction::East);
         state.wind = WindState::East;
         state.sail_cadence = u8::MAX;
-        state.sail_stall_pending = true;
         state.prng_state = 0x2468;
         let mut expected_prng = state.prng_state;
         let expected_roll = u5_prng_range_u16(
@@ -905,7 +902,6 @@ fn refused_hoisted_frigate_step_runs_exact_collision_payload_without_a_turn() {
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, expected_message);
         assert_eq!(state.sail_cadence, 0);
-        assert!(!state.sail_stall_pending);
         assert_eq!(state.prng_state, expected_prng);
         assert_eq!(
             state.player.transport,
