@@ -196,9 +196,21 @@ pub const COMBAT_SLEEP_WAKE_SUCCESS_ROLL: u8 = 16;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
+/// `combat.md §6.1`: "`0x10` Phase/blink filter (bypassed on scene `'('`
+/// `0x28` and on monster type `'/'` `0x2F`)." `§9` separates it from
+/// ordinary invisibility: the target picker rejects "a suppressed
+/// phase/hidden state" first - with the Doom-scene and Shadow-Lord
+/// bypass - and only then rejects the "invisible / not-yet-revealed"
+/// flag, which no bypass reaches. The two states are different bits.
+pub const COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER: u8 = 0x10;
 pub const COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED: u8 = 0x04;
 /// `combat.md §6.3`: branch-specific narration already emitted.
 pub const COMBAT_ACTION_RESULT_VANISH_NARRATED: u8 = 0x02;
+/// `combat.md §6.3`: the common attack-result narrator's own
+/// kill-narrated bit. "It first clears the field's kill-narrated bit
+/// `0x01`" and, on the arm that does narrate a kill, "sets kill-narrated
+/// bit `0x01`, clears the transient sleep bit".
+pub const COMBAT_ACTION_RESULT_KILL_NARRATED: u8 = 0x01;
 /// `combat.md §6.3`: normal sleep helper result, replacing the whole field.
 pub const COMBAT_ACTION_RESULT_SLEEP: u8 = 0x04;
 pub const COMBAT_NO_TARGET_FLEE_MIN_SLOT: usize = 5;
@@ -278,8 +290,27 @@ pub const COMBAT_CLASS_CORPSER: u8 = 45;
 /// (38) consecutively. Anchor DRAGON to DAEMON + 1.
 pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;
 pub const COMBAT_CLASS_SHADOW_LORD: u8 = 47;
-pub const COMBAT_SUMMONED_ACTOR_FLAGS: u8 =
-    COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
+/// `combat.md §6.1a` writer 3: "**Conjure and Swarm placement** set the
+/// bit on each freshly placed creature, and **Summon** sets it on its
+/// placed Daemon whenever its caster self-check succeeds ... They are
+/// still placed through the ordinary monster placement path, so their
+/// class byte is the monster-side one - but the bit **does** hand the
+/// creature to the player's prompt: a monster-side slot carrying it is
+/// dispatched to the keystroke/command path, not to the automatic
+/// driver". `§6.1` bit `0x80` is stamped "only when [placement] writes a
+/// party member's descriptor. Monster and object descriptors never carry
+/// it", so a summoned creature is `0x40 | 0x01` (or `0x20 | 0x01` for the
+/// two passive class rows), never `0x80`.
+///
+/// The flags value is unchanged by the `RETRACTIONS.md` R354 correction;
+/// only the reason is. The earlier justification - "monster AI drives
+/// their turns" - is withdrawn, and `magic.md`, Summoning and
+/// conjuration, carries the matching correction: "That bit **is** a
+/// transfer of control ... a monster-side slot carrying the bit fails
+/// the self-acting test".
+pub const fn combat_summoned_actor_flags(class: u8) -> u8 {
+    combat_monster_placement_flags(class) | COMBAT_ACTOR_FLAG_CONTROLLED
+}
 /// `magic.md §8` Conjure spell outcome bound — sixteen weighted
 /// outcomes. Same fundamental count as
 /// [`crate::CONJURE_OUTCOME_COUNT`] in magic.rs; anchored
@@ -1080,6 +1111,13 @@ impl CombatActorDescriptor {
         self.flags & COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED != 0
     }
 
+    /// `combat.md §6.1` bit `0x10`, the phase/blink filter. `§9` makes
+    /// this the *bypassable* half of the target picker's two rejection
+    /// tests; [`Self::is_hidden_or_unrevealed`] is the other half.
+    pub const fn is_phase_suppressed(self) -> bool {
+        self.flags & COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER != 0
+    }
+
     pub const fn is_status_disabled(self) -> bool {
         self.flags & COMBAT_ACTOR_FLAG_STATUS_DISABLED != 0
     }
@@ -1098,6 +1136,15 @@ impl CombatActorDescriptor {
 
     pub const fn is_controlled(self) -> bool {
         self.flags & COMBAT_ACTOR_FLAG_CONTROLLED != 0
+    }
+
+    /// `combat.md §6.1`, bit `0x80`: "Party-side actor. ... Monster and
+    /// object descriptors never carry it." `§6.1a` adds that the
+    /// slot-to-group helper "reads the party-class bit `0x80` only to
+    /// choose which rule applies", so this is the descriptor-level
+    /// party-side/monster-side discriminator.
+    pub const fn is_party_side(self) -> bool {
+        self.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0
     }
 
     pub const fn eligible_for_field_coordinate_lookup(self, linked_active_object_tile: u8) -> bool {
@@ -1119,8 +1166,19 @@ impl CombatActorDescriptor {
         self.owner_target_class = owner_target_class;
     }
 
+    /// `combat.md §6.1`, bit `0x20`: "party death ORs it in". This is the
+    /// party-side form only.
     pub fn mark_dead(&mut self) {
         self.flags |= COMBAT_ACTOR_FLAG_MARKED_DEAD;
+    }
+
+    /// `combat.md §6.1`, bit `0x20`: "Monster death overwrites the whole
+    /// flags byte with this value"; `§6.3` repeats it - "**Monster death
+    /// overwrites the flags byte** with the marked-dead value rather than
+    /// ORing it, so all other per-round flag state on that descriptor is
+    /// lost." A dead monster is therefore exactly `0x20`, never `0x60`.
+    pub fn mark_dead_overwriting_flags(&mut self) {
+        self.flags = COMBAT_ACTOR_FLAG_MARKED_DEAD;
     }
 
     pub fn set_status_disabled(&mut self) {
@@ -1179,7 +1237,7 @@ impl CombatActorDescriptor {
         let killed = instant_kill || self.hp_or_wound == 0;
         let death_path = if killed {
             self.hp_or_wound = 0;
-            self.mark_dead();
+            self.mark_dead_overwriting_flags();
             // `combat.md §6.3`: "The branch order is: party-side bit
             // first; then the pair test \"incorporeal bit or vanish bit
             // set\"; inside that pair, vanish wins over incorporeal;
@@ -2085,11 +2143,57 @@ pub fn clear_combat_linked_invisibility(
     set_combat_linked_visibility(actor, active_objects, false)
 }
 
+/// `combat.md §6.1`: the blink/phase ability toggles descriptor bit
+/// `0x10`, the phase/blink filter - **not** bit `0x04`, which `§9` keeps
+/// for "ordinary invisibility" and which no suppression bypass reaches.
+/// The linked presentation byte follows the same hide/show rule either
+/// way.
+pub fn set_combat_linked_phase(
+    actor: &mut CombatActorDescriptor,
+    active_objects: &mut [ActiveObject],
+    phased: bool,
+) -> Option<CombatLinkedVisibilityOutcome> {
+    if actor.is_empty() || actor.is_marked_dead() {
+        return None;
+    }
+
+    let actor_flags_before = actor.flags;
+    if phased {
+        actor.flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
+    } else {
+        actor.flags &= !COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
+    }
+
+    let mut visual_tile_before = None;
+    let mut visual_tile_after = None;
+    if let Some(object) = active_objects.get_mut(actor.active_object_slot as usize) {
+        visual_tile_before = Some(object.tile);
+        object.tile = if phased {
+            COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
+        } else {
+            object.type_byte
+        };
+        visual_tile_after = Some(object.tile);
+    }
+
+    Some(CombatLinkedVisibilityOutcome {
+        visibility: if phased {
+            CombatLinkedVisibility::Hidden
+        } else {
+            CombatLinkedVisibility::Visible
+        },
+        actor_flags_before,
+        actor_flags_after: actor.flags,
+        visual_tile_before,
+        visual_tile_after,
+    })
+}
+
 pub fn toggle_combat_blink_phase(
     actor: &mut CombatActorDescriptor,
     active_objects: &mut [ActiveObject],
 ) -> Option<CombatLinkedVisibilityOutcome> {
-    set_combat_linked_visibility(actor, active_objects, !actor.is_hidden_or_unrevealed())
+    set_combat_linked_phase(actor, active_objects, !actor.is_phase_suppressed())
 }
 
 pub fn apply_combat_reveal(actors: &mut [CombatActorDescriptor]) -> usize {
@@ -2269,10 +2373,100 @@ pub fn collect_cause_fear_actor_slots(
     slots
 }
 
+/// `combat.md §6.3`, "Vanish ordering and the shared result field": the
+/// common attack result narrator "is [the shared action-result field's]
+/// only relevant bit reader. It first clears the field's kill-narrated
+/// bit `0x01`; when `0x02` is still present, the combined suppression
+/// test skips the generic killed/slept/hit chain, produces no message or
+/// sound, and clears `0x02` in cleanup."
+///
+/// The ordering collision in the same section is the other arm: a
+/// successful faint-sleep "replaces the whole result field with sleep
+/// bit `0x04`, losing `0x02`", so the narrator runs its generic chain,
+/// appends the vanished target's `<name> killed!` line, plays no
+/// additional sound, and "sets kill-narrated bit `0x01`, clears the
+/// transient sleep bit".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatAttackNarratorGate {
+    /// Whether the generic killed/slept/hit chain runs at all.
+    pub run_generic_chain: bool,
+    /// The shared action-result field after the narrator's own cleanup.
+    pub result_after: u8,
+}
+
+pub const fn resolve_combat_attack_narrator_gate(
+    result_before: u8,
+    narrates_kill: bool,
+) -> CombatAttackNarratorGate {
+    // Step 1: "It first clears the field's kill-narrated bit `0x01`".
+    let cleared = result_before & !COMBAT_ACTION_RESULT_KILL_NARRATED;
+    if cleared & COMBAT_ACTION_RESULT_VANISH_NARRATED != 0 {
+        // "when `0x02` is still present, the combined suppression test
+        // skips the generic killed/slept/hit chain, produces no message
+        // or sound, and clears `0x02` in cleanup."
+        return CombatAttackNarratorGate {
+            run_generic_chain: false,
+            result_after: cleared & !COMBAT_ACTION_RESULT_VANISH_NARRATED,
+        };
+    }
+    let result_after = if narrates_kill {
+        // "It sets kill-narrated bit `0x01`, clears the transient sleep
+        // bit". Only the kill arm sets the kill-narrated bit.
+        (cleared | COMBAT_ACTION_RESULT_KILL_NARRATED) & !COMBAT_ACTION_RESULT_SLEEP
+    } else {
+        cleared
+    };
+    CombatAttackNarratorGate {
+        run_generic_chain: true,
+        result_after,
+    }
+}
+
+/// `combat.md §16.1`: "Side counting skips empty, dead, and passive
+/// descriptors, then uses the same group resolver. Group 1 counts as
+/// foes and group 0 as friends. Control and the traitor identity
+/// therefore affect victory detection."
+///
+/// The skip is the `§14` census wording - "counts every descriptor that
+/// is non-empty and not dead-marked, with **no terrain filter**" - and
+/// passive class 8/9 descriptors fall out of it because their `0x20`
+/// placement tag is the same marked-dead/non-acting bit.
+pub fn combat_side_census(actors: &[CombatActorDescriptor]) -> CombatSideCensus {
+    let mut census = CombatSideCensus {
+        friends: 0,
+        foes: 0,
+    };
+    for (slot, actor) in actors.iter().copied().enumerate().take(COMBAT_ACTOR_SLOTS) {
+        if !combat_actor_is_present_not_dead(actor) {
+            continue;
+        }
+        match resolve_combat_target_group_for_actor(actor, slot, None) {
+            COMBAT_TARGET_GROUP_MONSTER => census.foes += 1,
+            COMBAT_TARGET_GROUP_PARTY => census.friends += 1,
+            _ => {}
+        }
+    }
+    census
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatSideCensus {
+    pub friends: usize,
+    pub foes: usize,
+}
+
+impl CombatSideCensus {
+    pub const fn foes_remain(self) -> bool {
+        self.foes > 0
+    }
+
+    pub const fn friends_remain(self) -> bool {
+        self.friends > 0
+    }
+}
+
 pub fn combat_has_active_not_dead_non_party_actor(actors: &[CombatActorDescriptor]) -> bool {
-    actors.iter().copied().enumerate().any(|(slot, actor)| {
-        slot >= COMBAT_PARTY_ACTOR_SLOTS && combat_actor_is_present_not_dead(actor)
-    })
+    combat_side_census(actors).foes_remain()
 }
 
 pub fn resolve_combat_victory(actors: &[CombatActorDescriptor]) -> bool {
@@ -2286,15 +2480,31 @@ pub fn combat_escape_has_unmarked_party_side_actor(actors: &[CombatActorDescript
         .any(|actor| actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0 && !actor.is_marked_dead())
 }
 
+/// `combat.md §14`, the Escape-key handler's three branches, in the
+/// published order:
+///
+/// 1. "If such a party-side descriptor exists **and the encounter mode's
+///    high bit is set**, append `-Not here!`" - unconditional on the
+///    exit announcement.
+/// 2. "If such a descriptor exists **in an ordinary mode** and the
+///    one-shot exit announcement has not yet happened, append
+///    `-Not yet!`".
+/// 3. "If the **ordinary-mode** exit announcement has already happened,
+///    or if no qualifying party-side descriptor exists, accept cleanup."
+///
+/// Branch 3's announcement arm is scoped to an ordinary mode, so the
+/// announcement flag must be tested *after* the high bit, never before.
 pub fn resolve_combat_escape_cleanup(
     actors: &[CombatActorDescriptor],
     encounter_mode_high_bit: bool,
     exit_announced: bool,
 ) -> CombatEscapeCleanupDecision {
-    if !combat_escape_has_unmarked_party_side_actor(actors) || exit_announced {
+    if !combat_escape_has_unmarked_party_side_actor(actors) {
         CombatEscapeCleanupDecision::Accepted
     } else if encounter_mode_high_bit {
         CombatEscapeCleanupDecision::RefusedNotHere
+    } else if exit_announced {
+        CombatEscapeCleanupDecision::Accepted
     } else {
         CombatEscapeCleanupDecision::RefusedNotYet
     }
@@ -3629,27 +3839,72 @@ pub fn resolve_combat_target_group_for_actor(
 /// monster-side group "for both the friendly-fire filter and the
 /// player-versus-AI dispatch gate".
 ///
-/// The dispatch decision is therefore the slot-to-group helper alone, and
-/// the toggle cuts both ways. `magic.md §8`: "a monster-side slot carrying
-/// the bit fails the self-acting test, so the round walker sends it to the
-/// keystroke/command path instead of to the automatic actor driver. It takes
-/// its turns at the player's prompt, printing the reduced turn banner ...
-/// then `Attack-`, `Aim! `, `Nothing!` on a cancelled confirm, and `<target>
-/// missed!` on a failed roll."
+/// The decision is the resolved group and nothing else: `§16.1`
+/// "The round walker sends group-1 actors to the automatic action
+/// driver. Group-0 actors enter the combined command handler". So a
+/// monster-side slot carrying the controlled bit resolves to group 0 and
+/// **does** reach this path - `§6.1a` writer 3: "the bit **does** hand
+/// the creature to the player's prompt: a monster-side slot carrying it
+/// is dispatched to the keystroke/command path, not to the automatic
+/// driver". `magic.md`, Summoning and conjuration, carries the matching
+/// correction ("That bit **is** a transfer of control ... a monster-side
+/// slot carrying the bit fails the self-acting test"); its earlier
+/// "monster AI drives its turns ... the player never gets to move it"
+/// is withdrawn by `RETRACTIONS.md` R354. A slot index test would
+/// re-impose the withdrawn reading, so there is none here.
 ///
-/// *Corrected.* This helper previously required a party-side slot outright,
-/// on the reading that "monster AI drives its turns exactly as it drives any
-/// other monster" and that "nothing routes a summoned creature through the
-/// player command parser, and the player never gets to move it". All of that
-/// is withdrawn - `RETRACTIONS.md` R354, which also reverses the earlier R074
-/// withdrawal. The slot bound also disagreed with the round walker, which
-/// already dispatches by group and hands a stamped creature `PlayerReady`.
+/// An empty or death-marked descriptor takes neither path: `§6.1` "A
+/// descriptor whose flags byte is entirely zero is a free slot", and the
+/// group resolver answers `COMBAT_TARGET_GROUP_PARTY` for a death-marked
+/// descriptor for the friendly-fire filter's sake, which is not a
+/// dispatch decision.
 pub fn combat_slot_takes_player_command_path(slot: usize, actor: CombatActorDescriptor) -> bool {
     if actor.is_empty() || actor.is_marked_dead() {
         return false;
     }
     resolve_combat_target_group(slot, actor.owner_target_class, actor.team_toggled())
         == COMBAT_TARGET_GROUP_PARTY
+}
+
+/// Reaching the combined command handler and being *prompted* by it are
+/// two different things. `combat.md §16.1`: "Group-0 actors enter the
+/// combined command handler; it prompts only for an eligible selected
+/// party member, while a monster descriptor that control moved to group
+/// 0 still synthesizes an automatic action."
+///
+/// So this predicate - the keystroke gate - is the group test of
+/// [`combat_slot_takes_player_command_path`] **and** the descriptor's
+/// party-side bit `0x80` (`§6.1a`: the helper "reads the party-class bit
+/// `0x80` only to choose which rule applies"). A controlled monster is
+/// still handed to the handler; it is simply never asked for a key.
+/// `§11.1` publishes the whole of the turn it gets instead - the reduced
+/// banner "then one fixed attempt: `Attack-`, `Aim! `, and on a failed
+/// roll `<target> missed!`" - and `magic.md`, Summoning and conjuration,
+/// records that "What the player can usefully do with such a creature
+/// beyond that attack path is not established here", so no ordinary
+/// command is accepted for it.
+///
+/// **Open spec question, unresolved at spec HEAD.** Two published
+/// statements disagree, and this predicate follows the first of them.
+/// `§16.1` synthesizes: the handler "prompts only for an eligible
+/// selected party member, while a monster descriptor that control moved
+/// to group 0 still **synthesizes an automatic action**". `RETRACTIONS.md`
+/// R354 prompts: a monster carrying the bit "is dispatched to the
+/// keystroke/command path and takes its turns under player control,
+/// printing the reduced turn banner ... then `Attack-`, `Aim! `,
+/// `Nothing!` on a **cancelled confirm**, and `<target> missed!` on a
+/// failed roll" - and a cancelled confirm presupposes a player confirm.
+/// R364 says the same slot "is driven from the player's prompt".
+///
+/// Refusing the keystroke here therefore re-establishes, in outcome, the
+/// reading R354 withdrew: the player cannot move the slot. The refusal is
+/// kept because §16.1 is the section that describes this dispatch
+/// decision directly and because the alternative would have to invent the
+/// whole command surface `magic.md` says "is not established here" - but
+/// it is a choice between two current published texts, not a reading of
+/// one, and it needs a ruling before it can be called settled.
+pub fn combat_slot_prompts_for_player_command(slot: usize, actor: CombatActorDescriptor) -> bool {
+    combat_slot_takes_player_command_path(slot, actor) && actor.is_party_side()
 }
 
 pub fn combat_target_candidate_view_from_descriptor(

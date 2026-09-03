@@ -3757,12 +3757,15 @@ fn combat_blink_phase_toggles_same_linked_visibility_state() {
 
     let disappeared = toggle_combat_blink_phase(&mut actor, &mut active_objects).unwrap();
     assert_eq!(disappeared.visibility, CombatLinkedVisibility::Hidden);
-    assert!(actor.is_hidden_or_unrevealed());
+    // `combat.md §6.1`: blink/phase is bit `0x10`, and `§9` keeps
+    // "ordinary invisibility" (`0x04`) a separate, non-bypassable filter.
+    assert!(actor.is_phase_suppressed());
+    assert!(!actor.is_hidden_or_unrevealed());
     assert_eq!(active_objects[1].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
 
     let returned = toggle_combat_blink_phase(&mut actor, &mut active_objects).unwrap();
     assert_eq!(returned.visibility, CombatLinkedVisibility::Visible);
-    assert!(!actor.is_hidden_or_unrevealed());
+    assert!(!actor.is_phase_suppressed());
     assert_eq!(active_objects[1].tile, 0x9c);
 }
 
@@ -3807,7 +3810,8 @@ fn combat_ai_blink_special_toggles_linked_visibility_and_marks_dirty() {
             },
         } if slot == actor_slot
     ));
-    assert!(state.combat_actors[actor_slot].is_hidden_or_unrevealed());
+    assert!(state.combat_actors[actor_slot].is_phase_suppressed());
+    assert!(!state.combat_actors[actor_slot].is_hidden_or_unrevealed());
     assert_eq!(
         state.active_objects[actor_slot].tile,
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
@@ -6019,7 +6023,7 @@ fn combat_frame_restores_world_table_player_and_surviving_active_player() {
         6,
         5,
         6,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     let mut combat_terrain = DEFAULT_COMBAT_ARENA_TERRAIN;
@@ -7636,7 +7640,7 @@ fn combat_summon_application_allocates_actor_and_object_on_legal_neighbor() {
             COMBAT_PARTY_ACTOR_SLOTS as u8,
             6,
             4,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(COMBAT_CLASS_GIANT_SPIDER),
             0,
         )
         .unwrap()
@@ -8112,7 +8116,7 @@ fn combat_cast_clone_routes_resources_and_places_copy_on_legal_cell() {
         target_slot as u8,
         5,
         6,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         2,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -8399,7 +8403,7 @@ fn combat_cast_conjure_routes_resources_and_places_weighted_animal() {
             COMBAT_PARTY_ACTOR_SLOTS as u8,
             conjure_x,
             conjure_y,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(COMBAT_CLASS_GIANT_RAT),
             0,
         )
         .unwrap()
@@ -8480,7 +8484,7 @@ fn combat_cast_swarm_routes_resources_and_places_four_swarms_on_one_probe() {
                 slot as u8,
                 swarm_x,
                 swarm_y,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                combat_summoned_actor_flags(COMBAT_CLASS_INSECT_SWARM),
                 0,
             )
             .unwrap()
@@ -8540,7 +8544,7 @@ fn combat_swarm_rejects_an_off_arena_probe_then_places_four_at_one_cell() {
                 (COMBAT_PARTY_ACTOR_SLOTS + offset) as u8,
                 4,
                 4,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                combat_summoned_actor_flags(COMBAT_CLASS_INSECT_SWARM),
                 0,
             )
             .unwrap()
@@ -8614,7 +8618,7 @@ fn combat_cast_summon_daemon_routes_resources_and_places_daemon() {
             COMBAT_PARTY_ACTOR_SLOTS as u8,
             expected_x,
             expected_y,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(COMBAT_CLASS_DAEMON),
             0,
         )
         .unwrap()
@@ -8642,7 +8646,7 @@ fn summon_self_check_threshold_uses_party_intelligence_or_monster_endurance() {
         monster_slot as u8,
         6,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -8744,7 +8748,10 @@ fn combat_ai_summon_daemon_special_places_daemon_without_spell_resources() {
                     summoned_object_slot as u8,
                     6,
                     4,
-                    COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                    // `combat.md §6.1`: monster descriptors never carry
+                    // `0x80`; `§6.1a`: the monster AI's own summon-daemon
+                    // ability does not set the controlled bit either.
+                    COMBAT_ACTOR_FLAG_SELECTABLE_40,
                     0,
                 )
                 .unwrap(),
@@ -8760,7 +8767,7 @@ fn combat_ai_summon_daemon_special_places_daemon_without_spell_resources() {
             summoned_object_slot as u8,
             6,
             4,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         )
         .unwrap()
@@ -9575,7 +9582,9 @@ fn combat_ai_turn_applies_traitor_roster_record_group_to_target_scan() {
 #[test]
 fn combat_ai_turn_doom_context_bypasses_suppressed_phase_targets() {
     let mut state = combat_ai_turn_state(8, 5);
-    state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    // `combat.md §6.1`: the bypassable filter is bit `0x10`, the
+    // phase/blink filter, not `0x04`.
+    state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     state.combat_frame_snapshot = Some(CombatFrameSnapshot {
         area: Area::Dungeon {
             scene: DungeonScene {
@@ -9636,7 +9645,7 @@ fn combat_ai_summon_daemon_uses_only_the_single_injected_probe() {
         8,
         8,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.active_objects[8].type_byte = 0xdc;
@@ -9678,7 +9687,7 @@ fn combat_ai_failed_summon_probe_continues_ordinary_action() {
         8,
         8,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -9756,7 +9765,7 @@ fn production_combat_ai_summon_draws_gate_then_fresh_x_then_y_and_stops() {
         8,
         8,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -10166,6 +10175,12 @@ fn combat_ai_turn_applies_possess_hook_before_target_synthesis() {
 #[test]
 fn combat_round_production_path_can_drive_possess_special() {
     let mut state = combat_ai_turn_state(8, 5);
+    // `combat.md §16.1`: a controlled party descriptor resolves to group 1,
+    // so a lone possessed member would satisfy the `§14` defeat recount and
+    // its control/faint helper would immediately undo the possession. Seat a
+    // second, farther party actor so this test observes the possession.
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 0, 0]);
     state.combat_actors[8].owner_target_class = 28;
     state.combat_actors[8].phase_counter = 1;
     state.next_combat_actor_slot = 8;
@@ -12385,21 +12400,28 @@ fn combat_input_dispatch_z_stats_refuses_missing_or_disabled_actor() {
 }
 
 #[test]
-fn combat_input_dispatch_accepts_a_controlled_non_party_actor_turn() {
-    // magic.md §8: "That bit **is** a transfer of control ... a
-    // monster-side slot carrying the bit fails the self-acting test, so the
-    // round walker sends it to the keystroke/command path instead of to the
-    // automatic actor driver. It takes its turns at the player's prompt".
+fn combat_input_dispatch_never_prompts_a_controlled_non_party_actor() {
+    // combat.md §6.1a writer 3: "the bit **does** hand the creature to
+    // the player's prompt: a monster-side slot carrying it is dispatched
+    // to the keystroke/command path, not to the automatic driver"
+    // (RETRACTIONS.md R354). That is the dispatch half, and §16.1 gives
+    // the other half: "Group-0 actors enter the combined command handler;
+    // it prompts only for an eligible selected party member, while a
+    // monster descriptor that control moved to group 0 still synthesizes
+    // an automatic action." §11.1 publishes that synthesized turn as one
+    // fixed attempt, and magic.md's Summoning and conjuration records that
+    // "What the player can usefully do with such a creature beyond that
+    // attack path is not established here" - so no ordinary command is
+    // accepted for it.
     //
-    // *Corrected.* This test previously asserted the opposite, quoting the
-    // withdrawn "monster AI drives its turns exactly as it drives any other
-    // monster ... the player never gets to move it". RETRACTIONS.md R354
-    // withdraws all of it and reverses the earlier R074 withdrawal.
-    //
-    // combat.md §6.1a: the round walker picks the keystroke path through
-    // the slot-to-group helper alone, and the controlled bit is that
-    // helper's team toggle, so it moves this monster into the party's group
-    // for the dispatch gate as well as for the same-faction filter.
+    // The two halves do not sit together comfortably: R354 also gives the
+    // slot "`Nothing!` on a cancelled confirm", which presupposes a player
+    // confirm, and R364 says it "is driven from the player's prompt", so
+    // refusing the keystroke re-establishes in outcome what R354 withdrew.
+    // This test pins the §16.1 reading, which
+    // `combat_slot_prompts_for_player_command` documents as an open spec
+    // question; if the ruling goes the other way, this is the test that
+    // must change with it.
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
@@ -12407,19 +12429,61 @@ fn combat_input_dispatch_accepts_a_controlled_non_party_actor_turn() {
     state.next_combat_actor_slot = 9;
     state.visibility_dirty = false;
 
+    // The slot resolves to group 0 and so reaches the command handler ...
+    assert_eq!(
+        resolve_combat_target_group_for_actor(state.combat_actors[8], 8, None),
+        COMBAT_TARGET_GROUP_PARTY
+    );
+    assert!(combat_slot_takes_player_command_path(
+        8,
+        state.combat_actors[8]
+    ));
+    // ... but the handler never prompts it, while the seated party member
+    // in slot 0 is prompted.
+    assert!(!combat_slot_prompts_for_player_command(
+        8,
+        state.combat_actors[8]
+    ));
+    assert!(combat_slot_prompts_for_player_command(
+        0,
+        state.combat_actors[0]
+    ));
+
     assert_eq!(
         handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
-    // The direction echo of Section 8, then the next actor's turn banner.
-    assert_eq!(state.message, "East
-
-Avatar, armed with bare hands:");
-    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 5));
+    // The movement command is refused: no step, no transcript line.
+    assert_eq!(state.message, "");
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
     assert_eq!(
         (state.active_objects[8].x, state.active_objects[8].y),
-        (9, 5)
+        (8, 5)
+    );
+
+    // The round walk never opens a pending turn on that slot either.
+    let mut walked = combat_player_command_state(8, 5);
+    walked.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
+    walked.next_combat_actor_slot = 8;
+    walked.ensure_pending_combat_player_turn();
+    assert_ne!(walked.pending_combat_actor_slot, Some(8));
+
+    // The same slot without the bit stays on the automatic driver and
+    // ignores the keystroke.
+    let mut driven = combat_player_command_state(8, 5);
+    driven.pending_combat_actor_slot = Some(8);
+    driven.next_combat_actor_slot = 9;
+
+    assert_eq!(
+        handle_play_key_input(&mut driven, '6', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert_eq!(driven.message, "");
+    assert_eq!(
+        (driven.combat_actors[8].x, driven.combat_actors[8].y),
+        (8, 5)
     );
 }
 
@@ -13335,13 +13399,35 @@ fn combat_actor_slot_dispatch_runs_ready_monster_ai_after_phase_refresh() {
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
 }
 
-#[test]
-fn combat_actor_slot_dispatch_routes_controlled_non_party_actor_to_player_path() {
-    let mut state = combat_ai_turn_state(8, 5);
+fn controlled_monster_dispatch_state(foe_x: u8, foe_y: u8) -> PlayState {
+    let mut state = combat_ai_turn_state(6, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
     state.combat_actors[8].phase_counter = 1;
+    // One hostile foe. The controlled creature resolves to group 0, and
+    // `combat.md §16.1` target selection "rejects candidates in the acting
+    // slot's group", so this is its only legal target.
+    state.active_objects[9] = ActiveObject {
+        type_byte: 0x90,
+        tile: 0x90,
+        x: usize::from(foe_x),
+        y: usize::from(foe_y),
+        ..ActiveObject::empty()
+    };
+    state.combat_actors[9] = CombatActorDescriptor::from_row([
+        10,
+        1,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
+        COMBAT_CLASS_GIANT_RAT,
+        9,
+        0,
+        foe_x,
+        foe_y,
+    ]);
+    state
+}
 
-    let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+fn dispatch_controlled_monster_slot(state: &mut PlayState) -> CombatActorSlotDispatchApplication {
+    state.apply_combat_actor_slot_dispatch_with_inputs(
         8,
         30,
         false,
@@ -13357,22 +13443,97 @@ fn combat_actor_slot_dispatch_routes_controlled_non_party_actor_to_player_path()
         None,
         true,
         &[1, 2, 3, 4],
-        &[],
-    );
+        &[(
+            8,
+            CombatMonsterAttackInputs {
+                forced_hit: Some(true),
+                ..CombatMonsterAttackInputs::default()
+            },
+        )],
+    )
+}
 
+#[test]
+fn combat_dispatch_synthesizes_the_controlled_monster_turn_instead_of_prompting() {
+    // combat.md §16.1: "Group-0 actors enter the combined command handler;
+    // it prompts only for an eligible selected party member, while a
+    // monster descriptor that control moved to group 0 still synthesizes
+    // an automatic action." §11.1's announcement table publishes that turn
+    // as the reduced banner "then one fixed attempt", and §6.1a's attack
+    // driver reader supplies the attempt: it "still picks a target the
+    // normal way", the target "must be at straight-line distance exactly
+    // one", and the strike skips the attacker back-link.
+    let mut state = controlled_monster_dispatch_state(7, 5);
+
+    let application = dispatch_controlled_monster_slot(&mut state);
+
+    let CombatActorSlotDispatchApplication::Slot {
+        slot,
+        action,
+        control_after,
+        ..
+    } = application
+    else {
+        panic!("the controlled monster slot should dispatch");
+    };
+    assert_eq!(slot, 8);
+    assert_eq!(control_after, CombatRoundLoopControl::ContinueActorWalk);
+    let CombatActorDispatchAction::ControlledMonsterAttempt {
+        attempt: Some(attempt),
+    } = action
+    else {
+        panic!("a controlled monster must never be handed the prompt: {action:?}");
+    };
+    assert_eq!(attempt.actor_slot, 8);
     assert_eq!(
-        application,
-        CombatActorSlotDispatchApplication::Slot {
-            slot: 8,
-            phase_tick: Some(CombatActorPhaseTick::Ready {
-                counter_before: 1,
-                refreshed_counter: 29,
-            }),
-            action: CombatActorDispatchAction::PlayerReady,
-            control_after: CombatRoundLoopControl::ContinueActorWalk,
+        attempt.target,
+        CombatAiTargetResolution::ChosenActor { slot: 9, x: 7, y: 5 }
+    );
+    let attack = attempt
+        .monster_attack
+        .expect("the adjacent foe takes the one fixed attempt");
+    assert_eq!((attack.attacker_slot, attack.target_slot), (8, 9));
+    assert!(matches!(
+        attack.resolution,
+        Some(CombatWeaponAttackResolution::Hit { .. })
+    ));
+    // §6.1a: "the pre-attack animation, the attacker back-link, the
+    // class-specific attack overrides and the monster ranged-spell branch
+    // are all skipped", and the turn does not step.
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
+    assert_eq!(state.combat_interference_sources[9], 0);
+}
+
+#[test]
+fn a_controlled_monster_with_no_adjacent_foe_produces_no_action_at_all() {
+    // combat.md §6.1a: if the chosen target "is further away the actor's
+    // turn produces **no action at all**: the driver does not fall through
+    // to the ranged branch, does not consult the class's
+    // maximum-attack-range byte, and does not step".
+    let mut state = controlled_monster_dispatch_state(10, 5);
+
+    let application = dispatch_controlled_monster_slot(&mut state);
+
+    let CombatActorSlotDispatchApplication::Slot { action, .. } = application else {
+        panic!("the controlled monster slot should dispatch");
+    };
+    let CombatActorDispatchAction::ControlledMonsterAttempt {
+        attempt: Some(attempt),
+    } = action
+    else {
+        panic!("a controlled monster must never be handed the prompt: {action:?}");
+    };
+    assert_eq!(
+        attempt.target,
+        CombatAiTargetResolution::ChosenActor {
+            slot: 9,
+            x: 10,
+            y: 5
         }
     );
-    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+    assert_eq!(attempt.monster_attack, None);
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
+    assert_eq!(state.combat_actors[9].hp_or_wound, 10);
 }
 
 #[test]
@@ -14666,7 +14827,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -14775,7 +14936,9 @@ fn place_death_side_effect_monster(
         active_object_slot as u8,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        // `combat.md §6.1`: "Monster and object descriptors never carry"
+        // the party-side bit `0x80`.
+        combat_monster_placement_flags(class),
         0,
     );
     state.active_objects[active_object_slot] = ActiveObject {
@@ -15291,10 +15454,16 @@ fn combat_monster_attack_state(attacker_class: u8, attacker_x: u8, attacker_y: u
     }];
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    // `combat.md §6.1`, bit `0x80`: "Placement stamps this bit only when it
+    // writes a party member's descriptor. Monster and object descriptors
+    // never carry it." The attacker here is a monster, and the damage/death
+    // resolver reads that bit as its party/monster discriminator, so the
+    // fixture has to stamp the placement tag `§16.1` gives the class rather
+    // than the party-side bit.
     state.combat_actors[8] = CombatActorDescriptor::from_row([
         10,
         1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        combat_monster_placement_flags(attacker_class),
         attacker_class,
         8,
         0,
@@ -15323,6 +15492,10 @@ fn combat_monster_attack_applies_poison_status_before_ordinary_melee_damage() {
             }),
             resolution: None,
             damage_application: None,
+            // `combat.md §11.1`: the poison line prints "**inside** damage
+            // resolution ... and the ordinary result line is then
+            // suppressed", so this arm never reaches the gated chain.
+            generic_chain_suppressed: false,
         }
     );
     assert_eq!(state.party[0].status, b'P');
@@ -15385,6 +15558,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
                     status_after: b'P',
                 },
             }),
+            generic_chain_suppressed: false,
         }
     );
     assert_eq!(state.party[0].hp, 3);
@@ -15426,6 +15600,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
                     status_after: b'G',
                 },
             }),
+            generic_chain_suppressed: false,
         }
     );
     assert_eq!(state.party[0].hp, 9);
@@ -15469,6 +15644,7 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
                     status_after: b'D',
                 },
             }),
+            generic_chain_suppressed: false,
         }
     );
     assert_eq!(state.party[0].hp, 0);
@@ -15550,7 +15726,7 @@ fn combat_cast_active_target_spell_routes_resources_damage_and_xp() {
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -15721,7 +15897,7 @@ fn active_combat_cast_target_followup_collects_one_and_two_digit_slots() {
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -15770,7 +15946,7 @@ fn active_combat_cast_target_followup_collects_one_and_two_digit_slots() {
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -15831,7 +16007,7 @@ fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
         COMBAT_PARTY_ACTOR_SLOTS as u8,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1] =
@@ -15840,7 +16016,7 @@ fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
             (COMBAT_PARTY_ACTOR_SLOTS + 1) as u8,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2] =
@@ -15849,7 +16025,7 @@ fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
             (COMBAT_PARTY_ACTOR_SLOTS + 2) as u8,
             6,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -16020,7 +16196,7 @@ fn combat_cast_directed_damage_winds_route_damage_and_friendly_fire() {
         COMBAT_PARTY_ACTOR_SLOTS as u8,
         7,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -16054,7 +16230,7 @@ fn combat_cast_directed_damage_winds_route_damage_and_friendly_fire() {
         COMBAT_PARTY_ACTOR_SLOTS as u8,
         6,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -16186,7 +16362,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
             7,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[target_slot + 1] = CombatActorDescriptor::from_row([
@@ -16279,7 +16455,7 @@ fn combat_cast_tremor_routes_resources_table_damage_and_xp() {
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.combat_actors[target_slot].base_step = 1;
@@ -16331,7 +16507,7 @@ fn combat_cast_polymorph_routes_resources_and_replaces_hostile_creature() {
         target_slot as u8,
         5,
         6,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         2,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -16485,7 +16661,7 @@ fn combat_cast_field_spell_places_arena_marker_after_coordinate_lookup() {
         target_slot as u8,
         4,
         3,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -16565,7 +16741,7 @@ fn combat_cast_field_spell_places_marker_without_immediate_contact() {
         target_slot as u8,
         4,
         3,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -16647,7 +16823,7 @@ fn combat_cast_fire_field_places_marker_without_random_gate() {
         target_slot as u8,
         4,
         3,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -16855,7 +17031,7 @@ fn tremor_spell_damage_application_requires_roll_for_each_accepted_target() {
             7,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     let mut gate_accepts = [false; COMBAT_ACTOR_SLOTS];
@@ -16901,7 +17077,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
             7,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -16973,7 +17149,7 @@ fn directed_spell_damage_skips_disabled_targets_in_cone() {
             7,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[disabled_slot].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
@@ -16983,7 +17159,7 @@ fn directed_spell_damage_skips_disabled_targets_in_cone() {
             8,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -17034,7 +17210,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
             7,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[second_slot] =
@@ -17043,7 +17219,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
             8,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -17146,7 +17322,7 @@ fn directed_spell_status_application_applies_sleep_to_party_and_reports_non_part
             7,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[target_slot + 1] = CombatActorDescriptor::from_row([
@@ -17233,7 +17409,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
             7,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[second_monster] =
@@ -17242,7 +17418,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
             8,
             6,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -17331,7 +17507,7 @@ fn directed_spell_status_application_requires_poison_inputs_before_mutation() {
             7,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 

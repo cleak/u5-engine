@@ -2537,17 +2537,22 @@ fn handle_endgame_key_input(
     Ok(PlayInputDisposition::Continue)
 }
 
-/// The dispatch decision is `combat.md §6.1a`'s slot-to-group helper, not
-/// the controlled bit read directly, and the toggle cuts both ways: a
-/// party-side actor carrying that bit (Sword of Chaos, possession, Charm)
-/// goes to the automatic driver, and a monster-side actor carrying it goes
-/// to the prompt. `magic.md §8`: "a monster-side slot carrying the bit
-/// fails the self-acting test, so the round walker sends it to the
-/// keystroke/command path ... It takes its turns at the player's prompt."
-/// The former "nothing routes a summoned creature through the player command
-/// parser" is withdrawn - `RETRACTIONS.md` R354.
+/// Which slots the player may actually type a command for. `combat.md
+/// §6.1a`'s slot-to-group helper decides who reaches the combined command
+/// handler - a party-side actor carrying the controlled bit (Sword of
+/// Chaos, possession, Charm) resolves to group 1 and goes to the automatic
+/// driver, while a monster-side actor carrying it resolves to group 0 and
+/// "is dispatched to the keystroke/command path, not to the automatic
+/// driver" (`§6.1a` writer 3; `magic.md`'s "the player never gets to move
+/// it" is withdrawn by `RETRACTIONS.md` R354).
+///
+/// The prompt is narrower than that path. `§16.1`: the handler "prompts
+/// only for an eligible selected party member, while a monster descriptor
+/// that control moved to group 0 still synthesizes an automatic action" -
+/// so a controlled monster is dispatched by the walker and never consumes
+/// a keystroke.
 fn combat_actor_accepts_player_input(slot: usize, actor: CombatActorDescriptor) -> bool {
-    combat_actor_is_active_not_dead(actor) && combat_slot_takes_player_command_path(slot, actor)
+    combat_actor_is_active_not_dead(actor) && combat_slot_prompts_for_player_command(slot, actor)
 }
 
 fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
@@ -2560,13 +2565,14 @@ fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
         .any(|(slot, actor)| combat_actor_accepts_player_input(slot, actor))
 }
 
+/// `combat.md §16.1`: "Side counting skips empty, dead, and passive
+/// descriptors, then uses the same group resolver. Group 1 counts as
+/// foes and group 0 as friends. Control and the traitor identity
+/// therefore affect victory detection." The raw slot-index scan this
+/// replaced disagreed with the round loop's own census for exactly the
+/// charmed-monster and traitor cases §16.1 publishes.
 pub(crate) fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
-    state
-        .combat_actors
-        .iter()
-        .skip(COMBAT_PARTY_ACTOR_SLOTS)
-        .copied()
-        .any(combat_actor_is_active_not_dead)
+    combat_has_active_not_dead_non_party_actor(&state.combat_actors)
 }
 
 fn combat_pending_player_actor_is_active(state: &PlayState, actor_slot: usize) -> bool {
@@ -2647,7 +2653,7 @@ fn finish_combat_attack_walk(
     walk: CombatAttackWalkApplication,
 ) {
     if let Some((target_slot, attack)) = walk.attack
-        && let Some(line) = combat_weapon_attack_result_message(state, target_slot, attack)
+        && let Some(line) = combat_weapon_attack_narrated_result_message(state, target_slot, attack)
     {
         append_combat_result_line(&mut state.message, &line);
     }
@@ -2749,7 +2755,8 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         state.message.clear();
         return PlayInputDisposition::Continue;
     };
-    state.message = combat_player_command_application_message(state, &application);
+    let command_message = combat_player_command_application_message(state, &application);
+    state.message = command_message;
     if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
         return PlayInputDisposition::Continue;
     }
@@ -3122,7 +3129,7 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
 }
 
 fn combat_player_command_application_message(
-    state: &PlayState,
+    state: &mut PlayState,
     application: &CombatPlayerCommandApplication,
 ) -> String {
     let message = match application.action {
@@ -3164,7 +3171,7 @@ fn combat_direction_code_name(direction_code: u8) -> &'static str {
 }
 
 fn combat_step_or_attack_application_message(
-    state: &PlayState,
+    state: &mut PlayState,
     direction_code: u8,
     outcome: CombatStepOrAttackPrimitiveOutcome,
     edge: Option<CombatOutOfArenaLeaveApplication>,
@@ -3194,8 +3201,9 @@ fn combat_step_or_attack_application_message(
             _ => format!("{direction}\n"),
         },
         CombatStepOrAttackPrimitiveOutcome::Attack { target_slot } => {
-            let result = weapon_attack
-                .and_then(|attack| combat_weapon_attack_result_message(state, target_slot, attack));
+            let result = weapon_attack.and_then(|attack| {
+                combat_weapon_attack_narrated_result_message(state, target_slot, attack)
+            });
             result
                 .map(|result| format!("{direction}\n{result}\n"))
                 .unwrap_or_else(|| format!("{direction}\n"))
@@ -3203,6 +3211,137 @@ fn combat_step_or_attack_application_message(
         CombatStepOrAttackPrimitiveOutcome::Moved { .. } => format!("{direction}\n"),
         CombatStepOrAttackPrimitiveOutcome::InactiveActor => String::new(),
     }
+}
+
+/// `combat.md §6.3`: the common attack result narrator is the only
+/// relevant reader of the shared action-result scratch. It clears the
+/// kill-narrated bit `0x01` first; a surviving vanish bit `0x02` then
+/// suppresses the generic killed/slept/hit chain and is cleared in
+/// cleanup, so a vanish death never also prints `<name> killed!`.
+///
+/// The scope is exactly that chain. `§11.1` names the reader "a wider
+/// test that halts the narrator before the kill, sleep, hit and wound
+/// chain", and it makes the miss line a separate producer - "The routine
+/// that prints a miss line has exactly two call sites, both inside
+/// party-side attack helpers" - so a miss neither is suppressed by the
+/// bit nor touches the field. Likewise `§6.3`: "If that narrator is not
+/// reached, the combat walker replaces the whole field with zero before
+/// the next actor dispatch", so a dispatch that produces no result line
+/// at all (out of range, no ordinary damage, a special resolution)
+/// leaves the field to the walker's own zeroing rather than clearing
+/// `0x02` or setting `0x01` here.
+///
+/// The engine builds attack transcripts after the action has resolved,
+/// so the gate is applied here, at the one point per attack where the
+/// generic chain would emit its line.
+fn combat_apply_attack_narrator_gate(
+    state: &mut PlayState,
+    line: Option<String>,
+    narrates_kill: bool,
+    reaches_generic_chain: bool,
+) -> Option<String> {
+    if !reaches_generic_chain {
+        return line;
+    }
+    let gate = resolve_combat_attack_narrator_gate(state.combat_action_result, narrates_kill);
+    state.combat_action_result = gate.result_after;
+    if gate.run_generic_chain { line } else { None }
+}
+
+/// `combat.md §11.1`: the generic chain is the "kill, sleep, hit and
+/// wound chain" - every result line [`combat_landed_damage_result_line`]
+/// produces. Both the `Hit` and the `Special` resolutions end there, so
+/// both are inside the gate's scope. A failed to-hit takes the separate
+/// miss producer - "The routine that prints a miss line has exactly two
+/// call sites, both inside party-side attack helpers" - and the
+/// resolutions that print nothing never reach the narrator at all, so
+/// `§6.3` leaves their field to "the combat walker[, which] replaces the
+/// whole field with zero before the next actor dispatch".
+///
+/// The `Special` arm's own `Thy sword hath shattered!` is **not** in
+/// scope: `§11.1` prints it "**inside** the damage roll, so it lands
+/// between the hit newline and the result line", ahead of the narrator
+/// this gate halts. [`combat_attack_result_narration`] therefore keeps it
+/// separate from the result line, so a standing `0x02` can withhold the
+/// result line without swallowing the shatter line with it.
+pub(crate) fn combat_weapon_resolution_reaches_generic_chain(
+    resolution: CombatWeaponAttackResolution,
+) -> bool {
+    matches!(
+        resolution,
+        CombatWeaponAttackResolution::Hit { .. } | CombatWeaponAttackResolution::Special { .. }
+    )
+}
+
+/// The party-side result line with `combat.md §6.3`'s narrator gate
+/// applied. The party melee path resolves its attack and assembles its
+/// transcript inside one dispatch, so the gate runs here, at the one point
+/// per attack where the generic chain would emit its line.
+///
+/// The gate covers the result line only. `§11.1`'s Glass Sword row puts
+/// `Thy sword hath shattered!` inside the damage roll, before the
+/// narrator, so it survives a standing `0x02` - and it must, because the
+/// vanish branch that raised `0x02` has already printed `<monster>
+/// vanishes!` and `§6.3` says the narrator then "skips the generic
+/// killed/slept/hit chain, produces no message or sound". A Glass Sword
+/// kill of a vanish-class monster therefore reads `<monster> vanishes!`
+/// then `Thy sword hath shattered!`, and never also `<monster> killed!`.
+pub(crate) fn combat_weapon_attack_narrated_result_message(
+    state: &mut PlayState,
+    target_slot: usize,
+    attack: CombatWeaponAttackApplication,
+) -> Option<String> {
+    let mut narration = combat_attack_result_narration(state, target_slot, None, attack);
+    let narrates_kill = combat_weapon_damage_application_killed(attack.damage_application);
+    let reaches_generic_chain =
+        narration.result.is_some() && narration.result_reaches_generic_chain;
+    narration.result = combat_apply_attack_narrator_gate(
+        state,
+        narration.result.take(),
+        narrates_kill,
+        reaches_generic_chain,
+    );
+    narration.into_message()
+}
+
+/// The narrator gate for a monster-side attack already ran, inside the
+/// dispatch that resolved the attack
+/// ([`PlayState::apply_combat_monster_attack_narrator_gate`]). `combat.md
+/// §6.3` gives the shared result field a one-dispatch lifetime - "the
+/// combat walker replaces the whole field with zero before the next actor
+/// dispatch" - and a round walk visits several slots before any transcript
+/// is assembled, so this stage only honours the verdict recorded then.
+fn combat_monster_attack_narrated_result_message(
+    state: &PlayState,
+    attack: CombatMonsterAttackApplication,
+    narration: CombatMonsterAttackNarration,
+) -> Option<String> {
+    if attack.generic_chain_suppressed {
+        return None;
+    }
+    match narration {
+        CombatMonsterAttackNarration::SelfActingHostile => {
+            combat_monster_attack_result_message(state, attack)
+        }
+        CombatMonsterAttackNarration::Controlled => {
+            combat_controlled_monster_attack_result_message(state, attack)
+        }
+    }
+}
+
+/// Which of `combat.md §11.1`'s two producers narrates one resolved
+/// monster-side attack. The section's scope note is explicit that the
+/// choice is not made by the actor: "*party-side helper* describes the
+/// routine, not the actor - Section 6.1a's controlled bit lets a monster
+/// reach it and lets a party member bypass it."
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CombatMonsterAttackNarration {
+    /// The `§9` automatic actor driver's own turn, which "calls the shared
+    /// helpers directly and passes through none of" the announcement layer.
+    SelfActingHostile,
+    /// `§16.1`'s synthesized turn for a monster descriptor control moved to
+    /// group 0.
+    Controlled,
 }
 
 /// `combat.md §11.1` "The census": the party-side half of one attack
@@ -3216,6 +3355,12 @@ fn combat_step_or_attack_application_message(
 /// attacker's name in the miss line produces a transcript that is wrong on
 /// every line it emits." Rule 2: the two sides "share the to-hit roll, the
 /// impact presentation, the damage roller and the result narrator".
+///
+/// This is the producer alone, without `§6.3`'s narrator gate; the
+/// dispatch prints [`combat_weapon_attack_narrated_result_message`]
+/// instead. Only conformance tests that assert on the unsuppressed census
+/// rows call it directly.
+#[cfg(test)]
 pub(crate) fn combat_weapon_attack_result_message(
     state: &PlayState,
     target_slot: usize,
@@ -3230,8 +3375,52 @@ fn combat_attack_result_message(
     attacker_slot: Option<usize>,
     attack: CombatWeaponAttackApplication,
 ) -> Option<String> {
+    combat_attack_result_narration(state, target_slot, attacker_slot, attack).into_message()
+}
+
+/// One attack outcome's printed lines, split where `combat.md §6.3`'s
+/// narrator gate cuts.
+///
+/// `§11.1` puts two different things into one transcript: lines printed
+/// "**inside** the damage roll" - the Glass Sword row's `Thy sword hath
+/// shattered!` - and the result line the shared narrator emits after it.
+/// `§6.3` gives the gate only the second of those: while `0x02` stands
+/// the narrator "skips the generic killed/slept/hit chain, produces no
+/// message or sound", and it says nothing about the damage roll's own
+/// prints. Keeping the two apart is what lets a Glass Sword kill of a
+/// vanish-class monster read `<monster> vanishes!` then `Thy sword hath
+/// shattered!` without also printing `<monster> killed!` beside it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CombatAttackResultNarration {
+    /// Printed inside the damage roll, ahead of the result narrator.
+    inside_damage_roll: Option<String>,
+    /// The result line, when this outcome narrates one.
+    result: Option<String>,
+    /// Whether [`Self::result`] is the generic killed/slept/hit/wound
+    /// chain's line - the only line the gate withholds.
+    result_reaches_generic_chain: bool,
+}
+
+impl CombatAttackResultNarration {
+    fn into_message(self) -> Option<String> {
+        match (self.inside_damage_roll, self.result) {
+            (Some(inside), Some(result)) => Some(format!("{inside}\n{result}")),
+            (Some(line), None) | (None, Some(line)) => Some(line),
+            (None, None) => None,
+        }
+    }
+}
+
+fn combat_attack_result_narration(
+    state: &PlayState,
+    target_slot: usize,
+    attacker_slot: Option<usize>,
+    attack: CombatWeaponAttackApplication,
+) -> CombatAttackResultNarration {
+    let result_reaches_generic_chain =
+        combat_weapon_resolution_reaches_generic_chain(attack.resolution);
     let target_name = combat_actor_display_name(state, target_slot);
-    match attack.resolution {
+    let (inside_damage_roll, result) = match attack.resolution {
         // `combat.md §11.1` census, "To-hit fails | **party melee** |
         // `<target> missed!`, following the newline already printed before
         // the roll". The line is target-named: "`Bat missed!` is a real
@@ -3243,33 +3432,36 @@ fn combat_attack_result_message(
         // reports nobody **and** the originally aimed cell held a real
         // actor". This engine models no scatter on that arm, so every
         // failed party ranged roll is that case.
-        CombatWeaponAttackResolution::Miss { .. } => Some(format!("{target_name} missed!")),
-        CombatWeaponAttackResolution::Hit { .. } => match attack.damage_application {
-            Some(application) => {
-                combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
-            }
-            None => Some(format!("{target_name} hit!")),
-        },
+        CombatWeaponAttackResolution::Miss { .. } => (None, Some(format!("{target_name} missed!"))),
+        CombatWeaponAttackResolution::Hit { .. } => (
+            None,
+            match attack.damage_application {
+                Some(application) => {
+                    combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
+                }
+                None => Some(format!("{target_name} hit!")),
+            },
+        ),
         // `combat.md §11.1` census: "Glass Sword swing | party melee |
         // `Thy sword hath shattered!`, printed **inside** the damage roll,
         // so it lands between the hit newline and the result line". The
         // ordinary result line then follows - for the sentinel that is
         // "Target dies | both | `<target> killed!`" - so the shatter line
-        // is a prefix, not a replacement.
-        CombatWeaponAttackResolution::Special { shattered, .. } => {
-            let mut lines = Vec::new();
-            if shattered {
-                lines.push(COMBAT_GLASS_SWORD_SHATTER_LINE.to_string());
-            }
-            if let Some(result) = attack.damage_application.and_then(|application| {
+        // is a prefix, not a replacement, and it sits on the damage roll's
+        // side of `§6.3`'s narrator gate rather than the narrator's.
+        CombatWeaponAttackResolution::Special { shattered, .. } => (
+            shattered.then(|| COMBAT_GLASS_SWORD_SHATTER_LINE.to_string()),
+            attack.damage_application.and_then(|application| {
                 combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
-            }) {
-                lines.push(result);
-            }
-            (!lines.is_empty()).then(|| lines.join("\n"))
-        }
+            }),
+        ),
         CombatWeaponAttackResolution::OutOfRange { .. }
-        | CombatWeaponAttackResolution::NoOrdinaryDamage { .. } => None,
+        | CombatWeaponAttackResolution::NoOrdinaryDamage { .. } => (None, None),
+    };
+    CombatAttackResultNarration {
+        inside_damage_roll,
+        result,
+        result_reaches_generic_chain,
     }
 }
 
@@ -3324,10 +3516,19 @@ fn combat_landed_damage_result_line(
                 // attacker | `<monster> vanishes!` ... printed inside the
                 // damage handler, which then suppresses the kill line."
                 // The vanish line itself is emitted by the death path in
-                // `combat_frame.rs`.
-                if damage.death_path == Some(CombatMonsterDeathPath::Vanish) {
-                    return None;
-                }
+                // `combat_frame.rs`, and so is that suppression: `§6.3`
+                // step 2 has the vanish branch "replace the shared combat
+                // action-result/narration field with `0x02`", and the
+                // common narrator skips the generic chain "when `0x02` is
+                // still present". This producer therefore keeps writing the
+                // line and [`combat_apply_attack_narrator_gate`] (party
+                // side) / `PlayState::apply_combat_monster_attack_narrator_gate`
+                // (monster side) withholds it, because `§6.3` publishes one
+                // case where it must *not* be withheld: when the faint
+                // tail's "sleep helper replaces the whole result field with
+                // sleep bit `0x04`, losing `0x02`", the narrator "appends
+                // the vanished target's `<name> killed!` line - not
+                // `<name> slept!` - after the faint tail".
                 return Some(format!("{class_name} killed!"));
             }
             // `combat.md §11.1` "The graded wound lines are monster-target
@@ -3380,6 +3581,50 @@ pub(crate) fn combat_actor_display_name(state: &PlayState, slot: usize) -> Strin
         .unwrap_or_else(|| "Combatant".to_string())
 }
 
+/// `combat.md §11.1` census: "Party target poisoned | monster attacker |
+/// `<target> is poisoned!`, printed **inside** damage resolution - after
+/// the hit newline and before the result line - and the ordinary result
+/// line is then suppressed". The row is keyed on the attacker being a
+/// monster, not on which driver dispatched it, so both monster-side
+/// producers below start here.
+fn combat_monster_attack_poison_line(
+    state: &PlayState,
+    attack: CombatMonsterAttackApplication,
+) -> Option<String> {
+    matches!(
+        attack.poison_status_outcome,
+        Some(CombatPoisonStatusAttackOutcome::PoisonedPartyMember { .. })
+    )
+    .then(|| {
+        format!(
+            "{} is poisoned!",
+            combat_actor_display_name(state, attack.target_slot)
+        )
+    })
+}
+
+/// The shared result narrator, entered from a monster-side attack.
+/// `combat.md §11.1` rule 2: below the announcement layer both sides
+/// "share the to-hit roll, the impact presentation, the damage roller and
+/// the result narrator". The attacker slot travels with the call because
+/// one census row reads it: "Ordinary landed hit, **party** target,
+/// attacker is a **Corpser** (class 45) | monster attacker | `<target>
+/// dragged under!` in place of `hit!`".
+fn combat_monster_attack_shared_result_message(
+    state: &PlayState,
+    attack: CombatMonsterAttackApplication,
+) -> Option<String> {
+    combat_attack_result_message(
+        state,
+        attack.target_slot,
+        Some(attack.attacker_slot),
+        CombatWeaponAttackApplication {
+            resolution: attack.resolution?,
+            damage_application: attack.damage_application,
+        },
+    )
+}
+
 /// `combat.md §11.1` for a self-acting hostile's turn: the monster-side
 /// half of the published attack-outcome census. The two sides "join
 /// *below* the announcement layer, which is why an ordinary hostile
@@ -3391,14 +3636,8 @@ pub(crate) fn combat_monster_attack_result_message(
     state: &PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
-    let target_name = combat_actor_display_name(state, attack.target_slot);
-    if matches!(
-        attack.poison_status_outcome,
-        Some(CombatPoisonStatusAttackOutcome::PoisonedPartyMember { .. })
-    ) {
-        // 11.1: "Party target poisoned | monster attacker | `<target> is
-        // poisoned!` ... and the ordinary result line is then suppressed".
-        return Some(format!("{target_name} is poisoned!"));
+    if let Some(line) = combat_monster_attack_poison_line(state, attack) {
+        return Some(line);
     }
 
     // 11.1, the census row that carries the whole section: "**To-hit fails** |
@@ -3428,31 +3667,42 @@ pub(crate) fn combat_monster_attack_result_message(
         attack.resolution,
         Some(CombatWeaponAttackResolution::Miss { .. })
     ) {
-        // `combat.md §11.1` census: "To-hit fails | **monster melee** |
-        // **nothing at all**", and the section text - "an ordinary hostile
-        // monster's melee miss prints nothing and sounds nothing - no
-        // newline, no name, no line, no tone". §11.1's controlled-monster
-        // carve-out (a reduced banner and `<target> missed!`) does not
-        // apply here: a monster carrying the controlled bit is toggled
-        // into the party group and dispatched to `PlayerReady`, so it
-        // narrates through the party-side helper above instead of this
-        // one.
-        //
-        // The ranged carve-out - a failed monster ranged roll scatters and
-        // "the **full hit chain runs against that actor**" - is not
-        // modelled; this engine resolves a failed ranged roll as silent,
-        // which §11.1 lists as one of its three genuinely silent cases.
+        // §11.1's controlled-monster carve-out is not reached here: that
+        // slot narrates through
+        // [`combat_controlled_monster_attack_result_message`] instead, on
+        // §11.1's own scoping - "*party-side helper* describes the routine,
+        // not the actor - Section 6.1a's controlled bit lets a monster reach
+        // it". The dispatch that picks between the two is `§16.1`'s, in
+        // `PlayState::apply_combat_actor_slot_dispatch`.
         return None;
     }
-    combat_attack_result_message(
-        state,
-        attack.target_slot,
-        Some(attack.attacker_slot),
-        CombatWeaponAttackApplication {
-            resolution: attack.resolution?,
-            damage_application: attack.damage_application,
-        },
-    )
+    combat_monster_attack_shared_result_message(state, attack)
+}
+
+/// `combat.md §11.1` for `§16.1`'s synthesized turn: "a monster
+/// descriptor that control moved to group 0 still synthesizes an
+/// automatic action", and §11.1's announcement table gives that turn as
+/// the "**reduced** banner ... then one fixed attempt: `Attack-`, `Aim!
+/// `, and on a failed roll `<target> missed!`".
+///
+/// So this arm differs from the self-acting hostile's in exactly one row -
+/// the miss - and §11.1 says why the difference is a difference of
+/// *producer*, not of string: "Note the scoping: *party-side helper*
+/// describes the routine, not the actor - Section 6.1a's controlled bit
+/// lets a monster reach it and lets a party member bypass it." Every other
+/// row, the graded wound lines of "The graded wound lines are
+/// monster-target only" included, is the shared narrator's, reached
+/// through the same [`combat_attack_result_message`] the party's own swing
+/// uses; §11.1 rule 1 then holds on every line this can emit, because that
+/// routine names the target and never the attacker.
+pub(crate) fn combat_controlled_monster_attack_result_message(
+    state: &PlayState,
+    attack: CombatMonsterAttackApplication,
+) -> Option<String> {
+    if let Some(line) = combat_monster_attack_poison_line(state, attack) {
+        return Some(line);
+    }
+    combat_monster_attack_shared_result_message(state, attack)
 }
 
 fn append_combat_result_line(message: &mut String, line: &str) {
@@ -3463,11 +3713,11 @@ fn append_combat_result_line(message: &mut String, line: &str) {
     message.push('\n');
 }
 
-fn append_combat_round_walk_messages(
+pub(crate) fn append_combat_round_walk_messages(
     state: &mut PlayState,
     application: &CombatRoundWalkApplication,
 ) {
-    let lines = application
+    let attacks = application
         .applications
         .iter()
         .filter_map(|entry| match entry {
@@ -3477,14 +3727,37 @@ fn append_combat_round_walk_messages(
                         ai_turn: Some(ai_turn),
                     },
                 ..
-            } => ai_turn
-                .monster_attack
-                .and_then(|attack| combat_monster_attack_result_message(state, attack)),
+            } => Some((
+                ai_turn.monster_attack?,
+                CombatMonsterAttackNarration::SelfActingHostile,
+            )),
+            // `combat.md §16.1`'s synthesized turn for a controlled monster
+            // resolves its one fixed attempt through the same shared attack
+            // primitive, but not through the same producer: `§11.1` gives
+            // this slot `<target> missed!` on a failed roll where the
+            // self-acting hostile prints nothing, and its scope note puts
+            // that difference in the routine rather than in the actor.
+            CombatActorSlotDispatchApplication::Slot {
+                action:
+                    CombatActorDispatchAction::ControlledMonsterAttempt {
+                        attempt: Some(attempt),
+                    },
+                ..
+            } => Some((
+                attempt.monster_attack?,
+                CombatMonsterAttackNarration::Controlled,
+            )),
             _ => None,
         })
         .collect::<Vec<_>>();
-    for line in lines {
-        append_combat_result_line(&mut state.message, &line);
+    // `combat.md §6.3`: the narrator gate already ran inside each attack's
+    // own dispatch, while the shared result field still described that
+    // slot; this loop only prints what the gate let through.
+    for (attack, narration) in attacks {
+        if let Some(line) = combat_monster_attack_narrated_result_message(state, attack, narration)
+        {
+            append_combat_result_line(&mut state.message, &line);
+        }
     }
 }
 
