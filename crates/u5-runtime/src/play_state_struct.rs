@@ -139,6 +139,10 @@ pub struct PlayState {
     pub party_experience: Vec<u16>,
     pub party_stay_counters: Vec<u8>,
     pub party_strengths: Vec<u8>,
+    /// `combat.md §12`: the cached combat-defense byte the damage roller
+    /// reads for a party defender, at character-record offset `+0x18`,
+    /// one entry per roster slot.
+    pub party_combat_defense: Vec<u8>,
     pub party_intelligence: Vec<u8>,
     pub party_equipment: Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
     pub party_roster: Vec<PartyRosterRecord>,

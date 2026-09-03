@@ -790,6 +790,12 @@ pub fn default_party_strengths(party_len: usize) -> Vec<u8> {
     vec![AVATAR_STAT_MAX; party_len]
 }
 
+/// `combat.md §12`: "factory-seed records carry value `7`" in the cached
+/// combat-defense byte at character-record offset `+0x18`.
+pub fn default_party_combat_defense(party_len: usize) -> Vec<u8> {
+    vec![crate::combat_frame::CHARACTER_DEFENSE_FACTORY_SEED; party_len]
+}
+
 pub fn default_party_equipment(party_len: usize) -> Vec<[u8; EQUIPMENT_SLOT_COUNT]> {
     vec![[EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]; party_len]
 }

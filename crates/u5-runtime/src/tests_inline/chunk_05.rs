@@ -1833,12 +1833,20 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     // `combat.md` Section 12 (`RETRACTIONS.md` R336): a Guard brings its
     // class attack value of 30 flat, less the party's inclusive `1..7`
     // defence draw, so eight of them take a shipped party member apart in
-    // one walk. This regression is about the alarm, the arena and the attack
-    // transcript rather than about surviving a guard, so the seated member
-    // is given the endurance to reach the targeting cursor. (The bump has to
-    // follow combat entry, which reseats the roster.)
-    state.party[0].max_hp = u16::MAX;
-    state.party[0].hp = u16::MAX;
+    // one walk. This regression is about the alarm, the arena and the
+    // transcript, not about surviving eight of them, so it holds all but
+    // the first hostile off their phase (Section 7: an actor comes round
+    // only when its phase counter reaches zero) and leaves the seated
+    // member on the shipped roster's 60 HP, which one guard's flat 30 less
+    // the party's `1..7` defence draw cannot end. (The freeze has to follow
+    // combat entry, which seats the actors.)
+    for slot in COMBAT_PARTY_ACTOR_SLOTS + 1..COMBAT_ACTOR_SLOTS {
+        state.combat_actors[slot].phase_counter = u8::MAX;
+    }
+    assert_eq!(
+        state.party[0].hp, DEFAULT_PARTY_HP,
+        "the fixture must exercise a shipped roster HP, not an inflated one"
+    );
 
     let walk = state
         .ensure_pending_combat_player_turn()
@@ -1874,14 +1882,13 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         .take_while(|line| !line.contains(COMBAT_TURN_BANNER_ARMED_WITH))
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
-    assert_eq!(result_lines.first(), Some(&"East"));
-    assert!(result_lines.len() > 1);
-    assert!(
-        result_lines
-            .iter()
-            .skip(1)
-            .all(|line| *line == "Guard missed!" || *line == "Avatar hit!")
-    );
+    // `combat.md` Section 11 step 2 prints the direction word, then the
+    // one hostile left on its phase takes its turn. Section 11.1's census
+    // gives that turn exactly one line - "Ordinary landed hit, **party**
+    // target | monster attacker | `<target> hit!` - **flat and ungraded**",
+    // target-named. A monster melee miss would print "nothing at all" and a
+    // soaked swing would print `Avatar grazed!`; this seed lands.
+    assert_eq!(result_lines, vec!["East", "Avatar hit!"]);
     assert!(!state
         .message_entries()
         .iter()

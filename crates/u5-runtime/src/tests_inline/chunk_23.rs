@@ -4731,19 +4731,29 @@ fn ordinary_damage_roller_uses_a_flat_monster_value_and_a_rolled_party_value() {
             shattered: true,
         })
     );
+    // The Jeweled Sword override is a raw *value* of zero, not a
+    // zero-damage dispatcher row: only the sentinel "short-circuits the
+    // whole roller and returns immediately - **before the defender's
+    // defence byte is read**". `catalogs/item-list.md` Section 5.1: "Id 40
+    // carries `1`, which the same roller overrides to `0` before any
+    // roll", so the dispatcher never sees a zero row for it and stage two
+    // still runs.
     assert_eq!(equipment_attack_max(EQUIPMENT_JEWELED_SWORD), Some(1));
-    assert_eq!(
-        resolve_combat_attacker_raw_damage(
-            CombatAttackerDamageSource::PartyItem {
-                item_id: EQUIPMENT_JEWELED_SWORD,
-            },
-            0,
-        ),
-        Some(CombatAttackerRawDamage {
-            route: CombatWeaponDamageRoute::NoOrdinaryDamage,
-            shattered: false,
-        })
-    );
+    for roll in [0u8, 7, 200, 255] {
+        assert_eq!(
+            resolve_combat_attacker_raw_damage(
+                CombatAttackerDamageSource::PartyItem {
+                    item_id: EQUIPMENT_JEWELED_SWORD,
+                },
+                roll,
+            ),
+            Some(CombatAttackerRawDamage {
+                route: CombatWeaponDamageRoute::Damage { raw_damage: 0 },
+                shattered: false,
+            }),
+            "the override runs before the roll, so no draw changes it"
+        );
+    }
 }
 
 #[test]
@@ -4839,13 +4849,14 @@ fn weapon_attack_resolver_tracks_miss_forced_hit_and_non_damage_routes() {
     // `combat.md` Section 11 "Always-hit cases ... the always-hit set is
     // three readied equipment ids - **Sword of Chaos, Glass Sword and
     // Jeweled Sword**", which `catalogs/item-list.md` Section 5.1 says
-    // "skips the to-hit score entirely". With the shipped `Attack max`
-    // values that outcome is delivered by stage one, not by the
-    // always-hit flag: ids 35 and 39 leave on the sentinel's `Special`
-    // route and id 40 on `NoOrdinaryDamage`, all three before the score
-    // is computed. The hopeless rating pair below (score 142, "a score of
-    // `31` or more always misses") is what shows the score is never
-    // consulted; the flag itself changes no outcome for these ids.
+    // "skips the to-hit score entirely". For ids 35 and 39 that outcome is
+    // delivered by stage one rather than by the flag - both "carry the
+    // instant-kill sentinel `99`", so they leave on the `Special` route
+    // before the score is computed. Id 40's override forces a raw *value*
+    // of `0` and still enters the roller, so there the flag is what
+    // carries the attempt past the score. Both cases are shown against the
+    // hopeless rating pair below (score 142, "a score of `31` or more
+    // always misses").
     assert_eq!(
         resolve_combat_equipment_weapon_attack(
             EQUIPMENT_GLASS_SWORD,
@@ -4862,6 +4873,24 @@ fn weapon_attack_resolver_tracks_miss_forced_hit_and_non_damage_routes() {
             route: CombatWeaponAttackRangeRoute::Melee,
             shattered: true,
         })
+    );
+    assert_eq!(
+        resolve_combat_equipment_weapon_attack(
+            EQUIPMENT_JEWELED_SWORD,
+            1,
+            0,
+            255,
+            0,
+            0,
+            0,
+            0,
+            None,
+        ),
+        Some(CombatWeaponAttackResolution::Hit {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 0,
+        }),
+        "the flag carries the forced-zero raw value past an impossible score"
     );
     assert!(EQUIPMENT_ALWAYS_HIT_ITEM_IDS
         .into_iter()
@@ -9269,6 +9298,11 @@ fn combat_ai_target_picker_allows_status_disabled_targets() {
 
 fn combat_ai_turn_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = world_state(open_world_grid(), 10, 20);
+    // `combat.md` Section 12 stage two reads the defender's own cached
+    // combat-defense byte, and "when it is zero it takes no draw at all".
+    // These fixtures pin PRNG streams, so they state a zero byte on the
+    // roster rather than letting the factory seed add a draw.
+    state.party_combat_defense = vec![0; state.party.len().max(1)];
     state.combat_active = true;
     // `combat.md` Section 5.3 step 8 runs the round-loop entry prologue - one
     // full world tick, whose draw count that table marks "variable and
@@ -9765,7 +9799,6 @@ fn combat_ai_turn_applies_monster_attack_when_attack_inputs_are_supplied() {
             true,
             &[1, 2, 3, 4],
             Some(CombatMonsterAttackInputs {
-                party_defence_rating: 0,
                 hit_raw_roll_0_to_60: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
@@ -9820,7 +9853,6 @@ fn negate_magic_skips_enemy_special_hook_but_preserves_ordinary_melee() {
             true,
             &[1, 2, 3, 4],
             Some(CombatMonsterAttackInputs {
-                party_defence_rating: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
             }),
@@ -9893,7 +9925,6 @@ fn crown_bypasses_enemy_teleport_arm_and_continues_ordinary_step() {
 #[test]
 fn negate_magic_silently_consumes_only_scene_resistant_ranged_effects() {
     let attack_inputs = CombatMonsterAttackInputs {
-        party_defence_rating: 0,
         forced_hit: Some(true),
         ..CombatMonsterAttackInputs::default()
     };
@@ -12734,7 +12765,6 @@ fn combat_actor_slot_dispatch_applies_slot_matched_monster_attack_inputs() {
             (
                 7,
                 CombatMonsterAttackInputs {
-                    party_defence_rating: 99,
                     forced_hit: Some(false),
                     ..CombatMonsterAttackInputs::default()
                 },
@@ -12742,7 +12772,6 @@ fn combat_actor_slot_dispatch_applies_slot_matched_monster_attack_inputs() {
             (
                 8,
                 CombatMonsterAttackInputs {
-                    party_defence_rating: 0,
                     forced_hit: Some(true),
                     ..CombatMonsterAttackInputs::default()
                 },
@@ -13042,7 +13071,6 @@ fn combat_round_walk_carries_monster_attack_inputs_through_dispatch() {
         &[(
             8,
             CombatMonsterAttackInputs {
-                party_defence_rating: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
             },
@@ -13725,7 +13753,7 @@ fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
     };
 
     let miss = apply_combat_party_damage(&mut member, -1);
-    assert!(miss.missed);
+    assert!(miss.grazed);
     assert!(!miss.instant_kill);
     assert!(!miss.killed);
     assert_eq!(miss.applied_damage, 0);
@@ -13735,7 +13763,7 @@ fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
     assert_eq!(member.status, b'G');
 
     let hit = apply_combat_party_damage(&mut member, 5);
-    assert!(!hit.missed);
+    assert!(!hit.grazed);
     assert_eq!(hit.applied_damage, 5);
     assert!(!hit.killed);
     assert_eq!(member.hp, 7);
@@ -13904,7 +13932,7 @@ fn combat_weapon_damage_application_routes_party_targets_through_party_damage() 
             damage: CombatPartyDamageOutcome {
                 raw_damage: 12,
                 applied_damage: 12,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: true,
                 status_before: b'G',
@@ -13964,7 +13992,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: 4,
                 applied_damage: 4,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: false,
                 return_value: 4,
@@ -13984,7 +14012,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: 2,
                 applied_damage: 2,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: false,
                 return_value: 2,
@@ -14008,7 +14036,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                 applied_damage: 4,
-                missed: false,
+                grazed: false,
                 instant_kill: true,
                 killed: true,
                 return_value: stats.reward_unit(),
@@ -14458,7 +14486,7 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
                     class: 32,
                     raw_damage: expected_damage,
                     applied_damage: expected_applied,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     return_value: expected_applied,
@@ -14595,7 +14623,7 @@ fn combat_monster_attack_applies_poison_status_before_ordinary_melee_damage() {
     let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_SPIDER, 6, 5);
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14622,7 +14650,7 @@ fn combat_monster_adjacent_miss_overwrites_interference_but_controlled_attack_do
     automatic.combat_interference_sources[0] = 7;
 
     let missed = automatic
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, false, 8, Some(false))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
         .unwrap();
     assert!(matches!(
         missed.resolution,
@@ -14635,7 +14663,7 @@ fn combat_monster_adjacent_miss_overwrites_interference_but_controlled_attack_do
     controlled.combat_interference_sources[0] = 7;
     assert!(
         controlled
-            .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, false, 8, Some(false))
+            .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
             .is_some()
     );
     assert_eq!(controlled.combat_interference_sources[0], 7);
@@ -14647,7 +14675,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
     state.party[0].status = b'P';
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14664,7 +14692,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 9,
                     applied_damage: 9,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'P',
@@ -14682,7 +14710,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
     let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_SPIDER, 6, 5);
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, false, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14705,7 +14733,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 3,
                     applied_damage: 3,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -14724,7 +14752,7 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
     state.combat_interference_sources[0] = 7;
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14748,7 +14776,7 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 25,
                     applied_damage: 12,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     status_before: b'G',
@@ -14797,7 +14825,7 @@ fn active_target_spell_damage_application_applies_defense_and_credits_caster() {
                     class: 32,
                     raw_damage: 5,
                     applied_damage: 5,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     return_value: 5,
@@ -15393,7 +15421,7 @@ fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
                     class: 32,
                     raw_damage: -4,
                     applied_damage: 0,
-                    missed: true,
+                    grazed: true,
                     instant_kill: false,
                     killed: false,
                     return_value: 0,
@@ -15423,7 +15451,7 @@ fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
                     class: 32,
                     raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                     applied_damage: stats.max_hp,
-                    missed: false,
+                    grazed: false,
                     instant_kill: true,
                     killed: true,
                     return_value: stats.reward_unit(),
@@ -15502,7 +15530,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
                         damage: CombatPartyDamageOutcome {
                             raw_damage: 3,
                             applied_damage: 3,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             status_before: b'G',
@@ -15519,7 +15547,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
                             class: 32,
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             return_value: 5,
@@ -16209,7 +16237,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
                         damage: CombatPartyDamageOutcome {
                             raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                             applied_damage: 12,
-                            missed: false,
+                            grazed: false,
                             instant_kill: true,
                             killed: true,
                             status_before: b'G',
@@ -16226,7 +16254,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
                             class: 32,
                             raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                             applied_damage: stats.max_hp,
-                            missed: false,
+                            grazed: false,
                             instant_kill: true,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16291,7 +16319,7 @@ fn directed_spell_damage_skips_disabled_targets_in_cone() {
                         class: 32,
                         raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                         applied_damage: stats.max_hp,
-                        missed: false,
+                        grazed: false,
                         instant_kill: true,
                         killed: true,
                         return_value: stats.reward_unit(),
@@ -16374,7 +16402,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
                             class: 32,
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             return_value: 5,
@@ -16392,7 +16420,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
                             class: 32,
                             raw_damage: 10,
                             applied_damage: 10,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16558,7 +16586,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
                         damage: CombatPartyDamageOutcome {
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             status_before: b'P',
@@ -16575,7 +16603,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
                             class: 32,
                             raw_damage: 10,
                             applied_damage: 10,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16690,7 +16718,7 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 4,
                     applied_damage: 4,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'P',
@@ -16713,7 +16741,7 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 10,
                     applied_damage: 8,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     status_before: b'P',
@@ -16778,7 +16806,7 @@ fn arena_field_contact_application_handles_non_party_damage_skip_and_sleep_repor
                     class: 32,
                     raw_damage: 10,
                     applied_damage: 10,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     return_value: stats.reward_unit(),
@@ -16809,7 +16837,7 @@ fn arena_field_contact_application_targets_current_actor_and_ignores_energy() {
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 10,
                     applied_damage: 10,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -17776,14 +17804,14 @@ fn combat_actor_monster_damage_clamps_miss_and_subtracts_without_underflow() {
     let mut descriptor = CombatActorDescriptor::for_monster_placement(stats, 7, 4, 5, 0, 0);
 
     let miss = descriptor.apply_monster_damage(-1, false).unwrap();
-    assert!(miss.missed);
+    assert!(miss.grazed);
     assert!(!miss.killed);
     assert_eq!(miss.applied_damage, 0);
     assert_eq!(miss.return_value, 0);
     assert_eq!(descriptor.hp_or_wound, 10);
 
     let hit = descriptor.apply_monster_damage(4, false).unwrap();
-    assert!(!hit.missed);
+    assert!(!hit.grazed);
     assert!(!hit.killed);
     assert_eq!(hit.applied_damage, 4);
     assert_eq!(hit.return_value, 4);

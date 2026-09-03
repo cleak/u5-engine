@@ -405,11 +405,6 @@ pub struct CombatMonsterAttackApplication {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatMonsterAttackInputs {
-    /// `combat.md §12` stage two, party defender: "the cached character
-    /// combat-defense byte". This is the *damage* roller's term, not the
-    /// to-hit score's - `RETRACTIONS.md` R337: "Neither byte is ever the
-    /// defender term of an ordinary melee."
-    pub party_defence_rating: u8,
     /// `combat.md §11` "The draw": the inclusive `0..=60` raw draw behind
     /// the shared skewed `1..30` roll.
     pub hit_raw_roll_0_to_60: u8,
@@ -1302,14 +1297,24 @@ impl PlayState {
     /// member." §13 (R337): "The **defense** byte reaches the damage
     /// roller directly and never through the selector."
     ///
-    /// No traced combat path recomputes the party byte from readied
-    /// armour - "§12": "No traced combat path recomputes the
-    /// character-defense byte from readied armour" - so the factory seed
-    /// stands for every party member.
+    /// The party term is the per-record byte §12 names: "the damage roll
+    /// reads the cached combat-defense byte in the character record at
+    /// offset `+0x18`; factory-seed records carry value `7`". `7` is the
+    /// value that byte holds in a factory-seed record, not a rule that
+    /// every record carries it, so this reads the loaded per-record byte
+    /// and falls back to the factory seed only for a slot the roster does
+    /// not cover. §12's negative - "No traced combat path recomputes the
+    /// character-defense byte from readied armour" - is why nothing
+    /// recomputes it here from equipment, not a claim that it is constant
+    /// across the roster.
     pub fn combat_actor_defence_rating(&self, slot: usize) -> Option<u8> {
         if slot < COMBAT_PARTY_ACTOR_SLOTS {
             self.combat_actors.get(slot)?;
-            return Some(CHARACTER_DEFENSE_FACTORY_SEED);
+            return Some(
+                self.combat_roster_slot_for_actor_slot(slot)
+                    .and_then(|roster_slot| self.party_combat_defense.get(roster_slot).copied())
+                    .unwrap_or(CHARACTER_DEFENSE_FACTORY_SEED),
+            );
         }
         let actor = self.combat_actors.get(slot).copied()?;
         combat_class_stats(actor.owner_target_class).map(|stats| stats.defense)
@@ -2726,7 +2731,6 @@ impl PlayState {
                             self.resolve_and_apply_combat_monster_scattered_attack(
                                 actor_slot,
                                 target_slot,
-                                inputs.party_defence_rating,
                                 inputs.hit_raw_roll_0_to_60,
                                 inputs.amulet_turning_scatter_roll,
                             )
@@ -2734,7 +2738,6 @@ impl PlayState {
                             self.resolve_and_apply_combat_monster_attack(
                                 actor_slot,
                                 target_slot,
-                                inputs.party_defence_rating,
                                 inputs.hit_raw_roll_0_to_60,
                                 inputs.poison_gate_accepts,
                                 inputs.poison_damage_roll,
@@ -4583,7 +4586,6 @@ impl PlayState {
         &mut self,
         attacker_slot: usize,
         target_slot: usize,
-        party_defence_rating: u8,
         hit_raw_roll_0_to_60: u8,
         poison_gate_accepts: bool,
         poison_damage_roll: u8,
@@ -4617,11 +4619,9 @@ impl PlayState {
         let defender_rating = self.combat_target_weight(target_slot)?;
         // `combat.md §12` stage two: "class defense byte for a monster and
         // the cached character combat-defense byte for a party member".
-        let defence_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            party_defence_rating
-        } else {
-            combat_class_stats(target.owner_target_class)?.defense
-        };
+        // Both sides of the arena read the one helper, so the party term
+        // is the loaded per-record `+0x18` byte rather than a constant.
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
         // `combat.md §11` selector, attacker arm: the class combat tier for
         // the six `zero-selector stat row` classes, and the actor's own
         // combat weight for the other forty-two.
@@ -4828,7 +4828,6 @@ impl PlayState {
         &mut self,
         attacker_slot: usize,
         intended_target_slot: usize,
-        party_defence_rating: u8,
         hit_raw_roll_0_to_60: u8,
         scatter_roll: u8,
     ) -> Option<CombatMonsterAttackApplication> {
@@ -4883,11 +4882,7 @@ impl PlayState {
             });
         };
         let defender_rating = self.combat_target_weight(target_slot)?;
-        let defence_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            party_defence_rating
-        } else {
-            combat_class_stats(self.combat_actors[target_slot].owner_target_class)?.defense
-        };
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
         let attacker_rating = combat_monster_attacker_rating(
             attacker.owner_target_class,
             self.combat_target_weight(attacker_slot)?,
@@ -5882,8 +5877,14 @@ impl PlayState {
         // keystroke/command path and the other group to the automatic actor
         // driver, so a party-side actor carrying the controlled/charmed bit
         // takes its turn through the driver instead of the player's prompt.
-        // The earlier reading that any slot carrying the bit is sent to the
-        // player command parser is expressly withdrawn.
+        // The toggle therefore cuts both ways, and `RETRACTIONS.md` R354
+        // is explicit about the monster-side half: the bit "**does** hand a
+        // monster to the player's prompt ... a monster carrying the bit is
+        // dispatched to the keystroke/command path and takes its turns
+        // under player control". That is why an ordinary hostile's melee
+        // miss is silent while a controlled monster's prints `<target>
+        // missed!` - the two reach different narrators, not different
+        // strings.
         let action = if self.combat_target_group_for_slot(slot) == COMBAT_TARGET_GROUP_PARTY {
             CombatActorDispatchAction::PlayerReady
         } else if resolve_negate_time_dispatch_skipped(
@@ -6297,8 +6298,11 @@ impl PlayState {
         // `combat.md §12` stage one, monster row: "the class's **attack
         // byte, used flat**, with **no random draw at all**", so no
         // damage draw is taken here - `RETRACTIONS.md` R336.
+        // `combat.md §12` stage two reads the defender's own rating, so
+        // it is taken from the target record at resolution time rather
+        // than pre-drawn here: the AI's target is not chosen yet, and the
+        // rating is a record read, not a draw.
         CombatMonsterAttackInputs {
-            party_defence_rating: CHARACTER_DEFENSE_FACTORY_SEED,
             hit_raw_roll_0_to_60: self.random_range_u8(0, COMBAT_SKEWED_ROLL_RAW_MAX),
             poison_gate_accepts: self.random_mod_u8(2) == 0,
             poison_damage_roll: self.random_mod_u8(20),

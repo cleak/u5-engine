@@ -3063,70 +3063,141 @@ fn combat_step_or_attack_application_message(
     }
 }
 
-/// Player-visible result lines observed in the original DOS presentation and
-/// described by `combat.md §12`. Internal slots, coordinates, rolls and raw
-/// damage never belong in this string.
+/// `combat.md §11.1` "The census": one attack outcome's printed result
+/// line, for either side of the arena. Two rules from that section govern
+/// every string here - "**Every result line names the target, never the
+/// attacker.** No combat result line anywhere in the game is
+/// attacker-named", and the two sides "share the to-hit roll, the impact
+/// presentation, the damage roller and the result narrator". Internal
+/// slots, coordinates, rolls and raw damage never belong in this string.
 pub(crate) fn combat_weapon_attack_result_message(
     state: &PlayState,
     target_slot: usize,
     attack: CombatWeaponAttackApplication,
 ) -> Option<String> {
+    combat_attack_result_message(state, target_slot, None, attack)
+}
+
+fn combat_attack_result_message(
+    state: &PlayState,
+    target_slot: usize,
+    attacker_slot: Option<usize>,
+    attack: CombatWeaponAttackApplication,
+) -> Option<String> {
     let target_name = combat_actor_display_name(state, target_slot);
     match attack.resolution {
+        // `combat.md §11.1` census, "To-hit fails | **party melee** |
+        // `<target> missed!`, following the newline already printed before
+        // the roll". The line is target-named: "`Bat missed!` is a real
+        // original-game line, and it reads *the Bat was missed*: it is
+        // printed by a party member's failed swing **at** a Bat".
+        //
+        // The party ranged and thrown arm shares this line, and §11.1
+        // makes it conditional there: it prints "only when the resolver
+        // reports nobody **and** the originally aimed cell held a real
+        // actor". This engine models no scatter on that arm, so every
+        // failed party ranged roll is that case.
         CombatWeaponAttackResolution::Miss { .. } => Some(format!("{target_name} missed!")),
-        // `combat.md §12`: the two-stage roller's "result may be zero or
-        // negative, and both read as a miss" - against a party defender the
-        // negative "short-circuits with the miss narration", and against a
-        // monster it "falls through into the damage-and-status handler
-        // below, which clamps it and raises the same miss flag", so the two
-        // routes are "gameplay-identical - a printed miss and no HP change".
         CombatWeaponAttackResolution::Hit { .. } => match attack.damage_application {
-            Some(CombatWeaponDamageApplication::Party { damage, .. }) if damage.missed => {
-                Some(format!("{target_name} missed!"))
-            }
-            Some(CombatWeaponDamageApplication::Monster { damage, .. }) if damage.missed => {
-                let class_name = combat_class_stats(damage.class)
-                    .map(|stats| stats.name)
-                    .unwrap_or(target_name.as_str());
-                Some(format!("{class_name} missed!"))
-            }
-            Some(CombatWeaponDamageApplication::Party { damage, .. }) => Some(if damage.killed {
-                format!("{target_name} killed!")
-            } else {
-                format!("{target_name} hit!")
-            }),
-            Some(CombatWeaponDamageApplication::Monster { damage, .. }) => {
-                let class_name = combat_class_stats(damage.class)
-                    .map(|stats| stats.name)
-                    .unwrap_or(target_name.as_str());
-                if damage.killed {
-                    Some(format!("{class_name} killed!"))
-                } else {
-                    let actor = state.combat_actors.get(target_slot)?;
-                    let max_hp = combat_class_stats(damage.class)?.max_hp;
-                    let condition = match combat_wound_score_bucket(actor.hp_or_wound, max_hp) {
-                        CombatWoundScoreBucket::ThreeQuartersOrMore => "grazed",
-                        CombatWoundScoreBucket::HalfToUnderThreeQuarters => "lightly wounded",
-                        CombatWoundScoreBucket::OneQuarterToUnderHalf => "heavily wounded",
-                        CombatWoundScoreBucket::UnderOneQuarter => "critically wounded",
-                    };
-                    Some(format!("{class_name} {condition}!"))
-                }
+            Some(application) => {
+                combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
             }
             None => Some(format!("{target_name} hit!")),
         },
-        // `combat.md §12`: "The **Glass Sword** id narrates `Thy sword hath
-        // shattered!` and substitutes the instant-kill sentinel `99`."
-        //
-        // Only that one line is published. Whether the sentinel kill is
-        // also narrated on this path, and in which order relative to the
-        // shatter line, is not - so nothing is composed onto it here.
-        CombatWeaponAttackResolution::Special {
-            shattered: true, ..
-        } => Some(COMBAT_GLASS_SWORD_SHATTER_LINE.to_string()),
+        // `combat.md §11.1` census: "Glass Sword swing | party melee |
+        // `Thy sword hath shattered!`, printed **inside** the damage roll,
+        // so it lands between the hit newline and the result line". The
+        // ordinary result line then follows - for the sentinel that is
+        // "Target dies | both | `<target> killed!`" - so the shatter line
+        // is a prefix, not a replacement.
+        CombatWeaponAttackResolution::Special { shattered, .. } => {
+            let mut lines = Vec::new();
+            if shattered {
+                lines.push(COMBAT_GLASS_SWORD_SHATTER_LINE.to_string());
+            }
+            if let Some(result) = attack.damage_application.and_then(|application| {
+                combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
+            }) {
+                lines.push(result);
+            }
+            (!lines.is_empty()).then(|| lines.join("\n"))
+        }
         CombatWeaponAttackResolution::OutOfRange { .. }
-        | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
-        | CombatWeaponAttackResolution::Special { .. } => None,
+        | CombatWeaponAttackResolution::NoOrdinaryDamage { .. } => None,
+    }
+}
+
+/// `combat.md §11.1` census rows for a landed swing, in the order the
+/// section's "Order, stated once" list gives them: the graze arm first
+/// (it "suppresses every later result line"), then the death arm, then
+/// the ordinary hit.
+fn combat_landed_damage_result_line(
+    state: &PlayState,
+    target_slot: usize,
+    attacker_slot: Option<usize>,
+    application: CombatWeaponDamageApplication,
+) -> Option<String> {
+    match application {
+        // `combat.md §11.1`: "Damage zero or negative | both | `<target>
+        // grazed!` **and nothing else** - the kill, sleep, hit and wound
+        // lines are all suppressed". `RETRACTIONS.md` R352 withdrew the
+        // former miss reading of this arm.
+        CombatWeaponDamageApplication::Party { damage, .. } if damage.grazed => Some(format!(
+            "{} grazed!",
+            combat_actor_display_name(state, target_slot)
+        )),
+        CombatWeaponDamageApplication::Party { damage, .. } => {
+            let target_name = combat_actor_display_name(state, target_slot);
+            if damage.killed {
+                // "Target dies | both | `<target> killed!`"
+                return Some(format!("{target_name} killed!"));
+            }
+            // `combat.md §11.1`: "**A party member who takes a solid
+            // landed hit always reads the flat `<target> hit!`** - or
+            // `<target> dragged under!` when the attacker is a Corpser."
+            // The grading "never applies to a **party** target".
+            if attacker_slot.is_some_and(|slot| {
+                state
+                    .combat_actors
+                    .get(slot)
+                    .is_some_and(|actor| actor.owner_target_class == COMBAT_CLASS_CORPSER)
+            }) {
+                return Some(format!("{target_name} dragged under!"));
+            }
+            Some(format!("{target_name} hit!"))
+        }
+        CombatWeaponDamageApplication::Monster { damage, .. } => {
+            let class_name = combat_class_stats(damage.class)
+                .map(|stats| stats.name.to_string())
+                .unwrap_or_else(|| combat_actor_display_name(state, target_slot));
+            if damage.grazed {
+                return Some(format!("{class_name} grazed!"));
+            }
+            if damage.killed {
+                // `combat.md §11.1`: "Monster dies, vanish class | party
+                // attacker | `<monster> vanishes!` ... printed inside the
+                // damage handler, which then suppresses the kill line."
+                // The vanish line itself is emitted by the death path in
+                // `combat_frame.rs`.
+                if damage.death_path == Some(CombatMonsterDeathPath::Vanish) {
+                    return None;
+                }
+                return Some(format!("{class_name} killed!"));
+            }
+            // `combat.md §11.1` "The graded wound lines are monster-target
+            // only": the result line "is graded by the target's remaining
+            // HP against its class maximum, using the same four-bucket
+            // wound score the flee classifier of Section 9 computes".
+            let actor = state.combat_actors.get(target_slot)?;
+            let max_hp = combat_class_stats(damage.class)?.max_hp;
+            let wound_line = match combat_wound_score_bucket(actor.hp_or_wound, max_hp) {
+                CombatWoundScoreBucket::ThreeQuartersOrMore => "barely wounded",
+                CombatWoundScoreBucket::HalfToUnderThreeQuarters => "lightly wounded",
+                CombatWoundScoreBucket::OneQuarterToUnderHalf => "heavily wounded",
+                CombatWoundScoreBucket::UnderOneQuarter => "critical",
+            };
+            Some(format!("{class_name} {wound_line}!"))
+        }
     }
 }
 
@@ -3148,6 +3219,10 @@ fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
         .unwrap_or_else(|| "Combatant".to_string())
 }
 
+/// `combat.md §11.1` for a self-acting hostile's turn. The two sides
+/// "join *below* the announcement layer, which is why an ordinary hostile
+/// monster prints no banner, no `Attack-`, no `Aim! ` and, on a melee
+/// miss, no line at all" (`RETRACTIONS.md` R353).
 pub(crate) fn combat_monster_attack_result_message(
     state: &PlayState,
     attack: CombatMonsterAttackApplication,
@@ -3163,38 +3238,31 @@ pub(crate) fn combat_monster_attack_result_message(
         attack.resolution,
         Some(CombatWeaponAttackResolution::Miss { .. })
     ) {
-        let attacker_name = combat_actor_display_name(state, attack.attacker_slot);
-        return Some(format!("{attacker_name} missed!"));
+        // `combat.md §11.1` census: "To-hit fails | **monster melee** |
+        // **nothing at all**", and the section text - "an ordinary hostile
+        // monster's melee miss prints nothing and sounds nothing - no
+        // newline, no name, no line, no tone". §11.1's controlled-monster
+        // carve-out (a reduced banner and `<target> missed!`) does not
+        // apply here: a monster carrying the controlled bit is toggled
+        // into the party group and dispatched to `PlayerReady`, so it
+        // narrates through the party-side helper above instead of this
+        // one.
+        //
+        // The ranged carve-out - a failed monster ranged roll scatters and
+        // "the **full hit chain runs against that actor**" - is not
+        // modelled; this engine resolves a failed ranged roll as silent,
+        // which §11.1 lists as one of its three genuinely silent cases.
+        return None;
     }
-    match attack.damage_application {
-        // `combat.md §12`: the two-stage roller's "result may be zero or
-        // negative, and both read as a miss", and against a party defender
-        // a soaked result "short-circuits with the miss narration". This
-        // is the monster-attacker route, so it narrates the miss the way
-        // the forced-miss arm just above does.
-        Some(CombatWeaponDamageApplication::Party { damage, .. }) if damage.missed => {
-            let attacker_name = combat_actor_display_name(state, attack.attacker_slot);
-            Some(format!("{attacker_name} missed!"))
-        }
-        Some(CombatWeaponDamageApplication::Party { damage, .. }) => Some(if damage.killed {
-            format!("{target_name} killed!")
-        } else {
-            format!("{target_name} hit!")
-        }),
-        Some(CombatWeaponDamageApplication::Monster { .. }) => {
-            attack.resolution.and_then(|resolution| {
-                combat_weapon_attack_result_message(
-                    state,
-                    attack.target_slot,
-                    CombatWeaponAttackApplication {
-                        resolution,
-                        damage_application: attack.damage_application,
-                    },
-                )
-            })
-        }
-        None => None,
-    }
+    combat_attack_result_message(
+        state,
+        attack.target_slot,
+        Some(attack.attacker_slot),
+        CombatWeaponAttackApplication {
+            resolution: attack.resolution?,
+            damage_application: attack.damage_application,
+        },
+    )
 }
 
 fn append_combat_result_line(message: &mut String, line: &str) {

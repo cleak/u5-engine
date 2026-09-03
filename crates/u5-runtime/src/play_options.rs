@@ -21,6 +21,11 @@ pub struct PlayOptions {
     pub party_experience: Vec<u16>,
     pub party_stay_counters: Vec<u8>,
     pub party_strengths: Vec<u8>,
+    /// `combat.md §12`: the cached combat-defense byte at character-record
+    /// offset `+0x18`, one entry per roster slot. A slot with no entry
+    /// falls back to [`crate::CHARACTER_DEFENSE_FACTORY_SEED`], the value
+    /// the spec publishes for factory-seed records.
+    pub party_combat_defense: Vec<u8>,
     pub party_intelligence: Vec<u8>,
     pub party_equipment: Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
     pub party_roster: Vec<PartyRosterRecord>,
@@ -115,6 +120,7 @@ impl Default for PlayOptions {
             party_experience: default_party_experience(1),
             party_stay_counters: default_party_stay_counters(1),
             party_strengths: default_party_strengths(1),
+            party_combat_defense: default_party_combat_defense(1),
             party_intelligence: default_party_intelligence(1),
             party_equipment: default_party_equipment(1),
             party_roster: default_party_roster(1),

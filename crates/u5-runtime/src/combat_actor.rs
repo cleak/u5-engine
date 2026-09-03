@@ -261,6 +261,11 @@ pub const COMBAT_CLASS_GIANT_SPIDER: u8 = COMBAT_CLASS_BAT + 1;
 pub const COMBAT_CLASS_INSECT_SWARM: u8 = 31;
 pub const COMBAT_CLASS_PYTHON: u8 = 34;
 pub const COMBAT_CLASS_DAEMON: u8 = 38;
+/// `combat.md §11.1`: the one attacker class whose landed hit on a party
+/// target replaces the flat `hit!` line - "Ordinary landed hit, **party**
+/// target, attacker is a **Corpser** (class 45) | monster attacker |
+/// `<target> dragged under!` in place of `hit!`".
+pub const COMBAT_CLASS_CORPSER: u8 = 45;
 /// `catalogs/monster-bestiary.md §2`: Dragon (39) follows Daemon
 /// (38) consecutively. Anchor DRAGON to DAEMON + 1.
 pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;
@@ -743,7 +748,13 @@ pub struct CombatMonsterDamageOutcome {
     pub class: u8,
     pub raw_damage: i16,
     pub applied_damage: u8,
-    pub missed: bool,
+    /// `combat.md §12`: "The result may be zero or negative, and **both
+    /// are narrated as a graze, not as a miss**." `RETRACTIONS.md` R352
+    /// keeps the mechanical half of the withdrawn text - "same marker on
+    /// both routes, no HP change, the experience block the only
+    /// difference" - and withdraws the miss wording and the miss flag:
+    /// "There is no miss flag ... Neither reader is a miss."
+    pub grazed: bool,
     pub instant_kill: bool,
     pub killed: bool,
     pub return_value: u8,
@@ -754,7 +765,11 @@ pub struct CombatMonsterDamageOutcome {
 pub struct CombatPartyDamageOutcome {
     pub raw_damage: i16,
     pub applied_damage: u16,
-    pub missed: bool,
+    /// `combat.md §12`, the party-defender route: a zero or negative
+    /// result raises "the same shared result marker" as the monster
+    /// route and narrates `<target> grazed!` (`§11.1`), never a miss -
+    /// `RETRACTIONS.md` R352.
+    pub grazed: bool,
     pub instant_kill: bool,
     pub killed: bool,
     pub status_before: u8,
@@ -1123,15 +1138,18 @@ impl CombatActorDescriptor {
     ) -> Option<CombatMonsterDamageOutcome> {
         let stats = combat_class_stats(self.owner_target_class)?;
         let traits = combat_class_traits(self.owner_target_class)?;
-        // `combat.md §12`: "The result may be zero or negative, and both
-        // read as a miss." The damage-modifier paragraph in the same
-        // section only has to speak of the negative half - "Negative
-        // damage is clamped to zero and an `attack missed` status flag is
-        // raised" - because zero needs no clamp; the two-value rule above
-        // is what decides the flag.
-        let missed = raw_damage <= 0;
+        // `combat.md §12`: "The result may be zero or negative, and
+        // **both are narrated as a graze, not as a miss**." The
+        // damage-modifier paragraph in the same section states the
+        // clamp - "Negative damage is clamped to zero and the shared
+        // result marker's graze bit is raised, so the narration reads
+        // `<target> grazed!` and every later result line is suppressed
+        // (Section 11.1)" - and only has to speak of the negative half
+        // because zero needs no clamp. `RETRACTIONS.md` R352 confirms
+        // this mechanical half and withdraws the former miss reading.
+        let grazed = raw_damage <= 0;
         let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
-        let damage = if missed {
+        let damage = if grazed {
             0
         } else if instant_kill {
             self.hp_or_wound
@@ -1173,7 +1191,7 @@ impl CombatActorDescriptor {
             class: stats.class,
             raw_damage,
             applied_damage,
-            missed,
+            grazed,
             instant_kill,
             killed,
             return_value,
@@ -1187,11 +1205,14 @@ pub fn apply_combat_party_damage(
     raw_damage: i16,
 ) -> CombatPartyDamageOutcome {
     let status_before = member.status;
-    // `combat.md §12`: "The result may be zero or negative, and both read
-    // as a miss."
-    let missed = raw_damage <= 0;
+    // `combat.md §12`: "The result may be zero or negative, and **both
+    // are narrated as a graze, not as a miss**." Against a party
+    // defender the negative result "short-circuits early", but both
+    // routes "raise the same shared result marker" and are
+    // "gameplay-identical - one printed graze line and no HP change".
+    let grazed = raw_damage <= 0;
     let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
-    let applied_damage = if missed {
+    let applied_damage = if grazed {
         0
     } else if instant_kill {
         let applied = member.hp;
@@ -1205,7 +1226,7 @@ pub fn apply_combat_party_damage(
     CombatPartyDamageOutcome {
         raw_damage,
         applied_damage,
-        missed,
+        grazed,
         instant_kill,
         killed: member.hp == 0,
         status_before,
@@ -1596,7 +1617,16 @@ pub fn resolve_combat_attacker_raw_damage(
             if item_id == EQUIPMENT_GLASS_SWORD {
                 (CombatWeaponDamageRoute::Special, true)
             } else if item_id == EQUIPMENT_JEWELED_SWORD {
-                (CombatWeaponDamageRoute::NoOrdinaryDamage, false)
+                // `combat.md §12`: the override "forces the raw value to
+                // `0` whatever its table entry says" - a raw *value*, not
+                // a zero-damage dispatcher row. Only the instant-kill
+                // sentinel "short-circuits the whole roller and returns
+                // immediately - **before the defender's defence byte is
+                // read**", so this attempt still runs stage two.
+                // `catalogs/item-list.md §5.1`: "Id 40 carries `1`, which
+                // the same roller overrides to `0` before any roll" - the
+                // dispatcher therefore never sees a zero row for it.
+                (CombatWeaponDamageRoute::Damage { raw_damage: 0 }, false)
             } else {
                 (
                     resolve_combat_weapon_raw_damage(equipment_attack_max(item_id)?, damage_roll),
@@ -1629,7 +1659,8 @@ pub const fn combat_defence_subtraction(defence_rating: u8, defence_roll: u8) ->
 }
 
 /// `combat.md §12`: the whole two-stage roller for one landed swing.
-/// "The result may be zero or negative, and both read as a miss." The
+/// "The result may be zero or negative, and **both are narrated as a
+/// graze, not as a miss**." The
 /// instant-kill sentinel "short-circuits the whole roller and returns
 /// immediately - **before the defender's defence byte is read** - so an
 /// instant kill takes no defence draw", which is why `Special` never
@@ -1693,6 +1724,16 @@ pub struct CombatWeaponAttackInput {
     pub forced_hit: Option<bool>,
 }
 
+/// `combat.md §11.1` "Order, stated once": the to-hit decides first, and
+/// "damage application" is step 4. The damage roller is one roller that
+/// "runs in two stages" (`§12`), so an attempt that the to-hit rejects
+/// reaches neither stage and spends neither draw - see
+/// [`combat_weapon_attack_reaches_damage_roller`], which the callers use
+/// to decide whether to spend them. The dispatcher's own routing - "A zero
+/// damage row routes to spell or special effect handling; a nonzero damage
+/// row routes to target selection and attack application" (`§11`) - and
+/// the two per-item overrides that "run before the roll" are table reads,
+/// not draws, so they are resolved here ahead of the score.
 pub fn resolve_combat_weapon_attack(
     input: CombatWeaponAttackInput,
 ) -> CombatWeaponAttackResolution {
@@ -1773,33 +1814,44 @@ pub fn combat_attacker_damage_draw_taken(source: CombatAttackerDamageSource) -> 
     }
 }
 
-/// `combat.md §11` / `§12`: whether one attempt reaches the party-side
-/// stage-one draw at all. An out-of-range attempt "exits without applying
-/// damage" (§11) and so never rolls.
+/// `combat.md §12`: whether this attempt reaches the ordinary attack
+/// damage roller at all. `§11.1`'s ordered contract puts "damage
+/// application" at step 4, after the to-hit roll of step 0 and the impact
+/// presentation of step 2, so an attempt that misses, that is out of
+/// range, that carries a zero damage row or that short-circuits on the
+/// instant-kill sentinel never enters the roller.
+///
+/// This is one roller running "in two stages", so both of its draws are
+/// taken together or not at all: an attempt that does not reach it spends
+/// neither the party-side stage-one `1..Attack max` draw nor the
+/// stage-two `1..rating` defence draw.
+pub fn combat_weapon_attack_reaches_damage_roller(input: CombatWeaponAttackInput) -> bool {
+    matches!(
+        resolve_combat_weapon_attack(CombatWeaponAttackInput {
+            defence_rating: 0,
+            defence_roll: 0,
+            ..input
+        }),
+        CombatWeaponAttackResolution::Hit { .. }
+    )
+}
+
+/// `combat.md §12` stage one: whether this attempt spends the party-side
+/// inclusive `1..Attack max` draw. It must reach the roller (above) and
+/// the source must be one of the rows that rolls at all.
 pub fn combat_weapon_attack_takes_damage_draw(input: CombatWeaponAttackInput) -> bool {
-    resolve_combat_weapon_attack_range_route(input.target_range, input.range_cap, input.effect_code)
-        .is_some()
+    combat_weapon_attack_reaches_damage_roller(input)
         && combat_attacker_damage_draw_taken(input.source)
 }
 
-/// `combat.md §12`: whether this attempt reaches stage two of the damage
-/// roller and therefore takes the defender's inclusive `1..rating` draw.
-/// An out-of-range attempt, a zero-damage row, a miss and the instant-kill
-/// sentinel - which "short-circuits the whole roller and returns
-/// immediately - **before the defender's defence byte is read**" - all skip
-/// it, and so does a zero rating: "when it is zero it takes no draw at all
-/// and subtracts nothing", which "is part of PRNG parity, not an
+/// `combat.md §12` stage two: whether this attempt spends the defender's
+/// inclusive `1..rating` draw. It must reach the roller, and the rating
+/// must be non-zero: "when it is zero it takes no draw at all and
+/// subtracts nothing", which "is part of PRNG parity, not an
 /// optimisation".
 pub fn combat_weapon_attack_takes_defence_draw(input: CombatWeaponAttackInput) -> bool {
-    combat_defence_draw_taken(input.defence_rating)
-        && matches!(
-            resolve_combat_weapon_attack(CombatWeaponAttackInput {
-                defence_rating: 0,
-                defence_roll: 0,
-                ..input
-            }),
-            CombatWeaponAttackResolution::Hit { .. }
-        )
+    combat_weapon_attack_reaches_damage_roller(input)
+        && combat_defence_draw_taken(input.defence_rating)
 }
 
 /// `combat.md §11` / `§12` inputs for one readied-item attempt, with the
@@ -1832,12 +1884,12 @@ pub fn combat_equipment_weapon_attack_input(
         // always-hit ids `combat.md §11` names "skips the to-hit score
         // entirely"; a caller-supplied force still wins.
         //
-        // With the shipped `Attack max` values this arm is inert: ids 35
-        // and 39 "both carry the instant-kill sentinel `99`" and id 40 is
-        // forced to `0`, so all three leave stage one on the `Special` or
-        // `NoOrdinaryDamage` route and never reach the score the flag
-        // would skip. It is kept because the published contract is about
-        // the ids, not about which of the two mechanisms delivers them.
+        // With the shipped `Attack max` values ids 35 and 39 "both carry
+        // the instant-kill sentinel `99`", so they leave stage one on the
+        // `Special` route and never reach the score the flag would skip;
+        // the flag changes no outcome for those two. Id 40's override
+        // forces a raw *value* of `0` and still enters the roller, so on
+        // that id the flag is live.
         forced_hit: forced_hit.or_else(|| equipment_attack_is_always_hit(item_id).then_some(true)),
     })
 }

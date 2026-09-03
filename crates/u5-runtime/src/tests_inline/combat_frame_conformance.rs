@@ -382,7 +382,7 @@
         }];
 
         let application = state
-            .resolve_and_apply_combat_monster_attack(8, 0, 1, 0, true, 0, Some(true))
+            .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 0, Some(true))
             .expect("an adjacent controlled attacker still resolves an attack");
 
         assert!(
@@ -402,7 +402,7 @@
         state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
         assert!(
             state
-                .resolve_and_apply_combat_monster_attack(8, 0, 1, 0, false, 0, Some(true))
+                .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
                 .is_none(),
             "a controlled attacker requires straight-line distance exactly one"
         );
@@ -1419,18 +1419,43 @@
             "the reciprocal expectation must be taken on the rate, not the period"
         );
 
-        // "One attack per monster activation ... there is no multi-attack
-        // loop anywhere on it."
+        // "One attack per monster activation: the automatic driver reaches
+        // the attack path once, that path runs one target pick, one to-hit
+        // and one damage resolution, and there is no multi-attack loop
+        // anywhere on it." Counted, not bounded: the dispatch carries at
+        // most one attack, and every HP the Avatar lost belongs to it.
         let mut state = worked_bat_arena(&[(6, 5)], 0);
         let bat_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        // Section 7: the actor comes round when its phase counter reaches
+        // zero. Put it on the edge of its own phase so this dispatch is the
+        // one that acts.
+        state.combat_actors[bat_slot].phase_counter = 1;
         let hp_before = state.party[0].hp;
         let application = state
             .apply_combat_actor_slot_dispatch(bat_slot, COMBAT_PHASE_REFRESH_CONSTANT, false);
-        let _ = application;
-        assert!(
-            hp_before - state.party[0].hp <= 5,
-            "one activation resolves at most one Bat swing"
+        let monster_attack = match application {
+            CombatActorSlotDispatchApplication::Slot {
+                action:
+                    CombatActorDispatchAction::MonsterAi {
+                        ai_turn: Some(ai_turn),
+                    },
+                ..
+            } => ai_turn.monster_attack,
+            other => panic!("a due hostile slot dispatches to the driver, got {other:?}"),
+        };
+        let applied = match monster_attack.and_then(|attack| attack.damage_application) {
+            Some(CombatWeaponDamageApplication::Party { damage, .. }) => {
+                u32::from(damage.applied_damage)
+            }
+            None => 0,
+            other => panic!("a Bat swing at the Avatar applies party damage, got {other:?}"),
+        };
+        assert_eq!(
+            u32::from(hp_before) - u32::from(state.party[0].hp),
+            applied,
+            "one activation resolves exactly one Bat swing, and the HP lost is that swing's"
         );
+        assert!(applied <= 5, "a Bat can never take more than 5 HP in one swing");
     }
 
     /// A `combat.md` Section 11 worked-example arena: the shipped starting
@@ -1502,19 +1527,18 @@
     }
 
     #[test]
-    fn three_adjacent_bats_kill_a_sixty_hp_avatar_at_the_observed_rate() {
+    fn three_adjacent_bats_cost_the_hp_per_turn_section_11_publishes() {
         // End-to-end through the production round walker and player command
-        // path. The reference point is the original's observed 60 -> 0 over
-        // fourteen rounds with bats that were free to move; three bats held
-        // adjacent must be at least that fast, and `combat.md` Section 11
-        // fixes both ends of the band:
+        // path, checked against `combat.md` Section 11's own arithmetic and
+        // against nothing else. Section 11 fixes both ends of the band:
         //
         //   - "a Bat can never take more than 5 HP in one swing and cannot
         //     one-shot a 60-HP Avatar", so no single turn can end it;
         //   - "the expected loss per *attempted* swing is `0.746 * 15/7 =
         //     1.60` HP" and "The expected number of Bat attempts per Avatar
         //     turn is therefore `21 * E[1/period] = 3.01`", so three bats
-        //     cost about `3 * 3.01 * 1.60 = 14.4` HP per Avatar turn.
+        //     held adjacent cost about `3 * 3.01 * 1.60 = 14.4` HP per
+        //     Avatar turn.
         //
         // Before R334-R336 the same fixture lost a handful of HP over the
         // whole fourteen rounds: the score was inverted (29.5 % instead of
@@ -1541,11 +1565,6 @@
                 turns > 1,
                 "seed {seed}: a Bat cannot one-shot a 60 HP Avatar"
             );
-            assert!(
-                turns <= 14,
-                "seed {seed}: took {turns} turns; the original's observation is 60 -> 0 over \
-                 fourteen rounds with bats free to move, so held adjacent it must be faster"
-            );
             turns_to_death.push(turns);
         }
         let mean_turns =
@@ -1568,18 +1587,20 @@
     }
 
     #[test]
-    fn a_defence_soaked_swing_changes_no_hp_and_narrates_as_a_miss() {
+    fn a_defence_soaked_swing_grazes_and_a_missed_monster_swing_prints_nothing() {
         // `combat.md` Section 12: "The result may be zero or negative, and
-        // both read as a miss. Against a **party** defender a negative
-        // result short-circuits with the miss narration; against a
-        // **monster** defender it falls through into the damage-and-status
-        // handler below, which clamps it and raises the same miss flag ...
-        // The two routes are therefore gameplay-identical - a printed miss
-        // and no HP change."
+        // **both are narrated as a graze, not as a miss**", and Section
+        // 11.1's census row - "Damage zero or negative | both | `<target>
+        // grazed!` **and nothing else**". `RETRACTIONS.md` R352 withdrew
+        // the former miss reading of exactly this arm and named the defect
+        // it produces: "with the shipped party defence byte of 7 against a
+        // Bat's flat attack of 6, two of the seven equally likely defence
+        // draws land here".
         //
         // The sixth and seventh rows of the published Bat table - attack
         // value 6 against the shipped party defence of 7, subtractions 6
-        // and 7 - are the zero and the negative the sentence pairs.
+        // and 7 - are the zero and the negative that table pairs, and both
+        // of its "Line printed" cells read `<name> grazed!`.
         let bat = combat_class_stats(WORKED_BAT_CLASS).unwrap();
         for (defence_roll, expected_result) in [
             (CHARACTER_DEFENSE_FACTORY_SEED - 2, 0i16),
@@ -1600,14 +1621,14 @@
             let CombatWeaponDamageApplication::Party { damage, .. } = application else {
                 panic!("expected a party damage application, got {application:?}");
             };
-            assert!(damage.missed, "result {soaked} must read as a miss");
+            assert!(damage.grazed, "result {soaked} raises the graze marker");
             assert_eq!(damage.applied_damage, 0);
             assert_eq!(state.party[0].hp, hp_before);
             assert_eq!(state.party[0].status, b'G');
 
             // The line the monster-attack route actually prints for that
-            // swing - the half of "a printed miss and no HP change" the
-            // assertions above cannot see.
+            // landed-but-soaked swing. It names the target, never the
+            // attacker (Section 11.1 rule 1).
             assert_eq!(
                 crate::input_dispatch::combat_monster_attack_result_message(
                     &state,
@@ -1623,8 +1644,263 @@
                     },
                 )
                 .as_deref(),
-                Some("Bat missed!"),
+                Some("Avatar grazed!"),
             );
+        }
+
+        // Section 11.1 census, the row this engine got wrong for both
+        // rounds: "To-hit fails | **monster melee** | **nothing at all**".
+        // A failed roll is not a graze and not a line - "no newline, no
+        // name, no line, no tone".
+        let state = worked_bat_arena(&[(6, 5)], 0);
+        assert_eq!(
+            crate::input_dispatch::combat_monster_attack_result_message(
+                &state,
+                CombatMonsterAttackApplication {
+                    attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
+                    target_slot: 0,
+                    poison_status_outcome: None,
+                    resolution: Some(CombatWeaponAttackResolution::Miss {
+                        route: CombatWeaponAttackRangeRoute::Melee,
+                        hit_score: 7,
+                    }),
+                    damage_application: None,
+                },
+            ),
+            None,
+        );
+
+        // The same failed roll on the party side does print, and the line
+        // is still target-named: "`Bat missed!` ... is printed by a party
+        // member's failed swing **at** a Bat".
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                COMBAT_PARTY_ACTOR_SLOTS,
+                CombatWeaponAttackApplication {
+                    resolution: CombatWeaponAttackResolution::Miss {
+                        route: CombatWeaponAttackRangeRoute::Melee,
+                        hit_score: 21,
+                    },
+                    damage_application: None,
+                },
+            )
+            .as_deref(),
+            Some("Bat missed!"),
+        );
+
+        // No line this engine can emit from an attack outcome is
+        // attacker-named: "An engine that prints the attacker's name in
+        // the miss line produces a transcript that is wrong on every line
+        // it emits."
+        assert!(
+            !std::include_str!("../input_dispatch.rs").contains("attacker_name"),
+            "R353's own suggested check: grep the narration module for any              attacker-named combat line"
+        );
+    }
+
+    #[test]
+    fn the_party_defence_term_is_the_per_record_byte_not_the_factory_seed() {
+        // `combat.md` Section 12: "For party-member defenders, the damage
+        // roll reads the cached combat-defense byte in the character record
+        // at offset `+0x18`; factory-seed records carry value `7`." Seven is
+        // what that byte holds in a factory-seed record, not a rule that
+        // every record carries it, so the roller reads the record.
+        assert_eq!(
+            crate::character_record::SAVE_CHARACTER_DEFENSE_BYTE_OFFSET,
+            0x18
+        );
+        let mut bytes = vec![0u8; SAVE_ROSTER_OFFSET + 2 * SAVE_CHARACTER_RECORD_LEN];
+        bytes[SAVE_ROSTER_OFFSET + crate::character_record::SAVE_CHARACTER_DEFENSE_BYTE_OFFSET] =
+            CHARACTER_DEFENSE_FACTORY_SEED;
+        bytes[SAVE_ROSTER_OFFSET
+            + SAVE_CHARACTER_RECORD_LEN
+            + crate::character_record::SAVE_CHARACTER_DEFENSE_BYTE_OFFSET] = 3;
+        assert_eq!(
+            decode_party_combat_defense(&bytes, 2),
+            vec![CHARACTER_DEFENSE_FACTORY_SEED, 3]
+        );
+
+        // And the roller uses whatever that record holds. Against a Bat's
+        // flat attack of 6, a cached byte of 3 makes the subtraction an
+        // inclusive `1..3` and every landed swing cost 3, 4 or 5 HP - never
+        // the zero and negative the shipped seed of 7 produces.
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        state.party_combat_defense = vec![3];
+        assert_eq!(state.combat_actor_defence_rating(0), Some(3));
+        let bat = combat_class_stats(WORKED_BAT_CLASS).unwrap();
+        for roll in 0..=255u8 {
+            let soaked = resolve_combat_damage_after_defence(
+                i16::from(bat.attack_value),
+                state.combat_actor_defence_rating(0).unwrap(),
+                roll,
+            );
+            assert!(
+                (3..=5).contains(&soaked),
+                "a cached byte of 3 soaks 1..3, giving {soaked}"
+            );
+        }
+
+        // A slot the roster does not cover falls back to the published
+        // factory-seed value rather than to zero, which would silently drop
+        // stage two's draw.
+        state.party_combat_defense.clear();
+        assert_eq!(
+            state.combat_actor_defence_rating(0),
+            Some(CHARACTER_DEFENSE_FACTORY_SEED)
+        );
+    }
+
+    #[test]
+    fn the_landed_hit_result_lines_follow_the_section_11_1_census() {
+        // `combat.md` Section 11.1 publishes these strings verbatim for the
+        // first time. Monster target: "the result line is graded by the
+        // target's remaining HP against its class maximum", score 1
+        // `<target> critical!`, 2 `heavily wounded!`, 3 `lightly wounded!`,
+        // 4 `barely wounded!`, with "The quarter ... the class maximum
+        // divided by four with truncation".
+        //
+        // Corpser (class 45) carries a class maximum of 40, so the three
+        // thresholds are exactly 10, 20 and 30 and the boundaries need no
+        // truncation allowance.
+        let corpser = combat_class_stats(COMBAT_CLASS_CORPSER).unwrap();
+        assert_eq!(corpser.max_hp, 40);
+        for (remaining_hp, line) in [
+            (5u8, "Corpser critical!"),
+            (10, "Corpser heavily wounded!"),
+            (19, "Corpser heavily wounded!"),
+            (20, "Corpser lightly wounded!"),
+            (29, "Corpser lightly wounded!"),
+            (30, "Corpser barely wounded!"),
+            (40, "Corpser barely wounded!"),
+        ] {
+            let mut state = worked_bat_arena(&[(6, 5)], 0);
+            let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+            state.combat_actors[target_slot].owner_target_class = COMBAT_CLASS_CORPSER;
+            state.combat_actors[target_slot].hp_or_wound = remaining_hp;
+            assert_eq!(
+                crate::input_dispatch::combat_weapon_attack_result_message(
+                    &state,
+                    target_slot,
+                    landed_monster_target_attack(target_slot, COMBAT_CLASS_CORPSER, None),
+                )
+                .as_deref(),
+                Some(line),
+                "remaining {remaining_hp} of {}",
+                corpser.max_hp
+            );
+        }
+
+        // "Monster dies, vanish class | party attacker | `<monster>
+        // vanishes!` ... printed inside the damage handler, which then
+        // suppresses the kill line." Every other death arm prints
+        // "Target dies | both | `<target> killed!`".
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        state.combat_actors[target_slot].owner_target_class = COMBAT_CLASS_SHADOW_LORD;
+        assert!(
+            combat_class_traits(COMBAT_CLASS_SHADOW_LORD)
+                .unwrap()
+                .vanish_branch
+        );
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                target_slot,
+                landed_monster_target_attack(
+                    target_slot,
+                    COMBAT_CLASS_SHADOW_LORD,
+                    Some(CombatMonsterDeathPath::Vanish),
+                ),
+            ),
+            None,
+            "the vanish arm's own line stands alone"
+        );
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                target_slot,
+                landed_monster_target_attack(
+                    target_slot,
+                    COMBAT_CLASS_SHADOW_LORD,
+                    Some(CombatMonsterDeathPath::Incorporeal),
+                ),
+            )
+            .as_deref(),
+            Some("Shadow Lord killed!")
+        );
+
+        // Party target: "**A party member who takes a solid landed hit
+        // always reads the flat `<target> hit!`** - or `<target> dragged
+        // under!` when the attacker is a Corpser." The grading "never
+        // applies to a **party** target".
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let attacker_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        state.party[0].hp = 3;
+        state.party[0].max_hp = 60;
+        for (attacker_class, line) in [
+            (WORKED_BAT_CLASS, "Avatar hit!"),
+            (COMBAT_CLASS_CORPSER, "Avatar dragged under!"),
+        ] {
+            state.combat_actors[attacker_slot].owner_target_class = attacker_class;
+            assert_eq!(
+                crate::input_dispatch::combat_monster_attack_result_message(
+                    &state,
+                    CombatMonsterAttackApplication {
+                        attacker_slot,
+                        target_slot: 0,
+                        poison_status_outcome: None,
+                        resolution: Some(CombatWeaponAttackResolution::Hit {
+                            route: CombatWeaponAttackRangeRoute::Melee,
+                            raw_damage: 4,
+                        }),
+                        damage_application: Some(CombatWeaponDamageApplication::Party {
+                            target_slot: 0,
+                            damage: CombatPartyDamageOutcome {
+                                raw_damage: 4,
+                                applied_damage: 4,
+                                grazed: false,
+                                instant_kill: false,
+                                killed: false,
+                                status_before: b'G',
+                                status_after: b'G',
+                            },
+                        }),
+                    },
+                )
+                .as_deref(),
+                Some(line),
+                "a party target is never graded, whatever its remaining HP"
+            );
+        }
+    }
+
+    /// One landed, non-fatal ordinary hit on a monster in `target_slot`,
+    /// with the death path the caller wants when `killed` is implied by it.
+    fn landed_monster_target_attack(
+        target_slot: usize,
+        class: u8,
+        death_path: Option<CombatMonsterDeathPath>,
+    ) -> CombatWeaponAttackApplication {
+        CombatWeaponAttackApplication {
+            resolution: CombatWeaponAttackResolution::Hit {
+                route: CombatWeaponAttackRangeRoute::Melee,
+                raw_damage: 5,
+            },
+            damage_application: Some(CombatWeaponDamageApplication::Monster {
+                target_slot,
+                damage: CombatMonsterDamageOutcome {
+                    class,
+                    raw_damage: 5,
+                    applied_damage: 5,
+                    grazed: false,
+                    instant_kill: false,
+                    killed: death_path.is_some(),
+                    return_value: 5,
+                    death_path,
+                },
+                credited_experience: None,
+            }),
         }
     }
 
@@ -1750,6 +2026,65 @@
             state.prng_state, prng_before,
             "bare hands and a zero defence rating draw nothing"
         );
+
+        // `combat.md` Section 11.1 "Order, stated once" puts damage
+        // application at step 4, after the to-hit. It is one roller running
+        // "in two stages", so a swing that misses reaches neither stage:
+        // both draws or neither, never one of them. A Halberd (`Attack max`
+        // 30) against a defence-7 party member would spend both on a hit.
+        let landing = combat_equipment_weapon_attack_input(
+            34,
+            1,
+            WORKED_AVATAR_DEXTERITY,
+            bat.speed_seed,
+            CHARACTER_DEFENSE_FACTORY_SEED,
+            0,
+            0,
+            0,
+            Some(true),
+        )
+        .expect("the halberd row resolves");
+        assert!(combat_weapon_attack_takes_damage_draw(landing));
+        assert!(combat_weapon_attack_takes_defence_draw(landing));
+        let missing = CombatWeaponAttackInput {
+            forced_hit: Some(false),
+            ..landing
+        };
+        assert!(
+            !combat_weapon_attack_takes_damage_draw(missing),
+            "a missed swing must not spend the stage-one draw"
+        );
+        assert!(
+            !combat_weapon_attack_takes_defence_draw(missing),
+            "a missed swing must not spend the stage-two draw"
+        );
+
+        // And through the production entry point: a swing the to-hit
+        // rejects advances the shared stream by nothing beyond the to-hit
+        // draw the caller already made.
+        let mut missing_state = worked_bat_arena(&[(6, 5)], 0);
+        missing_state.party_equipment = default_party_equipment(1);
+        missing_state.party_equipment[0][EQUIP_SLOT_WEAPON] = 34;
+        let prng_before = missing_state.prng_state;
+        let missed = missing_state
+            .apply_combat_player_command_with_attack_inputs(
+                0,
+                CombatPlayerCommandInput::AttackDirection(2),
+                CombatPlayerWeaponAttackInputs {
+                    damage_roll: None,
+                    hit_raw_roll_0_to_60: 0,
+                    forced_hit: Some(false),
+                },
+            )
+            .expect("the attack command resolves");
+        assert!(matches!(
+            missed.weapon_attack.map(|attack| attack.resolution),
+            Some(CombatWeaponAttackResolution::Miss { .. })
+        ));
+        assert_eq!(
+            missing_state.prng_state, prng_before,
+            "a missed party swing spends no damage-roller draw"
+        );
     }
 
     #[test]
@@ -1825,9 +2160,34 @@
             COMBAT_GLASS_SWORD_SHATTER_LINE,
             "Thy sword hath shattered!"
         );
-        // `catalogs/item-list.md`: "the Jeweled Sword ... delivers no
-        // ordinary attack damage at all".
+        // `combat.md` Section 11.1 census: the shatter line is "printed
+        // **inside** the damage roll, so it lands between the hit newline
+        // and the result line", and the result line for a dead target is
+        // "Target dies | both | `<target> killed!`". Both lines print, in
+        // that order; this target's class takes the special-tile death
+        // transition rather than the vanish branch, which is the one arm
+        // that suppresses the kill line.
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                target_slot,
+                application,
+            )
+            .as_deref(),
+            Some("Thy sword hath shattered!\nGargoyle killed!")
+        );
+
+        // `combat.md` Section 12: the Jeweled Sword override "forces the
+        // raw value to `0` whatever its table entry says" - a raw value,
+        // not a zero-damage row - and only the sentinel returns "**before
+        // the defender's defence byte is read**". The swing therefore
+        // still enters the roller and lands on Section 11.1's zero-or-
+        // negative arm: `<target> grazed!` and no HP change. This Bat's
+        // class defense byte is `0`, so stage two takes no draw and the
+        // raw value reaches the endpoint as a bare zero.
         let mut untouched = worked_bat_arena(&[(6, 5)], 0);
+        let hp_before = untouched.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound;
+        let prng_before = untouched.prng_state;
         let jewelled = untouched
             .resolve_and_apply_combat_equipment_weapon_attack(
                 EQUIPMENT_JEWELED_SWORD,
@@ -1843,9 +2203,36 @@
             .expect("the Jeweled Sword still resolves");
         assert_eq!(
             jewelled.resolution,
-            CombatWeaponAttackResolution::NoOrdinaryDamage {
+            CombatWeaponAttackResolution::Hit {
                 route: CombatWeaponAttackRangeRoute::Melee,
+                raw_damage: 0,
             }
         );
-        assert!(jewelled.damage_application.is_none());
+        assert!(
+            matches!(
+                jewelled.damage_application,
+                Some(CombatWeaponDamageApplication::Monster { damage, .. })
+                    if damage.grazed && damage.applied_damage == 0 && !damage.killed
+            ),
+            "a forced-zero raw value grazes: {:?}",
+            jewelled.damage_application
+        );
+        assert_eq!(
+            untouched.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound,
+            hp_before,
+            "a graze costs no HP"
+        );
+        assert_eq!(
+            untouched.prng_state, prng_before,
+            "a zero defence rating takes no draw, and the override runs before stage one's"
+        );
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &untouched,
+                COMBAT_PARTY_ACTOR_SLOTS,
+                jewelled,
+            )
+            .as_deref(),
+            Some("Bat grazed!")
+        );
     }
