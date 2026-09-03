@@ -290,6 +290,10 @@ pub const COMBAT_CLASS_DAEMON: u8 = 38;
 /// target, attacker is a **Corpser** (class 45) | monster attacker |
 /// `<target> dragged under!` in place of `hit!`".
 pub const COMBAT_CLASS_CORPSER: u8 = 45;
+/// `catalogs/monster-bestiary.md §2` Troll row: an ordinary hostile
+/// class with no special-death, poison or gaze trait, whose flat attack
+/// byte (`15`) clears every defence rating below it outright.
+pub const COMBAT_CLASS_TROLL: u8 = 41;
 /// `catalogs/monster-bestiary.md §2`: Dragon (39) follows Daemon
 /// (38) consecutively. Anchor DRAGON to DAEMON + 1.
 pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;

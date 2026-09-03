@@ -854,11 +854,22 @@
         // creature: `§16.1` "Controlled/charmed bit on an ordinary monster
         // descriptor" resolves to "Group 0", so it is a legal target for the
         // group-1 attacker beside it.
+        // The attacker's flat attack byte has to clear the Shadow Lord's
+        // defence rating outright. `combat.md §12`: the roller "subtracts
+        // an inclusive `1..rating` draw" against a non-zero rating, and the
+        // Shadow Lord's class defence is `10`; a Giant Rat's attack byte of
+        // `6` therefore grazes on any draw of six or more, which makes this
+        // case a hostage of wherever the shared stream happens to stand.
+        // A Troll's `15` clears `10` for every draw the rating can produce,
+        // so the vanish kill this test is about holds whatever the stream
+        // does. (It became load-bearing when the arena animator started
+        // spending one coin per animated arena record in the round-loop
+        // entry prologue, moving this draw four steps along.)
         state.combat_actors[8] = CombatActorDescriptor::from_row([
             10,
             1,
             COMBAT_ACTOR_FLAG_SELECTABLE_40,
-            COMBAT_CLASS_GIANT_RAT,
+            COMBAT_CLASS_TROLL,
             8,
             1,
             6,
