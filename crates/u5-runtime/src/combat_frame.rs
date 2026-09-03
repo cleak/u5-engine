@@ -1971,8 +1971,9 @@ impl PlayState {
     /// explicit arena X/Y" only while its gate is raised. The gate and the
     /// coordinate are two different bytes with two different lifetimes -
     /// "the marker is on screen **if and only if an arena targeting cursor
-    /// is currently open**", while the coordinate itself "is never cleared"
-    /// - so the painting pass asks for the pair through this gated view and
+    /// is currently open**", while the coordinate itself "is never
+    /// cleared" - so the painting pass asks for the pair through this
+    /// gated view and
     /// the confirm-path consumers read
     /// [`PlayState::combat_aim_marker_cell`] directly.
     pub fn combat_secondary_marker(&self) -> Option<(u8, u8)> {
@@ -8514,11 +8515,11 @@ impl PlayState {
                 // empty-cell confirm there also leaves the previous value.
                 // An engine that clears on every confirmation, or on cancel,
                 // diverges on the very next turn's cursor seed."
-                if !session.melee_arm && target_slot.is_none() {
-                    if let Some(entry) = self.combat_remembered_targets.get_mut(session.actor_slot)
-                    {
-                        *entry = None;
-                    }
+                if !session.melee_arm
+                    && target_slot.is_none()
+                    && let Some(entry) = self.combat_remembered_targets.get_mut(session.actor_slot)
+                {
+                    *entry = None;
                 }
                 let attack = target_slot.and_then(|target_slot| {
                     // `combat.md §8.2`: "**Written only on a confirm that
