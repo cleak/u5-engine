@@ -2576,7 +2576,7 @@ fn save_calendar_offsets_chain_month_through_ampm() {
     assert_eq!(SAVE_MINUTE_OFFSET, 0x02db);
     assert_eq!(SAVE_COMBAT_ROUND_COUNTER_OFFSET, 0x02dc);
     assert_eq!(SAVE_PER_TURN_STATE_OFFSET, 0x02dd);
-    assert_eq!(SAVE_AMPM_DISPLAY_OFFSET, 0x02de);
+    assert_eq!(SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET, 0x02de);
 }
 
 #[test]
@@ -16880,15 +16880,24 @@ fn sky_strip_renders_only_for_surface_and_town_family() {
 }
 
 #[test]
-fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
-    // `moons.md §3`: "below the surface, nothing is drawn, nothing is
-    // erased, and **nothing is cached**, exactly as for combat and
-    // dungeon scenes." The strip's only caller is the hour-change hook
-    // of the per-turn cleanup, "whose own gate already excludes a party
-    // Z with the high bit set (`systems/time.md` Section 5)". A cache
-    // written underground is therefore a cache the original never
-    // writes - and `moons.md §5` warns consumers not to infer "no
-    // phase" from "not drawn", so a stale-vs-fresh cache is observable.
+fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not() {
+    // Two predicates, two gates. `time.md §5`, hour-change bundle item 2:
+    // "If the active scene is in the surface/town-family range and the
+    // party is not at dungeon depth, the engine refreshes the sky strip
+    // in the top viewport border." That floor test belongs to the
+    // hour-change hook alone - `RETRACTIONS.md` R343: the renderer has
+    // several callers and "only one of them - the hour-change hook of the
+    // per-turn cleanup - carries a gate that excludes a party Z with the
+    // high bit set. The overworld and town-family scene-entry callers
+    // carry no such gate, so a below-surface entry (the Underworld plane,
+    // or a basement floor inside a town-family location) can reach the
+    // painter."
+    //
+    // R343 also withdraws the negative this test used to quote: "no
+    // negative about what is drawn, erased or cached below the surface is
+    // supported". So the below-surface rows below assert only the shape of
+    // the *hour hook's* published gate, and each is paired with the
+    // scene-entry caller, which does cache there.
     let sentinel = [0xAA, 0xBB];
 
     // Surface overworld: the hook runs and the cache is written.
@@ -16907,7 +16916,8 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
         "a surface hour change must refresh the cache"
     );
 
-    // Underworld plane - party Z has its high bit set.
+    // Underworld plane - party Z has its high bit set, so the hour hook's
+    // own gate excludes it. Scene entry into the same plane does not.
     let mut underworld = world_state(open_world_grid(), 5, 5);
     underworld.area = Area::World {
         plane: WorldPlane::Underworld,
@@ -16918,10 +16928,18 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
     underworld.refresh_cached_moon_glyphs();
     assert_eq!(
         underworld.cached_moon_glyph_bytes, sentinel,
-        "the underworld plane must not reach the strip, so nothing is cached"
+        "the hour hook's floor gate excludes a high-bit party Z"
+    );
+    assert!(underworld.sky_strip_scene_entry_refresh_runs());
+    underworld.refresh_cached_moon_glyphs_at_scene_entry();
+    assert_eq!(
+        underworld.cached_moon_glyph_bytes, surface_cache,
+        "an Underworld scene entry carries no floor gate and still caches"
     );
 
-    // Dungeon scene - excluded by the scene-range half of the gate.
+    // Dungeon scene - excluded from both callers by the scene class.
+    // `moons.md §2.2`: scenes outside the surface/town family "never reach
+    // the renderer at all. Nothing is drawn and nothing is cached."
     let mut dungeon = world_state(open_world_grid(), 5, 5);
     dungeon.area = Area::Dungeon {
         scene: DungeonScene::new(FIRST_DUNGEON_SCENE_BYTE).unwrap(),
@@ -16930,13 +16948,16 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
     dungeon.clock = GameClock::new(11, 0).unwrap();
     dungeon.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
     assert!(!dungeon.sky_strip_hour_refresh_runs());
+    assert!(!dungeon.sky_strip_scene_entry_refresh_runs());
     dungeon.refresh_cached_moon_glyphs();
+    dungeon.refresh_cached_moon_glyphs_at_scene_entry();
     assert_eq!(
         dungeon.cached_moon_glyph_bytes, sentinel,
-        "a dungeon scene must not reach the strip, so nothing is cached"
+        "a dungeon scene never reaches the renderer, so nothing is cached"
     );
 
-    // Town basement - a below-entry floor sets the Z high bit too.
+    // Town basement - a below-entry floor sets the Z high bit too, so the
+    // hour hook skips it and the scene-entry caller does not.
     let mut basement = world_state(open_world_grid(), 5, 5);
     basement.area = Area::Town {
         scene: Scene::new(13).unwrap(),
@@ -16948,10 +16969,16 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
     basement.refresh_cached_moon_glyphs();
     assert_eq!(
         basement.cached_moon_glyph_bytes, sentinel,
-        "a below-entry town floor must not reach the strip"
+        "the hour hook's floor gate excludes a below-entry town floor"
+    );
+    assert!(basement.sky_strip_scene_entry_refresh_runs());
+    basement.refresh_cached_moon_glyphs_at_scene_entry();
+    assert_eq!(
+        basement.cached_moon_glyph_bytes, surface_cache,
+        "a basement scene entry carries no floor gate and still caches"
     );
 
-    // The same town at ground level does reach it.
+    // The same town at ground level reaches both callers.
     let mut ground = world_state(open_world_grid(), 5, 5);
     ground.area = Area::Town {
         scene: Scene::new(13).unwrap(),
@@ -16960,6 +16987,7 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
     ground.clock = GameClock::new(11, 0).unwrap();
     ground.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
     assert!(ground.sky_strip_hour_refresh_runs());
+    assert!(ground.sky_strip_scene_entry_refresh_runs());
     ground.refresh_cached_moon_glyphs();
     assert_eq!(ground.cached_moon_glyph_bytes, surface_cache);
 }
@@ -19091,10 +19119,6 @@ fn moon_glyph_tables_match_published_day_index() {
     );
     assert_eq!(moonstone_slot_from_glyph_byte(b'8'), None);
     assert_eq!(moonstone_slot_from_glyph_byte(b'/'), None);
-    assert_eq!(
-        MOON_GLYPH_CACHE_NO_GATE,
-        [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL]
-    );
 }
 
 #[test]
@@ -20771,7 +20795,7 @@ fn save_calendar_offsets_and_bounds_match_spec() {
     assert_eq!(SAVE_MINUTE_OFFSET, 0x02DB);
     assert_eq!(SAVE_COMBAT_ROUND_COUNTER_OFFSET, 0x02DC);
     assert_eq!(SAVE_PER_TURN_STATE_OFFSET, 0x02DD);
-    assert_eq!(SAVE_AMPM_DISPLAY_OFFSET, 0x02DE);
+    assert_eq!(SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET, 0x02DE);
     // Bounds
     assert_eq!(SAVE_MONTH_MIN, 1);
     assert_eq!(SAVE_MONTH_MAX, 13);

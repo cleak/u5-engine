@@ -751,6 +751,10 @@ fn world_load_from_save_uses_live_active_object_table() {
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
         cleanup_previous_hour: 0,
+        twelve_hour_audio_repeats: 0,
+        // `formats/saved-gam.md §5.1` factory seed: both bytes zero.
+        cached_moon_glyph_bytes: [0, 0],
+        ambient_light: 0,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),
@@ -864,6 +868,10 @@ fn world_load_reports_current_wind_status_through_the_banner_not_the_message() {
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
         cleanup_previous_hour: 0,
+        twelve_hour_audio_repeats: 0,
+        // `formats/saved-gam.md §5.1` factory seed: both bytes zero.
+        cached_moon_glyph_bytes: [0, 0],
+        ambient_light: 0,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),

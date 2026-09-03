@@ -444,6 +444,29 @@ impl PlayState {
         self.relink_npc_objects();
     }
 
+    /// The preserving town-family entry of `town-mode.md §5` — the mode
+    /// "Journey Onward into a town-family scene passes", and the mode this
+    /// engine reaches whenever the save image carried an active-object
+    /// table.
+    ///
+    /// `RETRACTIONS.md` R341: that mode "suppresses far more than the slot
+    /// clear: the `.NPC` roster load, the runtime-state initialisation from
+    /// the hour, the clear of records one through thirty-one **and** the
+    /// whole NPC reseat", because "the entire NPC runtime family ... lies
+    /// **inside the 4192-byte save image**". So the live cast is exactly
+    /// what the restored active-object table holds: a roster slot that
+    /// matches no restored record is not seated, and "the location stays
+    /// empty for any number of turns that create no loose object, because
+    /// the per-tick NPC walker skips every roster slot whose type byte is
+    /// zero and the type array was never loaded".
+    ///
+    /// The roster is still parsed here, because this engine does not yet
+    /// persist the `0x07B4..0x105F` band that carries the schedule table,
+    /// the dialogue indices and the per-NPC runtime block
+    /// (`formats/saved-gam.md §12`). Matching the restored records against
+    /// the roster is how a resumed NPC keeps its schedule and its
+    /// conversation; the records themselves, not the hour, decide who is
+    /// present and where they stand.
     pub fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
         let removed = self.removed_town_npc_mask_for_current_scene();
         self.npcs = effective_npc_slots(slots)
@@ -463,6 +486,25 @@ impl PlayState {
             .collect();
         self.apply_persisted_town_npc_mutations();
         self.link_npcs_to_existing_active_objects();
+        // No reseat. `RETRACTIONS.md` R341: on a preserving entry "the
+        // location stays empty for any number of turns that create no
+        // loose object, because the per-tick NPC walker skips every roster
+        // slot whose type byte is zero and the type array was never
+        // loaded" - so a roster slot **on this floor** that the restored
+        // table does not carry is not part of the resumed cast and must
+        // not be seated by the next turn's walker.
+        //
+        // An *off-floor* roster slot is left alone: `town-mode.md §5`
+        // step 5 has off-floor NPCs existing "only in the schedule
+        // tables", which is exactly an unseated roster entry, and
+        // `formats/saved-gam.md §12` says the band a save carries is the
+        // whole cast. Dropping those would discard schedule rows the
+        // original keeps.
+        if let Area::Town { floor, .. } = self.area {
+            let floor_byte = floor as u8;
+            self.npcs
+                .retain(|npc| npc.active_object.is_some() || npc.z != floor_byte);
+        }
     }
 
     fn apply_persisted_town_npc_mutations(&mut self) {
@@ -518,41 +560,63 @@ impl PlayState {
         was_clear
     }
 
+    /// Seat the resumed cast on the records the save image restored.
+    ///
+    /// `RETRACTIONS.md` R341 / `active-objects.md §11`: a preserving
+    /// town-family entry runs neither "the runtime-state initialisation
+    /// from the hour" nor "the whole NPC reseat", so loading "restores the
+    /// cast **exactly as it stood at the save**, mid-route positions and
+    /// queued paths included - it does not snap NPCs back to their
+    /// scheduled waypoint". The record is therefore the authority for a
+    /// resumed NPC's position, and the schedule is only what it will walk
+    /// toward next.
+    ///
+    /// The pairing is by tile class and floor, taking roster slots in
+    /// order. The original pairs them through the NPC's linked-slot field
+    /// inside the `0x07B4..0x105F` band (`formats/saved-gam.md §12`), which
+    /// this engine does not persist yet; two roster slots of the same class
+    /// on one floor can therefore swap schedules across a save, which the
+    /// original does not do.
+    ///
+    /// The floor is compared in the save image's own signed encoding
+    /// (`formats/saved-gam.md §6`, party Z: "`0x00` is the entry floor,
+    /// positive values are storeys above it, `0xFF` is a basement"), and
+    /// the runtime NPC's own floor byte is the unsigned view of the same
+    /// value, which is the convention [`Self::relink_npc_objects`] already
+    /// uses. A basement therefore pairs like any other floor; an earlier
+    /// `floor < 0` early return here left basement records permanently
+    /// unpaired.
     pub fn link_npcs_to_existing_active_objects(&mut self) {
         let Area::Town { floor, .. } = self.area else {
             return;
         };
-        if floor < 0 {
-            return;
-        }
-        let floor = floor as u8;
+        let floor_byte = floor as u8;
         let mut claimed = vec![false; self.active_objects.len()];
         for index in 0..self.npcs.len() {
-            if let Some(slot) = self.match_existing_npc_active_object(index, floor, &claimed) {
-                self.npcs[index].active_object = Some(slot);
-                claimed[slot] = true;
-            }
+            let type_byte = self.npcs[index].type_byte;
+            let seat = self
+                .active_objects
+                .iter()
+                .copied()
+                .enumerate()
+                .skip(1)
+                .find(|(slot, object)| {
+                    !claimed.get(*slot).copied().unwrap_or(false)
+                        && !object.is_empty()
+                        && object.type_byte == type_byte
+                        && object.z == floor
+                });
+            let Some((slot, object)) = seat else {
+                self.npcs[index].active_object = None;
+                continue;
+            };
+            claimed[slot] = true;
+            let npc = &mut self.npcs[index];
+            npc.active_object = Some(slot);
+            npc.x = object.x;
+            npc.y = object.y;
+            npc.z = floor_byte;
         }
-    }
-
-    pub fn match_existing_npc_active_object(
-        &self,
-        npc_index: usize,
-        floor: u8,
-        claimed: &[bool],
-    ) -> Option<usize> {
-        let npc = self.npcs.get(npc_index)?;
-        self.active_objects
-            .iter()
-            .copied()
-            .enumerate()
-            .skip(1)
-            .find_map(|(slot, object)| {
-                if claimed.get(slot).copied().unwrap_or(false) {
-                    return None;
-                }
-                active_object_matches_runtime_npc(object, npc, floor).then_some(slot)
-            })
     }
 
     pub fn sync_npc_active_object(&mut self, index: usize, floor: u8) -> bool {

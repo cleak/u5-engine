@@ -236,22 +236,31 @@ impl PlayState {
         // detect hour crossings", and `time.md §2` has it "taken at the start
         // of every cleanup pass".
         save[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET] = self.cleanup_previous_hour;
-        // `SAVE_AMPM_DISPLAY_OFFSET` (`0x02DE`) is deliberately NOT written
-        // here. `time.md §2` has "a 12-hour display hour, recomputed whenever
-        // the hour changes", and `time.md §11` tabulates `0x02DE` as the
-        // "twelve-hour display value recomputed on hour changes" — but the same
-        // section settles what a save writer should do with it: "Only `0x02CE`,
-        // `0x02D7`, `0x02D8`, `0x02D9`, and `0x02DB` are the canonical calendar
-        // fields. The derived and adjacent bytes are still persistent engine
-        // state, so compatibility implementations should round-trip them rather
-        // than regenerating the whole span from the calendar alone." `0x02DE` is
-        // a derived byte, so it round-trips out of the save template instead of
-        // being regenerated from the live clock. The DOS build agrees: driving
-        // the original from a save whose byte is zero and saving again leaves it
-        // zero after no turns, after four turns that carried 08:59 to 09:03
-        // across an hour boundary, and after a sixteen-move session. Deriving it
-        // at save time was the only clock byte this engine changed on a
-        // no-action load-and-save.
+        // `formats/saved-gam.md §5` / `time.md §11` (spec `0170809`):
+        // `0x02DE` is the "Twelve-hour hour value / audio repeat countdown",
+        // "written with the twelve-hour form of the hour when the cleanup
+        // finds the snapshot at `0x02DA` disagreeing with the hour at
+        // `0x02D9`, then counted down toward zero by the ambient-audio
+        // tick". `RETRACTIONS.md` R338 withdraws the old "12-hour display"
+        // reading this engine used to justify a blind template round trip:
+        // the value rule survives but the byte is live state, so it is
+        // flushed from the counter the clock and the audio tick maintain.
+        // The DOS build's zero on a no-turn load-and-save and on a
+        // four-turn 08:59 -> 09:03 session is what the write-then-decay
+        // pair produces once any idle world ticks have run.
+        save[SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET] = self.twelve_hour_audio_repeats;
+        // `formats/saved-gam.md §5.1` (spec `0170809`): the cached Trammel
+        // and Felucca moon-phase digits, "gameplay state, not scratch" -
+        // "natural-moongate transit selects its destination from these two
+        // cached bytes and from nothing else".
+        save[SAVE_CACHED_TRAMMEL_GLYPH_OFFSET] = self.cached_moon_glyph_bytes[0];
+        save[SAVE_CACHED_FELUCCA_GLYPH_OFFSET] = self.cached_moon_glyph_bytes[1];
+        // `formats/saved-gam.md §10` (spec `0170809`): the ambient light
+        // level, "recomputed by **every** clock call including the mode-zero
+        // ... call that scene entry issues". The shipped seed's `5` "is a
+        // stale sample the first clock call overwrites", so a save taken
+        // after entry carries the recomputed value, not the template's.
+        save[SAVE_AMBIENT_LIGHT_OFFSET] = self.ambient_light;
         write_u16_at(&mut save, SAVE_FOOD_STOCK_OFFSET, self.food);
         write_u16_at(&mut save, SAVE_GOLD_STOCK_OFFSET, self.gold);
         save[SAVE_KEY_STOCK_OFFSET] = self.keys;
@@ -339,6 +348,23 @@ impl PlayState {
         // second write here - one used to clobber the Glass Sword counter.
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
+        // `formats/saved-gam.md §10` / `town-mode.md §5` step 6 (spec
+        // `0170809`): `0x03B2` is the resident-Shadowlord selector, "a
+        // **per-entry latch, not durable world state**". Town-family entry
+        // stores `0xFF` unconditionally - the write "sits after the
+        // entry-mode guard", so it happens on preserving re-entries too -
+        // and the install helper replaces it with an index only in a
+        // hosting location. "A byte-compatible producer emits `0xFF` for
+        // any save taken inside a location; a save tool should preserve
+        // whatever it finds", so a save taken outside one leaves the
+        // template byte alone. The factory seed's `0` is "a stale,
+        // semantically wrong value".
+        if matches!(self.area, Area::Town { .. }) {
+            save[SAVE_RESIDENT_SHADOWLORD_OFFSET] = self
+                .resident_shadowlord
+                .and_then(|index| u8::try_from(index).ok())
+                .unwrap_or(SAVE_RESIDENT_SHADOWLORD_NONE);
+        }
         encode_npc_mask_bank(
             &mut save,
             SAVE_NPC_REMOVED_MASKS_OFFSET,
@@ -668,6 +694,8 @@ impl PlayState {
             clock: options.clock,
             status_pass_previous_hour: options.clock.hour,
             cleanup_previous_hour: options.cleanup_previous_hour,
+            twelve_hour_audio_repeats: options.twelve_hour_audio_repeats,
+            ambient_audio_sub_tick: 0,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two
@@ -713,8 +741,15 @@ impl PlayState {
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
             pending_town_active_object_pass: false,
-            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
-                .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
+            // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
+            // restored from `0x02DF`/`0x02E0` and then rewritten by the
+            // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
+            // scene-entry callers are also the mechanism by which the
+            // cached glyph digits are refreshed on a **Journey Onward**".
+            // In a scene outside the surface/town family the renderer is
+            // never reached at all (`moons.md §2.2`: "Nothing is drawn and
+            // nothing is cached"), so there the restored bytes stand.
+            cached_moon_glyph_bytes: options.cached_moon_glyph_bytes,
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -755,7 +790,7 @@ impl PlayState {
             torches: options.torches,
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
-            ambient_light: 0,
+            ambient_light: options.ambient_light,
             light_beacon: LightBeaconState {
                 sources: beacon_sources,
                 bearing: BEACON_INITIAL_BEARING,
@@ -876,6 +911,14 @@ impl PlayState {
                 ));
             }
         }
+        // `moons.md §3` / `RETRACTIONS.md` R343: the moon-phase
+        // status-strip renderer runs on "every overworld scene entry,
+        // every town-family scene entry" and rewrites both cached
+        // glyph digits from the day-of-month before it decides whether
+        // either glyph is on screen. The scene-entry callers "carry no
+        // such gate" as the hour-change hook's floor test, so a basement
+        // or Underworld entry refreshes the pair too.
+        state.refresh_cached_moon_glyphs_at_scene_entry();
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
         state.append_stonegate_entry_presentation_message();
@@ -978,6 +1021,8 @@ impl PlayState {
             clock: options.clock,
             status_pass_previous_hour: options.clock.hour,
             cleanup_previous_hour: options.cleanup_previous_hour,
+            twelve_hour_audio_repeats: options.twelve_hour_audio_repeats,
+            ambient_audio_sub_tick: 0,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two
@@ -1023,8 +1068,15 @@ impl PlayState {
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
             pending_town_active_object_pass: false,
-            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
-                .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
+            // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
+            // restored from `0x02DF`/`0x02E0` and then rewritten by the
+            // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
+            // scene-entry callers are also the mechanism by which the
+            // cached glyph digits are refreshed on a **Journey Onward**".
+            // In a scene outside the surface/town family the renderer is
+            // never reached at all (`moons.md §2.2`: "Nothing is drawn and
+            // nothing is cached"), so there the restored bytes stand.
+            cached_moon_glyph_bytes: options.cached_moon_glyph_bytes,
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -1065,7 +1117,7 @@ impl PlayState {
             torches: options.torches,
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
-            ambient_light: 0,
+            ambient_light: options.ambient_light,
             light_beacon: LightBeaconState {
                 sources: [None; BEACON_SOURCE_SLOTS],
                 bearing: BEACON_INITIAL_BEARING,
@@ -1315,6 +1367,8 @@ impl PlayState {
             clock: options.clock,
             status_pass_previous_hour: options.clock.hour,
             cleanup_previous_hour: options.cleanup_previous_hour,
+            twelve_hour_audio_repeats: options.twelve_hour_audio_repeats,
+            ambient_audio_sub_tick: 0,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two
@@ -1360,8 +1414,15 @@ impl PlayState {
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
             pending_town_active_object_pass: false,
-            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(options.clock.day)
-                .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
+            // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
+            // restored from `0x02DF`/`0x02E0` and then rewritten by the
+            // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
+            // scene-entry callers are also the mechanism by which the
+            // cached glyph digits are refreshed on a **Journey Onward**".
+            // In a scene outside the surface/town family the renderer is
+            // never reached at all (`moons.md §2.2`: "Nothing is drawn and
+            // nothing is cached"), so there the restored bytes stand.
+            cached_moon_glyph_bytes: options.cached_moon_glyph_bytes,
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -1402,7 +1463,7 @@ impl PlayState {
             torches: options.torches,
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
-            ambient_light: 0,
+            ambient_light: options.ambient_light,
             light_beacon: LightBeaconState {
                 sources: beacon_sources,
                 bearing: BEACON_INITIAL_BEARING,
@@ -1502,6 +1563,14 @@ impl PlayState {
         };
         state.sync_player_object();
         state.cache_current_world_overlay();
+        // `moons.md §3` / `RETRACTIONS.md` R343: the moon-phase
+        // status-strip renderer runs on "every overworld scene entry,
+        // every town-family scene entry" and rewrites both cached
+        // glyph digits from the day-of-month before it decides whether
+        // either glyph is on screen. The scene-entry callers "carry no
+        // such gate" as the hour-change hook's floor test, so a basement
+        // or Underworld entry refreshes the pair too.
+        state.refresh_cached_moon_glyphs_at_scene_entry();
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
         Ok(state)

@@ -315,23 +315,31 @@ pub const STEADY_PHASE: u8 = 0x0f;
 /// Phase byte (`+0x06`) the player's own active-object record
 /// carries in slot zero.
 ///
-/// Runtime observation, spec silent on the value: `formats/saved-gam.md
-/// §8.1` and `active-objects.md §3` publish the field but never say what
-/// the player's record seeds it with, and `active-objects.md §5` scopes
-/// the per-frame refresh of slot zero to "bytes 0..4 of slot zero from
-/// the world-state globals", which does not include byte 6. Driving the
-/// DOS build from the shipped save and saving again — with no turns, and
-/// again after four turns across an hour boundary — leaves the slot-zero
-/// record as `1C 1C 0F 0F 00 00 00 00`: the original holds zero here, not
-/// the steady marker.
+/// `formats/saved-gam.md §8.1` (spec `0170809`): "A byte-compatible
+/// producer must not write a facing here — in particular, the player's
+/// own record carries **zero** in this byte in a shipped save, not the
+/// all-ones freeze marker." `RETRACTIONS.md` R340 states the same as the
+/// withdrawal: "the **player's own record carries zero in byte 6 in a
+/// shipped save, not the freeze sentinel**, and an engine that writes the
+/// sentinel there diverges on every save."
 ///
-/// The published readers of the byte both pass slot zero over: the town
-/// object walker's eligibility row in `systems/town-mode.md §16` skips
-/// "the avatar's slot-zero record", and `active-objects.md §8` has the
-/// outdoor per-turn walker "skip slot zero". That section's resident
-/// frame animator does walk "from slot zero to slot thirty-one", so this
-/// seed is not provably inert from the spec alone — it is inert in this
-/// engine, whose two `tick_phase` loops start at slot one.
+/// The byte is not a facing and never was. `active-objects.md §3`: the
+/// low nibble is a frame-delay countdown whose all-ones value is the
+/// freeze sentinel, the high nibble is "the slot's step within its
+/// **animation script**", and byte 6 "carries **no facing and no
+/// direction of any kind**".
+///
+/// Why zero survives a save is also published, and it is not the tile
+/// class: "a low nibble in `1..14` is **decremented and written back
+/// unconditionally, with no tile-class precondition, on any slot
+/// including slot zero**, and only a low nibble of zero reaches the
+/// frame-byte and tile-class gates. Slot zero's byte 6 survives a shipped
+/// save because of its stored **value**, not because the player's tile
+/// class protects the record."
+///
+/// The DOS build agrees: driving it from the shipped save and saving
+/// again — with no turns, and again after four turns across an hour
+/// boundary — leaves the slot-zero record as `1C 1C 0F 0F 00 00 00 00`.
 pub const PLAYER_ACTIVE_OBJECT_PHASE: u8 = 0x00;
 /// `systems/weather.md §7`: "The cadence counter is stored per
 /// active-object slot ... The cadence counter is persisted with the
@@ -436,9 +444,31 @@ pub const SAVE_SAVED_HOUR_SNAPSHOT_OFFSET: usize = SAVE_HOUR_OFFSET + 1;
 pub const SAVE_MINUTE_OFFSET: usize = SAVE_SAVED_HOUR_SNAPSHOT_OFFSET + 1;
 pub const SAVE_COMBAT_ROUND_COUNTER_OFFSET: usize = SAVE_MINUTE_OFFSET + 1;
 /// `formats/saved-gam.md §5` adjacent per-turn state byte; preserve
-/// byte-for-byte but no public calendar meaning.
+/// byte-for-byte but no public calendar meaning. `systems/time.md §11`
+/// names it: "It is the cached wind-cadence byte, and the wind setter
+/// clears it whenever the wind actually changes".
 pub const SAVE_PER_TURN_STATE_OFFSET: usize = SAVE_COMBAT_ROUND_COUNTER_OFFSET + 1;
-pub const SAVE_AMPM_DISPLAY_OFFSET: usize = SAVE_PER_TURN_STATE_OFFSET + 1;
+/// `formats/saved-gam.md §5` (spec `0170809`): "Twelve-hour hour value /
+/// audio repeat countdown ... Written with the twelve-hour form of the
+/// hour when the cleanup finds the snapshot at `0x02DA` disagreeing with
+/// the hour at `0x02D9`, then counted down toward zero by the
+/// ambient-audio tick. Nothing renders it."
+///
+/// The earlier name `SAVE_AMPM_DISPLAY_OFFSET` is withdrawn with the
+/// "12-hour display" reading itself: `RETRACTIONS.md` R338 keeps the
+/// value rule but withdraws the word *display*, "because no consumer in
+/// the shipped game renders this byte".
+pub const SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET: usize = SAVE_PER_TURN_STATE_OFFSET + 1;
+/// `formats/saved-gam.md §5.1` (spec `0170809`): "The two bytes at
+/// `0x02DF` and `0x02E0` are the cached Trammel and Felucca moon-phase
+/// digits for the current day of the month, in that order", each "stored
+/// as the printable character for a digit in the range zero through
+/// seven". `RETRACTIONS.md` R339 lifts them out of the old
+/// "food gauge / mode scratch" band: "**They are gameplay state, not
+/// scratch.** Natural-moongate transit selects its destination from these
+/// two cached bytes and from nothing else".
+pub const SAVE_CACHED_TRAMMEL_GLYPH_OFFSET: usize = SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET + 1;
+pub const SAVE_CACHED_FELUCCA_GLYPH_OFFSET: usize = SAVE_CACHED_TRAMMEL_GLYPH_OFFSET + 1;
 /// `formats/saved-gam.md §5`: in-game calendar bounds. Months are
 /// one-based 1..=13 (thirteen 28-day months per year), days are
 /// one-based 1..=28, hours are zero-based 0..=23, minutes 0..=59.
@@ -535,6 +565,34 @@ pub const SAVE_PENDING_VEHICLE_X_OFFSET: usize = SAVE_DOOR_TRACKER_COUNTDOWN_OFF
 /// `formats/saved-gam.md §10`: queued shipwright-delivery Y coordinate.
 pub const SAVE_PENDING_VEHICLE_Y_OFFSET: usize = 0x03AE;
 pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;
+/// `formats/saved-gam.md §10` (spec `0170809`): "`0x02FE` is the master
+/// redraw-enable gate: while it is zero the idle world tick skips its
+/// whole body, which suppresses the ambient-audio tick, the autonomous
+/// wind drift and the object animator alike."
+pub const SAVE_REDRAW_ENABLE_OFFSET: usize = 0x02fe;
+/// `formats/saved-gam.md §10` (spec `0170809`): the cached ambient light
+/// level, "recomputed by **every** clock call including the mode-zero
+/// 'commit the screen without advancing time' call that scene entry
+/// issues". Factory seed `5`, "a stale sample the first clock call
+/// overwrites".
+pub const SAVE_AMBIENT_LIGHT_OFFSET: usize = SAVE_REDRAW_ENABLE_OFFSET + 1;
+/// `formats/saved-gam.md §10` (spec `0170809`): the resident-Shadowlord
+/// selector, "`0`, `1` or `2` for a hosting location, `0xFF` for 'none'.
+/// It is a **per-entry latch, not durable world state**." Town-family
+/// entry stores the no-host marker unconditionally, so "a byte-compatible
+/// producer emits `0xFF` for any save taken inside a location".
+pub const SAVE_RESIDENT_SHADOWLORD_OFFSET: usize = 0x03b2;
+/// `formats/saved-gam.md §10`: the "none" marker of the
+/// resident-Shadowlord latch above.
+pub const SAVE_RESIDENT_SHADOWLORD_NONE: u8 = 0xff;
+/// `systems/time.md §11` (spec `0170809`): the ambient-audio tick
+/// decrements the twelve-hour repeat counter at `0x02DE` "on **two of
+/// every eight** of its own calls, using a small free-running sub-tick
+/// counter that is not part of the save image". Eight is that counter's
+/// period; the stride below is what makes two of the eight residues
+/// carry the decrement. Which two is not published.
+pub const AMBIENT_AUDIO_SUB_TICK_PERIOD: u8 = 8;
+pub const AMBIENT_AUDIO_DECREMENT_STRIDE: u8 = 4;
 /// `formats/saved-gam.md §10`: durable dungeon room-clear bitmap. The
 /// 16-byte block at `0x033A..0x0349` records which dungeon room
 /// encounters have already been cleared; dungeon mode uses it to
@@ -626,15 +684,29 @@ pub const SAVE_AVATAR_NAME_LEN: usize = SAVE_CHARACTER_NAME_LEN;
 /// begins. Anchored so the two parallel names share one source
 /// of truth.
 pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = SAVE_ACTIVE_OBJECT_TABLE_OFFSET;
-/// `formats/saved-gam.md §12`: 2,220-byte reserved tail at file
-/// offsets `0x07B4..=0x105F` that follows the active-object table.
-/// In memory the region holds the NPC schedule blob, NPC runtime
-/// state, NPC path queues, and the world-tile render buffer — all
-/// repopulated from the location's NPC files and the active-map
-/// loader on map entry. The bytes are transient for gameplay, but
-/// byte-compatible save editors must preserve them so unknown bytes
-/// survive a rewrite of an existing save. Promote the offset and
-/// length so the tail span has one named source of truth.
+/// `formats/saved-gam.md §12` (spec `0170809`): 2,220-byte tail at file
+/// offsets `0x07B4..=0x105F` that follows the active-object table. In
+/// memory the region holds the NPC schedule blob, NPC runtime state, NPC
+/// path queues, the NPC type array, the per-NPC stuck counters and the
+/// world-tile render buffer.
+///
+/// **This band is durable gameplay state, not scratch.** "A save taken
+/// inside a town-family location carries that location's entire live cast
+/// here, and the load path's town-family entry deliberately does *not*
+/// reload it: on a Journey Onward the restored image **is** the cast."
+/// `RETRACTIONS.md` R341 withdraws the earlier reading this comment
+/// carried - that the contents "are transient for gameplay" and that "a
+/// clean implementation may rebuild them on load". Only the world-tile
+/// render buffer at the tail of the band is genuinely rebuildable.
+///
+/// This engine does not write the band yet: it persists the
+/// active-object table of §8.1 and pairs restored records against the
+/// `.NPC` roster on a preserving entry (see
+/// [`crate::PlayState::link_npcs_to_existing_active_objects`]), which
+/// reproduces the empty-location and mid-route-position behaviour but not
+/// the queued paths, pursuit targets or stuck counters. The bytes are
+/// preserved byte-for-byte through a save either way. Promote the offset
+/// and length so the tail span has one named source of truth.
 pub const SAVE_RESERVED_TAIL_OFFSET: usize = SAVE_ACTIVE_OBJECT_TABLE_OFFSET + OOL_PLANE_LEN;
 pub const SAVE_RESERVED_TAIL_LEN: usize = 2_220;
 pub const SAVE_PARTY_SIZE_OFFSET: usize = 0x02b5;

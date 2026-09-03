@@ -58,6 +58,21 @@ pub struct PlayState {
     /// hour. Distinct from [`Self::status_pass_previous_hour`], which is the
     /// status/provision pass's own snapshot (`time.md §5`).
     pub cleanup_previous_hour: u8,
+    /// `formats/saved-gam.md §5` / `time.md §11` (spec `0170809`): save
+    /// byte `0x02DE`. "On a cleanup call whose snapshot at `0x02DA`
+    /// disagrees with the hour at `0x02D9`, the byte takes the twelve-hour
+    /// form of the hour ... That is the whole write rule; there is no
+    /// second writer." Its only consumer is the ambient-audio tick, which
+    /// "reads the byte as a count of remaining loud repeats ... and
+    /// decrements it toward zero on **two of every eight** of its own
+    /// calls". `RETRACTIONS.md` R338 withdraws the old "12-hour display"
+    /// reading: nothing in the shipped game renders it.
+    pub twelve_hour_audio_repeats: u8,
+    /// Free-running sub-tick behind the two-in-eight decrement above.
+    /// `time.md §11`: it uses "a small free-running sub-tick counter that
+    /// is not part of the save image", so this field is deliberately not
+    /// persisted.
+    pub ambient_audio_sub_tick: u8,
     /// `dungeon-mode.md §15`: the dungeon loop charges one minute at the
     /// head of every iteration, ungated on whether the command consumed a
     /// turn. This flag records that the iteration's minute is already spent so

@@ -65,6 +65,8 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         clock: GameClock::default(),
         status_pass_previous_hour: GameClock::default().hour,
         cleanup_previous_hour: GameClock::default().hour,
+        twelve_hour_audio_repeats: 0,
+        ambient_audio_sub_tick: 0,
         dungeon_loop_minute_charged: false,
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),
@@ -83,7 +85,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         pending_town_active_object_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)
-            .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
+            .expect("the shipped start day is inside the published 1..=28 glyph tables"),
         food: DEFAULT_FOOD_STOCK,
         gold: DEFAULT_GOLD_STOCK,
         keys: DEFAULT_KEY_STOCK,
@@ -251,6 +253,8 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         clock: GameClock::default(),
         status_pass_previous_hour: GameClock::default().hour,
         cleanup_previous_hour: GameClock::default().hour,
+        twelve_hour_audio_repeats: 0,
+        ambient_audio_sub_tick: 0,
         dungeon_loop_minute_charged: false,
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),
@@ -269,7 +273,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         pending_town_active_object_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)
-            .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
+            .expect("the shipped start day is inside the published 1..=28 glyph tables"),
         food: DEFAULT_FOOD_STOCK,
         gold: DEFAULT_GOLD_STOCK,
         keys: DEFAULT_KEY_STOCK,
@@ -443,6 +447,8 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         clock: GameClock::default(),
         status_pass_previous_hour: GameClock::default().hour,
         cleanup_previous_hour: GameClock::default().hour,
+        twelve_hour_audio_repeats: 0,
+        ambient_audio_sub_tick: 0,
         dungeon_loop_minute_charged: false,
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),
@@ -461,7 +467,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         pending_town_active_object_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)
-            .unwrap_or(MOON_GLYPH_CACHE_NO_GATE),
+            .expect("the shipped start day is inside the published 1..=28 glyph tables"),
         food: DEFAULT_FOOD_STOCK,
         gold: DEFAULT_GOLD_STOCK,
         keys: DEFAULT_KEY_STOCK,
@@ -761,7 +767,12 @@ pub fn write_saved_clock(bytes: &mut [u8], clock: GameClock) {
     bytes[SAVE_DAY_OFFSET] = clock.day;
     bytes[SAVE_HOUR_OFFSET] = clock.hour;
     bytes[SAVE_MINUTE_OFFSET] = clock.minute;
-    bytes[SAVE_AMPM_DISPLAY_OFFSET] = clock.display_hour();
+    // `0x02DE` is deliberately left alone: `formats/saved-gam.md §5`
+    // (spec `0170809`) makes it the twelve-hour value / audio repeat
+    // countdown rather than a calendar field, and the shipped seed carries
+    // zero there against a start hour of eight. Stamping the live
+    // twelve-hour value would make every fixture start from a state the
+    // original never writes.
 }
 
 pub fn ool_plane_with_object(slot: usize, object: ActiveObject) -> Vec<u8> {
