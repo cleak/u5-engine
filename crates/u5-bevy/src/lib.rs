@@ -70,17 +70,17 @@ use u5_runtime::{
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NPC_DIALOG_ID_NONE, NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot,
     OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, POISON_FIELD_SPELL_INDEX,
-    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE,
-    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyCapability, PartyMember, PlayInputDisposition,
-    PlayOptions, PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome,
-    ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
-    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
-    RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectangleDissolve,
-    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    PEER_SPELL_INDEX, PLAY_EXIT_TO_DOS_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
+    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y,
+    PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyCapability,
+    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PotionFlashPlayback,
+    PreFlourishOutcome, ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
+    REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH,
+    RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
+    RectangleDissolve, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
+    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
     SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING, SHIPPED_PALETTE_REGISTERS,
     SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
@@ -10526,7 +10526,7 @@ fn drive_visual_intro(
     if keyboard.just_pressed(KeyCode::Escape) && cancel_visual_intro_panel(&mut intro) {
         // `systems/intro.md §12`: Escape backs out of a panel. With no panel
         // open it does nothing - the published program exit is the
-        // `Control + E` "Exit to DOS?" prompt of `commands.md §5.1`, never a
+        // `Control + E` "Exit to DOS?" prompt of `commands.md §9`, never a
         // bare keypress.
         handled = true;
     }
@@ -16760,7 +16760,7 @@ fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
     state.advance_endgame_display_frame()
 }
 
-/// `systems/commands.md §5.1` gives the program exit its own prompt
+/// `systems/commands.md §9` gives the program exit its own prompt
 /// (`Control + E`, "Exit to DOS?"), and no published input contract gives
 /// Escape a gameplay meaning outside a prompt: `input.md §10` has the
 /// adjacent-tile direction prompt treat it as "another read like any other
@@ -16916,7 +16916,12 @@ const NUM_LOCK_STATE_OBSERVABLE: bool = false;
 fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bool) -> Option<u8> {
     use KeyCode::*;
     if control_pressed {
+        // `commands.md` Section 9: the shared pre-dispatch control-code table.
+        // Control + `E` prompts "Exit to DOS?" and Control + `S` toggles sound;
+        // neither consumes a turn. Control + `K` and Control + `V` are the two
+        // rows this shell does not yet carry.
         return match key {
+            KeyE => Some(PLAY_EXIT_TO_DOS_KEY as u8),
             KeyS => Some(PLAY_MUSIC_TOGGLE_KEY as u8),
             _ => None,
         };
@@ -23106,6 +23111,42 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `commands.md` Section 9: every mode loop's pre-dispatch control-code
+    /// table binds Control + `E` to the "Exit to DOS?" prompt, and none of the
+    /// four shared bindings consumes a turn. The shell has to deliver that
+    /// chord as the runtime's control byte, unshifted and unuppercased, or the
+    /// published program exit is unreachable from the window - which it was.
+    ///
+    /// `key_code_to_command_char` upper-cases what it maps, so this also pins
+    /// that the control byte survives that pass: `0x05` is not a letter.
+    #[test]
+    fn control_e_maps_to_the_published_program_exit_byte() {
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::KeyE, false, true),
+            Some(PLAY_EXIT_TO_DOS_KEY as u8)
+        );
+        assert_eq!(
+            key_code_to_command_char(KeyCode::KeyE, false, true),
+            Some(PLAY_EXIT_TO_DOS_KEY)
+        );
+        assert_eq!(
+            key_code_to_command_char(KeyCode::KeyE, true, true),
+            Some(PLAY_EXIT_TO_DOS_KEY),
+            "the chord does not depend on shift"
+        );
+
+        // Without Control it stays the ordinary Enter/E-nter letter, and the
+        // typed-line reader never sees a control chord at all.
+        assert_eq!(
+            key_code_to_command_char(KeyCode::KeyE, false, false),
+            Some('E')
+        );
+        assert_eq!(
+            key_code_to_line_input_byte(KeyCode::KeyE, false, true),
+            None
+        );
+    }
+
     #[test]
     fn visual_key_map_emits_spec_input_bytes_for_commands_and_movement() {
         assert_eq!(key_code_to_char(KeyCode::KeyW, false, false), Some('w'));
@@ -24227,6 +24268,66 @@ mod tests {
 
         assert!(input_line.is_empty());
         assert!(state.active_conversation.is_some());
+    }
+
+    /// `input.md` Section 8: Enter at a free-text prompt "terminates the
+    /// prompt, returning the accumulated string" to the caller that asked for
+    /// it. The typed line is an answer, not a command, so a keyword that
+    /// begins with a lowercase `q` must reach the conversation and never the
+    /// dispatcher's harness-quit arm — `drive_visual` turns that arm into
+    /// `AppExit`, which would end the session with no prompt and no save.
+    /// `commands.md` Section 9 puts the published program exit behind
+    /// Control + `E`'s "Exit to DOS?" confirmation instead.
+    #[test]
+    fn visual_line_input_submit_never_quits_on_a_typed_q_keyword() {
+        fn letter_key(letter: char) -> KeyCode {
+            match letter {
+                'e' => KeyCode::KeyE,
+                'q' => KeyCode::KeyQ,
+                's' => KeyCode::KeyS,
+                't' => KeyCode::KeyT,
+                'u' => KeyCode::KeyU,
+                other => panic!("unmapped test letter {other}"),
+            }
+        }
+
+        for word in ["q", "quest"] {
+            let mut state = test_state(open_grid(), 1, 1);
+            install_test_conversation(&mut state);
+            let mut input_line = String::new();
+
+            for letter in word.chars() {
+                let typed = handle_visual_line_key(
+                    &mut state,
+                    &mut input_line,
+                    letter_key(letter),
+                    false,
+                    false,
+                    Path::new(""),
+                )
+                .unwrap();
+                assert_eq!(typed, Some(PlayInputDisposition::Continue));
+            }
+            assert_eq!(input_line, word);
+
+            let submitted = handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                KeyCode::Enter,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
+
+            assert_ne!(
+                submitted,
+                Some(PlayInputDisposition::Quit),
+                "the typed keyword `{word}` must not end the session"
+            );
+            assert_eq!(submitted, Some(PlayInputDisposition::Continue));
+            assert!(input_line.is_empty());
+        }
     }
 
     #[test]

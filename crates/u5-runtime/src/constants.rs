@@ -284,6 +284,15 @@ pub const KARMA_RECORD_COUNT: usize = KARMA_DAT_RECORDS;
 pub const PLAY_IGNORED_INPUT_KEY: char = '\u{1e}';
 pub const PLAY_TYPEAHEAD_TOGGLE_KEY: char = '\u{1f}';
 pub const PLAY_MUSIC_TOGGLE_KEY: char = '\u{13}';
+/// `commands.md` Section 9: the program-exit binding in every mode loop's
+/// pre-dispatch control-code table. It is a typed Control character - Control
+/// with the fifth letter of the alphabet - and, like the other three shared
+/// bindings, it consumes no turn.
+///
+/// `dungeon-mode.md` Section 10 settles which key owns the prompt: "`Q` is the
+/// ordinary save-game route; the "Exit to DOS?" prompt is a Control binding in
+/// the mode-local table, not a letter."
+pub const PLAY_EXIT_TO_DOS_KEY: char = '\u{05}';
 pub const TRAP_NON_COMBAT_EFFECT_TABLE: [u8; 8] = [0, 0, 0, 1, 1, 2, 2, 3];
 pub const TRAP_ACID_DAMAGE_MAX: u8 = 30;
 pub const TRAP_BOMB_DAMAGE_MAX: u8 = 8;
