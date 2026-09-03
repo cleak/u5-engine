@@ -10069,12 +10069,17 @@ struct VisualReturnToViewPreview {
     frame_metadata: Vec<VisualReturnToViewFrameMeta>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct VisualReturnToViewFrameMeta {
     command_index: usize,
     elapsed_title_ticks: u32,
     kind: ReturnToViewFrameKind,
     caption: Option<&'static str>,
+    /// `audio.md §8.6`: the ambient cue this scheduled preview tick carries -
+    /// strip 2's three-pitch rumble on every tick, strip 3's blip on local
+    /// phases 0 and 4, `None` everywhere else. The runtime already resolves it
+    /// per playback frame; carrying it here is what lets the preview sound.
+    sound: Option<SoundEffect>,
 }
 
 /// Drives the gameplay world tick at a stable simulation cadence so the
@@ -10617,6 +10622,54 @@ fn queue_start_menu_reveal_clicks(
     ));
 }
 
+/// `audio.md §8.6`: sound the cue of the Return-to-View preview tick that is
+/// on screen now.
+///
+/// The published rows are exact: "Return-to-View strip 2 - each scheduled inner
+/// tick runs rumble `(20, 60, 10000)`, exactly three random pitches in
+/// 100..10000 Hz. The enclosing tick is BIOS-clock paced." and "Return-to-View
+/// strip 3 - at local phase 0 play a 3000 Hz blocking tone for 3 calibrated
+/// units; at phase 4 play 2000 Hz for 3." The runtime resolves both onto every
+/// playback frame it emits; this shell was rendering those frames and dropping
+/// their cues, so the attract preview ran silent.
+///
+/// `sounded_frame` remembers which preview frame has already sounded, so a host
+/// frame that does not advance the preview re-queues nothing - the same
+/// idempotence [`queue_subtitle_ignition_burst`] uses. Cues are always audible:
+/// `§3` says the sound boolean "starts enabled when the program boots" and the
+/// Ctrl-S that could clear it belongs to the "overworld, town, combat, and
+/// dungeon command loops", none of which the intro has entered.
+fn return_to_view_preview_cue(
+    panel: &VisualIntroPanel,
+    sounded_frame: &mut Option<usize>,
+) -> Option<SpeakerEffect> {
+    let VisualIntroPanel::ReturnToView {
+        frame_metadata,
+        preview_frame_index,
+        ..
+    } = panel
+    else {
+        *sounded_frame = None;
+        return None;
+    };
+    if *sounded_frame == Some(*preview_frame_index) {
+        return None;
+    }
+    *sounded_frame = Some(*preview_frame_index);
+    let effect = frame_metadata.get(*preview_frame_index)?.sound.clone()?;
+    Some(SpeakerEffect::always_audible(effect))
+}
+
+fn queue_return_to_view_preview_cue(
+    intro: &VisualIntroState,
+    speaker: &mut EventWriter<SpeakerEffect>,
+    sounded_frame: &mut Option<usize>,
+) {
+    if let Some(cue) = return_to_view_preview_cue(&intro.panel, sounded_frame) {
+        speaker.write(cue);
+    }
+}
+
 fn queue_subtitle_ignition_burst(
     intro: &VisualIntroState,
     speaker: &mut EventWriter<SpeakerEffect>,
@@ -10649,9 +10702,11 @@ fn animate_visual_intro_title_effects(
     mut images: ResMut<Assets<Image>>,
     mut speaker: EventWriter<SpeakerEffect>,
     mut sounded_publish: Local<Option<usize>>,
+    mut sounded_preview_frame: Local<Option<usize>>,
 ) {
     let Some(mut intro) = intro else {
         *sounded_publish = None;
+        *sounded_preview_frame = None;
         return;
     };
 
@@ -10678,6 +10733,7 @@ fn animate_visual_intro_title_effects(
     // entered or the tick above advanced it. `sounded_publish` makes this
     // idempotent, so each publication bursts exactly once.
     queue_subtitle_ignition_burst(&intro, &mut speaker, &mut sounded_publish);
+    queue_return_to_view_preview_cue(&intro, &mut speaker, &mut sounded_preview_frame);
     queue_start_menu_reveal_clicks(&mut intro, &mut speaker);
     if !advanced {
         return;
@@ -13162,6 +13218,7 @@ fn visual_return_to_view_summary(
             elapsed_title_ticks: frame.elapsed_title_ticks,
             kind: frame.kind,
             caption: frame.state.current_caption,
+            sound: frame.sound.clone(),
         });
         previous = Some(viewport);
     }
@@ -13222,7 +13279,7 @@ fn render_return_to_view_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     let strip = preview_frames
         .get(index)
         .expect("Return-to-View current preview frame is missing");
-    let current_meta = *frame_metadata
+    let current_meta = frame_metadata
         .get(index)
         .expect("Return-to-View current frame metadata is missing");
     let caption = current_meta
@@ -23072,6 +23129,72 @@ mod tests {
     }
 
     #[test]
+    fn the_return_to_view_preview_sounds_each_scheduled_tick_once() {
+        // audio.md §8.6: "Return-to-View strip 2 - each scheduled inner tick
+        // runs rumble (20, 60, 10000)" and "Return-to-View strip 3 - at local
+        // phase 0 play a 3000 Hz blocking tone for 3 calibrated units; at phase
+        // 4 play 2000 Hz for 3." The runtime resolves the cue onto every
+        // playback frame; the shell used to render those frames and drop the
+        // cue, so the attract preview was silent.
+        let panel = VisualIntroPanel::ReturnToView {
+            preview_frames: vec![
+                intro_test_preview_buffer(1, 1, vec![0x00, 0x00, 0x00, 0xff]),
+                intro_test_preview_buffer(1, 1, vec![0xff, 0xff, 0xff, 0xff]),
+            ],
+            frame_metadata: vec![
+                VisualReturnToViewFrameMeta {
+                    command_index: 0,
+                    elapsed_title_ticks: 1,
+                    kind: ReturnToViewFrameKind::PreviewTick,
+                    caption: Some("The Arrival"),
+                    sound: Some(SoundEffect::ReturnToViewStrip2),
+                },
+                VisualReturnToViewFrameMeta {
+                    command_index: 1,
+                    elapsed_title_ticks: 2,
+                    kind: ReturnToViewFrameKind::PreviewTick,
+                    caption: Some("The Arrival"),
+                    sound: None,
+                },
+            ],
+            preview_frame_index: 0,
+        };
+        let mut sounded = None;
+
+        let cue = return_to_view_preview_cue(&panel, &mut sounded)
+            .expect("a sounding preview tick must reach the speaker");
+        assert_eq!(
+            cue,
+            SpeakerEffect::always_audible(SoundEffect::ReturnToViewStrip2)
+        );
+        assert!(
+            return_to_view_preview_cue(&panel, &mut sounded).is_none(),
+            "a host frame that does not advance the preview re-queues nothing"
+        );
+
+        // A silent tick of the same preview publishes nothing.
+        let VisualIntroPanel::ReturnToView {
+            preview_frames,
+            frame_metadata,
+            ..
+        } = panel
+        else {
+            panic!("fixture panel");
+        };
+        let silent = VisualIntroPanel::ReturnToView {
+            preview_frames,
+            frame_metadata,
+            preview_frame_index: 1,
+        };
+        assert!(return_to_view_preview_cue(&silent, &mut sounded).is_none());
+
+        // Leaving the preview clears the marker so a re-entered preview sounds
+        // its first tick again.
+        assert!(return_to_view_preview_cue(&VisualIntroPanel::Menu, &mut sounded).is_none());
+        assert_eq!(sounded, None);
+    }
+
+    #[test]
     fn a_muted_effect_holds_the_voice_without_playing_it() {
         // audio.md §3: Ctrl-S "changes output, not command or animation
         // cadence"; a blocking tone "still performs its calibrated hold".
@@ -24809,6 +24932,7 @@ mod tests {
                 elapsed_title_ticks: 12,
                 kind,
                 caption: Some("The Summoning"),
+                sound: None,
             }],
             preview_frame_index: 0,
         }
@@ -25114,12 +25238,14 @@ mod tests {
                     elapsed_title_ticks: 1,
                     kind: ReturnToViewFrameKind::PreviewTick,
                     caption: Some("The Summoning"),
+                    sound: None,
                 },
                 VisualReturnToViewFrameMeta {
                     command_index: 1,
                     elapsed_title_ticks: 2,
                     kind: ReturnToViewFrameKind::PreviewTick,
                     caption: Some("The Summoning"),
+                    sound: None,
                 },
             ],
             preview_frame_index: 0,
@@ -25197,6 +25323,32 @@ mod tests {
                 .iter()
                 .any(|frame| frame.pixels.iter().any(|pixel| *pixel != 0)),
             "no Return-to-View frame painted any pixels"
+        );
+
+        // `audio.md §8.6`: the shipped preview reaches strip 2 and strip 3, so
+        // its metadata must carry their cues - strip 2 on every scheduled tick,
+        // strip 3 on local phases 0 and 4 only. The shell renders these frames;
+        // dropping the cue here is what left the attract preview silent.
+        assert!(
+            preview
+                .frame_metadata
+                .iter()
+                .any(|meta| meta.sound == Some(SoundEffect::ReturnToViewStrip2)),
+            "the shipped preview must carry strip 2 rumbles"
+        );
+        assert!(
+            preview
+                .frame_metadata
+                .iter()
+                .any(|meta| matches!(meta.sound, Some(SoundEffect::ReturnToViewStrip3 { .. }))),
+            "the shipped preview must carry strip 3 blips"
+        );
+        assert!(
+            preview
+                .frame_metadata
+                .iter()
+                .any(|meta| meta.sound.is_none()),
+            "strips 0 and 1 and strip 3\'s six silent phases stay silent"
         );
     }
 
