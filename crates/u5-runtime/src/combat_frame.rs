@@ -620,7 +620,6 @@ pub struct CombatSleepWakeApplication {
 pub enum CombatPlayerCommandInput {
     Key(char),
     Direction(u8),
-    AttackDirection(u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -628,9 +627,12 @@ pub enum CombatPlayerCommandAction {
     QuicknessSkipped,
     ActivePlayerSelection(CombatActivePlayerSelectionOutcome),
     Pass(CombatPassCommandOutcome),
-    PromptForAttackDirection,
+    /// `combat.md §8.2`: accepted Attack "opens a second, separate input
+    /// read, and it is not a one-shot direction key but an **interactive
+    /// targeting cursor**". The attempt walk itself is
+    /// [`PlayState::begin_combat_attack_walk`].
+    OpenTargetingCursor,
     StepOrAttack {
-        prompted_attack: bool,
         direction_code: u8,
         outcome: CombatStepOrAttackPrimitiveOutcome,
     },
@@ -710,7 +712,7 @@ pub const fn combat_player_command_action_defers_maintenance(
     action: &CombatPlayerCommandAction,
 ) -> bool {
     match action {
-        CombatPlayerCommandAction::PromptForAttackDirection => true,
+        CombatPlayerCommandAction::OpenTargetingCursor => true,
         CombatPlayerCommandAction::Branch { branch, .. } => {
             combat_command_branch_is_named_multistage(*branch)
                 || matches!(
@@ -764,7 +766,7 @@ pub const fn combat_player_command_action_reprompts(action: &CombatPlayerCommand
         ),
         CombatPlayerCommandAction::ActivePlayerSelection(_)
         | CombatPlayerCommandAction::Pass(_)
-        | CombatPlayerCommandAction::PromptForAttackDirection
+        | CombatPlayerCommandAction::OpenTargetingCursor
         | CombatPlayerCommandAction::StepOrAttack { .. }
         | CombatPlayerCommandAction::EscapeCleanup {
             application:
@@ -1106,6 +1108,22 @@ impl PlayState {
             CombatCastInterferenceOutcome::Interfered
         )
         .then_some(source_slot)
+    }
+
+    /// `combat.md §8`: the committed non-digit action tail — the absorbable
+    /// field check, the common terrain/marker contact hook, the visible-ring
+    /// maintenance and the active timed-effect age. Multi-stage commands run
+    /// it when their continuation finally commits.
+    pub fn apply_combat_committed_action_tail(
+        &mut self,
+        actor_slot: usize,
+    ) -> Option<CombatMagicRingPassOutcome> {
+        let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
+        let _ = self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
+        self.clear_combat_interference_for_completed_action(actor_slot);
+        let ring_pass = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
+        let _ = self.age_active_effect();
+        ring_pass
     }
 
     pub(crate) fn clear_combat_interference_for_completed_action(&mut self, victim_slot: usize) {
@@ -3187,6 +3205,11 @@ impl PlayState {
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         self.combat_cursor_blink = false;
         self.combat_secondary_marker = None;
+        // `combat.md §8.2`: the targeting cursor is per-turn scratch and
+        // combat cannot be saved mid-fight, so no cursor survives an arena
+        // boundary. Neither does an attacker's remembered previous target.
+        self.active_combat_targeting = None;
+        self.combat_remembered_targets = [None; COMBAT_ACTOR_SLOTS];
         self.combat_ambush_reveals = reveals;
         self.combat_active = true;
         self.combat_action_result = 0;
@@ -3257,6 +3280,11 @@ impl PlayState {
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         self.combat_cursor_blink = false;
         self.combat_secondary_marker = None;
+        // `combat.md §8.2`: the targeting cursor is per-turn scratch and
+        // combat cannot be saved mid-fight, so no cursor survives an arena
+        // boundary. Neither does an attacker's remembered previous target.
+        self.active_combat_targeting = None;
+        self.combat_remembered_targets = [None; COMBAT_ACTOR_SLOTS];
         self.combat_ambush_reveals = [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT];
         self.combat_active = false;
         self.combat_action_result = 0;
@@ -5049,10 +5077,7 @@ impl PlayState {
         actor_slot: usize,
         input: CombatPlayerCommandInput,
     ) -> Option<CombatPlayerCommandApplication> {
-        let weapon_attack_inputs = if matches!(
-            input,
-            CombatPlayerCommandInput::Direction(_) | CombatPlayerCommandInput::AttackDirection(_)
-        ) {
+        let weapon_attack_inputs = if matches!(input, CombatPlayerCommandInput::Direction(_)) {
             self.combat_player_weapon_attack_inputs(actor_slot)
         } else {
             CombatPlayerWeaponAttackInputs::default()
@@ -5189,8 +5214,7 @@ impl PlayState {
         }
 
         let action = match input {
-            CombatPlayerCommandInput::Direction(direction_code)
-            | CombatPlayerCommandInput::AttackDirection(direction_code) => {
+            CombatPlayerCommandInput::Direction(direction_code) => {
                 if !combat_direction_code_is_cardinal(direction_code) {
                     CombatPlayerCommandAction::InvalidDirection { direction_code }
                 } else {
@@ -5199,20 +5223,18 @@ impl PlayState {
                         self.combat_destination_walkable_for_direction(actor_slot, direction_code)?;
                     // `combat.md §8`/`§8.1` (`RETRACTIONS.md` R310): a bare
                     // direction key "is purely a step: there is no bump
-                    // attack". Only the `A` verb's own targeting
-                    // confirmation - which arrives here as
-                    // `AttackDirection` - resolves against an occupant.
-                    let prompted_attack =
-                        matches!(input, CombatPlayerCommandInput::AttackDirection(_));
+                    // attack". The `A` verb's own targeting cursor (`§8.2`)
+                    // resolves against an occupant instead, through
+                    // `PlayState::apply_combat_targeting_cursor_key`, so no
+                    // direction key ever reaches an attack here.
                     let outcome = self.apply_combat_step_or_attack_primitive(
                         actor_slot,
                         attacker_group,
                         direction_code,
                         destination_walkable,
-                        prompted_attack,
+                        false,
                     );
                     CombatPlayerCommandAction::StepOrAttack {
-                        prompted_attack,
                         direction_code,
                         outcome,
                     }
@@ -5231,7 +5253,7 @@ impl PlayState {
                             CombatPlayerCommandAction::Pass(resolve_combat_pass_command())
                         }
                         CombatCommandBranch::Attack => {
-                            CombatPlayerCommandAction::PromptForAttackDirection
+                            CombatPlayerCommandAction::OpenTargetingCursor
                         }
                         CombatCommandBranch::EscapeCleanup => {
                             CombatPlayerCommandAction::EscapeCleanup {
@@ -5424,6 +5446,23 @@ impl PlayState {
             .map(usize::from)
             .filter(|item| armaments.contains(item))
             .or_else(|| armaments.first().copied());
+        self.resolve_and_apply_combat_player_attack(actor_slot, target_slot, item_id, inputs)
+    }
+
+    /// One player-side attack attempt against a known target with a known
+    /// readied item, or `None` for `combat.md §8.2`'s bare-handed attempt.
+    ///
+    /// Shared by the one-swing command entry above and by the §8.2 targeting
+    /// cursor, so the two cannot drift apart on §11's selector or on §12's
+    /// lazy damage draw.
+    pub fn resolve_and_apply_combat_player_attack(
+        &mut self,
+        actor_slot: usize,
+        target_slot: usize,
+        item_id: Option<usize>,
+        inputs: CombatPlayerWeaponAttackInputs,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let roster_slot = self.combat_roster_slot_for_actor_slot(actor_slot)?;
         // `combat.md §11` selector, party attacker arm: Strength for the
         // five strength-arm ids, otherwise the character's own combat
         // weight - "the raw Dexterity byte copied at seating".
@@ -6072,19 +6111,31 @@ impl PlayState {
     /// overlays. The secondary coordinate is deliberately not range-checked;
     /// the display surface owns clipping.
     pub fn apply_combat_cursor_blink_tick(&mut self) -> CombatCursorBlinkReport {
-        let mut report = CombatCursorBlinkReport::default();
-
         if self.combat_active {
             self.combat_cursor_blink = !self.combat_cursor_blink;
-            report.cursor_blink_visible = self.combat_cursor_blink;
-            if self.combat_cursor_blink {
-                report.cursor_draw_cell = self.combat_cursor_actor_cell();
-                if report.cursor_draw_cell.is_some() {
-                    report.secondary_marker_cell = self.combat_secondary_marker;
-                }
+        }
+        self.combat_overlay_draw_cells()
+    }
+
+    /// `combat.md §7`: the two overlay coordinates for the current blink
+    /// state, without advancing it. "A dark blink pass, invalid active cell,
+    /// or non-player active group suppresses both overlays."
+    ///
+    /// A frontend that repaints more often than the blink toggles reads this
+    /// so the drawn overlays stay in step with the flag rather than with the
+    /// repaint.
+    pub fn combat_overlay_draw_cells(&self) -> CombatCursorBlinkReport {
+        let mut report = CombatCursorBlinkReport::default();
+        if !self.combat_active {
+            return report;
+        }
+        report.cursor_blink_visible = self.combat_cursor_blink;
+        if self.combat_cursor_blink {
+            report.cursor_draw_cell = self.combat_cursor_actor_cell();
+            if report.cursor_draw_cell.is_some() {
+                report.secondary_marker_cell = self.combat_secondary_marker;
             }
         }
-
         report
     }
 
@@ -6587,6 +6638,350 @@ impl PlayState {
             self.advance_turn_with_minutes(tick.advance_time_minutes);
         }
         tick
+    }
+
+    /// `combat.md §8.2`: the attempt list one `A` produces for a
+    /// keyboard-driven combatant. Only party-side slots reach the command
+    /// prompt (`§6.1a`), so the readied-equipment scan is the party record's;
+    /// a slot with no roster equipment takes the published bare-handed
+    /// attempt.
+    pub fn combat_attack_attempts_for_actor(&self, actor_slot: usize) -> Vec<CombatAttackAttempt> {
+        self.combat_roster_slot_for_actor_slot(actor_slot)
+            .and_then(|roster_slot| self.party_equipment.get(roster_slot))
+            .map(combat_attack_attempts)
+            .unwrap_or_else(|| vec![CombatAttackAttempt::bare_handed()])
+    }
+
+    pub fn combat_actor_cell(&self, slot: usize) -> Option<(u8, u8)> {
+        let actor = self.combat_actors.get(slot).copied()?;
+        (usize::from(actor.x) < COMBAT_ARENA_SIDE && usize::from(actor.y) < COMBAT_ARENA_SIDE)
+            .then_some((actor.x, actor.y))
+    }
+
+    /// `combat.md §8.2` adjacent-attacker interference gate for the five
+    /// missile items. "The engine keeps, per combatant, the identity of
+    /// whichever actor most recently struck that combatant" - the same
+    /// per-slot map `magic.md §7` reads for `C`-Cast - and the abort fires
+    /// only when that actor "is on the automatic-driver side", is "neither
+    /// invisible nor asleep", Negate Time is inactive, and "its distance
+    /// from the attacker is exactly one".
+    pub fn combat_attack_interference_source_for_slot(
+        &self,
+        attacker_slot: usize,
+    ) -> Option<usize> {
+        let source_slot = usize::from(*self.combat_interference_sources.get(attacker_slot)?);
+        let attacker = self.combat_actors.get(attacker_slot).copied()?;
+        let source = self.combat_actors.get(source_slot).copied();
+        // "**An adjacent ordinary party member never interferes**": the test
+        // is which dispatch path the source runs on, not which side it
+        // fights for, so a party member carrying the controlled/charmed bit
+        // does interfere (`§6.1a`).
+        let source_on_automatic_driver_side = source
+            .is_some_and(|source| !combat_slot_takes_player_command_path(source_slot, source));
+        let negate_time_active = active_effect_is_active(
+            self.active_effect_tag,
+            self.active_effect_counter,
+            NEGATE_TIME_ACTIVE_EFFECT_TAG,
+        );
+
+        combat_attack_interference_aborts(
+            attacker,
+            source,
+            source_on_automatic_driver_side,
+            negate_time_active,
+        )
+        .then_some(source_slot)
+    }
+
+    /// `combat.md §8.2` cursor confirmation lookup: "it looks for an actor
+    /// occupying the cursor cell; if there is none, or the occupant is
+    /// dead-marked, invisible, or an empty/decoration slot, it prints
+    /// `Nothing!`. **The occupancy lookup does not filter by side**, so
+    /// confirming on a party member's cell attacks that party member."
+    ///
+    /// That exclusion list is exhaustive, and the asleep/magically-disabled
+    /// bit (`§6.1` bit `0x08`) is not on it, so this uses the no-status-term
+    /// predicate. `§7.1` says a non-acting actor "is returned by the
+    /// cell-occupancy lookup, so it can be **targeted, attacked and killed
+    /// normally**", and `§11`'s worked example computes a score against "**An
+    /// asleep defender**" rather than skipping it - "with the defender rating
+    /// floored to one the score is 2, 2, 1, 1 and 0 ... giving **98.4 %**, not
+    /// 100 %". `§5`/`§6.1` also pre-set `0x08` on every seated party member
+    /// whose status byte is not `'G'` or `'P'`, so a status filter here would
+    /// break "confirming on a party member's cell attacks that party member"
+    /// as well.
+    pub fn combat_targeting_occupant_at(&self, cell: (u8, u8)) -> Option<usize> {
+        self.combat_actors
+            .iter()
+            .copied()
+            .enumerate()
+            .take(COMBAT_ACTOR_SLOTS)
+            .find(|(_, actor)| {
+                actor.x == cell.0
+                    && actor.y == cell.1
+                    && combat_actor_is_present_not_dead(*actor)
+                    && !actor.is_hidden_or_unrevealed()
+                    && !combat_actor_is_passive_placement(*actor)
+            })
+            .map(|(slot, _)| slot)
+    }
+
+    /// Resolve one confirmed targeting-cursor attempt against the occupant
+    /// of the cursor cell. `combat.md §11` owns the resolution itself; this
+    /// only routes the attempt's own readied item into it.
+    pub fn resolve_and_apply_combat_targeting_attack(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        item_id: usize,
+        inputs: Option<CombatPlayerWeaponAttackInputs>,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let inputs =
+            inputs.unwrap_or_else(|| self.combat_player_weapon_attack_inputs(attacker_slot));
+        self.resolve_and_apply_combat_player_attack(
+            attacker_slot,
+            target_slot,
+            Some(item_id),
+            inputs,
+        )
+    }
+
+    /// The cursor's `combat.md §8.2` bare-handed arm: "A character with no
+    /// qualifying item makes a single bare-handed attempt, which behaves as
+    /// melee with range one."
+    pub fn resolve_and_apply_combat_targeting_bare_handed_attack(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        inputs: Option<CombatPlayerWeaponAttackInputs>,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let inputs =
+            inputs.unwrap_or_else(|| self.combat_player_weapon_attack_inputs(attacker_slot));
+        self.resolve_and_apply_combat_player_attack(attacker_slot, target_slot, None, inputs)
+    }
+
+    /// `combat.md §8.2`: open the `A`-Attack walk. Each attempt "prints
+    /// `Attack-` and then consults the item's **reach** ... Immediately
+    /// before the cursor opens the engine prints `Aim! `", and the five
+    /// missile items run the interference abort first, which "opens no
+    /// cursor" for that attempt.
+    ///
+    /// `foes_present` is the caller's census of live non-party actors taken
+    /// when the `A` was accepted. `combat.md §7` prints `VICTORY!` when
+    /// "party actors remain and foes do not", and a multi-attempt walk can
+    /// kill the last foe on a non-final attempt, so the answer is captured
+    /// once for the whole walk instead of being re-asked per keystroke.
+    pub fn begin_combat_attack_walk(
+        &mut self,
+        actor_slot: usize,
+        foes_present: bool,
+    ) -> CombatAttackWalkApplication {
+        let attempts = self.combat_attack_attempts_for_actor(actor_slot);
+        self.active_combat_targeting = None;
+        self.open_combat_attack_attempt(actor_slot, attempts, 0, foes_present)
+    }
+
+    /// Walk attempts from `index` until one opens its cursor or the list is
+    /// exhausted.
+    fn open_combat_attack_attempt(
+        &mut self,
+        actor_slot: usize,
+        attempts: Vec<CombatAttackAttempt>,
+        mut index: usize,
+        foes_present_at_walk_start: bool,
+    ) -> CombatAttackWalkApplication {
+        let mut text = String::new();
+        // `combat.md §7`: the overlay marker is drawn "at an explicit arena
+        // X/Y" only while its flag is set, and the base viewport repaint of
+        // the next pass "removes both old shapes". No cursor is open here
+        // until one is opened below, so the coordinate is dropped first.
+        self.combat_secondary_marker = None;
+        let Some(attacker) = self.combat_actor_cell(actor_slot) else {
+            self.active_combat_targeting = None;
+            return CombatAttackWalkApplication {
+                text,
+                cursor_open: false,
+                attack: None,
+            };
+        };
+        while let Some(attempt) = attempts.get(index).copied() {
+            if let Some(line) = combat_attack_item_line(&attempts, index) {
+                text.push_str(&line);
+            }
+            text.push_str(COMBAT_ATTACK_LABEL);
+            if attempt.runs_interference
+                && let Some(source_slot) =
+                    self.combat_attack_interference_source_for_slot(actor_slot)
+            {
+                text.push('\n');
+                // `combat.md §8.2`: "the interfering actor's name". The
+                // engine's one combat name lookup already serves every other
+                // narrated actor, so no second naming policy is introduced
+                // here.
+                text.push_str(&crate::input_dispatch::combat_actor_display_name(
+                    self,
+                    source_slot,
+                ));
+                text.push_str(COMBAT_INTERFERES_TAIL);
+                index += 1;
+                continue;
+            }
+            text.push_str(COMBAT_ATTACK_AIM_PROMPT);
+            // `combat.md §8.2`: the cursor "starts on **the attacker's**
+            // remembered previous target", so the lookup is keyed by the
+            // attacking slot.
+            let remembered = self
+                .combat_remembered_targets
+                .get(actor_slot)
+                .copied()
+                .flatten()
+                .and_then(|slot| self.combat_actors.get(usize::from(slot)).copied());
+            let cursor = combat_targeting_cursor_start(attacker, remembered, attempt.max_range);
+            self.active_combat_targeting = Some(CombatTargetingCursorSession {
+                actor_slot,
+                attempts,
+                index,
+                attacker,
+                cursor,
+                max_range: attempt.max_range,
+                melee_arm: attempt.melee_arm,
+                foes_present_at_walk_start,
+            });
+            // `combat.md §7` combat-overlay tail: after the player cursor
+            // box, "a separate flag can then draw an additional marker at an
+            // explicit arena X/Y", composed second so it "wins wherever the
+            // two overlays coincide". The open `§8.2` targeting cursor is
+            // what supplies that coordinate: it is the one arena X/Y the
+            // published contract lets the player move independently of the
+            // acting character's own cell, and §7 asks a flag with no
+            // reader or no producer to be treated as evidence the contract
+            // is not real. Filed as a spec question all the same, because
+            // §7 names the reader and not the producer.
+            self.combat_secondary_marker = Some(cursor);
+            self.mark_visibility_dirty();
+            return CombatAttackWalkApplication {
+                text,
+                cursor_open: true,
+                attack: None,
+            };
+        }
+        self.active_combat_targeting = None;
+        CombatAttackWalkApplication {
+            text,
+            cursor_open: false,
+            attack: None,
+        }
+    }
+
+    /// `combat.md §8.2` cursor loop body: feed one keystroke to the open
+    /// targeting cursor. Returns `None` when no cursor is open.
+    pub fn apply_combat_targeting_cursor_key(
+        &mut self,
+        key: char,
+    ) -> Option<CombatAttackWalkApplication> {
+        self.apply_combat_targeting_cursor_key_with_inputs(key, None)
+    }
+
+    /// [`Self::apply_combat_targeting_cursor_key`] with the confirmed
+    /// attempt's to-hit and damage draws supplied, for deterministic tests.
+    pub fn apply_combat_targeting_cursor_key_with_inputs(
+        &mut self,
+        key: char,
+        inputs: Option<CombatPlayerWeaponAttackInputs>,
+    ) -> Option<CombatAttackWalkApplication> {
+        let session = self.active_combat_targeting.clone()?;
+        let action = resolve_combat_targeting_cursor_key(
+            combat_targeting_cursor_input(key),
+            session.cursor,
+            session.attacker,
+            session.max_range,
+        );
+        match action {
+            // "If either test fails the cursor simply does not move: no
+            // message, no beep, no turn consumed, and the loop reads another
+            // key."
+            CombatTargetingCursorAction::Held => Some(CombatAttackWalkApplication {
+                text: String::new(),
+                cursor_open: true,
+                attack: None,
+            }),
+            CombatTargetingCursorAction::Moved(cell) => {
+                if let Some(open) = self.active_combat_targeting.as_mut() {
+                    open.cursor = cell;
+                }
+                // `combat.md §7`: the marker follows the cursor cell, and
+                // the next pass's base repaint erases the old shape.
+                self.combat_secondary_marker = Some(cell);
+                self.mark_visibility_dirty();
+                Some(CombatAttackWalkApplication {
+                    text: String::new(),
+                    cursor_open: true,
+                    attack: None,
+                })
+            }
+            // "On cancel the engine prints `Nothing!` (melee arm) or returns
+            // silently (ranged arm)." The turn is still spent: "cancelling
+            // with Escape or Space does not return to the command prompt and
+            // does not give the turn back."
+            CombatTargetingCursorAction::Cancelled => {
+                let mut walk = self.close_combat_attack_attempt(&session);
+                if session.melee_arm {
+                    walk.text.insert_str(0, COMBAT_TARGETING_NOTHING_LINE);
+                }
+                Some(walk)
+            }
+            CombatTargetingCursorAction::Confirmed(cell) => {
+                let target_slot = self.combat_targeting_occupant_at(cell);
+                let item_id = session.attempt().and_then(|attempt| attempt.item_id);
+                let attack = target_slot.and_then(|target_slot| {
+                    // `combat.md §8.2`: the cursor "starts on **the
+                    // attacker's** remembered previous target", so a
+                    // confirmation that found an occupant is what that
+                    // attacker remembers next time.
+                    if let Some(entry) = self.combat_remembered_targets.get_mut(session.actor_slot)
+                    {
+                        *entry = u8::try_from(target_slot).ok();
+                    }
+                    match item_id {
+                        Some(item_id) => self.resolve_and_apply_combat_targeting_attack(
+                            session.actor_slot,
+                            target_slot,
+                            item_id,
+                            inputs,
+                        ),
+                        // `combat.md §8.2`: a character with no qualifying
+                        // item "makes a single bare-handed attempt, which
+                        // behaves as melee with range one". It resolves like
+                        // any other melee attempt (`§11`, `§12`); there is no
+                        // readied item to look a row up for.
+                        None => self.resolve_and_apply_combat_targeting_bare_handed_attack(
+                            session.actor_slot,
+                            target_slot,
+                            inputs,
+                        ),
+                    }
+                });
+                let mut walk = self.close_combat_attack_attempt(&session);
+                match target_slot {
+                    Some(target_slot) => walk.attack = attack.map(|attack| (target_slot, attack)),
+                    None => walk.text.insert_str(0, COMBAT_TARGETING_NOTHING_LINE),
+                }
+                Some(walk)
+            }
+        }
+    }
+
+    fn close_combat_attack_attempt(
+        &mut self,
+        session: &CombatTargetingCursorSession,
+    ) -> CombatAttackWalkApplication {
+        self.active_combat_targeting = None;
+        self.open_combat_attack_attempt(
+            session.actor_slot,
+            session.attempts.clone(),
+            session.index + 1,
+            session.foes_present_at_walk_start,
+        )
     }
 }
 

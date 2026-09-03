@@ -1971,30 +1971,35 @@
         state.party_equipment[0][EQUIP_SLOT_HELM] = SPIKED_HELM;
         state.party_equipment[0][EQUIP_SLOT_WEAPON] = HALBERD;
 
-        let application = state
-            .apply_combat_player_command_with_attack_inputs(
-                0,
-                CombatPlayerCommandInput::AttackDirection(2),
-                CombatPlayerWeaponAttackInputs {
+        assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+        let held = state
+            .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+            .expect("the cursor accepts the move");
+        assert!(held.cursor_open);
+        let walk = state
+            .apply_combat_targeting_cursor_key_with_inputs(
+                '\r',
+                Some(CombatPlayerWeaponAttackInputs {
                     // `1 + 10 % 30 = 11` for the halberd against
                     // `1 + 10 % 4 = 3` for the spiked helm.
                     damage_roll: Some(10),
                     forced_hit: Some(true),
                     ..CombatPlayerWeaponAttackInputs::default()
-                },
+                }),
             )
-            .expect("the attack command resolves");
+            .expect("the confirm resolves");
+        let (_, application) = walk.attack.expect("confirmation resolves an attack");
 
         assert!(
             matches!(
-                application.weapon_attack,
-                Some(CombatWeaponAttackApplication {
+                application,
+                CombatWeaponAttackApplication {
                     resolution: CombatWeaponAttackResolution::Hit { raw_damage: 11, .. },
                     ..
-                })
+                }
             ),
             "expected the halberd's blow, got {:?}",
-            application.weapon_attack
+            application
         );
     }
 
@@ -2111,20 +2116,24 @@
         missing_state.party_equipment = default_party_equipment(1);
         missing_state.party_equipment[0][EQUIP_SLOT_WEAPON] = 34;
         let prng_before = missing_state.prng_state;
+        assert!(missing_state.begin_combat_attack_walk(0, true).cursor_open);
+        missing_state
+            .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+            .expect("the cursor accepts the move");
         let missed = missing_state
-            .apply_combat_player_command_with_attack_inputs(
-                0,
-                CombatPlayerCommandInput::AttackDirection(2),
-                CombatPlayerWeaponAttackInputs {
+            .apply_combat_targeting_cursor_key_with_inputs(
+                '\r',
+                Some(CombatPlayerWeaponAttackInputs {
                     damage_roll: None,
                     hit_raw_roll_0_to_60: 0,
                     forced_hit: Some(false),
-                },
+                }),
             )
-            .expect("the attack command resolves");
+            .expect("the confirm resolves");
+        let (_, missed_attack) = missed.attack.expect("confirmation resolves an attempt");
         assert!(matches!(
-            missed.weapon_attack.map(|attack| attack.resolution),
-            Some(CombatWeaponAttackResolution::Miss { .. })
+            missed_attack.resolution,
+            CombatWeaponAttackResolution::Miss { .. }
         ));
         assert_eq!(
             missing_state.prng_state, prng_before,

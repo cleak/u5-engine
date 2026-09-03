@@ -17,8 +17,11 @@ use crate::play_state_struct::PlayState;
 /// One scripted combat input.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CombatScenarioInput {
-    /// `A` followed by an inline direction code (1-4).
-    AttackDirection(u8),
+    /// `A` — `combat.md §8.2` opens the interactive targeting cursor.
+    Attack,
+    /// One keystroke fed to an open `combat.md §8.2` targeting cursor: an
+    /// internal direction code, Enter, `A`, Space or Escape.
+    CursorKey(char),
     /// Single direction code in `[1, 4]` — west/east/north/south.
     Move(u8),
     /// Pass / wait one phase.
@@ -80,6 +83,37 @@ pub fn run_combat_scenario(
             break;
         };
 
+        // `combat.md §8.2`: while a cursor is open it owns the keyboard.
+        if state.active_combat_targeting.is_some() {
+            let key = match input {
+                CombatScenarioInput::CursorKey(key) => *key,
+                CombatScenarioInput::Attack => 'A',
+                CombatScenarioInput::Pass => ' ',
+                CombatScenarioInput::Escape => '\u{1b}',
+                // `combat.md §8.2`: the cursor's move keys are the internal
+                // direction codes, the same bytes `Move` carries, so a
+                // scripted `Move` steers an open cursor instead of being
+                // dropped as an ignored key.
+                CombatScenarioInput::Move(code) => char::from(*code),
+                _ => char::from(0),
+            };
+            let walk = state.apply_combat_targeting_cursor_key(key);
+            result
+                .steps
+                .push(CombatScenarioStep::AppliedToSlot(actor_slot));
+            if walk.is_none_or(|walk| walk.cursor_open) {
+                state.pending_combat_actor_slot = Some(actor_slot);
+                continue;
+            }
+            let _ = state.apply_combat_committed_action_tail(actor_slot);
+            if let Some(exit) = advance_combat_round_after_scenario_actor(state, actor_slot) {
+                result.steps.push(CombatScenarioStep::Exited(exit));
+                result.final_exit = Some(exit);
+                break;
+            }
+            continue;
+        }
+
         if !state.combat_active {
             result
                 .steps
@@ -112,9 +146,22 @@ pub fn run_combat_scenario(
         }
         if matches!(
             application.action,
-            CombatPlayerCommandAction::PromptForAttackDirection
+            CombatPlayerCommandAction::OpenTargetingCursor
         ) {
-            state.pending_combat_actor_slot = Some(actor_slot);
+            // `combat.md §8.2`: the accepted `A` runs the attempt walk. It
+            // ends the actor's turn only once no further cursor opens.
+            let foes_present = crate::input_dispatch::combat_has_active_non_party_actor(state);
+            let walk = state.begin_combat_attack_walk(actor_slot, foes_present);
+            if walk.cursor_open {
+                state.pending_combat_actor_slot = Some(actor_slot);
+                continue;
+            }
+            let _ = state.apply_combat_committed_action_tail(actor_slot);
+            if let Some(exit) = advance_combat_round_after_scenario_actor(state, actor_slot) {
+                result.steps.push(CombatScenarioStep::Exited(exit));
+                result.final_exit = Some(exit);
+                break;
+            }
             continue;
         }
         if let Some(exit) = advance_combat_round_after_scenario_actor(state, actor_slot) {
@@ -130,9 +177,8 @@ pub fn run_combat_scenario(
 
 fn scenario_command_input(input: &CombatScenarioInput) -> CombatPlayerCommandInput {
     match input {
-        CombatScenarioInput::AttackDirection(direction) => {
-            CombatPlayerCommandInput::AttackDirection(*direction)
-        }
+        CombatScenarioInput::Attack => CombatPlayerCommandInput::Key('A'),
+        CombatScenarioInput::CursorKey(key) => CombatPlayerCommandInput::Key(*key),
         CombatScenarioInput::Move(direction) => CombatPlayerCommandInput::Direction(*direction),
         CombatScenarioInput::Pass => CombatPlayerCommandInput::Key(' '),
         CombatScenarioInput::StatsPanel => CombatPlayerCommandInput::Key('Z'),

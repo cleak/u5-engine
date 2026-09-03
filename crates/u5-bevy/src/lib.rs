@@ -224,9 +224,6 @@ const DISPLAY_PIXEL_ASPECT: f32 = 1.2;
 /// buffer and flushes queued type-ahead after each accepted action.
 const HELD_DIRECTION_INITIAL_DELAY: Duration = Duration::from_millis(500);
 const HELD_DIRECTION_REPEAT_INTERVAL: Duration = Duration::from_millis(100);
-/// Post-action combat redraws are brisk, but each automatic action must reach
-/// at least one host frame instead of collapsing into the final state.
-const PACED_COMBAT_PRESENTATION_INTERVAL_SECS: f32 = 0.08;
 
 /// The visual shell models the period 200-line EGA display seen in surviving
 /// DOS captures. The clean runtime keeps the specification's enhanced-display
@@ -10162,16 +10159,28 @@ impl Default for VisualIntroAnimationPump {
     }
 }
 
+/// Which cadence the gameplay pump runs at this frame.
+///
+/// While the round walk owes automatic combat actions the interval is
+/// **zero**: the pump fires on every host frame. Nothing published gives an
+/// automatic combat action a wall-clock delay, so the shell adds none. The
+/// only published constraint is `combat.md §7` step 7's per-action render -
+/// "Only after the hazard pass does the separate render step redraw changed
+/// cells and run any post-action sound or particle effect" - and in a
+/// frame-based shell one rendered frame per action is exactly that
+/// constraint and nothing more. Gating those actions on the BIOS user tick
+/// instead would be a 55 ms delay of the shell's own choosing, which is the
+/// same invention as the 80 ms one it replaced.
+///
+/// The visibility sweep still overrides, because `catalogs/item-list.md
+/// §7.2` does publish that presentation's per-frame pause.
 fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> (bool, f32) {
     state.visibility_sweep.map_or_else(
         || {
-            let paced_combat_waiting = state.combat_active
-                && state.pace_combat_presentations
-                && state.pending_combat_actor_slot.is_none();
             (
                 false,
-                if paced_combat_waiting {
-                    PACED_COMBAT_PRESENTATION_INTERVAL_SECS
+                if paced_combat_presentation_owed(state) {
+                    0.0
                 } else {
                     ordinary_interval
                 },
@@ -10184,6 +10193,37 @@ fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> 
             )
         },
     )
+}
+
+/// Whether the shell owes an automatic combat action this frame.
+///
+/// `combat.md §8` hands a keyboard-driven combatant's turn to the player
+/// command handler, so the pump declines while one is pending.
+fn paced_combat_presentation_owed(state: &PlayState) -> bool {
+    state.combat_active
+        && state.pace_combat_presentations
+        && state.pending_combat_actor_slot.is_none()
+}
+
+/// One pump firing's combat work: at most **one** automatic combat action.
+///
+/// `combat.md §7` step 7 publishes a render per action - "Only after the
+/// hazard pass does the separate render step redraw changed cells and run
+/// any post-action sound or particle effect" - so the shell advances one
+/// automatic action per firing and lets that firing's repaint show it.
+/// `§16`'s "A modern implementation can treat it as 'redraw every frame'
+/// without preserving the cadence" is scoped to the round counter's
+/// every-ten tile render; it permits dropping that cadence, not rendering
+/// fewer frames than there are actions.
+///
+/// Returns whether this firing owned the step, so the caller can skip the
+/// ordinary exploration pump.
+fn advance_paced_combat_pump_firing(state: &mut PlayState) -> bool {
+    if !paced_combat_presentation_owed(state) {
+        return false;
+    }
+    advance_paced_combat_presentation(state);
+    true
 }
 
 /// One firing of the gameplay world-tick pump, or none.
@@ -10275,15 +10315,12 @@ fn animate_static_tiles(
         // to `break` out of a catch-up loop; they now leave this block.
         'step: {
             let mut prompt_cursor_visible = visual.prompt_cursor_visible;
-            if visual.state.combat_active
-                && visual.state.pace_combat_presentations
-                && visual.state.pending_combat_actor_slot.is_none()
-            {
-                advance_paced_combat_presentation(&mut visual.state);
+            if advance_paced_combat_pump_firing(&mut visual.state) {
                 visual.prompt_cursor_visible = false;
                 visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
-                // One automatic action owns one visible host frame. A slow frame
-                // must never collapse several combat actions into one redraw.
+                // One automatic action owns one visible host frame. A slow
+                // frame must never collapse several combat actions into one
+                // redraw.
                 pump.accumulator = 0.0;
                 advanced = true;
                 break 'step;
@@ -12047,8 +12084,9 @@ fn drive_visual(
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     let control_pressed =
         keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-    let modal_prompt_active =
-        visual_line_prompt_active(&visual.state) || visual_modal_prompt_active(&visual.state);
+    let modal_prompt_active = visual_line_prompt_active(&visual.state)
+        || visual_modal_prompt_active(&visual.state)
+        || combat_targeting_cursor_owns_keyboard(&visual.state);
     let repeat_command = held_direction_repeat_command(
         &keyboard,
         time.delta(),
@@ -16667,6 +16705,17 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.endgame.is_some()
 }
 
+/// The idle redraw tick, which is also the only pass that toggles the
+/// `combat.md §7` combat-overlay blink flag - it reaches it through
+/// `idle_wait_pass`, which calls `advance_visual_tick` on the command-wait
+/// pass and on the under-sail world step alike.
+///
+/// An open `§8.2` targeting cursor is deliberately **not** counted as a
+/// modal prompt here. `§7` gives the blink no modal exception - "It toggles
+/// a blink flag each pass" - and freezing it would leave the arena with no
+/// player cursor box and no aim marker on every dark-phase opening, for as
+/// long as the cursor stayed open. The cursor's real claim on the keyboard is
+/// expressed where it belongs, in [`combat_targeting_cursor_owns_keyboard`].
 fn visual_idle_tick(state: &mut PlayState, game_dir: &Path) -> bool {
     if visual_modal_prompt_active(state) {
         return false;
@@ -16722,7 +16771,17 @@ fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
 /// `AppExit` on it: one keypress ended the session with no prompt and no
 /// save. The name asserted a contract nothing published.
 fn escape_is_inert_in_gameplay(state: &PlayState) -> bool {
-    !visual_modal_prompt_active(state)
+    !(visual_modal_prompt_active(state) || combat_targeting_cursor_owns_keyboard(state))
+}
+
+/// `combat.md §8.2`: while the `A`-Attack targeting cursor is open it owns
+/// the keyboard. Escape is one of its published keys - "Escape | Cancels" -
+/// so the shell must not treat it as an inert gameplay Escape, and
+/// held-direction auto-repeat must not steer the cursor. This is keyboard
+/// routing only: unlike [`visual_modal_prompt_active`] it does not stop the
+/// idle redraw tick, which is what toggles the `§7` overlay blink.
+fn combat_targeting_cursor_owns_keyboard(state: &PlayState) -> bool {
+    state.active_combat_targeting.is_some()
 }
 
 fn handle_visual_line_key(
@@ -21224,20 +21283,165 @@ mod tests {
         assert_eq!(interval, 3.0 * BIOS_USER_TICK_INTERVAL_SECS);
     }
 
-    #[test]
-    fn automatic_combat_actions_use_the_brisk_presentation_interval() {
+    /// A fight already under way with two automatic actors owing turns and
+    /// the keyboard-driven party actor still counting down. `combat.md §5.3`
+    /// step 8 runs the round-loop entry prologue once per encounter, so the
+    /// fixture marks it spent rather than paying its world tick here.
+    fn paced_two_monster_combat_state() -> PlayState {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.pace_combat_presentations = true;
         state.pending_combat_actor_slot = None;
+        state.combat_round_loop_prologue_ran = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.active_objects = vec![ActiveObject::empty(); u5_runtime::OOL_SLOTS];
+        state.active_objects[0] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        // The party actor's phase counter is still counting down, so this
+        // round walk owes only the two monsters.
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            5,
+            5,
+            5,
+        ]);
+        for (slot, x) in [(8usize, 8u8), (9, 2)] {
+            state.active_objects[slot] = ActiveObject {
+                type_byte: 0x90,
+                tile: 0x90,
+                x: usize::from(x),
+                y: 5,
+                ..ActiveObject::empty()
+            };
+            state.combat_actors[slot] = CombatActorDescriptor::from_row([
+                10,
+                1,
+                u5_runtime::COMBAT_ACTOR_FLAG_SELECTABLE_40,
+                COMBAT_CLASS_GIANT_RAT,
+                slot as u8,
+                0,
+                x,
+                5,
+            ]);
+        }
+        state
+    }
+
+    /// `combat.md §7` step 7 gives every dispatched action its own render:
+    /// "Only after the hazard pass does the separate render step redraw
+    /// changed cells and run any post-action sound or particle effect."
+    /// One pump firing therefore advances one automatic action, never the
+    /// whole owed run - `§16`'s "redraw every frame" licence is scoped to the
+    /// round counter's every-ten tile render, not to collapsing actions.
+    #[test]
+    fn one_pump_firing_advances_exactly_one_automatic_combat_action() {
+        let mut state = paced_two_monster_combat_state();
+
+        assert!(advance_paced_combat_pump_firing(&mut state));
+        let after_first = state.next_combat_actor_slot;
+        assert_eq!(after_first, 9, "the first firing must stop after slot 8");
+        assert_eq!(state.pending_combat_actor_slot, None);
+
+        assert!(advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(
+            state.next_combat_actor_slot, 10,
+            "the second firing owns the second automatic action"
+        );
+    }
+
+    /// `combat.md §7`: the shared tile-painting pass "toggles a blink flag
+    /// each pass", with no modal exception, and the shell's idle redraw tick
+    /// is the only caller of that toggle.
+    ///
+    /// An open `§8.2` targeting cursor owns the keyboard, but it must not
+    /// stop that tick. If it did, the flag would freeze at whatever value it
+    /// held when the cursor opened, and on a dark pass `§7`'s "dark blink
+    /// pass ... suppresses both overlays" would leave the arena with no
+    /// player cursor box and no aim marker for as long as the player kept
+    /// aiming.
+    #[test]
+    fn an_open_targeting_cursor_does_not_freeze_the_combat_overlay_blink() {
+        let mut state = paced_two_monster_combat_state();
+        state.pending_combat_actor_slot = Some(0);
+        assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+
+        // Keyboard ownership is real - Escape belongs to the cursor, and
+        // held-direction auto-repeat must not steer it...
+        assert!(combat_targeting_cursor_owns_keyboard(&state));
+        assert!(!escape_is_inert_in_gameplay(&state));
+        // ...but it is not a blink-freezing modal prompt.
+        assert!(!visual_modal_prompt_active(&state));
+
+        let opened_with = state.combat_cursor_blink;
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
+        assert_ne!(
+            state.combat_cursor_blink, opened_with,
+            "the idle redraw tick must keep toggling while the cursor is open"
+        );
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
+        assert_eq!(state.combat_cursor_blink, opened_with);
+    }
+
+    /// The same gate must never steal a keyboard-driven combatant's turn:
+    /// `combat.md §8` hands the turn to the player command handler, and the
+    /// shell's pump has no business advancing the walk while it waits.
+    #[test]
+    fn the_combat_pump_declines_while_a_keyboard_driven_actor_is_pending() {
+        let mut state = paced_two_monster_combat_state();
+        state.pending_combat_actor_slot = Some(0);
+        let slot_before = state.next_combat_actor_slot;
+
+        assert!(!advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(state.next_combat_actor_slot, slot_before);
+
+        state.pending_combat_actor_slot = None;
+        state.combat_active = false;
+        assert!(!advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(state.next_combat_actor_slot, slot_before);
+    }
+
+    /// Nothing published gives an automatic combat action a wall-clock
+    /// delay, so the shell adds none: while the walk owes actions the pump
+    /// interval is zero and one action takes one rendered frame, which is
+    /// exactly `combat.md §7` step 7's per-action render. A pending
+    /// keyboard-driven actor restores the ordinary cadence, and the
+    /// published visibility-sweep pause still overrides.
+    #[test]
+    fn automatic_combat_actions_add_no_interval_of_the_shells_own() {
+        let mut state = paced_two_monster_combat_state();
 
         assert_eq!(
-            visual_animation_pump_interval(&state, 0.33),
-            (false, PACED_COMBAT_PRESENTATION_INTERVAL_SECS)
+            visual_animation_pump_interval(&state, GAMEPLAY_WORLD_TICK_INTERVAL_SECS),
+            (false, 0.0)
         );
 
         state.pending_combat_actor_slot = Some(0);
-        assert_eq!(visual_animation_pump_interval(&state, 0.33), (false, 0.33));
+        assert_eq!(
+            visual_animation_pump_interval(&state, GAMEPLAY_WORLD_TICK_INTERVAL_SECS),
+            (false, GAMEPLAY_WORLD_TICK_INTERVAL_SECS)
+        );
+        state.pending_combat_actor_slot = None;
+
+        state.visibility_sweep = Some(u5_runtime::VisibilitySweep {
+            frames_remaining: 20,
+            pause_bios_ticks_per_frame: 3,
+            center_x: 10,
+            center_y: 20,
+            visible_cells: [true; u5_runtime::VIEWPORT_SIDE * u5_runtime::VIEWPORT_SIDE],
+        });
+        assert_eq!(
+            visual_animation_pump_interval(&state, GAMEPLAY_WORLD_TICK_INTERVAL_SECS),
+            (true, 3.0 * BIOS_USER_TICK_INTERVAL_SECS)
+        );
     }
 
     #[test]

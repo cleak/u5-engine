@@ -10912,7 +10912,7 @@ fn combat_player_command_ignores_quickness_entirely() {
 }
 
 #[test]
-fn combat_player_command_routes_direction_and_attack_prompt_through_step_primitive() {
+fn combat_player_command_routes_a_bare_direction_through_the_step_primitive() {
     let mut move_state = combat_player_command_state(8, 5);
     move_state.visibility_dirty = false;
 
@@ -10923,7 +10923,6 @@ fn combat_player_command_routes_direction_and_attack_prompt_through_step_primiti
     assert_eq!(
         moved.action,
         CombatPlayerCommandAction::StepOrAttack {
-            prompted_attack: false,
             direction_code: 2,
             outcome: CombatStepOrAttackPrimitiveOutcome::Moved {
                 commit: CombatLinkedPositionCommitOutcome {
@@ -10948,57 +10947,570 @@ fn combat_player_command_routes_direction_and_attack_prompt_through_step_primiti
         (6, 5)
     );
     assert!(move_state.visibility_dirty);
+}
 
+/// `combat.md §8.2`: "accepting Attack opens a second, separate input read,
+/// and it is not a one-shot direction key but an **interactive targeting
+/// cursor**". `A` itself only opens it — "Immediately before the cursor
+/// opens the engine prints `Aim! `" — and consumes no randomness.
+#[test]
+fn combat_attack_opens_the_targeting_cursor_and_prints_aim() {
     let mut attack_state = combat_player_command_state(6, 5);
     attack_state.combat_terrain[5][5] = 0x05;
     attack_state.visibility_dirty = false;
     attack_state.party_equipment = default_party_equipment(1);
-    attack_state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
-    attack_state.party[0].hp = attack_state.party[0].hp.saturating_sub(1);
+    attack_state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     attack_state.prng_state = 0x0030;
     let prng_before_prompt = attack_state.prng_state;
+
     let prompted = attack_state
         .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('A'))
         .unwrap();
+
     assert_eq!(
         prompted.action,
-        CombatPlayerCommandAction::PromptForAttackDirection
+        CombatPlayerCommandAction::OpenTargetingCursor
     );
     assert_eq!(prompted.ring_pass, None);
     assert_eq!(attack_state.prng_state, prng_before_prompt);
 
-    let attacked = attack_state
-        .apply_combat_player_command_with_attack_inputs(
+    let walk = attack_state.begin_combat_attack_walk(0, true);
+
+    // Exactly one item qualifies, so no item-name line is printed.
+    assert_eq!(walk.text, "Attack-Aim! ");
+    assert!(walk.cursor_open);
+    // "It starts ... on the attacker's own cell" when nothing is remembered.
+    let session = attack_state.active_combat_targeting.clone().unwrap();
+    assert_eq!(session.cursor, (5, 5));
+    assert_eq!(session.attacker, (5, 5));
+    // Dagger reach 3 (`catalogs/item-list.md §5.3`).
+    assert_eq!(session.max_range, 3);
+    assert_eq!(attack_state.prng_state, prng_before_prompt);
+}
+
+/// `combat.md §8.2`: "Enter, or the letter `A` (either case) | Confirm at the
+/// cursor cell", and "The occupancy lookup does not filter by side".
+#[test]
+fn combat_targeting_cursor_confirmation_applies_readied_weapon_damage() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
+    state.party_strengths = vec![30];
+    state.party_experience = vec![0];
+    let hp_before = state.combat_actors[8].hp_or_wound;
+
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    // Internal direction code east moves the cursor onto the monster.
+    let held = state
+        .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+        .unwrap();
+    assert!(held.cursor_open);
+    assert_eq!(
+        state.active_combat_targeting.as_ref().unwrap().cursor,
+        (6, 5)
+    );
+
+    let walk = state
+        .apply_combat_targeting_cursor_key_with_inputs(
+            '\r',
+            Some(CombatPlayerWeaponAttackInputs {
+                damage_roll: Some(0),
+                forced_hit: Some(true),
+                ..CombatPlayerWeaponAttackInputs::default()
+            }),
+        )
+        .unwrap();
+
+    assert!(!walk.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+    let (target_slot, attack) = walk.attack.expect("confirmation resolves an attack");
+    assert_eq!(target_slot, 8);
+    assert!(matches!(
+        attack,
+        CombatWeaponAttackApplication {
+            resolution: CombatWeaponAttackResolution::Hit {
+                route: CombatWeaponAttackRangeRoute::Melee,
+                raw_damage: 1,
+            },
+            damage_application: Some(CombatWeaponDamageApplication::Monster { target_slot: 8, .. }),
+        }
+    ));
+    assert_eq!(state.combat_actors[8].hp_or_wound, hp_before - 1);
+    assert_eq!(state.party_experience[0], 1);
+}
+
+/// `combat.md §8.2`: "On confirm it looks for an actor occupying the cursor
+/// cell; if there is none ... it prints `Nothing!`", and "cancelling with
+/// Escape or Space does not return to the command prompt and does not give
+/// the turn back".
+#[test]
+fn combat_targeting_cursor_reports_nothing_and_still_ends_the_walk() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
+
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    let empty = state
+        .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_NORTH), None)
+        .unwrap();
+    assert!(empty.cursor_open);
+    let confirmed = state
+        .apply_combat_targeting_cursor_key_with_inputs('\r', None)
+        .unwrap();
+    assert_eq!(confirmed.text, "Nothing!");
+    assert!(!confirmed.cursor_open);
+    assert!(confirmed.attack.is_none());
+
+    // "On cancel the engine prints `Nothing!` (melee arm) or returns
+    // silently (ranged arm)." The Dagger's reach 3 is the ranged arm.
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    let ranged_cancel = state
+        .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
+        .unwrap();
+    assert_eq!(ranged_cancel.text, "");
+    assert!(!ranged_cancel.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+
+    // Bare hands is the melee arm, so its cancel does print `Nothing!`.
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = EQUIPMENT_EMPTY;
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    let melee_cancel = state
+        .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
+        .unwrap();
+    assert_eq!(melee_cancel.text, "Nothing!");
+    assert!(!melee_cancel.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+}
+
+/// `combat.md §8.2`: "Confirm at the cursor cell - **unless** the cursor is
+/// on the attacker's own cell, in which case nothing happens and the loop
+/// reads another key", and a move outside the range cap leaves the cursor
+/// where it is with "no message, no beep, no turn consumed".
+#[test]
+fn combat_targeting_cursor_holds_on_the_attacker_cell_and_out_of_range_moves() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    // Bare hands: `§8.2` "a single bare-handed attempt, which behaves as
+    // melee with range one".
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    assert_eq!(state.active_combat_targeting.as_ref().unwrap().max_range, 1);
+
+    let held = state
+        .apply_combat_targeting_cursor_key_with_inputs('\r', None)
+        .unwrap();
+    assert!(held.cursor_open);
+    assert!(held.text.is_empty());
+
+    // Two cells east is beyond a range-one cursor, so the cursor does not
+    // move.
+    assert!(
+        state
+            .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+            .unwrap()
+            .cursor_open
+    );
+    let blocked = state
+        .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+        .unwrap();
+    assert!(blocked.cursor_open);
+    assert!(blocked.text.is_empty());
+    assert_eq!(
+        state.active_combat_targeting.as_ref().unwrap().cursor,
+        (6, 5)
+    );
+}
+
+/// `combat.md §8.2`: "Five items - **sling, flaming oil, bow, crossbow and
+/// magic bow** - run an interference test before the cursor. ... On abort the
+/// engine prints a newline, the interfering actor's name, and ` interferes!`,
+/// opens no cursor, **and the turn is still spent**."
+#[test]
+fn combat_attack_missile_item_aborts_on_an_adjacent_recent_attacker() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow
+    // "The engine keeps, per combatant, the identity of whichever actor most
+    // recently struck that combatant".
+    state.combat_interference_sources[0] = 8;
+
+    let walk = state.begin_combat_attack_walk(0, true);
+
+    assert_eq!(walk.text, "Attack-\nGiant Rat interferes!");
+    assert!(!walk.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+
+    // "The other reach-bearing items - dagger, spear, throwing axe, morning
+    // star, halberd, magic axe - do **not** run this test".
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16; // Dagger
+    let walk = state.begin_combat_attack_walk(0, true);
+    assert_eq!(walk.text, "Attack-Aim! ");
+    assert!(walk.cursor_open);
+}
+
+/// `combat.md §8.2`: "the Negate Time effect is not currently active" is one
+/// of the five conditions the abort needs, and the source must be "on the
+/// automatic-driver side - a monster, or a party member acting under
+/// Sword-of-Chaos / charm control. **An adjacent ordinary party member never
+/// interferes**".
+#[test]
+fn combat_attack_interference_needs_a_live_adjacent_automatic_side_source() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26;
+    state.combat_interference_sources[0] = 8;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), Some(8));
+
+    // Negate Time suppresses it.
+    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 3;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
+    state.active_effect_tag = None;
+    state.active_effect_counter = 0;
+
+    // "it is neither invisible nor asleep".
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
+    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
+    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+
+    // "its distance from the attacker is exactly one".
+    state.combat_actors[8].x = 8;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
+    state.combat_actors[8].x = 6;
+    state.combat_actors[8].y = 6;
+    // "Distance uses the same truncated Euclidean metric as the cursor, so
+    // 'exactly one' means any of the eight surrounding cells, diagonals
+    // included."
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), Some(8));
+}
+
+/// `combat.md §8.2`: "When two or three items qualify, each attempt
+/// additionally prints a newline, that item's name, and a colon **on its own
+/// line before its `Attack-`**", and the cursor "is entered once per readied
+/// weapon, not once per Attack command".
+#[test]
+fn combat_attack_walks_one_cursor_per_qualifying_readied_item() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_HELM] = 3; // Spiked Helm
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow, reach 7
+
+    let opened = state.begin_combat_attack_walk(0, true);
+    assert_eq!(opened.text, "\nSpiked Helm:\nAttack-Aim! ");
+    assert!(opened.cursor_open);
+    // The Spiked Helm has no range cap, so its cursor is the range-one melee
+    // arm.
+    assert_eq!(state.active_combat_targeting.as_ref().unwrap().max_range, 1);
+
+    // Cancelling the first attempt still moves on to the second.
+    let second = state
+        .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
+        .unwrap();
+    assert_eq!(second.text, "Nothing!\nBow:\nAttack-Aim! ");
+    assert!(second.cursor_open);
+    assert_eq!(state.active_combat_targeting.as_ref().unwrap().index, 1);
+    assert_eq!(state.active_combat_targeting.as_ref().unwrap().max_range, 7);
+
+    // The Bow is the ranged arm, so its cancel is silent, and with no third
+    // attempt the whole walk is over.
+    let done = state
+        .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
+        .unwrap();
+    assert_eq!(done.text, "");
+    assert!(!done.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+}
+
+/// `combat.md §8.2`: "A character with no qualifying item makes a single
+/// bare-handed attempt, which behaves as melee with range one." It resolves.
+/// `§11`'s attacker-rating table carries the row "party member with any other
+/// readied item, or bare-handed", so the shared to-hit helper runs; `§12`'s
+/// stage-one damage row says "**bare hands are a flat `1`**".
+#[test]
+fn a_confirmed_bare_handed_attempt_resolves_a_flat_one_melee_hit() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_experience = vec![0];
+    let hp_before = state.combat_actors[8].hp_or_wound;
+
+    let attempts = state.combat_attack_attempts_for_actor(0);
+    assert_eq!(attempts, vec![CombatAttackAttempt::bare_handed()]);
+
+    let prng_before = state.prng_state;
+    let application = state
+        .resolve_and_apply_combat_targeting_bare_handed_attack(
             0,
-            CombatPlayerCommandInput::AttackDirection(2),
-            CombatPlayerWeaponAttackInputs::default(),
+            8,
+            Some(CombatPlayerWeaponAttackInputs {
+                hit_raw_roll_0_to_60: 0,
+                damage_roll: Some(0),
+                forced_hit: Some(true),
+            }),
         )
         .unwrap();
 
     assert_eq!(
-        attacked.action,
-        CombatPlayerCommandAction::StepOrAttack {
-            prompted_attack: true,
-            direction_code: 2,
-            outcome: CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 8 },
+        application.resolution,
+        CombatWeaponAttackResolution::Hit {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 1,
         }
     );
+    assert_eq!(state.combat_actors[8].hp_or_wound, hp_before - 1);
     assert_eq!(
-        attacked.ring_pass,
-        Some(CombatMagicRingPassOutcome {
-            invisibility_applied: false,
-            regeneration_applied: 1,
-            vanished_ring: None,
-        })
+        state.prng_state, prng_before,
+        "supplied inputs must not draw, and a flat damage value never draws"
     );
+}
+
+/// `combat.md §8.2` lists the cursor's exclusions exhaustively - "if there is
+/// none, or the occupant is dead-marked, invisible, or an empty/decoration
+/// slot, it prints `Nothing!`" - and asleep is not among them. `§7.1`: a
+/// non-acting actor "is returned by the cell-occupancy lookup, so it can be
+/// **targeted, attacked and killed normally**", and `§11` computes a score
+/// against "**An asleep defender**" rather than skipping it.
+#[test]
+fn the_targeting_cursor_still_finds_an_asleep_occupant() {
+    let mut state = combat_player_command_state(6, 5);
+
+    assert_eq!(state.combat_targeting_occupant_at((6, 5)), Some(8));
+
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
     assert_eq!(
-        (
-            attack_state.combat_actors[0].x,
-            attack_state.combat_actors[0].y
+        state.combat_targeting_occupant_at((6, 5)),
+        Some(8),
+        "the asleep/magically-disabled bit is not a targeting exclusion"
+    );
+
+    // The published exclusions still hold.
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    assert_eq!(state.combat_targeting_occupant_at((6, 5)), None);
+}
+
+/// `combat.md §8.2`: the cursor "starts on **the attacker's** remembered
+/// previous target" - a per-attacker property, not one arena-wide cell.
+#[test]
+fn the_remembered_previous_target_belongs_to_one_attacker() {
+    let mut state = combat_player_command_state(6, 5);
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 5, 6]);
+
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    let _ = state
+        .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+        .unwrap();
+    let _ = state
+        .apply_combat_targeting_cursor_key_with_inputs('\r', None)
+        .unwrap();
+    assert_eq!(state.combat_remembered_targets[0], Some(8));
+    assert_eq!(state.combat_remembered_targets[1], None);
+
+    // Slot 1 has never aimed at anything, so its own cursor opens on its own
+    // cell rather than on slot 0's last target.
+    assert!(state.begin_combat_attack_walk(1, true).cursor_open);
+    let session = state.active_combat_targeting.clone().unwrap();
+    assert_eq!(session.attacker, (5, 6));
+    assert_eq!(session.cursor, (5, 6));
+
+    // `combat.md §7`: the open cursor is what supplies the "explicit arena
+    // X/Y" the overlay tail's second shape is drawn at, so slot 1's freshly
+    // opened cursor - on its own cell - is the marked cell.
+    assert_eq!(state.combat_secondary_marker, Some((5, 6)));
+}
+
+/// `combat.md §7` combat-overlay tail: on a lit, eligible pass it "draws
+/// the player cursor box around the eligible active player's arena cell" and
+/// then "a separate flag can then draw an additional marker at an explicit
+/// arena X/Y".
+///
+/// The open `§8.2` targeting cursor is what supplies that explicit
+/// coordinate, so the aim cell is marked on screen, the mark follows the
+/// cursor, and it is gone once the walk ends - `§7`: "The next pass's base
+/// repaint removes both old shapes."
+#[test]
+fn the_open_targeting_cursor_is_the_arena_marker_the_overlay_tail_draws() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow, reach 7
+    state.pending_combat_actor_slot = Some(0);
+    state.combat_cursor_blink = true;
+
+    assert_eq!(state.combat_secondary_marker, None);
+    assert_eq!(state.combat_overlay_draw_cells().secondary_marker_cell, None);
+
+    // "It starts ... on the attacker's own cell" with nothing remembered.
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    assert_eq!(state.combat_secondary_marker, Some((5, 5)));
+    let opened = state.combat_overlay_draw_cells();
+    assert_eq!(opened.cursor_draw_cell, Some((5, 5)));
+    assert_eq!(opened.secondary_marker_cell, Some((5, 5)));
+
+    let _ = state
+        .apply_combat_targeting_cursor_key(char::from(INPUT_CODE_EAST))
+        .unwrap();
+    assert_eq!(
+        state.active_combat_targeting.as_ref().unwrap().cursor,
+        (6, 5)
+    );
+    assert_eq!(state.combat_secondary_marker, Some((6, 5)));
+    assert_eq!(
+        state.combat_overlay_draw_cells().secondary_marker_cell,
+        Some((6, 5))
+    );
+
+    // `§7`: "A dark blink pass ... suppresses both overlays."
+    state.combat_cursor_blink = false;
+    let dark = state.combat_overlay_draw_cells();
+    assert_eq!(dark.cursor_draw_cell, None);
+    assert_eq!(dark.secondary_marker_cell, None);
+    state.combat_cursor_blink = true;
+
+    // The Bow is the ranged arm, so Escape closes it silently and, with no
+    // further attempt, ends the walk. No coordinate is left lit.
+    let done = state.apply_combat_targeting_cursor_key('\u{1b}').unwrap();
+    assert!(!done.cursor_open);
+    assert_eq!(state.combat_secondary_marker, None);
+    assert_eq!(state.combat_overlay_draw_cells().secondary_marker_cell, None);
+}
+
+/// `combat.md §7`: "If party actors remain and foes do not, it prints
+/// `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
+///
+/// `§8.2` opens one cursor per readied item, so the last foe can die on an
+/// attempt that is not the last one. The announcement belongs to the end of
+/// the acting combatant's dispatch, and the walk must still owe it after the
+/// next attempt's cursor has come and gone.
+#[test]
+fn a_kill_on_a_non_final_attack_attempt_still_announces_victory() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_player_command_state(6, 5);
+    state.active_player = Some(0);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_HELM] = 3; // Spiked Helm, melee
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow, reach 7
+    state.party_strengths = vec![255];
+    state.party_experience = vec![0];
+    // The Spiked Helm's weapon-capability entry is 4, and `§12`'s stage-one
+    // roll on a non-flat entry is `1 + roll % max`, so any landed swing does
+    // at least one point: a one-hit-point Giant Rat dies on the first
+    // attempt.
+    state.combat_actors[8].hp_or_wound = 1;
+    state.prng_state = 0x0000;
+
+    assert_eq!(
+        handle_play_key_input(
+            &mut state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir
+        )
+        .unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(
+        state.message.contains("Giant Rat killed!"),
+        "the first attempt must land the fatal blow: {:?}",
+        state.message
+    );
+    // The turn is not over: the Bow's cursor is open and owns the keyboard,
+    // so nothing is announced yet.
+    assert!(state.active_combat_targeting.is_some());
+    assert!(!state.message.contains("VICTORY!"));
+
+    assert_eq!(
+        handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_combat_targeting.is_none());
+    assert!(
+        state.message.contains("VICTORY!"),
+        "the victory earned on the first attempt must survive the second cursor: {:?}",
+        state.message
+    );
+}
+
+/// The player-side attacker rating is read from the attacking character's
+/// own roster row, not from the descriptor index.
+///
+/// `combat.md §5` seats a packed party, so a character can sit at a
+/// descriptor slot below its roster slot; reading `party_strengths` by
+/// descriptor index would give a second party member the first one's rating.
+/// (This is the engine's held operand pair, not `§11`'s selector - see the
+/// doc comment on `combat_player_attack_ratings`.)
+#[test]
+fn a_player_attackers_rating_follows_its_roster_row_not_its_descriptor_slot() {
+    let mut state = combat_player_command_state(6, 5);
+    // A packed party: descriptor slot 1 belongs to roster slot 2, which is
+    // exactly the case an index-by-descriptor-slot read gets wrong.
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 2, 1, 0, 5, 6]);
+    state.party_strengths = vec![10, 10, 200];
+    assert_eq!(state.combat_roster_slot_for_actor_slot(1), Some(2));
+
+    // `combat_to_hit_score` is `(attacker - defender + 30) / 2` compared
+    // against the drawn roll, so a roll of 100 separates Strength 200 from
+    // Strength 10 for any small class defence.
+    let inputs = CombatPlayerWeaponAttackInputs {
+        hit_raw_roll_0_to_60: 100,
+        damage_roll: Some(0),
+        forced_hit: None,
+    };
+    // Descriptor slot 1 stands at (5, 6), adjacent to the Giant Rat (6, 5).
+    let application = state
+        .resolve_and_apply_combat_targeting_bare_handed_attack(1, 8, Some(inputs))
+        .expect("the bare-handed arm resolves");
+    assert!(
+        matches!(
+            application.resolution,
+            CombatWeaponAttackResolution::Hit { .. }
         ),
-        (5, 5)
+        "roster slot 2's Strength 200 lands; descriptor slot 1's row is 10"
     );
-    assert!(!attack_state.visibility_dirty);
+
+    // Swap the two rows: the roster read now sees 10 and the same swing must
+    // miss. A descriptor-indexed read would see 200 and still hit.
+    state.party_strengths = vec![10, 200, 10];
+    let low = state
+        .resolve_and_apply_combat_targeting_bare_handed_attack(1, 8, Some(inputs))
+        .expect("the bare-handed arm resolves");
+    assert!(matches!(
+        low.resolution,
+        CombatWeaponAttackResolution::Miss { .. }
+    ));
+}
+
+/// `combat.md §8.2`: the scripted combat driver reaches the same cursor, so
+/// headless scenarios can cover it. Confirming with `A` "either case" is the
+/// same as Enter.
+#[test]
+fn combat_scenario_script_drives_the_targeting_cursor() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
+    state.party_strengths = vec![255];
+
+    let result = crate::combat_scenario::run_combat_scenario(
+        &mut state,
+        &[
+            crate::combat_scenario::CombatScenarioInput::Attack,
+            crate::combat_scenario::CombatScenarioInput::CursorKey(char::from(INPUT_CODE_EAST)),
+            crate::combat_scenario::CombatScenarioInput::CursorKey('a'),
+        ],
+    );
+
+    assert!(state.active_combat_targeting.is_none());
+    assert!(
+        result
+            .steps
+            .iter()
+            .any(|step| matches!(
+                step,
+                crate::combat_scenario::CombatScenarioStep::AppliedToSlot(0)
+            ))
+    );
+    assert!(state.combat_actors[8].hp_or_wound < 10 || state.combat_actors[8].is_marked_dead());
 }
 
 #[test]
@@ -11015,7 +11527,6 @@ fn combat_player_command_out_of_arena_direction_releases_only_the_actor() {
     assert_eq!(
         application.action,
         CombatPlayerCommandAction::StepOrAttack {
-            prompted_attack: false,
             direction_code: 2,
             outcome: CombatStepOrAttackPrimitiveOutcome::OutOfArena { x: 11, y: 5 },
         }
@@ -11045,76 +11556,42 @@ fn combat_player_command_out_of_arena_direction_releases_only_the_actor() {
     assert!(state.visibility_dirty);
 }
 
+/// `combat.md §7`: "If party actors remain and foes do not, it prints
+/// `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
 #[test]
-fn combat_player_command_attack_applies_readied_weapon_damage() {
-    let mut state = combat_player_command_state(6, 5);
-    state.party_equipment = default_party_equipment(1);
-    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
-    state.party_strengths = vec![30];
-    state.party_experience = vec![0];
-    let hp_before = state.combat_actors[8].hp_or_wound;
-
-    let application = state
-        .apply_combat_player_command_with_attack_inputs(
-            0,
-            CombatPlayerCommandInput::AttackDirection(2),
-            CombatPlayerWeaponAttackInputs {
-                damage_roll: Some(0),
-                forced_hit: Some(true),
-                ..CombatPlayerWeaponAttackInputs::default()
-            },
-        )
-        .unwrap();
-
-    assert_eq!(
-        application.action,
-        CombatPlayerCommandAction::StepOrAttack {
-            prompted_attack: true,
-            direction_code: 2,
-            outcome: CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 8 },
-        }
-    );
-    assert!(matches!(
-        application.weapon_attack,
-        Some(CombatWeaponAttackApplication {
-            resolution: CombatWeaponAttackResolution::Hit {
-                route: CombatWeaponAttackRangeRoute::Melee,
-                raw_damage: 1,
-            },
-            damage_application: Some(CombatWeaponDamageApplication::Monster { target_slot: 8, .. }),
-        })
-    ));
-    assert_eq!(state.combat_actors[8].hp_or_wound, hp_before - 1);
-    assert_eq!(state.party_experience[0], 1);
-}
-
-#[test]
-fn combat_player_command_attack_announces_victory_and_continues_cleanup() {
+fn combat_targeting_cursor_kill_clears_the_last_foe_for_the_victory_line() {
     let mut state = combat_player_command_state(6, 5);
     state.party_equipment = default_party_equipment(1);
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     state.party_strengths = vec![30];
     state.combat_actors[8].hp_or_wound = 1;
 
-    let application = state
-        .apply_combat_player_command_with_attack_inputs(
-            0,
-            CombatPlayerCommandInput::AttackDirection(2),
-            CombatPlayerWeaponAttackInputs {
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    assert!(
+        state
+            .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+            .unwrap()
+            .cursor_open
+    );
+    let walk = state
+        .apply_combat_targeting_cursor_key_with_inputs(
+            '\r',
+            Some(CombatPlayerWeaponAttackInputs {
                 damage_roll: Some(0),
                 forced_hit: Some(true),
                 ..CombatPlayerWeaponAttackInputs::default()
-            },
+            }),
         )
         .unwrap();
 
+    assert!(!walk.cursor_open);
+    assert!(walk.attack.is_some());
     assert!(state.combat_actors[8].is_marked_dead());
     assert_eq!(
-        application.control_after,
+        state.combat_round_loop_control(false, false),
         CombatRoundLoopControl::ContinueActorWalk
     );
-    assert!(application.victory_announced);
-    assert!(application.weapon_attack.is_some());
+    assert!(state.announce_combat_victory_if_needed());
 }
 
 #[test]
@@ -11356,8 +11833,35 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
 
     let mut attack_state = combat_player_command_state(6, 5);
     attack_state.active_player = Some(0);
+    // `combat.md §8.2`: `A` opens the targeting cursor; the cursor is then
+    // steered by internal direction codes and confirmed with Enter. The
+    // attacker itself never moves.
+    //
+    // This Avatar has nothing readied, so the walk is the published single
+    // bare-handed attempt, which "behaves as melee with range one" and
+    // resolves like any other melee attempt. `§11`'s attacker-rating table
+    // ends "| Attacker | party member with any other readied item, or
+    // bare-handed | its own **combat weight** |", so the shared to-hit
+    // helper runs and takes its **one** draw; `§12`'s stage-one damage row
+    // says "Values `0` and `1` pass through unchanged, and **bare hands are
+    // a flat `1`**", so no damage draw follows it. Nine of a ten-HP Giant
+    // Rat's hit points is "three quarters or more", which `§11.1`'s
+    // graded-wound table publishes as `<target> barely wounded!`.
+    let mut expected_prng = attack_state.prng_state;
+    let _bare_handed_hit_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX));
+    // The Giant Rat's reply poisons the Avatar rather than dealing
+    // ordinary damage; `combat.md §12`'s "the poison/status branch returns
+    // before the ordinary roller ever asks for it" means its defence draw
+    // is skipped just as a miss's would be.
+    advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false);
     assert_eq!(
-        handle_play_key_input(&mut attack_state, 'A', "6", game_dir).unwrap(),
+        handle_play_key_input(
+            &mut attack_state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir
+        )
+        .unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(
@@ -11368,18 +11872,16 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         (5, 5)
     );
     // `combat.md` Section 8.1 closes the turn with the unconditional turn
-    // banner. The Giant Rat's reply ahead of it is the stream re-baselined
-    // by `RETRACTIONS.md` R311: the lazily drawn cardinal fallback changes
-    // which roll the reply takes.
-    // `combat.md` 11.1: the party swing's own failed to-hit prints the
-    // target-named `Giant Rat missed!` - "it is printed by a party member's
-    // failed swing **at** a Bat, never by the Bat's failed swing at the
-    // party". The rat's own reply then takes the poison/status branch of
-    // Section 12, whose line is "printed **inside** damage resolution ...
-    // and the ordinary result line is then suppressed".
+    // banner, and the Giant Rat's reply sits ahead of it.
     assert_eq!(
         attack_state.message,
-        "East\nGiant Rat missed!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
+        "Attack-Aim! \nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
+    );
+    assert_eq!(attack_state.combat_actors[8].hp_or_wound, 9);
+    assert_eq!(attack_state.party_experience[0], 1);
+    assert_eq!(
+        attack_state.prng_state, expected_prng,
+        "a confirmed bare-handed attempt draws the to-hit roll and nothing else"
     );
     assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
@@ -11442,7 +11944,13 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false);
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
+        handle_play_key_input(
+            &mut state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir
+        )
+        .unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -11455,14 +11963,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     assert!(state.combat_actors[8].hp_or_wound >= 6);
     assert_eq!(
         state.message,
-        // The Giant Rat's reply is its poison/status branch, which
-        // `combat.md` Section 12 resolves "instead of the default melee
-        // roll" and which returns before the ordinary roller ever asks
-        // for its defence draw. Which branch the rat takes moved with
-        // the shared stream: `RETRACTIONS.md` R335 narrowed the to-hit
-        // draw to the shared `0..=60` raw roll and R336 removed the
-        // monster-side damage draw entirely.
-        "East\nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with Dagger:"
+        "Attack-Aim! \nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -11484,7 +11985,13 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     state.combat_actors[8].hp_or_wound = 1;
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
+        handle_play_key_input(
+            &mut state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir
+        )
+        .unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -11495,7 +12002,9 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     // the next keyboard-driven turn still follows it.
     assert_eq!(
         state.message,
-        format!("East\nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:")
+        format!(
+            "Attack-Aim! \nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:"
+        )
     );
     assert_eq!(state.party_experience[0], 3);
     assert!(state.combat_active);
@@ -12030,8 +12539,13 @@ fn combat_input_dispatch_uses_pending_round_walker_actor_slot() {
     assert_eq!(state.message, "South\n\nAvatar, armed with bare hands:");
 }
 
+/// `combat.md §8.2`: while the targeting cursor is open it owns the
+/// keyboard. "Anything else | Discarded; the loop reads again", so an
+/// ordinary movement key neither steps the actor nor reaches the command
+/// parser, and confirming on an empty cell prints `Nothing!` while still
+/// spending the turn.
 #[test]
-fn combat_input_dispatch_attack_prompt_keeps_pending_actor_for_direction() {
+fn combat_input_dispatch_attack_cursor_owns_the_next_keystrokes() {
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
 
@@ -12043,13 +12557,32 @@ fn combat_input_dispatch_attack_prompt_keeps_pending_actor_for_direction() {
     // then `Aim! ` immediately before the targeting cursor opens.
     assert_eq!(state.message, "Attack-Aim! ");
     assert_eq!(state.pending_combat_actor_slot, Some(0));
+    assert!(state.active_combat_targeting.is_some());
 
     assert_eq!(
         handle_play_key_input(&mut state, 'd', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
-    assert_eq!(state.message, "East\n\nAvatar, armed with bare hands:");
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+    assert_eq!(state.message, "Attack-Aim! ");
+    assert!(state.active_combat_targeting.is_some());
+
+    assert_eq!(
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+    assert_eq!(
+        state.active_combat_targeting.as_ref().unwrap().cursor,
+        (6, 5)
+    );
+
+    assert_eq!(
+        handle_play_key_input(&mut state, '\r', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_combat_targeting.is_none());
+    assert!(state.message.starts_with("Attack-Aim! Nothing!"));
 }
 
 #[test]

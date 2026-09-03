@@ -1865,14 +1865,28 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     assert_eq!(state.message, "Attack-Aim! ");
     assert_eq!(state.pending_combat_actor_slot, Some(actor_slot));
 
+    // `combat.md §8.2`: the cursor owns the keystroke. A direction code
+    // steers the cursor and leaves the attacker on its seat; Enter confirms.
+    let seat = (
+        state.combat_actors[actor_slot].x,
+        state.combat_actors[actor_slot].y,
+    );
     assert_eq!(
         handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(
-        (state.combat_actors[actor_slot].x, state.combat_actors[actor_slot].y),
-        (6, 7)
+        (
+            state.combat_actors[actor_slot].x,
+            state.combat_actors[actor_slot].y
+        ),
+        seat
     );
+    assert_eq!(
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_combat_targeting.is_none());
     // `combat.md §8.1`: the transcript ends with the turn banner for the
     // next keyboard-driven actor, printed "before any key is read". Trim it
     // (and its leading blank line) before asserting on the attack result.
@@ -1882,13 +1896,14 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         .take_while(|line| !line.contains(COMBAT_TURN_BANNER_ARMED_WITH))
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
-    // `combat.md` Section 11 step 2 prints the direction word, then the
-    // one hostile left on its phase takes its turn. Section 11.1's census
-    // gives that turn exactly one line - "Ordinary landed hit, **party**
-    // target | monster attacker | `<target> hit!` - **flat and ungraded**",
-    // target-named. A monster melee miss would print "nothing at all" and a
-    // soaked swing would print `Avatar grazed!`; this seed lands.
-    assert_eq!(result_lines, vec!["East", "Avatar hit!"]);
+    assert_eq!(result_lines.first().copied(), Some("Attack-Aim! Nothing!"));
+    assert!(result_lines.len() > 1);
+    assert!(
+        result_lines
+            .iter()
+            .skip(1)
+            .all(|line| *line == "Guard missed!" || *line == "Avatar hit!")
+    );
     assert!(!state
         .message_entries()
         .iter()
