@@ -177,9 +177,9 @@ pub const fn cached_moon_glyph_bytes_for_day(day: u8) -> Option<[u8; 2]> {
 }
 
 /// `moons.md §2.2` (issue #190, `RETRACTIONS.md` R376), the
-/// **descriptive** rule: the renderer's lookup "is a bare indexed read
-/// - table base plus twice the day - performed twice, once per moon,
-/// with no comparison, no mask and no clamp on either table. Any byte
+/// **descriptive** rule: the renderer's lookup "is a bare indexed
+/// read - table base plus twice the day - performed twice, once per
+/// moon, with no comparison, no mask and no clamp on either table. Any byte
 /// value from zero to two hundred fifty-five therefore reads
 /// *something*, and the painter caches whatever it read."
 ///

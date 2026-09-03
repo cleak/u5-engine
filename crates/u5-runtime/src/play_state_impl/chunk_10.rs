@@ -1112,8 +1112,8 @@ impl PlayState {
     /// of §7's route bookkeeping applies to a step the route did not choose.
     ///
     /// It also **never touches the stuck counter**. `RETRACTIONS.md` R367:
-    /// "Neither cap-zero route-recovery step of Section 9.1 can increment it
-    /// - not the queued-route replay's recovery step and not the
+    /// "Neither cap-zero route-recovery step of Section 9.1 can increment
+    /// it - not the queued-route replay's recovery step and not the
     /// exhausted-queue arm's - because the increment happens *before* the
     /// recovery step runs and nothing afterwards inspects how that step
     /// ended, and the recovery stepper never touches the counter table on any

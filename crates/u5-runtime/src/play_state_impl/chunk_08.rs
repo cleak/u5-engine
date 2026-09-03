@@ -1508,9 +1508,9 @@ impl PlayState {
     /// quote "an implementation should treat a zero or out-of-range day
     /// as a save-data error rather than looking up a twenty-ninth entry"
     /// as the contract and leave the restored pair alone. R376 withdraws
-    /// that: "The original **does** look one up", by "a bare indexed read
-    /// - table base plus twice the day - performed once per moon, with no
-    /// comparison, mask or clamp".
+    /// that: "The original **does** look one up", by "a bare indexed
+    /// read - table base plus twice the day - performed once per moon,
+    /// with no comparison, mask or clamp".
     ///
     /// This engine takes the section's **prescriptive** side, which R376
     /// re-issues as a labelled divergence: "reject or clamp an
