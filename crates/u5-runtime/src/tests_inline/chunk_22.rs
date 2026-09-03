@@ -844,7 +844,21 @@
         assert_eq!(state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX], 0);
 
         // Step 1: the exact published line, with no terminating period, and
-        // printed after the conflict banner rather than before it.
+        // printed *between* the two banners.
+        //
+        // `combat.md §4.1` publishes the whole entry transcript as echo /
+        // blank / group name / blank / `*** CONFLICT ***` "with `The Sceptre
+        // is reclaimed!` inserted after the group name on the Shadow Lord
+        // branch when the sceptre is held" - row 3 is the group name and row
+        // 5 is the conflict banner, so the line lands under `SHADOW LORD`
+        // and above `*** CONFLICT ***`. §4.1 also states that this fight
+        // "announces `SHADOW LORD`" and that "the sceptre line of
+        // `systems/encounters.md` Section 4 is printed after it", while
+        // `encounters.md §4` puts the line "after the class banner that names
+        // the opponent, which is printed for this encounter whether or not
+        // the sceptre is held" and runs the whole branch "entirely inside
+        // encounter setup, before the combat scene is entered" - i.e. before
+        // the framer prints banner two.
         assert_eq!(SCEPTRE_RECLAIMED_LINE, "The Sceptre is reclaimed!");
         let texts: Vec<&str> = state
             .message_entries()
@@ -859,7 +873,17 @@
             .iter()
             .position(|text| *text == SCEPTRE_RECLAIMED_LINE)
             .expect("the sceptre line is printed");
-        assert!(banner_at < line_at, "{texts:?}");
+        let group_at = texts
+            .iter()
+            .position(|text| *text == "SHADOW LORD")
+            .expect("the group name is printed");
+        assert!(group_at < line_at && line_at < banner_at, "{texts:?}");
+        let banner = combat_banner_line();
+        assert_eq!(
+            &texts[group_at..=banner_at],
+            &["SHADOW LORD", "", SCEPTRE_RECLAIMED_LINE, banner.as_str()],
+            "{texts:?}"
+        );
 
         // Step 2: the sting. `audio.md §8.4.1` — "It is the only caller of
         // this recipe."

@@ -764,6 +764,51 @@
         assert_ne!(actor.phase_counter, 0);
     }
 
+    /// `combat.md` §4.1: the conflict banner "is **unconditional**. The test
+    /// that precedes it cannot fail, so every terrain-setup entry prints it."
+    /// The camp ambush is "the one entry that reaches setup without passing
+    /// through" the world-side terrain-combat entry step, so it "prints the
+    /// conflict banner below but **no** group name".
+    #[test]
+    fn the_camp_ambush_prints_the_conflict_banner_and_no_group_name() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = 0x0f0f;
+        state.message_transcript.clear();
+        // A line the handler wrote straight into the compatibility slot and
+        // has not flushed yet - what the camp outcome of
+        // `rest_with_watch` is at this point. It must print *above* the
+        // banner, not be swallowed by it (`text-output.md §11`: "a second
+        // line produced in the same turn prints beneath" the first).
+        state.message = "Camp outcome.".to_string();
+        state
+            .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0, std::path::Path::new(""))
+            .unwrap();
+
+        let printed: Vec<String> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        // Exact, not a count: an inline copy of the banner smuggled into a
+        // later row, or a dropped outcome line, both pass a count assertion.
+        assert_eq!(
+            printed,
+            vec!["Camp outcome.".to_string(), combat_banner_line().to_string()],
+            "the camp ambush prints the outcome line, then the conflict \
+             banner once, and no group name"
+        );
+        // And the slot is left holding the banner, so the next
+        // turn-composition flush repeats nothing.
+        assert_eq!(state.message, combat_banner_line());
+        assert!(!state.flush_message_slot());
+    }
+
+    // The dungeon side of that gate is deliberately *not* pinned by a test,
+    // for the same reason the placement-shuffle gate beside it is not: the
+    // surface scoping is a conservative reading of `combat.md §4.1`/§5
+    // against `rest-and-camp.md §6`, and adopting the other reading should
+    // stay a one-line change rather than a test rewrite.
+
     #[test]
     fn sleep_ambush_placement_seeds_base_step_and_phase_like_any_other_placement() {
         // `combat.md §5`: the alternate rest/camp entry modes seat the

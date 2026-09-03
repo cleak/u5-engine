@@ -3063,13 +3063,17 @@ fn combat_step_or_attack_application_message(
     }
 }
 
-/// `combat.md §11.1` "The census": one attack outcome's printed result
-/// line, for either side of the arena. Two rules from that section govern
-/// every string here - "**Every result line names the target, never the
-/// attacker.** No combat result line anywhere in the game is
-/// attacker-named", and the two sides "share the to-hit roll, the impact
-/// presentation, the damage roller and the result narrator". Internal
-/// slots, coordinates, rolls and raw damage never belong in this string.
+/// `combat.md §11.1` "The census": the party-side half of one attack
+/// outcome's printed result line. Internal slots, coordinates, rolls and
+/// raw damage never belong in this string.
+///
+/// Two rules from that section govern every string here. Rule 1: "**Every
+/// result line names the target, never the attacker.** ... `Bat missed!`
+/// ... is printed by a party member's failed swing **at** a Bat, never by
+/// the Bat's failed swing at the party. An engine that prints the
+/// attacker's name in the miss line produces a transcript that is wrong on
+/// every line it emits." Rule 2: the two sides "share the to-hit roll, the
+/// impact presentation, the damage roller and the result narrator".
 pub(crate) fn combat_weapon_attack_result_message(
     state: &PlayState,
     target_slot: usize,
@@ -3190,14 +3194,29 @@ fn combat_landed_damage_result_line(
             // wound score the flee classifier of Section 9 computes".
             let actor = state.combat_actors.get(target_slot)?;
             let max_hp = combat_class_stats(damage.class)?.max_hp;
-            let wound_line = match combat_wound_score_bucket(actor.hp_or_wound, max_hp) {
-                CombatWoundScoreBucket::ThreeQuartersOrMore => "barely wounded",
-                CombatWoundScoreBucket::HalfToUnderThreeQuarters => "lightly wounded",
-                CombatWoundScoreBucket::OneQuarterToUnderHalf => "heavily wounded",
-                CombatWoundScoreBucket::UnderOneQuarter => "critical",
-            };
+            let wound_line = combat_monster_wound_line_grade(actor.hp_or_wound, max_hp);
             Some(format!("{class_name} {wound_line}!"))
         }
+    }
+}
+
+/// `combat.md` 11.1, "The graded wound lines are monster-target only". The
+/// four strings are published verbatim there against the same four-bucket wound
+/// score the flee classifier of 9 computes:
+///
+/// | 1 | below one quarter | `<target> critical!` |
+/// | 2 | one quarter to just under one half | `<target> heavily wounded!` |
+/// | 3 | one half to just under three quarters | `<target> lightly wounded!` |
+/// | 4 | three quarters or more | `<target> barely wounded!` |
+///
+/// `grazed!` is **not** one of them: 11.1 reserves that line for the separate
+/// zero-or-negative-damage outcome, and 12 narrates it "and nothing else".
+pub(crate) fn combat_monster_wound_line_grade(current_hp: u8, max_hp: u8) -> &'static str {
+    match combat_wound_score_bucket(current_hp, max_hp) {
+        CombatWoundScoreBucket::ThreeQuartersOrMore => "barely wounded",
+        CombatWoundScoreBucket::HalfToUnderThreeQuarters => "lightly wounded",
+        CombatWoundScoreBucket::OneQuarterToUnderHalf => "heavily wounded",
+        CombatWoundScoreBucket::UnderOneQuarter => "critical",
     }
 }
 
@@ -3219,10 +3238,13 @@ fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
         .unwrap_or_else(|| "Combatant".to_string())
 }
 
-/// `combat.md §11.1` for a self-acting hostile's turn. The two sides
-/// "join *below* the announcement layer, which is why an ordinary hostile
-/// monster prints no banner, no `Attack-`, no `Aim! ` and, on a melee
-/// miss, no line at all" (`RETRACTIONS.md` R353).
+/// `combat.md §11.1` for a self-acting hostile's turn: the monster-side
+/// half of the published attack-outcome census. The two sides "join
+/// *below* the announcement layer, which is why an ordinary hostile
+/// monster prints no banner, no `Attack-`, no `Aim! `, no `Nothing!` and,
+/// on a melee miss, no line at all" (`RETRACTIONS.md` R353); below that
+/// layer it shares the impact presentation, the damage roller and the
+/// result narrator with the party side.
 pub(crate) fn combat_monster_attack_result_message(
     state: &PlayState,
     attack: CombatMonsterAttackApplication,
@@ -3232,8 +3254,34 @@ pub(crate) fn combat_monster_attack_result_message(
         attack.poison_status_outcome,
         Some(CombatPoisonStatusAttackOutcome::PoisonedPartyMember { .. })
     ) {
+        // 11.1: "Party target poisoned | monster attacker | `<target> is
+        // poisoned!` ... and the ordinary result line is then suppressed".
         return Some(format!("{target_name} is poisoned!"));
     }
+
+    // 11.1, the census row that carries the whole section: "**To-hit fails** |
+    // **monster melee** | **nothing at all**", and in the prose, "**an ordinary
+    // hostile monster's melee miss prints nothing and sounds nothing** - no
+    // newline, no name, no line, no tone". The reason is structural: "the
+    // routine that prints a miss line has exactly two call sites, both inside
+    // party-side attack helpers".
+    //
+    // Two things this must not become. It must not print an attacker-named
+    // line: rule 1 of 11.1 is that "**Every result line names the target, never
+    // the attacker**", and `<attacker> missed!` "produces a transcript that is
+    // wrong on every line it emits". And it must not be widened to every
+    // monster attacker - 11.1's announcement table gives a monster carrying the
+    // controlled/charmed bit (6.1a) "the **reduced** banner ... then one fixed
+    // attempt: `Attack-`, `Aim! `, and on a failed roll `<target> missed!`",
+    // because that slot is driven from the player's prompt.
+    //
+    // The ranged carve-out is **not** folded in here. 11.1: "A monster's failed
+    // **ranged or thrown** to-hit is not unconditionally silent ... the impact
+    // point is drawn from the three-by-three neighbourhood centred on the **aim
+    // cell** ... and the **full hit chain runs against that actor**." This
+    // engine does not model that scatter, so the miss arm stays silent on both
+    // routes; the gap is a missing hit chain against a scatter victim, never a
+    // miss line, so nothing here would print on either reading.
     if matches!(
         attack.resolution,
         Some(CombatWeaponAttackResolution::Miss { .. })

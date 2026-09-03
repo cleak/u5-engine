@@ -11324,6 +11324,8 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // banner. The Giant Rat's reply ahead of it is the stream re-baselined
     // by `RETRACTIONS.md` R311: the lazily drawn cardinal fallback changes
     // which roll the reply takes.
+    // `combat.md` 11.1: the Giant Rat's failed melee to-hit prints "nothing
+    // at all", so only the direction echo and the next turn banner remain.
     assert_eq!(
         attack_state.message,
         "East\nGiant Rat missed!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
@@ -11393,6 +11395,13 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
         PlayInputDisposition::Continue
     );
 
+    // `combat.md` 11.1's graded wound lines, monster target: the Giant Rat's
+    // class maximum is 10, so the truncated quarter is 2 and the thresholds are
+    // 2, 4 and 6. The survivor sits at or above three truncated quarters, which
+    // is wound score 4, "`<target> barely wounded!`". The engine previously
+    // printed `grazed` for this bucket; 11.1 reserves `grazed!` for the
+    // zero-or-negative-damage outcome and gives score 4 its own line.
+    assert!(state.combat_actors[8].hp_or_wound >= 6);
     assert_eq!(
         state.message,
         // The Giant Rat's reply is its poison/status branch, which
@@ -13697,37 +13706,65 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
 }
 
 #[test]
-fn combat_wound_morale_uses_quarter_buckets_and_documented_roll_rate() {
+fn combat_wound_morale_uses_truncated_quarter_thresholds_and_documented_roll_rate() {
+    // `combat.md` 11.1: "The quarter is the class maximum divided by four with
+    // truncation, and the three thresholds are one, two and three of those
+    // truncated quarters, so the boundaries sit slightly low for maxima that
+    // are not multiples of four."
+    //
+    // 99 is deliberately not a multiple of four: the truncated quarter is 24,
+    // so the thresholds are 24, 48 and 72 - not 24.75, 49.5 and 74.25. Each
+    // pair below straddles one of the three boundaries, which is what
+    // distinguishes the published rule from an exact-fraction comparison.
+    for (hp, bucket) in [
+        (23u8, CombatWoundScoreBucket::UnderOneQuarter),
+        (24, CombatWoundScoreBucket::OneQuarterToUnderHalf),
+        (47, CombatWoundScoreBucket::OneQuarterToUnderHalf),
+        (48, CombatWoundScoreBucket::HalfToUnderThreeQuarters),
+        (71, CombatWoundScoreBucket::HalfToUnderThreeQuarters),
+        (72, CombatWoundScoreBucket::ThreeQuartersOrMore),
+    ] {
+        assert_eq!(
+            combat_wound_score_bucket(hp, 99),
+            bucket,
+            "wound score bucket for {hp} of 99"
+        );
+    }
+
+    // 9's morale rule over the same buckets: "below one quarter sets fleeing,
+    // one-quarter through just under one-half rolls a morale check that sets
+    // fleeing on 252 of 256 possible random-byte results, and one-half or
+    // higher clears fleeing."
     assert_eq!(
-        resolve_combat_wound_morale(24, 99, 0),
+        resolve_combat_wound_morale(23, 99, 255),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::UnderOneQuarter,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(25, 99, 251),
+        resolve_combat_wound_morale(24, 99, 251),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(49, 99, 252),
+        resolve_combat_wound_morale(47, 99, 252),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: false,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(50, 99, 255),
+        resolve_combat_wound_morale(48, 99, 0),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::HalfToUnderThreeQuarters,
             fleeing: false,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(75, 99, 255),
+        resolve_combat_wound_morale(72, 99, 0),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::ThreeQuartersOrMore,
             fleeing: false,
@@ -13737,17 +13774,27 @@ fn combat_wound_morale_uses_quarter_buckets_and_documented_roll_rate() {
 
 #[test]
 fn combat_wound_morale_can_resolve_class_max_hp() {
+    // Class 32's maximum is 10, so the truncated quarter is 2 and the
+    // thresholds are 2, 4 and 6 (`combat.md` 11.1). HP 2 is the first value in
+    // the morale-roll band; HP 4 is already out of it.
     assert_eq!(
-        resolve_combat_wound_morale_for_class(4, 32, 0).unwrap(),
+        resolve_combat_wound_morale_for_class(2, 32, 0).unwrap(),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale_for_class(4, 32, 252).unwrap(),
+        resolve_combat_wound_morale_for_class(2, 32, 252).unwrap(),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
+            fleeing: false,
+        }
+    );
+    assert_eq!(
+        resolve_combat_wound_morale_for_class(4, 32, 0).unwrap(),
+        CombatWoundMorale {
+            bucket: CombatWoundScoreBucket::HalfToUnderThreeQuarters,
             fleeing: false,
         }
     );
@@ -13755,7 +13802,7 @@ fn combat_wound_morale_can_resolve_class_max_hp() {
 }
 
 #[test]
-fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
+fn combat_party_damage_grazes_on_zero_or_negative_and_uses_saturating_hp_counter() {
     let mut member = PartyMember {
         slot: 0,
         class_byte: 1,
@@ -13767,15 +13814,25 @@ fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
         level: 1,
     };
 
-    let miss = apply_combat_party_damage(&mut member, -1);
-    assert!(miss.grazed);
-    assert!(!miss.instant_kill);
-    assert!(!miss.killed);
-    assert_eq!(miss.applied_damage, 0);
-    assert_eq!(miss.status_before, b'G');
-    assert_eq!(miss.status_after, b'G');
+    // `combat.md` 12: "The result may be zero or negative, and **both are
+    // narrated as a graze, not as a miss**"; `RETRACTIONS.md` R352 withdraws
+    // the three sentences that called this outcome a miss and states "There is
+    // no miss flag". Zero is asserted alongside negative because the marker's
+    // "two writers [are] both this zero-or-negative condition".
+    let graze = apply_combat_party_damage(&mut member, -1);
+    assert!(graze.grazed);
+    assert!(!graze.instant_kill);
+    assert!(!graze.killed);
+    assert_eq!(graze.applied_damage, 0);
+    assert_eq!(graze.status_before, b'G');
+    assert_eq!(graze.status_after, b'G');
     assert_eq!(member.hp, 12);
     assert_eq!(member.status, b'G');
+
+    let zero_graze = apply_combat_party_damage(&mut member, 0);
+    assert!(zero_graze.grazed);
+    assert_eq!(zero_graze.applied_damage, 0);
+    assert_eq!(member.hp, 12);
 
     let hit = apply_combat_party_damage(&mut member, 5);
     assert!(!hit.grazed);
@@ -17814,15 +17871,22 @@ fn combat_split_placement_checks_up_to_eight_candidate_slots() {
 }
 
 #[test]
-fn combat_actor_monster_damage_clamps_miss_and_subtracts_without_underflow() {
+fn combat_actor_monster_damage_grazes_on_zero_or_negative_and_subtracts_without_underflow() {
     let stats = combat_class_stats(32).unwrap();
     let mut descriptor = CombatActorDescriptor::for_monster_placement(stats, 7, 4, 5, 0, 0);
 
-    let miss = descriptor.apply_monster_damage(-1, false).unwrap();
-    assert!(miss.grazed);
-    assert!(!miss.killed);
-    assert_eq!(miss.applied_damage, 0);
-    assert_eq!(miss.return_value, 0);
+    // Same zero-or-negative graze condition on the monster arm
+    // (`combat.md` 12, `RETRACTIONS.md` R352).
+    let graze = descriptor.apply_monster_damage(-1, false).unwrap();
+    assert!(graze.grazed);
+    assert!(!graze.killed);
+    assert_eq!(graze.applied_damage, 0);
+    assert_eq!(graze.return_value, 0);
+    assert_eq!(descriptor.hp_or_wound, 10);
+
+    let zero_graze = descriptor.apply_monster_damage(0, false).unwrap();
+    assert!(zero_graze.grazed);
+    assert_eq!(zero_graze.applied_damage, 0);
     assert_eq!(descriptor.hp_or_wound, 10);
 
     let hit = descriptor.apply_monster_damage(4, false).unwrap();

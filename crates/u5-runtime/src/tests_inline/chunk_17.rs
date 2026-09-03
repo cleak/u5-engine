@@ -3214,6 +3214,11 @@ Mixed 1 IL charge; stock is 1.");
             state.combat_actors[8].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
+        // The Daemon's own turn follows and its to-hit fails. `combat.md`
+        // 11.1: an ordinary hostile's melee miss prints "nothing at all - no
+        // newline, no name, no line, no tone", so the next actor's turn
+        // banner - which "opens with a newline" (8.1) - follows this
+        // diagnostic directly.
         assert_eq!(
             state.message,
             // The Daemon's reply re-baselines with the shared stream:

@@ -753,7 +753,11 @@ pub struct CombatMonsterDamageOutcome {
     /// keeps the mechanical half of the withdrawn text - "same marker on
     /// both routes, no HP change, the experience block the only
     /// difference" - and withdraws the miss wording and the miss flag:
-    /// "There is no miss flag ... Neither reader is a miss."
+    /// "There is no miss flag ... Neither reader is a miss." The bit this
+    /// models has "exactly two writers, both of them this zero-or-negative
+    /// condition". Narration lives in `input_dispatch`; see the §11.1
+    /// census row "Damage zero or negative | both | `<target> grazed!`
+    /// **and nothing else**".
     pub grazed: bool,
     pub instant_kill: bool,
     pub killed: bool,
@@ -765,10 +769,10 @@ pub struct CombatMonsterDamageOutcome {
 pub struct CombatPartyDamageOutcome {
     pub raw_damage: i16,
     pub applied_damage: u16,
-    /// `combat.md §12`, the party-defender route: a zero or negative
-    /// result raises "the same shared result marker" as the monster
-    /// route and narrates `<target> grazed!` (`§11.1`), never a miss -
-    /// `RETRACTIONS.md` R352.
+    /// `combat.md §12`, the party-defender route: "Against a **party**
+    /// defender a negative result short-circuits early ... Both routes
+    /// raise the same shared result marker". The narration is
+    /// `<target> grazed!` (`§11.1`), never a miss - `RETRACTIONS.md` R352.
     pub grazed: bool,
     pub instant_kill: bool,
     pub killed: bool,
@@ -1139,14 +1143,18 @@ impl CombatActorDescriptor {
         let stats = combat_class_stats(self.owner_target_class)?;
         let traits = combat_class_traits(self.owner_target_class)?;
         // `combat.md §12`: "The result may be zero or negative, and
-        // **both are narrated as a graze, not as a miss**." The
-        // damage-modifier paragraph in the same section states the
-        // clamp - "Negative damage is clamped to zero and the shared
-        // result marker's graze bit is raised, so the narration reads
-        // `<target> grazed!` and every later result line is suppressed
-        // (Section 11.1)" - and only has to speak of the negative half
-        // because zero needs no clamp. `RETRACTIONS.md` R352 confirms
-        // this mechanical half and withdraws the former miss reading.
+        // **both are narrated as a graze, not as a miss**." Zero is
+        // included deliberately - the marker's two writers are "both the
+        // zero-or-negative-damage condition", so the predicate is `<= 0`
+        // and not `< 0`. The damage-modifier paragraph in the same
+        // section states the clamp - "Negative damage is clamped to zero
+        // and the shared result marker's graze bit is raised, so the
+        // narration reads `<target> grazed!` and every later result line
+        // is suppressed (Section 11.1)" - and only has to speak of the
+        // negative half because zero needs no clamp. `RETRACTIONS.md`
+        // R352 confirms this mechanical half and withdraws the former
+        // miss reading. The instant-kill sentinel is decimal 99 and
+        // cannot collide with the graze predicate.
         let grazed = raw_damage <= 0;
         let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
         let damage = if grazed {
@@ -1205,11 +1213,13 @@ pub fn apply_combat_party_damage(
     raw_damage: i16,
 ) -> CombatPartyDamageOutcome {
     let status_before = member.status;
+    // Same zero-or-negative graze condition as the monster arm above.
     // `combat.md §12`: "The result may be zero or negative, and **both
     // are narrated as a graze, not as a miss**." Against a party
     // defender the negative result "short-circuits early", but both
     // routes "raise the same shared result marker" and are
-    // "gameplay-identical - one printed graze line and no HP change".
+    // "gameplay-identical - one printed graze line and no HP change"
+    // (`RETRACTIONS.md` R352).
     let grazed = raw_damage <= 0;
     let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
     let applied_damage = if grazed {
@@ -4053,18 +4063,31 @@ pub fn resolve_combat_wound_morale_for_class(
     ))
 }
 
+/// `combat.md` 11.1, "The graded wound lines are monster-target only": "The
+/// quarter is the class maximum divided by four with truncation, and the three
+/// thresholds are one, two and three of those truncated quarters, so the
+/// boundaries sit slightly low for maxima that are not multiples of four."
+///
+/// That sentence is a first publication of the arithmetic behind 9's
+/// four-bucket classifier, and it is **not** the exact-fraction comparison an
+/// implementation reaches for first: at class maximum 10 the truncated quarter
+/// is 2, so the thresholds are 2/4/6, while `hp * 4 < max` and its siblings put
+/// them at 2.5/5/7.5 and mis-grade five of the eleven possible HP values.
 pub fn combat_wound_score_bucket(current_hp: u8, max_hp: u8) -> CombatWoundScoreBucket {
     if max_hp == 0 {
+        // Degenerate input the spec does not cover: no shipped class row has a
+        // zero maximum. Kept on the pre-existing answer rather than letting the
+        // published arithmetic (every threshold zero, so every HP grades as
+        // "three quarters or more") decide an unpublished case.
         return CombatWoundScoreBucket::UnderOneQuarter;
     }
-    let hp = current_hp.min(max_hp) as u16;
-    let max = max_hp as u16;
-    let scaled = hp * 4;
-    if scaled < max {
+    let hp = current_hp.min(max_hp);
+    let quarter = max_hp / 4;
+    if hp < quarter {
         CombatWoundScoreBucket::UnderOneQuarter
-    } else if hp * 2 < max {
+    } else if hp < quarter * 2 {
         CombatWoundScoreBucket::OneQuarterToUnderHalf
-    } else if scaled < max * 3 {
+    } else if hp < quarter * 3 {
         CombatWoundScoreBucket::HalfToUnderThreeQuarters
     } else {
         CombatWoundScoreBucket::ThreeQuartersOrMore

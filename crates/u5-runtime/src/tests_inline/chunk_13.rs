@@ -10252,8 +10252,10 @@ fn outdoor_active_object_class_immobile_matches_spec_range() {
 
 #[test]
 fn text_window_inner_width_and_centred_start_match_spec() {
-    // text-output.md §4: window whose corners are columns 6 and 33
-    // has width 27 (27 chars fit before wrapping).
+    // text-output.md §4 (`RETRACTIONS.md` R344): a window whose corners
+    // are columns 6 and 33 carries an inclusive-endpoint budget of 27 -
+    // the last legal window-local column, NOT a character count. The row
+    // holds twenty-eight; the twenty-ninth forces the wrap.
     assert_eq!(text_window_inner_width(6, 33), 27);
     assert_eq!(text_window_inner_width(0, 39), 39);
     // Inverted corners collapse to zero.
@@ -10262,7 +10264,7 @@ fn text_window_inner_width_and_centred_start_match_spec() {
 
     // text-output.md §5: the centre branch measures against
     // `columns_in_window = bottom_right_x - top_left_x + 1`, one
-    // MORE than the wrap width above. Dropping the plus one agrees
+    // MORE than the inclusive-endpoint budget above. Dropping the plus one agrees
     // on odd-length lines but shifts every even-length line one
     // whole cell left, so `column_count()` - not `inner_width()` -
     // is what the helper takes.
@@ -10331,6 +10333,88 @@ fn centred_printer_uses_the_plus_one_column_count() {
     system.emit_byte(TEXT_CTRL_CENTRE_ON);
     system.print_wrapped_string("abcdefg");
     assert_eq!(system.cell(2, 0).unwrap().byte, b'a');
+}
+
+#[test]
+fn an_overlong_chunk_is_kept_whole_and_printed_from_column_zero() {
+    // `text-output.md §6` (`RETRACTIONS.md` R346): "A word longer than the
+    // row is **not** allowed to overflow the right edge. The collector never
+    // gathers more characters than the row can still hold, so nothing is ever
+    // written past `bottom_right_x`. When the collected chunk fills the
+    // remaining row and contains no break byte to retreat to, the printer
+    // keeps the whole chunk, first emits a line feed if the cursor is not
+    // already at the window's left edge, and prints the chunk from column 0 of
+    // the fresh row; the following chunk then continues on that same row at
+    // the column where the first one stopped."
+    //
+    // `RETRACTIONS.md` R349 works exactly this case for the dungeon exit:
+    // "With eight of sixteen columns left, the printer collects the eight
+    // characters that still fit, finds no break byte, keeps that chunk, emits
+    // a line feed because the cursor is not at the left edge, prints the chunk
+    // from column 0, and the **next** chunk continues on the same row at
+    // column eight." The rendered pixels are `Underworld!` whole on the new
+    // row - the truncated `Underwor` is never printed in place.
+    let mut system = TextWindowSystem::new();
+    // The gameplay message window: columns 24..=39, sixteen cells
+    // (`text-output.md §10.1`, `RETRACTIONS.md` R347).
+    system.set_window_rect(0, 24, 11, 39, 23);
+    for byte in b"Exit to " {
+        system.emit_byte(*byte);
+    }
+    assert_eq!(system.active_cursor(), (8, 0));
+
+    system.print_wrapped_string("Underworld!");
+
+    let row_below: String = (24..=34)
+        .map(|x| char::from(system.cell(x, 12).map(|cell| cell.byte).unwrap_or(b' ')))
+        .collect();
+    assert_eq!(row_below, "Underworld!");
+    // Nothing was written past `bottom_right_x`, and nothing landed in the
+    // eight columns the word did not fit into on the row above.
+    for x in 32..=39 {
+        assert_eq!(system.cell(x, 11), None, "column {x} of the entry row");
+    }
+    assert_eq!(system.active_cursor(), (11, 1));
+}
+
+#[test]
+fn a_word_longer_than_a_full_row_is_hard_broken_into_row_filling_pieces() {
+    // §6: "a word longer than a **full** row is hard-broken at the row edge
+    // into successive row-filling pieces, and an implementation that
+    // special-cases 'restart the whole word on a new line' diverges as soon as
+    // that happens."
+    let chunks = wrap_text_chunks("supercalifragilistic", 8, 0);
+    assert_eq!(
+        chunks
+            .iter()
+            .map(|chunk| (chunk.text.as_str(), chunk.row_filling))
+            .collect::<Vec<_>>(),
+        vec![
+            ("supercal", true),
+            ("ifragili", true),
+            ("stic", false),
+        ],
+    );
+
+    let mut system = TextWindowSystem::new();
+    system.set_window_rect(0, 0, 0, 7, 4);
+    system.print_wrapped_string("supercalifragilistic");
+    let rows: Vec<String> = (0..3)
+        .map(|y| {
+            (0..8)
+                .map(|x| char::from(system.cell(x, y).map(|cell| cell.byte).unwrap_or(b' ')))
+                .collect()
+        })
+        .collect();
+    assert_eq!(rows, vec!["supercal", "ifragili", "stic    "]);
+}
+
+#[test]
+fn an_ordinary_soft_wrap_is_not_flagged_row_filling() {
+    // Only the no-break-byte arm takes the R346 route; a line that ended on a
+    // remembered space still ends its row.
+    let chunks = wrap_text_chunks("the quick brown fox", 10, 0);
+    assert!(chunks.iter().all(|chunk| !chunk.row_filling), "{chunks:?}");
 }
 
 #[test]
@@ -10424,7 +10508,11 @@ fn text_window_system_scrolls_the_row_below_into_the_vacated_bottom() {
     for byte in b"ijkl" {
         system.emit_byte(*byte);
     }
-    system.set_window_rect(0, 0, 0, 4, 1);
+    // `text-output.md §4` (`RETRACTIONS.md` R344): both corner columns
+    // are inclusive, so a `0..=3` rectangle is the four-cell row this test
+    // needs; the former `0..=4` rectangle held four cells only under the
+    // withdrawn `bottom_right_x - top_left_x` width rule.
+    system.set_window_rect(0, 0, 0, 3, 1);
     system.set_active_cursor(0, 0);
 
     for byte in b"abcd" {
@@ -22787,13 +22875,15 @@ fn wrap_text_breaks_a_prompt_line_at_the_last_space() {
 }
 
 #[test]
-fn wrap_text_matches_the_observed_fifteen_cell_message_window_wrap() {
-    // §5, observed in the original's 15-cell dungeon message window: every
-    // break lands on a space, never mid-word.
-    let lines = wrap_text("Wielding the Sceptre of Lord British...", 15, 0);
+fn wrap_text_matches_the_observed_message_window_wrap() {
+    // §5, observed in the original's message window: every break lands on
+    // a space, never mid-word. The rows are the same under the corrected
+    // sixteen-cell capacity (`RETRACTIONS.md` R344/R347) as under the
+    // withdrawn fifteen, which is why the observation still holds.
+    let lines = wrap_text("Wielding the Sceptre of Lord British...", 16, 0);
     assert_eq!(lines, vec!["Wielding the", "Sceptre of Lord", "British..."]);
     for line in &lines {
-        assert!(line.len() <= 15, "line {line:?} crosses the right edge");
+        assert!(line.len() <= 16, "line {line:?} crosses the right edge");
     }
 }
 
