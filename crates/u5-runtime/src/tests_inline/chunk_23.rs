@@ -11378,20 +11378,16 @@ fn combat_input_dispatch_z_stats_refuses_missing_or_disabled_actor() {
 }
 
 #[test]
-fn combat_input_dispatch_refuses_controlled_non_party_actor_turn() {
-    // magic.md §8: "All three place their creature through the
-    // ordinary monster placement path, so the new actor keeps the
-    // monster-side class byte and monster AI drives its turns
-    // exactly as it drives any other monster. Nothing routes a
-    // summoned creature through the player command parser, and the
-    // player never gets to move it."
-    //
-    // combat.md §6.1a: the round walker picks the keystroke path
-    // through the slot-to-group helper, and only "the group
-    // ordinarily occupied by seated party members" reaches it. The
-    // controlled bit does move this monster into the party's group
-    // for the same-faction filter, which is why the withdrawn
-    // reading looked plausible.
+fn combat_input_dispatch_hands_a_controlled_non_party_actor_the_prompt() {
+    // combat.md §6.1a writer 3: "the bit **does** hand the creature to
+    // the player's prompt: a monster-side slot carrying it is dispatched
+    // to the keystroke/command path, not to the automatic driver".
+    // §16.1: the controlled bit resolves an "ordinary monster
+    // descriptor" to "Group 0", and "Group-0 actors enter the combined
+    // command handler". magic.md, Summoning and conjuration, carries the
+    // matching correction; RETRACTIONS.md R354 withdraws the earlier
+    // "the player never gets to move it" reading, which this test used
+    // to assert.
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
@@ -11400,14 +11396,36 @@ fn combat_input_dispatch_refuses_controlled_non_party_actor_turn() {
     state.visibility_dirty = false;
 
     assert_eq!(
+        resolve_combat_target_group_for_actor(state.combat_actors[8], 8, None),
+        COMBAT_TARGET_GROUP_PARTY
+    );
+
+    assert_eq!(
         handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "");
-    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 5));
     assert_eq!(
         (state.active_objects[8].x, state.active_objects[8].y),
+        (9, 5)
+    );
+    assert!(state.message.starts_with("East"));
+
+    // The same slot without the bit stays on the automatic driver and
+    // ignores the keystroke.
+    let mut driven = combat_player_command_state(8, 5);
+    driven.pending_combat_actor_slot = Some(8);
+    driven.next_combat_actor_slot = 9;
+
+    assert_eq!(
+        handle_play_key_input(&mut driven, '6', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert_eq!(driven.message, "");
+    assert_eq!(
+        (driven.combat_actors[8].x, driven.combat_actors[8].y),
         (8, 5)
     );
 }

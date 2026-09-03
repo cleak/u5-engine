@@ -5502,14 +5502,15 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
         "combat-mass-charm-effect" => {
             // `combat.md §16.1`: "Mass Charm's local target-picker override"
             // does not affect side counting, so the charmed foe still counts
-            // and the encounter runs on past the cast turn. The contract this
-            // route checks is that the shared effect slot survives the action
-            // and keeps ageing one step per world turn, not that exactly one
-            // turn elapsed.
+            // and the scripted route runs on past the cast turn instead of
+            // ending it. Re-derived on that corrected route, the shared
+            // effect slot ages four steps before the script stops, so the
+            // expectation is exact rather than a range.
+            const MASS_CHARM_ROUTE_AGE_STEPS: u8 = 4;
             if !state.message.starts_with("Mass charm!")
                 || state.active_effect_tag != Some(MASS_CHARM_ACTIVE_EFFECT_TAG)
-                || state.active_effect_counter == 0
-                || state.active_effect_counter >= MASS_CHARM_ACTIVE_EFFECT_DURATION
+                || state.active_effect_counter
+                    != MASS_CHARM_ACTIVE_EFFECT_DURATION.saturating_sub(MASS_CHARM_ROUTE_AGE_STEPS)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not retain the post-action Mass Charm effect; tag {:?}, counter {}, message `{}`",

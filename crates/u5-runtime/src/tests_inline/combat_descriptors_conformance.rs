@@ -89,6 +89,7 @@
             CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
         state.party[0].hp = 5;
         state.active_player = Some(0);
+        state.visibility_dirty = false;
 
         state
             .apply_combat_weapon_damage_to_target(None, 0, COMBAT_INSTANT_KILL_DAMAGE, false)
@@ -103,6 +104,9 @@
         // The slot itself is not released.
         assert!(!state.combat_actors[0].is_free_for_allocation());
         assert_eq!(state.active_player, None);
+        // `§11.1`, "Target dies": "no cue of its own; the party death arm
+        // runs a full stats redraw".
+        assert!(state.visibility_dirty);
     }
 
     #[test]
@@ -147,6 +151,18 @@
         // happily targeted an invisible party member.
         let mut state = combat_ai_turn_state(8, 5);
         state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+        // A second, plainly visible party member so the assertion below
+        // pins that the picker *chose the visible candidate*, not merely
+        // that it failed to choose anybody.
+        state.combat_actors[1] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 7, 5]);
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 7,
+            y: 5,
+            ..ActiveObject::empty()
+        };
         state.combat_frame_snapshot = Some(CombatFrameSnapshot {
             area: Area::Dungeon {
                 scene: DungeonScene {
@@ -188,14 +204,14 @@
             )
             .unwrap();
 
-        assert_ne!(
+        assert_eq!(
             application.target,
             CombatAiTargetResolution::ChosenActor {
-                slot: 0,
-                x: 5,
+                slot: 1,
+                x: 7,
                 y: 5,
             },
-            "ordinary invisibility is rejected even in the Doom bypass context"
+            "ordinary invisibility is rejected even in the Doom bypass context,              so the visible party member is the chosen target"
         );
     }
 
@@ -560,4 +576,185 @@
             COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED
         );
         assert_eq!(state.party[1].status, b'S');
+    }
+
+    #[test]
+    fn the_victory_census_uses_the_group_resolver_on_both_halves() {
+        // `combat.md §16.1`: "Side counting skips empty, dead, and passive
+        // descriptors, then uses the same group resolver. Group 1 counts as
+        // foes and group 0 as friends. Control and the traitor identity
+        // therefore affect victory detection." The party half of the
+        // announcement gate was a raw `0x80` scan, so a charmed party member
+        // still counted as a friend while the round loop's own census had
+        // already moved it to the hostile side.
+        let mut charmed_party = combat_descriptor_state();
+        charmed_party.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        let census = combat_side_census(&charmed_party.combat_actors);
+        assert_eq!((census.friends, census.foes), (0, 1));
+        assert!(!charmed_party.announce_combat_victory_if_needed());
+
+        // The mirror case: an ordinary party member plus a charmed monster.
+        // §16.1 resolves `0x41` to group 0, so no foe remains and the
+        // announcement fires.
+        let mut charmed_monster = combat_descriptor_state();
+        charmed_monster.combat_actors[0] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        charmed_monster.combat_actors[6] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            COMBAT_CLASS_GIANT_RAT,
+            6,
+            0,
+            4,
+            4,
+        ]);
+        let census = combat_side_census(&charmed_monster.combat_actors);
+        assert_eq!((census.friends, census.foes), (2, 0));
+        assert!(charmed_monster.announce_combat_victory_if_needed());
+
+        // And the ordinary shape is unchanged: a live hostile suppresses it.
+        let mut ordinary = combat_descriptor_state();
+        ordinary.combat_actors[0] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        ordinary.combat_actors[6] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_GIANT_RAT,
+            6,
+            0,
+            4,
+            4,
+        ]);
+        assert!(!ordinary.announce_combat_victory_if_needed());
+    }
+
+    #[test]
+    fn a_slot_visit_that_dispatches_no_action_does_not_run_the_faint_tail() {
+        // `combat.md §7` places the recount that "first gives the party
+        // control/faint helper a chance to restore one actor" after a
+        // *dispatched action*, and `§14` puts the helper on the defeat
+        // transition. The helper is not read-only - it prints
+        // `<name> passes out!`, plays the blocking faint envelope, removes
+        // the Sword of Chaos, sleeps the member and advances a world tick -
+        // so a slot visit that takes no turn must not reach it.
+        let mut state = combat_ai_turn_state(8, 5);
+        // `§16.1`: the controlled bit moves this party descriptor to group 1,
+        // so the census sees no friend and the visit's recount reports defeat.
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+
+        // Slot 1 is empty, so the visit takes the inactive arm.
+        let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+            1, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
+            &[],
+        );
+
+        assert_eq!(
+            application,
+            CombatActorSlotDispatchApplication::Slot {
+                slot: 1,
+                phase_tick: Some(CombatActorPhaseTick::Inactive),
+                action: CombatActorDispatchAction::Inactive,
+                control_after: CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat),
+            }
+        );
+        assert!(
+            !state.message.contains("passes out!"),
+            "message was {:?}",
+            state.message
+        );
+        assert_eq!(
+            state.combat_actors[0].flags,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED
+        );
+        assert_eq!(state.party[0].status, b'G');
+
+        // The end-of-round check is the same: `§7` gives it the terminal
+        // table state, not the restore attempt.
+        let end_of_round = state.apply_combat_actor_slot_dispatch_with_inputs(
+            COMBAT_ACTOR_SLOTS,
+            30,
+            false,
+            false,
+            0,
+            false,
+            1,
+            1,
+            &[],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[1, 2, 3, 4],
+            &[],
+        );
+        assert_eq!(
+            end_of_round,
+            CombatActorSlotDispatchApplication::EndOfRound {
+                control: CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat),
+            }
+        );
+        assert!(!state.message.contains("passes out!"));
+        assert_eq!(state.party[0].status, b'G');
+    }
+
+    #[test]
+    fn the_narrator_gate_is_scoped_to_the_generic_chain() {
+        // `combat.md §6.3` scopes the suppression to "the generic
+        // killed/slept/hit chain", and `§11.1` restates the reader as "a
+        // wider test that halts the narrator before the kill, sleep, hit and
+        // wound chain". The miss line is a separate producer there - "The
+        // routine that prints a miss line has exactly two call sites, both
+        // inside party-side attack helpers" - so a live `0x02` must not
+        // swallow it. The engine applied the gate to the whole result line.
+        use crate::input_dispatch::combat_weapon_resolution_reaches_generic_chain as reaches;
+
+        let route = CombatWeaponAttackRangeRoute::Melee;
+        assert!(reaches(CombatWeaponAttackResolution::Hit {
+            route,
+            raw_damage: 3,
+        }));
+        assert!(!reaches(CombatWeaponAttackResolution::Miss {
+            route,
+            hit_score: -1,
+        }));
+        // `§6.3`: "If that narrator is not reached, the combat walker
+        // replaces the whole field with zero before the next actor
+        // dispatch", so a resolution that prints nothing must not clear
+        // `0x02` or set `0x01` on its own.
+        assert!(!reaches(CombatWeaponAttackResolution::OutOfRange {
+            target_range: 4,
+            range_cap: 1,
+        }));
+        assert!(!reaches(CombatWeaponAttackResolution::NoOrdinaryDamage {
+            route
+        }));
+        assert!(!reaches(CombatWeaponAttackResolution::Special { route }));
+
+        // End to end: a party melee miss still prints its line with the
+        // vanish bit standing.
+        let game_dir = std::path::Path::new(".");
+        let mut miss = combat_player_command_state(6, 5);
+        miss.party_strengths = vec![0];
+        miss.party_experience = vec![0];
+        miss.combat_actors[8].base_step = 30;
+        miss.combat_action_result = COMBAT_ACTION_RESULT_VANISH_NARRATED;
+        miss.prng_state = 0xFFFF;
+        handle_play_key_input(&mut miss, 'A', "6", game_dir).unwrap();
+        let transcript = combat_descriptor_transcript(&miss);
+        assert!(
+            transcript.contains("missed!"),
+            "transcript was {transcript:?}"
+        );
     }

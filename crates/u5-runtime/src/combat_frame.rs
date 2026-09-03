@@ -3334,10 +3334,20 @@ impl PlayState {
             // adds "party death ORs it in". The OR happens here, on the
             // death itself, not on a later dispatch's sweep.
             //
-            // SPEC GAP: `§6.3` requires "death audio played" but names no
-            // cue, and `audio.md §8` publishes no combat party-death
-            // trigger row. Nothing is emitted here rather than inventing a
-            // program; see the reported spec question.
+            // SPEC GAP (narrowed): `§6.3` requires "death audio played"
+            // but names no cue, and `audio.md §8` publishes no combat
+            // party-death trigger row. `§11.1`, published later, gives the
+            // death outcome "no cue of its own; the party death arm runs a
+            // full stats redraw" - which is a census of what the outcome
+            // emits, and names a redraw where `§6.3` names audio. Nothing
+            // is emitted here rather than inventing a program; see the
+            // reported spec question.
+            //
+            // The redraw `§11.1` does name is emitted: the engine's
+            // panel/viewport refresh signal is the visibility-dirty mark,
+            // the same one the `§6.3` sleep helper's "redraws the full
+            // stats panel" uses.
+            self.mark_visibility_dirty();
             if let Some(actor) = self.combat_actors.get_mut(slot) {
                 actor.mark_dead();
             }
@@ -5065,9 +5075,10 @@ impl PlayState {
         }
         // `combat.md §6.1a`: the round walker picks the keystroke path
         // through the slot-to-group helper, so a party-side actor
-        // carrying the controlled bit runs on the automatic driver.
-        // `magic.md §8`: "Nothing routes a summoned creature through the
-        // player command parser, and the player never gets to move it."
+        // carrying the controlled bit runs on the automatic driver while
+        // a monster-side slot carrying it "is dispatched to the
+        // keystroke/command path, not to the automatic driver"
+        // (`RETRACTIONS.md` R354).
         if !combat_slot_takes_player_command_path(actor_slot, active_actor) {
             return None;
         }
@@ -5208,7 +5219,12 @@ impl PlayState {
                         ..
                     },
             } => CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat),
-            _ => self.combat_round_loop_control(false, false),
+            // `combat.md §7` places the recount that owns the party
+            // control/faint restore "after a dispatched action". This
+            // provisional read happens before the weapon attack below has
+            // been applied, so it takes the read-only census; the mutating
+            // recount is the post-action one further down.
+            _ => self.combat_round_loop_control_census(false, false),
         };
         let weapon_attack = self.apply_combat_player_weapon_attack_for_action(
             actor_slot,
@@ -5250,7 +5266,15 @@ impl PlayState {
             );
             control_after = self.combat_round_loop_control(leave_combat, false);
         }
-        if matches!(control_after, CombatRoundLoopControl::ContinueActorWalk) {
+        // `combat.md §7`: this is the post-dispatched-action recount, so it
+        // is the one that "first gives the party control/faint helper a
+        // chance to restore one actor". A provisional defeat from the
+        // read-only census above therefore has to be re-resolved here.
+        if matches!(
+            control_after,
+            CombatRoundLoopControl::ContinueActorWalk
+                | CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+        ) {
             control_after = self.combat_round_loop_control(false, false);
         }
         let victory_announced = !reprompt
@@ -5405,10 +5429,17 @@ impl PlayState {
     /// suppresses this. Returns whether this call is the one that fires,
     /// so the caller prints [`COMBAT_VICTORY_LINE`]; the stored guard
     /// makes every later call return `false`.
+    ///
+    /// `§16.1` makes side counting one contract for both halves - "Group 1
+    /// counts as foes and group 0 as friends. Control and the traitor
+    /// identity therefore affect victory detection" - so the friendly half
+    /// runs the same group resolver rather than the raw `0x80` scan. The
+    /// `§14` Escape handler keeps its own raw party-side test; it looks for
+    /// "any party-side descriptor whose marked-dead bit is clear", which is
+    /// a flag test and not a side count.
     pub fn announce_combat_victory_if_needed(&mut self) -> bool {
-        if combat_has_active_not_dead_non_party_actor(&self.combat_actors)
-            || !combat_escape_has_unmarked_party_side_actor(&self.combat_actors)
-        {
+        let census = combat_side_census(&self.combat_actors);
+        if census.foes_remain() || !census.friends_remain() {
             return false;
         }
         let Some(snapshot) = &mut self.combat_frame_snapshot else {
@@ -5480,10 +5511,11 @@ impl PlayState {
     /// shipped traitor identity - is group 1 and stops counting as a
     /// friend.
     ///
-    /// This is the read-only form. `§14` requires the defeat transition to
-    /// run the party control/faint helper before conceding, so the round
-    /// loop takes [`Self::combat_round_loop_control_with_faint_restore`]
-    /// instead.
+    /// This is the read-only form, and it is what every slot visit that
+    /// dispatches no action uses. `§14` requires the defeat transition to
+    /// run the party control/faint helper before conceding, so the
+    /// post-dispatched-action recount takes the mutating
+    /// [`Self::combat_round_loop_control`] instead.
     pub fn combat_round_loop_control_census(
         &self,
         leave_combat_flag: bool,
@@ -5510,6 +5542,13 @@ impl PlayState {
     /// controlled/charmed bit moves that party descriptor from group 1
     /// back to group 0 (`§16.1`), so the recount below finds a friend and
     /// the round loop continues instead of conceding.
+    ///
+    /// This form mutates - the faint tail prints `<name> passes out!`,
+    /// plays the blocking faint envelope, removes the Sword of Chaos and
+    /// sleeps the member, and the sleep arm advances a world tick - so it
+    /// belongs only on the recount `§7` places "after a dispatched
+    /// action". Every other recount site takes
+    /// [`Self::combat_round_loop_control_census`].
     pub fn combat_round_loop_control(
         &mut self,
         leave_combat_flag: bool,
@@ -5636,7 +5675,7 @@ impl PlayState {
         self.run_combat_round_loop_entry_prologue_if_needed();
         if slot >= COMBAT_ACTOR_SLOTS {
             return CombatActorSlotDispatchApplication::EndOfRound {
-                control: self.combat_round_loop_control(leave_combat_flag, true),
+                control: self.combat_round_loop_control_census(leave_combat_flag, true),
             };
         }
 
@@ -5650,7 +5689,7 @@ impl PlayState {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
                 action: CombatActorDispatchAction::Inactive,
-                control_after: self.combat_round_loop_control(leave_combat_flag, false),
+                control_after: self.combat_round_loop_control_census(leave_combat_flag, false),
             };
         }
 
@@ -5662,7 +5701,7 @@ impl PlayState {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
                 action: CombatActorDispatchAction::Inactive,
-                control_after: self.combat_round_loop_control(leave_combat_flag, false),
+                control_after: self.combat_round_loop_control_census(leave_combat_flag, false),
             };
         }
 
@@ -5678,7 +5717,7 @@ impl PlayState {
                 slot,
                 phase_tick: None,
                 action: CombatActorDispatchAction::PartyDeathSweep,
-                control_after: self.combat_round_loop_control(leave_combat_flag, false),
+                control_after: self.combat_round_loop_control_census(leave_combat_flag, false),
             };
         }
 
@@ -5687,7 +5726,7 @@ impl PlayState {
                 slot,
                 phase_tick: None,
                 action: CombatActorDispatchAction::Inactive,
-                control_after: self.combat_round_loop_control(leave_combat_flag, false),
+                control_after: self.combat_round_loop_control_census(leave_combat_flag, false),
             };
         };
         if !phase_tick.actor_should_dispatch() {
@@ -5695,7 +5734,7 @@ impl PlayState {
                 slot,
                 phase_tick: Some(phase_tick),
                 action: CombatActorDispatchAction::Waiting,
-                control_after: self.combat_round_loop_control(leave_combat_flag, false),
+                control_after: self.combat_round_loop_control_census(leave_combat_flag, false),
             };
         }
 
@@ -5710,7 +5749,7 @@ impl PlayState {
                 slot,
                 phase_tick: Some(phase_tick),
                 action: CombatActorDispatchAction::StatusDisabledWake { wake },
-                control_after: self.combat_round_loop_control(leave_combat_flag, false),
+                control_after: self.combat_round_loop_control_census(leave_combat_flag, false),
             };
         }
 
@@ -5763,9 +5802,12 @@ impl PlayState {
         // group ordinarily occupied by seated party members goes to the
         // keystroke/command path and the other group to the automatic actor
         // driver, so a party-side actor carrying the controlled/charmed bit
-        // takes its turn through the driver instead of the player's prompt.
-        // The earlier reading that any slot carrying the bit is sent to the
-        // player command parser is expressly withdrawn.
+        // takes its turn through the driver instead of the player's prompt,
+        // while a monster-side slot carrying it goes the other way: "the bit
+        // **does** hand the creature to the player's prompt" (`§6.1a` writer
+        // 3, `RETRACTIONS.md` R354). Only the reading that *every* slot
+        // carrying the bit reaches the player parser stays withdrawn - for a
+        // party-side slot the routing is the other way round.
         let action = if self.combat_target_group_for_slot(slot) == COMBAT_TARGET_GROUP_PARTY {
             CombatActorDispatchAction::PlayerReady
         } else if resolve_negate_time_dispatch_skipped(
@@ -5817,11 +5859,22 @@ impl PlayState {
             self.clear_combat_interference_for_completed_action(slot);
         }
 
+        // `combat.md §7`: the recount that "first gives the party
+        // control/faint helper a chance to restore one actor" is the one
+        // taken after a *dispatched action*. Only the automatic driver's
+        // turn is one here: `PlayerReady` has not read a command yet, and
+        // the Negate Time / Quickness arms skip the turn outright, so those
+        // take the read-only census.
+        let control_after = if matches!(action, CombatActorDispatchAction::MonsterAi { .. }) {
+            self.combat_round_loop_control(leave_combat_flag, false)
+        } else {
+            self.combat_round_loop_control_census(leave_combat_flag, false)
+        };
         CombatActorSlotDispatchApplication::Slot {
             slot,
             phase_tick: Some(phase_tick),
             action,
-            control_after: self.combat_round_loop_control(leave_combat_flag, false),
+            control_after,
         }
     }
 

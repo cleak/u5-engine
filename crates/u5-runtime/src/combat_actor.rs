@@ -281,11 +281,20 @@ pub const COMBAT_CLASS_SHADOW_LORD: u8 = 47;
 /// bit on each freshly placed creature, and **Summon** sets it on its
 /// placed Daemon whenever its caster self-check succeeds ... They are
 /// still placed through the ordinary monster placement path, so their
-/// class byte is the monster-side one and monster AI drives their
-/// turns". `§6.1` bit `0x80` is stamped "only when [placement] writes a
+/// class byte is the monster-side one - but the bit **does** hand the
+/// creature to the player's prompt: a monster-side slot carrying it is
+/// dispatched to the keystroke/command path, not to the automatic
+/// driver". `§6.1` bit `0x80` is stamped "only when [placement] writes a
 /// party member's descriptor. Monster and object descriptors never carry
 /// it", so a summoned creature is `0x40 | 0x01` (or `0x20 | 0x01` for the
 /// two passive class rows), never `0x80`.
+///
+/// The flags value is unchanged by the `RETRACTIONS.md` R354 correction;
+/// only the reason is. The earlier justification - "monster AI drives
+/// their turns" - is withdrawn, and `magic.md`, Summoning and
+/// conjuration, carries the matching correction: "That bit **is** a
+/// transfer of control ... a monster-side slot carrying the bit fails
+/// the self-acting test".
 pub const fn combat_summoned_actor_flags(class: u8) -> u8 {
     combat_monster_placement_flags(class) | COMBAT_ACTOR_FLAG_CONTROLLED
 }
@@ -3402,18 +3411,21 @@ pub fn resolve_combat_target_group_for_actor(
 /// monster-side group "for both the friendly-fire filter and the
 /// player-versus-AI dispatch gate".
 ///
-/// A monster-side slot never reaches the keystroke path even when the
-/// controlled bit puts it in the party's group for the same-faction
-/// filter. `magic.md §8`: "All three place their creature through the
-/// ordinary monster placement path, so the new actor keeps the
-/// monster-side class byte and monster AI drives its turns exactly as
-/// it drives any other monster. Nothing routes a summoned creature
-/// through the player command parser, and the player never gets to
-/// move it." The earlier reading - that the controlled bit hands a
-/// summoned creature to the player's prompt - is withdrawn.
+/// The decision is the resolved group and nothing else: `§16.1`
+/// "The round walker sends group-1 actors to the automatic action
+/// driver. Group-0 actors enter the combined command handler". So a
+/// monster-side slot carrying the controlled bit resolves to group 0 and
+/// **does** reach this path - `§6.1a` writer 3: "the bit **does** hand
+/// the creature to the player's prompt: a monster-side slot carrying it
+/// is dispatched to the keystroke/command path, not to the automatic
+/// driver". `magic.md`, Summoning and conjuration, carries the matching
+/// correction ("That bit **is** a transfer of control ... a monster-side
+/// slot carrying the bit fails the self-acting test"); its earlier
+/// "monster AI drives its turns ... the player never gets to move it"
+/// is withdrawn by `RETRACTIONS.md` R354. A slot index test would
+/// re-impose the withdrawn reading, so there is none here.
 pub fn combat_slot_takes_player_command_path(slot: usize, actor: CombatActorDescriptor) -> bool {
-    slot < COMBAT_PARTY_ACTOR_SLOTS
-        && resolve_combat_target_group_for_actor(actor, slot, None) == COMBAT_TARGET_GROUP_PARTY
+    resolve_combat_target_group_for_actor(actor, slot, None) == COMBAT_TARGET_GROUP_PARTY
 }
 
 pub fn combat_target_candidate_view_from_descriptor(

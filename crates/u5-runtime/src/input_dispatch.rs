@@ -2503,12 +2503,14 @@ fn handle_endgame_key_input(
     Ok(PlayInputDisposition::Continue)
 }
 
-/// `magic.md §8`: "Nothing routes a summoned creature through the
-/// player command parser, and the player never gets to move it."
 /// The dispatch decision is `combat.md §6.1a`'s slot-to-group helper,
-/// not the controlled bit read directly - a party-side actor carrying
-/// that bit (Sword of Chaos, possession, Charm) goes to the automatic
-/// driver, and a monster-side actor never gets a keystroke prompt.
+/// not the controlled bit read directly: a party-side actor carrying
+/// that bit (Sword of Chaos, possession, Charm) resolves to group 1 and
+/// goes to the automatic driver, while a monster-side actor carrying it
+/// resolves to group 0 and "is dispatched to the keystroke/command path,
+/// not to the automatic driver" (`§6.1a` writer 3; `magic.md`'s
+/// "the player never gets to move it" is withdrawn by
+/// `RETRACTIONS.md` R354).
 fn combat_actor_accepts_player_input(slot: usize, actor: CombatActorDescriptor) -> bool {
     combat_actor_is_active_not_dead(actor) && combat_slot_takes_player_command_path(slot, actor)
 }
@@ -2523,13 +2525,14 @@ fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
         .any(|(slot, actor)| combat_actor_accepts_player_input(slot, actor))
 }
 
+/// `combat.md §16.1`: "Side counting skips empty, dead, and passive
+/// descriptors, then uses the same group resolver. Group 1 counts as
+/// foes and group 0 as friends. Control and the traitor identity
+/// therefore affect victory detection." The raw slot-index scan this
+/// replaced disagreed with the round loop's own census for exactly the
+/// charmed-monster and traitor cases §16.1 publishes.
 fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
-    state
-        .combat_actors
-        .iter()
-        .skip(COMBAT_PARTY_ACTOR_SLOTS)
-        .copied()
-        .any(combat_actor_is_active_not_dead)
+    combat_has_active_not_dead_non_party_actor(&state.combat_actors)
 }
 
 fn combat_pending_player_actor_is_active(state: &PlayState, actor_slot: usize) -> bool {
@@ -3067,8 +3070,20 @@ fn combat_step_or_attack_application_message(
 /// `combat.md §6.3`: the common attack result narrator is the only
 /// relevant reader of the shared action-result scratch. It clears the
 /// kill-narrated bit `0x01` first; a surviving vanish bit `0x02` then
-/// suppresses the whole generic killed/slept/hit chain and is cleared in
+/// suppresses the generic killed/slept/hit chain and is cleared in
 /// cleanup, so a vanish death never also prints `<name> killed!`.
+///
+/// The scope is exactly that chain. `§11.1` names the reader "a wider
+/// test that halts the narrator before the kill, sleep, hit and wound
+/// chain", and it makes the miss line a separate producer - "The routine
+/// that prints a miss line has exactly two call sites, both inside
+/// party-side attack helpers" - so a miss neither is suppressed by the
+/// bit nor touches the field. Likewise `§6.3`: "If that narrator is not
+/// reached, the combat walker replaces the whole field with zero before
+/// the next actor dispatch", so a dispatch that produces no result line
+/// at all (out of range, no ordinary damage, a special resolution)
+/// leaves the field to the walker's own zeroing rather than clearing
+/// `0x02` or setting `0x01` here.
 ///
 /// The engine builds attack transcripts after the action has resolved,
 /// so the gate is applied here, at the one point per attack where the
@@ -3077,10 +3092,23 @@ fn combat_apply_attack_narrator_gate(
     state: &mut PlayState,
     line: Option<String>,
     narrates_kill: bool,
+    reaches_generic_chain: bool,
 ) -> Option<String> {
+    if !reaches_generic_chain {
+        return line;
+    }
     let gate = resolve_combat_attack_narrator_gate(state.combat_action_result, narrates_kill);
     state.combat_action_result = gate.result_after;
     if gate.run_generic_chain { line } else { None }
+}
+
+/// `combat.md §11.1`: the generic chain is the "kill, sleep, hit and
+/// wound chain". A failed to-hit takes the separate miss producer, and
+/// the resolutions that print nothing never reach the narrator.
+pub(crate) fn combat_weapon_resolution_reaches_generic_chain(
+    resolution: CombatWeaponAttackResolution,
+) -> bool {
+    matches!(resolution, CombatWeaponAttackResolution::Hit { .. })
 }
 
 fn combat_weapon_damage_application_killed(
@@ -3100,7 +3128,9 @@ fn combat_weapon_attack_result_message(
 ) -> Option<String> {
     let line = combat_weapon_attack_result_line(state, target_slot, attack);
     let narrates_kill = combat_weapon_damage_application_killed(attack.damage_application);
-    combat_apply_attack_narrator_gate(state, line, narrates_kill)
+    let reaches_generic_chain =
+        line.is_some() && combat_weapon_resolution_reaches_generic_chain(attack.resolution);
+    combat_apply_attack_narrator_gate(state, line, narrates_kill, reaches_generic_chain)
 }
 
 fn combat_monster_attack_result_message(
@@ -3109,7 +3139,19 @@ fn combat_monster_attack_result_message(
 ) -> Option<String> {
     let line = combat_monster_attack_result_line(state, attack);
     let narrates_kill = combat_weapon_damage_application_killed(attack.damage_application);
-    combat_apply_attack_narrator_gate(state, line, narrates_kill)
+    // `§11.1` puts the poison line inside damage resolution, ahead of the
+    // result line it then suppresses, so it is not the generic chain
+    // either.
+    let poisoned = matches!(
+        attack.poison_status_outcome,
+        Some(CombatPoisonStatusAttackOutcome::PoisonedPartyMember { .. })
+    );
+    let reaches_generic_chain = line.is_some()
+        && !poisoned
+        && attack
+            .resolution
+            .is_some_and(combat_weapon_resolution_reaches_generic_chain);
+    combat_apply_attack_narrator_gate(state, line, narrates_kill, reaches_generic_chain)
 }
 
 /// Player-visible result lines observed in the original DOS presentation and

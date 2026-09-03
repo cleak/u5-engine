@@ -20392,12 +20392,19 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
 }
 
 #[test]
-fn summoned_creatures_never_reach_the_player_command_path() {
-    // magic.md §8: "All three place their creature through the ordinary
-    // monster placement path, so the new actor keeps the monster-side
-    // class byte and monster AI drives its turns exactly as it drives
-    // any other monster. Nothing routes a summoned creature through the
-    // player command parser, and the player never gets to move it."
+fn summoned_creatures_take_the_player_command_path() {
+    // combat.md §6.1a writer 3: summoned creatures "are still placed
+    // through the ordinary monster placement path, so their class byte
+    // is the monster-side one - but the bit **does** hand the creature
+    // to the player's prompt: a monster-side slot carrying it is
+    // dispatched to the keystroke/command path, not to the automatic
+    // driver". magic.md, Summoning and conjuration, carries the matching
+    // correction: "That bit **is** a transfer of control ... a
+    // monster-side slot carrying the bit fails the self-acting test, so
+    // the round walker sends it to the keystroke/command path instead of
+    // to the automatic actor driver." RETRACTIONS.md R354 withdraws the
+    // earlier "monster AI drives its turns ... the player never gets to
+    // move it" reading this test used to assert.
     //
     // combat.md §6.1a: "The walker sends the group ordinarily occupied
     // by seated party members to the keystroke/command path (Section 8)
@@ -20431,18 +20438,26 @@ fn summoned_creatures_never_reach_the_player_command_path() {
     );
     assert!(!combat_slot_takes_player_command_path(0, controlled_party));
 
-    // An ordinary monster is driven by monster AI.
-    let monster = descriptor(COMBAT_ACTOR_FLAG_SELECTABLE_80, 20);
+    // combat.md §6.1: "Monster and object descriptors never carry"
+    // 0x80; an ordinary monster is the hostile placement tag and is
+    // driven by monster AI.
+    let monster = descriptor(combat_monster_placement_flags(20), 20);
+    assert_eq!(monster.flags, COMBAT_ACTOR_FLAG_SELECTABLE_40);
     assert!(!combat_slot_takes_player_command_path(
         COMBAT_PARTY_ACTOR_SLOTS,
         monster
     ));
 
     // Conjure / Swarm / Summon stamp the summoned-actor flags into a
-    // monster-side slot. The bit groups the creature with the party for
-    // the same-faction filter, but it must not hand the creature to the
-    // player's prompt.
+    // monster-side slot: 0x40 | 0x01, never 0x80. §16.1 resolves that
+    // descriptor to group 0, and "Group-0 actors enter the combined
+    // command handler", so every monster-side slot carrying the bit
+    // reaches the keystroke path.
     let summoned = descriptor(combat_summoned_actor_flags(20), 20);
+    assert_eq!(
+        summoned.flags,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_CONTROLLED
+    );
     assert!(summoned.is_controlled());
     assert_eq!(
         resolve_combat_target_group_for_actor(summoned, COMBAT_PARTY_ACTOR_SLOTS, None),
@@ -20450,9 +20465,17 @@ fn summoned_creatures_never_reach_the_player_command_path() {
     );
     for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
         assert!(
-            !combat_slot_takes_player_command_path(slot, summoned),
-            "summoned creature in slot {slot} reached the player command path"
+            combat_slot_takes_player_command_path(slot, summoned),
+            "summoned creature in slot {slot} missed the player command path"
         );
+    }
+
+    // Summon's rebound branch leaves the bit clear, and that Daemon is
+    // "really hostile and AI-driven" (magic.md, Summoning and
+    // conjuration).
+    let rebound = descriptor(combat_monster_placement_flags(38), 38);
+    for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+        assert!(!combat_slot_takes_player_command_path(slot, rebound));
     }
 
     // combat.md §9: the traitor-roster override applies "for both the
