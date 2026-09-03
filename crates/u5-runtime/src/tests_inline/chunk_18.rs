@@ -567,7 +567,6 @@
         state.wind = WindState::Calm;
         state.wind_save_byte = 0x7a;
         state.sail_cadence = 1;
-        state.sail_stall_pending = true;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'C', "1HR4", Path::new("")).unwrap(),
@@ -581,7 +580,6 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert_eq!(state.sail_cadence, 0);
-        assert!(!state.sail_stall_pending);
         assert_eq!(state.message, "Wind change! Calm Winds -> North Winds.");
     }
 

@@ -8586,7 +8586,6 @@ fn seed_visual_route_shipwright_shop(state: &mut PlayState, shipwright: Shipwrig
         y: 2,
         transport: state.player.transport,
         sail_cadence: state.sail_cadence,
-        sail_stall_pending: state.sail_stall_pending,
         grid: state.grid.clone(),
         active_objects: state.active_objects.clone(),
         pending_vehicle: None,
@@ -8642,7 +8641,6 @@ fn seed_visual_route_dungeon_surface_exit(state: &mut PlayState) {
         y: 124,
         transport: TransportState::Foot,
         sail_cadence: state.sail_cadence,
-        sail_stall_pending: state.sail_stall_pending,
         grid: vec![0; WORLD_SIDE * WORLD_SIDE],
         active_objects: Vec::new(),
         pending_vehicle: None,
@@ -16750,8 +16748,11 @@ fn visual_idle_tick(state: &mut PlayState, game_dir: &Path) -> bool {
     }
     // `timing.md §8.2`: this pump is the input helper's idle wait, so it owns
     // the scripted step-and-wait and - when sails are set - the under-sail
-    // route, where "an **under-sail auto-advance pass costs two ticks and one
-    // world step and never enters the command wait at all**".
+    // route, which "never enters the command wait at all" and pays "**One
+    // world step, unconditionally**" plus "**One fully consumed game turn**"
+    // per pass. (`RETRACTIONS.md` R371: "**Two ticks is a maximum, not a
+    // cost**", so the tick figure is a pacing bound rather than work this
+    // pump owes.)
     // `idle_wait_pass` performs the world step on the first pump of that pass
     // and, on the second, the bare cursor poll plus the synthesized movement
     // command `overworld.md §5` step 3 has the helper return "instead" of
@@ -24032,11 +24033,13 @@ mod tests {
 
     #[test]
     fn visual_idle_tick_sails_a_steered_ship_with_no_keypress() {
-        // `timing.md §8.2` / `overworld.md §5` step 3: this pump is the input
-        // helper's idle wait, and under sail "this step does not read the
-        // keyboard at all: the input helper returns the cached sail direction
-        // instead, which is how a ship keeps moving with no keypress". The
-        // shell therefore has to advance the ship off the pump alone.
+        // `overworld.md §5` step 3: this pump is the input helper's idle wait,
+        // and under sail "this step does not enter the command wait: the
+        // input helper runs its own auto-advance loop and returns the cached
+        // sail direction, which is how a ship keeps moving with no keypress"
+        // (`RETRACTIONS.md` R372 withdrew the older "does not read the
+        // keyboard at all"; the loop polls one key per pass). The shell
+        // therefore has to advance the ship off the pump alone.
         let mut state = u5_runtime::test_fixtures::world_state(
             vec![u5_runtime::BRIT_DEEP_WATER_TILE; u5_runtime::WORLD_CELLS],
             10,
@@ -24058,17 +24061,20 @@ mod tests {
         assert!(visual_idle_tick(&mut state, Path::new(".")));
         assert_eq!((state.player.x, state.player.y), (10, 20));
 
-        // One keyed command establishes the cache; from there the pump alone
-        // keeps the ship sailing, one cell per two pumps.
+        // One keyed command establishes the cache. `weather.md §5`: "If the
+        // requested heading differs from the current cached sail direction,
+        // the ship turns and clears the sailing counter; that action does not
+        // also move the ship." From there the pump alone keeps the ship
+        // sailing, one cell per two pumps.
         assert_eq!(
             state
                 .step_with_game_dir(Direction::East, None)
                 .expect("sidecar-free ship step"),
-            u5_runtime::MoveOutcome::Moved
+            u5_runtime::MoveOutcome::SailTurned
         );
-        assert_eq!((state.player.x, state.player.y), (11, 20));
+        assert_eq!((state.player.x, state.player.y), (10, 20));
 
-        for expected_x in [12usize, 13] {
+        for expected_x in [11usize, 12] {
             assert!(visual_idle_tick(&mut state, Path::new(".")));
             assert_eq!(state.player.x, expected_x - 1);
             assert!(visual_idle_tick(&mut state, Path::new(".")));

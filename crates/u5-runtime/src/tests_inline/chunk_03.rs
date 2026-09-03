@@ -440,7 +440,6 @@ fn save_game_command_persists_pending_shipwright_delivery_from_town_return_world
         y: 21,
         transport: TransportState::Foot,
         sail_cadence: 0,
-        sail_stall_pending: false,
         grid: open_world_grid(),
         active_objects: vec![ActiveObject {
             type_byte: PLAYER_TILE,
@@ -531,7 +530,6 @@ fn save_game_command_persists_pending_skiff_delivery_from_town_return_world() {
         y: 106,
         transport: TransportState::Foot,
         sail_cadence: 0,
-        sail_stall_pending: false,
         grid: open_world_grid(),
         active_objects: world_objects,
         pending_vehicle: Some(pending),

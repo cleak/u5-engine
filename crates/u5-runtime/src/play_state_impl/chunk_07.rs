@@ -768,7 +768,6 @@ impl PlayState {
     pub fn force_foot_transport(&mut self) {
         self.player.transport = TransportState::Foot;
         self.sail_cadence = 0;
-        self.sail_stall_pending = false;
         self.sail_cached_direction = None;
     }
 
@@ -1020,7 +1019,6 @@ impl PlayState {
                     }
                     .with_facing(self.player.facing);
                     self.sail_cadence = 0;
-                    self.sail_stall_pending = false;
                     self.sail_cached_direction = None;
                     self.sync_player_object();
                     self.mark_visibility_dirty();
@@ -1050,7 +1048,6 @@ impl PlayState {
                         tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
                     };
                     self.sail_cadence = 0;
-                    self.sail_stall_pending = false;
                     self.sail_cached_direction = None;
                     self.sync_player_object();
                     self.mark_visibility_dirty();
@@ -1123,7 +1120,6 @@ impl PlayState {
             skiffs,
         };
         self.sail_cadence = 0;
-        self.sail_stall_pending = false;
         // `vehicles.md` "Ship Sails": furling makes the ship "manually
         // handled" and "wind-driven drift should not advance the ship while
         // furled", so the toggle drops the cache the auto-advance route
@@ -2998,10 +2994,12 @@ impl PlayState {
     pub fn pass_turn_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
         let turn_before = self.turn;
         self.advance_turn();
-        if self.sail_stall_pending {
-            self.sail_stall_pending = false;
-            // `weather.md §6`: "A later Pass command reports the
-            // stalled-sailing feedback and clears the cached sailing state."
+        // `weather.md §5.1`, clear three: "The Pass command | Only while the
+        // outdoor scene is current and the cache is non-zero; it prints the
+        // stalled-sailing line first, then clears." The condition is the
+        // cache, not the engine's own stall flag: a Pass taken on a released
+        // pass still had a heading cached and still clears it.
+        if matches!(self.area, Area::World { .. }) && self.sail_cached_direction.is_some() {
             self.sail_cached_direction = None;
             self.message = "Ship remains stalled by the wind.".to_string();
         } else {

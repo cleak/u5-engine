@@ -520,17 +520,19 @@ fn under_sail_world(x: usize, y: usize, wind: WindState) -> PlayState {
 
 #[test]
 fn a_steered_ship_keeps_sailing_with_no_keypress_at_the_published_cadence() {
-    // `timing.md §8.2`: "On the overworld the input helper performs one
-    // scripted step-and-wait - one world step followed by one one-tick wait -
-    // before either entering the command wait or, when sails are set,
-    // performing a bare cursor poll instead; so an **under-sail auto-advance
-    // pass costs two ticks and one world step and never enters the command
-    // wait at all**."
+    // `timing.md §8.2`: per under-sail wait pass the helper pays "**One world
+    // step, unconditionally**", "**One fully consumed game turn**" and
+    // "**Zero, one or two one-tick waits - not two flat**" - `RETRACTIONS.md`
+    // R371 withdrew the older "costs two ticks" figure in favour of that
+    // maximum. The world-step figure and "never enters the command wait at
+    // all" both stand, and they are what this test pins.
     //
-    // `overworld.md §5` step 3 says what the pass buys: "under sail on the
-    // wind-driven cadence, this step does not read the keyboard at all: the
-    // input helper returns the cached sail direction instead, which is how a
-    // ship keeps moving with no keypress."
+    // `overworld.md §5` step 3 says what the pass buys: "Under sail on the
+    // wind-driven cadence, this step does not enter the command wait: the
+    // input helper runs its own auto-advance loop and returns the cached sail
+    // direction, which is how a ship keeps moving with no keypress." (R372
+    // withdrew the older "does not read the keyboard at all" half; the loop
+    // polls one key per pass - see the swallow test below.)
     //
     // A north wind is perpendicular to an easterly heading, which
     // `weather.md §5`'s table releases immediately, so every auto-advance
@@ -550,10 +552,13 @@ fn a_steered_ship_keeps_sailing_with_no_keypress_at_the_published_cadence() {
     assert_eq!((state.player.x, state.player.y), (5, 5));
 
     // One keyed movement command establishes the cache (`weather.md §5`: a
-    // movement command "first establishes or changes the ship's heading").
-    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+    // movement command "first establishes or changes the ship's heading"),
+    // and that command turns without moving: "If the requested heading
+    // differs from the current cached sail direction, the ship turns and
+    // clears the sailing counter; that action does not also move the ship."
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(state.sail_cached_direction, Some(Direction::East));
-    assert_eq!((state.player.x, state.player.y), (6, 5));
+    assert_eq!((state.player.x, state.player.y), (5, 5));
     assert!(state.under_sail_wait_pass_applies());
 
     // Control: what one *keyed* sail command costs the world clock on its
@@ -566,13 +571,16 @@ fn a_steered_ship_keeps_sailing_with_no_keypress_at_the_published_cadence() {
     // modular.
     let period = STATIC_TILE_ANIMATION_PERIOD_TICKS;
     let keyed_command_frames = {
-        let mut control = under_sail_world(6, 5, WindState::North);
+        let mut control = under_sail_world(5, 5, WindState::North);
+        // Spend the heading-establishing turn first so the measured command
+        // is a released one, the same kind the auto-advance pass synthesizes.
+        assert_eq!(control.step(Direction::East), MoveOutcome::SailTurned);
         let before = control.animation.frame;
         assert_eq!(control.step(Direction::East), MoveOutcome::Moved);
         (control.animation.frame + period - before) % period
     };
 
-    for expected_x in [7usize, 8, 9] {
+    for expected_x in [6usize, 7, 8] {
         let frame_before = state.animation.frame;
         let turn_before = state.turn;
         let x_before = state.player.x;
@@ -617,10 +625,27 @@ fn an_auto_advance_pass_into_the_wind_pays_the_published_wait_ticks() {
     // So the cursor-poll half does published work on a stalled turn too: it
     // is the pass that increments the counter.
     let mut state = under_sail_world(5, 5, WindState::East);
-    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+
+    // The keyed command that establishes the heading turns without moving and
+    // leaves the counter at zero - `weather.md §5.1`: the store "is the same
+    // step that zeroes the sailing counter".
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!(state.sail_cadence, 0);
+    assert_eq!((state.player.x, state.player.y), (5, 5));
+
+    // Wait tick one.
+    assert_eq!(
+        state.idle_wait_pass(None).unwrap(),
+        IdleWaitPass::UnderSailWorldStep
+    );
+    assert_eq!(
+        state.idle_wait_pass(None).unwrap(),
+        IdleWaitPass::UnderSailCursorPoll
+    );
     assert_eq!(state.sail_cadence, 1);
     assert_eq!((state.player.x, state.player.y), (5, 5));
 
+    // Wait tick two.
     assert_eq!(
         state.idle_wait_pass(None).unwrap(),
         IdleWaitPass::UnderSailWorldStep
@@ -664,9 +689,21 @@ fn a_sailing_collision_clears_the_cache_and_ends_the_auto_advance_route() {
     };
     state.wind = WindState::North;
 
-    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
-    assert_eq!((state.player.x, state.player.y), (6, 5));
+    // The keyed command turns without moving (`weather.md §5`); the crosswind
+    // release lands on the auto-advance pass that follows it.
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!((state.player.x, state.player.y), (5, 5));
     assert!(state.under_sail_wait_pass_applies());
+
+    assert_eq!(
+        state.idle_wait_pass(None).unwrap(),
+        IdleWaitPass::UnderSailWorldStep
+    );
+    assert_eq!(
+        state.idle_wait_pass(None).unwrap(),
+        IdleWaitPass::UnderSailCursorPoll
+    );
+    assert_eq!((state.player.x, state.player.y), (6, 5));
 
     assert_eq!(
         state.idle_wait_pass(None).unwrap(),
@@ -695,7 +732,7 @@ fn the_under_sail_route_does_not_leak_into_combat_or_a_furled_ship() {
     // command, which consumes a turn through the clock rather than the idle
     // wait, never reaches this code at all.
     let mut combat = under_sail_world(5, 5, WindState::North);
-    assert_eq!(combat.step(Direction::East), MoveOutcome::Moved);
+    assert_eq!(combat.step(Direction::East), MoveOutcome::SailTurned);
     assert!(combat.under_sail_wait_pass_applies());
     combat.combat_active = true;
     assert!(!combat.under_sail_wait_pass_applies());
@@ -707,7 +744,7 @@ fn the_under_sail_route_does_not_leak_into_combat_or_a_furled_ship() {
     // Furling is one of the published cache clears (`vehicles.md` "Ship
     // Sails": "wind-driven drift should not advance the ship while furled").
     let mut furled = under_sail_world(5, 5, WindState::North);
-    assert_eq!(furled.step(Direction::East), MoveOutcome::Moved);
+    assert_eq!(furled.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(furled.toggle_sails(), MoveOutcome::SailToggled);
     assert!(!furled.player.transport.is_ship_under_sail());
     assert!(furled.sail_cached_direction.is_none());
@@ -728,13 +765,17 @@ fn the_town_animator_is_not_one_of_the_two_gated_walkers() {
     // `npc-schedules.md §5`: the three effect gates "sit in the town loop's
     // per-turn epilogue, ahead of both town walkers - the object walker that
     // moves loose horse-family objects and this schedule processor". The
-    // animator is neither of those two: `npc-schedules.md §12` has "the
-    // active-object animator, run independently each render frame", and
-    // `RETRACTIONS.md` R316 gives its whole contract as "the displayed-tile
-    // byte and the packed phase/facing byte; it never writes a slot's column
-    // or row". So a turn the transport-marker gate skips still animates the
-    // town's sprites - otherwise a mounted or carpet-borne party, or one
-    // under Quickness, would see town sprites freeze on half of all turns.
+    // animator is neither of those two: `npc-schedules.md §12` has the
+    // animator running "independently of the scheduler, once per world tick
+    // rather than once per player turn" and selecting frames while the
+    // drawing "belongs to the shared visibility post-pass" (`RETRACTIONS.md`
+    // R373 withdrew "run independently each render frame" / "draws the
+    // per-NPC sprites"), and R316 gives its whole write set as "the
+    // displayed-tile byte and the packed phase/facing byte; it never writes a
+    // slot's column or row". So a turn the transport-marker gate skips still
+    // animates the town's sprites - otherwise a mounted or carpet-borne
+    // party, or one under Quickness, would see town sprites freeze on half of
+    // all turns.
     let mut state = test_state(open_grid(), 5, 5);
     state.player.transport = mounted_horse_transport();
     state.npcs.push(wandering_npc(1, 9, 9, (9, 9)));
@@ -857,14 +898,24 @@ fn a_refused_queued_route_step_falls_into_the_cap_zero_wander() {
 
 #[test]
 fn a_stuck_npc_only_replans_on_the_one_in_three_draw() {
-    // `npc-schedules.md §9.1`: "Separately, when the NPC's stuck counter is
-    // non-zero the walker only re-plans on a **one-in-three** draw and
-    // otherwise ages the counter for that turn."
+    // `npc-schedules.md §9.1`, "The replan gate and the stuck counter's three
+    // bands": in the `1..=199` band the walker takes "The **one-in-three
+    // replan draw** ... On a pass the NPC re-plans; on a failure the NPC's
+    // turn simply ends. **The counter is not aged, incremented or otherwise
+    // touched on a failure.**"
+    //
+    // `RETRACTIONS.md` R368 withdraws the aging half this test used to pin:
+    // "The rate and the gate stand; **the aging half is withdrawn.** ... in
+    // that band a **failed draw ages nothing** - it simply ends that NPC's
+    // turn."
+    //
+    // The draw's form is also published: "a uniform range draw over `0`, `1`,
+    // `2` accepted on **exactly the middle value** ... not a byte-and-mask
+    // draw like the one-in-two wander coin. ... A mask model consumes the
+    // same single advance and selects a different third of the stream."
     //
     // The NPC is in state 2 with its direct step blocked, so the pathfinder
-    // is the only way it can move. With the counter already non-zero the
-    // replan is gated: on a failed draw the walker neither searches nor
-    // moves, and the counter ages.
+    // is the only way it can move.
     let blocked_state = |seed: u16| {
         let mut grid = npc_open_grid();
         // Wall off the direct step toward the waypoint at (3, 9).
@@ -878,28 +929,444 @@ fn a_stuck_npc_only_replans_on_the_one_in_three_draw() {
         state
     };
 
+    // The draw is accepted on the middle value of `0..=2`, so `0` and `2`
+    // both refuse. A mask model accepting on `0` would pick a different third
+    // of the stream while spending the same advance.
     let refusing_seed = (0..=u16::MAX)
         .find(|seed| {
             let mut probe = test_state(open_grid(), 5, 5);
             probe.prng_state = *seed;
-            probe.random_range_u8(0, 2) != 0
+            probe.random_range_u8(0, 2) != 1
         })
         .expect("some PRNG state fails the one-in-three replan draw");
     let mut refused = blocked_state(refusing_seed);
     refused.advance_npc_schedules();
     assert_eq!((refused.npcs[0].x, refused.npcs[0].y), (3, 3));
-    assert_eq!(refused.npcs[0].stuck_counter, 2);
+    // R368: "a failed draw ages nothing - it simply ends that NPC's turn."
+    assert_eq!(refused.npcs[0].stuck_counter, 1);
     assert!(refused.npcs[0].move_queue.is_empty());
 
     let passing_seed = (0..=u16::MAX)
         .find(|seed| {
             let mut probe = test_state(open_grid(), 5, 5);
             probe.prng_state = *seed;
-            probe.random_range_u8(0, 2) == 0
+            probe.random_range_u8(0, 2) == 1
         })
         .expect("some PRNG state passes the one-in-three replan draw");
     let mut replanned = blocked_state(passing_seed);
     replanned.advance_npc_schedules();
     // The replan ran, the route was found and its first step committed.
     assert_ne!((replanned.npcs[0].x, replanned.npcs[0].y), (3, 3));
+
+    // A seed that would pass a `== 0` mask model but fails the published
+    // middle-value draw still ends the turn, which is the parity the
+    // retraction is about.
+    let mask_only_seed = (0..=u16::MAX)
+        .find(|seed| {
+            let mut probe = test_state(open_grid(), 5, 5);
+            probe.prng_state = *seed;
+            probe.random_range_u8(0, 2) == 0
+        })
+        .expect("some PRNG state draws zero");
+    let mut mask_model = blocked_state(mask_only_seed);
+    mask_model.advance_npc_schedules();
+    assert_eq!((mask_model.npcs[0].x, mask_model.npcs[0].y), (3, 3));
+    assert_eq!(mask_model.npcs[0].stuck_counter, 1);
 }
+
+/// A town NPC in the in-plane route state at `(3, 3)`, walled in on the
+/// cardinals named by `open`, with an unreachable waypoint at `(3, 9)`.
+fn boxed_route_npc_state(open: &[(usize, usize)]) -> PlayState {
+    let mut grid = npc_open_grid();
+    for cell in [(2usize, 3usize), (4, 3), (3, 2), (3, 4)] {
+        if !open.contains(&cell) {
+            grid[cell.0 + cell.1 * 32] = 0xB9;
+        }
+    }
+    // A wall right across the map keeps the waypoint unreachable, so every
+    // replan attempt fails.
+    for x in 0..32 {
+        grid[x + 6 * 32] = 0xB9;
+    }
+    let mut state = test_state(grid, 20, 20);
+    let mut npc = wandering_npc(0, 3, 3, (3, 9));
+    npc.state = NPC_STATE_INPLANE_MOVE;
+    state.npcs.push(npc);
+    state
+}
+
+#[test]
+fn a_counter_of_zero_replans_unconditionally_and_spends_no_draw() {
+    // `npc-schedules.md §9.1`: "`0` | The NPC re-plans **unconditionally**.
+    // No draw is taken, and no draw is spent."
+    //
+    // Every seed must behave the same way, including seeds on which the
+    // one-in-three draw would refuse: the draw is simply not reached.
+    for seed in [0x0001u16, 0x1234, 0x2468, 0xBEEF] {
+        let mut state = boxed_route_npc_state(&[]);
+        state.prng_state = seed;
+        assert_eq!(state.npcs[0].stuck_counter, 0);
+
+        state.advance_npc_schedules();
+
+        // The replan was attempted and failed, so the high band was entered
+        // by assignment rather than by counting.
+        assert_eq!(state.npcs[0].stuck_counter, NPC_STUCK_HIGH_BAND_ENTRY);
+    }
+}
+
+#[test]
+fn a_failed_replan_assigns_two_hundred_on_a_turn_that_is_not_still() {
+    // `npc-schedules.md §9.1`, "The aging band, `200..204`": "The value `200`
+    // is never *counted* into: it is **assigned** outright when a replan is
+    // attempted and the pathfinder fails to reach the waypoint." And
+    // `RETRACTIONS.md` R369: "**The turn on which the counter is set to
+    // `200` is not a still turn.** That turn falls straight through into the
+    // cap-zero recovery step ... which can and does commit a move".
+    let mut state = boxed_route_npc_state(&[(4, 3)]);
+    state.prng_state = wander_seed_for(Direction::East);
+
+    state.advance_npc_schedules();
+
+    assert_eq!(state.npcs[0].stuck_counter, NPC_STUCK_HIGH_BAND_ENTRY);
+    assert_eq!(
+        (state.npcs[0].x, state.npcs[0].y),
+        (4, 3),
+        "the assigning turn falls through into the cap-zero recovery step"
+    );
+}
+
+#[test]
+fn the_high_band_is_five_still_turns_and_the_sixth_replans() {
+    // `npc-schedules.md §9.1`: "`200` .. `204` | No draw and no replan. The
+    // counter is incremented, and once the increment carries it past `204`
+    // the same pass zeroes it." R369: "the band that follows is **five**
+    // consecutive turns of complete stillness (entry values two hundred
+    // through two hundred four, the fifth pass both incrementing past two
+    // hundred four and zeroing), after which the **sixth** turn re-plans
+    // unconditionally with no draw."
+    let mut state = boxed_route_npc_state(&[]);
+
+    // Turn one: counter zero, unconditional replan, pathfinder fails, `200`
+    // assigned.
+    state.advance_npc_schedules();
+    assert_eq!(state.npcs[0].stuck_counter, NPC_STUCK_HIGH_BAND_ENTRY);
+
+    // Five aging passes. The NPC is walled in, so stillness is guaranteed by
+    // the geometry; what this pins is the counter's walk and the zeroing
+    // pass.
+    for expected in [201u16, 202, 203, 204, 0] {
+        state.advance_npc_schedules();
+        assert_eq!(state.npcs[0].stuck_counter, expected);
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 3));
+    }
+    assert_eq!(NPC_STUCK_HIGH_BAND_LAST, 204);
+
+    // The sixth turn sees a counter of zero and re-plans unconditionally,
+    // which fails again and re-assigns the band entry.
+    state.advance_npc_schedules();
+    assert_eq!(state.npcs[0].stuck_counter, NPC_STUCK_HIGH_BAND_ENTRY);
+}
+
+#[test]
+fn only_a_refused_queued_route_step_increments_the_stuck_counter() {
+    // `RETRACTIONS.md` R367: "**Exactly one event increments the counter: a
+    // queued route step refused by the per-step cell check.** Neither
+    // cap-zero route-recovery step of Section 9.1 can increment it ... and
+    // the recovery stepper never touches the counter table on any of its
+    // three rejection paths."
+    let mut grid = npc_open_grid();
+    grid[2 + 3 * 32] = 0xB9;
+    let mut state = test_state(grid, 20, 20);
+    let mut npc = wandering_npc(0, 3, 3, (12, 12));
+    npc.state = NPC_STATE_REPLAY_QUEUE;
+    npc.move_queue = vec![NPC_PATH_DIR_WEST, NPC_PATH_DIR_WEST];
+    state.npcs.push(npc);
+    // A losing coin makes the recovery step reject, which R367 names as one
+    // of the three rejection paths that must not touch the counter - the one
+    // increment already happened ahead of it.
+    state.prng_state = losing_wander_coin_seed();
+
+    state.advance_npc_schedules();
+
+    assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 3));
+    assert_eq!(state.npcs[0].stuck_counter, 1);
+
+    // The exhausted-queue arm takes the same recovery step and increments
+    // nothing at all: the counter it starts with is the counter it keeps.
+    let mut exhausted = boxed_route_npc_state(&[]);
+    exhausted.npcs[0].stuck_counter = 2;
+    let mut searched = true;
+    let outcome = exhausted.advance_npc_in_plane_schedule_step(0, 0, 3, 9, 0, 0, &mut searched);
+    assert_eq!(outcome, NpcScheduleStepOutcome::Stalled);
+    assert_eq!(exhausted.npcs[0].stuck_counter, 2);
+}
+
+#[test]
+fn a_successful_queued_route_step_resets_the_stuck_counter() {
+    // `npc-schedules.md §5` step 7: "A queued route step that commits resets
+    // the counter to zero" - one of the "two facts the old wording hid"
+    // (`RETRACTIONS.md` R367).
+    let mut state = test_state(npc_open_grid(), 20, 20);
+    let mut npc = wandering_npc(0, 3, 3, (6, 3));
+    npc.state = NPC_STATE_REPLAY_QUEUE;
+    npc.move_queue = vec![NPC_PATH_DIR_EAST, NPC_PATH_DIR_EAST];
+    npc.stuck_counter = 2;
+    state.npcs.push(npc);
+
+    state.advance_npc_schedules();
+
+    assert_eq!((state.npcs[0].x, state.npcs[0].y), (4, 3));
+    assert_eq!(state.npcs[0].stuck_counter, 0);
+}
+
+#[test]
+fn a_quickness_suppressed_outdoor_turn_does_not_advance_the_transport_parity() {
+    // `encounters.md §2.1`'s per-turn-shape table, and `RETRACTIONS.md`
+    // R370/R374: "a Quickness-suppressed turn returns before the transport
+    // marker is read, so it does **not** advance the transport parity", while
+    // "a gated turn does not 'skip' the alternation - advancing the
+    // alternation is what the gate does".
+    let mut world = world_state(open_world_grid(), 5, 5);
+    world.player.transport = mounted_horse_transport();
+    world.active_effect_tag = Some(TimingStatusTag::HalfTime.save_byte());
+    world.active_effect_counter = 10;
+
+    // Pass one: Quickness is reached, flips its own bit and comes up set, so
+    // the turn is suppressed before the transport marker is read.
+    assert_eq!(
+        world.overworld_walker_effect_gates(),
+        WalkerEffectGate::SkippedByQuickness
+    );
+    assert!(world.quickness_walker_gate_parity);
+    assert!(
+        !world.transport_walker_gate_parity,
+        "the transport gate was never reached, so its parity stands"
+    );
+
+    // Pass two: Quickness lets the turn through, so the transport gate is
+    // reached and advances its own alternation.
+    assert_eq!(
+        world.overworld_walker_effect_gates(),
+        WalkerEffectGate::SkippedByTransportMarker
+    );
+    assert!(!world.quickness_walker_gate_parity);
+    assert!(world.transport_walker_gate_parity);
+}
+
+#[test]
+fn a_repeated_heading_neither_rewrites_the_cache_nor_restarts_the_wait() {
+    // `weather.md §5.1`, "**The one setter.**": "The store runs only when the
+    // requested heading **differs** from the cached one, and it is the same
+    // step that zeroes the sailing counter. Repeating the heading already
+    // cached changes neither the cache nor the counter, and in particular
+    // does not restart the wait." And: "The stored value is always a real
+    // movement direction and is **never zero**, so **a new heading replaces
+    // the cache rather than clearing it.**"
+    //
+    // An east wind against an easterly heading is the two-pass upwind wait of
+    // `weather.md §5`, so the counter is observable between passes.
+    let mut state = under_sail_world(5, 5, WindState::East);
+
+    // The differing-heading step is the setter, and `weather.md §5` bounds
+    // what it may do on the same command: "the ship turns and clears the
+    // sailing counter; that action does not also move the ship."
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+    assert_eq!(state.sail_cadence, 0);
+    assert_eq!((state.player.x, state.player.y), (5, 5));
+
+    // Repeating the cached heading advances the wait instead of restarting
+    // it.
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+    assert_eq!(state.sail_cadence, 1);
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+    assert_eq!(state.sail_cadence, 2);
+
+    // A different heading replaces the cache and zeroes the counter on the
+    // same step. The cache is never momentarily empty, and the ship stays put
+    // on that step even though west is downwind of an east wind.
+    assert_eq!(state.step(Direction::West), MoveOutcome::SailTurned);
+    assert_eq!(state.sail_cached_direction, Some(Direction::West));
+    assert_eq!(state.sail_cadence, 0);
+    assert_eq!((state.player.x, state.player.y), (5, 5));
+
+    // The restarted one-pass wait is then paid from zero.
+    assert_eq!(state.step(Direction::West), MoveOutcome::SailStalled);
+    assert_eq!(state.sail_cadence, 1);
+    assert_eq!(state.step(Direction::West), MoveOutcome::Moved);
+    assert_eq!((state.player.x, state.player.y), (4, 5));
+    assert_eq!(state.sail_cadence, 0);
+}
+
+#[test]
+fn a_wind_change_zeroes_the_sailing_counter_but_a_re_announcement_does_not() {
+    // `weather.md §5.1`, "**A fourth reset of the sailing counter.**":
+    // "**a wind change zeroes the sailing counter.** The routine that stores
+    // a new wind state clears the counter immediately afterwards, and both
+    // are skipped when the same routine is called only to re-announce the
+    // wind already in force. So a ship one pass into a two-pass upwind wait
+    // restarts that wait when the wind shifts."
+    let mut state = under_sail_world(5, 5, WindState::East);
+    // The heading-establishing turn leaves the counter at zero; the wait pass
+    // after it is what puts the ship one pass into the two-pass upwind wait.
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!(state.sail_cadence, 0);
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    assert_eq!(state.sail_cadence, 1);
+
+    // Re-announcing the wind already in force leaves the wait alone.
+    assert!(!state.apply_wind_state(WindState::East));
+    assert_eq!(state.sail_cadence, 1);
+
+    // An actual change restarts it.
+    assert!(state.apply_wind_state(WindState::South));
+    assert_eq!(state.sail_cadence, 0);
+}
+
+#[test]
+fn the_post_command_marker_guard_owns_the_sail_cache_clears() {
+    // `weather.md §5.1`, clear four: "After **every** outdoor command handler
+    // returns, and before the next input is read, the loop clears the cache
+    // unless the transport marker is still a hoisted frigate." That single
+    // guard is why "Furling, boarding, disembarking, mounting a horse or a
+    // carpet, and anything else that moves the transport marker out of the
+    // hoisted-frigate run are covered ... on the same turn", and equally why
+    // "a Look, a Ztats, or any other marker-neutral command under sail does
+    // **not** interrupt sailing".
+    let mut state = under_sail_world(5, 5, WindState::North);
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+
+    // Marker-neutral: the guard leaves the cache alone.
+    state.apply_outdoor_sail_cache_marker_guard();
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+    assert!(is_ship_transport_hoisted(state.player.transport.save_marker()));
+
+    // Any command that moves the marker out of `0x20..=0x23` is covered,
+    // whether or not its handler mentions the cache. A furled ship is the
+    // simplest such marker move.
+    state.player.transport = state.player.transport.with_ship_sails_furled();
+    assert!(!is_ship_transport_hoisted(
+        state.player.transport.save_marker()
+    ));
+    state.apply_outdoor_sail_cache_marker_guard();
+    assert!(state.sail_cached_direction.is_none());
+
+    // The guard is outdoor-only; it does not reach into a town scene.
+    let mut town = test_state(open_grid(), 5, 5);
+    town.sail_cached_direction = Some(Direction::East);
+    town.apply_outdoor_sail_cache_marker_guard();
+    assert_eq!(town.sail_cached_direction, Some(Direction::East));
+}
+
+#[test]
+fn entering_outdoor_mode_clears_the_cached_sail_direction() {
+    // `weather.md §5.1`, clear one: "Entering outdoor mode | The
+    // outdoor-mode entry pass clears the cache in its opening block, so no
+    // cached heading survives a scene change into the overworld."
+    let mut state = under_sail_world(5, 5, WindState::North);
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+
+    state.clear_sail_cache_on_outdoor_mode_entry();
+
+    assert!(state.sail_cached_direction.is_none());
+}
+
+#[test]
+fn the_same_direction_key_is_swallowed_under_sail() {
+    // `timing.md §8.2` / `RETRACTIONS.md` R372: "**One keyboard poll.** Every
+    // pass polls exactly one key. No key runs the advance body. A key whose
+    // translated code **equals the cached sail heading is swallowed** -
+    // discarded, with the advance body running anyway - which is why pressing
+    // the arrow you are already sailing does nothing. Any other key ends the
+    // loop and becomes that turn's command."
+    let mut state = under_sail_world(5, 5, WindState::North);
+    // `weather.md §5`: the heading-establishing command "turns and clears the
+    // sailing counter; that action does not also move the ship". It is the
+    // command that fills the cache the swallow tests against.
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+
+    assert!(state.under_sail_key_is_swallowed(Some(Direction::East)));
+    // Any other key ends the loop and becomes the turn's command.
+    assert!(!state.under_sail_key_is_swallowed(Some(Direction::West)));
+    assert!(!state.under_sail_key_is_swallowed(Some(Direction::North)));
+    assert!(!state.under_sail_key_is_swallowed(None));
+
+    // Nothing is swallowed when the auto-advance route does not apply, so a
+    // steered ship that has furled reads its direction keys normally.
+    let mut furled = under_sail_world(5, 5, WindState::North);
+    assert_eq!(furled.step(Direction::East), MoveOutcome::SailTurned);
+    furled.player.transport = furled.player.transport.with_ship_sails_furled();
+    assert!(!furled.under_sail_key_is_swallowed(Some(Direction::East)));
+
+    // End to end: the dispatcher discards the swallowed key, but "the advance
+    // body [runs] anyway" - `timing.md §8.2` calls the swallow "observable
+    // behaviour rather than a timing detail", and per pass the body costs
+    // "**One world step, unconditionally**" and "**One fully consumed game
+    // turn**". So the key is not a no-op: the auto-advance pass's synthesized
+    // command in the cached heading is what lands.
+    let turn_before = state.turn;
+    let position_before = (state.player.x, state.player.y);
+    assert_eq!(
+        handle_play_key_input(
+            &mut state,
+            char::from(INPUT_CODE_EAST),
+            "",
+            Path::new("")
+        )
+        .unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(
+        state.turn > turn_before,
+        "the swallowed key must still run the advance body's consumed turn"
+    );
+    assert_eq!(
+        (state.player.x, state.player.y),
+        (position_before.0 + 1, position_before.1),
+        "the advance body's synthesized command is the cached heading"
+    );
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+
+    // The advance body is the pass, not an extra movement command: a
+    // swallowed key leaves the same world state as the idle pump's own pass
+    // (`overworld.md §5` step 3 - the helper "returns the cached sail
+    // direction ... which is how a ship keeps moving with no keypress").
+    let mut pumped = under_sail_world(5, 5, WindState::North);
+    assert_eq!(pumped.step(Direction::East), MoveOutcome::SailTurned);
+    pumped.run_under_sail_advance_body(None).unwrap();
+    assert_eq!((pumped.player.x, pumped.player.y), (state.player.x, state.player.y));
+    assert_eq!(pumped.turn, state.turn);
+
+    // A wind-stalled heading pays the wait pass rather than the step, and
+    // that too is a consumed turn - the ship must not sit frozen because the
+    // key was swallowed.
+    let mut becalmed = under_sail_world(5, 5, WindState::Calm);
+    becalmed.sail_cached_direction = Some(Direction::East);
+    let becalmed_turn = becalmed.turn;
+    let becalmed_position = (becalmed.player.x, becalmed.player.y);
+    assert!(becalmed.under_sail_key_is_swallowed(Some(Direction::East)));
+    assert_eq!(
+        handle_play_key_input(
+            &mut becalmed,
+            char::from(INPUT_CODE_EAST),
+            "",
+            Path::new("")
+        )
+        .unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(becalmed.turn > becalmed_turn);
+    assert_eq!(
+        (becalmed.player.x, becalmed.player.y),
+        becalmed_position,
+        "a becalmed pass consumes its turn without releasing the step"
+    );
+}
+

@@ -707,7 +707,6 @@ impl PlayState {
             self.player.y = y;
             self.player.transport = TransportState::Foot;
             self.sail_cadence = 0;
-            self.sail_stall_pending = false;
             self.sail_cached_direction = None;
             self.grid = return_world.grid;
             self.natural_moongate_live_cells.clear();
@@ -782,7 +781,6 @@ impl PlayState {
         if ship_under_sail && tile == OVERWORLD_PIER_TILE {
             self.player.transport = self.player.transport.with_ship_sails_furled();
             self.sail_cadence = 0;
-            self.sail_stall_pending = false;
             // `overworld.md §6.2.5`: docking "prints `Docked!`, changes the
             // marker to the same-facing furled frigate, clears the sailing
             // cache, refuses the coordinate step".

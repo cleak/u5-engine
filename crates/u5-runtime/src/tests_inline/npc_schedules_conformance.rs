@@ -219,7 +219,12 @@ fn npc_schedule_search_latch_allows_one_fresh_search_per_tick() {
         state.npcs[1].move_queue.is_empty(),
         "the second searching slot is skipped until the next tick"
     );
-    assert_eq!(state.npcs[1].stuck_counter, 1);
+    // `RETRACTIONS.md` R367: "**Exactly one event increments the counter: a
+    // queued route step refused by the per-step cell check.**" A slot
+    // diverted by the tick's spent heavy-work budget takes the cap-zero
+    // recovery step, and "the recovery stepper never touches the counter
+    // table on any of its three rejection paths".
+    assert_eq!(state.npcs[1].stuck_counter, 0);
 }
 
 #[test]

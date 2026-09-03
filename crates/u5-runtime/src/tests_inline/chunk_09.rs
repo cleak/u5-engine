@@ -66,7 +66,6 @@ fn world_step_uses_clean_plane_transition_table_without_falls_narration() {
         skiffs: 0,
     };
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
     state.active_objects[0].z = WorldPlane::Britannia.save_floor();
     state.sync_player_object();
     state.party = vec![
@@ -133,7 +132,6 @@ fn world_step_uses_clean_plane_transition_table_without_falls_narration() {
     assert_eq!(state.player.transport, TransportState::Foot);
     assert_eq!(state.active_effect_timing_status(), TimingStatusTag::Normal);
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(state.grid[world_cell_index(30, 40)], 5);
     assert_eq!(
         state.active_objects[1],

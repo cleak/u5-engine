@@ -1625,14 +1625,26 @@ fn hoisted_ship_stalls_in_calm_wind_and_consumes_turn() {
     };
     state.sync_player_object();
 
-    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    // The heading-establishing turn comes first and does not move the ship
+    // (`weather.md §5`), and `§4` makes it "observable as a command action",
+    // so it consumes its turn like the wait passes after it.
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
 
     assert_eq!((state.player.x, state.player.y), (10, 10));
     assert_eq!(state.player.facing, Direction::East);
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
+    assert_eq!(state.sail_cadence, 0);
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+
+    // `weather.md §5`: "Calm wind never releases a cached hoisted-sail
+    // movement. The ship waits until the player enters a different command."
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+
+    assert_eq!((state.player.x, state.player.y), (10, 10));
+    assert_eq!(state.turn, 2);
+    assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
     assert!(state.message.contains("calm wind"));
-    assert!(state.sail_stall_pending);
 }
 
 #[test]
@@ -1658,19 +1670,30 @@ fn rigged_hoisted_ship_wait_uses_one_minute_cleanup() {
         aux3: 0,
     });
 
-    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    // `weather.md §5`, the rigging paragraph: "With the rigging flag active,
+    // **every** sailing wait pass uses the one-minute increment, while the
+    // outdoor per-turn epilogue is run on **alternate** passes only". The
+    // heading-establishing turn is the first such pass.
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
 
     assert_eq!((state.player.x, state.player.y), (10, 10));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     assert_eq!(state.active_objects[1].phase, 0x22);
-    assert!(state.message.contains("calm wind"));
 
     assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
 
     assert_eq!((state.player.x, state.player.y), (10, 10));
     assert_eq!(state.turn, 2);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+    assert_eq!(state.active_objects[1].phase, 0x21);
+    assert!(state.message.contains("calm wind"));
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+
+    assert_eq!((state.player.x, state.player.y), (10, 10));
+    assert_eq!(state.turn, 3);
+    assert_eq!(state.clock, GameClock::new(12, 3).unwrap());
     assert_eq!(state.active_objects[1].phase, 0x21);
 }
 
@@ -1686,14 +1709,19 @@ fn pass_reports_and_clears_sail_stall_feedback() {
     };
     state.sync_player_object();
 
-    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
-    assert!(state.sail_stall_pending);
+    // `weather.md §5.1`, clear three: the Pass report is conditioned on the
+    // cache, not on a separate refusal flag - "Only while the outdoor scene is
+    // current and the cache is non-zero; it prints the stalled-sailing line
+    // first, then clears." The heading-establishing turn is what fills the
+    // cache here.
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!(state.sail_cached_direction, Some(Direction::East));
 
     assert_eq!(state.pass_turn(), MoveOutcome::Passed);
     assert_eq!(state.turn, 2);
     assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
     assert!(state.message.contains("stalled by the wind"));
-    assert!(!state.sail_stall_pending);
+    assert!(state.sail_cached_direction.is_none());
 
     assert_eq!(state.pass_turn(), MoveOutcome::Passed);
     assert!(state.message.is_empty());
@@ -1712,11 +1740,23 @@ fn hoisted_ship_advances_immediately_with_perpendicular_wind() {
     };
     state.sync_player_object();
 
+    // A north wind against an easterly heading is the crosswind fold of
+    // `weather.md §5` ("A crosswind heading therefore releases on the very
+    // first pass"), so the wait is zero passes. It is still not the turning
+    // command that moves: "the ship turns and clears the sailing counter;
+    // that action does not also move the ship".
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    assert_eq!((state.player.x, state.player.y), (10, 10));
+    assert_eq!(state.sail_cadence, 0);
+    assert_eq!(state.turn, 1);
+
+    // The next command already matches the cache, so it releases immediately
+    // - zero wait ticks, exactly as the table's "immediate" cell says.
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
 
     assert_eq!((state.player.x, state.player.y), (11, 10));
-    assert_eq!(state.turn, 1);
-    assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+    assert_eq!(state.turn, 2);
+    assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
 }
 
 #[test]
@@ -1732,14 +1772,22 @@ fn hoisted_ship_with_wind_uses_one_wait_tick() {
     };
     state.sync_player_object();
 
+    assert_eq!(state.step(Direction::West), MoveOutcome::SailTurned);
+    assert_eq!((state.player.x, state.player.y), (10, 10));
+    assert_eq!(state.sail_cadence, 0);
+    assert_eq!(state.turn, 1);
+
+    // One wait tick: the table's "move after one wait tick" cell for a
+    // westerly heading in an east wind.
     assert_eq!(state.step(Direction::West), MoveOutcome::SailStalled);
     assert_eq!((state.player.x, state.player.y), (10, 10));
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.sail_cadence, 1);
+    assert_eq!(state.turn, 2);
 
     assert_eq!(state.step(Direction::West), MoveOutcome::Moved);
     assert_eq!((state.player.x, state.player.y), (9, 10));
-    assert_eq!(state.turn, 2);
-    assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
+    assert_eq!(state.turn, 3);
+    assert_eq!(state.clock, GameClock::new(12, 6).unwrap());
 }
 
 #[test]
@@ -1755,21 +1803,26 @@ fn hoisted_ship_into_wind_uses_two_wait_ticks() {
     };
     state.sync_player_object();
 
-    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!((state.player.x, state.player.y), (10, 10));
-    assert_eq!(state.sail_cadence, 1);
+    assert_eq!(state.sail_cadence, 0);
     assert_eq!(state.turn, 1);
 
     assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
     assert_eq!((state.player.x, state.player.y), (10, 10));
-    assert_eq!(state.sail_cadence, 2);
+    assert_eq!(state.sail_cadence, 1);
     assert_eq!(state.turn, 2);
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    assert_eq!((state.player.x, state.player.y), (10, 10));
+    assert_eq!(state.sail_cadence, 2);
+    assert_eq!(state.turn, 3);
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
     assert_eq!((state.player.x, state.player.y), (11, 10));
     assert_eq!(state.sail_cadence, 0);
-    assert_eq!(state.turn, 3);
-    assert_eq!(state.clock, GameClock::new(12, 6).unwrap());
+    assert_eq!(state.turn, 4);
+    assert_eq!(state.clock, GameClock::new(12, 8).unwrap());
 }
 
 #[test]
@@ -1790,6 +1843,9 @@ fn save_after_wind_driven_ship_move_persists_wind_and_ship_marker() {
     };
     state.sync_player_object();
 
+    // The heading-establishing turn does not move (`weather.md §5`); the
+    // crosswind release lands on the next command.
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
     assert_eq!(
         state.save_game_command(&dir, Some(true)).unwrap(),

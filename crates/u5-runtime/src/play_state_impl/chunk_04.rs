@@ -236,8 +236,15 @@ impl PlayState {
         let changed = self.wind != wind;
         self.wind = wind;
         self.wind_save_byte = wind.save_byte();
-        self.sail_cadence = 0;
-        self.sail_stall_pending = false;
+        // `weather.md §5.1`, "**A fourth reset of the sailing counter.**":
+        // "The routine that stores a new wind state clears the counter
+        // immediately afterwards, and both are skipped when the same routine
+        // is called only to re-announce the wind already in force. So a ship
+        // one pass into a two-pass upwind wait restarts that wait when the
+        // wind shifts."
+        if changed {
+            self.sail_cadence = 0;
+        }
         changed
     }
 

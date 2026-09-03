@@ -209,11 +209,15 @@ pub const fn idle_world_step_suppressed_for_scene(scene_byte: u8) -> bool {
 
 /// `timing.md §8.2`: what one pass of the input helper's idle wait did.
 ///
-/// "On the overworld the input helper performs one scripted step-and-wait -
-/// one world step followed by one one-tick wait - before either entering the
-/// command wait or, when sails are set, performing a bare cursor poll
-/// instead; so an **under-sail auto-advance pass costs two ticks and one
-/// world step and never enters the command wait at all**."
+/// On the overworld the helper performs one scripted world step and then,
+/// when sails are set, a bare cursor poll instead of the command wait; per
+/// under-sail pass it pays "**One world step, unconditionally**", "**One
+/// fully consumed game turn**", "**One keyboard poll**" and "**Zero, one or
+/// two one-tick waits - not two flat**". `RETRACTIONS.md` R371 withdrew the
+/// older "costs two ticks" figure - "**Two ticks is a maximum, not a
+/// cost.**" - and "The entry step carries no wait of its own." What stands,
+/// and what this enum distinguishes, is the world step and the fact that the
+/// route "never enters the command wait at all".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IdleWaitPass {
     /// The ordinary route: the scripted step-and-wait ran, and the helper is

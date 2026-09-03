@@ -402,7 +402,6 @@
             y: 98,
             transport: TransportState::Foot,
             sail_cadence: 1,
-            sail_stall_pending: true,
             grid: vec![0xff; WORLD_SIDE * WORLD_SIDE],
             active_objects: Vec::new(),
             pending_vehicle: None,
@@ -434,7 +433,6 @@
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.player.transport, transport);
         assert_eq!(state.sail_cadence, 0);
-        assert!(!state.sail_stall_pending);
         assert_eq!(state.world_object_at(11, 20), Some(&world_object));
         assert_eq!(state.active_objects[0].phase, 0x42);
         assert_eq!(state.active_objects[0].aux1, 0xa5);
@@ -687,7 +685,6 @@
                 tile: 184,
             },
             sail_cadence: 1,
-            sail_stall_pending: true,
             grid: open_world_grid(),
             active_objects: Vec::new(),
             pending_vehicle: None,

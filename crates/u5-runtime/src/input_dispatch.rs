@@ -44,12 +44,37 @@ pub fn handle_play_key_input(
             state.pending_outdoor_reaction_slots.clear();
         }
     }
+    // `weather.md §5.1`, clear four: "After **every** outdoor command handler
+    // returns, and before the next input is read, the loop clears the cache
+    // unless the transport marker is still a hoisted frigate." This is that
+    // loop position - the guard covers Furl, board, X-it, mounting a horse or
+    // a carpet and anything else that moves the marker, and equally leaves a
+    // marker-neutral Look or Ztats under sail alone.
+    state.apply_outdoor_sail_cache_marker_guard();
     state.commit_command_echo();
     // `text-output.md §11`: whatever is still only in the slot is a line
     // the original would already have printed, so record it before the
     // next key can overwrite it.
     state.flush_message_slot();
     result
+}
+
+/// `timing.md §8.2` / `RETRACTIONS.md` R372: the cardinal direction a key
+/// translates to, using the **translated code** path only.
+///
+/// The under-sail swallow tests "a key whose translated code equals the
+/// cached sail heading", so it must read the same control codes the original
+/// input helper compares, not this engine's additional letter aliases - those
+/// collide with command verbs (`A`ttack, `S`earch, ...).
+fn under_sail_translated_cardinal(key: char) -> Option<Direction> {
+    let byte = input_byte_from_char(key)?;
+    match input_code_direction(byte)? {
+        InputDirection::North => Some(Direction::North),
+        InputDirection::South => Some(Direction::South),
+        InputDirection::East => Some(Direction::East),
+        InputDirection::West => Some(Direction::West),
+        _ => None,
+    }
 }
 
 fn handle_play_key_input_inner(
@@ -142,6 +167,23 @@ fn handle_play_key_input_inner(
         return Ok(PlayInputDisposition::Continue);
     }
     if state.resolve_natural_moongate_entry(game_dir)?.is_some() {
+        return Ok(PlayInputDisposition::Continue);
+    }
+    // `timing.md §8.2`, the under-sail pass's keyboard poll, and
+    // `RETRACTIONS.md` R372: "a key whose translated code **equals the cached
+    // sail heading is swallowed** - discarded, with the advance body running
+    // anyway - which is why pressing the arrow you are already sailing does
+    // nothing. Any other key ends the loop and becomes that turn's command."
+    //
+    // §8.2 calls the swallow "observable behaviour rather than a timing
+    // detail", so discarding the key is only half of the clause: the advance
+    // body has to run anyway or the key becomes a no-op the original never
+    // has. The body is the auto-advance pass
+    // (`PlayState::run_under_sail_advance_body`), and the swallowed key
+    // completes the pass it was polled in - R371: such a pass "pays **one**"
+    // tick instead of two, so it ends early rather than being duplicated.
+    if suffix.is_empty() && state.under_sail_key_is_swallowed(under_sail_translated_cardinal(key)) {
+        state.run_under_sail_advance_body(Some(game_dir))?;
         return Ok(PlayInputDisposition::Continue);
     }
     // `systems/shops.md` tavern drunkenness: every top-level town command

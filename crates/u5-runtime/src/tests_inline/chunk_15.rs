@@ -600,7 +600,6 @@
         state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
         state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
         state.sail_cadence = 1;
-        state.sail_stall_pending = true;
 
         assert_eq!(
             state.climb(&dir, ClimbIntent::Down).unwrap(),
@@ -621,7 +620,6 @@
         assert_eq!(state.active_effect_timing_status(), TimingStatusTag::HalfTime);
         assert_eq!(state.active_effect_tag, Some(QUICKNESS_ACTIVE_EFFECT_TAG));
         assert_eq!(state.sail_cadence, 0);
-        assert!(!state.sail_stall_pending);
         assert_eq!(state.active_objects[0].z, WorldPlane::Underworld.save_floor());
         assert_eq!(state.turn, 1);
         assert_eq!(

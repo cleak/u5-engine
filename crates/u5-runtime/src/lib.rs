@@ -587,16 +587,17 @@ pub use npc_runtime::{
     NPC_PATHFIND_WORKSPACE_SIDE, NPC_RUNTIME_DESCRIPTOR_BYTES, NPC_STATE_ASCEND_TOWARD_TARGET,
     NPC_STATE_CLIMB_DOWN_OFF_FLOOR, NPC_STATE_CLIMB_UP_OFF_FLOOR, NPC_STATE_DESCEND_TOWARD_TARGET,
     NPC_STATE_EMPTY, NPC_STATE_IDLE, NPC_STATE_INPLANE_MOVE, NPC_STATE_PARKED_OFF_FLOOR,
-    NPC_STATE_REPLAY_QUEUE, NPC_STUCK_REPLAN_THRESHOLD, NPC_TYPE_DEFAULT_HUMAN_SPRITE,
-    NPC_TYPE_EMPTY, NPC_TYPE_SHADOWLORD_ACTOR, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction,
-    NpcScheduleState, NpcScheduleStepOutcome, NpcShopTrigger, NpcTypeByteClass, RuntimeNpc,
+    NPC_STATE_REPLAY_QUEUE, NPC_STUCK_HIGH_BAND_ENTRY, NPC_STUCK_HIGH_BAND_LAST,
+    NPC_STUCK_REPLAN_THRESHOLD, NPC_TYPE_DEFAULT_HUMAN_SPRITE, NPC_TYPE_EMPTY,
+    NPC_TYPE_SHADOWLORD_ACTOR, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction, NpcScheduleState,
+    NpcScheduleStepOutcome, NpcShopTrigger, NpcStuckBand, NpcTypeByteClass, RuntimeNpc,
     npc_ai_behavior, npc_dialog_id_kind, npc_dynamic_obstacle_blocks, npc_floor_is_above,
     npc_floor_link_arrival_accepts, npc_floor_link_gate_accepts, npc_floor_link_marker_toward,
     npc_hidden_sprite_slot, npc_link_action, npc_path_direction_offset,
     npc_path_direction_opposite, npc_path_tile_obstacle, npc_pathfind_visit_stamp,
     npc_schedule_state_classify, npc_schedule_state_for_floor_transition, npc_shop_trigger,
-    npc_state_off_floor_or_empty, npc_stuck_counter_forces_replan, npc_type_byte_class,
-    npc_type_byte_occupied, schedule_floor_state,
+    npc_state_off_floor_or_empty, npc_stuck_counter_band, npc_stuck_counter_forces_replan,
+    npc_type_byte_class, npc_type_byte_occupied, schedule_floor_state,
 };
 pub use ool_audit::*;
 pub use outdoor_ranged_attack::{

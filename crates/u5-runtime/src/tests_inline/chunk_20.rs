@@ -87,7 +87,6 @@ fn idle_tick_can_apply_public_random_wind_drift_without_turn() {
     state.wind = WindState::Calm;
     state.wind_save_byte = 0x7a;
     state.sail_cadence = 1;
-    state.sail_stall_pending = true;
 
     idle_until_wind_change(&mut state);
 
@@ -101,7 +100,6 @@ fn idle_tick_can_apply_public_random_wind_drift_without_turn() {
     // "Setting a new state also clears the cached wind-cadence byte used by
     // sailing and by wind-driven actors."
     assert_eq!(state.sail_cadence, 0);
-    assert!(!state.sail_stall_pending);
     assert_eq!(
         state.message,
         format!("Idle animation tick. {}", state.wind.status_message())
