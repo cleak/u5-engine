@@ -934,7 +934,7 @@ pub use wind::{
     PLAYER_SAIL_WAIT_TICKS_INTO_WIND, PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR,
     PLAYER_SAIL_WAIT_TICKS_WITH_WIND, WIND_DRIFT_CALM_ACCEPT_MIN, WIND_DRIFT_CANDIDATE_MODULUS,
     WIND_DRIFT_OUTER_ROLL_MASK, WIND_DRIFT_OUTER_ROLL_MAX, WindSetterOutcome, WindState,
-    wind_setter_outcome, wind_status_message_from_save_byte,
+    autonomous_wind_drift_with_draws, wind_setter_outcome, wind_status_message_from_save_byte,
     wind_status_message_from_state_and_save_byte,
 };
 pub use world_chunk_buffer::*;

@@ -715,6 +715,62 @@ fn dungeon_room_special_marker_active_object(
     }
 }
 
+/// `combat.md §5` "Arena-centre special": the magic-field marker tile the
+/// setup pass looks for on the arena's centre cell.
+pub const COMBAT_ARENA_CENTRE_SPECIAL_TILE: u8 = 0xDC;
+
+/// `combat.md §5` "Arena-centre special": the setup id the converted centre
+/// cell is given.
+pub const COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID: u8 = 1;
+
+/// `combat.md §5` "Arena-centre special": the cell tested, "row five,
+/// column five".
+pub const COMBAT_ARENA_CENTRE_CELL: (usize, usize) = (5, 5);
+
+/// `combat.md §5`, "Arena-centre special": "If the loaded arena's centre
+/// cell (row five, column five) holds the magic-field marker tile `0xDC`,
+/// the setup pass converts that cell into a special active object with
+/// setup id one, using the same auxiliary-byte rule the dungeon-room loader
+/// applies to that id. No shipped outdoor arena carries that tile at that
+/// cell, so this is inert for stock `BRIT.CBT` data and is documented only
+/// so a custom arena behaves the same way."
+///
+/// Setup id one's auxiliary-byte rule is
+/// [`DungeonRoomSpecialPostWrite::LevelTimesThreePlusSeven`], which draws
+/// nothing - so this conversion is draw-free and does not perturb the
+/// `§5.3` entry stream. Like every marker placement it allocates an
+/// active-object record only and no combat descriptor (`§5`), so the cell
+/// never takes a turn and never reaches the target picker.
+///
+/// The published sentence converts the cell into an object and says nothing
+/// about rewriting the arena terrain byte underneath it, so the terrain
+/// grid is left exactly as loaded.
+pub fn combat_arena_centre_special_active_object(
+    terrain: &[[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    z: i8,
+    prng_state: &mut u16,
+) -> Option<ActiveObject> {
+    let (row, column) = COMBAT_ARENA_CENTRE_CELL;
+    if terrain[row][column] != COMBAT_ARENA_CENTRE_SPECIAL_TILE {
+        return None;
+    }
+    let placement =
+        DungeonRoomSpecialPlacement::from_setup_id(COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID);
+    Some(ActiveObject {
+        type_byte: placement.setup_id,
+        tile: placement.setup_id,
+        x: column,
+        y: row,
+        z,
+        phase: STEADY_PHASE,
+        aux1: match placement.post_write {
+            DungeonRoomSpecialPostWrite::None => placement.setup_id,
+            post_write => dungeon_room_special_aux1(post_write, z, prng_state),
+        },
+        aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
+    })
+}
+
 pub fn terrain_combat_base_class(trigger: ActiveObject) -> Option<CombatClassStats> {
     outdoor_combat_class_id(trigger.type_byte).and_then(combat_class_stats)
 }
@@ -1435,6 +1491,13 @@ impl PlayState {
             object.z,
             &party_positions,
         );
+        // `combat.md §5` "Arena-centre special", published between the
+        // party descriptor seeding above and the monster count below: a
+        // `0xDC` centre cell becomes a special active object with setup id
+        // one. Inert for stock `BRIT.CBT` (no shipped record carries that
+        // tile there) and draw-free, so it changes no existing entry.
+        self.place_combat_arena_centre_special(&setup.terrain, object.z, &mut active_objects);
+
         // `active-objects.md §7`: monster records "continue from the
         // first record left free by the seated party". Scanned, not
         // counted - see the note on
@@ -1561,6 +1624,22 @@ impl PlayState {
             z,
             &TERRAIN_COMBAT_PARTY_POSITIONS,
         );
+    }
+
+    /// `combat.md §5` "Arena-centre special". Allocates the marker's
+    /// active-object record by the ordinary rule - "the first record whose
+    /// tile byte is zero" - and no combat descriptor, which is what `§5`
+    /// requires of every marker-only placement.
+    pub fn place_combat_arena_centre_special(
+        &mut self,
+        terrain: &[[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+        z: i8,
+        active_objects: &mut [ActiveObject],
+    ) -> Option<usize> {
+        let marker = combat_arena_centre_special_active_object(terrain, z, &mut self.prng_state)?;
+        let record = first_free_combat_active_object_record(active_objects)?;
+        active_objects[record] = marker;
+        Some(record)
     }
 
     pub fn populate_dungeon_room_combat_party(
@@ -1704,6 +1783,20 @@ impl PlayState {
                     active_objects,
                     actors,
                 );
+            }
+            // `combat.md §5.3` step 3, per-slot item 5: "A member whose
+            // status is `'S'` (asleep) takes a branch that runs a **full
+            // world tick**, itself a variable consumer - so seating is not
+            // draw-bounded at all whenever anyone in the party is asleep."
+            //
+            // It is the fifth and last item of the per-slot order, after
+            // the ring-effect step of item 4, and it is charged once per
+            // asleep member rather than once per seating pass. The tick is
+            // the shared world step of `animation.md §13.2`; its own draw
+            // count is that step's contract, and `§5.3` publishes no
+            // maximum for it.
+            if asleep {
+                self.advance_visual_tick();
             }
         }
         if cleared_active_player {
@@ -2474,5 +2567,142 @@ mod combat_setup_batch_tests {
 
         assert_eq!(state.combat_cursor_actor_cell(), Some(BATCH_SEATS[3]));
         let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `combat.md §5.3` step 3, per-slot item 5: "A member whose status is
+    /// `'S'` (asleep) takes a branch that runs a **full world tick**, itself
+    /// a variable consumer - so seating is not draw-bounded at all whenever
+    /// anyone in the party is asleep."
+    ///
+    /// The tick is charged per asleep member and lands after item 4's
+    /// ring-effect step. The all-good control is `§5.3` step 3's other half:
+    /// with no ring and no `'S'`, seating "is genuinely draw-free in the
+    /// default case".
+    #[test]
+    fn seating_an_asleep_member_runs_one_full_world_tick() {
+        let (mut awake, awake_dir) = batch_combat_state(&[b'G', b'G', b'G']);
+        awake.prng_state = 0x1234;
+        let _ = seat_batch_party(&mut awake);
+        assert_eq!(
+            awake.prng_state, 0x1234,
+            "an all-good roster with no rings seats draw-free"
+        );
+        let _ = fs::remove_dir_all(awake_dir);
+
+        let (mut asleep, asleep_dir) = batch_combat_state(&[b'G', b'S', b'G']);
+        asleep.prng_state = 0x1234;
+        let _ = seat_batch_party(&mut asleep);
+
+        // The reference is the same fixture taking exactly one world tick
+        // and nothing else, so the asleep branch is pinned to one tick
+        // rather than to some other number of draws.
+        let (mut reference, reference_dir) = batch_combat_state(&[b'G', b'S', b'G']);
+        reference.prng_state = 0x1234;
+        reference.advance_visual_tick();
+
+        assert_ne!(
+            asleep.prng_state, 0x1234,
+            "the `'S'` branch must consume the world tick's draws"
+        );
+        assert_eq!(
+            asleep.prng_state, reference.prng_state,
+            "seating an asleep member costs exactly one full world tick"
+        );
+        let _ = fs::remove_dir_all(asleep_dir);
+        let _ = fs::remove_dir_all(reference_dir);
+    }
+
+    /// A second `'S'` member charges a second tick: `§5.3` puts the branch
+    /// inside the per-slot walk, not once per seating pass.
+    #[test]
+    fn each_asleep_member_charges_its_own_world_tick() {
+        let (mut one, one_dir) = batch_combat_state(&[b'G', b'S', b'G']);
+        one.prng_state = 0x1234;
+        let _ = seat_batch_party(&mut one);
+
+        let (mut two, two_dir) = batch_combat_state(&[b'G', b'S', b'S']);
+        two.prng_state = 0x1234;
+        let _ = seat_batch_party(&mut two);
+
+        let (mut reference, reference_dir) = batch_combat_state(&[b'G', b'S', b'S']);
+        reference.prng_state = 0x1234;
+        reference.advance_visual_tick();
+        reference.advance_visual_tick();
+
+        assert_ne!(two.prng_state, one.prng_state);
+        assert_eq!(two.prng_state, reference.prng_state);
+        let _ = fs::remove_dir_all(one_dir);
+        let _ = fs::remove_dir_all(two_dir);
+        let _ = fs::remove_dir_all(reference_dir);
+    }
+
+    /// `combat.md §5` "Arena-centre special": "If the loaded arena's centre
+    /// cell (row five, column five) holds the magic-field marker tile
+    /// `0xDC`, the setup pass converts that cell into a special active
+    /// object with setup id one, using the same auxiliary-byte rule the
+    /// dungeon-room loader applies to that id."
+    ///
+    /// Setup id one's rule is level-times-three-plus-seven, which draws
+    /// nothing. `§5` also makes every marker-only placement descriptor-free,
+    /// so the converted cell "never takes a turn and never appears to the
+    /// target picker".
+    #[test]
+    fn an_arena_centre_magic_field_becomes_a_setup_id_one_special_object() {
+        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        let mut record = batch_arena_record();
+        record[5 * COMBAT_ARENA_ROW_STRIDE + 5] = COMBAT_ARENA_CENTRE_SPECIAL_TILE;
+        fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+        let trigger = batch_trigger();
+        let prng_before = state.prng_state;
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, trigger)
+            .unwrap();
+
+        // A live party of four fills records 0..3; the marker takes the
+        // next free record by the ordinary "first record whose tile byte is
+        // zero" rule.
+        let marker = state.active_objects[4];
+        assert_eq!(marker.type_byte, COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID);
+        assert_eq!(marker.tile, COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID);
+        assert_eq!((marker.x, marker.y), COMBAT_ARENA_CENTRE_CELL);
+        // Setup id one's auxiliary-byte rule: level * 3 + 7, on the
+        // trigger's plane (surface, level zero).
+        assert_eq!(marker.aux1, 7);
+        assert_eq!(marker.aux3, COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR);
+
+        // Marker-only placement allocates no descriptor, so nothing links
+        // back to record four.
+        assert!(
+            state
+                .combat_actors
+                .iter()
+                .all(|actor| actor.is_empty() || usize::from(actor.active_object_slot) != 4),
+            "the centre special must not own a combat descriptor"
+        );
+
+        // The conversion is draw-free, so it cannot perturb the `§5.3`
+        // entry stream ahead of the count roll. Re-running the same entry
+        // on the plain arena has to leave the PRNG in the same place.
+        let (mut plain, plain_dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        plain.prng_state = prng_before;
+        plain
+            .enter_terrain_combat_from_world_object(&plain_dir, WorldPlane::Britannia, 1, trigger)
+            .unwrap();
+        assert_eq!(state.prng_state, plain.prng_state);
+
+        // And with no `0xDC` at the centre there is no marker at all: the
+        // clause is inert for stock `BRIT.CBT`, whose records carry no
+        // `0xDC` on cell (5, 5).
+        assert!(
+            plain.active_objects[4].type_byte != COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID
+                || plain.active_objects[4].aux3 != COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR
+                || (plain.active_objects[4].x, plain.active_objects[4].y)
+                    != COMBAT_ARENA_CENTRE_CELL,
+            "a non-`0xDC` centre cell must not produce the special object"
+        );
+
+        let _ = fs::remove_dir_all(dir);
+        let _ = fs::remove_dir_all(plain_dir);
     }
 }
