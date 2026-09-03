@@ -224,9 +224,6 @@ const DISPLAY_PIXEL_ASPECT: f32 = 1.2;
 /// buffer and flushes queued type-ahead after each accepted action.
 const HELD_DIRECTION_INITIAL_DELAY: Duration = Duration::from_millis(500);
 const HELD_DIRECTION_REPEAT_INTERVAL: Duration = Duration::from_millis(100);
-/// Post-action combat redraws are brisk, but each automatic action must reach
-/// at least one host frame instead of collapsing into the final state.
-const PACED_COMBAT_PRESENTATION_INTERVAL_SECS: f32 = 0.08;
 
 /// The visual shell models the period 200-line EGA display seen in surviving
 /// DOS captures. The clean runtime keeps the specification's enhanced-display
@@ -10154,21 +10151,17 @@ impl Default for VisualIntroAnimationPump {
     }
 }
 
+/// Which cadence the gameplay pump runs at this frame.
+///
+/// Combat is deliberately **not** a special case here. Nothing published
+/// gives an automatic combat action a wall-clock delay of the shell's own
+/// choosing, so the paced combat pump runs at the ordinary BIOS-tick
+/// interval every other gameplay step uses rather than at a shorter invented
+/// one. What the pump does *per firing* is a separate question, answered by
+/// [`advance_paced_combat_pump_firing`].
 fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> (bool, f32) {
     state.visibility_sweep.map_or_else(
-        || {
-            let paced_combat_waiting = state.combat_active
-                && state.pace_combat_presentations
-                && state.pending_combat_actor_slot.is_none();
-            (
-                false,
-                if paced_combat_waiting {
-                    PACED_COMBAT_PRESENTATION_INTERVAL_SECS
-                } else {
-                    ordinary_interval
-                },
-            )
-        },
+        || (false, ordinary_interval),
         |sweep| {
             (
                 true,
@@ -10176,6 +10169,30 @@ fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> 
             )
         },
     )
+}
+
+/// One pump firing's combat work: at most **one** automatic combat action.
+///
+/// `combat.md §7` step 7 publishes a render per action - "Only after the
+/// hazard pass does the separate render step redraw changed cells and run
+/// any post-action sound or particle effect" - so the shell advances one
+/// automatic action per firing and lets that firing's repaint show it.
+/// `§16`'s "A modern implementation can treat it as 'redraw every frame'
+/// without preserving the cadence" is scoped to the round counter's
+/// every-ten tile render; it permits dropping that cadence, not rendering
+/// fewer frames than there are actions.
+///
+/// Returns whether this firing owned the step, so the caller can skip the
+/// ordinary exploration pump.
+fn advance_paced_combat_pump_firing(state: &mut PlayState) -> bool {
+    if !(state.combat_active
+        && state.pace_combat_presentations
+        && state.pending_combat_actor_slot.is_none())
+    {
+        return false;
+    }
+    advance_paced_combat_presentation(state);
+    true
 }
 
 /// One firing of the gameplay world-tick pump, or none.
@@ -10267,15 +10284,12 @@ fn animate_static_tiles(
         // to `break` out of a catch-up loop; they now leave this block.
         'step: {
             let mut prompt_cursor_visible = visual.prompt_cursor_visible;
-            if visual.state.combat_active
-                && visual.state.pace_combat_presentations
-                && visual.state.pending_combat_actor_slot.is_none()
-            {
-                advance_paced_combat_presentation(&mut visual.state);
+            if advance_paced_combat_pump_firing(&mut visual.state) {
                 visual.prompt_cursor_visible = false;
                 visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
-                // One automatic action owns one visible host frame. A slow frame
-                // must never collapse several combat actions into one redraw.
+                // One automatic action owns one visible host frame. A slow
+                // frame must never collapse several combat actions into one
+                // redraw.
                 pump.accumulator = 0.0;
                 advanced = true;
                 break 'step;
@@ -14598,6 +14612,150 @@ fn fixed_cell_message_lines(message: &str, width: usize) -> Vec<String> {
     lines
 }
 
+/// `combat.md §7` combat-overlay raster contract: "let its sixteen-by-sixteen
+/// screen-cell origin be `(8 + 16*x, 8 + 16*y)`, where `(x,y)` is the
+/// corresponding arena coordinate."
+const COMBAT_OVERLAY_CELL_ORIGIN: usize = 8;
+const COMBAT_OVERLAY_CELL_SIDE: usize = 16;
+
+/// `combat.md §7` secondary marker strokes, in the published emission order:
+/// upper white, upper black, lower white, lower black; "within each white
+/// group the horizontal stroke precedes the vertical stroke; within each
+/// black group the narrower left horizontal/vertical pair is followed by the
+/// wider left pair, then by the narrower and wider right pairs. Each pair
+/// draws its horizontal stroke before its vertical stroke."
+///
+/// Each entry is `(palette index, x0, y0, x1, y1)`, inclusive and relative to
+/// the cell origin. "These are solid colour replacement writes, not XOR or
+/// inversion."
+const COMBAT_SECONDARY_MARKER_STROKES: [(usize, usize, usize, usize, usize); 20] = [
+    // Upper white, palette 15: row 6, columns 2 through 6; column 6, rows 2
+    // through 6.
+    (15, 2, 6, 6, 6),
+    (15, 6, 2, 6, 6),
+    // Upper black, palette 0 — narrower left pair, then wider left pair,
+    // then narrower and wider right pairs.
+    (0, 2, 5, 5, 5),
+    (0, 5, 2, 5, 5),
+    (0, 2, 7, 6, 7),
+    (0, 7, 2, 7, 6),
+    (0, 10, 5, 13, 5),
+    (0, 10, 2, 10, 5),
+    (0, 9, 7, 13, 7),
+    (0, 8, 2, 8, 6),
+    // Lower white, palette 15: row 9, columns 2 through 6; column 6, rows 9
+    // through 13.
+    (15, 2, 9, 6, 9),
+    (15, 6, 9, 6, 13),
+    // Lower black, palette 0.
+    (0, 2, 10, 5, 10),
+    (0, 5, 10, 5, 13),
+    (0, 2, 8, 6, 8),
+    (0, 7, 9, 7, 13),
+    (0, 10, 10, 13, 10),
+    (0, 10, 10, 10, 13),
+    (0, 9, 8, 13, 8),
+    (0, 8, 9, 8, 13),
+];
+
+const fn ega_palette_rgba(index: usize) -> [u8; 4] {
+    [
+        EGA_PALETTE_RGB[index][0],
+        EGA_PALETTE_RGB[index][1],
+        EGA_PALETTE_RGB[index][2],
+        0xff,
+    ]
+}
+
+const fn combat_overlay_cell_origin(x: u8, y: u8) -> (usize, usize) {
+    (
+        COMBAT_OVERLAY_CELL_ORIGIN + COMBAT_OVERLAY_CELL_SIDE * x as usize,
+        COMBAT_OVERLAY_CELL_ORIGIN + COMBAT_OVERLAY_CELL_SIDE * y as usize,
+    )
+}
+
+/// `combat.md §7`: "Composition order for a lit eligible pass is the full
+/// eleven-by-eleven base viewport repaint (terrain and composited actors),
+/// the cursor, then the secondary marker."
+///
+/// The secondary marker is where `§8.2`'s targeting cursor is drawn: it is
+/// the one published overlay placed "at an explicit arena X/Y", and the
+/// engine keeps that coordinate in `combat_secondary_marker`.
+fn paint_combat_overlays_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    state: &PlayState,
+) {
+    let report = state.combat_overlay_draw_cells();
+    paint_combat_overlay_cells_rgba(
+        dst,
+        dst_width,
+        dst_height,
+        report.cursor_draw_cell,
+        report.secondary_marker_cell,
+    );
+}
+
+fn paint_combat_overlay_cells_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    cursor_cell: Option<(u8, u8)>,
+    secondary_marker_cell: Option<(u8, u8)>,
+) {
+    let Some((cursor_x, cursor_y)) = cursor_cell else {
+        return;
+    };
+    let (origin_x, origin_y) = combat_overlay_cell_origin(cursor_x, cursor_y);
+    let white = ega_palette_rgba(15);
+    // "Horizontal strokes | All pixels from `x=0` through `x=15` on rows
+    // `y=0`, `1`, `14`, and `15`".
+    for row in [0usize, 1, 14, 15] {
+        fill_rgba_rect_inclusive(
+            dst,
+            dst_width,
+            dst_height,
+            origin_x,
+            origin_y + row,
+            origin_x + 15,
+            origin_y + row,
+            white,
+        );
+    }
+    // "Vertical strokes | All pixels from `y=0` through `y=15` on columns
+    // `x=0`, `1`, `14`, and `15`".
+    for column in [0usize, 1, 14, 15] {
+        fill_rgba_rect_inclusive(
+            dst,
+            dst_width,
+            dst_height,
+            origin_x + column,
+            origin_y,
+            origin_x + column,
+            origin_y + 15,
+            white,
+        );
+    }
+
+    let Some((marker_x, marker_y)) = secondary_marker_cell else {
+        return;
+    };
+    let (origin_x, origin_y) = combat_overlay_cell_origin(marker_x, marker_y);
+    for (palette, x0, y0, x1, y1) in COMBAT_SECONDARY_MARKER_STROKES {
+        fill_rgba_rect_inclusive(
+            dst,
+            dst_width,
+            dst_height,
+            origin_x + x0,
+            origin_y + y0,
+            origin_x + x1,
+            origin_y + y1,
+            ega_palette_rgba(palette),
+        );
+    }
+}
+
 fn fill_rgba_rect_inclusive(
     dst: &mut [u8],
     dst_width: usize,
@@ -15413,6 +15571,10 @@ fn render_visual_play_frame_over_viewport(
         VIEWPORT_ORIGIN_X,
         VIEWPORT_ORIGIN_Y,
     );
+    // `combat.md §7`: the shared painting pass's combat tail draws the
+    // player cursor box and, when set, the secondary marker over the
+    // repainted viewport.
+    paint_combat_overlays_rgba(&mut rgba, width, height, state);
     blit_active_view_overlay_rgba(&mut rgba, width, height, state, atlas.depth);
     rgba
 }
@@ -16652,6 +16814,11 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.active_new_order.is_some()
         || state.active_wishing_well.is_some()
         || state.active_direction_prompt.is_some()
+        // `combat.md §8.2`: while the `A`-Attack targeting cursor is open it
+        // owns the keyboard, and Escape is one of its published keys - "Escape
+        // | Cancels" - so the shell must not swallow it as an inert gameplay
+        // Escape, and held-direction auto-repeat must not steer the cursor.
+        || state.active_combat_targeting.is_some()
         || state.active_yes_no_prompt.is_some()
         || state.active_shop.is_some()
         || state.pending_town_arrest.is_some()
@@ -21042,20 +21209,191 @@ mod tests {
         assert_eq!(interval, 3.0 * BIOS_USER_TICK_INTERVAL_SECS);
     }
 
+    /// `combat.md §7` exact combat-overlay raster contract. The cursor
+    /// "uses EGA/Tandy palette index 15 (white) and covers the complete
+    /// two-pixel outer ring of its cell", anchored at
+    /// `(8 + 16*x, 8 + 16*y)`; the secondary marker "occupies the
+    /// twelve-by-twelve box from relative `(2,2)` through `(13,13)`".
     #[test]
-    fn automatic_combat_actions_use_the_brisk_presentation_interval() {
+    fn combat_overlay_raster_matches_the_published_cursor_and_marker() {
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
+        let mut rgba = vec![0u8; width * height * 4];
+
+        paint_combat_overlay_cells_rgba(&mut rgba, width, height, Some((1, 2)), Some((3, 4)));
+
+        let white = ega_rgba(15);
+        let black = ega_rgba(0);
+        let (cx, cy) = (8 + 16, 8 + 32);
+        for row in [0usize, 1, 14, 15] {
+            for column in 0..16usize {
+                assert_eq!(rgba_pixel(&rgba, width, cx + column, cy + row), white);
+            }
+        }
+        for column in [0usize, 1, 14, 15] {
+            for row in 0..16usize {
+                assert_eq!(rgba_pixel(&rgba, width, cx + column, cy + row), white);
+            }
+        }
+        // The ring is two pixels, so the cell interior is untouched.
+        assert_eq!(rgba_pixel(&rgba, width, cx + 7, cy + 7), [0, 0, 0, 0]);
+
+        let (mx, my) = (8 + 48, 8 + 64);
+        // Upper white: "row 6, columns 2 through 6" and "column 6, rows 2
+        // through 6".
+        for column in 2..=6usize {
+            assert_eq!(rgba_pixel(&rgba, width, mx + column, my + 6), white);
+        }
+        for row in 2..=6usize {
+            assert_eq!(rgba_pixel(&rgba, width, mx + 6, my + row), white);
+        }
+        // Upper black: "row 5, columns 2 through 5 and 10 through 13".
+        for column in (2..=5usize).chain(10..=13usize) {
+            assert_eq!(rgba_pixel(&rgba, width, mx + column, my + 5), black);
+        }
+        // Lower white: "row 9, columns 2 through 6" and "column 6, rows 9
+        // through 13".
+        for column in 2..=6usize {
+            assert_eq!(rgba_pixel(&rgba, width, mx + column, my + 9), white);
+        }
+        for row in 9..=13usize {
+            assert_eq!(rgba_pixel(&rgba, width, mx + 6, my + row), white);
+        }
+        // Nothing is drawn outside the twelve-by-twelve box.
+        assert_eq!(rgba_pixel(&rgba, width, mx + 1, my + 1), [0, 0, 0, 0]);
+        assert_eq!(rgba_pixel(&rgba, width, mx + 14, my + 14), [0, 0, 0, 0]);
+    }
+
+    /// `combat.md §7`: "A dark blink pass, invalid active cell, or non-player
+    /// active group suppresses both overlays", and the marker is gated on the
+    /// cursor being drawn.
+    #[test]
+    fn combat_overlay_marker_is_gated_on_the_cursor_cell() {
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
+        let mut rgba = vec![0u8; width * height * 4];
+
+        paint_combat_overlay_cells_rgba(&mut rgba, width, height, None, Some((3, 4)));
+
+        assert!(rgba.iter().all(|byte| *byte == 0));
+    }
+
+    /// A fight already under way with two automatic actors owing turns and
+    /// the keyboard-driven party actor still counting down. `combat.md §5.3`
+    /// step 8 runs the round-loop entry prologue once per encounter, so the
+    /// fixture marks it spent rather than paying its world tick here.
+    fn paced_two_monster_combat_state() -> PlayState {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.pace_combat_presentations = true;
         state.pending_combat_actor_slot = None;
+        state.combat_round_loop_prologue_ran = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.active_objects = vec![ActiveObject::empty(); u5_runtime::OOL_SLOTS];
+        state.active_objects[0] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        // The party actor's phase counter is still counting down, so this
+        // round walk owes only the two monsters.
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            5,
+            5,
+            5,
+        ]);
+        for (slot, x) in [(8usize, 8u8), (9, 2)] {
+            state.active_objects[slot] = ActiveObject {
+                type_byte: 0x90,
+                tile: 0x90,
+                x: usize::from(x),
+                y: 5,
+                ..ActiveObject::empty()
+            };
+            state.combat_actors[slot] = CombatActorDescriptor::from_row([
+                10,
+                1,
+                u5_runtime::COMBAT_ACTOR_FLAG_SELECTABLE_40,
+                COMBAT_CLASS_GIANT_RAT,
+                slot as u8,
+                0,
+                x,
+                5,
+            ]);
+        }
+        state
+    }
+
+    /// `combat.md §7` step 7 gives every dispatched action its own render:
+    /// "Only after the hazard pass does the separate render step redraw
+    /// changed cells and run any post-action sound or particle effect."
+    /// One pump firing therefore advances one automatic action, never the
+    /// whole owed run - `§16`'s "redraw every frame" licence is scoped to the
+    /// round counter's every-ten tile render, not to collapsing actions.
+    #[test]
+    fn one_pump_firing_advances_exactly_one_automatic_combat_action() {
+        let mut state = paced_two_monster_combat_state();
+
+        assert!(advance_paced_combat_pump_firing(&mut state));
+        let after_first = state.next_combat_actor_slot;
+        assert_eq!(after_first, 9, "the first firing must stop after slot 8");
+        assert_eq!(state.pending_combat_actor_slot, None);
+
+        assert!(advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(
+            state.next_combat_actor_slot, 10,
+            "the second firing owns the second automatic action"
+        );
+    }
+
+    /// The same gate must never steal a keyboard-driven combatant's turn:
+    /// `combat.md §8` hands the turn to the player command handler, and the
+    /// shell's pump has no business advancing the walk while it waits.
+    #[test]
+    fn the_combat_pump_declines_while_a_keyboard_driven_actor_is_pending() {
+        let mut state = paced_two_monster_combat_state();
+        state.pending_combat_actor_slot = Some(0);
+        let slot_before = state.next_combat_actor_slot;
+
+        assert!(!advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(state.next_combat_actor_slot, slot_before);
+
+        state.pending_combat_actor_slot = None;
+        state.combat_active = false;
+        assert!(!advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(state.next_combat_actor_slot, slot_before);
+    }
+
+    /// Nothing published gives an automatic combat action a shell-chosen
+    /// wall-clock delay, so the paced combat pump keeps the ordinary
+    /// BIOS-tick cadence and only a visibility sweep overrides it.
+    #[test]
+    fn automatic_combat_actions_use_the_ordinary_bios_tick_interval() {
+        let mut state = paced_two_monster_combat_state();
 
         assert_eq!(
-            visual_animation_pump_interval(&state, 0.33),
-            (false, PACED_COMBAT_PRESENTATION_INTERVAL_SECS)
+            visual_animation_pump_interval(&state, GAMEPLAY_WORLD_TICK_INTERVAL_SECS),
+            (false, GAMEPLAY_WORLD_TICK_INTERVAL_SECS)
         );
 
-        state.pending_combat_actor_slot = Some(0);
-        assert_eq!(visual_animation_pump_interval(&state, 0.33), (false, 0.33));
+        state.visibility_sweep = Some(u5_runtime::VisibilitySweep {
+            frames_remaining: 20,
+            pause_bios_ticks_per_frame: 3,
+            center_x: 10,
+            center_y: 20,
+            visible_cells: [true; u5_runtime::VIEWPORT_SIDE * u5_runtime::VIEWPORT_SIDE],
+        });
+        assert_eq!(
+            visual_animation_pump_interval(&state, GAMEPLAY_WORLD_TICK_INTERVAL_SECS),
+            (true, 3.0 * BIOS_USER_TICK_INTERVAL_SECS)
+        );
     }
 
     #[test]

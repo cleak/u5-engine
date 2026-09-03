@@ -21,6 +21,7 @@ pub mod combat_frame;
 pub mod combat_scenario;
 pub mod combat_setup;
 pub mod combat_stats;
+pub mod combat_targeting;
 pub mod commands;
 pub mod common_words_io;
 pub mod constants;
@@ -225,6 +226,7 @@ pub use combat_arena::*;
 pub use combat_frame::*;
 pub use combat_setup::*;
 pub use combat_stats::*;
+pub use combat_targeting::*;
 pub use commands::{
     Command, CommandEcho, CommandEchoJoin, CommandEchoMode, DEATH_VISION_LOOK_TILE,
     DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW, DIRECTION_PROMPT_CANCEL_LITERAL,

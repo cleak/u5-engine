@@ -237,6 +237,19 @@ pub struct PlayState {
     pub pace_combat_presentations: bool,
     pub combat_frame_snapshot: Option<CombatFrameSnapshot>,
     pub pending_combat_actor_slot: Option<usize>,
+    /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
+    /// targeting cursor. `A` "opens a second, separate input read, and
+    /// it is not a one-shot direction key but an **interactive targeting
+    /// cursor**", entered "once per readied weapon, not once per Attack
+    /// command". Never serialized: combat cannot be saved mid-fight.
+    pub active_combat_targeting: Option<CombatTargetingCursorSession>,
+    /// `combat.md §8.2`: the targeting cursor "starts on **the attacker's**
+    /// remembered previous target when that target is still a valid, live,
+    /// visible actor within the maximum range, and on the attacker's own
+    /// cell otherwise." The remembered target is a property of the attacker,
+    /// so it is held per actor slot rather than once for the arena. Never
+    /// serialized: combat cannot be saved mid-fight (`§15`).
+    pub combat_remembered_targets: [Option<u8>; COMBAT_ACTOR_SLOTS],
     pub pending_combat_terrain_trigger_slot: Option<usize>,
     /// `town-mode.md §14`: the town NPC-conflict chain's carry-over.
     /// A-Attack on a town actor enters the ordinary terrain arena, and

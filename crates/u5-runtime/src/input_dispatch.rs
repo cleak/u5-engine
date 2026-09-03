@@ -2598,7 +2598,88 @@ fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had
     }
 }
 
+/// `combat.md §8.2`: append one attempt-walk advance to the transcript and,
+/// when no further cursor opens, spend the acting combatant's turn.
+/// "The acting character's turn is consumed either way: cancelling with
+/// Escape or Space does not return to the command prompt and does not give
+/// the turn back."
+fn finish_combat_attack_walk(
+    state: &mut PlayState,
+    actor_slot: usize,
+    had_foe: bool,
+    walk: CombatAttackWalkApplication,
+) {
+    if let Some((target_slot, attack)) = walk.attack
+        && let Some(line) = combat_weapon_attack_result_message(state, target_slot, attack)
+    {
+        append_combat_result_line(&mut state.message, &line);
+    }
+    state.message.push_str(&walk.text);
+    if walk.cursor_open {
+        state.pending_combat_actor_slot = Some(actor_slot);
+        return;
+    }
+
+    state.pending_combat_actor_slot = None;
+    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+    if state.combat_active
+        && matches!(
+            state.combat_round_loop_control(false, false),
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+        )
+    {
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::Defeat);
+        return;
+    }
+    if state.combat_active {
+        // `combat.md §7`: "If party actors remain and foes do not, it prints
+        // `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
+        if had_foe
+            && !combat_has_active_non_party_actor(state)
+            && state.announce_combat_victory_if_needed()
+        {
+            state
+                .message
+                .push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
+        }
+        advance_combat_round_after_actor_and_append_message(state, actor_slot);
+    }
+}
+
+/// `combat.md §8.2`: while a targeting cursor is open it owns the keyboard.
+/// The cursor loop "reads another key" for every input outside its published
+/// table, so no keystroke reaches the combat command parser here.
+fn handle_combat_targeting_cursor_key(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+) -> PlayInputDisposition {
+    let Some(actor_slot) = state
+        .active_combat_targeting
+        .as_ref()
+        .map(|session| session.actor_slot)
+    else {
+        return PlayInputDisposition::Continue;
+    };
+    // `combat.md §8.2`: the cursor's own prints continue the line `A` opened
+    // - `Aim! ` carries no newline - and a discarded key prints nothing at
+    // all, so the standing transcript is appended to rather than replaced.
+    for cursor_key in std::iter::once(key).chain(suffix.chars()) {
+        if state.active_combat_targeting.is_none() {
+            break;
+        }
+        let had_foe = combat_has_active_non_party_actor(state);
+        if let Some(walk) = state.apply_combat_targeting_cursor_key(cursor_key) {
+            finish_combat_attack_walk(state, actor_slot, had_foe, walk);
+        }
+    }
+    PlayInputDisposition::Continue
+}
+
 fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> PlayInputDisposition {
+    if state.active_combat_targeting.is_some() {
+        return handle_combat_targeting_cursor_key(state, key, suffix);
+    }
     state.ensure_pending_combat_player_turn();
     let Some(actor_slot) = state.pending_combat_actor_slot.take() else {
         state.message.clear();
@@ -2608,7 +2689,7 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         state.message.clear();
         return PlayInputDisposition::Continue;
     }
-    let input = combat_player_command_input_from_key_suffix(key, suffix);
+    let input = combat_player_command_input_from_key(key);
     // `combat.md §8.1`: the banner was already emitted into the transcript
     // when this turn opened - "before any key is read" - so this keystroke's
     // own transcript starts with the command output and never reprints it.
@@ -2638,9 +2719,26 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         }
     } else if matches!(
         application.action,
-        CombatPlayerCommandAction::PromptForAttackDirection
+        CombatPlayerCommandAction::OpenTargetingCursor
     ) {
-        state.pending_combat_actor_slot = Some(actor_slot);
+        // `combat.md §8.2`: accepted Attack walks the readied slots, printing
+        // `Attack-` (and a per-item name line when two or three qualify) per
+        // attempt and opening one cursor per attempt that survives the
+        // interference abort.
+        let had_foe = combat_has_active_non_party_actor(state);
+        let walk = state.begin_combat_attack_walk(actor_slot);
+        finish_combat_attack_walk(state, actor_slot, had_foe, walk);
+        // A scripted `A<keys>` token feeds the rest of its characters to the
+        // cursor one at a time, exactly as separate keystrokes would.
+        for cursor_key in suffix.chars() {
+            if state.active_combat_targeting.is_none() {
+                break;
+            }
+            let had_foe = combat_has_active_non_party_actor(state);
+            if let Some(walk) = state.apply_combat_targeting_cursor_key(cursor_key) {
+                finish_combat_attack_walk(state, actor_slot, had_foe, walk);
+            }
+        }
     } else if application.control_after.result_code().is_none() {
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     }
@@ -2851,12 +2949,7 @@ fn apply_combat_committed_action_maintenance(
     state: &mut PlayState,
     actor_slot: usize,
 ) -> Option<CombatMagicRingPassOutcome> {
-    let _ = state.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
-    let _ = state.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
-    state.clear_combat_interference_for_completed_action(actor_slot);
-    let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-    let _ = state.age_active_effect();
-    ring_pass
+    state.apply_combat_committed_action_tail(actor_slot)
 }
 
 fn combat_cast_suffix_for_actor(suffix: &str, actor_slot: usize) -> String {
@@ -2883,18 +2976,13 @@ fn combat_cast_suffix_for_actor(suffix: &str, actor_slot: usize) -> String {
     }
 }
 
-fn combat_player_command_input_from_key_suffix(
-    key: char,
-    suffix: &str,
-) -> CombatPlayerCommandInput {
+fn combat_player_command_input_from_key(key: char) -> CombatPlayerCommandInput {
+    // `combat.md §8.2`: `A` no longer folds a following direction key into a
+    // one-shot attack direction. Accepting Attack "opens a second, separate
+    // input read, and it is not a one-shot direction key but an
+    // **interactive targeting cursor**", so any suffix after `A` is fed to
+    // that cursor a key at a time by the caller.
     if key.eq_ignore_ascii_case(&'A') {
-        if let Some(direction_code) = suffix
-            .chars()
-            .find_map(Direction::from_play_key)
-            .and_then(combat_direction_code_for_direction)
-        {
-            return CombatPlayerCommandInput::AttackDirection(direction_code);
-        }
         return CombatPlayerCommandInput::Key('A');
     }
     if key.is_ascii_uppercase() {
@@ -2916,10 +3004,11 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
         }
         CombatPlayerCommandAction::Pass(_) => "Pass.".to_string(),
         // `combat.md §8.1`/`§8.2`: what `A` adds on top of the turn banner
-        // is `Attack-` and, "immediately before the cursor opens", `Aim! `.
-        CombatPlayerCommandAction::PromptForAttackDirection => {
-            format!("{COMBAT_ATTACK_LABEL}{COMBAT_ATTACK_AIM_PROMPT}")
-        }
+        // is `Attack-` and, "immediately before the cursor opens", `Aim! `,
+        // plus a per-item name line when two or three items qualify. All of
+        // that is produced per attempt by the attempt walker, so this arm
+        // contributes nothing of its own.
+        CombatPlayerCommandAction::OpenTargetingCursor => String::new(),
         // Every production step-or-attack transcript comes from
         // `combat_step_or_attack_application_message`, which prints the
         // `combat.md §3` lines (the direction word, then `Blocked!`,
@@ -3106,7 +3195,7 @@ fn combat_weapon_attack_result_message(
     }
 }
 
-fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
+pub(crate) fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
     if slot < COMBAT_PARTY_ACTOR_SLOTS {
         return state
             .combat_roster_slot_for_actor_slot(slot)
