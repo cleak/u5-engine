@@ -320,6 +320,19 @@ pub struct PlayState {
     /// of the two cases it is in. Never serialized: it is presentation
     /// position, not saved state.
     pub combat_transcript_row_open: bool,
+    /// Whether the arena prompt now waiting for a key is standing on the
+    /// row a `combat.md §8.1` turn banner opened.
+    ///
+    /// §8.1 spends the marker row's line feed in the banner - the turn
+    /// handler "emits the line feed itself, unconditionally, between
+    /// printing the banner and reading the command byte" - so a prompt that
+    /// banner opened must not also take `text-output.md §10.4`'s derived
+    /// blank row. A **free re-prompt after a refusal** is the case that
+    /// separates the two: §8.1 says it "uses the short form and does
+    /// **not** reprint the banner", so no line feed was spent for it and
+    /// its marker row takes §10.4's blank like any world-loop prompt.
+    /// Never serialized: presentation position, not saved state.
+    pub combat_prompt_row_opened_by_banner: bool,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

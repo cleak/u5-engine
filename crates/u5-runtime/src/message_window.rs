@@ -305,10 +305,18 @@ pub fn message_log_from_entries<'a>(
 /// between command turns. `combat.md §8.1` spends the same line feed
 /// earlier - the arena's turn handler "emits the line feed itself,
 /// unconditionally, between printing the banner and reading the command
-/// byte" - so while an arena combatant is waiting at its prompt the marker
-/// row follows the banner's last row immediately.
+/// byte" - so while an arena combatant is waiting at a prompt **that banner
+/// opened**, the marker row follows the banner's last row immediately.
+///
+/// It is the banner that buys the row, not the pending slot. §8.1's free
+/// re-prompt after a refusal "uses the short form and does **not** reprint
+/// the banner", so that prompt spends no line feed of its own and keeps
+/// §10.4's blank; [`crate::PlayState::combat_prompt_row_opened_by_banner`]
+/// is which of the two this prompt is.
 pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
-    state.combat_active && state.pending_combat_actor_slot.is_some()
+    state.combat_active
+        && state.pending_combat_actor_slot.is_some()
+        && state.combat_prompt_row_opened_by_banner
 }
 
 /// Place a log — and optionally the live input line — into the window.

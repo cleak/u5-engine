@@ -2788,17 +2788,24 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
         return PlayInputDisposition::Continue;
     }
-    // `text-output.md §10.2`: the key was read on the marker row, so what
-    // it echoes is written there and "echoed command lines carry" the end
-    // cap. `combat.md §8.1` supplies that row's line feed from the turn
-    // banner, so the echo neither opens a row of its own nor takes §10.4's
-    // derived blank.
+    // The key was read on the marker row, so what it echoes is written
+    // there. `text-output.md §10.2` states that rule for the loops it
+    // lists, and combat is not one of them, so the arena's end-cap
+    // placement is a runtime observation rather than a §10.2 claim.
+    // `combat.md §8.1` is what supplies the row's line feed - the turn
+    // handler "emits the line feed itself, unconditionally, between
+    // printing the banner and reading the command byte" - so the echo
+    // neither opens a row of its own nor takes §10.4's derived blank.
     state.message.clear();
     if !echo.is_empty() {
         state.emit_combat_command_echo_line(&echo);
     }
     if application.reprompt {
+        // `combat.md §8.1`'s free re-prompt "uses the short form and does
+        // **not** reprint the banner", so no line feed was spent on this
+        // marker row and `text-output.md §10.4`'s derived blank stands.
         state.pending_combat_actor_slot = Some(actor_slot);
+        state.combat_prompt_row_opened_by_banner = false;
         return PlayInputDisposition::Continue;
     }
     if let CombatRoundLoopControl::Exit(exit) = application.control_after {

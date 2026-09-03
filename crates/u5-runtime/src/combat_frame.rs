@@ -1313,6 +1313,7 @@ impl PlayState {
     pub(crate) fn open_pending_combat_player_turn(&mut self, slot: Option<usize>) {
         self.pending_combat_actor_slot = slot;
         let banner = slot.and_then(|slot| self.combat_turn_banner_for_actor(slot));
+        self.combat_prompt_row_opened_by_banner = banner.is_some();
         if let Some(banner) = banner.as_deref() {
             // `combat.md §8.1`: the banner is "a newline, the actor's name,
             // ... a colon **and then a newline**". `combat_turn_banner`

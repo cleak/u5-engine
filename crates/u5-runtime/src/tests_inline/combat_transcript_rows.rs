@@ -207,3 +207,56 @@ fn the_aim_prompt_keeps_the_marker_row_and_carries_the_cursor_inline() {
     assert_eq!(prompt.row, MESSAGE_WINDOW_BOTTOM);
     assert_eq!(layout.inline_cursor, Some((MESSAGE_WINDOW_LEFT + 13, MESSAGE_WINDOW_BOTTOM)));
 }
+
+#[test]
+fn a_free_re_prompt_after_a_refusal_keeps_the_blank_row_the_banner_paid_for() {
+    // `combat.md §8.1` buys the marker row with the banner's own line feed -
+    // the turn handler "emits the line feed itself, unconditionally, between
+    // printing the banner and reading the command byte" - and that is the
+    // only prompt row that comes free. The same section says a free
+    // re-prompt after a refusal "uses the short form and does **not**
+    // reprint the banner", so nothing spends a line feed for it and
+    // `text-output.md §10.4`'s derived blank row stands above it, exactly as
+    // it does for a world-loop prompt.
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_state_after_the_conflict_banner(8, 5);
+    state.active_player = Some(0);
+    state.ensure_pending_combat_player_turn();
+
+    assert!(
+        combat_prompt_row_follows_history(&state),
+        "the banner's line feed opened this marker row"
+    );
+    let banner_rows = combat_message_window_rows(&state);
+    let banner_prompt = banner_rows
+        .iter()
+        .rposition(|row| row.starts_with('>'))
+        .expect("the marker row is drawn");
+    assert!(
+        !banner_rows[banner_prompt - 1].is_empty(),
+        "no blank row under the banner: {banner_rows:?}"
+    );
+
+    // A blocked step is one of `combat.md §8.1`'s refusals: it prints its
+    // line, costs no turn and hands the same actor its prompt back.
+    state.combat_terrain[4][5] = 0x0c;
+    assert_eq!(
+        handle_play_key_input(&mut state, 'w', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(state.pending_combat_actor_slot, Some(0));
+
+    assert!(
+        !combat_prompt_row_follows_history(&state),
+        "the re-prompt reprinted no banner, so it spent no line feed"
+    );
+    let rows = combat_message_window_rows(&state);
+    let prompt = rows
+        .iter()
+        .rposition(|row| row.starts_with('>'))
+        .expect("the marker row is drawn");
+    assert!(
+        rows[prompt - 1].is_empty(),
+        "the re-prompt keeps §10.4's blank row: {rows:?}"
+    );
+}
