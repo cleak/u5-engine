@@ -6519,10 +6519,20 @@ impl PlayState {
     /// before the cursor opens the engine prints `Aim! `", and the five
     /// missile items run the interference abort first, which "opens no
     /// cursor" for that attempt.
-    pub fn begin_combat_attack_walk(&mut self, actor_slot: usize) -> CombatAttackWalkApplication {
+    ///
+    /// `foes_present` is the caller's census of live non-party actors taken
+    /// when the `A` was accepted. `combat.md §7` prints `VICTORY!` when
+    /// "party actors remain and foes do not", and a multi-attempt walk can
+    /// kill the last foe on a non-final attempt, so the answer is captured
+    /// once for the whole walk instead of being re-asked per keystroke.
+    pub fn begin_combat_attack_walk(
+        &mut self,
+        actor_slot: usize,
+        foes_present: bool,
+    ) -> CombatAttackWalkApplication {
         let attempts = self.combat_attack_attempts_for_actor(actor_slot);
         self.active_combat_targeting = None;
-        self.open_combat_attack_attempt(actor_slot, attempts, 0)
+        self.open_combat_attack_attempt(actor_slot, attempts, 0, foes_present)
     }
 
     /// Walk attempts from `index` until one opens its cursor or the list is
@@ -6532,8 +6542,14 @@ impl PlayState {
         actor_slot: usize,
         attempts: Vec<CombatAttackAttempt>,
         mut index: usize,
+        foes_present_at_walk_start: bool,
     ) -> CombatAttackWalkApplication {
         let mut text = String::new();
+        // `combat.md §7`: the overlay marker is drawn "at an explicit arena
+        // X/Y" only while its flag is set, and the base viewport repaint of
+        // the next pass "removes both old shapes". No cursor is open here
+        // until one is opened below, so the coordinate is dropped first.
+        self.combat_secondary_marker = None;
         let Some(attacker) = self.combat_actor_cell(actor_slot) else {
             self.active_combat_targeting = None;
             return CombatAttackWalkApplication {
@@ -6583,7 +6599,19 @@ impl PlayState {
                 cursor,
                 max_range: attempt.max_range,
                 melee_arm: attempt.melee_arm,
+                foes_present_at_walk_start,
             });
+            // `combat.md §7` combat-overlay tail: after the player cursor
+            // box, "a separate flag can then draw an additional marker at an
+            // explicit arena X/Y", composed second so it "wins wherever the
+            // two overlays coincide". The open `§8.2` targeting cursor is
+            // what supplies that coordinate: it is the one arena X/Y the
+            // published contract lets the player move independently of the
+            // acting character's own cell, and §7 asks a flag with no
+            // reader or no producer to be treated as evidence the contract
+            // is not real. Filed as a spec question all the same, because
+            // §7 names the reader and not the producer.
+            self.combat_secondary_marker = Some(cursor);
             self.mark_visibility_dirty();
             return CombatAttackWalkApplication {
                 text,
@@ -6635,6 +6663,9 @@ impl PlayState {
                 if let Some(open) = self.active_combat_targeting.as_mut() {
                     open.cursor = cell;
                 }
+                // `combat.md §7`: the marker follows the cursor cell, and
+                // the next pass's base repaint erases the old shape.
+                self.combat_secondary_marker = Some(cell);
                 self.mark_visibility_dirty();
                 Some(CombatAttackWalkApplication {
                     text: String::new(),
@@ -6703,6 +6734,7 @@ impl PlayState {
             session.actor_slot,
             session.attempts.clone(),
             session.index + 1,
+            session.foes_present_at_walk_start,
         )
     }
 }

@@ -2523,7 +2523,7 @@ fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
         .any(|(slot, actor)| combat_actor_accepts_player_input(slot, actor))
 }
 
-fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
+pub(crate) fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
     state
         .combat_actors
         .iter()
@@ -2616,6 +2616,11 @@ fn finish_combat_attack_walk(
     }
     state.message.push_str(&walk.text);
     if walk.cursor_open {
+        // The turn is not over: `§8.2` opens one cursor per readied item and
+        // the acting combatant keeps the keyboard. `combat.md §7`'s
+        // `VICTORY!` belongs to the end of the dispatch, so a kill on this
+        // attempt is announced when the last attempt closes - the census
+        // that decides it is carried by the walk, not recomputed then.
         state.pending_combat_actor_slot = Some(actor_slot);
         return;
     }
@@ -2665,10 +2670,18 @@ fn handle_combat_targeting_cursor_key(
     // - `Aim! ` carries no newline - and a discarded key prints nothing at
     // all, so the standing transcript is appended to rather than replaced.
     for cursor_key in std::iter::once(key).chain(suffix.chars()) {
-        if state.active_combat_targeting.is_none() {
+        // `combat.md §7`: `VICTORY!` is owed when "party actors remain and
+        // foes do not". The census belongs to the whole `A` walk, not to
+        // this keystroke: an earlier attempt in the same walk may already
+        // have killed the last foe, and re-asking here would answer `false`
+        // and lose the line.
+        let Some(had_foe) = state
+            .active_combat_targeting
+            .as_ref()
+            .map(|session| session.foes_present_at_walk_start)
+        else {
             break;
-        }
-        let had_foe = combat_has_active_non_party_actor(state);
+        };
         if let Some(walk) = state.apply_combat_targeting_cursor_key(cursor_key) {
             finish_combat_attack_walk(state, actor_slot, had_foe, walk);
         }
@@ -2726,15 +2739,18 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         // attempt and opening one cursor per attempt that survives the
         // interference abort.
         let had_foe = combat_has_active_non_party_actor(state);
-        let walk = state.begin_combat_attack_walk(actor_slot);
+        let walk = state.begin_combat_attack_walk(actor_slot, had_foe);
         finish_combat_attack_walk(state, actor_slot, had_foe, walk);
         // A scripted `A<keys>` token feeds the rest of its characters to the
         // cursor one at a time, exactly as separate keystrokes would.
         for cursor_key in suffix.chars() {
-            if state.active_combat_targeting.is_none() {
+            let Some(had_foe) = state
+                .active_combat_targeting
+                .as_ref()
+                .map(|session| session.foes_present_at_walk_start)
+            else {
                 break;
-            }
-            let had_foe = combat_has_active_non_party_actor(state);
+            };
             if let Some(walk) = state.apply_combat_targeting_cursor_key(cursor_key) {
                 finish_combat_attack_walk(state, actor_slot, had_foe, walk);
             }
@@ -3178,11 +3194,20 @@ fn combat_weapon_attack_result_message(
                 } else {
                     let actor = state.combat_actors.get(target_slot)?;
                     let max_hp = combat_class_stats(damage.class)?.max_hp;
+                    // `combat.md §11.1`, "The graded wound lines are
+                    // monster-target only": wound score 1 "below one quarter"
+                    // is `<target> critical!`, 2 is `heavily wounded!`, 3 is
+                    // `lightly wounded!` and 4 "three quarters or more" is
+                    // `barely wounded!`. `<target> grazed!` is not a wound
+                    // grade at all - §11.1 and §12 reserve it for the
+                    // zero-or-negative damage outcome, which applies no HP
+                    // change and suppresses "the kill, sleep, hit and wound
+                    // lines".
                     let condition = match combat_wound_score_bucket(actor.hp_or_wound, max_hp) {
-                        CombatWoundScoreBucket::ThreeQuartersOrMore => "grazed",
+                        CombatWoundScoreBucket::ThreeQuartersOrMore => "barely wounded",
                         CombatWoundScoreBucket::HalfToUnderThreeQuarters => "lightly wounded",
                         CombatWoundScoreBucket::OneQuarterToUnderHalf => "heavily wounded",
-                        CombatWoundScoreBucket::UnderOneQuarter => "critically wounded",
+                        CombatWoundScoreBucket::UnderOneQuarter => "critical",
                     };
                     Some(format!("{class_name} {condition}!"))
                 }

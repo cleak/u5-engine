@@ -121,30 +121,30 @@ pub fn combat_attack_attempts(equipment: &[u8; EQUIPMENT_SLOT_COUNT]) -> Vec<Com
 }
 
 /// `combat.md §8.2`: "When two or three items qualify, each attempt
-/// additionally prints a newline, that item's name, and a colon on its own
-/// line before its `Attack-`; with exactly one qualifying item, or none, no
+/// additionally prints a newline, that item's name, and a colon **on its own
+/// line before its `Attack-`**; with exactly one qualifying item, or none, no
 /// item-name line is printed."
 ///
-/// **Known divergence, filed as a spec question.** That sentence enumerates
-/// three emissions - a newline, the name, a colon - and also says the name
-/// and colon land "on its own line before its `Attack-`". This function
-/// emits exactly the three published pieces, so the caller's `Attack-`
-/// continues the same line and the rendered transcript renders the name,
-/// its colon and `Attack-Aim! ` on one line, which is not the published
-/// layout. The
-/// alternative - a fourth, unpublished newline after the colon - would
-/// invent an emission, and `§8.1`'s turn banner is "terminated by a colon"
-/// with `Attack-` following it on the same line, so the parallel structure
-/// argues for what is implemented here. The engine keeps the published
-/// emissions and records the layout as the open question rather than
-/// guessing a byte the spec does not print.
+/// The layout clause is published twice and is load-bearing. `§8.1` names
+/// the same emission "a per-item name **line**", and `§8.2` puts the name
+/// and colon "on its own line **before** its `Attack-`" - and a row that
+/// `Attack-` continues is not its own line. `§11.1`'s announcement table
+/// settles what terminates it: it republishes the `§8.1` turn banner as
+/// "newline, name, `, armed with ` and the readied item names or `bare
+/// hands`, a colon, **newline**", a trailing newline that `§8.1`'s own
+/// three-part enumeration omits. The item-name line's enumeration is the
+/// same shape, so it is read the same way.
+///
+/// Still filed as a spec question, because `§8.2` enumerates three
+/// emissions and the fourth is read out of the layout clause rather than
+/// stated.
 pub fn combat_attack_item_line(attempts: &[CombatAttackAttempt], index: usize) -> Option<String> {
     if attempts.len() < 2 {
         return None;
     }
     let item_id = attempts.get(index)?.item_id?;
     Some(format!(
-        "\n{}{COMBAT_ATTACK_ITEM_LINE_TERMINATOR}",
+        "\n{}{COMBAT_ATTACK_ITEM_LINE_TERMINATOR}\n",
         equipment_name(item_id)
     ))
 }
@@ -361,6 +361,17 @@ pub struct CombatTargetingCursorSession {
     pub cursor: (u8, u8),
     pub max_range: u8,
     pub melee_arm: bool,
+    /// Whether any non-party actor was still active when this `A` walk
+    /// began.
+    ///
+    /// `combat.md §7`: "If party actors remain and foes do not, it prints
+    /// `VICTORY!` once and continues" (`RETRACTIONS.md` R289). One `A`
+    /// produces one attempt per readied item, so a kill on a non-final
+    /// attempt is followed by another cursor and another keystroke; asking
+    /// "were there foes?" again at that later keystroke answers `false` and
+    /// the announcement is lost. The walk therefore carries the answer it
+    /// had when the turn's Attack was accepted.
+    pub foes_present_at_walk_start: bool,
 }
 
 impl CombatTargetingCursorSession {
@@ -465,9 +476,12 @@ mod tests {
     }
 
     /// `combat.md §8.2`: "When two or three items qualify, each attempt
-    /// additionally prints a newline, that item's name, and a colon ...
-    /// with exactly one qualifying item, or none, no item-name line is
-    /// printed."
+    /// additionally prints a newline, that item's name, and a colon **on its
+    /// own line before its `Attack-`**; with exactly one qualifying item, or
+    /// none, no item-name line is printed." `§8.1` calls the same emission
+    /// "a per-item name **line**", and `§11.1`'s announcement table
+    /// republishes the sibling turn banner as ending "a colon, **newline**",
+    /// so the line is terminated and `Attack-` starts the next one.
     #[test]
     fn item_name_lines_appear_only_when_two_or_three_items_qualify() {
         let mut equipment = empty_equipment();
@@ -479,9 +493,12 @@ mod tests {
         let pair = combat_attack_attempts(&equipment);
         assert_eq!(
             combat_attack_item_line(&pair, 0).as_deref(),
-            Some("\nSpiked Helm:")
+            Some("\nSpiked Helm:\n")
         );
-        assert_eq!(combat_attack_item_line(&pair, 1).as_deref(), Some("\nBow:"));
+        assert_eq!(
+            combat_attack_item_line(&pair, 1).as_deref(),
+            Some("\nBow:\n")
+        );
     }
 
     /// `combat.md §8.2`: "all eight neighbours are within range one, so **a

@@ -90,6 +90,11 @@ pub fn run_combat_scenario(
                 CombatScenarioInput::Attack => 'A',
                 CombatScenarioInput::Pass => ' ',
                 CombatScenarioInput::Escape => '\u{1b}',
+                // `combat.md §8.2`: the cursor's move keys are the internal
+                // direction codes, the same bytes `Move` carries, so a
+                // scripted `Move` steers an open cursor instead of being
+                // dropped as an ignored key.
+                CombatScenarioInput::Move(code) => char::from(*code),
                 _ => char::from(0),
             };
             let walk = state.apply_combat_targeting_cursor_key(key);
@@ -145,7 +150,8 @@ pub fn run_combat_scenario(
         ) {
             // `combat.md §8.2`: the accepted `A` runs the attempt walk. It
             // ends the actor's turn only once no further cursor opens.
-            let walk = state.begin_combat_attack_walk(actor_slot);
+            let foes_present = crate::input_dispatch::combat_has_active_non_party_actor(state);
+            let walk = state.begin_combat_attack_walk(actor_slot, foes_present);
             if walk.cursor_open {
                 state.pending_combat_actor_slot = Some(actor_slot);
                 continue;
