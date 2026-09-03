@@ -2683,7 +2683,8 @@ fn finish_combat_attack_walk(
 ) {
     // `combat.md §11.1`: a monster carrying the controlled/charmed bit prints
     // "on a failed roll `<target> missed!`" where the self-acting hostile
-    // prints nothing, "because that slot is driven from the player's prompt".
+    // prints nothing - `§7` step 6 puts such a slot in group zero, so it "is
+    // therefore driven from the player's prompt".
     // Everything else on the row is the shared narrator's.
     if let Some((_, monster_attack)) = walk.monster_attack
         && let Some(line) = combat_monster_attack_narrated_result_message(
@@ -2969,9 +2970,9 @@ fn handle_combat_multistage_command(
             // that character's own sheet silently, with no prompt; for a
             // **monster-side** actor under player control it prints `Player: `
             // and runs the ordinary roster picker, so the player must choose a
-            // character." (`RETRACTIONS.md` R381 - the unqualified "selects the
-            // acting combatant's party slot instead of prompting" is withdrawn
-            // for a monster-side actor.)
+            // character." (`RETRACTIONS.md` R381 - the unqualified "selecting
+            // the acting combatant's party slot instead of prompting" is
+            // withdrawn for a monster-side actor.)
             if state
                 .combat_actors
                 .get(actor_slot)

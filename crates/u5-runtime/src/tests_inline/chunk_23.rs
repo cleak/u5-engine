@@ -5428,6 +5428,86 @@ fn combat_frame_entry_clears_or_installs_ambush_reveal_records() {
     assert!(state.combat_ambush_reveals.iter().all(Option::is_none));
 }
 
+/// `combat.md` §16.1: the player-command handler's "one gate is the
+/// active-player sentinel: while the sentinel is unset - **its state on combat
+/// entry**, and the state it returns to whenever `0` is pressed - every
+/// group-0 slot is prompted; while a character is selected with `1`-`6`, only
+/// the party-side slot that sentinel names is prompted and every other group-0
+/// slot, party or monster, is skipped without a banner, a keystroke or an
+/// action."
+///
+/// The sentinel is save-backed (`decode_active_player_slot` maps a saved byte
+/// `0..5` to `Some(n)`), so combat entry has to clear it or a save carrying a
+/// selected character would silence every other slot for the whole fight. §4's
+/// snapshot restores the pre-combat value on the way out.
+#[test]
+fn combat_frame_entry_clears_the_active_player_sentinel_and_exit_restores_it() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    // Roster slot 2 has to exist for the exit restore to hand it back
+    // (`resolve_post_combat_active_player_restore` drops a dead or sleeping
+    // slot).
+    let seed = state.party[0];
+    state.party = (0..3)
+        .map(|slot| PartyMember {
+            slot: slot as u8,
+            ..seed
+        })
+        .collect();
+    state.active_player = Some(2);
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    // A party member seated at roster slot 0, and a monster that control moved
+    // into group 0 - both group-0 slots that §16.1 requires to be prompted.
+    actors[0] = CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 4]);
+    actors[8] = CombatActorDescriptor::from_row([
+        20,
+        1,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_CONTROLLED,
+        12,
+        8,
+        0,
+        6,
+        6,
+    ]);
+
+    // With the saved sentinel still standing, neither slot would be prompted.
+    assert!(!combat_slot_prompted_by_player_command_handler(
+        Some(2),
+        0,
+        actors[0]
+    ));
+    assert!(!combat_slot_prompted_by_player_command_handler(
+        Some(2),
+        8,
+        actors[8]
+    ));
+
+    state
+        .enter_combat_frame(vec![ActiveObject::empty(); OOL_SLOTS], actors)
+        .expect("combat frame should enter");
+
+    assert_eq!(state.active_player, None, "the sentinel is unset on entry");
+    assert!(combat_slot_prompted_by_player_command_handler(
+        state.active_player,
+        0,
+        state.combat_actors[0]
+    ));
+    assert!(combat_slot_prompted_by_player_command_handler(
+        state.active_player,
+        8,
+        state.combat_actors[8]
+    ));
+
+    let snapshot = state.combat_frame_snapshot.take().unwrap();
+    assert_eq!(snapshot.active_player, Some(2));
+    state.restore_combat_frame(snapshot);
+    assert_eq!(
+        state.active_player,
+        Some(2),
+        "the pre-combat value comes back with the frame"
+    );
+}
+
 #[test]
 fn combat_frame_entry_and_exit_preserve_save_backed_interference_sources() {
     let mut state = world_state(open_world_grid(), 10, 20);
@@ -6178,10 +6258,13 @@ fn combat_raster_renders_arena_terrain_and_visible_actor_sprites() {
         aux1: 0,
         aux3: 0,
     };
+    // `combat.md §6.1` bit `0x10` is the "**Invisible / phase-hidden**"
+    // phase/blink filter, and `RETRACTIONS.md` R380 makes it the invisibility
+    // bit. That is the descriptor-side term the compositor suppresses on.
     state.combat_actors[6] = CombatActorDescriptor::from_row([
         10,
         1,
-        COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
+        COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
         0,
         6,
         0,
@@ -6191,7 +6274,7 @@ fn combat_raster_renders_arena_terrain_and_visible_actor_sprites() {
     state.combat_actors[9] = CombatActorDescriptor::from_row([
         10,
         1,
-        COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
+        COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
         0,
         12,
         0,
@@ -7008,7 +7091,24 @@ fn combat_cast_interference_requires_live_visible_awake_adjacent_target_without_
         CombatActorDescriptor::from_row([10, 1, COMBAT_ACTOR_FLAG_SELECTABLE_40, 2, 1, 0, 6, 5]);
     let far =
         CombatActorDescriptor::from_row([10, 1, COMBAT_ACTOR_FLAG_SELECTABLE_40, 2, 1, 0, 7, 5]);
+    // `magic.md` §7 condition 3: "The source is visible/revealed and awake; a
+    // hidden, not-yet-revealed, asleep, or disabled source does not
+    // interfere." The visibility half is the invisibility bit, which
+    // `RETRACTIONS.md` R380 puts on `0x10`, the phase/blink filter - the same
+    // bit §8.2's missile-interference gate reads for the same clause.
     let hidden = CombatActorDescriptor::from_row([
+        10,
+        1,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
+        2,
+        1,
+        0,
+        6,
+        5,
+    ]);
+    // Bit `0x04` is the dragged-under state; §7's list does not name it, so it
+    // is not what this gate reads.
+    let dragged_under = CombatActorDescriptor::from_row([
         10,
         1,
         COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
@@ -7042,6 +7142,22 @@ fn combat_cast_interference_requires_live_visible_awake_adjacent_target_without_
 
     assert!(combat_cast_interference_target_is_live_visible(adjacent));
     assert!(!combat_cast_interference_target_is_live_visible(hidden));
+    // Both copies of the one published clause read the same bits.
+    assert!(!combat_attack_interference_aborts(
+        caster,
+        Some(hidden),
+        true,
+        false
+    ));
+    assert!(combat_attack_interference_aborts(
+        caster,
+        Some(dragged_under),
+        true,
+        false
+    ));
+    assert!(combat_cast_interference_target_is_live_visible(
+        dragged_under
+    ));
     assert!(!combat_cast_interference_target_is_live_visible(sleeping));
     assert!(!combat_cast_interference_target_is_live_visible(dead));
     assert!(!combat_cast_interference_target_is_live_visible(
@@ -7067,6 +7183,10 @@ fn combat_cast_interference_requires_live_visible_awake_adjacent_target_without_
     assert_eq!(
         resolve_combat_cast_interference(caster, Some(hidden), true, false),
         CombatCastInterferenceOutcome::ContinueToSpellDispatcher
+    );
+    assert_eq!(
+        resolve_combat_cast_interference(caster, Some(dragged_under), true, false),
+        CombatCastInterferenceOutcome::Interfered
     );
     assert_eq!(
         resolve_combat_cast_interference(caster, Some(sleeping), true, false),
@@ -13009,9 +13129,12 @@ fn combat_cast_interference_revalidates_hostility_visibility_status_range_and_ne
     state.combat_interference_sources[0] = 8;
     assert_eq!(state.combat_cast_interference_source_for_slot(0), Some(8));
 
-    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+    // `magic.md` §7 condition 3: "The source is visible/revealed and awake."
+    // The visibility half is the invisibility bit `0x10` (`RETRACTIONS.md`
+    // R380), not the dragged-under bit `0x04`.
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
-    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
 
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
     assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
@@ -13627,8 +13750,8 @@ fn dispatch_controlled_monster_slot(state: &mut PlayState) -> CombatActorSlotDis
         )])
 }
 
-/// `combat.md` §16.1, upheld by `RETRACTIONS.md` R377: "The player-command
-/// handler has **no synthesis path for any slot**." A monster descriptor that
+/// `combat.md` §16.1, upheld by `RETRACTIONS.md` R377: "the handler contains
+/// no synthesis path for any slot". A monster descriptor that
 /// control moved to group 0 is dispatched to the prompt like a party member,
 /// and nothing is resolved for it until the player presses a key.
 ///
@@ -13680,8 +13803,9 @@ fn the_active_player_sentinel_skips_every_other_group_zero_slot() {
     assert_eq!(state.combat_actors[9].hp_or_wound, 10);
 }
 
-/// `combat.md` §8.2, R378: "on the prompted path the same distance-one number
-/// is the **targeting cursor's range clamp** - the cursor silently refuses to
+/// `RETRACTIONS.md` R378: a monster-side slot carrying the controlled bit
+/// "attacks through the prompted path, where the same distance-one number is
+/// the **targeting cursor's range clamp** - the cursor silently refuses to
 /// move out of range, so a too-far target cannot be selected and no turn is
 /// wasted on one." A distant foe therefore changes nothing about the dispatch.
 #[test]

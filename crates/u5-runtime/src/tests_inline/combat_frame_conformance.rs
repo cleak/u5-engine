@@ -318,16 +318,18 @@
         );
     }
 
-    /// `combat.md §6.1a` "Readers - the attack driver - **party-side slots
-    /// only**": the fixed magic strike, with its "the chosen target must be at
-    /// straight-line distance exactly one" requirement and its
-    /// no-action-at-all refusal, "lives inside the automatic driver's attack
-    /// path and is reached from nowhere else, so only slots the round walker
-    /// sends to that driver can take it - party-side descriptors carrying the
-    /// bit". "A **monster-side** slot carrying the bit goes to the
-    /// player-command handler and never enters the branch: it attacks through
-    /// the prompted path, where the same distance-one number is the
-    /// **targeting cursor's range clamp**." (`RETRACTIONS.md` R378.)
+    /// `combat.md §6.1a`, the first of the three direct readers - "**The
+    /// attack driver — party-side slots only.**" The fixed magic strike, with
+    /// its "the chosen target must be at straight-line distance exactly one"
+    /// requirement and its "**no action at all**" refusal, "lives inside the
+    /// automatic driver's attack path and is reached from nowhere else, so
+    /// only the slots the round walker sends to that driver can take it:
+    /// party-side descriptors carrying the bit". "A **monster-side** slot
+    /// carrying the bit is dispatched to the player-command handler instead
+    /// and never enters this branch at all: it attacks through the prompted
+    /// path of Sections 8.1, 8.2 and 11.1, where the same distance-one number
+    /// appears as a **cursor clamp rather than a refusal**."
+    /// (`RETRACTIONS.md` R378.)
     ///
     /// *(These three tests previously pinned the withdrawn universal form on a
     /// controlled **monster**: `controlled_actor_with_a_non_adjacent_target_takes_no_action`,

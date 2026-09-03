@@ -3398,7 +3398,6 @@ fn validate_visual_combat_actor_link(
 
 fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
     seed_visual_combat_gallery_party(state);
-    state.active_player = Some(0);
 
     let mut terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
     terrain[6][6] = COMBAT_GARGOYLE_DEATH_TERRAIN_TILE;
@@ -3420,6 +3419,10 @@ fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
     active_objects[9] = visual_route_combat_active_object(COMBAT_FIELD_KIND_ENERGY, 8, 4, 0);
 
     state.enter_combat_frame_with_terrain(active_objects, actors, terrain)?;
+    // `combat.md §16.1`: the active-player sentinel is unset on combat entry,
+    // so a fixture that wants a selected character has to set it afterwards,
+    // as pressing `1`-`6` would.
+    state.active_player = Some(0);
     state.combat_cursor_blink = true;
     state.combat_aim_marker_cell = Some((3, 4));
     state.combat_aim_marker_gate = true;
@@ -7624,7 +7627,6 @@ fn seed_visual_route_directed_wind_combat(
         caster.mana = cost;
         caster.level = cost;
     }
-    state.active_player = Some(0);
     state.spell_charges[spell_index] = 1;
 
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
@@ -7699,6 +7701,10 @@ fn seed_visual_route_directed_wind_combat(
     state
         .enter_combat_frame(active_objects, actors)
         .expect("visual route directed wind combat frame should seed");
+    // `combat.md §16.1`: the active-player sentinel is unset on combat entry,
+    // so a fixture that wants a selected character has to set it afterwards,
+    // as pressing `1`-`6` would.
+    state.active_player = Some(0);
 }
 
 fn visual_directed_route_coordinate(direction: Direction, distance: i16) -> (u8, u8) {
@@ -7889,7 +7895,6 @@ fn seed_visual_route_combat_field(state: &mut PlayState, spell_index: usize, cos
         caster.mana = cost;
         caster.level = cost;
     }
-    state.active_player = Some(0);
     state.spell_charges[spell_index] = 1;
 
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
@@ -7901,6 +7906,10 @@ fn seed_visual_route_combat_field(state: &mut PlayState, spell_index: usize, cos
     state
         .enter_combat_frame(active_objects, actors)
         .expect("visual route combat field frame should seed");
+    // `combat.md §16.1`: the active-player sentinel is unset on combat entry,
+    // so a fixture that wants a selected character has to set it afterwards,
+    // as pressing `1`-`6` would.
+    state.active_player = Some(0);
 }
 
 fn seed_visual_route_combat_fire_field(state: &mut PlayState) {
@@ -7939,7 +7948,6 @@ fn seed_visual_route_combat_dispel_route(state: &mut PlayState, place_field: boo
         caster.mana = DISPEL_FIELD_COST;
         caster.level = DISPEL_FIELD_COST;
     }
-    state.active_player = Some(0);
     state.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 1;
 
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
@@ -7954,6 +7962,10 @@ fn seed_visual_route_combat_dispel_route(state: &mut PlayState, place_field: boo
     state
         .enter_combat_frame(active_objects, actors)
         .expect("visual route combat field dispel frame should seed");
+    // `combat.md §16.1`: the active-player sentinel is unset on combat entry,
+    // so a fixture that wants a selected character has to set it afterwards,
+    // as pressing `1`-`6` would.
+    state.active_player = Some(0);
 }
 
 fn seed_visual_route_combat_utility_tile(
@@ -7973,7 +7985,6 @@ fn seed_visual_route_combat_utility_tile(
         caster.mana = cost;
         caster.level = cost;
     }
-    state.active_player = Some(0);
     state.spell_charges[spell_index] = 1;
 
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
@@ -7986,6 +7997,10 @@ fn seed_visual_route_combat_utility_tile(
     state
         .enter_combat_frame(active_objects, actors)
         .expect("visual route combat utility frame should seed");
+    // `combat.md §16.1`: the active-player sentinel is unset on combat entry,
+    // so a fixture that wants a selected character has to set it afterwards,
+    // as pressing `1`-`6` would.
+    state.active_player = Some(0);
     state.combat_terrain[5][6] = source_tile;
 }
 
@@ -8088,7 +8103,6 @@ fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
         caster.mana = cost;
         caster.level = cost;
     }
-    state.active_player = Some(0);
     state.spell_charges[spell_index] = 1;
     let mut combat_terrain = if matches!(code, "IQX" | "KX" | "BIX" | "CKX") {
         [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
@@ -8155,6 +8169,10 @@ fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
     state
         .enter_combat_frame_with_terrain(active_objects, actors, combat_terrain)
         .expect("visual route combat spell frame should seed");
+    // `combat.md §16.1`: the active-player sentinel is unset on combat entry,
+    // so a fixture that wants a selected character has to set it afterwards,
+    // as pressing `1`-`6` would.
+    state.active_player = Some(0);
 }
 
 fn seed_visual_route_combat_special_death(state: &mut PlayState, class: u8) {
@@ -8172,7 +8190,6 @@ fn seed_visual_route_combat_special_death(state: &mut PlayState, class: u8) {
         caster.mana = cost;
         caster.level = cost;
     }
-    state.active_player = Some(0);
     state.spell_charges[spell_index] = 1;
 
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
@@ -8205,6 +8222,10 @@ fn seed_visual_route_combat_special_death(state: &mut PlayState, class: u8) {
             [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
         )
         .expect("visual route combat special death frame should seed");
+    // `combat.md §16.1`: the active-player sentinel is unset on combat entry,
+    // so a fixture that wants a selected character has to set it afterwards,
+    // as pressing `1`-`6` would.
+    state.active_player = Some(0);
 }
 
 fn seed_visual_route_combat_monster(

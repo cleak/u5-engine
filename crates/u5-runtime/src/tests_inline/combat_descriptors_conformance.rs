@@ -1405,10 +1405,20 @@
             "Summon's Daemon is a non-melee-reach class"
         );
 
+        // §8.2: "On the monster side, a class reach of exactly 1 is normalised
+        // to zero, so it takes the fixed-range-one melee path rather than a
+        // one-cell ranged cursor." §11's dispatcher table publishes the same
+        // row as selector `1` "folded to zero, selecting the **melee /
+        // Aim-cursor arm**".
         let melee = CombatAttackAttempt::for_monster_class(1);
         assert!(melee.melee_arm && !melee.class_effect_arm && melee.max_range == 1);
-        // "On the monster side, a class reach of exactly 1 is normalised to
-        // zero, so it takes the fixed-range-one melee path".
+        // Selector `0` is an **engine fallback, not a published row**: §11's
+        // table publishes only "Selector `1` (most classes)" and "A selector
+        // above `1`", and the sentence above pins selector 1. §11 does say
+        // both side tables are "dense forty-eight-entry arrays with a defined
+        // byte for every class", so no class reaches this arm without a
+        // selector; folding 0 in with 1 keeps it off the cast/effect arm,
+        // which is the conservative choice.
         assert_eq!(CombatAttackAttempt::for_monster_class(0), melee);
         let effect = CombatAttackAttempt::for_monster_class(9);
         assert!(effect.class_effect_arm && !effect.melee_arm);
@@ -1460,10 +1470,10 @@
         assert!(monster.message.contains(PARTY_SELECTION_PROMPT));
     }
 
-    /// `combat.md` §3: "Only a party-side actor participates in direction sharing
-    /// ... **Monster-side actors neither seed nor test it.**" §8's direction
-    /// bullet says the same: "a monster acting under player control neither
-    /// seeds nor tests the shared direction and simply leaves".
+    /// `combat.md` §3: "Only a party-side actor participates in direction
+    /// sharing ... Monster-side actors neither seed nor test it." §8's
+    /// direction bullet says the same: "a monster acting under player control
+    /// neither seeds nor tests the shared direction and simply leaves".
     #[test]
     fn the_arena_exit_skips_the_same_exit_constraint_for_a_monster_side_actor() {
         // A party-side actor in a constrained encounter is refused.
@@ -1548,10 +1558,11 @@
     /// does not move: no message, no beep, no turn consumed, and the loop reads
     /// another key."
     ///
-    /// `RETRACTIONS.md` R378 calls this "the row to grep an implementation
-    /// for, because building the automatic rule into the prompted path
-    /// produces exactly the refuse-the-keystroke-and-strike-once behaviour
-    /// §16.1 invited". Same distance-one number, opposite mechanism.
+    /// `RETRACTIONS.md` R378: "This is the row to grep for: an engine that
+    /// applied the withdrawn universal form to a controlled monster refuses
+    /// that monster's keystroke and gives it one distance-gated automatic
+    /// strike, which is exactly the behaviour R377 also withdraws." Same
+    /// distance-one number, opposite mechanism.
     #[test]
     fn the_prompted_paths_distance_one_number_is_a_cursor_clamp_not_a_refusal() {
         let mut state = combat_player_command_state(8, 5);

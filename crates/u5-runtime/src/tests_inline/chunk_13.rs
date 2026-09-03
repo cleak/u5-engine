@@ -20764,7 +20764,7 @@ fn summoned_creatures_reach_the_command_handler_but_are_never_prompted() {
     // summoned/charmed monster is prompted like a party member.
     //
     // *(The withdrawn assertions - that the prompt was narrower than the
-    // dispatch path "by exactly the summoned/charmed monster" - implemented
+    // dispatch path by exactly the summoned/charmed monster - implemented
     // §16.1's "still synthesizes an automatic action" clause;
     // `RETRACTIONS.md` R377 and R378 withdraw it.)*
     assert!(combat_slot_prompted_by_player_command_handler(None, 0, party));

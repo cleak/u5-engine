@@ -132,6 +132,14 @@ impl CombatAttackAttempt {
     /// "a class reach of exactly 1 is normalised to zero, so it takes the
     /// fixed-range-one melee path rather than a one-cell ranged cursor". A
     /// selector above `1` takes the cast/effect arm.
+    ///
+    /// Selector `0` is **not a published row** - `§11`'s table has only
+    /// "Selector `1` (most classes)" and "A selector above `1`" - but `§11`
+    /// does say both side tables are "dense forty-eight-entry arrays with a
+    /// defined byte for every class", so no class arrives here without one.
+    /// Folding `0` in with `1` is this engine's conservative fallback, chosen
+    /// because the published fold runs toward zero and toward the melee arm;
+    /// it is not spec-derived.
     pub const fn for_monster_class(reach_selector: u8) -> Self {
         let melee_arm = reach_selector <= 1;
         Self {

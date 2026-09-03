@@ -202,10 +202,10 @@ pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
 /// combat command handler: it is what the melee cursor's seed gate rejects
 /// alongside the marked-dead bit (Section 8.2)."
 ///
-/// `RETRACTIONS.md` R380 moved invisibility here from bit `0x04`. `§6.1`
-/// also records the residue: "Prose elsewhere in this document that
-/// separates a 'phased/blinked' state from a 'hidden/not-yet-revealed' one
-/// - the possession-eligibility list in Section 9 among it - predates this
+/// `RETRACTIONS.md` R380 moved invisibility here from bit `0x04`. The same
+/// `§6.1` row records the residue: prose elsewhere in that document which
+/// separates a phased/blinked state from a hidden/not-yet-revealed one - the
+/// possession-eligibility list in Section 9 among it - "predates this
 /// correction and has not been re-derived against the bit layout", so `§9`'s
 /// two-test target picker keeps both terms here.
 pub const COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER: u8 = 0x10;
@@ -1663,8 +1663,8 @@ pub fn resolve_combat_step_or_attack_primitive(
 /// party-side actor participates in direction sharing. The first such actor
 /// attempting an edge stores the cardinal direction if the shared byte is
 /// zero. In an encounter whose mode has the high bit set, a later party actor
-/// choosing a different direction is refused ... **Monster-side actors
-/// neither seed nor test it.**" `§8`'s direction bullet and `K` row point at
+/// choosing a different direction is refused ... Monster-side actors neither
+/// seed nor test it." `§8`'s direction bullet and `K` row point at
 /// the same rule: "a monster acting under player control is never refused
 /// with `All must use the same exit!`".
 pub const fn resolve_combat_out_of_arena_leave(
@@ -1703,8 +1703,8 @@ pub const fn resolve_combat_out_of_arena_leave(
     };
     // The shared direction byte is seeded by the first accepted party-side
     // edge even in an ordinary encounter. Only high-bit/constrained encounters
-    // reject a later different direction, and a monster-side actor "neither
-    // seeds nor tests it", so it leaves the byte exactly as it found it.
+    // reject a later different direction. `§3`: "Monster-side actors neither
+    // seed nor test it." Such an actor leaves the byte as it found it.
     let established_direction_code = if actor_is_party_side {
         Some(match established_exit_direction_code {
             Some(required_direction_code) => required_direction_code,
@@ -2281,11 +2281,15 @@ pub fn clear_combat_linked_invisibility(
     set_combat_linked_visibility(actor, active_objects, false)
 }
 
-/// `combat.md §6.1`: the blink/phase ability toggles descriptor bit
-/// `0x10`, the phase/blink filter - **not** bit `0x04`, which `§9` keeps
-/// for "ordinary invisibility" and which no suppression bypass reaches.
-/// The linked presentation byte follows the same hide/show rule either
-/// way.
+/// `combat.md §6.1`: the blink/phase ability toggles descriptor bit `0x10`,
+/// "**Invisible / phase-hidden.** The phase/blink filter (bypassed on scene
+/// `'('` `0x28` and on monster type `'/'` `0x2F`)". Since `RETRACTIONS.md`
+/// R380 that is also the invisibility bit, so this writer and the
+/// invisibility writers above share it; `§6.1` records that `§9`'s prose
+/// separating a "phased/blinked" state from a "hidden/not-yet-revealed" one
+/// "predates this correction and has not been re-derived against the bit
+/// layout". The linked presentation byte follows the same hide/show rule
+/// either way.
 pub fn set_combat_linked_phase(
     actor: &mut CombatActorDescriptor,
     active_objects: &mut [ActiveObject],
@@ -3011,10 +3015,27 @@ pub fn resolve_combat_yell_command(word: Option<&str>) -> CombatYellCommandOutco
     }
 }
 
+/// `magic.md` §7 condition 3, the combat-only Cast interference gate's
+/// current-state test: "The source is visible/revealed and awake; a hidden,
+/// not-yet-revealed, asleep, or disabled source does not interfere."
+/// `combat.md` §10 restates the same predicate as "occupied, hostile,
+/// visible/revealed, awake, and in one of the eight adjacent cells".
+///
+/// The visibility half is the invisibility bit, which `RETRACTIONS.md` R380
+/// moved to `0x10`, the phase/blink filter; the awake half is the
+/// asleep/magically-disabled bit `0x08`, already carried by
+/// [`combat_actor_is_active_not_dead`]. This is the same published clause the
+/// §8.2 missile-interference gate reads
+/// ([`crate::combat_targeting::combat_attack_interference_aborts`]), so the
+/// two must test the same bits.
+///
+/// *(**Corrected.** This test read `!target.is_dragged_under()` - bit `0x04` -
+/// after the R380 rename, which inverted it on both counts: an invisible
+/// adjacent hostile blocked a Cast and a dragged-under one did not.)*
 pub const fn combat_cast_interference_target_is_live_visible(
     target: CombatActorDescriptor,
 ) -> bool {
-    combat_actor_is_active_not_dead(target) && !target.is_dragged_under()
+    combat_actor_is_active_not_dead(target) && !target.is_phase_suppressed()
 }
 
 pub fn resolve_combat_cast_interference(

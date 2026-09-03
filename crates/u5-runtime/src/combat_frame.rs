@@ -1482,7 +1482,14 @@ impl PlayState {
         let woke = roll == COMBAT_SLEEP_WAKE_SUCCESS_ROLL;
         if woke {
             actor.clear_status_disabled();
-            let hidden = actor.is_dragged_under();
+            // `catalogs/item-list.md` "Orange combat sleep presentation":
+            // wake "selects the retained base/type tile as the display tile,
+            // except that an actor still under the combat invisibility state
+            // uses tile `0x1D`". `combat.md §6.1` puts invisibility on bit
+            // `0x10`, the phase/blink filter - bit `0x04` is the dragged-under
+            // state and "no traced path tests `0x04` for it"
+            // (`RETRACTIONS.md` R380), so this branch reads the phase bit.
+            let hidden = actor.is_phase_suppressed();
             let active_object_slot = usize::from(actor.active_object_slot);
             // `combat.md §5`: the sleeping character is named by the
             // descriptor's owner/target/class byte, not by the
@@ -1576,8 +1583,9 @@ impl PlayState {
     /// A free re-prompt takes one of two shapes (`§8.1`,
     /// [`combat_player_command_action_reprompt_shape`]): the short one
     /// reinstates `pending_combat_actor_slot` directly without calling this
-    /// helper, while the banner-reprinting one calls it again so "the whole
-    /// banner [is] reprinted from its leading newline".
+    /// helper, while the banner-reprinting one calls it again, which is the
+    /// shape `§8.1` describes as "the whole banner reprinted from its leading
+    /// newline".
     ///
     /// *(**Corrected.** The withdrawn text said a free re-prompt "uses the
     /// short form and does **not** reprint the banner" without qualification;
@@ -3348,8 +3356,9 @@ impl PlayState {
         let actor = self.combat_actors[actor_slot];
         let step_vector = combat_ai_step_vector(actor.x, actor.y, target_x, target_y, fleeing);
         let target_range = target_slot.map(|slot| actor.range_to(self.combat_actors[slot]));
-        // `combat.md §6.1a` "Readers — the attack driver — **party-side
-        // slots only**": a **party-side** actor carrying bit `0x01` resolves
+        // `combat.md §6.1a`, the first direct reader of bit `0x01` - "**The
+        // attack driver — party-side slots only.**" A **party-side** actor
+        // carrying bit `0x01` resolves
         // its attack as a fixed magic strike. The driver still picks a target
         // the normal way and then adds one requirement the ordinary path has
         // no counterpart for — the chosen target must be at straight-line
@@ -3955,6 +3964,14 @@ impl PlayState {
             established_exit_direction_code: None,
         };
         self.active_objects = active_objects;
+        // `combat.md §16.1`: the player-command handler's "one gate is the
+        // active-player sentinel: while the sentinel is unset - **its state on
+        // combat entry**, and the state it returns to whenever `0` is pressed -
+        // every group-0 slot is prompted". The world-side sentinel is
+        // save-backed, so entering combat with a character still selected would
+        // otherwise skip every other group-0 slot for the whole fight. The
+        // pre-combat value is in the snapshot above and comes back at exit.
+        self.active_player = None;
         self.combat_actors = actors;
         self.combat_terrain = terrain;
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
@@ -5790,7 +5807,8 @@ impl PlayState {
             CombatMonsterAttackDraws::SharedPrng => (self.combat_monster_hit_roll(), None),
         };
 
-        // `combat.md §6.1a` "Readers — the attack driver": a controlled actor's
+        // `combat.md §6.1a`, "**The attack driver — party-side slots only.**"
+        // A controlled party-side actor's
         // attack is a fixed magic strike resolved by the shared
         // attack-application primitive. It requires straight-line distance
         // exactly one, and the pre-attack animation, the attacker back-link
@@ -8247,11 +8265,11 @@ impl PlayState {
     /// lookup does not filter by side**, so confirming on a party member's
     /// cell attacks that party member."
     ///
-    /// *(**Corrected.** The rejection list "previously read 'dead-marked,
-    /// **invisible**, or an empty/decoration slot', and this lookup tests
-    /// **no invisibility flag at all** - what it rejects in that flag's place
-    /// is the dragged-under bit and the linked record's hidden-frame marker."
-    /// `RETRACTIONS.md` R380.)*
+    /// *(**Corrected.** The rejection list previously read "dead-marked,
+    /// **invisible**, or an empty/decoration slot"; §8.2 now says "this lookup
+    /// tests **no invisibility flag at all** - what it rejects in that flag's
+    /// place is the dragged-under bit and the linked record's hidden-frame
+    /// marker". `RETRACTIONS.md` R380.)*
     ///
     /// That exclusion list is exhaustive, and the asleep/magically-disabled
     /// bit (`§6.1` bit `0x08`) is not on it, so this uses the no-status-term

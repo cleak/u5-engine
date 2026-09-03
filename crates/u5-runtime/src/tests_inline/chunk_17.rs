@@ -2750,7 +2750,12 @@ Mixed 1 IL charge; stock is 1.");
 
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY], 1);
-        assert!(!state.combat_actors[0].is_dragged_under());
+        // `catalogs/item-list.md`: the ring "marks that combatant
+        // hidden/suppressed"; unreadying clears that mark. The mark is bit
+        // `0x10` (`RETRACTIONS.md` R380), so this is the bit to read back -
+        // `is_dragged_under()` (`0x04`) has no writer on any invisibility path
+        // and could not fail here.
+        assert!(!state.combat_actors[0].is_phase_suppressed());
         assert_eq!(state.active_objects[0].tile, 0x5c);
         assert!(state.visibility_dirty);
         assert_eq!(
