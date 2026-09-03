@@ -39,6 +39,111 @@
         assert_eq!(unprompted.turn, 0);
     }
 
+    /// `input.md` Section 8: a free-text prompt's Enter "terminates the
+    /// prompt, returning the accumulated string" to the caller that asked for
+    /// it. A typed line is an answer, never a command, so a conversation
+    /// keyword that happens to begin with a lowercase `q` must be consumed by
+    /// the conversation rather than by the harness-quit arm further down this
+    /// dispatcher. `commands.md` Section 9 puts the published program exit
+    /// behind Control + `E`'s "Exit to DOS?" confirmation, so no typed line
+    /// may end the session, and never silently.
+    ///
+    /// The guarantee is an ordering one: every session the shell treats as a
+    /// typed-line prompt returns from `handle_play_key_input_inner` before the
+    /// `key == 'q'` arm is reached. This pins that ordering for the keyword
+    /// prompt; moving the quit arm above it would turn a typed `quest` into an
+    /// unsaved exit.
+    #[test]
+    fn typed_conversation_keyword_starting_with_q_never_quits() {
+        let enc = |text: &str| text.bytes().map(|byte| byte ^ 0x80).collect::<Vec<u8>>();
+
+        for (key, suffix) in [('q', ""), ('q', "uest")] {
+            let raw = vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+            ];
+            let decoded = vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+            ];
+            let mut state = world_state(open_world_grid(), 4, 5);
+            state.active_conversation_npc_slot = Some(1);
+            state.active_conversation = Some(Box::new(
+                crate::conversation_session::ConversationSession::new(raw, decoded),
+            ));
+
+            let disposition =
+                handle_play_key_input(&mut state, key, suffix, Path::new("")).unwrap();
+
+            assert_eq!(
+                disposition,
+                PlayInputDisposition::Continue,
+                "typed keyword `{key}{suffix}` must be answered, not dispatched"
+            );
+            assert_eq!(state.turn, 0);
+            assert_eq!((state.player.x, state.player.y), (4, 5));
+        }
+    }
+
+    /// The companion to the keyword case above, across the rest of the
+    /// typed-line set. `input.md` Section 8 names the prompts that read a whole
+    /// line - "NPC conversations accept a four- to six-character keyword;
+    /// character creation accepts a name; save filenames are typed in full;
+    /// hours-to-rest is a small unsigned number" - and every one of them
+    /// returns its accumulated string to its own caller. So each session must
+    /// consume a leading lowercase `q` itself, before the dispatcher's
+    /// harness-quit arm is reached. Any reordering that let one of these fall
+    /// through would make a typed word end the session with no save.
+    #[test]
+    fn every_typed_line_prompt_consumes_a_leading_q_before_the_quit_arm() {
+        let yell = |state: &mut PlayState| {
+            state.active_yell = Some(crate::z_stats::YellSession {
+                buffer: String::new(),
+            });
+        };
+        let shrine = |state: &mut PlayState| {
+            state.active_shrine = Some(crate::z_stats::ShrineSession {
+                virtue: crate::shrine_virtue::ShrineVirtue::Honesty,
+                phase: crate::z_stats::ShrinePhase::Mantra,
+                mantra_buffer: String::new(),
+            });
+        };
+        let wishing_well = |state: &mut PlayState| {
+            state.active_wishing_well = Some(crate::z_stats::WishingWellSession {
+                direction: Direction::North,
+                coin_accepted: true,
+            });
+        };
+
+        let cases: [(&str, &dyn Fn(&mut PlayState)); 3] = [
+            ("yell word", &yell),
+            ("shrine mantra", &shrine),
+            ("wishing well wish", &wishing_well),
+        ];
+
+        for (label, install) in cases {
+            for (key, suffix) in [('q', ""), ('q', "uest")] {
+                let mut state = world_state(open_world_grid(), 4, 5);
+                install(&mut state);
+
+                let disposition =
+                    handle_play_key_input(&mut state, key, suffix, Path::new("")).unwrap();
+
+                assert_ne!(
+                    disposition,
+                    PlayInputDisposition::Quit,
+                    "{label} must consume the typed `{key}{suffix}` itself"
+                );
+            }
+        }
+    }
+
     #[test]
     fn pending_prompt_suppresses_idle_visual_tick() {
         let mut prompted = world_state(open_world_grid(), 4, 5);

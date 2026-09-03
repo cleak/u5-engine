@@ -23795,6 +23795,66 @@ mod tests {
         assert!(state.active_conversation.is_some());
     }
 
+    /// `input.md` Section 8: Enter at a free-text prompt "terminates the
+    /// prompt, returning the accumulated string" to the caller that asked for
+    /// it. The typed line is an answer, not a command, so a keyword that
+    /// begins with a lowercase `q` must reach the conversation and never the
+    /// dispatcher's harness-quit arm — `drive_visual` turns that arm into
+    /// `AppExit`, which would end the session with no prompt and no save.
+    /// `commands.md` Section 9 puts the published program exit behind
+    /// Control + `E`'s "Exit to DOS?" confirmation instead.
+    #[test]
+    fn visual_line_input_submit_never_quits_on_a_typed_q_keyword() {
+        fn letter_key(letter: char) -> KeyCode {
+            match letter {
+                'e' => KeyCode::KeyE,
+                'q' => KeyCode::KeyQ,
+                's' => KeyCode::KeyS,
+                't' => KeyCode::KeyT,
+                'u' => KeyCode::KeyU,
+                other => panic!("unmapped test letter {other}"),
+            }
+        }
+
+        for word in ["q", "quest"] {
+            let mut state = test_state(open_grid(), 1, 1);
+            install_test_conversation(&mut state);
+            let mut input_line = String::new();
+
+            for letter in word.chars() {
+                let typed = handle_visual_line_key(
+                    &mut state,
+                    &mut input_line,
+                    letter_key(letter),
+                    false,
+                    false,
+                    Path::new(""),
+                )
+                .unwrap();
+                assert_eq!(typed, Some(PlayInputDisposition::Continue));
+            }
+            assert_eq!(input_line, word);
+
+            let submitted = handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                KeyCode::Enter,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
+
+            assert_ne!(
+                submitted,
+                Some(PlayInputDisposition::Quit),
+                "the typed keyword `{word}` must not end the session"
+            );
+            assert_eq!(submitted, Some(PlayInputDisposition::Continue));
+            assert!(input_line.is_empty());
+        }
+    }
+
     #[test]
     fn visual_line_input_buffers_shop_quantity_until_enter() {
         let mut state = test_state(open_grid(), 1, 1);
