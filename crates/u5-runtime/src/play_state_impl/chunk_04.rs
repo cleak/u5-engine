@@ -1732,7 +1732,7 @@ impl PlayState {
             return false;
         }
         actor.clear_status_disabled();
-        let hidden = actor.is_hidden_or_unrevealed();
+        let hidden = actor.is_dragged_under();
         let active_object_slot = usize::from(actor.active_object_slot);
         if let Some(object) = self.active_objects.get_mut(active_object_slot) {
             object.tile = if hidden {

@@ -138,7 +138,7 @@
             COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER
         );
         assert!(actor.is_phase_suppressed());
-        assert!(!actor.is_hidden_or_unrevealed());
+        assert!(!actor.is_dragged_under());
     }
 
     #[test]
@@ -150,7 +150,7 @@
         // fed `0x04` into the bypassable test, so a Doom-scene monster
         // happily targeted an invisible party member.
         let mut state = combat_ai_turn_state(8, 5);
-        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
         // A second, plainly visible party member so the assertion below
         // pins that the picker *chose the visible candidate*, not merely
         // that it failed to choose anybody.
@@ -981,29 +981,38 @@
         state
     }
 
+    /// The turn is **prompted**, not synthesized (`§16.1`, `RETRACTIONS.md`
+    /// R377), so the transcript is produced by accepting `A` and confirming
+    /// the cursor on the adjacent foe - `§8.2`'s single monster-side attempt
+    /// with its fixed pseudo-item, which "sends the dispatcher to the
+    /// monster-side reach and effect rows of that actor's class".
     fn walk_controlled_monster_slot(
         state: &mut PlayState,
         inputs: CombatMonsterAttackInputs,
     ) -> String {
-        let walk = state.apply_combat_round_walk_from_slot_with_inputs(
-            8,
-            30,
-            false,
-            0,
-            false,
-            1,
-            1,
-            &[(7, 5)],
-            None,
-            0,
-            false,
-            None,
-            true,
-            &[],
-            &[(8, inputs)],
-        );
-        crate::input_dispatch::append_combat_round_walk_messages(state, &walk);
-        state.message.clone()
+        let mut message = String::new();
+        let walk = state.begin_combat_attack_walk(8, true);
+        message.push_str(&walk.text);
+        assert!(walk.cursor_open, "a melee-reach class opens the cursor");
+        // One cursor step east, from the attacker's own cell onto the foe.
+        // `§8.2`: the loop reads internal direction codes, "never by the
+        // characters `1`-`4` reaching the loop unremapped".
+        state.apply_combat_targeting_cursor_key(char::from(INPUT_CODE_EAST));
+        let walk = state
+            .apply_combat_targeting_cursor_key_with_monster_inputs('A', inputs)
+            .expect("the confirm closes the attempt");
+        message.push_str(&walk.text);
+        if let Some((_, attack)) = walk.monster_attack
+            && let Some(line) = crate::input_dispatch::combat_monster_attack_narrated_result_message(
+                state,
+                attack,
+                crate::input_dispatch::CombatMonsterAttackNarration::Controlled,
+            )
+        {
+            message.push('\n');
+            message.push_str(&line);
+        }
+        message
     }
 
     #[test]
@@ -1027,15 +1036,27 @@
             "message was {message:?}"
         );
 
-        // The same slot without the controlled bit is an ordinary hostile,
-        // and §11.1 gives its melee miss "nothing at all" - "no newline, no
-        // name, no line, no tone".
+        // The same slot without the controlled bit is an ordinary hostile. It
+        // never reaches the prompt at all - `§6.1a`'s slot-to-group helper
+        // sends it to the automatic driver - and `§11.1` gives its melee miss
+        // "nothing at all": "no newline, no name, no line, no tone".
         let mut hostile = controlled_monster_miss_state();
         hostile.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_CONTROLLED;
-        let hostile_message = walk_controlled_monster_slot(&mut hostile, missed);
-        assert!(
-            !hostile_message.contains("missed!"),
-            "message was {hostile_message:?}"
+        assert!(!combat_slot_prompted_by_player_command_handler(
+            None,
+            8,
+            hostile.combat_actors[8]
+        ));
+        let hostile_attack = hostile
+            .resolve_and_apply_combat_monster_attack(8, 9, 0, false, 0, Some(false))
+            .expect("the hostile still swings on its own driver turn");
+        assert_eq!(
+            crate::input_dispatch::combat_monster_attack_narrated_result_message(
+                &hostile,
+                hostile_attack,
+                crate::input_dispatch::CombatMonsterAttackNarration::SelfActingHostile,
+            ),
+            None
         );
     }
 
@@ -1074,5 +1095,490 @@
             message.contains(&format!("{} {expected}!", stats.name)),
             "remaining {remaining} of {}; message was {message:?}",
             stats.max_hp
+        );
+    }
+
+    // ---------------------------------------------------------------- SPEC-9057C0D
+    // `systems/combat.md` 3 / 6.1 / 6.1a / 6.3 / 8 / 8.1 / 8.2 / 11 / 11.1 /
+    // 16.1 at spec commit 9057c0d, and `RETRACTIONS.md` R377-R382.
+
+    fn spec_9057c0d_transcript(state: &PlayState) -> String {
+        state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect::<String>()
+    }
+
+    /// `combat.md` §8.1: "Only two things precede the banner: the active-player
+    /// gate and the Sword-of-Chaos gate. The turn's two status early-outs -
+    /// the dragged-under (Corpser-held) arm that prints `ARGH!` and the asleep
+    /// arm that prints `Zzzzz...` - come **after** it, so a dragged-under or
+    /// sleeping combatant does get its full banner and then that line in place
+    /// of a command." (`RETRACTIONS.md` R380.)
+    #[test]
+    fn the_status_early_outs_follow_the_turn_banner() {
+        for (flag, line) in [
+            (COMBAT_ACTOR_FLAG_DRAGGED_UNDER, COMBAT_DRAGGED_UNDER_TURN_LINE),
+            (COMBAT_ACTOR_FLAG_STATUS_DISABLED, COMBAT_ASLEEP_TURN_LINE),
+        ] {
+            let mut state = combat_player_command_state(8, 5);
+            state.combat_actors[0].flags |= flag;
+            state.combat_actors[0].phase_counter = 1;
+            state.message_transcript.clear();
+
+            let application = state.apply_combat_actor_slot_dispatch(0, 30);
+
+            let CombatActorSlotDispatchApplication::Slot { action, .. } = application else {
+                panic!("the party slot should dispatch");
+            };
+            assert!(!matches!(action, CombatActorDispatchAction::PlayerReady));
+            let printed = spec_9057c0d_transcript(&state);
+            let banner = state
+                .combat_turn_banner_for_actor(0)
+                .expect("a prompted slot gets its banner");
+            let banner_line = banner.trim_matches('\n');
+            let banner_at = printed
+                .find(banner_line)
+                .unwrap_or_else(|| panic!("banner missing from {printed:?}"));
+            let line_at = printed
+                .find(line)
+                .unwrap_or_else(|| panic!("{line} missing from {printed:?}"));
+            assert!(
+                banner_at < line_at,
+                "the banner must precede {line}, got {printed:?}"
+            );
+        }
+    }
+
+    /// `combat.md` §8.1: the two re-prompt shapes. "Short re-prompt, banner not
+    /// reprinted: an unrecognised key (`What?`), the two toggles Ctrl-S and
+    /// Ctrl-B, and a refused step or refused climb." "Full re-prompt, the whole
+    /// banner reprinted from its leading newline: every shape-B ... letter, `D`
+    /// and `W`, every `Can't!` refusal ..., a failed `1`-`6` selection, and a
+    /// declined Escape." (`RETRACTIONS.md` R380.)
+    #[test]
+    fn the_two_reprompt_shapes_are_classified_as_published() {
+        use CombatCommandRepromptShape::{FullBanner, Short};
+
+        let refused_gate = CombatPlayerCommandAction::Branch {
+            branch: CombatCommandBranch::Get,
+            party_side_gate: CombatCommandPartySideGate::RefusedMonsterSide,
+        };
+        let full = [
+            refused_gate,
+            CombatPlayerCommandAction::Branch {
+                branch: CombatCommandBranch::CastSpell,
+                party_side_gate: CombatCommandPartySideGate::RefusedMonsterSide,
+            },
+            CombatPlayerCommandAction::Branch {
+                branch: CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Quit),
+                party_side_gate: CombatCommandPartySideGate::NotRequired,
+            },
+            CombatPlayerCommandAction::Branch {
+                branch: CombatCommandBranch::DWhatRefusal,
+                party_side_gate: CombatCommandPartySideGate::NotRequired,
+            },
+            CombatPlayerCommandAction::Branch {
+                branch: CombatCommandBranch::WWhatRefusal,
+                party_side_gate: CombatCommandPartySideGate::NotRequired,
+            },
+            CombatPlayerCommandAction::ActivePlayerSelection(
+                CombatActivePlayerSelectionOutcome::Invalid,
+            ),
+            CombatPlayerCommandAction::EscapeCleanup {
+                application: CombatEscapeCleanupApplication::refused(
+                    CombatEscapeCleanupDecision::RefusedNotYet,
+                ),
+            },
+        ];
+        for action in full {
+            assert_eq!(
+                combat_player_command_action_reprompt_shape(&action),
+                Some(FullBanner),
+                "{action:?}"
+            );
+        }
+
+        let short = [
+            CombatPlayerCommandAction::Branch {
+                branch: CombatCommandBranch::ToggleMusic,
+                party_side_gate: CombatCommandPartySideGate::NotRequired,
+            },
+            CombatPlayerCommandAction::Branch {
+                branch: CombatCommandBranch::Invalid,
+                party_side_gate: CombatCommandPartySideGate::NotRequired,
+            },
+            CombatPlayerCommandAction::InvalidDirection { direction_code: 5 },
+            CombatPlayerCommandAction::StepOrAttack {
+                direction_code: 1,
+                outcome: CombatStepOrAttackPrimitiveOutcome::BlockedWall,
+            },
+        ];
+        for action in short {
+            assert_eq!(
+                combat_player_command_action_reprompt_shape(&action),
+                Some(Short),
+                "{action:?}"
+            );
+        }
+
+        // "Neither shape spends the turn": a committed action has no shape.
+        assert_eq!(
+            combat_player_command_action_reprompt_shape(
+                &CombatPlayerCommandAction::OpenTargetingCursor
+            ),
+            None
+        );
+    }
+
+    /// `combat.md` §8.2, the melee occupancy lookup: it "rejects, in addition to
+    /// an empty cell: a slot carrying neither the party-side nor the
+    /// monster-side class bit (an empty or decoration record), a dead-marked
+    /// slot, a **dragged-under (Corpser-held)** slot, and a slot whose linked
+    /// presentation record carries the hidden-frame marker". It "tests **no
+    /// invisibility flag at all**" (`RETRACTIONS.md` R380).
+    #[test]
+    fn the_melee_occupancy_lookup_rejects_the_published_list_and_no_invisibility() {
+        let mut state = combat_player_command_state(8, 5);
+        let cell = (state.combat_actors[8].x, state.combat_actors[8].y);
+        assert_eq!(state.combat_targeting_occupant_at(cell), Some(8));
+
+        // Invisibility is not on the list: an invisible occupant is still
+        // returned.
+        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
+        assert_eq!(state.combat_targeting_occupant_at(cell), Some(8));
+        state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
+
+        for flag in [
+            COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
+            COMBAT_ACTOR_FLAG_MARKED_DEAD,
+        ] {
+            state.combat_actors[8].flags |= flag;
+            assert_eq!(state.combat_targeting_occupant_at(cell), None, "flag {flag}");
+            state.combat_actors[8].flags &= !flag;
+        }
+
+        // "a slot carrying neither the party-side nor the monster-side class
+        // bit (an empty or decoration record)".
+        let class_bits = state.combat_actors[8].flags
+            & (COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_SELECTABLE_40);
+        state.combat_actors[8].flags &= !class_bits;
+        assert_eq!(state.combat_targeting_occupant_at(cell), None);
+        state.combat_actors[8].flags |= class_bits;
+        assert_eq!(state.combat_targeting_occupant_at(cell), Some(8));
+
+        // "a slot whose linked presentation record carries the hidden-frame
+        // marker".
+        let linked = usize::from(state.combat_actors[8].active_object_slot);
+        state.active_objects[linked].tile = COMBAT_HIDDEN_ACTIVE_OBJECT_TILE;
+        assert_eq!(state.combat_targeting_occupant_at(cell), None);
+    }
+
+    /// `combat.md` §8.2: "`Nothing!` therefore has three routes on the melee arm,
+    /// not one. Escape; Space while the cursor sits on the attacker's own cell;
+    /// and a **confirm** on a cell that is in range but holds nobody the lookup
+    /// accepts. The third is not a cancellation ... but it reaches the same line
+    /// and ends the turn the same way. Enter and `A` on the attacker's own cell
+    /// are the one input pair that does nothing at all."
+    #[test]
+    fn the_melee_arm_reaches_nothing_by_three_routes_and_holds_on_enter() {
+        // Escape.
+        let mut escaped = combat_player_command_state(8, 5);
+        escaped.begin_combat_attack_walk(0, true);
+        let walk = escaped
+            .apply_combat_targeting_cursor_key('\u{1b}')
+            .expect("the cursor is open");
+        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_LINE));
+        assert!(!walk.cursor_open, "the turn is spent");
+
+        // Space on the attacker's own cell.
+        let mut spaced = combat_player_command_state(8, 5);
+        spaced.begin_combat_attack_walk(0, true);
+        let walk = spaced
+            .apply_combat_targeting_cursor_key(' ')
+            .expect("the cursor is open");
+        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_LINE));
+
+        // A confirm on an in-range cell holding nobody the lookup accepts.
+        let mut confirmed = combat_player_command_state(8, 5);
+        confirmed.begin_combat_attack_walk(0, true);
+        let attacker = confirmed.combat_actor_cell(0).unwrap();
+        confirmed.apply_combat_targeting_cursor_key(char::from(INPUT_CODE_EAST));
+        let cursor = confirmed
+            .active_combat_targeting
+            .as_ref()
+            .map(|session| session.cursor)
+            .unwrap();
+        assert_ne!(cursor, attacker, "the cursor moved one cell in range");
+        assert_eq!(confirmed.combat_targeting_occupant_at(cursor), None);
+        let walk = confirmed
+            .apply_combat_targeting_cursor_key('\r')
+            .expect("the cursor is open");
+        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_LINE));
+        assert!(!walk.cursor_open, "the confirm still spends the turn");
+
+        // "Enter and `A` on the attacker's own cell ... nothing at all".
+        for key in ['\r', 'A', 'a'] {
+            let mut held = combat_player_command_state(8, 5);
+            held.begin_combat_attack_walk(0, true);
+            let walk = held
+                .apply_combat_targeting_cursor_key(key)
+                .expect("the cursor is open");
+            assert!(walk.text.is_empty(), "key {key:?} printed {:?}", walk.text);
+            assert!(walk.cursor_open, "key {key:?} closed the cursor");
+        }
+    }
+
+    /// `combat.md` §8.2's seed gate: "that slot must be neither dead-marked nor
+    /// **blink-hidden**". Bit `0x04` is the dragged-under state and is not on
+    /// that list (`RETRACTIONS.md` R380).
+    #[test]
+    fn the_melee_cursor_seed_gate_rejects_blink_hidden_not_dragged_under() {
+        let attacker = (5, 5);
+        let target = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            20,
+            9,
+            0,
+            5,
+            6,
+        ]);
+        assert_eq!(
+            combat_targeting_cursor_start(attacker, Some(target), true, 1),
+            (5, 6)
+        );
+
+        let mut blinked = target;
+        blinked.flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
+        assert_eq!(
+            combat_targeting_cursor_start(attacker, Some(blinked), true, 1),
+            attacker
+        );
+
+        let mut dead = target;
+        dead.flags |= COMBAT_ACTOR_FLAG_MARKED_DEAD;
+        assert_eq!(
+            combat_targeting_cursor_start(attacker, Some(dead), true, 1),
+            attacker
+        );
+
+        // "its linked presentation record must be displayed".
+        assert_eq!(
+            combat_targeting_cursor_start(attacker, Some(target), false, 1),
+            attacker
+        );
+
+        // The dragged-under bit does not disturb the seed.
+        let mut dragged = target;
+        dragged.flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+        assert_eq!(
+            combat_targeting_cursor_start(attacker, Some(dragged), true, 1),
+            (5, 6)
+        );
+    }
+
+    /// `combat.md` §8.2: "For a **monster-side** actor under player control there
+    /// is no equipment to walk and the walker is skipped outright: `A` makes
+    /// **exactly one attempt**, unconditionally and without a loop, carrying a
+    /// fixed pseudo-item that sends the dispatcher to the monster-side reach and
+    /// effect rows of that actor's class."
+    ///
+    /// §11's dispatcher row folds selector `1` "to zero, selecting the **melee /
+    /// Aim-cursor arm**", while "a selector above `1`" selects "the cast/effect
+    /// arm unconditionally". `magic.md` §8 and `catalogs/spell-list.md` route the
+    /// summoned-creature transcript through the same selector rather than a
+    /// fixed transcript (`RETRACTIONS.md` R382).
+    #[test]
+    fn a_monster_side_actor_takes_one_attempt_chosen_by_its_class_reach_selector() {
+        // Swarm's Insect Swarm is melee-reach; Summon's Daemon is not.
+        assert_eq!(
+            combat_ranged_effect_stats(COMBAT_CLASS_INSECT_SWARM)
+                .unwrap()
+                .range_effect_selector,
+            1
+        );
+        assert!(
+            combat_ranged_effect_stats(38).unwrap().range_effect_selector > 1,
+            "Summon's Daemon is a non-melee-reach class"
+        );
+
+        let melee = CombatAttackAttempt::for_monster_class(1);
+        assert!(melee.melee_arm && !melee.class_effect_arm && melee.max_range == 1);
+        // "On the monster side, a class reach of exactly 1 is normalised to
+        // zero, so it takes the fixed-range-one melee path".
+        assert_eq!(CombatAttackAttempt::for_monster_class(0), melee);
+        let effect = CombatAttackAttempt::for_monster_class(9);
+        assert!(effect.class_effect_arm && !effect.melee_arm);
+
+        for (class, opens_cursor) in [(COMBAT_CLASS_INSECT_SWARM, true), (38, false)] {
+            let mut state = controlled_monster_dispatch_state(7, 5);
+            state.combat_actors[8].owner_target_class = class;
+            let attempts = state.combat_attack_attempts_for_actor(8);
+            assert_eq!(attempts.len(), 1, "class {class} must take one attempt");
+
+            state.open_pending_combat_player_turn(Some(8));
+            let walk = state.begin_combat_attack_walk(8, true);
+            // "`Attack-` and the reduced banner are unaffected: they precede
+            // the dispatcher and print for every class."
+            assert!(walk.text.starts_with(COMBAT_ATTACK_LABEL), "class {class}");
+            assert_eq!(
+                walk.text.contains(COMBAT_ATTACK_AIM_PROMPT),
+                opens_cursor,
+                "class {class} printed {:?}",
+                walk.text
+            );
+            assert_eq!(walk.cursor_open, opens_cursor, "class {class}");
+        }
+    }
+
+    /// `combat.md` §8, the `Z` row: "for a **party-side** actor it opens that
+    /// character's own sheet silently, with no prompt; for a **monster-side**
+    /// actor under player control it prints `Player: ` and runs the ordinary
+    /// roster picker" (`RETRACTIONS.md` R381).
+    #[test]
+    fn z_stats_prompts_for_a_monster_side_actor_and_not_for_a_party_one() {
+        let game_dir = std::path::Path::new(".");
+
+        let mut party = combat_player_command_state(8, 5);
+        party.open_pending_combat_player_turn(Some(0));
+        handle_play_key_input(&mut party, 'Z', "", game_dir).unwrap();
+        assert!(party.active_party_selector.is_none());
+        assert!(party.active_z_stats.is_some());
+
+        let mut monster = combat_player_command_state(8, 5);
+        monster.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+        monster.open_pending_combat_player_turn(Some(8));
+        handle_play_key_input(&mut monster, 'Z', "", game_dir).unwrap();
+        assert!(
+            monster.active_party_selector.is_some(),
+            "a monster-side actor runs the roster picker"
+        );
+        assert!(monster.active_z_stats.is_none());
+        assert!(monster.message.contains(PARTY_SELECTION_PROMPT));
+    }
+
+    /// `combat.md` §3: "Only a party-side actor participates in direction sharing
+    /// ... **Monster-side actors neither seed nor test it.**" §8's direction
+    /// bullet says the same: "a monster acting under player control neither
+    /// seeds nor tests the shared direction and simply leaves".
+    #[test]
+    fn the_arena_exit_skips_the_same_exit_constraint_for_a_monster_side_actor() {
+        // A party-side actor in a constrained encounter is refused.
+        assert!(matches!(
+            resolve_combat_out_of_arena_leave(false, 2, false, true, Some(1), true, true),
+            CombatOutOfArenaLeaveOutcome::RefusedConstrainedDirection { .. }
+        ));
+        // The same request from a monster-side actor leaves, and leaves the
+        // shared byte exactly as it found it.
+        assert_eq!(
+            resolve_combat_out_of_arena_leave(false, 2, false, true, Some(1), true, false),
+            CombatOutOfArenaLeaveOutcome::Accepted {
+                direction_code: 2,
+                presentation: CombatOutOfArenaLeavePresentation::EscapeWithFoes,
+                established_direction_code: Some(1),
+            }
+        );
+        // An unseeded encounter is not seeded by a monster-side departure.
+        assert_eq!(
+            resolve_combat_out_of_arena_leave(false, 2, false, true, None, true, false),
+            CombatOutOfArenaLeaveOutcome::Accepted {
+                direction_code: 2,
+                presentation: CombatOutOfArenaLeavePresentation::EscapeWithFoes,
+                established_direction_code: None,
+            }
+        );
+    }
+
+    /// `combat.md` §6.3, the party-member death row, "in this exact order:
+    /// character HP forced to zero; marked-dead bit ORed into the descriptor
+    /// flags byte; roster status byte set to `'D'`; the corpse tile written into
+    /// both tile bytes; active-player sentinel set to `0xFF` if the dead
+    /// character was active; **a full stats-panel redraw**. **No sound at any
+    /// point**." (`RETRACTIONS.md` R379; `audio.md` §9 lists this among its
+    /// silence boundaries.)
+    #[test]
+    fn the_party_death_arm_writes_in_the_published_order_and_plays_no_cue() {
+        let mut state = combat_player_command_state(8, 5);
+        state.party[0].hp = 4;
+        state.party[0].status = b'G';
+        state.active_player = Some(0);
+        state.visibility_dirty = false;
+        let sounds_before = state.sound_effect_history.len();
+
+        let outcome = state
+            .apply_combat_party_damage_to_slot(0, 99)
+            .expect("the party slot takes the death branch");
+
+        assert!(outcome.killed);
+        assert_eq!(state.party[0].hp, 0);
+        assert!(state.combat_actors[0].is_marked_dead());
+        assert_eq!(state.party[0].status, b'D');
+        let linked = usize::from(state.combat_actors[0].active_object_slot);
+        assert_eq!(state.active_objects[linked].tile, COMBAT_PARTY_CORPSE_TILE);
+        assert_eq!(
+            state.active_objects[linked].type_byte,
+            COMBAT_PARTY_CORPSE_TILE
+        );
+        assert_eq!(state.active_player, None);
+        assert!(state.visibility_dirty, "the full stats-panel redraw runs");
+        assert_eq!(
+            state.sound_effect_history.len(),
+            sounds_before,
+            "no party-death cue: {:?}",
+            state.sound_effect_history
+        );
+
+        // The helper that owns the interleaving leaves the roster letter to the
+        // caller so the marked-dead bit can precede it.
+        let mut member = state.party[0];
+        member.hp = 4;
+        member.status = b'G';
+        let deferred = apply_combat_party_damage_deferring_death_letter(&mut member, 99);
+        assert!(deferred.killed);
+        assert_eq!(member.hp, 0);
+        assert_eq!(member.status, b'G', "the letter is deferred to the caller");
+    }
+
+    /// `combat.md` §8.2: "A move is applied only if the destination stays inside
+    /// the eleven-by-eleven arena **and** its distance from the attacker does
+    /// not exceed the maximum range. If either test fails the cursor simply
+    /// does not move: no message, no beep, no turn consumed, and the loop reads
+    /// another key."
+    ///
+    /// `RETRACTIONS.md` R378 calls this "the row to grep an implementation
+    /// for, because building the automatic rule into the prompted path
+    /// produces exactly the refuse-the-keystroke-and-strike-once behaviour
+    /// §16.1 invited". Same distance-one number, opposite mechanism.
+    #[test]
+    fn the_prompted_paths_distance_one_number_is_a_cursor_clamp_not_a_refusal() {
+        let mut state = combat_player_command_state(8, 5);
+        let walk = state.begin_combat_attack_walk(0, true);
+        assert!(walk.cursor_open);
+        let attacker = state.combat_actor_cell(0).unwrap();
+
+        // One step east is in range; a second is not.
+        state.apply_combat_targeting_cursor_key(char::from(INPUT_CODE_EAST));
+        let in_range = state
+            .active_combat_targeting
+            .as_ref()
+            .map(|session| session.cursor)
+            .unwrap();
+        assert_ne!(in_range, attacker);
+
+        let held = state
+            .apply_combat_targeting_cursor_key(char::from(INPUT_CODE_EAST))
+            .expect("the cursor is still open");
+        assert!(held.text.is_empty(), "no message: {:?}", held.text);
+        assert!(held.cursor_open, "no turn is consumed");
+        assert_eq!(
+            state
+                .active_combat_targeting
+                .as_ref()
+                .map(|session| session.cursor),
+            Some(in_range),
+            "the cursor silently refuses to move out of range"
         );
     }

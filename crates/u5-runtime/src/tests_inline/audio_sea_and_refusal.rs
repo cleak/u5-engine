@@ -92,7 +92,7 @@ fn the_d_and_w_combat_refusals_and_unrecognised_keys_stay_silent() {
             applied.action,
             CombatPlayerCommandAction::Branch {
                 branch: expected,
-                live_actor_gate: CombatCommandLiveActorGate::NotRequired,
+                party_side_gate: CombatCommandPartySideGate::NotRequired,
             },
             "{key} should reach its own What? branch"
         );

@@ -2750,7 +2750,7 @@ Mixed 1 IL charge; stock is 1.");
 
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY], 1);
-        assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
+        assert!(!state.combat_actors[0].is_dragged_under());
         assert_eq!(state.active_objects[0].tile, 0x5c);
         assert!(state.visibility_dirty);
         assert_eq!(
@@ -3059,7 +3059,7 @@ Mixed 1 IL charge; stock is 1.");
         state.combat_actors[7] = CombatActorDescriptor::from_row([
             20,
             1,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
             32,
             7,
             0,
@@ -3076,7 +3076,7 @@ Mixed 1 IL charge; stock is 1.");
         assert_eq!(state.spell_charges[REVEAL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert!(!state.combat_actors[7].is_hidden_or_unrevealed());
+        assert!(!state.combat_actors[7].is_phase_suppressed());
         assert!(state.visibility_dirty);
         assert_eq!(state.message, "Revealed 1 combat actor(s).");
     }
@@ -3128,7 +3128,7 @@ Mixed 1 IL charge; stock is 1.");
         assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert!(state.combat_actors[0].is_hidden_or_unrevealed());
+        assert!(state.combat_actors[0].is_phase_suppressed());
         assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
         assert!(state.visibility_dirty);
         assert_eq!(state.message, "Invisibility!");
@@ -3193,7 +3193,7 @@ Mixed 1 IL charge; stock is 1.");
         state.combat_actors[8] = CombatActorDescriptor::from_row([
             25,
             1,
-            COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
             COMBAT_CLASS_PYTHON,
             8,
             0,

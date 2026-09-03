@@ -2538,7 +2538,7 @@ fn handle_endgame_key_input(
 }
 
 /// Which slots the player may actually type a command for. `combat.md
-/// §6.1a`'s slot-to-group helper decides who reaches the combined command
+/// §6.1a`'s slot-to-group helper decides who reaches the player-command
 /// handler - a party-side actor carrying the controlled bit (Sword of
 /// Chaos, possession, Charm) resolves to group 1 and goes to the automatic
 /// driver, while a monster-side actor carrying it resolves to group 0 and
@@ -2546,13 +2546,20 @@ fn handle_endgame_key_input(
 /// driver" (`§6.1a` writer 3; `magic.md`'s "the player never gets to move
 /// it" is withdrawn by `RETRACTIONS.md` R354).
 ///
-/// The prompt is narrower than that path. `§16.1`: the handler "prompts
-/// only for an eligible selected party member, while a monster descriptor
-/// that control moved to group 0 still synthesizes an automatic action" -
-/// so a controlled monster is dispatched by the walker and never consumes
-/// a keystroke.
-fn combat_actor_accepts_player_input(slot: usize, actor: CombatActorDescriptor) -> bool {
-    combat_actor_is_active_not_dead(actor) && combat_slot_prompts_for_player_command(slot, actor)
+/// Past that split the handler "**prompts, and never synthesizes**. Its one
+/// gate is the active-player sentinel" (`§16.1`), so every group-0 slot the
+/// sentinel admits is prompted, party or monster.
+///
+/// *(**Corrected.** This used to AND in the descriptor's party-side bit, on
+/// §16.1's withdrawn "still synthesizes an automatic action" clause -
+/// `RETRACTIONS.md` R377.)*
+fn combat_actor_accepts_player_input(
+    state: &PlayState,
+    slot: usize,
+    actor: CombatActorDescriptor,
+) -> bool {
+    combat_actor_is_active_not_dead(actor)
+        && combat_slot_prompted_by_player_command_handler(state.active_player, slot, actor)
 }
 
 fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
@@ -2562,7 +2569,7 @@ fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
         .enumerate()
         .take(COMBAT_ACTOR_SLOTS)
         .map(|(slot, actor)| (slot, *actor))
-        .any(|(slot, actor)| combat_actor_accepts_player_input(slot, actor))
+        .any(|(slot, actor)| combat_actor_accepts_player_input(state, slot, actor))
 }
 
 /// `combat.md §16.1`: "Side counting skips empty, dead, and passive
@@ -2580,7 +2587,7 @@ fn combat_pending_player_actor_is_active(state: &PlayState, actor_slot: usize) -
         .combat_actors
         .get(actor_slot)
         .copied()
-        .is_some_and(|actor| combat_actor_accepts_player_input(actor_slot, actor))
+        .is_some_and(|actor| combat_actor_accepts_player_input(state, actor_slot, actor))
 }
 
 fn handle_combat_cast_key_input(
@@ -2595,6 +2602,28 @@ fn handle_combat_cast_key_input(
     };
     if !combat_pending_player_actor_is_active(state, actor_slot) {
         state.message.clear();
+        return Ok(PlayInputDisposition::Continue);
+    }
+
+    // `combat.md §8`, the `C` row: "The branch first prints `Cast...` and
+    // then applies its own copy of the shape-A **party-side** test: a monster
+    // acting under player control gets `Can't!`, the banner is reprinted and
+    // the prompt is re-issued at no cost." (`RETRACTIONS.md` R381 - the
+    // withdrawn wording made this a dead-caster test.)
+    if matches!(
+        resolve_combat_command_party_side_gate(
+            CombatCommandBranch::CastSpell,
+            state.combat_actors.get(actor_slot).copied(),
+        ),
+        CombatCommandPartySideGate::RefusedMonsterSide
+    ) {
+        state.message.clear();
+        state.emit_combat_command_echo_line(&format!(
+            "{COMBAT_CAST_COMMAND_LABEL}{COMBAT_PARTY_SIDE_REFUSAL}"
+        ));
+        // `§8.1`: every `Can't!` refusal takes the full re-prompt, "the whole
+        // banner reprinted from its leading newline".
+        state.open_pending_combat_player_turn(Some(actor_slot));
         return Ok(PlayInputDisposition::Continue);
     }
 
@@ -2652,6 +2681,19 @@ fn finish_combat_attack_walk(
     had_foe: bool,
     walk: CombatAttackWalkApplication,
 ) {
+    // `combat.md §11.1`: a monster carrying the controlled/charmed bit prints
+    // "on a failed roll `<target> missed!`" where the self-acting hostile
+    // prints nothing, "because that slot is driven from the player's prompt".
+    // Everything else on the row is the shared narrator's.
+    if let Some((_, monster_attack)) = walk.monster_attack
+        && let Some(line) = combat_monster_attack_narrated_result_message(
+            state,
+            monster_attack,
+            CombatMonsterAttackNarration::Controlled,
+        )
+    {
+        state.emit_combat_print(&format!("\n{line}\n"));
+    }
     if let Some((target_slot, attack)) = walk.attack
         && let Some(line) = combat_weapon_attack_narrated_result_message(state, target_slot, attack)
     {
@@ -2754,21 +2796,14 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         return PlayInputDisposition::Continue;
     };
     if !combat_pending_player_actor_is_active(state, actor_slot) {
-        // `combat.md §8` Shape A: "The helper prints the verb label, then
-        // requires that the acting combatant is still alive. A dead actor gets
-        // the short \"Can't!\" refusal and the prompt is re-issued at no
-        // cost." The six Shape-A letters are the only ones that publish a
-        // refusal here; every other key on a non-acting slot stays silent.
-        let branch = resolve_combat_command_branch(key);
-        state.message = if combat_command_branch_requires_live_active_actor(branch) {
-            let mut refusal = combat_command_branch_published_label(branch)
-                .unwrap_or("")
-                .to_string();
-            refusal.push_str(COMBAT_LIVE_ACTOR_REFUSAL);
-            refusal
-        } else {
-            String::new()
-        };
+        // The slot the walker had pending is no longer one the handler
+        // prompts - it died, or the active-player sentinel moved. `§16.1`
+        // skips such a slot "without a banner, a keystroke or an action", so
+        // nothing is printed. The shape-A `Can't!` refusal is **not** here:
+        // that gate reads the party-side bit on a slot that *is* prompted
+        // (`RETRACTIONS.md` R381), and it is applied in
+        // `handle_combat_multistage_command` below.
+        state.message.clear();
         // The slot is not reinstated: the walker re-selects an acting slot on
         // the next keystroke, which is `§8`'s free re-prompt.
         return PlayInputDisposition::Continue;
@@ -2800,10 +2835,26 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     if !echo.is_empty() {
         state.emit_combat_command_echo_line(&echo);
     }
+    if let Some(shape) = combat_player_command_action_reprompt_shape(&application.action) {
+        match shape {
+            // `combat.md §8.1`: "**Short re-prompt, banner not reprinted** ...
+            // The handler emits one newline, refreshes the prompt window ...
+            // and reads another key", so no line feed was spent on this marker
+            // row and `text-output.md §10.4`'s derived blank stands.
+            CombatCommandRepromptShape::Short => {
+                state.pending_combat_actor_slot = Some(actor_slot);
+                state.combat_prompt_row_opened_by_banner = false;
+            }
+            // "**Full re-prompt, the whole banner reprinted from its leading
+            // newline**" - the same producer the turn opened with
+            // (`RETRACTIONS.md` R380).
+            CombatCommandRepromptShape::FullBanner => {
+                state.open_pending_combat_player_turn(Some(actor_slot));
+            }
+        }
+        return PlayInputDisposition::Continue;
+    }
     if application.reprompt {
-        // `combat.md §8.1`'s free re-prompt "uses the short form and does
-        // **not** reprint the banner", so no line feed was spent on this
-        // marker row and `text-output.md §10.4`'s derived blank stands.
         state.pending_combat_actor_slot = Some(actor_slot);
         state.combat_prompt_row_opened_by_banner = false;
         return PlayInputDisposition::Continue;
@@ -2858,19 +2909,19 @@ fn handle_combat_multistage_command(
 ) -> bool {
     let CombatPlayerCommandAction::Branch {
         branch,
-        live_actor_gate,
+        party_side_gate,
     } = action
     else {
         return false;
     };
     if matches!(
-        live_actor_gate,
-        CombatCommandLiveActorGate::RejectedDeadOrMissing
+        party_side_gate,
+        CombatCommandPartySideGate::RefusedMonsterSide
     ) {
-        // `combat.md §8` Shape A: the verb label is already in the slot, and
-        // the dead-actor arm appends the short published refusal before the
-        // free re-prompt. Clearing the slot printed nothing at all.
-        state.message.push_str(COMBAT_LIVE_ACTOR_REFUSAL);
+        // The label and the `Can't!` are already in the echo
+        // (`combat_player_command_message`); this arm only stops the verb
+        // reaching its delegate. `§8.1` then takes the banner-reprinting
+        // re-prompt.
         return false;
     }
 
@@ -2883,7 +2934,7 @@ fn handle_combat_multistage_command(
         CombatCommandBranch::UseItem => {
             // `combat.md §8` / `inventory.md §7`: combat U is Shape A, not
             // the withdrawn scene-refusal branch. It prints the normal verb
-            // echo, passes the live-actor gate above, and enters the same item
+            // echo, passes the party-side gate above, and enters the same item
             // picker used by world modes.
             state.begin_command_echo_for(Command::Use);
             state.start_use_item();
@@ -2913,7 +2964,23 @@ fn handle_combat_multistage_command(
             true
         }
         CombatCommandBranch::ZStats => {
-            state.z_stats_for_party(actor_slot);
+            // `combat.md §8`, the `Z` row: "Inside an arena that handler tests
+            // the acting slot's party side: for a **party-side** actor it opens
+            // that character's own sheet silently, with no prompt; for a
+            // **monster-side** actor under player control it prints `Player: `
+            // and runs the ordinary roster picker, so the player must choose a
+            // character." (`RETRACTIONS.md` R381 - the unqualified "selects the
+            // acting combatant's party slot instead of prompting" is withdrawn
+            // for a monster-side actor.)
+            if state
+                .combat_actors
+                .get(actor_slot)
+                .is_some_and(|actor| actor.is_party_side())
+            {
+                state.z_stats_for_party(actor_slot);
+            } else {
+                state.start_party_selector(PartySelectorTarget::ZStats);
+            }
             state.pending_combat_actor_slot = Some(actor_slot);
             true
         }
@@ -3000,8 +3067,8 @@ fn handle_combat_multistage_command(
             // any tile is examined."
             if *branch == CombatCommandBranch::Jimmy && state.keys == 0 {
                 // `combat.md §8` Shape A prints the verb label first and the
-                // delegate's own line after it, which is why the dead-actor
-                // arm above appends too. The label is already in the slot.
+                // delegate's own line after it. The label is already in the
+                // slot.
                 state.message.push_str(COMBAT_JIMMY_NO_KEYS_MESSAGE);
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
@@ -3148,6 +3215,21 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
             CombatEscapeCleanupDecision::RefusedNotYet => "Escape-Not yet!\n".to_string(),
             CombatEscapeCleanupDecision::Accepted => "Escape!".to_string(),
         },
+        // `combat.md §8` Shape A: "The helper prints the verb label, then
+        // requires that the acting combatant is a **party-side** descriptor.
+        // An actor that is not gets the short `Can't!` refusal." `C`-Cast
+        // "carries its own copy of the same party-side test and refuses the
+        // same way, after printing `Cast...`" (`RETRACTIONS.md` R381).
+        CombatPlayerCommandAction::Branch {
+            branch,
+            party_side_gate: CombatCommandPartySideGate::RefusedMonsterSide,
+        } => {
+            let label = match branch {
+                CombatCommandBranch::CastSpell => Some(COMBAT_CAST_COMMAND_LABEL),
+                _ => combat_command_branch_published_label(*branch),
+            };
+            format!("{}{COMBAT_PARTY_SIDE_REFUSAL}", label.unwrap_or(""))
+        }
         CombatPlayerCommandAction::Branch { branch, .. } => combat_command_branch_message(*branch),
     }
 }
@@ -3376,7 +3458,7 @@ pub(crate) fn combat_weapon_attack_narrated_result_message(
 /// combat walker replaces the whole field with zero before the next actor
 /// dispatch" - and a round walk visits several slots before any transcript
 /// is assembled, so this stage only honours the verdict recorded then.
-fn combat_monster_attack_narrated_result_message(
+pub(crate) fn combat_monster_attack_narrated_result_message(
     state: &PlayState,
     attack: CombatMonsterAttackApplication,
     narration: CombatMonsterAttackNarration,
@@ -3404,8 +3486,8 @@ pub(crate) enum CombatMonsterAttackNarration {
     /// The `§9` automatic actor driver's own turn, which "calls the shared
     /// helpers directly and passes through none of" the announcement layer.
     SelfActingHostile,
-    /// `§16.1`'s synthesized turn for a monster descriptor control moved to
-    /// group 0.
+    /// A monster descriptor control moved to group 0, narrating the attempt
+    /// it took at the **player's prompt** (`§16.1`, `RETRACTIONS.md` R377).
     Controlled,
 }
 
@@ -3779,11 +3861,12 @@ pub(crate) fn combat_monster_attack_result_message(
     combat_monster_attack_shared_result_message(state, attack)
 }
 
-/// `combat.md §11.1` for `§16.1`'s synthesized turn: "a monster
-/// descriptor that control moved to group 0 still synthesizes an
-/// automatic action", and §11.1's announcement table gives that turn as
-/// the "**reduced** banner ... then one fixed attempt: `Attack-`, `Aim!
-/// `, and on a failed roll `<target> missed!`".
+/// `combat.md §11.1` for a monster carrying the controlled/charmed bit.
+/// Its announcement table gives that turn as the "**reduced** banner ...
+/// then, **only if the player presses `A`**, one fixed attempt: `Attack-`,
+/// then `Aim! ` for a class whose reach selector is one, and on a failed roll
+/// `<target> missed!`". The turn is prompted, not synthesized
+/// (`RETRACTIONS.md` R377).
 ///
 /// So this arm differs from the self-acting hostile's in exactly one row -
 /// the miss - and §11.1 says why the difference is a difference of
@@ -3822,22 +3905,6 @@ pub(crate) fn append_combat_round_walk_messages(
             } => Some((
                 ai_turn.monster_attack?,
                 CombatMonsterAttackNarration::SelfActingHostile,
-            )),
-            // `combat.md §16.1`'s synthesized turn for a controlled monster
-            // resolves its one fixed attempt through the same shared attack
-            // primitive, but not through the same producer: `§11.1` gives
-            // this slot `<target> missed!` on a failed roll where the
-            // self-acting hostile prints nothing, and its scope note puts
-            // that difference in the routine rather than in the actor.
-            CombatActorSlotDispatchApplication::Slot {
-                action:
-                    CombatActorDispatchAction::ControlledMonsterAttempt {
-                        attempt: Some(attempt),
-                    },
-                ..
-            } => Some((
-                attempt.monster_attack?,
-                CombatMonsterAttackNarration::Controlled,
             )),
             _ => None,
         })

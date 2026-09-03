@@ -28,7 +28,7 @@ use u5_runtime::{
     BLINK_COST, BLINK_SPELL_INDEX, BRIT_CBT_RECORDS, BRIT_DAT_FILENAME, BRIT_OOL_FILENAME,
     BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT, CGA_PALETTE_RGB, CH_CELL_SIDE,
     CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX, CHARGEN_RESULT_PARAGRAPH_BOX,
-    CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80,
+    CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80,
     COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
     COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_POISON,
     COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
@@ -8145,7 +8145,9 @@ fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
             };
             seed_visual_route_combat_monster(&mut actors, &mut active_objects, class, 6, 6, 5);
             if code == "QW" {
-                actors[6].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+                // `combat.md` §6.1 / `RETRACTIONS.md` R380: invisibility rides on the
+                // phase/blink bit `0x10`, not on the dragged-under bit `0x04`.
+                actors[6].flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
             }
         }
     }

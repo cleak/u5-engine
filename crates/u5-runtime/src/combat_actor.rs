@@ -196,14 +196,29 @@ pub const COMBAT_SLEEP_WAKE_SUCCESS_ROLL: u8 = 16;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
-/// `combat.md §6.1`: "`0x10` Phase/blink filter (bypassed on scene `'('`
-/// `0x28` and on monster type `'/'` `0x2F`)." `§9` separates it from
-/// ordinary invisibility: the target picker rejects "a suppressed
-/// phase/hidden state" first - with the Doom-scene and Shadow-Lord
-/// bypass - and only then rejects the "invisible / not-yet-revealed"
-/// flag, which no bypass reaches. The two states are different bits.
+/// `combat.md §6.1` bit `0x10`: "**Invisible / phase-hidden.** The
+/// phase/blink filter (bypassed on scene `'('` `0x28` and on monster type
+/// `'/'` `0x2F`). This is the invisibility bit on the paths traced for the
+/// combat command handler: it is what the melee cursor's seed gate rejects
+/// alongside the marked-dead bit (Section 8.2)."
+///
+/// `RETRACTIONS.md` R380 moved invisibility here from bit `0x04`. `§6.1`
+/// also records the residue: "Prose elsewhere in this document that
+/// separates a 'phased/blinked' state from a 'hidden/not-yet-revealed' one
+/// - the possession-eligibility list in Section 9 among it - predates this
+/// correction and has not been re-derived against the bit layout", so `§9`'s
+/// two-test target picker keeps both terms here.
 pub const COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER: u8 = 0x10;
-pub const COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED: u8 = 0x04;
+/// `combat.md §6.1` bit `0x04`: "**Dragged-under (Corpser-held).** Its own
+/// turn arm prints `ARGH!` and rolls for release in place of a command
+/// (Section 8.1), and the melee occupancy lookup excludes a slot carrying it
+/// (Section 8.2)."
+///
+/// *(**Renamed.** This constant was `COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED`
+/// while `§6.1`'s row read "Hidden / not-yet-revealed (invisible)". "That
+/// name is **withdrawn**: invisibility rides on bit `0x10` above, and no
+/// traced path tests `0x04` for it" - `RETRACTIONS.md` R380.)*
+pub const COMBAT_ACTOR_FLAG_DRAGGED_UNDER: u8 = 0x04;
 /// `combat.md §6.3`: branch-specific narration already emitted.
 pub const COMBAT_ACTION_RESULT_VANISH_NARRATED: u8 = 0x02;
 /// `combat.md §6.3`: the common attack-result narrator's own
@@ -534,7 +549,7 @@ pub struct CombatTargetCandidateView {
     pub descriptor: CombatActorDescriptor,
     pub group: u8,
     pub suppressed: bool,
-    pub invisible_or_unrevealed: bool,
+    pub dragged_under: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -748,11 +763,20 @@ pub enum CombatCommandBranch {
     Invalid,
 }
 
+/// `combat.md §8` Shape A - "the labelled prompt with a **party-side
+/// gate**. The helper prints the verb label, then requires that the acting
+/// combatant is a **party-side** descriptor."
+///
+/// *(**Corrected.** This was `CombatCommandPartySideGate`, whose
+/// `RejectedDeadOrMissing` arm implemented §8's withdrawn "live-actor gate"
+/// wording. "That test is withdrawn: the gate reads the party-side bit, not
+/// liveness, and the dead-actor case it describes is unreachable" -
+/// `RETRACTIONS.md` R381.)*
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CombatCommandLiveActorGate {
+pub enum CombatCommandPartySideGate {
     NotRequired,
     Accepted,
-    RejectedDeadOrMissing,
+    RefusedMonsterSide,
 }
 
 /// `combat.md §14` Escape-key cleanup decision. Escape is independent of the
@@ -919,7 +943,7 @@ pub struct CombatPossessCandidateView {
     pub descriptor: CombatActorDescriptor,
     pub member: Option<PartyMember>,
     pub suppressed: bool,
-    pub invisible_or_unrevealed: bool,
+    pub dragged_under: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1158,13 +1182,13 @@ impl CombatActorDescriptor {
         self.flags & COMBAT_ACTOR_FLAG_MARKED_DEAD != 0
     }
 
-    pub const fn is_hidden_or_unrevealed(self) -> bool {
-        self.flags & COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED != 0
+    pub const fn is_dragged_under(self) -> bool {
+        self.flags & COMBAT_ACTOR_FLAG_DRAGGED_UNDER != 0
     }
 
     /// `combat.md §6.1` bit `0x10`, the phase/blink filter. `§9` makes
     /// this the *bypassable* half of the target picker's two rejection
-    /// tests; [`Self::is_hidden_or_unrevealed`] is the other half.
+    /// tests; [`Self::is_dragged_under`] is the other half.
     pub const fn is_phase_suppressed(self) -> bool {
         self.flags & COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER != 0
     }
@@ -1201,7 +1225,7 @@ impl CombatActorDescriptor {
     pub const fn eligible_for_field_coordinate_lookup(self, linked_active_object_tile: u8) -> bool {
         self.has_field_lookup_selectable_bit()
             && !self.is_marked_dead()
-            && !self.is_hidden_or_unrevealed()
+            && !self.is_dragged_under()
             && linked_active_object_tile != COMBAT_FIELD_REJECTED_ACTIVE_OBJECT_TILE
     }
 
@@ -1329,6 +1353,31 @@ pub fn apply_combat_party_damage(
     member: &mut PartyMember,
     raw_damage: i16,
 ) -> CombatPartyDamageOutcome {
+    apply_combat_party_damage_inner(member, raw_damage, true)
+}
+
+/// `combat.md §6.3`, the party-member death row's published write order: "HP
+/// to zero, **marked-dead bit**, `'D'`, corpse tile, sentinel reset,
+/// stats-panel redraw". The descriptor bit therefore lands between the HP
+/// write and the roster letter, and the caller that owns the descriptor has
+/// to interleave the two.
+///
+/// *(**Corrected.** `§6.3` previously published "roster status byte set to
+/// `'D'`, marked-dead bit ORed in"; "the two status writes were published in
+/// the wrong order: the **marked-dead bit precedes the `'D'` roster letter**,
+/// not the other way round" - `RETRACTIONS.md` R379.)*
+pub fn apply_combat_party_damage_deferring_death_letter(
+    member: &mut PartyMember,
+    raw_damage: i16,
+) -> CombatPartyDamageOutcome {
+    apply_combat_party_damage_inner(member, raw_damage, false)
+}
+
+fn apply_combat_party_damage_inner(
+    member: &mut PartyMember,
+    raw_damage: i16,
+    write_death_letter: bool,
+) -> CombatPartyDamageOutcome {
     let status_before = member.status;
     // Same zero-or-negative graze condition as the monster arm above.
     // `combat.md §12`: "The result may be zero or negative, and **both
@@ -1349,15 +1398,23 @@ pub fn apply_combat_party_damage(
     } else {
         member.apply_damage(raw_damage.clamp(0, u8::MAX as i16) as u8)
     };
+    let killed = member.hp == 0;
+    // The caller writes the letter itself, after the descriptor's marked-dead
+    // bit (`§6.3`, `RETRACTIONS.md` R379). `status_after` still reports the
+    // letter the arm ends on, because that write happens before any observer
+    // runs.
+    if killed && !write_death_letter {
+        member.status = status_before;
+    }
 
     CombatPartyDamageOutcome {
         raw_damage,
         applied_damage,
         grazed,
         instant_kill,
-        killed: member.hp == 0,
+        killed,
         status_before,
-        status_after: member.status,
+        status_after: if killed { b'D' } else { member.status },
     }
 }
 
@@ -1481,9 +1538,7 @@ pub const fn combat_target_groups_are_hostile(attacker_group: u8, target_group: 
 }
 
 pub const fn combat_step_or_attack_occupant_is_active(view: CombatTargetCandidateView) -> bool {
-    combat_actor_is_active_not_dead(view.descriptor)
-        && !view.suppressed
-        && !view.invisible_or_unrevealed
+    combat_actor_is_active_not_dead(view.descriptor) && !view.suppressed && !view.dragged_under
 }
 
 /// `combat.md §8`/`§8.1`: resolve one cardinal step for `moving_slot`.
@@ -1604,6 +1659,14 @@ pub fn resolve_combat_step_or_attack_primitive(
     }
 }
 
+/// `combat.md §3`, the edge helper. Rule 2 is party-side only: "Only a
+/// party-side actor participates in direction sharing. The first such actor
+/// attempting an edge stores the cardinal direction if the shared byte is
+/// zero. In an encounter whose mode has the high bit set, a later party actor
+/// choosing a different direction is refused ... **Monster-side actors
+/// neither seed nor test it.**" `§8`'s direction bullet and `K` row point at
+/// the same rule: "a monster acting under player control is never refused
+/// with `All must use the same exit!`".
 pub const fn resolve_combat_out_of_arena_leave(
     destination_in_bounds: bool,
     direction_code: u8,
@@ -1611,6 +1674,7 @@ pub const fn resolve_combat_out_of_arena_leave(
     constrained_exit: bool,
     established_exit_direction_code: Option<u8>,
     live_foes_remain: bool,
+    actor_is_party_side: bool,
 ) -> CombatOutOfArenaLeaveOutcome {
     if destination_in_bounds {
         return CombatOutOfArenaLeaveOutcome::InArena;
@@ -1621,7 +1685,7 @@ pub const fn resolve_combat_out_of_arena_leave(
     if ship_style_combat {
         return CombatOutOfArenaLeaveOutcome::RefusedShipStyle;
     }
-    if constrained_exit {
+    if actor_is_party_side && constrained_exit {
         if let Some(required_direction_code) = established_exit_direction_code {
             if required_direction_code != direction_code {
                 return CombatOutOfArenaLeaveOutcome::RefusedConstrainedDirection {
@@ -1639,11 +1703,16 @@ pub const fn resolve_combat_out_of_arena_leave(
     };
     // The shared direction byte is seeded by the first accepted party-side
     // edge even in an ordinary encounter. Only high-bit/constrained encounters
-    // reject a later different direction.
-    let established_direction_code = Some(match established_exit_direction_code {
-        Some(required_direction_code) => required_direction_code,
-        None => direction_code,
-    });
+    // reject a later different direction, and a monster-side actor "neither
+    // seeds nor tests it", so it leaves the byte exactly as it found it.
+    let established_direction_code = if actor_is_party_side {
+        Some(match established_exit_direction_code {
+            Some(required_direction_code) => required_direction_code,
+            None => direction_code,
+        })
+    } else {
+        established_exit_direction_code
+    };
 
     CombatOutOfArenaLeaveOutcome::Accepted {
         direction_code,
@@ -2112,7 +2181,7 @@ pub const fn resolve_active_target_spell_damage(
 pub const fn directed_spell_actor_is_eligible(actor: CombatActorDescriptor) -> bool {
     !actor.is_empty()
         && !actor.is_marked_dead()
-        && !actor.is_hidden_or_unrevealed()
+        && !actor.is_dragged_under()
         && !actor.is_status_disabled()
 }
 
@@ -2134,8 +2203,11 @@ pub const fn combat_actor_is_active_not_dead(actor: CombatActorDescriptor) -> bo
         && actor.has_field_lookup_selectable_bit()
 }
 
+/// `combat.md §6.1` bit `0x10`: invisibility "rides on bit `0x10`, the
+/// phase/blink bit" (`RETRACTIONS.md` R380), so the hide/reveal family below
+/// writes that bit and bit `0x04` is left to the dragged-under state.
 pub const fn combat_actor_is_revealable(actor: CombatActorDescriptor) -> bool {
-    !actor.is_empty() && !actor.is_marked_dead() && actor.is_hidden_or_unrevealed()
+    !actor.is_empty() && !actor.is_marked_dead() && actor.is_phase_suppressed()
 }
 
 pub fn apply_combat_invisibility(actor: &mut CombatActorDescriptor) -> bool {
@@ -2144,13 +2216,13 @@ pub fn apply_combat_invisibility(actor: &mut CombatActorDescriptor) -> bool {
     }
 
     let flags_before = actor.flags;
-    actor.flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    actor.flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     actor.flags != flags_before
 }
 
 pub fn clear_combat_invisibility(actor: &mut CombatActorDescriptor) -> bool {
     let flags_before = actor.flags;
-    actor.flags &= !COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    actor.flags &= !COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     actor.flags != flags_before
 }
 
@@ -2165,9 +2237,9 @@ pub fn set_combat_linked_visibility(
 
     let actor_flags_before = actor.flags;
     if hidden {
-        actor.flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+        actor.flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     } else {
-        actor.flags &= !COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+        actor.flags &= !COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     }
 
     let mut visual_tile_before = None;
@@ -2266,7 +2338,7 @@ pub fn apply_combat_reveal(actors: &mut [CombatActorDescriptor]) -> usize {
     let mut revealed = 0;
     for actor in actors {
         if combat_actor_is_revealable(*actor) {
-            actor.flags &= !COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+            actor.flags &= !COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
             revealed += 1;
         }
     }
@@ -2796,16 +2868,21 @@ pub fn resolve_combat_command_branch(key: char) -> CombatCommandBranch {
     }
 }
 
-pub const fn combat_command_branch_requires_live_active_actor(branch: CombatCommandBranch) -> bool {
+pub const fn combat_command_branch_requires_party_side_actor(branch: CombatCommandBranch) -> bool {
     match branch {
-        CombatCommandBranch::Get
+        // `combat.md §8`: "Six letters use this shape: `G` Get, `J` Jimmy,
+        // `O` Open, `R` Ready, `S` Search and `U` Use." And "`C`-Cast carries
+        // its own copy of the same party-side test and refuses the same way,
+        // after printing `Cast...`; so **seven** letters in total are
+        // unusable by a controlled monster" (`RETRACTIONS.md` R381).
+        CombatCommandBranch::CastSpell
+        | CombatCommandBranch::Get
         | CombatCommandBranch::Jimmy
         | CombatCommandBranch::Open
         | CombatCommandBranch::Ready
         | CombatCommandBranch::Search
         | CombatCommandBranch::UseItem => true,
         CombatCommandBranch::Attack
-        | CombatCommandBranch::CastSpell
         | CombatCommandBranch::SceneMessageAbort(_)
         | CombatCommandBranch::DWhatRefusal
         | CombatCommandBranch::Klimb
@@ -2820,26 +2897,57 @@ pub const fn combat_command_branch_requires_live_active_actor(branch: CombatComm
     }
 }
 
-pub const fn resolve_combat_command_live_actor_gate(
+/// `combat.md §8`: "The helper prints the verb label, then requires that the
+/// acting combatant is a **party-side** descriptor. An actor that is not gets
+/// the short `Can't!` refusal, the banner is reprinted (Section 8.1) and the
+/// prompt is re-issued at no cost. In practice the refusal has exactly one
+/// live population: a **monster acting under player control**."
+pub const fn resolve_combat_command_party_side_gate(
     branch: CombatCommandBranch,
     active_actor: Option<CombatActorDescriptor>,
-) -> CombatCommandLiveActorGate {
-    if !combat_command_branch_requires_live_active_actor(branch) {
-        return CombatCommandLiveActorGate::NotRequired;
+) -> CombatCommandPartySideGate {
+    if !combat_command_branch_requires_party_side_actor(branch) {
+        return CombatCommandPartySideGate::NotRequired;
     }
 
     match active_actor {
-        Some(actor) if combat_actor_is_active_not_dead(actor) => {
-            CombatCommandLiveActorGate::Accepted
-        }
-        Some(_) | None => CombatCommandLiveActorGate::RejectedDeadOrMissing,
+        Some(actor) if actor.is_party_side() => CombatCommandPartySideGate::Accepted,
+        Some(_) | None => CombatCommandPartySideGate::RefusedMonsterSide,
     }
 }
 
-/// `combat.md §8` Shape A: "The helper prints the verb label, then requires
-/// that the acting combatant is still alive. A dead actor gets the short
-/// \"Can't!\" refusal and the prompt is re-issued at no cost."
-pub const COMBAT_LIVE_ACTOR_REFUSAL: &str = "Can't!";
+/// `combat.md §8` Shape A: an actor that is not party-side "gets the short
+/// `Can't!` refusal, the banner is reprinted (Section 8.1) and the prompt is
+/// re-issued at no cost".
+pub const COMBAT_PARTY_SIDE_REFUSAL: &str = "Can't!";
+
+/// `combat.md §8.1`: "the dragged-under (Corpser-held) arm that prints
+/// `ARGH!`". `§6.1` bit `0x04`: "Its own turn arm prints `ARGH!` and rolls
+/// for release in place of a command."
+/// `combat.md` §8, the `C` row: "The branch first prints `Cast...` and then
+/// applies its own copy of the shape-A **party-side** test."
+pub const COMBAT_CAST_COMMAND_LABEL: &str = "Cast...";
+
+pub const COMBAT_DRAGGED_UNDER_TURN_LINE: &str = "ARGH!";
+
+/// `combat.md §8.1`: "the asleep arm that prints `Zzzzz...`".
+pub const COMBAT_ASLEEP_TURN_LINE: &str = "Zzzzz...";
+
+/// `combat.md §8.1`: "A free re-prompt then takes one of **two** shapes, not
+/// one." `§8`'s turn rule keeps "**two** re-prompt flags, not one, and they
+/// produce two visibly different re-prompts" (`RETRACTIONS.md` R380).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatCommandRepromptShape {
+    /// "**Short re-prompt, banner not reprinted:** an unrecognised key
+    /// (`What?`), the two toggles Ctrl-S and Ctrl-B, and a refused step or
+    /// refused climb."
+    Short,
+    /// "**Full re-prompt, the whole banner reprinted from its leading
+    /// newline:** every shape-B \"means nothing here\" letter, `D` and `W`,
+    /// every `Can't!` refusal (`C`-Cast's and the six shape-A letters'), a
+    /// failed `1`-`6` selection, and a declined Escape."
+    FullBanner,
+}
 
 pub const fn combat_command_branch_published_label(
     branch: CombatCommandBranch,
@@ -2906,7 +3014,7 @@ pub fn resolve_combat_yell_command(word: Option<&str>) -> CombatYellCommandOutco
 pub const fn combat_cast_interference_target_is_live_visible(
     target: CombatActorDescriptor,
 ) -> bool {
-    combat_actor_is_active_not_dead(target) && !target.is_hidden_or_unrevealed()
+    combat_actor_is_active_not_dead(target) && !target.is_dragged_under()
 }
 
 pub fn resolve_combat_cast_interference(
@@ -3011,7 +3119,7 @@ pub const fn creature_prompt_target_is_eligible(
 ) -> bool {
     !actor.is_empty()
         && !actor.is_marked_dead()
-        && !actor.is_hidden_or_unrevealed()
+        && !actor.is_dragged_under()
         && !actor.is_status_disabled()
         && !actor.is_controlled()
         && !protected_or_immune
@@ -3430,13 +3538,13 @@ pub fn combat_possess_candidate_view(
     descriptor: CombatActorDescriptor,
     member: Option<PartyMember>,
     suppressed: bool,
-    invisible_or_unrevealed: bool,
+    dragged_under: bool,
 ) -> CombatPossessCandidateView {
     CombatPossessCandidateView {
         descriptor,
         member,
         suppressed,
-        invisible_or_unrevealed,
+        dragged_under,
     }
 }
 
@@ -3459,9 +3567,9 @@ pub fn combat_possess_candidate_reaches_resistance(
         || !candidate.descriptor.has_field_lookup_selectable_bit()
         || candidate.descriptor.is_controlled()
         || candidate.descriptor.is_status_disabled()
-        || candidate.descriptor.is_hidden_or_unrevealed()
+        || candidate.descriptor.is_dragged_under()
         || candidate.suppressed
-        || candidate.invisible_or_unrevealed
+        || candidate.dragged_under
     {
         return false;
     }
@@ -3970,45 +4078,42 @@ pub fn combat_slot_takes_player_command_path(slot: usize, actor: CombatActorDesc
         == COMBAT_TARGET_GROUP_PARTY
 }
 
-/// Reaching the combined command handler and being *prompted* by it are
-/// two different things. `combat.md §16.1`: "Group-0 actors enter the
-/// combined command handler; it prompts only for an eligible selected
-/// party member, while a monster descriptor that control moved to group
-/// 0 still synthesizes an automatic action."
+/// `combat.md §16.1`: "The round walker sends group-1 actors to the
+/// automatic action driver. Group-0 actors enter the player-command handler,
+/// which **prompts, and never synthesizes**. Its one gate is the
+/// active-player sentinel: while the sentinel is unset - its state on combat
+/// entry, and the state it returns to whenever `0` is pressed - every group-0
+/// slot is prompted; while a character is selected with `1`-`6`, only the
+/// party-side slot that sentinel names is prompted and every other group-0
+/// slot, party or monster, is skipped without a banner, a keystroke or an
+/// action. A monster descriptor that control moved to group 0 is therefore
+/// prompted on exactly the same terms as a party member."
 ///
-/// So this predicate - the keystroke gate - is the group test of
-/// [`combat_slot_takes_player_command_path`] **and** the descriptor's
-/// party-side bit `0x80` (`§6.1a`: the helper "reads the party-class bit
-/// `0x80` only to choose which rule applies"). A controlled monster is
-/// still handed to the handler; it is simply never asked for a key.
-/// `§11.1` publishes the whole of the turn it gets instead - the reduced
-/// banner "then one fixed attempt: `Attack-`, `Aim! `, and on a failed
-/// roll `<target> missed!`" - and `magic.md`, Summoning and conjuration,
-/// records that "What the player can usefully do with such a creature
-/// beyond that attack path is not established here", so no ordinary
-/// command is accepted for it.
+/// The sentinel names a **roster** slot and is compared against the
+/// descriptor's owner/character byte, and only for a party-side descriptor
+/// (`§6.1a` writer 4: "when the slot is party-side and its owner/character
+/// byte equals the sentinel").
 ///
-/// **Open spec question, unresolved at spec HEAD.** Two published
-/// statements disagree, and this predicate follows the first of them.
-/// `§16.1` synthesizes: the handler "prompts only for an eligible
-/// selected party member, while a monster descriptor that control moved
-/// to group 0 still **synthesizes an automatic action**". `RETRACTIONS.md`
-/// R354 prompts: a monster carrying the bit "is dispatched to the
-/// keystroke/command path and takes its turns under player control,
-/// printing the reduced turn banner ... then `Attack-`, `Aim! `,
-/// `Nothing!` on a **cancelled confirm**, and `<target> missed!` on a
-/// failed roll" - and a cancelled confirm presupposes a player confirm.
-/// R364 says the same slot "is driven from the player's prompt".
-///
-/// Refusing the keystroke here therefore re-establishes, in outcome, the
-/// reading R354 withdrew: the player cannot move the slot. The refusal is
-/// kept because §16.1 is the section that describes this dispatch
-/// decision directly and because the alternative would have to invent the
-/// whole command surface `magic.md` says "is not established here" - but
-/// it is a choice between two current published texts, not a reading of
-/// one, and it needs a ruling before it can be called settled.
-pub fn combat_slot_prompts_for_player_command(slot: usize, actor: CombatActorDescriptor) -> bool {
-    combat_slot_takes_player_command_path(slot, actor) && actor.is_party_side()
+/// *(**Corrected.** This predicate was `combat_slot_prompts_for_player_command`
+/// and ANDed the group test with the descriptor's party-side bit, which
+/// implemented §16.1's withdrawn "still synthesizes an automatic action"
+/// clause: the controlled monster reached the handler and was never asked for
+/// a key. "The handler contains no synthesis path for any slot" -
+/// `RETRACTIONS.md` R377, upholding R354 and R364.)*
+pub fn combat_slot_prompted_by_player_command_handler(
+    active_player: Option<usize>,
+    slot: usize,
+    actor: CombatActorDescriptor,
+) -> bool {
+    if !combat_slot_takes_player_command_path(slot, actor) {
+        return false;
+    }
+    match active_player {
+        None => true,
+        Some(roster_slot) => {
+            actor.is_party_side() && usize::from(actor.owner_target_class) == roster_slot
+        }
+    }
 }
 
 pub fn combat_target_candidate_view_from_descriptor(
@@ -4016,13 +4121,13 @@ pub fn combat_target_candidate_view_from_descriptor(
     slot: usize,
     party_name: Option<&[u8]>,
     suppressed: bool,
-    invisible_or_unrevealed: bool,
+    dragged_under: bool,
 ) -> CombatTargetCandidateView {
     CombatTargetCandidateView {
         descriptor,
         group: resolve_combat_target_group_for_actor(descriptor, slot, party_name),
         suppressed,
-        invisible_or_unrevealed,
+        dragged_under,
     }
 }
 
@@ -4154,7 +4259,7 @@ pub fn find_combat_ai_target(
             || candidate.descriptor.is_marked_dead()
             || candidate.group == acting_group
             || (!bypass_suppression_filter && candidate.suppressed)
-            || candidate.invisible_or_unrevealed
+            || candidate.dragged_under
         {
             continue;
         }

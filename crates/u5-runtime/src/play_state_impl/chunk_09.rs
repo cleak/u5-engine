@@ -881,7 +881,7 @@ impl PlayState {
                 let linked_actor = self.combat_actors.iter().copied().find(|actor| {
                     !actor.is_empty() && usize::from(actor.active_object_slot) == slot
                 });
-                if linked_actor.is_some_and(CombatActorDescriptor::is_hidden_or_unrevealed) {
+                if linked_actor.is_some_and(CombatActorDescriptor::is_dragged_under) {
                     return None;
                 }
                 Some(object.tile)

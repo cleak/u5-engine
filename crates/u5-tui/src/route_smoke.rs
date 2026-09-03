@@ -37,7 +37,7 @@ use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, BRIT_DAT_FILENAME,
     BRIT_OOL_FILENAME, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_FLEEING,
-    COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
+    COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
     COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_CLASS_SHADOW_LORD,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
     COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PLACEMENT_PHASE_BASE,
@@ -5280,7 +5280,10 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
                 actors[6].base_step = 1;
             }
             if code == "QW" {
-                actors[6].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+                // `combat.md` §6.1 / `RETRACTIONS.md` R380: invisibility rides
+                // on the phase/blink bit `0x10`; `0x04` is the dragged-under
+                // state and Reveal does not touch it.
+                actors[6].flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
             }
         }
     }
@@ -5503,7 +5506,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
         }
         "combat-reveal-hidden-target" => {
             if !state.message.starts_with("Revealed 1 combat actor")
-                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_hidden_or_unrevealed()
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_phase_suppressed()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not reveal the hidden combat actor; message `{}`",
@@ -5513,7 +5516,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
         }
         "combat-invisibility-caster" => {
             if !state.message.starts_with("Invisibility!")
-                || !state.combat_actors[0].is_hidden_or_unrevealed()
+                || !state.combat_actors[0].is_phase_suppressed()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not hide the active caster; message `{}`",

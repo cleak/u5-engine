@@ -658,7 +658,7 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
         combat.use_potion_with_effect(POTION_BLACK_INDEX, 0, POTION_BLACK_INDEX),
         MoveOutcome::Used
     );
-    assert!(combat.combat_actors[0].is_hidden_or_unrevealed());
+    assert!(combat.combat_actors[0].is_phase_suppressed());
     assert_eq!(
         combat.active_objects[1].tile,
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
@@ -753,7 +753,7 @@ fn combat_orange_wake_dispatch_restores_status_and_retained_display_tile() {
 
     combat.party[0].status = b'S';
     assert!(combat.apply_combat_party_sleep_presentation(0));
-    combat.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    combat.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
     combat.apply_combat_sleep_wake_dispatch(0, COMBAT_SLEEP_WAKE_SUCCESS_ROLL);
     assert_eq!(combat.party[0].status, b'G');
     assert_eq!(

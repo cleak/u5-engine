@@ -82,6 +82,18 @@ pub struct CombatAttackAttempt {
     /// `§8.2`: whether this attempt runs the adjacent-attacker interference
     /// abort before the cursor.
     pub runs_interference: bool,
+    /// `combat.md §11`, the spell/weapon dispatcher's non-party-side arm -
+    /// "the arm a controlled monster acting at the player's prompt reaches".
+    /// A class reach selector above `1` "selects the **cast/effect arm**
+    /// unconditionally, at every distance including one". `§11.1`: such a
+    /// class "takes the cast/effect arm instead and prints no `Aim! `", opens
+    /// no cursor, "and reaches neither the melee miss line nor any of the
+    /// three `Nothing!` routes" (`RETRACTIONS.md` R382).
+    ///
+    /// What that arm *does* is not published - `§11.1`'s residue names it as
+    /// still unread - so this engine stops after `Attack-` and spends the
+    /// turn.
+    pub class_effect_arm: bool,
 }
 
 impl CombatAttackAttempt {
@@ -93,6 +105,7 @@ impl CombatAttackAttempt {
             max_range: 1,
             melee_arm: true,
             runs_interference: false,
+            class_effect_arm: false,
         }
     }
 
@@ -103,6 +116,30 @@ impl CombatAttackAttempt {
             max_range: if reach == 0 { 1 } else { reach },
             melee_arm: reach == 0,
             runs_interference: COMBAT_MISSILE_INTERFERENCE_ITEM_IDS.contains(&item_id),
+            class_effect_arm: false,
+        }
+    }
+
+    /// `combat.md §8.2`: "For a **monster-side** actor under player control
+    /// there is no equipment to walk and the walker is skipped outright: `A`
+    /// makes **exactly one attempt**, unconditionally and without a loop,
+    /// carrying a fixed pseudo-item that sends the dispatcher to the
+    /// monster-side reach and effect rows of that actor's class (Section 11)
+    /// instead of to any item row."
+    ///
+    /// `§11`'s dispatcher row folds selector `1` "to zero, selecting the
+    /// **melee / Aim-cursor arm**", which `§8.2` states from the other side -
+    /// "a class reach of exactly 1 is normalised to zero, so it takes the
+    /// fixed-range-one melee path rather than a one-cell ranged cursor". A
+    /// selector above `1` takes the cast/effect arm.
+    pub const fn for_monster_class(reach_selector: u8) -> Self {
+        let melee_arm = reach_selector <= 1;
+        Self {
+            item_id: None,
+            max_range: if melee_arm { 1 } else { reach_selector },
+            melee_arm,
+            runs_interference: false,
+            class_effect_arm: !melee_arm,
         }
     }
 }
@@ -242,17 +279,30 @@ pub const fn combat_targeting_direction_delta(direction: InputDirection) -> (i32
 /// visible actor within the maximum range, and on the attacker's own cell
 /// otherwise."
 ///
-/// "Live" and "visible" are the dead-marker and invisibility bits; the
-/// asleep/magically-disabled bit is neither, and `§7.1` keeps a non-acting
+/// `§8.2` states the seed's five-part validity gate outright: "the remembered
+/// value must name a real slot, that slot must be neither **dead-marked nor
+/// blink-hidden**, it must not be an empty slot, its linked presentation
+/// record must be displayed, and its distance from the attacker must not
+/// exceed this attempt's maximum range."
+///
+/// The blink-hidden term is bit `0x10`, which `§6.1` now publishes as the
+/// invisibility bit (`RETRACTIONS.md` R380); the dragged-under bit `0x04` is
+/// **not** on this list - it belongs to the occupancy lookup below. The
+/// asleep/magically-disabled bit is on neither, and `§7.1` keeps a non-acting
 /// actor fully targetable, so no status term enters this test.
+///
+/// `presentation_displayed` carries the fourth term - the linked
+/// presentation record's displayed state - which lives outside the descriptor.
 pub fn combat_targeting_cursor_start(
     attacker: (u8, u8),
     remembered: Option<CombatActorDescriptor>,
+    presentation_displayed: bool,
     max_range: u8,
 ) -> (u8, u8) {
     if let Some(target) = remembered
         && combat_actor_is_present_not_dead(target)
-        && !target.is_hidden_or_unrevealed()
+        && !target.is_phase_suppressed()
+        && presentation_displayed
         && usize::from(target.x) < COMBAT_ARENA_SIDE
         && usize::from(target.y) < COMBAT_ARENA_SIDE
         && combat_arena_range(attacker.0, attacker.1, target.x, target.y) <= max_range
@@ -286,7 +336,9 @@ pub fn combat_attack_interference_aborts(
     if source.is_empty() || !source_on_automatic_driver_side || negate_time_active {
         return false;
     }
-    if source.is_hidden_or_unrevealed() || source.is_status_disabled() {
+    // "it is neither invisible nor asleep" - and `§6.1`/`RETRACTIONS.md` R380
+    // put invisibility on the phase/blink bit `0x10`, not on `0x04`.
+    if source.is_phase_suppressed() || source.is_status_disabled() {
         return false;
     }
     attacker.range_to(source) == 1
@@ -394,6 +446,11 @@ pub struct CombatAttackWalkApplication {
     pub cursor_open: bool,
     /// A confirmed attempt's resolved attack, for the caller's narration.
     pub attack: Option<(usize, crate::combat_frame::CombatWeaponAttackApplication)>,
+    /// The same, for a **monster-side** actor acting at the player's prompt.
+    /// `combat.md §8.2`'s fixed pseudo-item "sends the dispatcher to the
+    /// monster-side reach and effect rows of that actor's class", which is the
+    /// shared monster attack primitive, not the party weapon cascade.
+    pub monster_attack: Option<(usize, crate::combat_frame::CombatMonsterAttackApplication)>,
 }
 
 #[cfg(test)]
