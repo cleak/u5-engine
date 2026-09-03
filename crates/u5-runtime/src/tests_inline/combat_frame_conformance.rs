@@ -53,8 +53,9 @@
         assert_eq!(swarm.hp_or_wound, stats.max_hp);
         assert_eq!((swarm.x, swarm.y), (4, 5));
         assert!(!swarm.is_marked_dead());
-        // Hostile faction tag, never the controlled/summoned flags.
-        assert_eq!(swarm.flags, COMBAT_ACTOR_FLAG_SELECTABLE_80);
+        // `combat.md §6.3`: "the hostile faction tag", and `§6.1`:
+        // "Monster and object descriptors never carry" `0x80`.
+        assert_eq!(swarm.flags, COMBAT_ACTOR_FLAG_SELECTABLE_40);
         assert!(!swarm.is_controlled());
         // Base-step is the speed seed under the `[-4, +3]` adjustment, and the
         // phase counter is thirty-six minus that base-step.
@@ -85,7 +86,7 @@
                 state.combat_actors[slot] = CombatActorDescriptor::from_row([
                     10,
                     1,
-                    COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                    COMBAT_ACTOR_FLAG_SELECTABLE_40,
                     COMBAT_CLASS_GIANT_RAT,
                     slot as u8,
                     0,
@@ -232,7 +233,9 @@
         let child = state.combat_actors[child_slot];
         assert_eq!(child.owner_target_class, 24);
         assert_eq!(child.hp_or_wound, stats.max_hp);
-        assert_eq!(child.flags, COMBAT_ACTOR_FLAG_SELECTABLE_80);
+        // `combat.md §6.1`: "Monster and object descriptors never carry"
+        // the party-side bit; `§16.1` maps every non-passive class to `0x40`.
+        assert_eq!(child.flags, COMBAT_ACTOR_FLAG_SELECTABLE_40);
         assert_eq!(
             (child.x, child.y),
             (

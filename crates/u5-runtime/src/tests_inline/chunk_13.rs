@@ -20438,11 +20438,11 @@ fn summoned_creatures_never_reach_the_player_command_path() {
         monster
     ));
 
-    // Conjure / Swarm / Summon stamp COMBAT_SUMMONED_ACTOR_FLAGS into a
+    // Conjure / Swarm / Summon stamp the summoned-actor flags into a
     // monster-side slot. The bit groups the creature with the party for
     // the same-faction filter, but it must not hand the creature to the
     // player's prompt.
-    let summoned = descriptor(COMBAT_SUMMONED_ACTOR_FLAGS, 20);
+    let summoned = descriptor(combat_summoned_actor_flags(20), 20);
     assert!(summoned.is_controlled());
     assert_eq!(
         resolve_combat_target_group_for_actor(summoned, COMBAT_PARTY_ACTOR_SLOTS, None),

@@ -2035,7 +2035,7 @@ impl PlayState {
             if let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 class,
                 z,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                combat_summoned_actor_flags(class),
                 legal_cells,
                 &[(x, y)],
             ) {
@@ -2056,10 +2056,15 @@ impl PlayState {
             if usize::from(x) >= COMBAT_ARENA_SIDE || usize::from(y) >= COMBAT_ARENA_SIDE {
                 continue;
             }
+            // `combat.md §6.1a` writer 3: "Summon's rebound branch is the
+            // one exception: it leaves the Daemon on the arena with the bit
+            // clear", so placement stamps only the ordinary monster-side
+            // tag here and the caller ORs `0x01` in on the success arm.
+            // `§6.1`: "Monster and object descriptors never carry" `0x80`.
             if let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 COMBAT_CLASS_DAEMON,
                 z,
-                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                combat_monster_placement_flags(COMBAT_CLASS_DAEMON),
                 legal_cells,
                 &[(x, y)],
             ) {
@@ -2084,7 +2089,7 @@ impl PlayState {
         self.apply_combat_summon_class_with_legal_mask(
             class,
             self.combat_actor_z(center_slot),
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(class),
             &legal_cells,
             &candidates,
         )
@@ -2104,7 +2109,7 @@ impl PlayState {
         self.apply_combat_summon_class_with_legal_mask(
             class,
             self.combat_actor_z(center_slot),
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(class),
             &legal_cells,
             &candidates,
         )
@@ -2122,7 +2127,7 @@ impl PlayState {
         self.apply_combat_summon_class_with_legal_mask(
             class,
             z,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(class),
             &legal_cells,
             &candidates,
         )
@@ -2165,10 +2170,13 @@ impl PlayState {
             return None;
         }
         let legal_cells = self.combat_legal_cell_mask();
+        // `combat.md §6.1a`: "The monster AI's own summon-daemon ability
+        // does *not* set this bit", and `§6.1` keeps `0x80` off every
+        // monster descriptor, so the hostile placement tag stands alone.
         let summon = self.apply_combat_summon_class_with_legal_mask(
             COMBAT_CLASS_DAEMON,
             self.combat_actor_z(actor_slot),
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(COMBAT_CLASS_DAEMON),
             &legal_cells,
             candidate_coordinates,
         )?;
@@ -2576,11 +2584,19 @@ impl PlayState {
             .copied()
             .enumerate()
             .map(|(slot, descriptor)| {
+                // `combat.md §9`, target eligibility: "Not in a suppressed
+                // phase/hidden state, except that ... Doom ... and ...
+                // Shadow Lord bypass this extra suppression filter", then
+                // separately "the 'invisible / not-yet-revealed' flag is
+                // still rejected after the phase/hidden check. This
+                // ordinary invisibility filter is not the same as the
+                // special suppression-filter bypass above." `§6.1` gives
+                // them different bits: `0x10` phase/blink, `0x04` hidden.
                 self.combat_target_candidate_view(
                     descriptor,
                     slot,
+                    descriptor.is_phase_suppressed(),
                     descriptor.is_hidden_or_unrevealed(),
-                    false,
                 )
             })
             .collect::<Vec<_>>();
@@ -2822,7 +2838,7 @@ impl PlayState {
             let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 COMBAT_CLASS_INSECT_SWARM,
                 z,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                combat_summoned_actor_flags(COMBAT_CLASS_INSECT_SWARM),
                 legal_cells,
                 &[(accepted_x, accepted_y)],
             ) else {
@@ -3311,6 +3327,20 @@ impl PlayState {
         let roster_slot = self.combat_roster_slot_for_actor_slot(slot)?;
         let outcome = apply_combat_party_damage(self.party.get_mut(roster_slot)?, raw_damage);
         if outcome.killed {
+            // `combat.md §6.3` party-member death row: "Character HP forced
+            // to zero, roster status byte set to `'D'`, marked-dead bit
+            // ORed in, death audio played, active-player sentinel set to
+            // `0xFF` if the dead character was active"; `§6.1` bit `0x20`
+            // adds "party death ORs it in". The OR happens here, on the
+            // death itself, not on a later dispatch's sweep.
+            //
+            // SPEC GAP: `§6.3` requires "death audio played" but names no
+            // cue, and `audio.md §8` publishes no combat party-death
+            // trigger row. Nothing is emitted here rather than inventing a
+            // program; see the reported spec question.
+            if let Some(actor) = self.combat_actors.get_mut(slot) {
+                actor.mark_dead();
+            }
             if self.active_player == Some(roster_slot) {
                 self.active_player = None;
             }
@@ -3384,9 +3414,15 @@ impl PlayState {
         true
     }
 
-    /// `combat.md §6.3`: the vanish tail scans party combat descriptors in
-    /// slot order and handles only the first party-side controlled actor.
-    fn apply_combat_vanish_party_control_faint_tail(&mut self) -> Option<usize> {
+    /// `combat.md §6.3`: "It examines party combat slots zero through five
+    /// in order and stops at the first descriptor carrying both the
+    /// party-side and controlled/charmed bits."
+    ///
+    /// Two callers reach it: the vanish death arm of `§6.3`, which ignores
+    /// the return value, and the `§14` defeat transition, which runs it
+    /// first and only prints the loss line if it "cannot restore an
+    /// actor".
+    pub(crate) fn apply_combat_party_control_faint_scan(&mut self) -> Option<usize> {
         let actor_slot = (0..COMBAT_PARTY_ACTOR_SLOTS).find(|slot| {
             let flags = self.combat_actors[*slot].flags;
             flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0
@@ -3484,7 +3520,7 @@ impl PlayState {
                     .unwrap_or(0);
                 self.run_combat_terrain_reveal(target_slot, (actor.x, actor.y), terrain_tile);
                 self.release_combat_actor_slot_negative(target_slot);
-                let _ = self.apply_combat_vanish_party_control_faint_tail();
+                let _ = self.apply_combat_party_control_faint_scan();
                 changed = true;
             }
             CombatMonsterDeathPath::Incorporeal => {
@@ -3564,7 +3600,12 @@ impl PlayState {
                         actor.x,
                         actor.y,
                         death_z,
-                        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                        // `combat.md §6.3`: the Gazer branch seeds its
+                        // Insect Swarm "exactly as any other monster
+                        // placement would (§ 5): ... **the hostile faction
+                        // tag**, class id `31`". `§6.1` keeps `0x80` off
+                        // every monster descriptor.
+                        combat_monster_placement_flags(COMBAT_CLASS_INSECT_SWARM),
                     )
                     .is_some()
                 {
@@ -3620,17 +3661,36 @@ impl PlayState {
             .get(usize::from(parent.active_object_slot))
             .map(|object| object.z)
             .unwrap_or_default();
+        // `combat.md §6.1`: "Monster and object descriptors never carry"
+        // `0x80`; `§16.1` maps every non-passive placed class to the
+        // ordinary hostile tag `0x40`.
         let child = self.place_combat_monster_at_arena_cell(
             placement.class,
             parent.x,
             parent.y,
             z,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(placement.class),
         )?;
         if let Some(stats) = combat_class_stats(placement.class) {
             self.message = format!("{} divides!", stats.name);
         }
         Some(child)
+    }
+
+    /// `combat.md §6.1`, bit `0x80`: "It is the discriminator the
+    /// damage/death resolver uses to choose the party-death branch over
+    /// the monster-death branch, so an engine that also sets it for live
+    /// monsters routes every monster death through the party path."
+    ///
+    /// The slot index is consulted only when the target has no seated
+    /// descriptor to discriminate on, which is not a state production
+    /// combat reaches: `§5` seats every party member's descriptor with
+    /// `0x80` before the round loop starts.
+    fn combat_damage_target_takes_party_branch(&self, target_slot: usize) -> bool {
+        match self.combat_actors.get(target_slot).copied() {
+            Some(actor) if !actor.is_empty() => actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0,
+            _ => target_slot < COMBAT_PARTY_ACTOR_SLOTS,
+        }
     }
 
     pub fn apply_combat_weapon_damage_to_target(
@@ -3640,7 +3700,7 @@ impl PlayState {
         raw_damage: i16,
         magical: bool,
     ) -> Option<CombatWeaponDamageApplication> {
-        if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
+        if self.combat_damage_target_takes_party_branch(target_slot) {
             let damage = self.apply_combat_party_damage_to_slot(target_slot, raw_damage)?;
             return Some(CombatWeaponDamageApplication::Party {
                 target_slot,
@@ -5317,7 +5377,12 @@ impl PlayState {
             if let Some(object) = self.active_objects.get_mut(active_object_slot)
                 && !object.is_empty()
             {
-                *object = ActiveObject::empty();
+                // `combat.md §6.3`: "the negative-form release used by a
+                // vanishing monster **or fled actor** ... zeros linked
+                // active-object bytes 0 through 5 while preserving that
+                // record's two trailing auxiliary bytes. ... an all-zero
+                // record is not required."
+                object.clear_record_prefix();
                 cleared_active_object = true;
             }
         }
@@ -5407,22 +5472,60 @@ impl PlayState {
         )
     }
 
-    pub fn combat_round_loop_control(
+    /// `combat.md §16.1`: "Side counting skips empty, dead, and passive
+    /// descriptors, then uses the same group resolver. Group 1 counts as
+    /// foes and group 0 as friends. Control and the traitor identity
+    /// therefore affect victory detection." A charmed monster is group 0
+    /// and stops counting as a foe; a charmed party member - or the
+    /// shipped traitor identity - is group 1 and stops counting as a
+    /// friend.
+    ///
+    /// This is the read-only form. `§14` requires the defeat transition to
+    /// run the party control/faint helper before conceding, so the round
+    /// loop takes [`Self::combat_round_loop_control_with_faint_restore`]
+    /// instead.
+    pub fn combat_round_loop_control_census(
         &self,
         leave_combat_flag: bool,
         exhausted_slots: bool,
     ) -> CombatRoundLoopControl {
-        let foes_remain = combat_has_active_not_dead_non_party_actor(&self.combat_actors);
-        let party_remains = combat_escape_has_unmarked_party_side_actor(&self.combat_actors);
-        if !party_remains && foes_remain {
+        let census = combat_side_census(&self.combat_actors);
+        if !census.friends_remain() && census.foes_remain() {
             CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
-        } else if !party_remains || leave_combat_flag {
+        } else if !census.friends_remain() || leave_combat_flag {
             CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
         } else if exhausted_slots {
             CombatRoundLoopControl::StartNextRound
         } else {
             CombatRoundLoopControl::ContinueActorWalk
         }
+    }
+
+    /// `combat.md §14` **Defeat**: "When no party-side actor remains while
+    /// at least one foe does, the engine **first runs the party
+    /// control/faint helper**. If it cannot restore an actor, the engine
+    /// prints `BATTLE IS LOST!` ... and returns word `1`."
+    ///
+    /// The helper restores an actor exactly when it matches: clearing the
+    /// controlled/charmed bit moves that party descriptor from group 1
+    /// back to group 0 (`§16.1`), so the recount below finds a friend and
+    /// the round loop continues instead of conceding.
+    pub fn combat_round_loop_control(
+        &mut self,
+        leave_combat_flag: bool,
+        exhausted_slots: bool,
+    ) -> CombatRoundLoopControl {
+        let control = self.combat_round_loop_control_census(leave_combat_flag, exhausted_slots);
+        if !matches!(
+            control,
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+        ) {
+            return control;
+        }
+        if self.apply_combat_party_control_faint_scan().is_none() {
+            return control;
+        }
+        self.combat_round_loop_control_census(leave_combat_flag, exhausted_slots)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -6353,7 +6456,7 @@ mod combat_death_batch_tests {
             active_object_slot as u8,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(class),
             0,
         );
         state.active_objects[active_object_slot] = ActiveObject {
@@ -6466,6 +6569,19 @@ mod combat_death_batch_tests {
             0,
             0,
             5,
+            5,
+        ]);
+        // `combat.md §16.1`: the compelled slot resolves to group 1 once the
+        // controlled bit lands, so a second uncharmed party descriptor keeps
+        // the `§14` post-dispatch recount away from its defeat/faint arm.
+        state.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            1,
+            1,
+            0,
+            6,
             5,
         ]);
         state.active_player = Some(0);

@@ -1004,5 +1004,6 @@ mod tests {
     include!("tests_inline/save_fidelity.rs");
     include!("tests_inline/spec_conformance_chunk_07.rs");
     include!("tests_inline/combat_frame_conformance.rs");
+    include!("tests_inline/combat_descriptors_conformance.rs");
     include!("tests_inline/result_lines_conformance.rs");
 }

@@ -2618,7 +2618,8 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         state.message.clear();
         return PlayInputDisposition::Continue;
     };
-    state.message = combat_player_command_application_message(state, &application);
+    let command_message = combat_player_command_application_message(state, &application);
+    state.message = command_message;
     if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
         return PlayInputDisposition::Continue;
     }
@@ -2980,7 +2981,7 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
 }
 
 fn combat_player_command_application_message(
-    state: &PlayState,
+    state: &mut PlayState,
     application: &CombatPlayerCommandApplication,
 ) -> String {
     let message = match application.action {
@@ -3022,7 +3023,7 @@ fn combat_direction_code_name(direction_code: u8) -> &'static str {
 }
 
 fn combat_step_or_attack_application_message(
-    state: &PlayState,
+    state: &mut PlayState,
     direction_code: u8,
     outcome: CombatStepOrAttackPrimitiveOutcome,
     edge: Option<CombatOutOfArenaLeaveApplication>,
@@ -3063,10 +3064,58 @@ fn combat_step_or_attack_application_message(
     }
 }
 
+/// `combat.md §6.3`: the common attack result narrator is the only
+/// relevant reader of the shared action-result scratch. It clears the
+/// kill-narrated bit `0x01` first; a surviving vanish bit `0x02` then
+/// suppresses the whole generic killed/slept/hit chain and is cleared in
+/// cleanup, so a vanish death never also prints `<name> killed!`.
+///
+/// The engine builds attack transcripts after the action has resolved,
+/// so the gate is applied here, at the one point per attack where the
+/// generic chain would emit its line.
+fn combat_apply_attack_narrator_gate(
+    state: &mut PlayState,
+    line: Option<String>,
+    narrates_kill: bool,
+) -> Option<String> {
+    let gate = resolve_combat_attack_narrator_gate(state.combat_action_result, narrates_kill);
+    state.combat_action_result = gate.result_after;
+    if gate.run_generic_chain { line } else { None }
+}
+
+fn combat_weapon_damage_application_killed(
+    damage_application: Option<CombatWeaponDamageApplication>,
+) -> bool {
+    match damage_application {
+        Some(CombatWeaponDamageApplication::Party { damage, .. }) => damage.killed,
+        Some(CombatWeaponDamageApplication::Monster { damage, .. }) => damage.killed,
+        None => false,
+    }
+}
+
+fn combat_weapon_attack_result_message(
+    state: &mut PlayState,
+    target_slot: usize,
+    attack: CombatWeaponAttackApplication,
+) -> Option<String> {
+    let line = combat_weapon_attack_result_line(state, target_slot, attack);
+    let narrates_kill = combat_weapon_damage_application_killed(attack.damage_application);
+    combat_apply_attack_narrator_gate(state, line, narrates_kill)
+}
+
+fn combat_monster_attack_result_message(
+    state: &mut PlayState,
+    attack: CombatMonsterAttackApplication,
+) -> Option<String> {
+    let line = combat_monster_attack_result_line(state, attack);
+    let narrates_kill = combat_weapon_damage_application_killed(attack.damage_application);
+    combat_apply_attack_narrator_gate(state, line, narrates_kill)
+}
+
 /// Player-visible result lines observed in the original DOS presentation and
 /// described by `combat.md §12`. Internal slots, coordinates, rolls and raw
 /// damage never belong in this string.
-fn combat_weapon_attack_result_message(
+fn combat_weapon_attack_result_line(
     state: &PlayState,
     target_slot: usize,
     attack: CombatWeaponAttackApplication,
@@ -3124,7 +3173,7 @@ fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
         .unwrap_or_else(|| "Combatant".to_string())
 }
 
-fn combat_monster_attack_result_message(
+fn combat_monster_attack_result_line(
     state: &PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
@@ -3150,7 +3199,7 @@ fn combat_monster_attack_result_message(
         }),
         Some(CombatWeaponDamageApplication::Monster { .. }) => {
             attack.resolution.and_then(|resolution| {
-                combat_weapon_attack_result_message(
+                combat_weapon_attack_result_line(
                     state,
                     attack.target_slot,
                     CombatWeaponAttackApplication {
@@ -3176,7 +3225,7 @@ fn append_combat_round_walk_messages(
     state: &mut PlayState,
     application: &CombatRoundWalkApplication,
 ) {
-    let lines = application
+    let attacks = application
         .applications
         .iter()
         .filter_map(|entry| match entry {
@@ -3186,14 +3235,16 @@ fn append_combat_round_walk_messages(
                         ai_turn: Some(ai_turn),
                     },
                 ..
-            } => ai_turn
-                .monster_attack
-                .and_then(|attack| combat_monster_attack_result_message(state, attack)),
+            } => ai_turn.monster_attack,
             _ => None,
         })
         .collect::<Vec<_>>();
-    for line in lines {
-        append_combat_result_line(&mut state.message, &line);
+    // `combat.md §6.3`: the narrator gate is per attack result, so each
+    // one runs it in dispatch order rather than after the whole walk.
+    for attack in attacks {
+        if let Some(line) = combat_monster_attack_result_message(state, attack) {
+            append_combat_result_line(&mut state.message, &line);
+        }
     }
 }
 

@@ -3757,12 +3757,15 @@ fn combat_blink_phase_toggles_same_linked_visibility_state() {
 
     let disappeared = toggle_combat_blink_phase(&mut actor, &mut active_objects).unwrap();
     assert_eq!(disappeared.visibility, CombatLinkedVisibility::Hidden);
-    assert!(actor.is_hidden_or_unrevealed());
+    // `combat.md §6.1`: blink/phase is bit `0x10`, and `§9` keeps
+    // "ordinary invisibility" (`0x04`) a separate, non-bypassable filter.
+    assert!(actor.is_phase_suppressed());
+    assert!(!actor.is_hidden_or_unrevealed());
     assert_eq!(active_objects[1].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
 
     let returned = toggle_combat_blink_phase(&mut actor, &mut active_objects).unwrap();
     assert_eq!(returned.visibility, CombatLinkedVisibility::Visible);
-    assert!(!actor.is_hidden_or_unrevealed());
+    assert!(!actor.is_phase_suppressed());
     assert_eq!(active_objects[1].tile, 0x9c);
 }
 
@@ -3807,7 +3810,8 @@ fn combat_ai_blink_special_toggles_linked_visibility_and_marks_dirty() {
             },
         } if slot == actor_slot
     ));
-    assert!(state.combat_actors[actor_slot].is_hidden_or_unrevealed());
+    assert!(state.combat_actors[actor_slot].is_phase_suppressed());
+    assert!(!state.combat_actors[actor_slot].is_hidden_or_unrevealed());
     assert_eq!(
         state.active_objects[actor_slot].tile,
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
@@ -5678,7 +5682,7 @@ fn combat_frame_restores_world_table_player_and_surviving_active_player() {
         6,
         5,
         6,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     let mut combat_terrain = DEFAULT_COMBAT_ARENA_TERRAIN;
@@ -7290,7 +7294,7 @@ fn combat_summon_application_allocates_actor_and_object_on_legal_neighbor() {
             COMBAT_PARTY_ACTOR_SLOTS as u8,
             6,
             4,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(COMBAT_CLASS_GIANT_SPIDER),
             0,
         )
         .unwrap()
@@ -7766,7 +7770,7 @@ fn combat_cast_clone_routes_resources_and_places_copy_on_legal_cell() {
         target_slot as u8,
         5,
         6,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         2,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -8053,7 +8057,7 @@ fn combat_cast_conjure_routes_resources_and_places_weighted_animal() {
             COMBAT_PARTY_ACTOR_SLOTS as u8,
             conjure_x,
             conjure_y,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(COMBAT_CLASS_GIANT_RAT),
             0,
         )
         .unwrap()
@@ -8134,7 +8138,7 @@ fn combat_cast_swarm_routes_resources_and_places_four_swarms_on_one_probe() {
                 slot as u8,
                 swarm_x,
                 swarm_y,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                combat_summoned_actor_flags(COMBAT_CLASS_INSECT_SWARM),
                 0,
             )
             .unwrap()
@@ -8194,7 +8198,7 @@ fn combat_swarm_rejects_an_off_arena_probe_then_places_four_at_one_cell() {
                 (COMBAT_PARTY_ACTOR_SLOTS + offset) as u8,
                 4,
                 4,
-                COMBAT_SUMMONED_ACTOR_FLAGS,
+                combat_summoned_actor_flags(COMBAT_CLASS_INSECT_SWARM),
                 0,
             )
             .unwrap()
@@ -8268,7 +8272,7 @@ fn combat_cast_summon_daemon_routes_resources_and_places_daemon() {
             COMBAT_PARTY_ACTOR_SLOTS as u8,
             expected_x,
             expected_y,
-            COMBAT_SUMMONED_ACTOR_FLAGS,
+            combat_summoned_actor_flags(COMBAT_CLASS_DAEMON),
             0,
         )
         .unwrap()
@@ -8296,7 +8300,7 @@ fn summon_self_check_threshold_uses_party_intelligence_or_monster_endurance() {
         monster_slot as u8,
         6,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -8398,7 +8402,10 @@ fn combat_ai_summon_daemon_special_places_daemon_without_spell_resources() {
                     summoned_object_slot as u8,
                     6,
                     4,
-                    COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                    // `combat.md §6.1`: monster descriptors never carry
+                    // `0x80`; `§6.1a`: the monster AI's own summon-daemon
+                    // ability does not set the controlled bit either.
+                    COMBAT_ACTOR_FLAG_SELECTABLE_40,
                     0,
                 )
                 .unwrap(),
@@ -8414,7 +8421,7 @@ fn combat_ai_summon_daemon_special_places_daemon_without_spell_resources() {
             summoned_object_slot as u8,
             6,
             4,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         )
         .unwrap()
@@ -9177,7 +9184,9 @@ fn combat_ai_turn_applies_traitor_roster_record_group_to_target_scan() {
 #[test]
 fn combat_ai_turn_doom_context_bypasses_suppressed_phase_targets() {
     let mut state = combat_ai_turn_state(8, 5);
-    state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    // `combat.md §6.1`: the bypassable filter is bit `0x10`, the
+    // phase/blink filter, not `0x04`.
+    state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     state.combat_frame_snapshot = Some(CombatFrameSnapshot {
         area: Area::Dungeon {
             scene: DungeonScene {
@@ -9238,7 +9247,7 @@ fn combat_ai_summon_daemon_uses_only_the_single_injected_probe() {
         8,
         8,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.active_objects[8].type_byte = 0xdc;
@@ -9280,7 +9289,7 @@ fn combat_ai_failed_summon_probe_continues_ordinary_action() {
         8,
         8,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -9358,7 +9367,7 @@ fn production_combat_ai_summon_draws_gate_then_fresh_x_then_y_and_stops() {
         8,
         8,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -9772,6 +9781,12 @@ fn combat_ai_turn_applies_possess_hook_before_target_synthesis() {
 #[test]
 fn combat_round_production_path_can_drive_possess_special() {
     let mut state = combat_ai_turn_state(8, 5);
+    // `combat.md §16.1`: a controlled party descriptor resolves to group 1,
+    // so a lone possessed member would satisfy the `§14` defeat recount and
+    // its control/faint helper would immediately undo the possession. Seat a
+    // second, farther party actor so this test observes the possession.
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 0, 0]);
     state.combat_actors[8].owner_target_class = 28;
     state.combat_actors[8].phase_counter = 1;
     state.next_combat_actor_slot = 8;
@@ -13573,7 +13588,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -13682,7 +13697,9 @@ fn place_death_side_effect_monster(
         active_object_slot as u8,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        // `combat.md §6.1`: "Monster and object descriptors never carry"
+        // the party-side bit `0x80`.
+        combat_monster_placement_flags(class),
         0,
     );
     state.active_objects[active_object_slot] = ActiveObject {
@@ -14420,7 +14437,7 @@ fn combat_cast_active_target_spell_routes_resources_damage_and_xp() {
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -14591,7 +14608,7 @@ fn active_combat_cast_target_followup_collects_one_and_two_digit_slots() {
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -14640,7 +14657,7 @@ fn active_combat_cast_target_followup_collects_one_and_two_digit_slots() {
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -14701,7 +14718,7 @@ fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
         COMBAT_PARTY_ACTOR_SLOTS as u8,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1] =
@@ -14710,7 +14727,7 @@ fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
             (COMBAT_PARTY_ACTOR_SLOTS + 1) as u8,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2] =
@@ -14719,7 +14736,7 @@ fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
             (COMBAT_PARTY_ACTOR_SLOTS + 2) as u8,
             6,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -14890,7 +14907,7 @@ fn combat_cast_directed_damage_winds_route_damage_and_friendly_fire() {
         COMBAT_PARTY_ACTOR_SLOTS as u8,
         7,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -14924,7 +14941,7 @@ fn combat_cast_directed_damage_winds_route_damage_and_friendly_fire() {
         COMBAT_PARTY_ACTOR_SLOTS as u8,
         6,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
@@ -15056,7 +15073,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
             7,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[target_slot + 1] = CombatActorDescriptor::from_row([
@@ -15149,7 +15166,7 @@ fn combat_cast_tremor_routes_resources_table_damage_and_xp() {
         7,
         4,
         5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.combat_actors[target_slot].base_step = 1;
@@ -15201,7 +15218,7 @@ fn combat_cast_polymorph_routes_resources_and_replaces_hostile_creature() {
         target_slot as u8,
         5,
         6,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         2,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -15355,7 +15372,7 @@ fn combat_cast_field_spell_places_arena_marker_after_coordinate_lookup() {
         target_slot as u8,
         4,
         3,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -15435,7 +15452,7 @@ fn combat_cast_field_spell_places_marker_without_immediate_contact() {
         target_slot as u8,
         4,
         3,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -15517,7 +15534,7 @@ fn combat_cast_fire_field_places_marker_without_random_gate() {
         target_slot as u8,
         4,
         3,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
     state.active_objects[target_slot] = ActiveObject {
@@ -15725,7 +15742,7 @@ fn tremor_spell_damage_application_requires_roll_for_each_accepted_target() {
             7,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     let mut gate_accepts = [false; COMBAT_ACTOR_SLOTS];
@@ -15771,7 +15788,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
             7,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -15843,7 +15860,7 @@ fn directed_spell_damage_skips_disabled_targets_in_cone() {
             7,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[disabled_slot].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
@@ -15853,7 +15870,7 @@ fn directed_spell_damage_skips_disabled_targets_in_cone() {
             8,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -15904,7 +15921,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
             7,
             4,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[second_slot] =
@@ -15913,7 +15930,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
             8,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -16016,7 +16033,7 @@ fn directed_spell_status_application_applies_sleep_to_party_and_reports_non_part
             7,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[target_slot + 1] = CombatActorDescriptor::from_row([
@@ -16103,7 +16120,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
             7,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
     state.combat_actors[second_monster] =
@@ -16112,7 +16129,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
             8,
             6,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 
@@ -16201,7 +16218,7 @@ fn directed_spell_status_application_requires_poison_inputs_before_mutation() {
             7,
             5,
             5,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
             0,
         );
 

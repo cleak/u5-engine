@@ -91,13 +91,13 @@ use u5_runtime::{
     WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WORLD_SIDE, WindState,
     WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, combat_class_sprite_byte,
-    combat_class_stats, default_party_equipment, default_party_experience,
-    default_party_intelligence, default_party_names, default_party_roster,
-    default_party_stay_counters, default_party_strengths, dungeon_ambush_source_rows,
-    dungeon_cell_index, dungeon_room_entry_seed_for_direction, hash_palette_indices,
-    inn_base_room_rate, load_camp_result_messages, load_play_options_from_save, load_tile_atlas,
-    published_world_location_entries, shipwright_delivery_coordinate, shipwright_price,
-    shop_intelligence_adjusted_price,
+    combat_class_stats, combat_monster_placement_flags, default_party_equipment,
+    default_party_experience, default_party_intelligence, default_party_names,
+    default_party_roster, default_party_stay_counters, default_party_strengths,
+    dungeon_ambush_source_rows, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
+    hash_palette_indices, inn_base_room_rate, load_camp_result_messages,
+    load_play_options_from_save, load_tile_atlas, published_world_location_entries,
+    shipwright_delivery_coordinate, shipwright_price, shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -4972,12 +4972,14 @@ fn seed_directed_wind_combat_route(
         let monster_distance = if target_party_slot.is_some() { 2 } else { 1 };
         let (monster_x, monster_y) =
             directed_route_coordinate_from_caster(direction, monster_distance);
+        // `combat.md §6.1`: "Monster and object descriptors never carry"
+        // the party-side bit `0x80`; placement stamps the hostile tag.
         actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
             stats,
             monster_slot as u8,
             monster_x,
             monster_y,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(COMBAT_CLASS_GIANT_RAT),
             0,
         );
         active_objects[monster_slot] = summoned_active_object_record(
@@ -4995,7 +4997,7 @@ fn seed_directed_wind_combat_route(
             reserve_slot as u8,
             reserve_x,
             reserve_y,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            combat_monster_placement_flags(COMBAT_CLASS_GIANT_RAT),
             0,
         );
         active_objects[reserve_slot] = summoned_active_object_record(
@@ -5285,12 +5287,14 @@ fn seed_combat_route_monster(
         io::Error::other(format!("combat stats for class {class} are unavailable"))
     })?;
     let active_object_slot = slot as u8;
+    // `combat.md §6.1`: "Monster and object descriptors never carry"
+    // the party-side bit `0x80`; placement stamps the hostile tag.
     actors[slot] = CombatActorDescriptor::for_monster_placement(
         stats,
         active_object_slot,
         x,
         y,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        combat_monster_placement_flags(class),
         0,
     );
     active_objects[slot] = summoned_active_object_record(class, usize::from(x), usize::from(y), 0)
@@ -5496,10 +5500,16 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-mass-charm-effect" => {
+            // `combat.md §16.1`: "Mass Charm's local target-picker override"
+            // does not affect side counting, so the charmed foe still counts
+            // and the encounter runs on past the cast turn. The contract this
+            // route checks is that the shared effect slot survives the action
+            // and keeps ageing one step per world turn, not that exactly one
+            // turn elapsed.
             if !state.message.starts_with("Mass charm!")
                 || state.active_effect_tag != Some(MASS_CHARM_ACTIVE_EFFECT_TAG)
-                || state.active_effect_counter
-                    != MASS_CHARM_ACTIVE_EFFECT_DURATION.saturating_sub(1)
+                || state.active_effect_counter == 0
+                || state.active_effect_counter >= MASS_CHARM_ACTIVE_EFFECT_DURATION
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not retain the post-action Mass Charm effect; tag {:?}, counter {}, message `{}`",
