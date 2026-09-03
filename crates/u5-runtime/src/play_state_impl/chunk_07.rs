@@ -769,6 +769,7 @@ impl PlayState {
         self.player.transport = TransportState::Foot;
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
+        self.sail_cached_direction = None;
     }
 
     pub fn free_active_object_slot(&mut self, slot: usize) {
@@ -1020,6 +1021,7 @@ impl PlayState {
                     .with_facing(self.player.facing);
                     self.sail_cadence = 0;
                     self.sail_stall_pending = false;
+                    self.sail_cached_direction = None;
                     self.sync_player_object();
                     self.mark_visibility_dirty();
                     self.advance_turn();
@@ -1049,6 +1051,7 @@ impl PlayState {
                     };
                     self.sail_cadence = 0;
                     self.sail_stall_pending = false;
+                    self.sail_cached_direction = None;
                     self.sync_player_object();
                     self.mark_visibility_dirty();
                     self.advance_turn();
@@ -1121,6 +1124,12 @@ impl PlayState {
         };
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
+        // `vehicles.md` "Ship Sails": furling makes the ship "manually
+        // handled" and "wind-driven drift should not advance the ship while
+        // furled", so the toggle drops the cache the auto-advance route
+        // reads. Hoisting starts with none, since the cache is written by a
+        // movement command.
+        self.sail_cached_direction = None;
         self.advance_turn();
         self.message = if next {
             YELL_SAILS_HOISTED_MESSAGE.to_string()
@@ -2991,6 +3000,9 @@ impl PlayState {
         self.advance_turn();
         if self.sail_stall_pending {
             self.sail_stall_pending = false;
+            // `weather.md §6`: "A later Pass command reports the
+            // stalled-sailing feedback and clears the cached sailing state."
+            self.sail_cached_direction = None;
             self.message = "Ship remains stalled by the wind.".to_string();
         } else {
             // `commands.md §8.1` row B: `Pass` completes its own echo and
@@ -3432,17 +3444,44 @@ impl PlayState {
     }
 
     /// Finish the scheduler/object half of the ordinary town epilogue after
-    /// underfoot effects and the shared status/provision pass. The explicit-T
-    /// arrest discriminator suppresses only the scheduler; it does not erase
-    /// the independently requested active-object animation pass.
+    /// underfoot effects and the shared status/provision pass.
+    ///
+    /// `town-mode.md §7` step 4, as corrected by **R328**: the turn's
+    /// movement work runs "in a fixed order: three effect gates, the **town
+    /// object walker** that moves the location's loose horse-family objects,
+    /// and finally the NPC schedule processor with the current hour byte".
+    /// The three gates were applied by the clock routine, which is what left
+    /// these two flags set; this is the walker half of that order.
+    ///
+    /// The explicit-T arrest discriminator is the fourth skip, and it is the
+    /// only one of the four that, in `town-mode.md §7` step 4's words,
+    /// "skips the schedule processor *only*, and it is tested after the
+    /// object walker has already made its pass". `npc-schedules.md §5` draws
+    /// the consequence: "That is why a result-two turn can still move a loose
+    /// horse-family object while no scheduled NPC moves." Both walkers
+    /// raise the visibility-dirty flag from inside themselves, so §7 step 5's
+    /// "the test has to cover **both** walkers, not just the schedule
+    /// processor" holds on a result-two turn too.
+    ///
+    /// *Corrected (R328).* This used to call the schedule processor first and
+    /// the object pass afterwards, which left a repaint conditioned on the
+    /// processor's report blind to an object the walker had moved.
     pub(crate) fn apply_pending_town_object_epilogue(&mut self) {
         let run_npc_schedule = std::mem::take(&mut self.pending_town_npc_schedule_pass);
         let run_active_objects = std::mem::take(&mut self.pending_town_active_object_pass);
-        if run_npc_schedule && self.pending_town_arrest.is_none() {
-            self.advance_npc_schedules();
+        // `npc-schedules.md §5` gates "**both** town walkers", which the
+        // animator is not one of (`npc-schedules.md §12`; `RETRACTIONS.md`
+        // R316), so the animate half carries its own flag and is not skipped
+        // by a turn the transport or Quickness parity gated out.
+        let run_animator = std::mem::take(&mut self.pending_town_active_object_animate_pass);
+        if run_animator {
+            self.animate_active_objects();
         }
         if run_active_objects {
-            self.advance_active_objects();
+            self.advance_active_object_walkers();
+        }
+        if run_npc_schedule && self.pending_town_arrest.is_none() {
+            self.advance_npc_schedules();
         }
     }
 
@@ -4833,6 +4872,11 @@ impl PlayState {
             recovered_hp += hp;
             recovered_mana += mana;
         }
+        // `npc-schedules.md §12`: the H-Hole-Up hours command is the second
+        // of the clear-and-re-place pass's three callers, and it runs "when
+        // it finishes its rested hours". An interrupted rest returns above
+        // and never reaches it.
+        self.clear_and_replace_scheduled_npcs();
         let woke = self.wake_town_rest_sleepers();
         self.message = format!(
             "Rested {hours} hour{} at the inn bed; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s).",

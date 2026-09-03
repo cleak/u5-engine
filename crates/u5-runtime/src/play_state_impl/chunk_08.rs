@@ -629,6 +629,35 @@ impl PlayState {
         (recovered_hp, recovered_mana)
     }
 
+    // OPEN SPEC QUESTION (`shops.md §8.4`, inn `R`): "The party's map
+    // position is written to the inn's bed cell for the duration, so the
+    // party is standing on the bed while the sequence plays." Which cell is
+    // *the* bed of a given inn is a per-inn authored coordinate that is not
+    // published, so no bed-cell write is implemented here; see
+    // `input_dispatch::apply_paid_inn_rest`. A scan for the nearest
+    // bed-family tile was tried and backed out: it is an invented coordinate
+    // rule, it is not bounded to the inn's own rooms, and the write is
+    // persistent, so on a map with beds in nearby residences it stranded the
+    // party in an unrelated building.
+
+    /// `shops.md §8.4`: "The clock is then run forward in paced steps until
+    /// the hour byte reads **six** - the rest always ends at 06:00, whatever
+    /// hour it began at, so a party that rents a room at 21:00 sleeps nine
+    /// hours and one that rents at 04:00 sleeps two." Returns the number of
+    /// paced hour steps the run took, which is what the result line reports.
+    ///
+    /// "The shared hourly provision cadence may apply as the clock advances",
+    /// so the steps go through the ordinary per-turn clock rather than
+    /// writing the hour byte directly.
+    pub fn advance_inn_rest_clock_to_morning(&mut self) -> u8 {
+        let mut hours = 0u8;
+        while self.clock.hour != INN_REST_WAKE_HOUR && hours < HOURS_PER_DAY {
+            self.advance_turn_with_minutes(MINUTES_PER_HOUR);
+            hours += 1;
+        }
+        hours
+    }
+
     pub fn apply_inn_rest_night_recovery(&mut self) -> (u16, u16, usize) {
         let mut recovered_hp = 0u16;
         let mut recovered_mana = 0u16;

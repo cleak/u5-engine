@@ -1167,9 +1167,8 @@
         ));
     }
 
-    #[test]
-    fn hostile_town_npc_chases_player_from_active_waypoint() {
-        let mut state = test_state(npc_open_grid(), 5, 5);
+    fn approach_and_attack_town_state(player_x: usize, player_y: usize) -> PlayState {
+        let mut state = test_state(npc_open_grid(), player_x, player_y);
         state.load_scheduled_npcs(&[
             NpcSlot {
                 slot: 0,
@@ -1186,6 +1185,17 @@
                 name: None,
             },
         ]);
+        state
+    }
+
+    #[test]
+    fn hostile_town_npc_chases_player_from_active_waypoint() {
+        // `npc-schedules.md §9` value `4`: "when the player is closer than
+        // that [four tiles from the waypoint], it enters the engagement path
+        // and can raise the town-mode attack event". The waypoint is `(9, 5)`
+        // and the party stands two cells from it, so this is the engagement
+        // arm and it is behind no coin.
+        let mut state = approach_and_attack_town_state(7, 5);
 
         state.advance_turn();
         state.apply_pending_town_status_provision_pass();
@@ -1193,6 +1203,29 @@
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (8, 5));
         assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn approach_and_attack_npc_wanders_while_the_player_is_far_from_the_waypoint() {
+        // `npc-schedules.md §9` value `4`, **corrected (R317)**: "While the
+        // player is four or more tiles from the *waypoint*, the NPC takes the
+        // ordinary bounded wander step with the **same constant cap of
+        // three** that value `1` uses". The withdrawn reading - "uses the
+        // wander step with a shrinking range around the waypoint" - and the
+        // engine's own "chase whenever the player is within eight cells of
+        // the NPC" both had this NPC stepping toward the party here.
+        //
+        // The wander arm is behind §9.1's one-in-two coin, so a seed on the
+        // losing half makes the distinction observable: an engaging NPC would
+        // step, a wandering one spends the turn.
+        let far = approach_and_attack_town_state(5, 5);
+        assert_eq!(far.town_player_distance_to(9, 5), 4);
+        let mut state = approach_and_attack_town_state(5, 5);
+        state.prng_state = losing_wander_coin_seed();
+
+        state.advance_npc_schedules();
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (9, 5));
     }
 
     /// `npc-schedules.md §10` ("Tile passability"): NPC pathfinding uses its

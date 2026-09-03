@@ -740,7 +740,12 @@ impl PlayState {
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
+            transport_walker_gate_parity: false,
+            quickness_walker_gate_parity: false,
+            world_walkers_ran_this_turn: false,
+            under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
+            pending_town_active_object_animate_pass: false,
             // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
             // restored from `0x02DF`/`0x02E0` and then rewritten by the
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
@@ -749,6 +754,12 @@ impl PlayState {
             // In a scene outside the surface/town family the renderer is
             // never reached at all (`moons.md §2.2`: "Nothing is drawn and
             // nothing is cached"), so there the restored bytes stand.
+            //
+            // §5.1 also forbids the recompute this merge replaced: the pair
+            // is "gameplay state, not scratch", and "An engine that treats
+            // the pair as disposable, or that recomputes the phase by a
+            // different route on load, sends the party through the wrong
+            // gate."
             cached_moon_glyph_bytes: options.cached_moon_glyph_bytes,
             food: options.food,
             gold: options.gold,
@@ -836,6 +847,7 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            sail_cached_direction: None,
             pending_vehicle_save: options
                 .pending_vehicle
                 .map(PendingVehicleSaveState::from_acquisition)
@@ -1074,7 +1086,12 @@ impl PlayState {
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
+            transport_walker_gate_parity: false,
+            quickness_walker_gate_parity: false,
+            world_walkers_ran_this_turn: false,
+            under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
+            pending_town_active_object_animate_pass: false,
             // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
             // restored from `0x02DF`/`0x02E0` and then rewritten by the
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
@@ -1083,6 +1100,12 @@ impl PlayState {
             // In a scene outside the surface/town family the renderer is
             // never reached at all (`moons.md §2.2`: "Nothing is drawn and
             // nothing is cached"), so there the restored bytes stand.
+            //
+            // §5.1 also forbids the recompute this merge replaced: the pair
+            // is "gameplay state, not scratch", and "An engine that treats
+            // the pair as disposable, or that recomputes the phase by a
+            // different route on load, sends the party through the wrong
+            // gate."
             cached_moon_glyph_bytes: options.cached_moon_glyph_bytes,
             food: options.food,
             gold: options.gold,
@@ -1170,6 +1193,7 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            sail_cached_direction: None,
             pending_vehicle_save: options
                 .pending_vehicle
                 .map(PendingVehicleSaveState::from_acquisition)
@@ -1425,7 +1449,12 @@ impl PlayState {
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
+            transport_walker_gate_parity: false,
+            quickness_walker_gate_parity: false,
+            world_walkers_ran_this_turn: false,
+            under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
+            pending_town_active_object_animate_pass: false,
             // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
             // restored from `0x02DF`/`0x02E0` and then rewritten by the
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
@@ -1434,6 +1463,12 @@ impl PlayState {
             // In a scene outside the surface/town family the renderer is
             // never reached at all (`moons.md §2.2`: "Nothing is drawn and
             // nothing is cached"), so there the restored bytes stand.
+            //
+            // §5.1 also forbids the recompute this merge replaced: the pair
+            // is "gameplay state, not scratch", and "An engine that treats
+            // the pair as disposable, or that recomputes the phase by a
+            // different route on load, sends the party through the wrong
+            // gate."
             cached_moon_glyph_bytes: options.cached_moon_glyph_bytes,
             food: options.food,
             gold: options.gold,
@@ -1521,6 +1556,7 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            sail_cached_direction: None,
             pending_vehicle_save,
             turn: 0,
             // As above for the coordinate half. The wind half is a duplicate:

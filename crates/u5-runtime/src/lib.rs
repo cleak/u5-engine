@@ -513,7 +513,7 @@ pub use main_loop::{
     DUNGEON_FACING_NORTH, DUNGEON_FACING_SOUTH, DUNGEON_FACING_WEST, DungeonEntrySeed,
     DungeonMovementAction, IDLE_WORLD_STEP_SUPPRESSED_FIRST,
     IDLE_WORLD_STEP_SUPPRESSED_FIRST_SCENE, IDLE_WORLD_STEP_SUPPRESSED_LAST,
-    IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE, PARTY_SLEEP_LINE, PartyCapability,
+    IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE, IdleWaitPass, PARTY_SLEEP_LINE, PartyCapability,
     SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST, SCENE_DUNGEON_FAMILY_LAST,
     SCENE_DUNGEON_NAMED_FIRST, SCENE_DUNGEON_NAMED_LAST, SCENE_INTRO_FIRST, SCENE_INTRO_LAST,
     SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST, SCENE_TOWN_FAMILY_LAST, SceneRoute,
@@ -801,7 +801,7 @@ pub use tile_classes::{
     TILE_WATER_LAST, TileClass, TileSuperCategory, coarse_tile_class, tile_super_category,
 };
 pub use tile_helpers::*;
-pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
+pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag, WalkerEffectGate};
 pub use tlk_control_codes::{
     CASTLE_TLK_NPCS, COMMON_WORD_DICTIONARY_ENTRIES, COMMON_WORD_DICTIONARY_NULL_REFERENCES,
     CONVERSATION_SHARED_NO_SLOT_SENTINEL, DWELLING_TLK_NPCS, KEEP_TLK_NPCS,
@@ -1011,4 +1011,5 @@ mod tests {
     include!("tests_inline/variant_rescope.rs");
     include!("tests_inline/combat_frame_conformance.rs");
     include!("tests_inline/result_lines_conformance.rs");
+    include!("tests_inline/town_turn_loop_conformance.rs");
 }

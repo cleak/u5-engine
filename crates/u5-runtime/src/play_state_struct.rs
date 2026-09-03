@@ -142,6 +142,42 @@ pub struct PlayState {
     /// separate because some low-level time calls deliberately suppress that
     /// pass while still owing the NPC scheduler. Never serialized.
     pub pending_town_active_object_pass: bool,
+    /// Whether the deferred town tail also owes the per-slot **animator**
+    /// pass. It is a separate flag from the walker pass above because
+    /// `npc-schedules.md §5`'s three effect gates skip "**both** town walkers
+    /// — the object walker that moves loose horse-family objects and this
+    /// schedule processor" and the animator is neither: it "moves no actor"
+    /// (`RETRACTIONS.md` R316) and `npc-schedules.md §12` runs it
+    /// "independently each render frame". Never serialized.
+    pub pending_town_active_object_animate_pass: bool,
+    /// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3: "While
+    /// the party's transport marker is one of the four values `0x12..0x15`,
+    /// a stored parity bit flips each turn and the loop skips **both** town
+    /// walkers on the turns where it comes up set". The bit is stored, not
+    /// derived from the turn counter, because "an early return leaves the
+    /// later gates' parity bits un-flipped" - so whether it advances on a
+    /// given turn depends on which mode's gate order reached it. Never
+    /// serialized.
+    pub transport_walker_gate_parity: bool,
+    /// `npc-schedules.md §5` gate 3 / `encounters.md §2.1` gate 2: the
+    /// Quickness parity bit, stored for the same reason as
+    /// [`Self::transport_walker_gate_parity`]. Never serialized.
+    pub quickness_walker_gate_parity: bool,
+    /// `encounters.md §2.1`: the three effect gates "sit ahead of the
+    /// encounter probe *and* ahead of the outdoor creature walker, so a gate
+    /// that fires costs the turn its probe as well as its creature movement".
+    /// The gates are evaluated once, in the per-turn clock routine, and the
+    /// outdoor post-action epilogue reads that one decision from here instead
+    /// of re-testing them - a second test would flip the stored parity bits
+    /// twice in one turn. Never serialized.
+    pub world_walkers_ran_this_turn: bool,
+    /// `timing.md §8.2`: which half of the under-sail auto-advance route the
+    /// next idle-wait pass owes. The route is "one world step followed by one
+    /// one-tick wait - before ... when sails are set, performing a bare
+    /// cursor poll instead", so a full pass is two ticks with the world step
+    /// on the first of them. Cleared whenever the route does not apply.
+    /// Never serialized.
+    pub under_sail_wait_cursor_poll_pending: bool,
     pub cached_moon_glyph_bytes: [u8; 2],
     pub food: u16,
     pub gold: u16,
@@ -310,6 +346,23 @@ pub struct PlayState {
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
     pub sail_cadence: u8,
     pub sail_stall_pending: bool,
+    /// `weather.md §5` / `overworld.md §5` step 3: the hoisted-sail ship's
+    /// **cached sail direction**. "Once the requested direction matches the
+    /// cached heading, the input helper can synthesize repeated movement
+    /// commands from the cached direction until the cache is cleared or
+    /// replaced", and at the loop's input step "under sail on the
+    /// wind-driven cadence, this step does not read the keyboard at all: the
+    /// input helper returns the cached sail direction instead, which is how a
+    /// ship keeps moving with no keypress".
+    ///
+    /// `None` means there is nothing to synthesize, so the loop reads a
+    /// command as usual. Docking, a sailing collision, furling, boarding or
+    /// leaving the ship, and the Pass command's stall report all clear it
+    /// (`overworld.md §6.2.5`, `vehicles.md` "Ship Sails", `weather.md §6`);
+    /// a wind change resets the counter but not the cache ("the next released
+    /// movement uses the same cadence again unless the wind, heading, or
+    /// cache changes"). Never serialized.
+    pub sail_cached_direction: Option<Direction>,
     /// Exact queued shipwright-delivery bytes from `SAVED.GAM`. The packed
     /// class is cleared only when world setup successfully delivers it.
     pub pending_vehicle_save: PendingVehicleSaveState,

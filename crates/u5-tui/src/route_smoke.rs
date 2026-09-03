@@ -57,22 +57,23 @@ use u5_runtime::{
     HARPSICHORD_PASSAGE_CELLS_NORTH, HARPSICHORD_PASSAGE_CLEARED_TILE, HARPSICHORD_TILE, HEAL_COST,
     HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, HOURLY_STARVATION_DAMAGE_MAX,
     HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX, IN_WIS_COST,
-    IN_WIS_SPELL_INDEX, Inn, JIMMY_MANACLES_TILE, JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE,
-    MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MASS_CHARM_ACTIVE_EFFECT_DURATION,
+    IN_WIS_SPELL_INDEX, INN_REST_WAKE_HOUR, Inn, JIMMY_MANACLES_TILE, JIMMY_RELEASE_AI_MODE,
+    JIMMY_STOCKS_TILE, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MASS_CHARM_ACTIVE_EFFECT_DURATION,
     MASS_CHARM_ACTIVE_EFFECT_TAG, MORAL_STANDING_MAX, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, NATURAL_MOONGATE_TERRAIN_TILE,
     NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NPC_DIALOG_ID_NONE,
-    NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS,
-    OPEN_SPELL_COST, OPEN_SPELL_INDEX, OUTDOOR_BROADSIDE_BOOM_MESSAGE,
-    OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX,
-    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
-    PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
-    RESURRECT_SPELL_INDEX, SAVE_QUEST_TILE_FLAG_HIGH_BIT, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
-    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED,
-    SHIP_NO_SKIFFS_WARNING, SHRINE_ALTAR_TILE_FIRST, SHRINE_RESTORATION_SUCCESS_BANNER, SLEEP_COST,
+    NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NPC_SCHEDULE_X_OFFSET,
+    NPC_SCHEDULE_Y_OFFSET, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
+    OUTDOOR_BROADSIDE_BOOM_MESSAGE, OUTDOOR_IMPACT_HULL_ROLL_HIGH, PEER_COST, PEER_SPELL_INDEX,
+    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST,
+    PROTECTION_SPELL_INDEX, PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState,
+    PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST,
+    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, SAVE_QUEST_TILE_FLAG_HIGH_BIT,
+    SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
+    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
+    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
+    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
+    SHRINE_ALTAR_TILE_FIRST, SHRINE_RESTORATION_SUCCESS_BANNER, SLEEP_COST,
     SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
     SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
     SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
@@ -104,7 +105,8 @@ use u5_runtime::{
     },
     shop_session::ActiveShopSession,
     spell_index_from_code, spell_mp_cost, stable_horse_price, summoned_active_object_record,
-    u5_prng_advance_state, u5_prng_range_u16, word_of_power_seal_for_word, world_cell_index,
+    u5_prng_advance_state, u5_prng_range_u16, waypoint_for_hour, word_of_power_seal_for_word,
+    world_cell_index,
 };
 
 use crate::{
@@ -5683,6 +5685,37 @@ fn validate_harpsichord_route_consumed_no_time(
     Ok(())
 }
 
+/// How many draws separate two states of the shared generator, walking
+/// forward from `from` and giving up after `max_draws`.
+///
+/// `npc-schedules.md §9.1` "Random-stream consumption": "A wander-eligible NPC
+/// consumes one draw from the shared generator on a turn where the gate fails
+/// and two on a turn where it passes, so the number of draws a turn consumes
+/// depends on how many NPCs were eligible." A town route therefore cannot pin
+/// the post-turn stream position to a single recomputed value the way an
+/// overworld route can - but it can still pin it to a *recomputed* position:
+/// the state the published head draws leave behind, advanced by a draw count
+/// inside the bound that same sentence gives.
+fn prng_draws_between(from: u16, to: u16, max_draws: usize) -> Option<usize> {
+    let mut probe = from;
+    for draws in 0..=max_draws {
+        if probe == to {
+            return Some(draws);
+        }
+        probe = u5_prng_advance_state(probe);
+    }
+    None
+}
+
+/// The published bound on the draws one town turn's schedule pass may add
+/// after the turn's own rolls: at most two per NPC in the roster
+/// (`npc-schedules.md §9.1`, "one draw ... on a turn where the gate fails and
+/// two on a turn where it passes"), and the schedule processor gives "every
+/// NPC ... one chance to act per tick" (§5).
+fn town_schedule_pass_draw_bound(state: &PlayState) -> usize {
+    2 * state.npcs.len()
+}
+
 fn validate_route_smoke_case_state(
     state: &PlayState,
     case_name: &str,
@@ -6210,7 +6243,7 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-hourly-poison-starvation-pass" => {
-            let mut expected_prng = 0x3456;
+            let mut expected_prng: u16 = 0x3456;
             let poisoned_starvation = u5_prng_range_u16(
                 &mut expected_prng,
                 HOURLY_STARVATION_DAMAGE_MIN,
@@ -6224,9 +6257,23 @@ fn validate_route_smoke_case_state(
             let poisoned_hp =
                 20u16 - u16::from(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE) - poisoned_starvation;
             let good_hp = 20u16 - good_starvation;
+            // The two starvation draws come off the head of the stream,
+            // because the shared status/provision pass runs ahead of the two
+            // town walkers in the turn tail; the damage equalities below pin
+            // both values and their order exactly. What follows them is the
+            // town schedule pass, whose draw count `npc-schedules.md §9.1`
+            // makes roster-dependent, so the end position is pinned as the
+            // recomputed post-starvation state advanced by a draw count
+            // inside that section's published per-NPC bound - not as "the
+            // stream moved".
+            let schedule_pass_draws = prng_draws_between(
+                expected_prng,
+                state.prng_state,
+                town_schedule_pass_draw_bound(state),
+            );
             if state.clock.hour != 9
                 || state.food != 0
-                || state.prng_state != expected_prng
+                || schedule_pass_draws.is_none()
                 || state
                     .party
                     .get(0)
@@ -6255,9 +6302,20 @@ fn validate_route_smoke_case_state(
         "castle-hourly-ring-regeneration-pass" => {
             let mut expected_prng = ring_regeneration_first_heal_seed();
             let roll = u5_prng_range_u16(&mut expected_prng, 0, 7);
+            // As in the poison/starvation case: the ring's own draw is the
+            // first off the seeded stream and the recovery equalities below
+            // pin its value, and the town schedule pass that follows it draws
+            // a roster-dependent number of times (`npc-schedules.md §9.1`).
+            // The end position is therefore pinned as the recomputed
+            // post-ring state advanced by a bounded draw count.
+            let schedule_pass_draws = prng_draws_between(
+                expected_prng,
+                state.prng_state,
+                town_schedule_pass_draw_bound(state),
+            );
             if roll != 0
                 || state.clock.hour != 8
-                || state.prng_state != expected_prng
+                || schedule_pass_draws.is_none()
                 || state.party.first().is_none_or(|member| {
                     member.status != b'G' || member.hp != member.max_hp || member.mana != 8
                 })
@@ -6274,8 +6332,19 @@ fn validate_route_smoke_case_state(
         "castle-poison-gas-step" => {
             let mut expected_prng = poison_gas_first_poison_seed();
             let roll = u5_prng_range_u16(&mut expected_prng, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
+            // As above: the gas roll is the first draw off the seeded stream
+            // and its value is pinned by `roll` and the poisoned status
+            // below; the town schedule pass that follows draws a
+            // roster-dependent number of times (`npc-schedules.md §9.1`), so
+            // the end position is pinned as the recomputed post-gas state
+            // advanced by a bounded draw count.
+            let schedule_pass_draws = prng_draws_between(
+                expected_prng,
+                state.prng_state,
+                town_schedule_pass_draw_bound(state),
+            );
             if roll == 0
-                || state.prng_state != expected_prng
+                || schedule_pass_draws.is_none()
                 || state.player.x != 16
                 || state.player.y != 15
                 || state
@@ -7091,10 +7160,25 @@ fn validate_route_smoke_case_state(
             let inn_recovery_applied = state.party.first().is_some_and(|member| {
                 member.hp == member.max_hp && member.mana == 24 && member.status == b'G'
             });
+            // `shops.md §8.4`: "The clock is then run forward in paced steps
+            // until the hour byte reads **six** - the rest always ends at
+            // 06:00, whatever hour it began at". The fixed eight-hour advance
+            // this route used to pin is withdrawn with the rest of the
+            // "pure presentation" reading of the `R` action.
+            let scheduled_npcs_are_on_their_06_00_waypoints = state.npcs.iter().all(|npc| {
+                let wp = waypoint_for_hour(&npc.schedule, state.clock.hour);
+                (npc.x, npc.y)
+                    == (
+                        npc.schedule[NPC_SCHEDULE_X_OFFSET + wp] as usize,
+                        npc.schedule[NPC_SCHEDULE_Y_OFFSET + wp] as usize,
+                    )
+            });
             if state.gold != expected_gold
                 || !inn_recovery_applied
-                || !state.message.contains("Rested 8 hours at the inn")
+                || state.clock.hour != INN_REST_WAKE_HOUR
+                || !state.message.contains("hours at the inn for")
                 || !state.message.contains("recovered 20 HP and 24 MP")
+                || !scheduled_npcs_are_on_their_06_00_waypoints
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public inn-rest outcome"

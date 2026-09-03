@@ -667,6 +667,43 @@ impl PlayState {
         false
     }
 
+    /// `npc-schedules.md §12`, "**The clear-and-re-place pass.**"
+    ///
+    /// "Three callers run the same pass that clears every non-party
+    /// active-object record and then re-places each live scheduled NPC at the
+    /// position its schedule gives for the *current* hour: entering the
+    /// location (the initialisation described in Section 4), the H-Hole-Up
+    /// hours command when it finishes its rested hours, and an inn's
+    /// rest-for-the-night, which ends at 06:00 and re-places the roster for
+    /// that hour before returning control (`systems/shops.md` Section 8.4).
+    /// After any of the three, an NPC that was mid-route is standing on its
+    /// scheduled position rather than where it had walked to, and its queued
+    /// route is gone."
+    ///
+    /// Town entry reaches the same result through
+    /// [`Self::load_scheduled_npcs`], which builds every runtime record from
+    /// the entry hour and then relinks; this is the pass for the two rest
+    /// callers, which keep their existing records.
+    pub fn clear_and_replace_scheduled_npcs(&mut self) {
+        if !matches!(self.area, Area::Town { .. }) {
+            return;
+        }
+        let hour = self.clock.hour;
+        for index in 0..self.npcs.len() {
+            let waypoint = waypoint_for_hour(&self.npcs[index].schedule, hour);
+            let (x, y, z) = self.npcs[index].waypoint_position(waypoint);
+            self.npcs[index].x = x;
+            self.npcs[index].y = y;
+            self.npcs[index].z = z;
+            // Writes the cache, returns the NPC to idle and discards any
+            // queued route - the three things §6 says both arrival paths do
+            // together.
+            self.npcs[index].set_settled_at_waypoint(waypoint);
+        }
+        self.relink_npc_objects();
+        self.mark_visibility_dirty();
+    }
+
     pub fn relink_npc_objects(&mut self) {
         let Area::Town { scene, floor } = self.area else {
             return;
@@ -754,49 +791,131 @@ impl PlayState {
         for index in 0..self.npcs.len() {
             let wp = waypoint_for_hour(&self.npcs[index].schedule, self.clock.hour);
             let (tx, ty, tz) = self.npcs[index].waypoint_position(wp);
-            let raw_ai = self.npcs[index].schedule[NPC_SCHEDULE_AI_OFFSET + wp];
-            let behavior = npc_ai_behavior(raw_ai);
-            if behavior == Some(NpcAiBehavior::Retreating)
-                && self.npcs[index].z == floor
-                && self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS
-            {
-                if let Some((nx, ny)) = self.town_npc_flee_step(index, floor) {
-                    self.npcs[index].x = nx;
-                    self.npcs[index].y = ny;
-                    moved = true;
-                    self.sync_npc_active_object(index, floor);
+            // `npc-schedules.md §5` step 5: the boundary trigger is called
+            // only on idle NPCs ("If state is 'idle' (state <= 1) ..."); a
+            // slot already in a movement state goes straight to the §7 state
+            // machine and never reaches the §9 AI dispatch.
+            let settled = self.npcs[index].state <= NPC_STATE_IDLE;
+            let at_boundary = npc_schedule_hour_at_boundary(
+                self.npcs[index].schedule_time_boundaries(),
+                self.clock.hour,
+            );
+            // `npc-schedules.md §6`, "What a boundary hour does to a
+            // wandering NPC": "The **direct** route to the AI dispatch of
+            // Section 9 is taken only when the trigger reports 'no action' -
+            // that is, only while the current hour matches none of the NPC's
+            // own four `time` bytes. ... For the whole of an hour that *does*
+            // equal one of them, a settled NPC is routed into the
+            // route/state machine of Section 7 instead, so a wander-AI NPC
+            // normally stands still for that entire hour, whether or not its
+            // waypoint actually changed."
+            //
+            // Of the two published escapes this fork is the first: "**The
+            // tick's heavy-work budget was already spent.** The walker allows
+            // one expensive replan/route operation per pass. If a
+            // lower-numbered NPC already consumed it, a diverted NPC takes
+            // the cheap arm instead, which re-checks the floor and then
+            // enters the AI dispatch after all - using its **cached**
+            // waypoint index rather than the freshly resolved one. Such an
+            // NPC wanders normally on that turn." The second escape - "the
+            // waypoint actually changed at the boundary" - needs no code
+            // here: that NPC leaves the idle state below and route-walks
+            // under §7. "An engine that models the boundary hour as a hard
+            // freeze will be right most of the time and will diverge in a
+            // crowded location, which is exactly where the difference is
+            // visible."
+            let ai_waypoint = if !settled {
+                None
+            } else if !at_boundary {
+                Some(wp)
+            } else if searched {
+                Some(self.npcs[index].cached_wp)
+            } else {
+                None
+            };
+            if let Some(ai_wp) = ai_waypoint {
+                let (ai_tx, ai_ty, _) = self.npcs[index].waypoint_position(ai_wp);
+                let raw_ai = self.npcs[index].schedule[NPC_SCHEDULE_AI_OFFSET + ai_wp];
+                let behavior = npc_ai_behavior(raw_ai);
+                if behavior == Some(NpcAiBehavior::Retreating)
+                    && self.npcs[index].z == floor
+                    && self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS
+                {
+                    if let Some((nx, ny)) = self.town_npc_flee_step(index, floor) {
+                        self.npcs[index].x = nx;
+                        self.npcs[index].y = ny;
+                        moved = true;
+                        self.sync_npc_active_object(index, floor);
+                    }
+                    continue;
                 }
-                continue;
-            }
-            if self.npcs[index].z == floor {
-                if let Some(behavior) = behavior {
-                    if behavior.raises_attack_event() || behavior.raises_guard_event() {
-                        let unconditional_chase = matches!(
-                            behavior,
-                            NpcAiBehavior::ReservedEngage | NpcAiBehavior::RandomChase
-                        );
-                        if !self.town_npc_adjacent_to_player(index)
-                            && (unconditional_chase
-                                || self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS)
-                        {
-                            if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
+                if self.npcs[index].z == floor {
+                    if let Some(behavior) = behavior {
+                        // `npc-schedules.md §9` value `4`, corrected by
+                        // **R317**: "While the player is four or more tiles
+                        // from the *waypoint*, the NPC takes the ordinary
+                        // bounded wander step with the **same constant cap of
+                        // three** that value `1` uses; when the player is
+                        // closer than that, it enters the engagement path".
+                        // "The distance this mode measures is used only to
+                        // choose between wandering and engaging and is then
+                        // discarded; the wander radius is a constant,
+                        // identical to value `1`, and never narrows as the
+                        // player closes."
+                        let approach_wanders = behavior == NpcAiBehavior::ApproachAndAttack
+                            && self.town_player_distance_to(ai_tx, ai_ty)
+                                >= TOWN_NPC_APPROACH_ENGAGE_WAYPOINT_DISTANCE;
+                        if approach_wanders {
+                            if let Some((nx, ny)) = self.town_npc_wander_step(
+                                index,
+                                floor,
+                                ai_tx,
+                                ai_ty,
+                                TOWN_NPC_BOUNDED_WANDER_CAP,
+                            ) {
                                 self.npcs[index].x = nx;
                                 self.npcs[index].y = ny;
                                 moved = true;
                                 self.sync_npc_active_object(index, floor);
                                 continue;
                             }
-                        }
-                    } else if behavior.is_wander() {
-                        let bounded = matches!(behavior, NpcAiBehavior::BoundedWander);
-                        if let Some((nx, ny)) =
-                            self.town_npc_wander_step(index, floor, tx, ty, bounded)
-                        {
-                            self.npcs[index].x = nx;
-                            self.npcs[index].y = ny;
-                            moved = true;
-                            self.sync_npc_active_object(index, floor);
-                            continue;
+                        } else if behavior.raises_attack_event() || behavior.raises_guard_event() {
+                            let unconditional_chase = matches!(
+                                behavior,
+                                NpcAiBehavior::ReservedEngage | NpcAiBehavior::RandomChase
+                            );
+                            if !self.town_npc_adjacent_to_player(index)
+                                && (unconditional_chase
+                                    || self.town_npc_player_distance(index)
+                                        <= TOWN_NPC_CHASE_RADIUS)
+                            {
+                                if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
+                                    self.npcs[index].x = nx;
+                                    self.npcs[index].y = ny;
+                                    moved = true;
+                                    self.sync_npc_active_object(index, floor);
+                                    continue;
+                                }
+                            }
+                        } else if behavior.is_wander() {
+                            // §9 value `2`: "the same one-attempt-per-turn
+                            // coin and the same single direction draw, with
+                            // the waypoint-radius test switched off entirely
+                            // (cap zero)."
+                            let cap = if matches!(behavior, NpcAiBehavior::BoundedWander) {
+                                TOWN_NPC_BOUNDED_WANDER_CAP
+                            } else {
+                                TOWN_NPC_UNBOUNDED_WANDER_CAP
+                            };
+                            if let Some((nx, ny)) =
+                                self.town_npc_wander_step(index, floor, ai_tx, ai_ty, cap)
+                            {
+                                self.npcs[index].x = nx;
+                                self.npcs[index].y = ny;
+                                moved = true;
+                                self.sync_npc_active_object(index, floor);
+                                continue;
+                            }
                         }
                     }
                 }
@@ -807,10 +926,11 @@ impl PlayState {
             }
 
             if self.npcs[index].state <= NPC_STATE_IDLE {
-                if !npc_schedule_hour_at_boundary(
-                    self.npcs[index].schedule_time_boundaries(),
-                    self.clock.hour,
-                ) {
+                // `npc-schedules.md §6` "Boundary equality": the trigger
+                // "compares the current hour byte against each of the NPC's
+                // four `time` bytes. If none match exactly, the trigger
+                // returns 'no action' - the NPC stays idle."
+                if !at_boundary {
                     continue;
                 }
                 if self.npcs[index].cached_wp == wp {
@@ -903,16 +1023,84 @@ impl PlayState {
             ));
         }
         if *searched {
+            // `npc-schedules.md §9.1`, "The same stepper is reached with the
+            // cap switched off": one of the two route-recovery entries is
+            // "the state-2/3 arm whose queue is exhausted and whose replan
+            // either failed or **was not attempted**". This is the
+            // not-attempted arm - §7's per-tick latch, "at most one NPC per
+            // tick may start a fresh search", has already spent the tick's
+            // one search.
+            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
+        }
+        // `npc-schedules.md §9.1`: "when the NPC's stuck counter is non-zero
+        // the walker only re-plans on a **one-in-three** draw and otherwise
+        // ages the counter for that turn." The draw is taken before the
+        // search latch is spent, so a stalled NPC does not deny the tick's
+        // one search to a later slot on the turns it does not replan.
+        if self.npcs[npc_index].stuck_counter != 0 && !self.town_npc_stuck_replan_draw_passes() {
             self.npcs[npc_index].note_failed_progress();
             return NpcScheduleStepOutcome::Stalled;
         }
         *searched = true;
         let Some(route) = self.npc_path_route(npc_index, start, target, floor) else {
-            self.npcs[npc_index].note_failed_progress();
-            return NpcScheduleStepOutcome::Stalled;
+            // The other published route-recovery entry: the replan failed.
+            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         };
         self.npcs[npc_index].set_move_queue(route);
         self.advance_npc_replay_queue_step(npc_index, waypoint, target_x, target_y, target_z, floor)
+    }
+
+    /// `npc-schedules.md §9.1`, "**The same stepper is reached with the cap
+    /// switched off.**"
+    ///
+    /// "Two route-recovery paths in the state machine call the identical
+    /// wander step with cap zero: the queued-route replay when its next
+    /// queued step is refused, and the state-2/3 arm whose queue is exhausted
+    /// and whose replan either failed or was not attempted because a queue
+    /// pointer was still live. Both are still behind the same one-in-two
+    /// coin, so an NPC that is recovering from a blocked route also moves on
+    /// about half its turns, but without the waypoint-radius limit."
+    ///
+    /// The recovery step is the wander stepper itself, so it pays the coin
+    /// and the direction draw and spends the turn on a stage-3/4 rejection
+    /// exactly as the AI-dispatch entry does. It commits the cell the same
+    /// way the AI dispatch does - position plus sprite sync - and leaves the
+    /// state byte, the move queue and the cached waypoint alone, because none
+    /// of §7's route bookkeeping applies to a step the route did not choose.
+    /// The failed route step is still counted against the stuck counter
+    /// (§5 step 7, "if the NPC fails to make progress, the stuck counter is
+    /// bumped"); recovering sideways is not progress along the route.
+    fn npc_route_recovery_wander(
+        &mut self,
+        npc_index: usize,
+        floor: u8,
+        target_x: usize,
+        target_y: usize,
+    ) -> NpcScheduleStepOutcome {
+        self.npcs[npc_index].note_failed_progress();
+        let Some((nx, ny)) = self.town_npc_wander_step(
+            npc_index,
+            floor,
+            target_x,
+            target_y,
+            TOWN_NPC_UNBOUNDED_WANDER_CAP,
+        ) else {
+            return NpcScheduleStepOutcome::Stalled;
+        };
+        self.npcs[npc_index].x = nx;
+        self.npcs[npc_index].y = ny;
+        self.sync_npc_active_object(npc_index, floor);
+        NpcScheduleStepOutcome::Moved
+    }
+
+    /// `npc-schedules.md §9.1`: "when the NPC's stuck counter is non-zero the
+    /// walker only re-plans on a **one-in-three** draw and otherwise ages the
+    /// counter for that turn."
+    ///
+    /// Only the rate is published. The draw form here is the same range
+    /// primitive the wander gate uses, over `0..2`, accepted on one value.
+    fn town_npc_stuck_replan_draw_passes(&mut self) -> bool {
+        self.random_range_u8(0, TOWN_NPC_STUCK_REPLAN_DRAW_MAX) == 0
     }
 
     /// `npc-schedules.md §7` state 8 and the unexpected-state default:
@@ -967,13 +1155,15 @@ impl PlayState {
             self.npcs[npc_index].set_idle();
             return NpcScheduleStepOutcome::Stalled;
         };
+        // `npc-schedules.md §9.1`: the first of the two cap-zero
+        // route-recovery entries is "the queued-route replay **when its next
+        // queued step is refused**". Both refusal arms below are that case -
+        // an unusable direction code and a cell the §10 checks reject.
         let Some((nx, ny)) = npc_step_from_direction_code(start, code) else {
-            self.npcs[npc_index].note_failed_progress();
-            return NpcScheduleStepOutcome::Stalled;
+            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         };
         if !self.npc_can_step_toward(npc_index, nx, ny, floor, target_x, target_y) {
-            self.npcs[npc_index].note_failed_progress();
-            return NpcScheduleStepOutcome::Stalled;
+            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         }
         self.npcs[npc_index].advance_move_queue_direction();
         let moved = self.commit_npc_schedule_position(
@@ -1073,33 +1263,95 @@ impl PlayState {
         best
     }
 
+    /// `npc-schedules.md §9.1` stage 1, the per-turn wander gate: "A fair
+    /// coin - **one in two**, not one in eight. The engine draws a uniform
+    /// byte and tests a single bit of it. On the losing half the NPC does
+    /// nothing at all this turn; there is no second look and no accumulated
+    /// credit. *Established.* The draw is the byte-wide form of the range
+    /// primitive in `systems/prng.md`, whose width divides the generator's
+    /// magnitude range evenly, so the draw is bias-free and the single bit is
+    /// an exact half."
+    ///
+    /// Which of the eight bits is tested, and which half of it loses, are not
+    /// published; the low bit is used here. Only the rate is contractual.
+    pub fn town_npc_wander_gate_passes(&mut self) -> bool {
+        self.random_range_u8(0, u8::MAX) & 1 == 0
+    }
+
+    /// `npc-schedules.md §9.1` stage 2: "A single cardinal direction is
+    /// drawn: a uniform value over the sixty-five integers `0..64`, folded to
+    /// its low two bits and mapped to east, north, west, south in that order.
+    /// Because sixty-five values do not fold evenly into four, the mapping is
+    /// very slightly biased: east is drawn about `26.2%` of the time and each
+    /// of the other three about `24.6%`. An implementation that draws a clean
+    /// uniform `0..3` will be indistinguishable in play but not in a recorded
+    /// roll sequence."
+    pub fn town_npc_wander_direction(&mut self) -> Direction {
+        match self.random_range_u8(0, TOWN_NPC_WANDER_DIRECTION_DRAW_MAX) & 0b11 {
+            0 => Direction::East,
+            1 => Direction::North,
+            2 => Direction::West,
+            _ => Direction::South,
+        }
+    }
+
+    /// `npc-schedules.md §9.1`, the complete per-turn wander contract for AI
+    /// values `1`, `2` and the far-from-player arm of value `4`.
+    ///
+    /// "An NPC that reaches the wander step gets **exactly one attempt per
+    /// player turn**, and that attempt has four stages, each of which can end
+    /// the turn with no movement": the one-in-two coin, one direction draw,
+    /// the waypoint-radius test ("skipped entirely when the cap is zero" -
+    /// the candidate cell's "**Manhattan distance to the active waypoint's
+    /// stored `(x, y)`** is compared against the cap, and a distance
+    /// **strictly greater** than the cap rejects the step"), and the ordinary
+    /// per-step cell check of §10.
+    ///
+    /// "**A rejection at stage 3 or 4 is a spent turn.** The NPC does not try
+    /// a second direction, does not re-roll, and does not fall back to a
+    /// different rule. One coin, one direction, one candidate, one turn." The
+    /// earlier implementation swept all four cardinals in a turn-derived
+    /// rotation with no coin at all, which is why this is a rewrite rather
+    /// than an edit.
+    ///
+    /// "Note that the rule caps where the NPC may *stand*, not how far it may
+    /// travel: an NPC sitting exactly on its waypoint may step to any of the
+    /// four neighbours, and only a candidate four cells away is refused at
+    /// cap three." The radius is therefore Manhattan on the candidate, not a
+    /// per-axis test on the committed cell.
+    ///
+    /// A step that lands on the waypoint commits but does **not** refresh the
+    /// cached-waypoint field (§6); the caller leaves that field alone.
     pub fn town_npc_wander_step(
-        &self,
+        &mut self,
         npc_index: usize,
         floor: u8,
         waypoint_x: usize,
         waypoint_y: usize,
-        bounded: bool,
+        cap: usize,
     ) -> Option<(usize, usize)> {
-        let start =
-            ((self.turn as usize) + self.npcs[npc_index].slot) % TOWN_NPC_CARDINAL_DIRECTIONS.len();
-        for offset in 0..TOWN_NPC_CARDINAL_DIRECTIONS.len() {
-            let direction =
-                TOWN_NPC_CARDINAL_DIRECTIONS[(start + offset) % TOWN_NPC_CARDINAL_DIRECTIONS.len()];
-            let Some((nx, ny)) = self.town_npc_step_in_direction_toward(
-                npc_index, floor, direction, waypoint_x, waypoint_y,
-            ) else {
-                continue;
-            };
-            if bounded
-                && (nx.abs_diff(waypoint_x) > TOWN_NPC_BOUNDED_WANDER_RADIUS
-                    || ny.abs_diff(waypoint_y) > TOWN_NPC_BOUNDED_WANDER_RADIUS)
-            {
-                continue;
-            }
-            return Some((nx, ny));
+        if !self.town_npc_wander_gate_passes() {
+            return None;
         }
-        None
+        let direction = self.town_npc_wander_direction();
+        let (dx, dy) = direction.delta();
+        let candidate_x = self.npcs[npc_index].x as isize + dx;
+        let candidate_y = self.npcs[npc_index].y as isize + dy;
+        if cap != 0 {
+            let distance = candidate_x.abs_diff(waypoint_x as isize)
+                + candidate_y.abs_diff(waypoint_y as isize);
+            if distance > cap {
+                return None;
+            }
+        }
+        self.town_npc_step_in_direction_toward(npc_index, floor, direction, waypoint_x, waypoint_y)
+    }
+
+    /// Manhattan distance from the party to an arbitrary town cell. Used by
+    /// the `npc-schedules.md §9` value-`4` fork, which measures the player
+    /// against the *waypoint* rather than against the NPC.
+    pub fn town_player_distance_to(&self, x: usize, y: usize) -> usize {
+        self.player.x.abs_diff(x) + self.player.y.abs_diff(y)
     }
 
     pub fn town_npc_step_in_direction(
@@ -1445,7 +1697,23 @@ impl PlayState {
 }
 
 const TOWN_NPC_CHASE_RADIUS: usize = 8;
-const TOWN_NPC_BOUNDED_WANDER_RADIUS: usize = 2;
+/// `npc-schedules.md §9` value `1`: "an accepted step must leave the NPC
+/// within Manhattan distance **three** of the active waypoint", and value `4`
+/// (R317) "uses the **same constant cap of three**".
+const TOWN_NPC_BOUNDED_WANDER_CAP: usize = 3;
+/// `npc-schedules.md §9` value `2`: "the waypoint-radius test switched off
+/// entirely (cap zero)".
+const TOWN_NPC_UNBOUNDED_WANDER_CAP: usize = 0;
+/// `npc-schedules.md §9.1`: the stuck-counter replan draw is "a
+/// **one-in-three** draw", so the range primitive runs over `0..2`.
+const TOWN_NPC_STUCK_REPLAN_DRAW_MAX: u8 = 2;
+/// `npc-schedules.md §9.1` stage 2: the direction draw is "a uniform value
+/// over the sixty-five integers `0..64`".
+const TOWN_NPC_WANDER_DIRECTION_DRAW_MAX: u8 = 64;
+/// `npc-schedules.md §9` value `4` (R317): the fork between the wander arm
+/// and the engagement path is "while the player is four or more tiles from
+/// the *waypoint*".
+const TOWN_NPC_APPROACH_ENGAGE_WAYPOINT_DISTANCE: usize = 4;
 const TOWN_NPC_CARDINAL_DIRECTIONS: [Direction; 4] = [
     Direction::West,
     Direction::South,
