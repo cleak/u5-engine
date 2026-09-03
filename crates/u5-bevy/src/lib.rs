@@ -20140,6 +20140,163 @@ mod tests {
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
+    /// The whole published start-up order, in one test, because it is
+    /// routinely re-reported as a defect ("the menu is never shown on
+    /// its own; the engine goes from the publisher flourish straight
+    /// into the attract demo"). `systems/intro.md §3` publishes the
+    /// opposite: an unskipped title sequence plays "the one-shot
+    /// automatic Return-to-View preview before polling the menu", and
+    /// only a keystroke in an earlier title phase suppresses it. The
+    /// six labels are therefore genuinely not on screen for more than
+    /// the one poll pass between the loader returning and the preview
+    /// starting; the key that leaves the preview is what settles the
+    /// menu, and from there §6.2's two-hundred-pass idle timeout
+    /// re-enters the preview.
+    ///
+    /// Confirmed black-box against DOS Ultima V under DOSBox Staging
+    /// (`machine=ega`, 200 ms PrintWindow trace from launch): the
+    /// original is on its start screen at 10.2 s and is already running
+    /// the preview at 10.4 s, with no menu frame in the following
+    /// 13.4 s.
+    #[test]
+    fn automatic_preview_then_key_then_idle_timeout_reenters_the_preview() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.pending_auto_return_to_view = true;
+
+        // 1. The one-shot runs before the menu is ever polled.
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "an unskipped run shows the attract preview before the first menu poll"
+        );
+
+        // 2. A key leaves the preview for the finished menu, with the
+        //    one-shot spent and the idle counter restarted.
+        assert!(step_visual_intro(&mut intro, ' '));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(!intro.pending_auto_return_to_view);
+        assert_eq!(intro.menu_idle_ticks, 0);
+
+        // 3. The idle timeout re-enters the preview. Only the first
+        //    automatic showing was conditional.
+        idle_the_intro_menu_through_the_return_to_view_timeout(&mut intro);
+        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §6.2`: "Two hundred consecutive no-key passes |
+    /// Commit `Return to the View` exactly as though `R` had been
+    /// pressed", and §5: each no-key pass "costs two BIOS ticks, not
+    /// one — the input poll waits one and the title tick waits another".
+    ///
+    /// The window is load-bearing *presentation*, not just a counter:
+    /// for the whole of it the six labels have to stay on screen. This
+    /// pins both ends — the menu survives every pump tick before the
+    /// two-hundredth pass and the preview starts on it — and the
+    /// arithmetic that turns passes into the wall-clock time the player
+    /// experiences.
+    #[test]
+    fn a_settled_menu_holds_for_the_whole_two_hundred_pass_idle_window() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        // The §3 one-shot has already been spent, so this is the
+        // ordinary polled menu.
+        intro.pending_auto_return_to_view = false;
+        intro.menu_idle_ticks = 0;
+        intro.menu_idle_bios_ticks = 0;
+
+        let pump_ticks = u32::from(INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES)
+            * u32::from(INTRO_MENU_IDLE_POLL_BIOS_TICKS);
+        assert_eq!(pump_ticks, 400, "200 poll passes of two BIOS ticks each");
+        for tick in 1..pump_ticks {
+            advance_visual_intro_animation_tick(&mut intro);
+            assert!(
+                matches!(intro.panel, VisualIntroPanel::Menu),
+                "the menu must still be the presented panel at pump tick {tick}"
+            );
+        }
+
+        advance_visual_intro_animation_tick(&mut intro);
+
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the two-hundredth no-key poll pass commits Return to the View"
+        );
+        let window_secs = pump_ticks as f32 * BIOS_USER_TICK_INTERVAL_SECS;
+        assert!(
+            (window_secs - 21.970).abs() < 0.005,
+            "the idle window is ~21.97 s of wall clock, got {window_secs}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The other half of §3's conditional: a keystroke during an
+    /// earlier title phase "suppresses the Return-to-View preview", so
+    /// a skipped run settles on the menu straight away — and that menu
+    /// then holds for the same full two-hundred-pass window before the
+    /// preview starts. This is the only start-up path on which the
+    /// player sees the six labels for more than one poll pass without
+    /// pressing a second key.
+    #[test]
+    fn a_skipped_title_sequence_settles_on_the_menu_and_still_times_out() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        // The plain loader path never reaches §3 step 7, so `WD.BIT`
+        // being absent proves no subtitle ignition ran.
+        fs::remove_file(dir.join("WD.BIT")).unwrap();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_sequence_skipped = true;
+
+        finish_visual_intro_title_to_menu(&mut intro, false);
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(
+            !intro.pending_auto_return_to_view,
+            "a skipped run suppresses the automatic preview entirely"
+        );
+        // No key is pressed from here on: the menu is on screen for the
+        // whole window and only the idle timeout takes it away.
+        idle_the_intro_menu_through_the_return_to_view_timeout(&mut intro);
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the idle timeout is unconditional; it fires on a skipped run too"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Pump the intro animation until the two-hundred-pass idle timeout
+    /// fires, asserting the menu is the presented panel for every tick
+    /// before it. Panics if the timeout has not fired by then.
+    fn idle_the_intro_menu_through_the_return_to_view_timeout(intro: &mut VisualIntroState) {
+        let pump_ticks = u32::from(INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES)
+            * u32::from(INTRO_MENU_IDLE_POLL_BIOS_TICKS);
+        // The menu may be mid-pass when this is called, so allow one
+        // extra BIOS tick to reach the pass boundary.
+        for tick in 0..=pump_ticks {
+            if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
+                assert!(
+                    tick + 1 >= pump_ticks,
+                    "the preview started after only {tick} of {pump_ticks} pump ticks"
+                );
+                return;
+            }
+            assert!(
+                matches!(intro.panel, VisualIntroPanel::Menu),
+                "the menu must still be the presented panel at pump tick {tick}"
+            );
+            advance_visual_intro_animation_tick(intro);
+        }
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the idle timeout never fired"
+        );
+    }
+
     #[test]
     fn intro_final_pre_menu_frame_is_slot8_signature_and_slot9_only() {
         let blank = solid_bitmap(1, 1, 0);
