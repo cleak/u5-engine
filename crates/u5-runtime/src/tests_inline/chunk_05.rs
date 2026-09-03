@@ -1865,12 +1865,18 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
     assert_eq!(result_lines.first(), Some(&"East"));
-    assert!(result_lines.len() > 1);
+    // `combat.md` 11.1: "**To-hit fails** | **monster melee** | **nothing at
+    // all**", so the guard's own turn may contribute no line whatever. The
+    // former `len() > 1` floor pinned `Guard missed!`, an attacker-named line
+    // that rule 1 of the same section says the original cannot emit.
     assert!(
         result_lines
             .iter()
             .skip(1)
-            .all(|line| *line == "Guard missed!" || *line == "Avatar hit!")
+            .all(|line| *line == "Avatar hit!"
+                || *line == "Avatar grazed!"
+                || *line == "Avatar killed!"),
+        "unexpected combat result lines: {result_lines:?}"
     );
     assert!(!state
         .message_entries()

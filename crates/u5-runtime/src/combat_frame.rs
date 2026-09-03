@@ -3633,6 +3633,26 @@ impl PlayState {
         Some(child)
     }
 
+    /// `combat.md` 11.1, census row "Damage zero or negative | both |
+    /// `<target> grazed!` **and nothing else** ... | the rising action-snap cue
+    /// (`audio.md`, 1200 toward 2000 Hz)", and 12: the marker's "first [reader]
+    /// prints `<target> grazed!` followed by the rising action-snap cue".
+    ///
+    /// 11.1's ordered sequence puts the cue on the result line, step 5, after
+    /// damage application at step 4, "with a cue only on the graze and
+    /// dragged-under arms". The damage-and-status handler is where the marker
+    /// is raised and is the one point both the party and monster defender
+    /// routes pass through. `audio.md` 11 lists "per-victim combat damage or
+    /// kill narration" among the generic action snap's sites.
+    ///
+    /// Zero is included with negative deliberately (`RETRACTIONS.md` R352); the
+    /// instant-kill sentinel is decimal 99 and cannot reach this arm.
+    fn emit_combat_graze_cue(&mut self, raw_damage: i16) {
+        if raw_damage <= 0 {
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+        }
+    }
+
     pub fn apply_combat_weapon_damage_to_target(
         &mut self,
         attacker_slot: Option<usize>,
@@ -3642,6 +3662,7 @@ impl PlayState {
     ) -> Option<CombatWeaponDamageApplication> {
         if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
             let damage = self.apply_combat_party_damage_to_slot(target_slot, raw_damage)?;
+            self.emit_combat_graze_cue(raw_damage);
             return Some(CombatWeaponDamageApplication::Party {
                 target_slot,
                 damage,
@@ -3652,6 +3673,7 @@ impl PlayState {
             .combat_actors
             .get_mut(target_slot)?
             .apply_monster_damage(raw_damage, magical)?;
+        self.emit_combat_graze_cue(raw_damage);
         if damage.killed {
             self.apply_combat_monster_death_active_object_effect(target_slot, damage);
         } else {

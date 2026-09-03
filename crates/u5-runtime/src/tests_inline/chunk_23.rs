@@ -10924,9 +10924,11 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // banner. The Giant Rat's reply ahead of it is the stream re-baselined
     // by `RETRACTIONS.md` R311: the lazily drawn cardinal fallback changes
     // which roll the reply takes.
+    // `combat.md` 11.1: the Giant Rat's failed melee to-hit prints "nothing
+    // at all", so only the direction echo and the next turn banner remain.
     assert_eq!(
         attack_state.message,
-        "East\nGiant Rat missed!\n\nAvatar, armed with bare hands:"
+        "East\n\nAvatar, armed with bare hands:"
     );
     assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
@@ -10982,9 +10984,16 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
         PlayInputDisposition::Continue
     );
 
+    // `combat.md` 11.1's graded wound lines, monster target: the Giant Rat's
+    // class maximum is 10, so the truncated quarter is 2 and the thresholds are
+    // 2, 4 and 6. The survivor sits at or above three truncated quarters, which
+    // is wound score 4, "`<target> barely wounded!`". The engine previously
+    // printed `grazed` for this bucket; 11.1 reserves `grazed!` for the
+    // zero-or-negative-damage outcome and gives score 4 its own line.
+    assert!(state.combat_actors[8].hp_or_wound >= 6);
     assert_eq!(
         state.message,
-        "East\nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
+        "East\nGiant Rat barely wounded!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -13275,37 +13284,65 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
 }
 
 #[test]
-fn combat_wound_morale_uses_quarter_buckets_and_documented_roll_rate() {
+fn combat_wound_morale_uses_truncated_quarter_thresholds_and_documented_roll_rate() {
+    // `combat.md` 11.1: "The quarter is the class maximum divided by four with
+    // truncation, and the three thresholds are one, two and three of those
+    // truncated quarters, so the boundaries sit slightly low for maxima that
+    // are not multiples of four."
+    //
+    // 99 is deliberately not a multiple of four: the truncated quarter is 24,
+    // so the thresholds are 24, 48 and 72 - not 24.75, 49.5 and 74.25. Each
+    // pair below straddles one of the three boundaries, which is what
+    // distinguishes the published rule from an exact-fraction comparison.
+    for (hp, bucket) in [
+        (23u8, CombatWoundScoreBucket::UnderOneQuarter),
+        (24, CombatWoundScoreBucket::OneQuarterToUnderHalf),
+        (47, CombatWoundScoreBucket::OneQuarterToUnderHalf),
+        (48, CombatWoundScoreBucket::HalfToUnderThreeQuarters),
+        (71, CombatWoundScoreBucket::HalfToUnderThreeQuarters),
+        (72, CombatWoundScoreBucket::ThreeQuartersOrMore),
+    ] {
+        assert_eq!(
+            combat_wound_score_bucket(hp, 99),
+            bucket,
+            "wound score bucket for {hp} of 99"
+        );
+    }
+
+    // 9's morale rule over the same buckets: "below one quarter sets fleeing,
+    // one-quarter through just under one-half rolls a morale check that sets
+    // fleeing on 252 of 256 possible random-byte results, and one-half or
+    // higher clears fleeing."
     assert_eq!(
-        resolve_combat_wound_morale(24, 99, 0),
+        resolve_combat_wound_morale(23, 99, 255),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::UnderOneQuarter,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(25, 99, 251),
+        resolve_combat_wound_morale(24, 99, 251),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(49, 99, 252),
+        resolve_combat_wound_morale(47, 99, 252),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: false,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(50, 99, 255),
+        resolve_combat_wound_morale(48, 99, 0),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::HalfToUnderThreeQuarters,
             fleeing: false,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(75, 99, 255),
+        resolve_combat_wound_morale(72, 99, 0),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::ThreeQuartersOrMore,
             fleeing: false,
@@ -13315,17 +13352,27 @@ fn combat_wound_morale_uses_quarter_buckets_and_documented_roll_rate() {
 
 #[test]
 fn combat_wound_morale_can_resolve_class_max_hp() {
+    // Class 32's maximum is 10, so the truncated quarter is 2 and the
+    // thresholds are 2, 4 and 6 (`combat.md` 11.1). HP 2 is the first value in
+    // the morale-roll band; HP 4 is already out of it.
     assert_eq!(
-        resolve_combat_wound_morale_for_class(4, 32, 0).unwrap(),
+        resolve_combat_wound_morale_for_class(2, 32, 0).unwrap(),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale_for_class(4, 32, 252).unwrap(),
+        resolve_combat_wound_morale_for_class(2, 32, 252).unwrap(),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
+            fleeing: false,
+        }
+    );
+    assert_eq!(
+        resolve_combat_wound_morale_for_class(4, 32, 0).unwrap(),
+        CombatWoundMorale {
+            bucket: CombatWoundScoreBucket::HalfToUnderThreeQuarters,
             fleeing: false,
         }
     );
@@ -13333,7 +13380,7 @@ fn combat_wound_morale_can_resolve_class_max_hp() {
 }
 
 #[test]
-fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
+fn combat_party_damage_grazes_on_zero_or_negative_and_uses_saturating_hp_counter() {
     let mut member = PartyMember {
         slot: 0,
         class_byte: 1,
@@ -13345,18 +13392,28 @@ fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
         level: 1,
     };
 
-    let miss = apply_combat_party_damage(&mut member, -1);
-    assert!(miss.missed);
-    assert!(!miss.instant_kill);
-    assert!(!miss.killed);
-    assert_eq!(miss.applied_damage, 0);
-    assert_eq!(miss.status_before, b'G');
-    assert_eq!(miss.status_after, b'G');
+    // `combat.md` 12: "The result may be zero or negative, and **both are
+    // narrated as a graze, not as a miss**"; `RETRACTIONS.md` R352 withdraws
+    // the three sentences that called this outcome a miss and states "There is
+    // no miss flag". Zero is asserted alongside negative because the marker's
+    // "two writers [are] both this zero-or-negative condition".
+    let graze = apply_combat_party_damage(&mut member, -1);
+    assert!(graze.grazed);
+    assert!(!graze.instant_kill);
+    assert!(!graze.killed);
+    assert_eq!(graze.applied_damage, 0);
+    assert_eq!(graze.status_before, b'G');
+    assert_eq!(graze.status_after, b'G');
     assert_eq!(member.hp, 12);
     assert_eq!(member.status, b'G');
 
+    let zero_graze = apply_combat_party_damage(&mut member, 0);
+    assert!(zero_graze.grazed);
+    assert_eq!(zero_graze.applied_damage, 0);
+    assert_eq!(member.hp, 12);
+
     let hit = apply_combat_party_damage(&mut member, 5);
-    assert!(!hit.missed);
+    assert!(!hit.grazed);
     assert_eq!(hit.applied_damage, 5);
     assert!(!hit.killed);
     assert_eq!(member.hp, 7);
@@ -13525,7 +13582,7 @@ fn combat_weapon_damage_application_routes_party_targets_through_party_damage() 
             damage: CombatPartyDamageOutcome {
                 raw_damage: 12,
                 applied_damage: 12,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: true,
                 status_before: b'G',
@@ -13585,7 +13642,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: 4,
                 applied_damage: 4,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: false,
                 return_value: 4,
@@ -13605,7 +13662,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: 2,
                 applied_damage: 2,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: false,
                 return_value: 2,
@@ -13629,7 +13686,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                 applied_damage: 4,
-                missed: false,
+                grazed: false,
                 instant_kill: true,
                 killed: true,
                 return_value: stats.reward_unit(),
@@ -14060,7 +14117,7 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
                     class: 32,
                     raw_damage: 6,
                     applied_damage: 6,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     return_value: 6,
@@ -14259,7 +14316,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 9,
                     applied_damage: 9,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'P',
@@ -14295,7 +14352,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 2,
                     applied_damage: 2,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -14332,7 +14389,7 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 5,
                     applied_damage: 5,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -14381,7 +14438,7 @@ fn active_target_spell_damage_application_applies_defense_and_credits_caster() {
                     class: 32,
                     raw_damage: 5,
                     applied_damage: 5,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     return_value: 5,
@@ -14977,7 +15034,7 @@ fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
                     class: 32,
                     raw_damage: -4,
                     applied_damage: 0,
-                    missed: true,
+                    grazed: true,
                     instant_kill: false,
                     killed: false,
                     return_value: 0,
@@ -15007,7 +15064,7 @@ fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
                     class: 32,
                     raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                     applied_damage: stats.max_hp,
-                    missed: false,
+                    grazed: false,
                     instant_kill: true,
                     killed: true,
                     return_value: stats.reward_unit(),
@@ -15086,7 +15143,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
                         damage: CombatPartyDamageOutcome {
                             raw_damage: 3,
                             applied_damage: 3,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             status_before: b'G',
@@ -15103,7 +15160,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
                             class: 32,
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             return_value: 5,
@@ -15793,7 +15850,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
                         damage: CombatPartyDamageOutcome {
                             raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                             applied_damage: 12,
-                            missed: false,
+                            grazed: false,
                             instant_kill: true,
                             killed: true,
                             status_before: b'G',
@@ -15810,7 +15867,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
                             class: 32,
                             raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                             applied_damage: stats.max_hp,
-                            missed: false,
+                            grazed: false,
                             instant_kill: true,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -15875,7 +15932,7 @@ fn directed_spell_damage_skips_disabled_targets_in_cone() {
                         class: 32,
                         raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                         applied_damage: stats.max_hp,
-                        missed: false,
+                        grazed: false,
                         instant_kill: true,
                         killed: true,
                         return_value: stats.reward_unit(),
@@ -15958,7 +16015,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
                             class: 32,
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             return_value: 5,
@@ -15976,7 +16033,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
                             class: 32,
                             raw_damage: 10,
                             applied_damage: 10,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16142,7 +16199,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
                         damage: CombatPartyDamageOutcome {
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             status_before: b'P',
@@ -16159,7 +16216,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
                             class: 32,
                             raw_damage: 10,
                             applied_damage: 10,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16274,7 +16331,7 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 4,
                     applied_damage: 4,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'P',
@@ -16297,7 +16354,7 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 10,
                     applied_damage: 8,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     status_before: b'P',
@@ -16362,7 +16419,7 @@ fn arena_field_contact_application_handles_non_party_damage_skip_and_sleep_repor
                     class: 32,
                     raw_damage: 10,
                     applied_damage: 10,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     return_value: stats.reward_unit(),
@@ -16393,7 +16450,7 @@ fn arena_field_contact_application_targets_current_actor_and_ignores_energy() {
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 10,
                     applied_damage: 10,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -17355,19 +17412,26 @@ fn combat_split_placement_checks_up_to_eight_candidate_slots() {
 }
 
 #[test]
-fn combat_actor_monster_damage_clamps_miss_and_subtracts_without_underflow() {
+fn combat_actor_monster_damage_grazes_on_zero_or_negative_and_subtracts_without_underflow() {
     let stats = combat_class_stats(32).unwrap();
     let mut descriptor = CombatActorDescriptor::for_monster_placement(stats, 7, 4, 5, 0, 0);
 
-    let miss = descriptor.apply_monster_damage(-1, false).unwrap();
-    assert!(miss.missed);
-    assert!(!miss.killed);
-    assert_eq!(miss.applied_damage, 0);
-    assert_eq!(miss.return_value, 0);
+    // Same zero-or-negative graze condition on the monster arm
+    // (`combat.md` 12, `RETRACTIONS.md` R352).
+    let graze = descriptor.apply_monster_damage(-1, false).unwrap();
+    assert!(graze.grazed);
+    assert!(!graze.killed);
+    assert_eq!(graze.applied_damage, 0);
+    assert_eq!(graze.return_value, 0);
+    assert_eq!(descriptor.hp_or_wound, 10);
+
+    let zero_graze = descriptor.apply_monster_damage(0, false).unwrap();
+    assert!(zero_graze.grazed);
+    assert_eq!(zero_graze.applied_damage, 0);
     assert_eq!(descriptor.hp_or_wound, 10);
 
     let hit = descriptor.apply_monster_damage(4, false).unwrap();
-    assert!(!hit.missed);
+    assert!(!hit.grazed);
     assert!(!hit.killed);
     assert_eq!(hit.applied_damage, 4);
     assert_eq!(hit.return_value, 4);

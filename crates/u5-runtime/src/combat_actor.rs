@@ -739,7 +739,14 @@ pub struct CombatMonsterDamageOutcome {
     pub class: u8,
     pub raw_damage: i16,
     pub applied_damage: u8,
-    pub missed: bool,
+    /// `combat.md` 12: "The result may be zero or negative, and **both are
+    /// narrated as a graze, not as a miss**." The bit this models has "exactly
+    /// two writers, both this zero-or-negative condition"; `RETRACTIONS.md`
+    /// R352 withdraws the earlier "miss" reading and states flatly "There is
+    /// no miss flag". Narration lives in `input_dispatch`; see 11.1's census
+    /// row "Damage zero or negative | both | `<target> grazed!` **and nothing
+    /// else**".
+    pub grazed: bool,
     pub instant_kill: bool,
     pub killed: bool,
     pub return_value: u8,
@@ -750,7 +757,11 @@ pub struct CombatMonsterDamageOutcome {
 pub struct CombatPartyDamageOutcome {
     pub raw_damage: i16,
     pub applied_damage: u16,
-    pub missed: bool,
+    /// The party-defender half of the same zero-or-negative condition
+    /// (`combat.md` 12, `RETRACTIONS.md` R352). "Against a **party** defender a
+    /// negative result short-circuits early ... Both routes raise the same
+    /// shared result marker".
+    pub grazed: bool,
     pub instant_kill: bool,
     pub killed: bool,
     pub status_before: u8,
@@ -1119,9 +1130,14 @@ impl CombatActorDescriptor {
     ) -> Option<CombatMonsterDamageOutcome> {
         let stats = combat_class_stats(self.owner_target_class)?;
         let traits = combat_class_traits(self.owner_target_class)?;
-        let missed = raw_damage < 0;
+        // `combat.md` 12: "The result may be zero or negative, and **both are
+        // narrated as a graze**." Zero is included deliberately - the marker's
+        // two writers are "both the zero-or-negative-damage condition", so the
+        // predicate is `<= 0` and not `< 0` (`RETRACTIONS.md` R352). The
+        // instant-kill sentinel is decimal 99 and cannot collide with it.
+        let grazed = raw_damage <= 0;
         let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
-        let damage = if missed {
+        let damage = if grazed {
             0
         } else if instant_kill {
             self.hp_or_wound
@@ -1163,7 +1179,7 @@ impl CombatActorDescriptor {
             class: stats.class,
             raw_damage,
             applied_damage,
-            missed,
+            grazed,
             instant_kill,
             killed,
             return_value,
@@ -1177,9 +1193,11 @@ pub fn apply_combat_party_damage(
     raw_damage: i16,
 ) -> CombatPartyDamageOutcome {
     let status_before = member.status;
-    let missed = raw_damage < 0;
+    // Same zero-or-negative graze condition as the monster arm above
+    // (`combat.md` 12, `RETRACTIONS.md` R352).
+    let grazed = raw_damage <= 0;
     let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
-    let applied_damage = if missed {
+    let applied_damage = if grazed {
         0
     } else if instant_kill {
         let applied = member.hp;
@@ -1193,7 +1211,7 @@ pub fn apply_combat_party_damage(
     CombatPartyDamageOutcome {
         raw_damage,
         applied_damage,
-        missed,
+        grazed,
         instant_kill,
         killed: member.hp == 0,
         status_before,
@@ -3648,18 +3666,31 @@ pub fn resolve_combat_wound_morale_for_class(
     ))
 }
 
+/// `combat.md` 11.1, "The graded wound lines are monster-target only": "The
+/// quarter is the class maximum divided by four with truncation, and the three
+/// thresholds are one, two and three of those truncated quarters, so the
+/// boundaries sit slightly low for maxima that are not multiples of four."
+///
+/// That sentence is a first publication of the arithmetic behind 9's
+/// four-bucket classifier, and it is **not** the exact-fraction comparison an
+/// implementation reaches for first: at class maximum 10 the truncated quarter
+/// is 2, so the thresholds are 2/4/6, while `hp * 4 < max` and its siblings put
+/// them at 2.5/5/7.5 and mis-grade five of the eleven possible HP values.
 pub fn combat_wound_score_bucket(current_hp: u8, max_hp: u8) -> CombatWoundScoreBucket {
     if max_hp == 0 {
+        // Degenerate input the spec does not cover: no shipped class row has a
+        // zero maximum. Kept on the pre-existing answer rather than letting the
+        // published arithmetic (every threshold zero, so every HP grades as
+        // "three quarters or more") decide an unpublished case.
         return CombatWoundScoreBucket::UnderOneQuarter;
     }
-    let hp = current_hp.min(max_hp) as u16;
-    let max = max_hp as u16;
-    let scaled = hp * 4;
-    if scaled < max {
+    let hp = current_hp.min(max_hp);
+    let quarter = max_hp / 4;
+    if hp < quarter {
         CombatWoundScoreBucket::UnderOneQuarter
-    } else if hp * 2 < max {
+    } else if hp < quarter * 2 {
         CombatWoundScoreBucket::OneQuarterToUnderHalf
-    } else if scaled < max * 3 {
+    } else if hp < quarter * 3 {
         CombatWoundScoreBucket::HalfToUnderThreeQuarters
     } else {
         CombatWoundScoreBucket::ThreeQuartersOrMore

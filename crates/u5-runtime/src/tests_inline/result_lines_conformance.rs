@@ -381,3 +381,209 @@ fn the_waterfall_family_is_the_falls_trigger_on_either_plane() {
     assert!(is_surface_chasm_cell(54, 138));
     assert_eq!(OVERWORLD_FALLS_FORCED_STEPS_SOUTH, 2);
 }
+
+// ---------------------------------------------------------------------------
+// `combat.md` Section 11.1, "Attack outcome narration: what prints, on which
+// side, in what order". Published by spec commit `a915219` (issue #185) with
+// `RETRACTIONS.md` R352-R355. The census rows these pin were the three places
+// this document previously called the zero-or-negative outcome a miss, plus
+// the graded wound lines, which Sections 11 and 12 had never mentioned.
+// ---------------------------------------------------------------------------
+
+/// The census's single most consequential row: "**To-hit fails** | **monster
+/// melee** | **nothing at all**".
+#[test]
+fn an_ordinary_hostile_monsters_melee_miss_prints_nothing() {
+    // 11.1: "**an ordinary hostile monster's melee miss prints nothing and
+    // sounds nothing** - no newline, no name, no line, no tone - while a party
+    // member's melee miss prints one line." The structural reason is that "the
+    // routine that prints a miss line has exactly two call sites, both inside
+    // party-side attack helpers".
+    let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+    let application = state
+        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(false))
+        .unwrap();
+
+    assert!(matches!(
+        application.resolution,
+        Some(CombatWeaponAttackResolution::Miss {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            ..
+        })
+    ));
+    assert_eq!(
+        crate::input_dispatch::combat_monster_attack_result_message(&state, application),
+        None
+    );
+}
+
+/// The one carve-out on that row: 11.1's announcement table gives a monster
+/// carrying the controlled/charmed bit "the **reduced** banner ... then one
+/// fixed attempt: `Attack-`, `Aim! `, and on a failed roll `<target>
+/// missed!`", because Section 6.1a's bit hands that slot to the player's
+/// prompt.
+#[test]
+fn a_controlled_monsters_failed_roll_prints_the_target_named_miss_line() {
+    let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+    let application = state
+        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(false))
+        .unwrap();
+
+    // Rule 1 of 11.1: "**Every result line names the target, never the
+    // attacker.** ... `Bat missed!` ... reads *the Bat was missed*". The name
+    // in this line is the party defender's, never the acting monster's.
+    let line = crate::input_dispatch::combat_monster_attack_result_message(&state, application);
+    assert_eq!(line.as_deref(), Some("Avatar missed!"));
+    assert!(!line.unwrap().contains("Giant Rat"));
+}
+
+/// "Damage zero or negative | both | `<target> grazed!` **and nothing else** -
+/// the kill, sleep, hit and wound lines are all suppressed | the rising
+/// action-snap cue".
+#[test]
+fn a_landed_swing_netting_zero_or_below_grazes_on_both_sides_with_its_cue() {
+    for raw_damage in [0i16, -1] {
+        // Party defender.
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        let before = state.sound_effect_serial;
+        let damage_application = state
+            .apply_combat_weapon_damage_to_target(None, 0, raw_damage, false)
+            .unwrap();
+        let application = CombatMonsterAttackApplication {
+            attacker_slot: 8,
+            target_slot: 0,
+            poison_status_outcome: None,
+            resolution: Some(CombatWeaponAttackResolution::Hit {
+                route: CombatWeaponAttackRangeRoute::Melee,
+                raw_damage,
+            }),
+            damage_application: Some(damage_application),
+        };
+        assert_eq!(
+            crate::input_dispatch::combat_monster_attack_result_message(&state, application)
+                .as_deref(),
+            Some("Avatar grazed!")
+        );
+        assert_eq!(state.party[0].hp, 12, "a graze costs no HP");
+        assert_eq!(
+            state.sound_effects_after(before),
+            vec![SoundEffect::ActionSnap]
+        );
+
+        // Monster defender, through the party-side narrator.
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        let before = state.sound_effect_serial;
+        let damage_application = state
+            .apply_combat_weapon_damage_to_target(Some(0), 8, raw_damage, false)
+            .unwrap();
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                8,
+                CombatWeaponAttackApplication {
+                    resolution: CombatWeaponAttackResolution::Hit {
+                        route: CombatWeaponAttackRangeRoute::Melee,
+                        raw_damage,
+                    },
+                    damage_application: Some(damage_application),
+                }
+            )
+            .as_deref(),
+            Some("Giant Rat grazed!")
+        );
+        assert_eq!(state.combat_actors[8].hp_or_wound, 10);
+        assert_eq!(
+            state.sound_effects_after(before),
+            vec![SoundEffect::ActionSnap]
+        );
+    }
+}
+
+/// "The graded wound lines are monster-target only", with the four lines
+/// published verbatim against the four-bucket wound score.
+#[test]
+fn an_ordinary_hit_on_a_monster_prints_the_published_graded_wound_line() {
+    let max_hp = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().max_hp;
+    assert_eq!(max_hp, 10);
+    // 11.1: "The quarter is the class maximum divided by four with
+    // truncation, and the three thresholds are one, two and three of those
+    // truncated quarters" - here 2, 4 and 6 against a maximum of 10.
+    for (starting_hp, expected) in [
+        (10u8, "Giant Rat barely wounded!"),
+        (7, "Giant Rat barely wounded!"),
+        (6, "Giant Rat lightly wounded!"),
+        (4, "Giant Rat heavily wounded!"),
+        (2, "Giant Rat critical!"),
+    ] {
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        state.combat_actors[8].hp_or_wound = starting_hp;
+        let damage_application = state
+            .apply_combat_weapon_damage_to_target(Some(0), 8, 1, false)
+            .unwrap();
+        assert_eq!(state.combat_actors[8].hp_or_wound, starting_hp - 1);
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                8,
+                CombatWeaponAttackApplication {
+                    resolution: CombatWeaponAttackResolution::Hit {
+                        route: CombatWeaponAttackRangeRoute::Melee,
+                        raw_damage: 1,
+                    },
+                    damage_application: Some(damage_application),
+                }
+            )
+            .as_deref(),
+            Some(expected),
+            "surviving HP {} of {max_hp}",
+            starting_hp - 1
+        );
+    }
+
+    // The four grades are exactly the published strings, and `grazed` is not
+    // one of them: 11.1 reserves `<target> grazed!` for the zero-or-negative
+    // outcome above. The engine previously printed `grazed` for wound score 4
+    // and `critically wounded` for wound score 1.
+    for (hp, expected) in [
+        (1u8, "critical"),
+        (2, "heavily wounded"),
+        (4, "lightly wounded"),
+        (6, "barely wounded"),
+    ] {
+        assert_eq!(
+            crate::input_dispatch::combat_monster_wound_line_grade(hp, max_hp),
+            expected
+        );
+    }
+}
+
+/// "The grading never applies to a **party** target: the classifier refuses a
+/// party record outright ... **A party member who takes a solid landed hit
+/// always reads the flat `<target> hit!`**".
+#[test]
+fn a_party_target_reads_the_flat_hit_line_at_every_wound_level() {
+    for starting_hp in [20u16, 12, 6, 2] {
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        state.party[0].hp = starting_hp;
+        let damage_application = state
+            .apply_combat_weapon_damage_to_target(None, 0, 1, false)
+            .unwrap();
+        let application = CombatMonsterAttackApplication {
+            attacker_slot: 8,
+            target_slot: 0,
+            poison_status_outcome: None,
+            resolution: Some(CombatWeaponAttackResolution::Hit {
+                route: CombatWeaponAttackRangeRoute::Melee,
+                raw_damage: 1,
+            }),
+            damage_application: Some(damage_application),
+        };
+        assert_eq!(
+            crate::input_dispatch::combat_monster_attack_result_message(&state, application)
+                .as_deref(),
+            Some("Avatar hit!"),
+            "party HP {starting_hp}"
+        );
+    }
+}
