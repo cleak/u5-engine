@@ -423,7 +423,12 @@ pub struct CombatMonsterAttackInputs {
 pub struct CombatPlayerWeaponAttackInputs {
     /// `combat.md §11` "The draw": the inclusive `0..=60` raw draw.
     pub hit_raw_roll_0_to_60: u8,
-    pub damage_roll: u8,
+    /// `combat.md §12` stage one, party row. `None` means "take the
+    /// inclusive `1..Attack max` draw from the shared stream, and only if
+    /// stage one actually rolls" - bare hands, a `0` or `1` `Attack max`
+    /// and the two per-item overrides "run before the roll" and draw
+    /// nothing. A `Some` value is a deterministic caller's injected roll.
+    pub damage_roll: Option<u8>,
     pub forced_hit: Option<bool>,
 }
 
@@ -4999,7 +5004,13 @@ impl PlayState {
         let _ = attacker_slot;
         CombatPlayerWeaponAttackInputs {
             hit_raw_roll_0_to_60: self.random_range_u8(0, COMBAT_SKEWED_ROLL_RAW_MAX),
-            damage_roll: self.random_range_u8(0, u8::MAX),
+            // `combat.md §12` stage one: "Values `0` and `1` pass through
+            // unchanged, and bare hands are a flat `1`", and the Glass
+            // Sword and Jeweled Sword overrides "run before the roll", so
+            // the draw cannot be taken here - it is taken at the attempt,
+            // once the readied item is known. Same reason the defence draw
+            // is lazy: "PRNG parity, not an optimisation".
+            damage_roll: None,
             forced_hit: None,
         }
     }
@@ -5332,8 +5343,23 @@ impl PlayState {
         // shield hand" and each qualifying item "produces **one attack
         // attempt**"; "A character with no qualifying item makes a single
         // bare-handed attempt, which behaves as melee with range one."
+        //
+        // This engine's attack entry is one direction-keyed swing per
+        // command, so it can deliver at most one of §8.2's "zero to three
+        // attempts". Of the qualifying items it swings the weapon hand
+        // whenever that slot holds one and falls back to the published
+        // scan order otherwise, so a character readying a Spiked Helm
+        // (`Attack max` 4) beside a Halberd (30) still swings the halberd.
+        // The second and third attempts are an unimplemented part of
+        // §8.2, not a reading of it.
         let equipment = self.party_equipment.get(roster_slot).copied()?;
-        let item_id = combat_armament_item_ids(&equipment).first().copied();
+        let armaments = combat_armament_item_ids(&equipment);
+        let item_id = equipment
+            .get(EQUIP_SLOT_WEAPON)
+            .copied()
+            .map(usize::from)
+            .filter(|item| armaments.contains(item))
+            .or_else(|| armaments.first().copied());
         // `combat.md §11` selector, party attacker arm: Strength for the
         // five strength-arm ids, otherwise the character's own combat
         // weight - "the raw Dexterity byte copied at seating".
@@ -5357,6 +5383,35 @@ impl PlayState {
                 inputs.forced_hit,
             );
         };
+        // `combat.md §12` stage one: the party arm's inclusive
+        // `1..Attack max` draw, taken here rather than with the rest of
+        // the attack inputs so the rows that "pass through unchanged" and
+        // the two per-item overrides that "run before the roll" spend
+        // nothing.
+        let damage_roll = match inputs.damage_roll {
+            Some(roll) => roll,
+            None => {
+                let attacker = *self.combat_actors.get(actor_slot)?;
+                let target = *self.combat_actors.get(target_slot)?;
+                let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+                let probe = combat_equipment_weapon_attack_input(
+                    item_id,
+                    attacker.range_to(target),
+                    attacker_rating,
+                    defender_rating,
+                    defence_rating,
+                    inputs.hit_raw_roll_0_to_60,
+                    0,
+                    0,
+                    inputs.forced_hit,
+                )?;
+                if combat_weapon_attack_takes_damage_draw(probe) {
+                    self.random_range_u8(0, u8::MAX)
+                } else {
+                    0
+                }
+            }
+        };
         self.resolve_and_apply_combat_equipment_weapon_attack(
             item_id,
             actor_slot,
@@ -5364,7 +5419,7 @@ impl PlayState {
             attacker_rating,
             defender_rating,
             inputs.hit_raw_roll_0_to_60,
-            inputs.damage_roll,
+            damage_roll,
             inputs.forced_hit,
             false,
         )

@@ -1123,7 +1123,13 @@ impl CombatActorDescriptor {
     ) -> Option<CombatMonsterDamageOutcome> {
         let stats = combat_class_stats(self.owner_target_class)?;
         let traits = combat_class_traits(self.owner_target_class)?;
-        let missed = raw_damage < 0;
+        // `combat.md §12`: "The result may be zero or negative, and both
+        // read as a miss." The damage-modifier paragraph in the same
+        // section only has to speak of the negative half - "Negative
+        // damage is clamped to zero and an `attack missed` status flag is
+        // raised" - because zero needs no clamp; the two-value rule above
+        // is what decides the flag.
+        let missed = raw_damage <= 0;
         let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
         let damage = if missed {
             0
@@ -1181,7 +1187,9 @@ pub fn apply_combat_party_damage(
     raw_damage: i16,
 ) -> CombatPartyDamageOutcome {
     let status_before = member.status;
-    let missed = raw_damage < 0;
+    // `combat.md §12`: "The result may be zero or negative, and both read
+    // as a miss."
+    let missed = raw_damage <= 0;
     let instant_kill = raw_damage == COMBAT_INSTANT_KILL_DAMAGE;
     let applied_damage = if missed {
         0
@@ -1736,6 +1744,44 @@ pub fn resolve_combat_weapon_attack(
     }
 }
 
+/// `combat.md §12` stage one: whether this attempt takes the party-side
+/// inclusive `1..Attack max` draw. The monster row is "the class's
+/// **attack byte, used flat**, with **no random draw at all**"; on the
+/// party side "Values `0` and `1` pass through unchanged, and bare hands
+/// are a flat `1`", and the Glass Sword and Jeweled Sword overrides "run
+/// before the roll", so only an ordinary readied item whose `Attack max`
+/// is above `1` and short of the sentinel reaches a draw. Like the
+/// defence skip this is PRNG parity, not an optimisation.
+pub fn combat_attacker_damage_draw_taken(source: CombatAttackerDamageSource) -> bool {
+    match source {
+        CombatAttackerDamageSource::MonsterFlat { .. }
+        | CombatAttackerDamageSource::PartyBareHands => false,
+        CombatAttackerDamageSource::PartyItem { item_id } => {
+            if item_id == EQUIPMENT_GLASS_SWORD || item_id == EQUIPMENT_JEWELED_SWORD {
+                return false;
+            }
+            match equipment_attack_max(item_id) {
+                // "when that value is greater than `1` and is not the
+                // instant-kill sentinel `99`, it is replaced by an
+                // inclusive `1..value` draw".
+                Some(attack_max) => {
+                    attack_max > 1 && i16::from(attack_max) != COMBAT_INSTANT_KILL_DAMAGE
+                }
+                None => false,
+            }
+        }
+    }
+}
+
+/// `combat.md §11` / `§12`: whether one attempt reaches the party-side
+/// stage-one draw at all. An out-of-range attempt "exits without applying
+/// damage" (§11) and so never rolls.
+pub fn combat_weapon_attack_takes_damage_draw(input: CombatWeaponAttackInput) -> bool {
+    resolve_combat_weapon_attack_range_route(input.target_range, input.range_cap, input.effect_code)
+        .is_some()
+        && combat_attacker_damage_draw_taken(input.source)
+}
+
 /// `combat.md §12`: whether this attempt reaches stage two of the damage
 /// roller and therefore takes the defender's inclusive `1..rating` draw.
 /// An out-of-range attempt, a zero-damage row, a miss and the instant-kill
@@ -1782,8 +1828,16 @@ pub fn combat_equipment_weapon_attack_input(
         hit_raw_roll_0_to_60,
         damage_roll,
         defence_roll,
-        // `combat.md §11`: the three always-hit ids "skip the to-hit score
+        // `catalogs/item-list.md §5.1`: an attempt with one of the three
+        // always-hit ids `combat.md §11` names "skips the to-hit score
         // entirely"; a caller-supplied force still wins.
+        //
+        // With the shipped `Attack max` values this arm is inert: ids 35
+        // and 39 "both carry the instant-kill sentinel `99`" and id 40 is
+        // forced to `0`, so all three leave stage one on the `Special` or
+        // `NoOrdinaryDamage` route and never reach the score the flag
+        // would skip. It is kept because the published contract is about
+        // the ids, not about which of the two mechanisms delivers them.
         forced_hit: forced_hit.or_else(|| equipment_attack_is_always_hit(item_id).then_some(true)),
     })
 }

@@ -3066,7 +3066,7 @@ fn combat_step_or_attack_application_message(
 /// Player-visible result lines observed in the original DOS presentation and
 /// described by `combat.md §12`. Internal slots, coordinates, rolls and raw
 /// damage never belong in this string.
-fn combat_weapon_attack_result_message(
+pub(crate) fn combat_weapon_attack_result_message(
     state: &PlayState,
     target_slot: usize,
     attack: CombatWeaponAttackApplication,
@@ -3117,28 +3117,13 @@ fn combat_weapon_attack_result_message(
         },
         // `combat.md §12`: "The **Glass Sword** id narrates `Thy sword hath
         // shattered!` and substitutes the instant-kill sentinel `99`."
+        //
+        // Only that one line is published. Whether the sentinel kill is
+        // also narrated on this path, and in which order relative to the
+        // shatter line, is not - so nothing is composed onto it here.
         CombatWeaponAttackResolution::Special {
             shattered: true, ..
-        } => {
-            let killed = match attack.damage_application {
-                Some(CombatWeaponDamageApplication::Party { damage, .. }) => damage.killed,
-                Some(CombatWeaponDamageApplication::Monster { damage, .. }) => damage.killed,
-                None => false,
-            };
-            let name = match attack.damage_application {
-                Some(CombatWeaponDamageApplication::Monster { damage, .. }) => {
-                    combat_class_stats(damage.class)
-                        .map(|stats| stats.name.to_string())
-                        .unwrap_or_else(|| target_name.clone())
-                }
-                _ => target_name.clone(),
-            };
-            Some(if killed {
-                format!("{COMBAT_GLASS_SWORD_SHATTER_LINE}\n{name} killed!")
-            } else {
-                COMBAT_GLASS_SWORD_SHATTER_LINE.to_string()
-            })
-        }
+        } => Some(COMBAT_GLASS_SWORD_SHATTER_LINE.to_string()),
         CombatWeaponAttackResolution::OutOfRange { .. }
         | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
         | CombatWeaponAttackResolution::Special { .. } => None,
@@ -3163,7 +3148,7 @@ fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
         .unwrap_or_else(|| "Combatant".to_string())
 }
 
-fn combat_monster_attack_result_message(
+pub(crate) fn combat_monster_attack_result_message(
     state: &PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
@@ -3182,6 +3167,15 @@ fn combat_monster_attack_result_message(
         return Some(format!("{attacker_name} missed!"));
     }
     match attack.damage_application {
+        // `combat.md §12`: the two-stage roller's "result may be zero or
+        // negative, and both read as a miss", and against a party defender
+        // a soaked result "short-circuits with the miss narration". This
+        // is the monster-attacker route, so it narrates the miss the way
+        // the forced-miss arm just above does.
+        Some(CombatWeaponDamageApplication::Party { damage, .. }) if damage.missed => {
+            let attacker_name = combat_actor_display_name(state, attack.attacker_slot);
+            Some(format!("{attacker_name} missed!"))
+        }
         Some(CombatWeaponDamageApplication::Party { damage, .. }) => Some(if damage.killed {
             format!("{target_name} killed!")
         } else {

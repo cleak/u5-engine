@@ -4838,7 +4838,14 @@ fn weapon_attack_resolver_tracks_miss_forced_hit_and_non_damage_routes() {
     );
     // `combat.md` Section 11 "Always-hit cases ... the always-hit set is
     // three readied equipment ids - **Sword of Chaos, Glass Sword and
-    // Jeweled Sword**". The Glass Sword arm also raises the shatter flag.
+    // Jeweled Sword**", which `catalogs/item-list.md` Section 5.1 says
+    // "skips the to-hit score entirely". With the shipped `Attack max`
+    // values that outcome is delivered by stage one, not by the
+    // always-hit flag: ids 35 and 39 leave on the sentinel's `Special`
+    // route and id 40 on `NoOrdinaryDamage`, all three before the score
+    // is computed. The hopeless rating pair below (score 142, "a score of
+    // `31` or more always misses") is what shows the score is never
+    // consulted; the flag itself changes no outcome for these ids.
     assert_eq!(
         resolve_combat_equipment_weapon_attack(
             EQUIPMENT_GLASS_SWORD,
@@ -10185,11 +10192,6 @@ fn combat_amulet_turning_scatter_state(seed: u16) -> PlayState {
     state.combat_actors[8].owner_target_class = 28;
     state.combat_actors[8].phase_counter = 1;
     state.prng_state = seed;
-    // Seed re-chosen after `RETRACTIONS.md` R311 moved the shared stream:
-    // the random-cardinal fallback is drawn lazily instead of four codes up
-    // front, so an AI dispatch that never reaches the fallback no longer
-    // spends four draws. R308's prologue world tick is the presentation-only
-    // one and draws nothing, so it is not why this seed changed.
     state.party[0].status = b'G';
     state.party[0].hp = 20;
     state.party[0].max_hp = 20;
@@ -10260,26 +10262,33 @@ fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
     // value is the class attack byte "used flat, with no random draw at
     // all", and the party's cached combat-defense byte of 7 then subtracts
     // an inclusive `1..7` draw. The former expectation of 1 was the
-    // withdrawn `1..attack` monster roll.
+    // withdrawn `1..attack` monster roll. The fixture seed is fixed, so
+    // both the draw and the blow it leaves are exact.
     let attack_value = combat_class_stats(28).unwrap().attack_value;
-    assert!(
-        (i16::from(attack_value) - i16::from(CHARACTER_DEFENSE_FACTORY_SEED)
-            ..=i16::from(attack_value) - 1)
-            .contains(&raw_damage),
-        "raw damage {raw_damage} must be the flat attack value less a 1..7 draw"
+    assert_eq!(attack_value, AMULET_TURNING_SCATTER_ATTACK_VALUE);
+    assert_eq!(
+        raw_damage, AMULET_TURNING_SCATTER_RAW_DAMAGE,
+        "the flat attack value less this seed's inclusive 1..7 defence draw"
     );
     assert_eq!(state.party[0].hp, 20, "the intended target is untouched");
     assert_eq!(
-        i32::from(state.party[1].hp),
-        20 - i32::from(raw_damage.max(0)),
+        state.party[1].hp, AMULET_TURNING_SCATTER_IMPACT_HP,
         "the scattered impact actor takes the blow"
     );
 }
 
-/// The PRNG seed at which the shipped scatter fixture lands its impact cell
-/// on the second seated party member. Found by the search below.
-const AMULET_TURNING_SCATTER_SEED: u16 = 0x0002;
+/// Class 28's flat attack value (`catalogs/monster-bestiary.md`, the
+/// column `RETRACTIONS.md` R336 renames to **Attack value**).
+const AMULET_TURNING_SCATTER_ATTACK_VALUE: u8 = 10;
+/// That value less the inclusive `1..7` defence draw
+/// [`AMULET_TURNING_SCATTER_SEED`] produces, which is `3`.
+const AMULET_TURNING_SCATTER_RAW_DAMAGE: i16 = 7;
+/// The impact actor's 20 HP less that blow.
+const AMULET_TURNING_SCATTER_IMPACT_HP: u16 = 13;
 
+/// The PRNG seed at which the shipped scatter fixture lands its impact cell
+/// on the second seated party member.
+const AMULET_TURNING_SCATTER_SEED: u16 = 0x0002;
 
 fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = combat_ai_turn_state(monster_x, monster_y);
@@ -10963,7 +10972,7 @@ fn combat_player_command_attack_applies_readied_weapon_damage() {
             0,
             CombatPlayerCommandInput::AttackDirection(2),
             CombatPlayerWeaponAttackInputs {
-                damage_roll: 0,
+                damage_roll: Some(0),
                 forced_hit: Some(true),
                 ..CombatPlayerWeaponAttackInputs::default()
             },
@@ -11005,7 +11014,7 @@ fn combat_player_command_attack_announces_victory_and_continues_cleanup() {
             0,
             CombatPlayerCommandInput::AttackDirection(2),
             CombatPlayerWeaponAttackInputs {
-                damage_roll: 0,
+                damage_roll: Some(0),
                 forced_hit: Some(true),
                 ..CombatPlayerWeaponAttackInputs::default()
             },
@@ -14418,12 +14427,14 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
     let mut expected_prng = state.prng_state;
     let expected_defence_roll =
         u5_prng_range_u16(&mut expected_prng, 0, u16::from(defence_rating - 1)) as u8;
-    let expected_damage = resolve_combat_damage_after_defence(
-        combat_spell_damage_roll(5, attack_max),
-        defence_rating,
-        expected_defence_roll,
-    );
-    let expected_applied = expected_damage as u8;
+    // Worked out by hand rather than by re-running the helpers under
+    // test: stage one is `1 + 5 % 6 = 6`, stage two subtracts
+    // `1 + 0 % 2 = 1`, so the blow is `5`.
+    assert_eq!(attack_max, 6);
+    assert_eq!(defence_rating, 2);
+    assert_eq!(expected_defence_roll, 0);
+    let expected_damage: i16 = 5;
+    let expected_applied: u8 = 5;
     assert_eq!(
         state.resolve_and_apply_combat_equipment_weapon_attack(
             17,

@@ -1552,10 +1552,18 @@
             turns_to_death.iter().map(|turns| f64::from(*turns)).sum::<f64>()
                 / turns_to_death.len() as f64;
         let hp_per_turn = f64::from(WORKED_AVATAR_HP as u32) / mean_turns;
+        // Section 11 publishes every input of this figure exactly - "the
+        // expected loss per *attempted* swing is `0.746 * 15/7 = 1.60` HP"
+        // and "`21 * E[1/period] = 3.01`" attempts per Avatar turn - so
+        // three bats held adjacent cost `3 * 3.01 * 1.60 = 14.4` HP per
+        // Avatar turn. This fixture measures 15.0 over its eight seeds,
+        // from turn counts 6, 5, 3, 3, 3, 3, 4, 5. The band is the
+        // published figure plus or minus about a sixth: wide enough for
+        // the eight-seed sample, narrow enough to exclude the pre-R334
+        // behaviour described above.
         assert!(
-            (3.0..=30.0).contains(&hp_per_turn),
-            "mean HP lost per Avatar turn was {hp_per_turn}; Section 11's three-Bat \
-             expectation is about 14.4"
+            (12.0..=17.0).contains(&hp_per_turn),
+            "mean HP lost per Avatar turn was {hp_per_turn} over turns {turns_to_death:?}; Section 11 expects 14.4"
         );
     }
 
@@ -1569,28 +1577,179 @@
         // The two routes are therefore gameplay-identical - a printed miss
         // and no HP change."
         //
-        // This is the seventh row of the published Bat table: attack value 6
-        // against the shipped party defence of 7, defence roll 7.
+        // The sixth and seventh rows of the published Bat table - attack
+        // value 6 against the shipped party defence of 7, subtractions 6
+        // and 7 - are the zero and the negative the sentence pairs.
         let bat = combat_class_stats(WORKED_BAT_CLASS).unwrap();
-        let soaked = resolve_combat_damage_after_defence(
-            i16::from(bat.attack_value),
-            CHARACTER_DEFENSE_FACTORY_SEED,
-            CHARACTER_DEFENSE_FACTORY_SEED - 1,
-        );
-        assert_eq!(soaked, -1);
+        for (defence_roll, expected_result) in [
+            (CHARACTER_DEFENSE_FACTORY_SEED - 2, 0i16),
+            (CHARACTER_DEFENSE_FACTORY_SEED - 1, -1i16),
+        ] {
+            let soaked = resolve_combat_damage_after_defence(
+                i16::from(bat.attack_value),
+                CHARACTER_DEFENSE_FACTORY_SEED,
+                defence_roll,
+            );
+            assert_eq!(soaked, expected_result);
+
+            let mut state = worked_bat_arena(&[(6, 5)], 0);
+            let hp_before = state.party[0].hp;
+            let application = state
+                .apply_combat_weapon_damage_to_target(None, 0, soaked, false)
+                .expect("the soaked value still reaches the damage endpoint");
+            let CombatWeaponDamageApplication::Party { damage, .. } = application else {
+                panic!("expected a party damage application, got {application:?}");
+            };
+            assert!(damage.missed, "result {soaked} must read as a miss");
+            assert_eq!(damage.applied_damage, 0);
+            assert_eq!(state.party[0].hp, hp_before);
+            assert_eq!(state.party[0].status, b'G');
+
+            // The line the monster-attack route actually prints for that
+            // swing - the half of "a printed miss and no HP change" the
+            // assertions above cannot see.
+            assert_eq!(
+                crate::input_dispatch::combat_monster_attack_result_message(
+                    &state,
+                    CombatMonsterAttackApplication {
+                        attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
+                        target_slot: 0,
+                        poison_status_outcome: None,
+                        resolution: Some(CombatWeaponAttackResolution::Hit {
+                            route: CombatWeaponAttackRangeRoute::Melee,
+                            raw_damage: soaked,
+                        }),
+                        damage_application: Some(application),
+                    },
+                )
+                .as_deref(),
+                Some("Bat missed!"),
+            );
+        }
+    }
+
+    #[test]
+    fn the_attack_walker_swings_the_weapon_hand_rather_than_the_helm() {
+        // `combat.md` Section 8.2: the walker scans "helm, weapon hand,
+        // shield hand" and every qualifying item "produces **one attack
+        // attempt**" - "zero to three attempts" per Section 11. This
+        // engine delivers one of them per direction-keyed swing, and it
+        // has to be the weapon hand's: a Spiked Helm (`Attack max` 4) is
+        // also one of Section 11's five strength-arm ids, so picking it
+        // ahead of a Halberd (`Attack max` 30) would change both the blow
+        // and which rating the score subtracts.
+        const SPIKED_HELM: u8 = 3;
+        const HALBERD: u8 = 34;
+        assert_eq!(equipment_attack_max(usize::from(SPIKED_HELM)), Some(4));
+        assert_eq!(equipment_attack_max(usize::from(HALBERD)), Some(30));
+        assert!(combat_to_hit_item_selects_strength(usize::from(SPIKED_HELM)));
+        assert!(!combat_to_hit_item_selects_strength(usize::from(HALBERD)));
 
         let mut state = worked_bat_arena(&[(6, 5)], 0);
-        let hp_before = state.party[0].hp;
-        let damage = state
-            .apply_combat_weapon_damage_to_target(None, 0, soaked, false)
-            .expect("the soaked value still reaches the damage endpoint");
-        let CombatWeaponDamageApplication::Party { damage, .. } = damage else {
-            panic!("expected a party damage application, got {damage:?}");
-        };
-        assert!(damage.missed);
-        assert_eq!(damage.applied_damage, 0);
-        assert_eq!(state.party[0].hp, hp_before);
-        assert_eq!(state.party[0].status, b'G');
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_HELM] = SPIKED_HELM;
+        state.party_equipment[0][EQUIP_SLOT_WEAPON] = HALBERD;
+
+        let application = state
+            .apply_combat_player_command_with_attack_inputs(
+                0,
+                CombatPlayerCommandInput::AttackDirection(2),
+                CombatPlayerWeaponAttackInputs {
+                    // `1 + 10 % 30 = 11` for the halberd against
+                    // `1 + 10 % 4 = 3` for the spiked helm.
+                    damage_roll: Some(10),
+                    forced_hit: Some(true),
+                    ..CombatPlayerWeaponAttackInputs::default()
+                },
+            )
+            .expect("the attack command resolves");
+
+        assert!(
+            matches!(
+                application.weapon_attack,
+                Some(CombatWeaponAttackApplication {
+                    resolution: CombatWeaponAttackResolution::Hit { raw_damage: 11, .. },
+                    ..
+                })
+            ),
+            "expected the halberd's blow, got {:?}",
+            application.weapon_attack
+        );
+    }
+
+    #[test]
+    fn the_party_stage_one_draw_is_taken_at_the_attempt_and_not_before() {
+        // `combat.md` Section 12 stage one: "Values `0` and `1` pass
+        // through unchanged, and bare hands are a flat `1`", and the Glass
+        // Sword and Jeweled Sword overrides "run before the roll". Like
+        // stage two's skipped defence draw, spending nothing on those rows
+        // is "PRNG parity, not an optimisation" (`RETRACTIONS.md` R336).
+        assert!(!combat_attacker_damage_draw_taken(
+            CombatAttackerDamageSource::PartyBareHands
+        ));
+        assert!(!combat_attacker_damage_draw_taken(
+            CombatAttackerDamageSource::MonsterFlat { attack_value: 6 }
+        ));
+        for inert in [
+            EQUIPMENT_GLASS_SWORD,
+            EQUIPMENT_JEWELED_SWORD,
+            EQUIPMENT_SWORD_OF_CHAOS,
+            // Arrows: an `Attack max` of `1`, which "passes through
+            // unchanged".
+            27,
+        ] {
+            assert!(
+                !combat_attacker_damage_draw_taken(CombatAttackerDamageSource::PartyItem {
+                    item_id: inert,
+                }),
+                "item {inert} takes no stage-one draw"
+            );
+        }
+        assert!(combat_attacker_damage_draw_taken(
+            CombatAttackerDamageSource::PartyItem { item_id: 34 }
+        ));
+
+        // The command-time inputs therefore carry only the to-hit draw.
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let mut expected_prng = state.prng_state;
+        let expected_hit_raw =
+            u5_prng_range_u16(&mut expected_prng, 0, u16::from(COMBAT_SKEWED_ROLL_RAW_MAX)) as u8;
+        let inputs = state.combat_player_weapon_attack_inputs(0);
+        assert_eq!(inputs.hit_raw_roll_0_to_60, expected_hit_raw);
+        assert_eq!(inputs.damage_roll, None);
+        assert_eq!(
+            state.prng_state, expected_prng,
+            "the stage-one draw is not pre-rolled with the attack inputs"
+        );
+
+        // A bare-handed swing at a Bat spends nothing at all: stage one is
+        // "a flat `1`" and the Bat's class defense byte is `0`, so "no
+        // defence roll is taken at all".
+        let bat = combat_class_stats(WORKED_BAT_CLASS).unwrap();
+        assert_eq!(bat.defense, 0);
+        let prng_before = state.prng_state;
+        let bare = state
+            .resolve_and_apply_combat_bare_handed_attack(
+                0,
+                COMBAT_PARTY_ACTOR_SLOTS,
+                WORKED_AVATAR_DEXTERITY,
+                bat.speed_seed,
+                0,
+                Some(true),
+            )
+            .expect("a bare-handed attempt resolves");
+        assert!(
+            matches!(
+                bare.resolution,
+                CombatWeaponAttackResolution::Hit { raw_damage: 1, .. }
+            ),
+            "expected the flat 1, got {:?}",
+            bare.resolution
+        );
+        assert_eq!(
+            state.prng_state, prng_before,
+            "bare hands and a zero defence rating draw nothing"
+        );
     }
 
     #[test]
@@ -1603,7 +1762,10 @@
         //
         // `catalogs/item-list.md` Section 5.1 adds the reach: the Glass
         // Sword is one of the three always-hit ids, so "an attempt with one
-        // of them skips the to-hit score entirely".
+        // of them skips the to-hit score entirely". With the shipped
+        // `Attack max` of 99 that skip is delivered by the sentinel route
+        // rather than by the always-hit flag - the two agree, and this
+        // test exercises the route, not the flag.
         let mut state = worked_bat_arena(&[(6, 5)], 0);
         let gargoyle = combat_class_stats(30).unwrap();
         assert_ne!(gargoyle.defense, 0, "a defender with a live defence byte");
@@ -1626,8 +1788,10 @@
                 EQUIPMENT_GLASS_SWORD,
                 0,
                 target_slot,
-                // Ratings that would otherwise never land: the always-hit
-                // arm skips the score outright.
+                // Ratings that would otherwise never land - score 142,
+                // and "a score of `31` or more always misses". The Glass
+                // Sword still resolves, because stage one leaves on the
+                // sentinel's `Special` route before the score is reached.
                 0,
                 u8::MAX,
                 0,
