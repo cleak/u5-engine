@@ -3244,12 +3244,28 @@ impl PlayState {
                 .and_then(|target_slot| {
                     let ranged_effect =
                         matches!(attack_route, Some(CombatAiAttackRoute::RangedEffect { .. }));
-                    let scattered = ranged_effect
-                        && self
-                            .combat_monster_amulet_turning_scatter_applies(actor_slot, target_slot);
+                    // `combat.md §11` puts the Amulet/Turning byte in attack
+                    // setup: "When such an actor targets a living party member
+                    // who has Amulet/Turning readied in the amulet/neck
+                    // equipment slot, attack setup rolls one byte in
+                    // `[0, 255]`." Nothing published conditions that roll on
+                    // whether a caller pre-supplied the attempt's other
+                    // inputs, so the production arm below takes it at setup.
+                    //
+                    // The deterministic arm keeps the roll where it was, inside
+                    // the input-supplied closure. Hoisting it there would have
+                    // spent a draw on an attempt that has no inputs and so
+                    // never resolves, which no section publishes; §11.1's
+                    // ranged carve-out is about the scatter a **failed to-hit
+                    // roll** causes and does not reach this gate.
                     match draws {
                         CombatAiTurnDraws::SharedPrng => {
-                            if scattered {
+                            if ranged_effect
+                                && self.combat_monster_amulet_turning_scatter_applies(
+                                    actor_slot,
+                                    target_slot,
+                                )
+                            {
                                 let hit_raw_roll_0_to_60 = self.combat_monster_hit_roll();
                                 let scatter_roll = self.combat_monster_scatter_cell_roll();
                                 self.resolve_and_apply_combat_monster_scattered_attack(
@@ -3269,7 +3285,12 @@ impl PlayState {
                             monster_attack_inputs,
                             ..
                         } => monster_attack_inputs.and_then(|inputs| {
-                            if scattered {
+                            if ranged_effect
+                                && self.combat_monster_amulet_turning_scatter_applies(
+                                    actor_slot,
+                                    target_slot,
+                                )
+                            {
                                 self.resolve_and_apply_combat_monster_scattered_attack(
                                     actor_slot,
                                     target_slot,
