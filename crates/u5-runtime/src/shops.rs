@@ -1234,7 +1234,76 @@ impl Inn {
             Self::TheKingsRansomInn => 2,
         }
     }
+
+    /// `shops.md §8.4` (issue #190): the inn's ordinal "within the
+    /// innkeeper shop kind - the same ordinal, in the same order, that
+    /// Section 8.0's inn table is listed in". It is the index into the
+    /// two parallel six-entry bed-cell tables.
+    pub const fn ordinal(self) -> usize {
+        match self {
+            Self::TheWayfarerInn => 0,
+            Self::TheWarriorsStead => 1,
+            Self::TheHauntingInn => 2,
+            Self::HotelBrittany => 3,
+            Self::TheSmugglersInn => 4,
+            Self::TheKingsRansomInn => 5,
+        }
+    }
+
+    /// `shops.md §8.4` (issue #190) per-inn **bed cell**: "The bed the
+    /// party is moved to is a **per-inn lookup, not a derivation from the
+    /// shop's registered cell and not a fixed offset from anything.** Two
+    /// parallel six-entry byte tables in the shared data overlay hold the
+    /// X and the Y of each inn's bed ... There is no rule to derive these
+    /// from the map or from the shop cell; they are authored data and must
+    /// be carried as data."
+    ///
+    /// Ordinary party map coordinates on the location's 32-by-32 floor
+    /// grid, "with `x` counted east from the west edge and `y` south from
+    /// the north edge".
+    ///
+    /// | Ordinal | Inn | Scene | Bed cell | Waking |
+    /// |---:|---|---:|---|---|
+    /// | 0 | The Wayfarer Inn | `2` | `(21, 10)` | `(22, 10)` |
+    /// | 1 | The Warrior's Stead | `3` | `(15, 7)` | `(16, 7)` |
+    /// | 2 | The Haunting Inn | `7` | `(25, 9)` | `(26, 9)` |
+    /// | 3 | Hotel Brittany | `20` | `(20, 1)` | `(21, 1)` |
+    /// | 4 | The Smugglers' Inn | `22` | `(27, 6)` | `(28, 6)` |
+    /// | 5 | The King's Ransom Inn | `24` | `(7, 26)` | `(8, 26)` |
+    ///
+    /// One thing §8.4 states it does **not** claim, carried here so no
+    /// consumer assumes otherwise: "whether each bed cell and the cell
+    /// east of it are walkable floor tiles on the shipped location pages
+    /// was not checked against the map data. The coordinates are the ones
+    /// the rest handler writes, which is what an implementation needs."
+    pub const fn bed_cell(self) -> (u8, u8) {
+        INN_BED_CELLS[self.ordinal()]
+    }
+
+    /// `shops.md §8.4` (issue #190): "The party does not wake in the bed.
+    /// On the completed-rest path the handler steps the party **one tile
+    /// east** of the bed cell before returning ... The bed cell is where
+    /// the party sleeps; the cell east of it is where the player finds the
+    /// party afterwards."
+    pub const fn bed_wake_cell(self) -> (u8, u8) {
+        let (x, y) = self.bed_cell();
+        (x + INN_BED_WAKE_STEP_EAST, y)
+    }
 }
+
+/// `shops.md §8.4` (issue #190): the six authored bed cells, in inn
+/// ordinal order. Carried as data because the section is explicit that
+/// no rule derives them.
+pub const INN_BED_CELLS: [(u8, u8); INN_COUNT] =
+    [(21, 10), (15, 7), (25, 9), (20, 1), (27, 6), (7, 26)];
+
+/// `shops.md §8.4` (issue #190): the completed-rest path's eastward step
+/// from the bed cell, in tiles.
+pub const INN_BED_WAKE_STEP_EAST: u8 = 1;
+
+/// `shops.md §8.4`: the six innkeeper rows, which is also the length of
+/// each of the two parallel bed-cell tables.
+pub const INN_COUNT: usize = 6;
 
 /// `shops.md §8.4` inn main-menu outcome. After the inn-entry guest
 /// scan, the main menu accepts three actions: `R` Rest for the

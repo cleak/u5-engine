@@ -33,16 +33,109 @@ pub const fn display_hour_12h(hour_24h: u8) -> u8 {
     }
 }
 
-/// `moons.md §3`: the sky/status-strip renderer runs only on
-/// surface and town-family views. Dungeon-class views and the
-/// underworld presentation suppress it. The argument is the saved
-/// scene byte and the underworld plane flag.
-pub const fn sky_strip_renders(scene_byte: u8, underworld_plane: bool) -> bool {
-    if underworld_plane {
-        return false;
-    }
-    // Surface (scene 0) and town-family (1..=32) render the strip.
-    scene_byte <= 32
+/// `moons.md §2.2`, the renderer's **scene gate** - the first test in
+/// the routine and the only one that precedes the two cache writes:
+/// "Scenes outside the surface/town family (combat, intro, and every
+/// scene id at or above the location range, dungeons included) never
+/// get past the renderer's scene gate. A caller may still call it -
+/// several do - but it returns immediately: nothing is drawn, and,
+/// because that gate precedes the two cache writes, nothing is cached
+/// either."
+///
+/// Surface is scene `0`; the town family is `1..=32`.
+///
+/// This is the predicate the two cache-refresh callers use. Whether the
+/// strip is actually *painted* once past this gate is
+/// [`sky_strip_renders`], and the difference is exactly the erase arm
+/// of [`sky_strip_erase_arm`].
+pub const fn sky_strip_scene_gate_passes(scene_byte: u8) -> bool {
+    scene_byte <= SKY_STRIP_LAST_TOWN_FAMILY_SCENE
+}
+
+/// `moons.md §2.2`: the last town-family scene byte. Above it the
+/// renderer's scene gate rejects: "every scene id at or above the
+/// location range, dungeons included".
+pub const SKY_STRIP_LAST_TOWN_FAMILY_SCENE: u8 = 32;
+
+/// `moons.md §2.2`: scene 25, "Ararat, the underworld-only keep". It
+/// "reaches the marker painter but makes it paint the strip's footprint
+/// flat instead of printing it", by the scene test rather than the
+/// level test, "so it fires there whatever the party's floor byte
+/// holds".
+pub const ARARAT_SCENE_BYTE: u8 = 25;
+
+/// `moons.md §2.2`, the marker painter's **erase arm**, resolved by
+/// issue #190: it "is **live, and it fires on four distinct routes in
+/// ordinary play**. Reproduce it."
+///
+/// Two independent tests reach it:
+///
+/// * the **scene** test - scene [`ARARAT_SCENE_BYTE`]; and
+/// * the **below-surface map level** test - the party's saved Z with
+///   its high bit set, which is the Underworld plane outdoors and a
+///   below-entry (basement) floor inside a town-family location
+///   (`formats/saved-gam.md §6`, party Z row). Four locations own such
+///   a floor and are reached on it in ordinary play: Yew, both large
+///   castles, and Serpent's Hold.
+///
+/// On the arm "the strip is not rendered at all, and the painter does
+/// the same work it does for Ararat: it still caches both glyph bytes,
+/// still selects and restores the text window and the runic font, and
+/// then flat-fills the strip footprint and rules the scanline under it.
+/// Nothing of the hour marker or of either moon is left on screen, and
+/// both end-caps are erased with them."
+///
+/// So the arm suppresses *painting* and not *caching*: callers that
+/// reach the renderer past its scene gate still write the pair
+/// (`moons.md §3`).
+pub const fn sky_strip_erase_arm(scene_byte: u8, below_surface: bool) -> bool {
+    scene_byte == ARARAT_SCENE_BYTE || below_surface
+}
+
+/// `moons.md §2.2`: `true` when a refresh actually **paints** the
+/// twelve-cell strip - the scene gate passes and the erase arm does
+/// not fire. `below_surface` is the party Z's high bit: the Underworld
+/// plane outdoors, or a below-entry floor inside a location.
+///
+/// *Corrected (issue #190).* This predicate previously took an
+/// `underworld_plane` flag and returned `true` for Ararat and for every
+/// below-entry town floor, because `moons.md §2.2` then recorded the
+/// erase arm's reachability as unresolved. It is resolved and live, so
+/// both now suppress the paint. The predicate is no longer the gate for
+/// the cache writes either - that is
+/// [`sky_strip_scene_gate_passes`], which the erase arm runs *after*.
+pub const fn sky_strip_renders(scene_byte: u8, below_surface: bool) -> bool {
+    sky_strip_scene_gate_passes(scene_byte) && !sky_strip_erase_arm(scene_byte, below_surface)
+}
+
+/// `time.md §11` (issue #190): `true` when the ambient-audio tick's
+/// free-running sub-tick counter, read **on entry and before its own
+/// advance**, is one of the two decrementing residues.
+///
+/// "The sub-tick counter is a single byte that cycles `0, 1, 2, 3, 4, 5,
+/// 6, 7` and wraps back to `0`, and the decrement fires on the calls
+/// where it holds **`0` or `4`** on entry. So the two residues are zero
+/// and four of the eight-phase cycle - every fourth call, not two
+/// adjacent calls out of eight."
+///
+/// The same predicate is the loud-envelope selector for the tick's other
+/// branch: "The same two residues also pick the loud envelope in the
+/// tick's own lava/shrine effect branch, so one counter drives both
+/// behaviours and an implementation should not give them separate
+/// phases." That branch is not modelled in this engine - it has no
+/// lava/shrine ambient effect - but when it is, it must read this
+/// predicate off the same counter rather than a second one.
+pub const fn ambient_audio_sub_tick_decrements(sub_tick_on_entry: u8) -> bool {
+    let residue = sub_tick_on_entry % AMBIENT_AUDIO_SUB_TICK_PERIOD;
+    residue == AMBIENT_AUDIO_DECREMENT_RESIDUES[0] || residue == AMBIENT_AUDIO_DECREMENT_RESIDUES[1]
+}
+
+/// `time.md §11` (issue #190): the loud envelope of the ambient tick's
+/// lava/shrine effect branch is picked by the *same* two residues off
+/// the *same* counter. Alias rather than a second predicate, so the two
+/// behaviours cannot drift into separate phases.
+pub const fn ambient_audio_sub_tick_selects_loud_envelope(sub_tick_on_entry: u8) -> bool {
+    ambient_audio_sub_tick_decrements(sub_tick_on_entry)
 }
 
 /// `time.md §5` provision-decrement hours: food is spent only at

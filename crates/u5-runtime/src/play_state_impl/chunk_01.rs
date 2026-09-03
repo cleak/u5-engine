@@ -751,9 +751,12 @@ impl PlayState {
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
             // scene-entry callers are also the mechanism by which the
             // cached glyph digits are refreshed on a **Journey Onward**".
-            // In a scene outside the surface/town family the renderer is
-            // never reached at all (`moons.md §2.2`: "Nothing is drawn and
-            // nothing is cached"), so there the restored bytes stand.
+            // In a scene outside the surface/town family the renderer
+            // returns at its scene gate before it writes anything
+            // (`moons.md §3`: "the renderer returns before it reaches
+            // either cache write, so **nothing** is cached there"), so
+            // there "the pair the save was loaded with stands untouched
+            // until the party next enters a scene that shows the strip".
             //
             // §5.1 also forbids the recompute this merge replaced: the pair
             // is "gameplay state, not scratch", and "An engine that treats
@@ -931,15 +934,14 @@ impl PlayState {
                 ));
             }
         }
-        // `moons.md §3` (the caller list `RETRACTIONS.md` R343 put on
-        // the record): the moon-phase status-strip renderer's callers are
-        // "every overworld scene entry; every town-family scene entry" and
-        // the hour-change hook, and "Each refresh caches the two glyph
-        // bytes for the current day *before* it tests whether either
-        // marker is on the visible horizon". `moons.md §2.2` adds that the
-        // scene-entry callers "carry no such gate" as the hour-change
-        // hook's floor test, so a basement or Underworld entry refreshes
-        // the pair too.
+        // `moons.md §3`, caller census: the town-family floor loader
+        // repaints on "Every town-family scene entry **and every in-place
+        // floor change inside a location**", and "Each refresh caches the
+        // two glyph bytes for the current day *before* it tests whether
+        // either marker is on the visible horizon". The hour-change hook
+        // is the only row that also tests the floor - "This is the only
+        // caller carrying that below-surface gate (Section 2.2)." - so a
+        // basement entry refreshes the pair too.
         state.refresh_cached_moon_glyphs_at_scene_entry();
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
@@ -1100,9 +1102,12 @@ impl PlayState {
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
             // scene-entry callers are also the mechanism by which the
             // cached glyph digits are refreshed on a **Journey Onward**".
-            // In a scene outside the surface/town family the renderer is
-            // never reached at all (`moons.md §2.2`: "Nothing is drawn and
-            // nothing is cached"), so there the restored bytes stand.
+            // In a scene outside the surface/town family the renderer
+            // returns at its scene gate before it writes anything
+            // (`moons.md §3`: "the renderer returns before it reaches
+            // either cache write, so **nothing** is cached there"), so
+            // there "the pair the save was loaded with stands untouched
+            // until the party next enters a scene that shows the strip".
             //
             // §5.1 also forbids the recompute this merge replaced: the pair
             // is "gameplay state, not scratch", and "An engine that treats
@@ -1466,9 +1471,12 @@ impl PlayState {
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
             // scene-entry callers are also the mechanism by which the
             // cached glyph digits are refreshed on a **Journey Onward**".
-            // In a scene outside the surface/town family the renderer is
-            // never reached at all (`moons.md §2.2`: "Nothing is drawn and
-            // nothing is cached"), so there the restored bytes stand.
+            // In a scene outside the surface/town family the renderer
+            // returns at its scene gate before it writes anything
+            // (`moons.md §3`: "the renderer returns before it reaches
+            // either cache write, so **nothing** is cached there"), so
+            // there "the pair the save was loaded with stands untouched
+            // until the party next enters a scene that shows the strip".
             //
             // §5.1 also forbids the recompute this merge replaced: the pair
             // is "gameplay state, not scratch", and "An engine that treats
@@ -1625,15 +1633,14 @@ impl PlayState {
         };
         state.sync_player_object();
         state.cache_current_world_overlay();
-        // `moons.md §3` (the caller list `RETRACTIONS.md` R343 put on
-        // the record): the moon-phase status-strip renderer's callers are
-        // "every overworld scene entry; every town-family scene entry" and
-        // the hour-change hook, and "Each refresh caches the two glyph
-        // bytes for the current day *before* it tests whether either
-        // marker is on the visible horizon". `moons.md §2.2` adds that the
-        // scene-entry callers "carry no such gate" as the hour-change
-        // hook's floor test, so a basement or Underworld entry refreshes
-        // the pair too.
+        // `moons.md §3`, caller census: the overworld entry pass repaints
+        // on "Every entry into the overworld framer, whether that is a
+        // fresh scene entry or an in-place return", and "Each refresh
+        // caches the two glyph bytes for the current day *before* it
+        // tests whether either marker is on the visible horizon". The
+        // hour-change hook is the only row that also tests the floor -
+        // "This is the only caller carrying that below-surface gate
+        // (Section 2.2)." - so an Underworld entry refreshes the pair too.
         state.refresh_cached_moon_glyphs_at_scene_entry();
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();

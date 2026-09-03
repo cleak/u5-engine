@@ -93,25 +93,24 @@ pub const fn natural_moongate_cached_glyph_slot(hour: u8) -> u8 {
     if hour < 12 { 0 } else { 1 }
 }
 
-/// `moons.md §2.2` cache-only "no gate for this moon" encoding.
-///
-/// This is **not** a glyph-table entry. §2.2 states plainly: "There is
-/// no sentinel byte in either table. An implementation that reserves a
-/// high-bit value for 'off horizon' is modelling something the tables
-/// do not contain; whether a moon is drawn is decided solely by the
-/// hour-driven visibility rule." The published day tables below
-/// therefore hold nothing but ASCII digits `b'0'..=b'7'`.
-///
-/// The engine still needs a byte to park in its two-entry glyph cache
-/// when a caller explicitly says "no Moonstone slot for this moon", so
-/// these two high-bit values remain as an internal cache encoding that
-/// [`moonstone_slot_from_glyph_byte`] decodes back to `None`.
-pub const TRAMMEL_OFF_HORIZON_SENTINEL: u8 = 0xF0;
-
-/// `moons.md §2.2` cache-only "no gate for this moon" encoding for
-/// Felucca. See [`TRAMMEL_OFF_HORIZON_SENTINEL`]; it is not a table
-/// entry either.
-pub const FELUCCA_OFF_HORIZON_SENTINEL: u8 = 0x80;
+// `moons.md §2.2`: "**There is no sentinel byte in either table.** An
+// implementation that reserves a high-bit value for 'off horizon' is
+// modelling something the tables do not contain; whether a moon is
+// drawn is decided solely by the hour-driven visibility rule above."
+//
+// *Backed out (issue #190).* This module used to publish
+// `TRAMMEL_OFF_HORIZON_SENTINEL = 0xF0` and
+// `FELUCCA_OFF_HORIZON_SENTINEL = 0x80` as an engine-internal "no gate
+// for this moon" cache encoding, on the argument that the encoding was
+// a different thing from the table. It was not a safe one: those are
+// exactly the two bytes §2.2 (`RETRACTIONS.md` R376) publishes as the
+// *day-zero* unchecked read, so reserving them made an
+// original-behaviour byte indistinguishable from an engine-internal
+// "no gate" answer - the sentinel model §2.2 says the original does not
+// have. Both constants and the encoding are removed; the glyph cache
+// now only ever holds a byte some caller actually wrote. See
+// [`MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE`] and
+// [`natural_moongate_slot_index_unchecked`].
 
 /// `moons.md §2.2`: "The glyph identity for each moon is table-driven,
 /// **indexed by the calendar day of the month, one through
@@ -152,14 +151,23 @@ pub const FELUCCA_GLYPH_BY_DAY: [u8; MOON_GLYPH_DAYS_PER_MONTH] = [
 pub const MOON_GLYPH_DAYS_PER_MONTH: usize = 28;
 
 /// `moons.md §2.2`: raw cached glyph bytes for a status/moon refresh on
-/// the supplied calendar day of the month (`1..=28`).
+/// a **legal** calendar day of the month (`1..=28`).
 ///
 /// "The day index is the saved day-of-month byte, which the per-turn
-/// clock keeps in the range one through twenty-eight ... There is no
-/// day zero, so an implementation should treat a zero or out-of-range
-/// day as a save-data error rather than looking up a twenty-ninth
-/// entry." A day outside `1..=28` therefore yields `None` rather than
-/// a synthesised sentinel pair.
+/// clock keeps in the range one through twenty-eight." A day outside
+/// that range yields `None` here; the *descriptive* rule for what the
+/// original's unchecked lookup returns instead lives in
+/// [`cached_moon_glyph_bytes_for_day_unchecked`].
+///
+/// *Corrected (issue #190, `RETRACTIONS.md` R376).* This function's
+/// doc comment used to quote "There is no day zero, so an
+/// implementation should treat a zero or out-of-range day as a
+/// save-data error rather than looking up a twenty-ninth entry" as the
+/// contract. R376 withdraws that sentence in that role: "The original
+/// **does** look one up." Rejecting the day survives only as a
+/// **prescriptive** divergence and belongs at load - see
+/// [`crate::GameClock::with_date`], which is where this engine takes
+/// it.
 pub const fn cached_moon_glyph_bytes_for_day(day: u8) -> Option<[u8; 2]> {
     if day == 0 || day as usize > MOON_GLYPH_DAYS_PER_MONTH {
         return None;
@@ -168,12 +176,129 @@ pub const fn cached_moon_glyph_bytes_for_day(day: u8) -> Option<[u8; 2]> {
     Some([TRAMMEL_GLYPH_BY_DAY[index], FELUCCA_GLYPH_BY_DAY[index]])
 }
 
+/// `moons.md §2.2` (issue #190, `RETRACTIONS.md` R376), the
+/// **descriptive** rule: the renderer's lookup "is a bare indexed read
+/// - table base plus twice the day - performed twice, once per moon,
+/// with no comparison, no mask and no clamp on either table. Any byte
+/// value from zero to two hundred fifty-five therefore reads
+/// *something*, and the painter caches whatever it read."
+///
+/// The published rows, verbatim from the section's table:
+///
+/// | Day byte | Cached Trammel byte | Cached Felucca byte |
+/// |---:|---|---|
+/// | `0` | `0xF0` | `0x80` |
+/// | `1..28` | the day tables above | the day tables above |
+/// | `29` | `0x04` | `0x00` |
+/// | `30`, `31`, `32` | `0x00` | `0x00` |
+/// | `33` | `0x04` | `0x05` |
+/// | larger | whatever lies at that distance past the table | ditto |
+///
+/// "**Neither out-of-range pair is a sentinel.** Day zero reads the
+/// tail of unrelated data that happens to precede the tables, and days
+/// past twenty-eight read the start of an unrelated block that follows
+/// them; the bytes carry no moon meaning and the code assigns them
+/// none."
+///
+/// The final row is deliberately **not** synthesised: the section
+/// publishes no bytes past day thirty-three, so a day above
+/// [`MOON_GLYPH_UNCHECKED_LAST_PUBLISHED_DAY`] returns `None` rather
+/// than an invented pair. That is the only gap; every published row is
+/// reproduced exactly.
+pub const fn cached_moon_glyph_bytes_for_day_unchecked(day: u8) -> Option<[u8; 2]> {
+    match day {
+        0 => Some([
+            MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE,
+            MOON_GLYPH_DAY_ZERO_FELUCCA_BYTE,
+        ]),
+        1..=28 => cached_moon_glyph_bytes_for_day(day),
+        29 => Some([0x04, 0x00]),
+        30..=32 => Some([0x00, 0x00]),
+        33 => Some([0x04, 0x05]),
+        _ => None,
+    }
+}
+
+/// `moons.md §2.2` (R376): the Trammel byte a day-of-month of zero
+/// caches. It is "the tail of unrelated data that happens to precede
+/// the tables"; "**Neither out-of-range pair is a sentinel** ... the
+/// bytes carry no moon meaning and the code assigns them none."
+///
+/// It is not an "off horizon" marker and it does not mean "no gate":
+/// the original carries it straight into destination selection, where
+/// the unchecked subtraction of [`natural_moongate_slot_index_unchecked`]
+/// turns it into Moonstone slot one hundred ninety-two. Nothing in this
+/// crate may treat this value as a reserved encoding.
+pub const MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE: u8 = 0xF0;
+
+/// `moons.md §2.2` (R376): the Felucca byte a day-of-month of zero
+/// caches; the unchecked subtraction turns it into slot eighty. See
+/// [`MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE`].
+pub const MOON_GLYPH_DAY_ZERO_FELUCCA_BYTE: u8 = 0x80;
+
+/// `moons.md §2.2` (R376): the highest day byte for which the section
+/// publishes the exact cached pair. Above it the table row reads
+/// "whatever lies at that distance past the table", which names no
+/// bytes, so [`cached_moon_glyph_bytes_for_day_unchecked`] returns
+/// `None` there.
+pub const MOON_GLYPH_UNCHECKED_LAST_PUBLISHED_DAY: u8 = 33;
+
+/// `moons.md §2.2` (R376), the **prescriptive** half, stated as the
+/// divergence it is: "an implementation that does not need byte parity
+/// on a corrupt save should reject or clamp an out-of-range day **at
+/// load**, where the value enters, and not inside the painter, where
+/// the original does not check - and it should record that it
+/// diverges."
+///
+/// This engine rejects. The check lives in
+/// [`crate::GameClock::with_date`], which every save-load path goes
+/// through, so the painter itself never sees an out-of-range day and
+/// [`cached_moon_glyph_bytes_for_day_unchecked`] exists for
+/// byte-parity consumers rather than for the live cache write.
+pub const fn day_of_month_is_in_range(day: u8) -> bool {
+    day >= 1 && day as usize <= MOON_GLYPH_DAYS_PER_MONTH
+}
+
+/// `moons.md §2.2` (issue #190, `RETRACTIONS.md` R376), the
+/// **descriptive** consumer rule: the cached pair "is the sole input to
+/// natural-moongate destination selection, which converts a cached byte
+/// to a Moonstone slot index by subtracting the character code of `0`
+/// with no range check on either side, so a day-zero save offers slot
+/// one hundred ninety-two or slot eighty and a day-twenty-nine save
+/// offers a negative slot".
+///
+/// This reproduces that subtraction and nothing else, returning the
+/// signed index the original carries into the eight-entry Moonstone
+/// slot table: [`MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE`] gives `192`,
+/// [`MOON_GLYPH_DAY_ZERO_FELUCCA_BYTE`] gives `80`, the day-twenty-nine
+/// Trammel byte `0x04` gives `-44`, and an ordinary phase digit gives
+/// its own slot.
+///
+/// It is **not** what the live path does, and that is a recorded
+/// divergence rather than an oversight: indexing an eight-entry table
+/// at `192` or at `-44` is a read of whatever save state lies past it,
+/// which this engine has no safe way to reproduce. The live path clamps
+/// through [`moonstone_slot_from_glyph_byte`]; the divergence is
+/// recorded there and on
+/// `PlayState::cached_natural_moongate_slot_index`.
+pub const fn natural_moongate_slot_index_unchecked(byte: u8) -> i16 {
+    byte as i16 - b'0' as i16
+}
+
 /// `moons.md §2.2`: decode a cached glyph byte into a Moonstone slot
-/// index (`0..=7`). Returns `None` for the cache-only "no gate"
-/// encodings ([`TRAMMEL_OFF_HORIZON_SENTINEL`] /
-/// [`FELUCCA_OFF_HORIZON_SENTINEL`]) and for any other unexpected
-/// byte. Every byte the published day tables contain decodes to a
-/// slot, because those tables hold nothing but `b'0'..=b'7'`.
+/// index (`0..=7`). Every byte the published day tables contain decodes
+/// to a slot, because "every entry is an ASCII digit in the range `'0'`
+/// through `'7'`".
+///
+/// **The rejection is a clamp, and the clamp is a divergence.** §2.2
+/// describes the original's conversion as an unchecked subtraction with
+/// "no range check on either side" - see
+/// [`natural_moongate_slot_index_unchecked`]. `None` here therefore
+/// means "this engine refuses to convert this byte", never "the
+/// original found no gate for this moon": §2.2 is explicit that
+/// "**Neither out-of-range pair is a sentinel** ... the bytes carry no
+/// moon meaning and the code assigns them none", and the original still
+/// offers whatever slot the subtraction produces.
 pub const fn moonstone_slot_from_glyph_byte(byte: u8) -> Option<usize> {
     if byte & 0x80 != 0 {
         return None;

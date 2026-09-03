@@ -717,13 +717,15 @@ impl PlayState {
             self.clear_open_town_door_state();
             self.pending_town_arrest = None;
             self.active_blackthorn = None;
-            // `moons.md §3`, refresh cadence: the strip renderer's callers are
-            // "every overworld scene entry; every town-family scene entry; the
-            // per-turn cleanup pass, when that pass observes the hour changing".
-            // This is an overworld scene entry, so the cached pair is rewritten
-            // here as well - a town or dungeon exit that left the restored pair
-            // standing would send the next natural gate to the wrong Moonstone
-            // slot (`formats/saved-gam.md §5.1`).
+            // `moons.md §3`, caller census: the overworld entry pass repaints on
+            // "Every entry into the overworld framer, whether that is a fresh
+            // scene entry or an in-place return", and §3's "Every in-place return
+            // to the overworld reaches the refresh." paragraph puts a dungeon
+            // exit, a town-boundary exit and a world-plane transition inside that
+            // row. So the cached pair is rewritten here as well - a town or
+            // dungeon exit that left the restored pair standing would send the
+            // next natural gate to the wrong Moonstone slot
+            // (`formats/saved-gam.md §5.1`).
             self.refresh_cached_moon_glyphs_at_scene_entry();
             self.mode_zero_cleanup();
             self.mark_visibility_dirty();

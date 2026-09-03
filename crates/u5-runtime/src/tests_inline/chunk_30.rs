@@ -426,7 +426,7 @@ mod moongate_gate_presence_phase {
         grid[world_cell_index(4, 5)] = NATURAL_MOONGATE_TERRAIN_TILE;
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(11, 58).unwrap();
-        state.set_cached_moon_glyph_slots(Some(1), None);
+        state.set_cached_moon_glyph_slots(1, 0);
         state.moonstone_slots[1] = MoonstoneGateSlot {
             scene: 0,
             x: 6,
@@ -954,7 +954,7 @@ mod moongate_transit_transition {
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(11, 58).unwrap();
         state.natural_moongate_counter = MOONGATE_PHASE_FULL;
-        state.set_cached_moon_glyph_slots(Some(1), None);
+        state.set_cached_moon_glyph_slots(1, 0);
         state.moonstone_slots[1] = MoonstoneGateSlot {
             scene: 0,
             x: 6,

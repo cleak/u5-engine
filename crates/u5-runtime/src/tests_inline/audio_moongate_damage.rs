@@ -169,7 +169,7 @@ fn the_transit_envelope_survives_the_destination_warp() {
     let mut state = britannia_state(grid, 5, 5);
     state.clock = GameClock::new(11, 58).unwrap();
     state.natural_moongate_counter = MOONGATE_PHASE_FULL;
-    state.set_cached_moon_glyph_slots(Some(1), None);
+    state.set_cached_moon_glyph_slots(1, 0);
     state.moonstone_slots[1] = MoonstoneGateSlot {
         scene: 0,
         x: 6,

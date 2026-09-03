@@ -2161,7 +2161,7 @@
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(11, 58).unwrap();
-        state.set_cached_moon_glyph_slots(Some(1), None);
+        state.set_cached_moon_glyph_slots(1, 0);
         state.moonstone_slots[1] = MoonstoneGateSlot {
             scene: 0,
             x: 6,
@@ -2196,7 +2196,7 @@
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(12, 0).unwrap();
-        state.set_cached_moon_glyph_slots(Some(1), Some(2));
+        state.set_cached_moon_glyph_slots(1, 2);
         state.moonstone_slots[1] = MoonstoneGateSlot {
             scene: 0,
             x: 6,
@@ -2265,10 +2265,11 @@
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(11, 58).unwrap();
-        state.set_cached_moon_glyph_bytes(
-            TRAMMEL_OFF_HORIZON_SENTINEL,
-            FELUCCA_OFF_HORIZON_SENTINEL,
-        );
+        // An arbitrary non-digit fixture pair, named here rather than
+        // taken from a reserved constant: `moons.md §2.2` says an
+        // implementation that reserves a high-bit "off horizon" value
+        // "is modelling something the tables do not contain".
+        state.set_cached_moon_glyph_bytes(0xAA, 0xBB);
         state.refresh_cached_moon_glyphs();
         state.natural_moongate_live_cells.push(origin_idx);
 
@@ -2293,7 +2294,9 @@
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(11, 58).unwrap();
-        state.set_cached_moon_glyph_bytes(b'1', FELUCCA_OFF_HORIZON_SENTINEL);
+        // The clock is before noon, so only the first cached byte is
+        // read (`moons.md §2.2`); the second is any legal phase digit.
+        state.set_cached_moon_glyph_bytes(b'1', b'0');
         state.natural_moongate_live_cells.push(origin_idx);
 
         assert_eq!(
@@ -2305,19 +2308,28 @@
     }
 
     #[test]
-    /// `moons.md §3`: "The strip renderer runs from exactly one place:
-    /// the per-turn cleanup pass, and only when that pass observes the
-    /// hour changing, and only in a scene that shows the surface/town
-    /// status strip. It is **not** driven by ordinary stats-panel
-    /// redraws, and an earlier statement in this document that it should
-    /// be refreshed on every stats-panel redraw is retracted."
+    /// `moons.md §3` refresh cadence: the strip renderer "is **not**
+    /// driven by ordinary stats-panel redraws, and an earlier statement
+    /// in this document that it should be refreshed on every stats-panel
+    /// redraw is retracted." What this test pins is that negative and the
+    /// hour-change hook's own row of the census - "Only when the pass
+    /// observes the hour changing, and only in a scene that shows the
+    /// surface/town status strip and on a floor at or above the entry
+    /// floor."
+    ///
+    /// *Re-anchored (issue #190).* This comment used to carry the model
+    /// `RETRACTIONS.md` R343 withdrew - that the renderer "runs from
+    /// **exactly one place**: the per-turn cleanup pass, and only when
+    /// that pass observes the hour changing". §3 now publishes a
+    /// seven-row caller census. The other callers are pinned in
+    /// `chunk_13.rs`; this test is about the redraw paths that are *not*
+    /// callers.
     fn moon_glyph_cache_refreshes_on_hour_change_but_not_on_status_redraw() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.clock = GameClock::new(10, 58).unwrap();
-        state.set_cached_moon_glyph_bytes(
-            TRAMMEL_OFF_HORIZON_SENTINEL,
-            FELUCCA_OFF_HORIZON_SENTINEL,
-        );
+        // An arbitrary non-digit fixture pair; see the note on
+        // `natural_moongate_entry_uses_published_day_table_for_empty_slot`.
+        state.set_cached_moon_glyph_bytes(0xAA, 0xBB);
 
         state.advance_turn_with_minutes(2);
 
@@ -2334,21 +2346,12 @@
         // these two bytes to pick the destination Moonstone slot, so a
         // repaint must not silently re-derive them from the current day.
         state.clock = GameClock::new(12, 0).unwrap();
-        state.set_cached_moon_glyph_bytes(
-            TRAMMEL_OFF_HORIZON_SENTINEL,
-            FELUCCA_OFF_HORIZON_SENTINEL,
-        );
+        state.set_cached_moon_glyph_bytes(0xAA, 0xBB);
         let _ = state.render_text_window_frame(None);
-        assert_eq!(
-            state.cached_moon_glyph_bytes,
-            [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL]
-        );
+        assert_eq!(state.cached_moon_glyph_bytes, [0xAA, 0xBB]);
 
         let _ = state.render_stats_panel_frame();
-        assert_eq!(
-            state.cached_moon_glyph_bytes,
-            [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL]
-        );
+        assert_eq!(state.cached_moon_glyph_bytes, [0xAA, 0xBB]);
     }
 
     #[test]
