@@ -1731,6 +1731,13 @@ impl PlayState {
         // gameplay stream on a frame the original never composites.
         // The canonical pass is
         // [`Self::composite_top_down_object_into_visibility_buffers`].
+        //
+        // Recorded consequence: a caller that renders *only* through this
+        // helper - the text view, the visibility-sweep repaint, any radius
+        // that is not the viewport's - shows the first entry of a selecting
+        // row permanently, while the buffer path re-rolls it every pass. The
+        // no-draw side is what `§8.1` charges; which of the two a non-viewport
+        // presentation should show is not published, and is a spec question.
         let variant = 0;
         match composite_active_object_slot(
             player_slot,
@@ -1843,9 +1850,9 @@ impl PlayState {
     /// clean-side capture saw a seated Avatar never change tile; R329
     /// explains the capture - the seat used was a fall-through, and "a seated
     /// actor that never changes tile is the expected result for the majority
-    /// of seats in the game, not a defect". A named-cell recapture then saw
-    /// 0.695-0.753 transitions per tick on qualifying seats and 0.000 on
-    /// fall-throughs, which is the fresh per-pass draw.
+    /// of seats, not a defect". A named-cell recapture then timed four
+    /// qualifying seats at 0.695, 0.709, 0.742 and 0.753 transitions per tick
+    /// and three fall-throughs at 0.000, which is the fresh per-pass draw.
     pub fn draw_active_object_composite_variant(&mut self) -> u8 {
         if self.negate_time_active() {
             // `§8.2`: "The composite still runs while Negate Time is active;

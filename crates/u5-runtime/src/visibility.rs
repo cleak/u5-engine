@@ -262,8 +262,8 @@ pub const fn active_object_default_tile_is_terrain_aware(tile: u8) -> bool {
 /// `visibility.md §8.2`: "The composite still runs while Negate Time is
 /// active; it just draws variant 0 every time." — so this is a selector
 /// short-circuit, not a suppression of the stamp. `§8.1` adds that the
-/// generator advance is "unconditional whenever the selector is entered **on
-/// its random arm**", so the short-circuit arm takes no draw at all.
+/// generator advance is "unconditional whenever the selector is entered on its
+/// random arm", so the short-circuit arm takes no draw at all.
 pub const fn active_object_compositor_variant(negate_time_active: bool, selector: u8) -> u8 {
     if negate_time_active {
         0
@@ -285,8 +285,11 @@ pub const ACTIVE_OBJECT_VARIANT_RANGE_HIGH: u8 = 3;
 /// `visibility.md §8.3`: "the probability that two draws separated by one
 /// to five steps differ is 0.7508" - so a qualifying seat repaints a
 /// *different* variant on about three idle passes in four. The named-cell
-/// recapture on `cleak/u5-spec#182` measured 0.695..0.753 transitions per tick
-/// across six qualifying seats and 0.000 on three fall-throughs.
+/// recapture table on `cleak/u5-spec#182` lists **five** qualifying seats and
+/// three fall-throughs. Four of the five carry a rate — 0.695, 0.709, 0.742
+/// and 0.753 transitions per tick; the fifth, Britain (3,8), is recorded with
+/// four distinct states and 204 transitions but **no tick count**, so it has
+/// no rate. All three fall-throughs measured 0.000.
 pub const ACTIVE_OBJECT_VARIANT_TRANSITION_PROBABILITY: f64 = 0.7508;
 
 /// `visibility.md §8`'s **five selecting rows**, and only those: the base of

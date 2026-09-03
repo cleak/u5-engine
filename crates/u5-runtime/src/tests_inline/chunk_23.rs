@@ -17479,45 +17479,73 @@ fn terrain_combat_setup_count_consumes_fortunes_flag_and_town_override() {
 /// the five selecting terrain rows ... and **zero** otherwise", so it
 /// contributes nothing here.
 ///
-/// `§5.3` marks step 6 "**Variable and unbounded**" for the *original*, whose
-/// animator arm is uncharacterised. This engine's tick is not: the only arm
-/// that draws is the wind check, which is a pure function of `prng_state`, so
-/// the exact post-tick state is computable. The post-condition is therefore
-/// pinned against a clone stepped through the same tick, not weakened to a
-/// liveness check - a package about draw counts must not accept a test that
-/// would pass on two ticks, zero ticks, or a different range.
+/// `§5.3` marks step 6 "**Variable and unbounded**", and `RETRACTIONS.md`
+/// R332 makes the wind arm's per-invocation count "**one, two, three, and so
+/// on upward** — every integer from one *is* reachable ... No maximum exists
+/// and an engine must still not assume one." So the published constraint on
+/// the tick's cost is a **lower bound of one draw and no upper bound**, and
+/// that is what is asserted here.
+///
+/// The *number* of ticks is pinned separately, and without running the tick
+/// to compute its own expectation: one world tick advances the shared
+/// `animation.md §6` phase counter exactly once, and that counter takes no
+/// generator draw, so it witnesses "exactly one tick" independently of
+/// whatever the tick draws. Step 5's own draws stay pinned exactly, by
+/// replaying `u5_prng_range_u16` off the pre-call state. The test therefore
+/// fails on zero ticks, on two ticks, on a tick that draws nothing, and on a
+/// different count range.
 #[test]
 fn terrain_combat_setup_count_rolls_from_resident_prng() {
-    // Run `advance_visual_tick` on a clone of `state` whose stream is already
-    // where the tick will find it, and return the exact state it leaves.
-    fn prng_after_step_six_tick(state: &PlayState, prng_after_count_draws: u16) -> u16 {
-        let mut probe = state.clone();
-        probe.prng_state = prng_after_count_draws;
-        probe.advance_visual_tick();
-        probe.prng_state
+    // How many generator advances separate two states on the shared stream.
+    // The state transform is range-independent, so walking it forward counts
+    // draws whatever ranges they were taken over - and it runs no production
+    // code, so nothing here certifies itself.
+    fn stream_advances(before: u16, after: u16) -> u32 {
+        let mut probe = before;
+        for steps in 0..=u32::from(u16::MAX) {
+            if probe == after {
+                return steps;
+            }
+            probe = u5_prng_advance_state(probe);
+        }
+        panic!("the shared stream never reached the post-call state");
+    }
+
+    // One world tick advances the §6 phase counter once, whichever animation
+    // path it takes.
+    fn ticks_from_clock(before: u8, after: u8) -> u8 {
+        after.wrapping_sub(before) % STATIC_TILE_ANIMATION_PERIOD_TICKS
     }
 
     let mut state = world_state(open_world_grid(), 10, 20);
     state.prng_state = 0x1234;
     let mut expected_prng = state.prng_state;
     let expected_count = u5_prng_range_u16(&mut expected_prng, 1, 10) as u8;
-    // Step 6's tick follows the roll on this branch. Its wind check "draws
-    // **once** and returns in the common case" (`prng.md §4`), so the tick is
-    // observable: it must move the stream, and to exactly this value.
-    let expected_after_tick = prng_after_step_six_tick(&state, expected_prng);
-    assert_ne!(
-        expected_after_tick, expected_prng,
-        "step 6's world tick draws, so it must move the stream"
-    );
 
+    let before_prng = state.prng_state;
+    let before_clock = state.animation.frame;
     assert_eq!(
         state.roll_terrain_combat_setup_count(10, false),
         expected_count
     );
+    // Step 5: exactly one count draw, at exactly the published range.
     assert_eq!(
-        state.prng_state, expected_after_tick,
-        "the count draws come off the pre-tick stream and step 6's tick then \
-         runs exactly once"
+        stream_advances(before_prng, expected_prng),
+        1,
+        "step 5's count is one draw off the pre-tick stream"
+    );
+    // Step 6: exactly one world tick, witnessed by the non-drawing clock.
+    assert_eq!(
+        ticks_from_clock(before_clock, state.animation.frame),
+        1,
+        "step 6's world tick runs exactly once after the count roll"
+    );
+    // ...which consumed at least one further draw. `§5.3` publishes no upper
+    // bound, so none is asserted.
+    let tick_draws = stream_advances(expected_prng, state.prng_state);
+    assert!(
+        tick_draws >= 1,
+        "step 6's world tick draws, so it must move the stream past the count"
     );
 
     state.fortunes_of_war = 1;
@@ -17526,25 +17554,33 @@ fn terrain_combat_setup_count_rolls_from_resident_prng() {
     // first roll's result, so it can only lower the count.
     let first_roll = u5_prng_range_u16(&mut expected_prng, 1, 10) as u8;
     let expected_count = u5_prng_range_u16(&mut expected_prng, 1, u16::from(first_roll)) as u8;
-    let expected_after_tick = prng_after_step_six_tick(&state, expected_prng);
-    assert_ne!(expected_after_tick, expected_prng);
 
+    let before_prng = state.prng_state;
+    let before_clock = state.animation.frame;
     assert!(expected_count <= first_roll);
     assert_eq!(
         state.roll_terrain_combat_setup_count(10, false),
         expected_count
     );
-    assert_eq!(state.prng_state, expected_after_tick);
+    // The damped branch takes two count draws, then the same single tick.
+    assert_eq!(stream_advances(before_prng, expected_prng), 2);
+    assert_eq!(ticks_from_clock(before_clock, state.animation.frame), 1);
+    assert!(stream_advances(expected_prng, state.prng_state) >= 1);
 
     // Sentinel ratings and the town-style override skip the whole branch, so
     // they take neither the count draws nor step 6's tick: §5.3 step 5,
     // "Sentinel ratings consume nothing here."
     let unchanged_prng = state.prng_state;
+    let unchanged_clock = state.animation.frame;
     assert_eq!(state.roll_terrain_combat_setup_count(16, false), 16);
     assert_eq!(state.roll_terrain_combat_setup_count(8, false), 8);
     assert_eq!(state.roll_terrain_combat_setup_count(1, false), 1);
     assert_eq!(state.roll_terrain_combat_setup_count(10, true), 1);
     assert_eq!(state.prng_state, unchanged_prng);
+    assert_eq!(
+        state.animation.frame, unchanged_clock,
+        "a skipped branch runs no world tick either"
+    );
 }
 
 /// `combat.md §5`: "A town-style single-attacker override applies
@@ -18813,7 +18849,7 @@ fn negate_time_freezes_every_tile_animation_clock() {
 ///
 /// `§8.1`: the selector's "one side effect is the generator advance inside
 /// the shared draw itself, which is unconditional whenever the selector is
-/// entered **on its random arm**" - so the short-circuit arm takes no draw and
+/// entered on its random arm" - so the short-circuit arm takes no draw and
 /// leaves the shared stream where it was.
 #[test]
 fn active_object_variant_short_circuits_to_zero_under_negate_time() {

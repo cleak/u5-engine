@@ -1854,6 +1854,19 @@ impl PlayState {
                     rolled = self.random_range_u8(1, rolled);
                 }
                 // Step 6, on this same branch and before any placement.
+                //
+                // GAP, recorded rather than papered over: this shared tick
+                // has its own `timing.md §8.2` scene gate and returns without
+                // doing anything for scene values `0x21..=0x7F`. `§5.3`
+                // scopes only step 3a out of the dungeon entries, and says
+                // nothing about step 6 there. If some route ever reaches this
+                // helper while the scene byte is still a dungeon value, that
+                // entry would take step 5's count draws and not step 6's
+                // tick. Both of today's callers are the terrain-combat setup
+                // helper, which `§5` describes on the surface; the dungeon
+                // entries go through the room painter and do not reach here.
+                // Taken to the spec as a question rather than resolved by
+                // hoisting the tick past its own published gate.
                 self.advance_visual_tick();
                 rolled
             }

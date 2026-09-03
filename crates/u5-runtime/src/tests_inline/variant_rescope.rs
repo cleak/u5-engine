@@ -278,7 +278,8 @@ fn the_variant_is_a_fresh_uniform_draw_on_every_pass() {
     }
 
     // The measured cadence on `cleak/u5-spec#182`'s named-cell recapture was
-    // 0.695..0.753 transitions per tick on the six qualifying seats.
+    // 0.695, 0.709, 0.742 and 0.753 transitions per tick - the four of its
+    // five qualifying seats that carry a tick count.
     let rate = transitions as f64 / (SAMPLES - 1) as f64;
     assert!(
         (rate - ACTIVE_OBJECT_VARIANT_TRANSITION_PROBABILITY).abs() < 0.02,
