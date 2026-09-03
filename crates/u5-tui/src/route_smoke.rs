@@ -3828,7 +3828,7 @@ fn apply_route_smoke_case_setup(
                 *tile = NATURAL_MOONGATE_TERRAIN_TILE;
             }
             state.natural_moongate_live_cells = vec![idx];
-            state.set_cached_moon_glyph_slots(Some(0), None);
+            state.set_cached_moon_glyph_slots(0, 0);
             state.mark_visibility_dirty();
         }
         "britannia-pirate-broadside-damages-the-party" => {

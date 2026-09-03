@@ -545,14 +545,13 @@ pub use miscmsg_io::{
     render_miscmsg_tile_glyph_text, tile_glyph_digraph,
 };
 pub use moongate::{
-    FELUCCA_GLYPH_BY_DAY, FELUCCA_OFF_HORIZON_SENTINEL, MOON_GLYPH_DAY_ZERO_FELUCCA_BYTE,
-    MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE, MOON_GLYPH_DAYS_PER_MONTH,
-    MOON_GLYPH_UNCHECKED_LAST_PUBLISHED_DAY, MOONSTONE_BURIAL_BAND_FIRST,
-    MOONSTONE_BURIAL_BAND_LAST, MOONSTONE_BURIAL_TILE_EXTRA_A, MOONSTONE_BURIAL_TILE_EXTRA_B,
-    MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE,
-    NATURAL_MOONGATE_UNDERLYING_TILE, NaturalMoongateCounterStep,
-    OVERWORLD_FALLS_FORCED_STEPS_SOUTH, SURFACE_CHASM_X, SURFACE_CHASM_Y, TRAMMEL_GLYPH_BY_DAY,
-    TRAMMEL_OFF_HORIZON_SENTINEL, WATERFALL_TILE_FIRST, WATERFALL_TILE_LAST,
+    FELUCCA_GLYPH_BY_DAY, MOON_GLYPH_DAY_ZERO_FELUCCA_BYTE, MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE,
+    MOON_GLYPH_DAYS_PER_MONTH, MOON_GLYPH_UNCHECKED_LAST_PUBLISHED_DAY,
+    MOONSTONE_BURIAL_BAND_FIRST, MOONSTONE_BURIAL_BAND_LAST, MOONSTONE_BURIAL_TILE_EXTRA_A,
+    MOONSTONE_BURIAL_TILE_EXTRA_B, MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X,
+    NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE, NATURAL_MOONGATE_UNDERLYING_TILE,
+    NaturalMoongateCounterStep, OVERWORLD_FALLS_FORCED_STEPS_SOUTH, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, TRAMMEL_GLYPH_BY_DAY, WATERFALL_TILE_FIRST, WATERFALL_TILE_LAST,
     WHIRLPOOL_UNDERWORLD_EMERGENCE_X, WHIRLPOOL_UNDERWORLD_EMERGENCE_Y, WORLD_PLANE_FALL_DAMAGE,
     WORLD_PLANE_FALL_SAVE_RAW_ROLL_HIGH, WORLD_PLANE_FALL_SAVE_RAW_ROLL_LOW,
     cached_moon_glyph_bytes_for_day, cached_moon_glyph_bytes_for_day_unchecked,
@@ -560,8 +559,8 @@ pub use moongate::{
     is_waterfall_tile, moonstone_burial_tile_accepted, moonstone_slot_from_glyph_byte,
     natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,
     natural_moongate_counter_step, natural_moongate_dispatches_meditate,
-    natural_moongate_slot_eligible, trammel_moonstone_slot_for_day,
-    world_plane_fall_member_takes_damage,
+    natural_moongate_slot_eligible, natural_moongate_slot_index_unchecked,
+    trammel_moonstone_slot_for_day, world_plane_fall_member_takes_damage,
 };
 pub use moongate_phase::{
     MOONGATE_PHASE_ENDGAME_GROUND_TILE, MOONGATE_PHASE_FULL, MOONGATE_PHASE_GROUND_TILE,

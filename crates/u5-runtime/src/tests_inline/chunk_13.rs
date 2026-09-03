@@ -17149,17 +17149,35 @@ fn below_surface_and_ararat_refresh_the_cache_but_paint_no_strip() {
 }
 
 #[test]
-fn the_hour_change_hook_is_the_only_caller_that_cannot_reach_the_erase_arm() {
+fn the_hour_change_hook_is_the_only_caller_that_cannot_reach_the_below_surface_erase_arm() {
     // `moons.md §2.2` (issue #190): "The **hour-change** caller is the
     // one caller that cannot reach this arm: it pre-tests the same
     // below-surface condition and skips the call entirely." So below the
     // surface the pair is refreshed by every §3 caller *except* the hour
     // hook - "never by the passage of an hour".
     //
-    // But Ararat is *not* below surface, and the hour hook's gate is the
-    // scene range plus the Z high bit, not "the strip paints". An hour
-    // crossing at Ararat therefore does reach the renderer and does cache.
-    let sentinel = [0xAA, 0xBB];
+    // **Scope of that sentence, and the conflict this test records.**
+    // Read absolutely it says the hour hook reaches *no* erase arm, and
+    // `main-loop.md` cleanup step 5 repeats it ("the one thing that keeps
+    // this caller off the renderer's erase arm"). Ararat contradicts both
+    // under the mechanism the same documents publish: §2.2 has scene
+    // twenty-five taking the arm "by the scene test ... whatever the
+    // party's floor byte holds", while `time.md §5` item 2 gates this
+    // caller on the scene range and the Z high bit alone - and scene
+    // twenty-five is inside that range. This engine reads both sentences
+    // as scoped to the **below-surface** arm the paragraph is about,
+    // whose stated mechanism is the pre-test, so the hour hook does reach
+    // the renderer at Ararat on a floor at or above entry and does write
+    // the cache there. That is a live behaviour choice on save state and
+    // is recorded as a spec question, not treated as settled; see the doc
+    // comment on `PlayState::sky_strip_hour_refresh_runs`. The test name
+    // says "below-surface erase arm" for that reason - the older name
+    // claimed the absolute reading its own body disproves.
+    // An arbitrary parked pair. It is deliberately not a named
+    // constant: `moons.md §2.2` says an implementation that reserves a
+    // high-bit "off horizon" value "is modelling something the tables do
+    // not contain".
+    let parked = [0xAA, 0xBB];
     let expected = cached_moon_glyph_bytes_for_day(PLAY_START_DAY).unwrap();
 
     let mut ararat = world_state(open_world_grid(), 5, 5);
@@ -17167,8 +17185,11 @@ fn the_hour_change_hook_is_the_only_caller_that_cannot_reach_the_erase_arm() {
         scene: Scene::new(ARARAT_SCENE_BYTE).unwrap(),
         floor: 0,
     };
-    ararat.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
-    assert!(ararat.sky_strip_hour_refresh_runs());
+    ararat.set_cached_moon_glyph_bytes(parked[0], parked[1]);
+    assert!(
+        ararat.sky_strip_hour_refresh_runs(),
+        "under the published two-test gate, scene 25 on a floor at or          above entry passes - this is the arm the two summary sentences          disagree about"
+    );
     ararat.refresh_cached_moon_glyphs();
     assert_eq!(
         ararat.cached_moon_glyph_bytes, expected,
@@ -17182,10 +17203,10 @@ fn the_hour_change_hook_is_the_only_caller_that_cannot_reach_the_erase_arm() {
         scene: Scene::new(ARARAT_SCENE_BYTE).unwrap(),
         floor: -1,
     };
-    ararat_below.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    ararat_below.set_cached_moon_glyph_bytes(parked[0], parked[1]);
     assert!(!ararat_below.sky_strip_hour_refresh_runs());
     ararat_below.refresh_cached_moon_glyphs();
-    assert_eq!(ararat_below.cached_moon_glyph_bytes, sentinel);
+    assert_eq!(ararat_below.cached_moon_glyph_bytes, parked);
     ararat_below.refresh_cached_moon_glyphs_at_scene_entry();
     assert_eq!(ararat_below.cached_moon_glyph_bytes, expected);
 }
@@ -17242,9 +17263,45 @@ fn out_of_range_day_of_month_reads_the_published_bytes_and_is_rejected_at_load()
     assert_eq!(cached_moon_glyph_bytes_for_day_unchecked(34), None);
     assert_eq!(cached_moon_glyph_bytes_for_day_unchecked(255), None);
 
-    // "**Neither out-of-range pair is a sentinel.**" The day-zero pair
-    // carries no Moonstone slot, and the day-29 Trammel byte is not a
-    // phase digit either.
+    // "**Neither out-of-range pair is a sentinel.** Day zero reads the
+    // tail of unrelated data that happens to precede the tables, and days
+    // past twenty-eight read the start of an unrelated block that follows
+    // them; the bytes carry no moon meaning and the code assigns them
+    // none. The consequence is not cosmetic: the cached pair is the sole
+    // input to natural-moongate destination selection, which converts a
+    // cached byte to a Moonstone slot index by subtracting the character
+    // code of `0` with no range check on either side, so a day-zero save
+    // offers slot one hundred ninety-two or slot eighty and a
+    // day-twenty-nine save offers a negative slot."
+    //
+    // The published answer for these bytes is therefore a *slot*, not
+    // "no slot". `natural_moongate_slot_index_unchecked` is that rule,
+    // and these three rows are the section's three worked values.
+    assert_eq!(
+        natural_moongate_slot_index_unchecked(MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE),
+        192
+    );
+    assert_eq!(
+        natural_moongate_slot_index_unchecked(MOON_GLYPH_DAY_ZERO_FELUCCA_BYTE),
+        80
+    );
+    assert!(natural_moongate_slot_index_unchecked(0x04) < 0);
+    assert_eq!(natural_moongate_slot_index_unchecked(0x04), -44);
+    for slot in 0..8i16 {
+        assert_eq!(
+            natural_moongate_slot_index_unchecked(b'0' + slot as u8),
+            slot,
+            "slot {slot}"
+        );
+    }
+
+    // *Recorded divergence, not a sentinel.* The live consumer clamps
+    // rather than index an eight-entry table at 192 or at -44, so it
+    // answers `None` for exactly these bytes. That `None` means "this
+    // engine refuses to convert", never "the original found no gate for
+    // this moon" - the two assertions below were previously captioned
+    // "the day-zero pair carries no Moonstone slot", which is what the
+    // quoted sentence denies.
     assert_eq!(
         moonstone_slot_from_glyph_byte(MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE),
         None
@@ -17345,28 +17402,38 @@ fn ambient_audio_sub_tick_residues_are_zero_and_four_tested_before_the_advance()
 #[test]
 fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not() {
     // Two predicates, two gates. `time.md §5`, hour-change bundle item 2:
-    // "If the active scene is in the surface/town-family range and the
-    // party is not at dungeon depth, the engine refreshes the sky strip
-    // in the top viewport border." That floor test belongs to the
-    // hour-change hook alone - `moons.md §2.2`: "The renderer has several
-    // callers (Section 3), and only one of them - the hour-change hook of
-    // the per-turn cleanup - carries a gate that excludes a party Z with
-    // the high bit set (`systems/time.md` Section 5). The overworld and
-    // town-family scene-entry callers carry no such gate, so a
-    // below-surface entry (the Underworld plane, or a basement floor
-    // inside a town-family location) can reach the painter."
+    // "If the active scene is in the surface/town-family range **and** the
+    // party's Z value has its high bit clear, the engine refreshes the sky
+    // strip in the top viewport border. Those are two separate tests and
+    // both must pass: the second excludes the Underworld plane and every
+    // below-entry floor inside a location, so an hour crossing never
+    // repaints the strip below the surface. This is the only one of the
+    // strip's callers that carries that second test - `systems/moons.md`
+    // Section 3 lists the others, which do repaint below the surface and
+    // drive the renderer's erase arm there."
     //
     // That the reached refresh writes the cache is `moons.md §3`: "Each
     // refresh caches the two glyph bytes for the current day *before* it
-    // tests whether either marker is on the visible horizon".
+    // tests whether either marker is on the visible horizon ... The cache
+    // writes also precede the erase-arm tests, so a refresh that ends in
+    // the erase arm still updates both bytes."
     //
-    // `RETRACTIONS.md` R343 is the withdrawal behind both sentences. It
-    // also withdraws the negative this test used to quote, in its own
-    // words: "no negative about what is drawn, erased or cached below the
-    // surface is supported". So the below-surface rows below assert only
-    // the shape of the *hour hook's* published gate, and each is paired
-    // with the scene-entry caller, which does cache there.
-    let sentinel = [0xAA, 0xBB];
+    // *Re-anchored (issue #190).* The comment this replaces quoted four
+    // sentences that no longer exist at spec HEAD: `time.md §5`'s "the
+    // party is not at dungeon depth" phrasing, and `moons.md §2.2`'s "The
+    // renderer has several callers (Section 3), and only one of them ..."
+    // / "The overworld and town-family scene-entry callers carry no such
+    // gate ... can reach the painter". Those were the R343-era wording,
+    // which framed the below-surface arm as unresolved; issue #190
+    // resolved it (the arm is live, on four routes) and both documents
+    // were rewritten. The assertions are unchanged in shape - they pin the
+    // hour hook's two-test gate against the scene-entry caller's single
+    // test - but they now cite the text that owns them.
+    //
+    // An arbitrary parked pair; deliberately not a named constant, since
+    // `moons.md §2.2` says an implementation that reserves a high-bit "off
+    // horizon" value "is modelling something the tables do not contain".
+    let parked = [0xAA, 0xBB];
 
     // Surface overworld: the hook runs and the cache is written.
     // (`world_state` seeds the Underworld plane, so name the surface.)
@@ -17375,12 +17442,12 @@ fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not()
         plane: WorldPlane::Britannia,
     };
     surface.clock = GameClock::new(11, 0).unwrap();
-    surface.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    surface.set_cached_moon_glyph_bytes(parked[0], parked[1]);
     assert!(surface.sky_strip_hour_refresh_runs());
     surface.refresh_cached_moon_glyphs();
     let surface_cache = surface.cached_moon_glyph_bytes;
     assert_ne!(
-        surface_cache, sentinel,
+        surface_cache, parked,
         "a surface hour change must refresh the cache"
     );
 
@@ -17391,11 +17458,11 @@ fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not()
         plane: WorldPlane::Underworld,
     };
     underworld.clock = GameClock::new(11, 0).unwrap();
-    underworld.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    underworld.set_cached_moon_glyph_bytes(parked[0], parked[1]);
     assert!(!underworld.sky_strip_hour_refresh_runs());
     underworld.refresh_cached_moon_glyphs();
     assert_eq!(
-        underworld.cached_moon_glyph_bytes, sentinel,
+        underworld.cached_moon_glyph_bytes, parked,
         "the hour hook's floor gate excludes a high-bit party Z"
     );
     assert!(underworld.sky_strip_scene_entry_refresh_runs());
@@ -17406,21 +17473,26 @@ fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not()
     );
 
     // Dungeon scene - excluded from both callers by the scene class.
-    // `moons.md §2.2`: scenes outside the surface/town family "never reach
-    // the renderer at all. Nothing is drawn and nothing is cached."
+    // `moons.md §2.2`: scenes outside the surface/town family "never get
+    // past the renderer's scene gate. A caller may still call it - several
+    // do - but it returns immediately: nothing is drawn, and, because that
+    // gate precedes the two cache writes, nothing is cached either."
+    // `moons.md §3` states the same rule from the other side: "the
+    // renderer returns before it reaches either cache write, so
+    // **nothing** is cached there."
     let mut dungeon = world_state(open_world_grid(), 5, 5);
     dungeon.area = Area::Dungeon {
         scene: DungeonScene::new(FIRST_DUNGEON_SCENE_BYTE).unwrap(),
         level: 0,
     };
     dungeon.clock = GameClock::new(11, 0).unwrap();
-    dungeon.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    dungeon.set_cached_moon_glyph_bytes(parked[0], parked[1]);
     assert!(!dungeon.sky_strip_hour_refresh_runs());
     assert!(!dungeon.sky_strip_scene_entry_refresh_runs());
     dungeon.refresh_cached_moon_glyphs();
     dungeon.refresh_cached_moon_glyphs_at_scene_entry();
     assert_eq!(
-        dungeon.cached_moon_glyph_bytes, sentinel,
+        dungeon.cached_moon_glyph_bytes, parked,
         "a dungeon scene never reaches the renderer, so nothing is cached"
     );
 
@@ -17432,11 +17504,11 @@ fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not()
         floor: -1,
     };
     basement.clock = GameClock::new(11, 0).unwrap();
-    basement.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    basement.set_cached_moon_glyph_bytes(parked[0], parked[1]);
     assert!(!basement.sky_strip_hour_refresh_runs());
     basement.refresh_cached_moon_glyphs();
     assert_eq!(
-        basement.cached_moon_glyph_bytes, sentinel,
+        basement.cached_moon_glyph_bytes, parked,
         "the hour hook's floor gate excludes a below-entry town floor"
     );
     assert!(basement.sky_strip_scene_entry_refresh_runs());
@@ -17453,7 +17525,7 @@ fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not()
         floor: 0,
     };
     ground.clock = GameClock::new(11, 0).unwrap();
-    ground.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    ground.set_cached_moon_glyph_bytes(parked[0], parked[1]);
     assert!(ground.sky_strip_hour_refresh_runs());
     assert!(ground.sky_strip_scene_entry_refresh_runs());
     ground.refresh_cached_moon_glyphs();
@@ -19577,20 +19649,22 @@ fn moon_glyph_tables_match_published_day_index() {
     assert_eq!(trammel_moonstone_slot_for_day(0), None);
     assert_eq!(felucca_moonstone_slot_for_day(29), None);
 
-    // Decode rule: high-bit cache-only "no gate" byte => None,
-    // b'0'..=b'7' => Some(slot).
+    // Decode rule: `b'0'..=b'7'` => `Some(slot)`, anything else `None`.
+    //
+    // *Corrected (issue #190).* This block used to caption its `None`
+    // rows as the "high-bit cache-only 'no gate' byte", pinning two
+    // reserved constants this crate no longer has. §2.2: "**There is no
+    // sentinel byte in either table.** An implementation that reserves a
+    // high-bit value for 'off horizon' is modelling something the tables
+    // do not contain." The `None` is this engine's clamp on a byte the
+    // original converts unchecked - see
+    // `out_of_range_day_of_month_reads_the_published_bytes_and_is_rejected_at_load`.
     assert_eq!(moonstone_slot_from_glyph_byte(b'0'), Some(0));
     assert_eq!(moonstone_slot_from_glyph_byte(b'7'), Some(7));
-    assert_eq!(
-        moonstone_slot_from_glyph_byte(TRAMMEL_OFF_HORIZON_SENTINEL),
-        None
-    );
-    assert_eq!(
-        moonstone_slot_from_glyph_byte(FELUCCA_OFF_HORIZON_SENTINEL),
-        None
-    );
     assert_eq!(moonstone_slot_from_glyph_byte(b'8'), None);
     assert_eq!(moonstone_slot_from_glyph_byte(b'/'), None);
+    assert_eq!(moonstone_slot_from_glyph_byte(0xF0), None);
+    assert_eq!(moonstone_slot_from_glyph_byte(0x80), None);
 }
 
 #[test]

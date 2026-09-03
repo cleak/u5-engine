@@ -1357,6 +1357,31 @@ impl PlayState {
     /// painted": Ararat is inside the surface/town-family range, so an
     /// hour crossing there reaches the renderer and writes the cache even
     /// though the painter takes the erase arm.
+    ///
+    /// **Recorded spec conflict, taken deliberately (issue #190).** Two
+    /// published sentences read the other way if taken absolutely.
+    /// `moons.md §2.2`: "The **hour-change** caller is the one caller
+    /// that cannot reach this arm". `main-loop.md` cleanup step 5: the Z
+    /// test "is the one thing that keeps this caller off the renderer's
+    /// erase arm". Under the two tests those same documents publish,
+    /// Ararat is a counterexample to both: §2.2 has scene twenty-five
+    /// taking the arm "by the scene test ... whatever the party's floor
+    /// byte holds", while `time.md §5` item 2 gates this caller on the
+    /// scene range and the Z high bit alone - and scene twenty-five is
+    /// inside that range, since §2.2 has it "reach[ing] the marker
+    /// painter".
+    ///
+    /// This engine implements the mechanism (the two tests) rather than
+    /// the summary, and reads both sentences as scoped to the arm the
+    /// paragraphs they sit in are about - the **below-surface** arm,
+    /// whose stated mechanism is "it pre-tests the same below-surface
+    /// condition". The consequence is live rather than cosmetic: at
+    /// Ararat on a floor at or above entry, an hour crossing reaches the
+    /// renderer and rewrites `0x02DF`/`0x02E0`, which
+    /// `formats/saved-gam.md §5.1` owns as gameplay state. If the
+    /// absolute reading is the intended one, this predicate must exclude
+    /// [`ARARAT_SCENE_BYTE`] as well and the cache must not be written
+    /// there. Raised as a spec question rather than settled silently.
     pub fn sky_strip_hour_refresh_runs(&self) -> bool {
         if self.current_floor().is_none_or(|floor| floor < 0) {
             return false;
@@ -1507,20 +1532,23 @@ impl PlayState {
         self.cached_moon_glyph_bytes = [trammel, felucca];
     }
 
-    pub fn set_cached_moon_glyph_slots(
-        &mut self,
-        trammel_slot: Option<usize>,
-        felucca_slot: Option<usize>,
-    ) {
-        let encode = |slot: Option<usize>, sentinel: u8| {
-            slot.filter(|slot| *slot < MOONSTONE_SLOT_COUNT)
-                .map(|slot| b'0' + slot as u8)
-                .unwrap_or(sentinel)
-        };
-        self.cached_moon_glyph_bytes = [
-            encode(trammel_slot, TRAMMEL_OFF_HORIZON_SENTINEL),
-            encode(felucca_slot, FELUCCA_OFF_HORIZON_SENTINEL),
-        ];
+    /// Fixture/route-seed helper: park the phase digit for a Moonstone
+    /// slot in each half of the cache, the way a refresh on a legal day
+    /// of the month would (`moons.md §2.2`: "Each phase digit `'0'`
+    /// through `'7'` corresponds to a Moonstone slot index zero through
+    /// seven").
+    ///
+    /// *Corrected (issue #190).* This used to take an `Option<usize>` per
+    /// moon and encode `None` as one of two reserved high-bit bytes.
+    /// §2.2 says an implementation that reserves such a value "is
+    /// modelling something the tables do not contain", and the two bytes
+    /// chosen were exactly the day-zero pair R376 publishes, so the
+    /// encoding is gone along with its constants. A caller that wants a
+    /// byte which is not a phase digit must name the byte itself,
+    /// through [`Self::set_cached_moon_glyph_bytes`].
+    pub fn set_cached_moon_glyph_slots(&mut self, trammel_slot: usize, felucca_slot: usize) {
+        let encode = |slot: usize| b'0' + slot.min(MOONSTONE_SLOT_COUNT - 1) as u8;
+        self.cached_moon_glyph_bytes = [encode(trammel_slot), encode(felucca_slot)];
     }
 
     pub fn resolve_natural_moongate_entry(
@@ -1671,6 +1699,36 @@ impl PlayState {
         Ok(playback)
     }
 
+    /// `overworld.md §9` / `moons.md §2.2`: the cached glyph pair "is the
+    /// sole input to natural-moongate destination selection" - before
+    /// noon the first cached byte, from noon onward the second
+    /// ([`natural_moongate_cached_glyph_slot`]).
+    ///
+    /// **Recorded divergence (issue #190, `RETRACTIONS.md` R376).** §2.2
+    /// converts that byte "by subtracting the character code of `0` with
+    /// no range check on either side, so a day-zero save offers slot one
+    /// hundred ninety-two or slot eighty and a day-twenty-nine save
+    /// offers a negative slot". This engine clamps: a byte outside
+    /// `b'0'..=b'7'` yields `None` here and the entry hook reports the
+    /// cache as unavailable instead of warping. Reproducing the original
+    /// would mean indexing the eight-entry Moonstone slot table at `192`
+    /// or at `-44`, which reads whatever save state lies past it and has
+    /// no safe meaning in this engine.
+    /// [`crate::natural_moongate_slot_index_unchecked`] publishes the
+    /// described conversion for byte-parity consumers.
+    ///
+    /// How narrow the divergence is. This engine also takes §2.2's
+    /// **prescriptive** half - an out-of-range day of the month is
+    /// rejected at load ([`crate::GameClock::with_date`]) - and every
+    /// caller that gets past the renderer's scene gate rewrites the pair
+    /// from a legal day, so the day-driven route to an out-of-range pair
+    /// is closed. What stays reachable is a save whose two cache bytes
+    /// are themselves out of range while its day-of-month field is legal:
+    /// `formats/saved-gam.md §5.1` says such a pair "stands unchanged"
+    /// while the party is in a dungeon, in combat, or above the location
+    /// range, so it survives until the next strip scene entry. A gate
+    /// entered before that entry answers "no gate" here and answers with
+    /// the unchecked index in the original.
     pub fn cached_natural_moongate_slot_index(&self) -> Option<usize> {
         let moon = natural_moongate_cached_glyph_slot(self.clock.hour) as usize;
         moonstone_slot_from_glyph_byte(self.cached_moon_glyph_bytes[moon])
