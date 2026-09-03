@@ -1170,12 +1170,16 @@ impl PlayState {
             level as i8,
             &setup.party_positions,
         );
-        // `combat.md §5` "Arena-centre special" (`RETRACTIONS.md` R362):
-        // "only the dungeon-room path can present a qualifying centre cell,
-        // because the byte arrives there from the dungeon room painter's
-        // underfoot-icon table", so the arm is wired here as well as on the
-        // outdoor path. The room painter's floor-fill byte is not published
-        // as a value, so no terrain overwrite is performed here.
+        // `combat.md §5` "Arena-centre special" (`RETRACTIONS.md` R362): the
+        // step is wired on all three setup callers. This one loads its arena
+        // from `DUNGEON.CBT`, and §5's arena-file negative is **established**
+        // - "**No shipped arena record carries `0xDC` anywhere in its
+        // grid**" - so no stock record can present a qualifying centre cell
+        // here; the byte "is painted at run time", by the painter path in
+        // [`Self::enter_dungeon_active_monster_combat`]. A record read from
+        // disk also carries no floor-fill byte this engine owns, and §14.1
+        // publishes none as a value, so the overwrite argument is `None`
+        // rather than a guess.
         let mut setup_terrain = setup.terrain;
         self.place_combat_arena_centre_special(
             &mut setup_terrain,
@@ -1307,12 +1311,34 @@ impl PlayState {
             rolled_count
         }
         .max(1);
+        // `combat.md §5` "Arena-centre special" (`RETRACTIONS.md` R362) and
+        // `dungeon-mode.md §14.1`, "The centre-icon classes": the painter
+        // "selects one byte from a small icon table that is stamped into the
+        // arena grid's centre cell", and the chest class "stamps the byte the
+        // combat setup pass tests at the arena centre ... That is the only
+        // way that byte ever reaches the centre cell - no shipped arena
+        // record carries it - so dungeon-room combat entered while the party
+        // stands on a chest cell is the sole live trigger for that step."
+        //
+        // This is the engine's only painter path and its only combat entry
+        // whose underfoot cell can be a chest:
+        // [`Self::enter_dungeon_room_combat`], the loaded-record route, is
+        // reached from a room-helper (`0xA?`) or room-trigger (`0xF?`) cell,
+        // never a `0x4?` one. Only the chest class's byte is published,
+        // so no other class stamps anything here. Confidence follows §5:
+        // **probable** for the icon-class identification.
+        let centre_icon = matches!(
+            dungeon_cell_class_of(self.dungeon_cell(level, self.player.x, self.player.y)),
+            DungeonCellClass::Chest
+        )
+        .then_some(COMBAT_ARENA_CENTRE_SPECIAL_TILE);
         let record = CombatArenaRecord::synthesise_dungeon_ambush(
             DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
             facing_seed,
             stats.class,
             count,
             permutation,
+            centre_icon,
         );
         let setup = dungeon_room_combat_setup_from_record_for_entry(
             DUNGEON_AMBUSH_SYNTHETIC_ARENA_INDEX,
@@ -1331,13 +1357,15 @@ impl PlayState {
             level as i8,
             &setup.party_positions,
         );
-        // `combat.md §5`: the camp/Hole-up ambush is the third caller. Its
-        // arena is synthesised rather than loaded, so this engine does know
-        // its room floor-fill byte - the corridor fill of
-        // `dungeon-mode.md §14.1` - and can perform the published terrain
-        // overwrite if the arm ever fires. "Whether the camp route can
-        // observe a grid left behind by an earlier dungeon room was not
-        // traced."
+        // `combat.md §5` third settled property, confidence **established**:
+        // "The step's last act overwrites that centre cell with the room's
+        // floor-fill terrain byte, erasing the `0xDC` the room painter had
+        // stamped there." This is the path that owns a floor-fill byte -
+        // §14.1's painter "fills the eleven-by-eleven terrain grid with the
+        // current corridor fill byte", and the synthesis above used exactly
+        // this constant - so the overwrite runs here with the caller's own
+        // fill rather than a guessed one, and it runs on the path the
+        // centre-icon stamp above can actually fire on.
         let mut setup_terrain = setup.terrain;
         self.place_combat_arena_centre_special(
             &mut setup_terrain,
@@ -1832,8 +1860,12 @@ impl PlayState {
     /// It is `None` for a caller that owns no room floor-fill byte: the
     /// outdoor terrain path, which `§5`'s three-caller census says can never
     /// present a qualifying centre cell, and the loaded-room path, whose
-    /// painter fill byte `dungeon-mode.md §14.1` does not publish as a
-    /// value. Filed as a spec question rather than filled in with a guess.
+    /// record comes off disk with no fill byte attached and which `§5`'s
+    /// **established** arena-file negative says can never carry the
+    /// qualifying byte anyway. Filed as a spec question rather than filled
+    /// in with a guess. The painter path
+    /// ([`Self::enter_dungeon_active_monster_combat`]) is the one that can
+    /// present the byte, and it passes the fill it built the grid with.
     pub fn place_combat_arena_centre_special(
         &mut self,
         terrain: &mut [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],

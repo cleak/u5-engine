@@ -3842,8 +3842,8 @@
         combat.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         combat.active_player = Some(0);
         combat.combat_cursor_blink = true;
-        combat.combat_aim_marker_cell = (3, 4);
-    combat.combat_aim_marker_gate = true;
+        combat.combat_aim_marker_cell = Some((3, 4));
+        combat.combat_aim_marker_gate = true;
         combat.combat_actors[0] = CombatActorDescriptor::from_row([
             20,
             0,
@@ -3908,15 +3908,15 @@
             }
         }
 
-        combat.combat_aim_marker_cell = (5, 6);
-    combat.combat_aim_marker_gate = true;
+        combat.combat_aim_marker_cell = Some((5, 6));
+        combat.combat_aim_marker_gate = true;
         let overlapped = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
         assert_eq!(overlapped.pixel(5 * 16 + 5, 6 * 16 + 5), Some(0));
         assert_eq!(overlapped.pixel(5 * 16, 6 * 16), Some(15));
 
         combat.combat_cursor_blink = false;
-        combat.combat_aim_marker_cell = (3, 4);
-    combat.combat_aim_marker_gate = true;
+        combat.combat_aim_marker_cell = Some((3, 4));
+        combat.combat_aim_marker_gate = true;
         let cleared = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
 
         assert_ne!(cleared.pixel(54, 70), Some(15));

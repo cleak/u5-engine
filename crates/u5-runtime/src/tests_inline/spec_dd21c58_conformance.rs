@@ -83,14 +83,14 @@ fn the_aim_marker_gate_closes_but_its_coordinate_is_never_cleared() {
     assert!(!state.combat_aim_marker_gate);
     assert!(state.begin_combat_attack_walk(0, true).cursor_open);
     assert!(state.combat_aim_marker_gate, "the cursor raises the gate");
-    assert_eq!(state.combat_aim_marker_cell, (5, 5));
+    assert_eq!(state.combat_aim_marker_cell, Some((5, 5)));
 
     let _ = state
         .apply_combat_targeting_cursor_key(char::from(INPUT_CODE_EAST))
         .expect("a cursor is open");
     assert_eq!(
         state.combat_aim_marker_cell,
-        (6, 5),
+        Some((6, 5)),
         "an accepted move rewrites the pair"
     );
 
@@ -166,32 +166,58 @@ fn only_a_confirmed_empty_cell_on_the_ranged_arm_clears_the_remembered_target() 
 /// it."
 #[test]
 fn placing_a_new_actor_into_a_slot_sweeps_every_memory_naming_it() {
-    let mut state = combat_ai_turn_state(8, 5);
-    state.combat_remembered_targets[0] = Some(9);
-    state.combat_remembered_targets[1] = Some(10);
+    // Learn which slot the allocation takes, so the seeded memories name it
+    // for certain rather than by luck. Allocation is deterministic for a
+    // given table, so the probe and the run below land in the same slot.
+    let mut probe = combat_ai_turn_state(8, 5);
+    let recycled = probe
+        .place_combat_monster_at_arena_cell(COMBAT_CLASS_GIANT_RAT, 2, 2, 0, 0)
+        .expect("an empty slot is available")
+        .actor_slot;
 
-    state
+    let mut state = combat_ai_turn_state(8, 5);
+    // Every combatant remembers a different slot, so exactly one seeded
+    // memory names the slot about to be recycled...
+    for (slot, entry) in state.combat_remembered_targets.iter_mut().enumerate() {
+        *entry = Some(slot as u8);
+    }
+    // ...and two more are pointed at it by hand, because the sweep is over
+    // "all thirty-two combatants", not over one entry.
+    let bystanders = [0, 1].map(|slot| if slot == recycled { 2 } else { slot });
+    for slot in bystanders {
+        state.combat_remembered_targets[slot] = Some(recycled as u8);
+    }
+
+    let placed = state
         .place_combat_monster_at_arena_cell(COMBAT_CLASS_GIANT_RAT, 2, 2, 0, 0)
         .expect("an empty slot is available");
-    let recycled = state
-        .combat_actors
-        .iter()
-        .position(|actor| actor.owner_target_class == COMBAT_CLASS_GIANT_RAT && actor.x == 2)
-        .expect("the new actor was placed");
+    assert_eq!(placed.actor_slot, recycled);
 
-    if recycled == 9 {
-        assert_eq!(state.combat_remembered_targets[0], None);
+    for slot in bystanders {
+        assert_eq!(
+            state.combat_remembered_targets[slot], None,
+            "the memory held by slot {slot} named the recycled index and is swept"
+        );
     }
-    if recycled == 10 {
-        assert_eq!(state.combat_remembered_targets[1], None);
-    }
-    // The sweep touches only memories naming the recycled slot.
+    assert_eq!(
+        state.combat_remembered_targets[recycled], None,
+        "the recycled slot's own seeded memory named itself and is swept too"
+    );
+    // The sweep touches nothing else: every other seeded memory survives
+    // verbatim, and none of the thirty-two still names the recycled index.
     for (slot, entry) in state.combat_remembered_targets.iter().enumerate() {
         assert_ne!(
             *entry,
             Some(recycled as u8),
             "slot {slot} still names the recycled index"
         );
+        if slot != recycled && !bystanders.contains(&slot) {
+            assert_eq!(
+                *entry,
+                Some(slot as u8),
+                "slot {slot} named no recycled index and must be untouched"
+            );
+        }
     }
 }
 
@@ -286,6 +312,51 @@ fn a_gazer_attack_sleeps_the_defender_instead_of_damaging_it() {
     assert_eq!(dead.party[0].status, b'D');
 }
 
+/// `combat.md §12`: the Gazer arm's entry gate. "When the attacker is a
+/// monster of the Gazer class **and the defender is not already asleep**, the
+/// resolver applies the asleep state and returns straight to its own
+/// epilogue." Already asleep is not a second no-op sleep: the branch is not
+/// entered at all, and the attack falls through to the ordinary roller.
+#[test]
+fn a_gazer_swinging_at_an_already_asleep_defender_falls_through_to_damage() {
+    // Party defender: the status letter alone is enough to close the gate.
+    let mut party = combat_ai_turn_state(6, 5);
+    party.combat_actors[8].owner_target_class = COMBAT_CLASS_GAZER;
+    party.party[0].status = b'S';
+    let hp_before = party.party[0].hp;
+
+    assert!(party.combat_defender_is_already_asleep(0));
+    let attack = party
+        .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
+        .expect("the Gazer acts");
+
+    assert_eq!(attack.sleep_effect, None, "the sleep arm is not entered");
+    assert!(
+        attack.resolution.is_some(),
+        "the attack falls through to the ordinary roller"
+    );
+    assert!(
+        party.party[0].hp < hp_before,
+        "an already-asleep defender takes ordinary damage, not a second sleep"
+    );
+    assert_eq!(party.party[0].status, b'S', "and stays asleep");
+
+    // The descriptor's disabled bit is the other witness - "the whole of the
+    // state §12 writes for a non-party defender", and the not-saved half of
+    // the party pair - and it closes the gate on either side of the arena.
+    let mut disabled = combat_ai_turn_state(6, 5);
+    assert!(!disabled.combat_defender_is_already_asleep(0));
+    assert!(!disabled.combat_defender_is_already_asleep(8));
+    disabled.combat_actors[0].set_status_disabled();
+    disabled.combat_actors[8].set_status_disabled();
+    assert!(disabled.combat_defender_is_already_asleep(0));
+    assert!(disabled.combat_defender_is_already_asleep(8));
+    // Upstream of the gate, this engine's shared "active, not dead"
+    // precondition already refuses a status-disabled defender outright, so
+    // the descriptor witness never has to carry the refusal on its own.
+    assert!(!combat_actor_is_active_not_dead(disabled.combat_actors[8]));
+}
+
 /// `combat.md §11` (`RETRACTIONS.md` R361), the Gremlin food-theft branch:
 /// "Draw one uniform value over zero through three and accept on three of the
 /// four ... **This draw is taken before the food test, so it is spent even
@@ -309,10 +380,21 @@ fn a_landed_gremlin_attack_steals_food_instead_of_dealing_damage() {
         seed = seed.wrapping_add(1);
     }
     state.prng_state = seed;
+    let sound_before = state.sound_effect_serial;
 
     let attack = state
         .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
         .expect("the Gremlin acts");
+
+    // `combat.md §11.1`'s Food-steal row publishes the cue as "a rising cue
+    // roughly 800 Hz toward 2000 Hz". That is `audio.md §6`'s 50-update
+    // cast-failure envelope, not the 40-update action snap that starts at
+    // 1200 Hz - and `audio.md §11`'s action-snap census enumerates that
+    // recipe's sites by name without the theft among them.
+    assert_eq!(
+        state.sound_effects_after(sound_before),
+        vec![SoundEffect::CastFailure]
+    );
 
     assert_eq!(
         attack.food_theft,
@@ -529,6 +611,82 @@ fn the_arena_centre_special_is_gated_draw_free_and_overwrites_its_terrain() {
     assert_eq!(
         terrain[row][column], 0x04,
         "the step overwrites the centre terrain with the room's floor fill"
+    );
+}
+
+/// `combat.md §5` / `dungeon-mode.md §14.1`: the same step on the production
+/// path. "The chest class stamps the byte the combat setup pass tests at the
+/// arena centre ... That is the only way that byte ever reaches the centre
+/// cell - no shipped arena record carries it - so dungeon-room combat entered
+/// while the party stands on a chest cell is the sole live trigger for that
+/// step", and the step then "overwrites that centre cell with the room's
+/// floor-fill terrain byte".
+#[test]
+fn entering_dungeon_combat_from_a_chest_cell_converts_and_repaints_the_centre() {
+    fn ambush_from_underfoot(cell: u8) -> PlayState {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::North;
+        state.grid[dungeon_cell_index(3, 1, 1)] = cell;
+        let object = ActiveObject {
+            type_byte: 0,
+            tile: 0,
+            x: 2,
+            y: 1,
+            z: 3,
+            phase: STEADY_PHASE,
+            aux1: 20,
+            aux3: DUNGEON_MONSTER_UPPER_DEP3,
+        };
+        state
+            .enter_dungeon_active_monster_combat(3, object)
+            .expect("the ambush launches");
+        state
+    }
+
+    // A chest underfoot: the painter stamps the qualifying byte, the setup
+    // pass converts it, and the terrain is repainted with the corridor fill.
+    let chest = ambush_from_underfoot(0x40);
+    assert_eq!(
+        dungeon_cell_class_of(0x40),
+        DungeonCellClass::Chest,
+        "0x4? is the chest class"
+    );
+    let (row, column) = COMBAT_ARENA_CENTRE_CELL;
+    let stamped = chest
+        .active_objects
+        .iter()
+        .find(|object| {
+            object.type_byte == COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID
+                && (usize::from(object.x), usize::from(object.y)) == (column, row)
+        })
+        .expect("the centre cell converted to a setup-id-one special object");
+    assert_eq!(
+        stamped.aux1,
+        3 * 3 + 7,
+        "three times the level index plus seven, in the quantity/loot byte"
+    );
+    assert_eq!(
+        stamped.aux3, COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
+        "a world-object row with no combat descriptor"
+    );
+    assert_eq!(
+        chest.combat_terrain[row][column], DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
+        "the centre terrain is overwritten with the room's floor fill, not          left holding 0xDC"
+    );
+
+    // Any other underfoot class stamps nothing, so the arm stays gated.
+    let ladder = ambush_from_underfoot(0x10);
+    assert!(
+        ladder
+            .active_objects
+            .iter()
+            .all(|object| object.type_byte != COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID
+                || (usize::from(object.x), usize::from(object.y)) != (column, row)),
+        "a non-chest underfoot class presents no qualifying centre cell"
+    );
+    assert_eq!(
+        ladder.combat_terrain[row][column],
+        DUNGEON_AMBUSH_ARENA_FLOOR_TILE
     );
 }
 

@@ -189,16 +189,27 @@ impl CombatArenaRecord {
     /// slots". The record is then read back by the ordinary room-combat
     /// setup helper, which recovers the same class the painter encoded.
     ///
-    /// The outline, corner markers, underfoot-class centre icon and the
-    /// four per-side treatments §14.1 also describes are not stamped
-    /// here: that section publishes no byte values for them and flags the
-    /// filler byte as inferred rather than traced.
+    /// The outline, corner markers and the four per-side treatments §14.1
+    /// also describes are not stamped here: that section publishes no byte
+    /// values for them and flags the filler byte as inferred rather than
+    /// traced.
+    ///
+    /// `centre_icon` is the one part of the painter's underfoot-class
+    /// centre icon that *is* published as a value. §14.1: "The underfoot
+    /// class is the high half of the room-layout cell under the party, and
+    /// it selects one byte from a small icon table that is stamped into the
+    /// arena grid's centre cell", and "**The chest class stamps the byte the
+    /// combat setup pass tests at the arena centre** ... That is the only
+    /// way that byte ever reaches the centre cell - no shipped arena record
+    /// carries it". The caller supplies `Some(0xDC)` for a chest and `None`
+    /// for every other class, whose icon bytes §14.1 does not publish.
     pub fn synthesise_dungeon_ambush(
         fill_byte: u8,
         facing_seed: u8,
         class: u8,
         count: u8,
         permutation: [u8; DUNGEON_ROOM_SOURCE_COUNT],
+        centre_icon: Option<u8>,
     ) -> Self {
         let mut rows = [[0u8; COMBAT_ARENA_ROW_STRIDE]; COMBAT_ARENA_SIDE];
         for row in rows.iter_mut() {
@@ -232,6 +243,10 @@ impl CombatArenaRecord {
             if slot < DUNGEON_ROOM_SOURCE_COUNT {
                 rows[DUNGEON_ROOM_SOURCE_ROW][DUNGEON_ROOM_SOURCE_COLUMN + slot] = source_byte;
             }
+        }
+        if let Some(icon) = centre_icon {
+            let (row, column) = crate::COMBAT_ARENA_CENTRE_CELL;
+            rows[row][column] = icon;
         }
         Self { rows }
     }

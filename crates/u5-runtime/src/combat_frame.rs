@@ -988,6 +988,37 @@ pub fn combat_placement_descriptor(
 }
 
 impl PlayState {
+    /// `combat.md §12`: the Gazer arm's entry gate - "When the attacker is a
+    /// monster of the Gazer class **and the defender is not already
+    /// asleep**, the resolver applies the asleep state and returns straight
+    /// to its own epilogue". A defender that is already asleep does not
+    /// re-enter the branch; the attack falls through to ordinary damage.
+    ///
+    /// `§12` stores the asleep state twice with two different lifetimes -
+    /// "the status letter and the presentation byte are inside the
+    /// saved-game window, while the descriptor's disabled bit is not" - so
+    /// this predicate accepts either witness. For a non-party defender the
+    /// descriptor's disabled bit is the whole of the state `§12` writes, and
+    /// it is this engine's only sleep marker: every writer of it
+    /// ([`Self::set_combat_actor_status_disabled`]) is a sleep application,
+    /// and [`Self::apply_combat_sleep_wake_dispatch`] reads it back as
+    /// "asleep".
+    pub fn combat_defender_is_already_asleep(&self, target_slot: usize) -> bool {
+        if self
+            .combat_actors
+            .get(target_slot)
+            .is_some_and(|actor| actor.is_status_disabled())
+        {
+            return true;
+        }
+        if target_slot >= COMBAT_PARTY_ACTOR_SLOTS {
+            return false;
+        }
+        self.combat_roster_slot_for_actor_slot(target_slot)
+            .and_then(|roster_slot| self.party.get(roster_slot))
+            .is_some_and(|member| member.status == b'S')
+    }
+
     /// `combat.md §12`, "The Gazer branch is a sleep application, and it
     /// replaces ordinary damage" (`RETRACTIONS.md` R359).
     ///
@@ -1066,12 +1097,17 @@ impl PlayState {
         }
         let food_before = self.food;
         self.food = self.food.saturating_sub(COMBAT_FOOD_THEFT_AMOUNT);
-        // `audio.md §11`: the rising action snap, the one published rising
-        // cue this engine models, and the cue the "stolen-action warning"
-        // row already shares. Filed as a spec question: `combat.md §11`
-        // names "the rising theft cue" and points at `audio.md`, which
-        // carries no theft-specific row.
-        self.emit_sound_effect(SoundEffect::ActionSnap);
+        // `combat.md §11.1`'s Food-steal row publishes the cue's own
+        // envelope: "a rising cue roughly 800 Hz toward 2000 Hz, then a
+        // stats-panel redraw". That is `audio.md §6`'s **cast-failure**
+        // recipe - "50 updates: 800, 824, ... 1976 Hz, rising toward 2000
+        // Hz", `§5.2` - and not the action snap, whose recipe starts at
+        // 1200 Hz and whose site census in `audio.md §11` enumerates its
+        // callers by name without the theft among them. The recipe is shared by more than
+        // the `Failed!` tail already (`audio.md §6.1` gives it to the two
+        // `No effect!` scenes), so playing it here names an envelope, not a
+        // cast.
+        self.emit_sound_effect(SoundEffect::CastFailure);
         // The direct redraw, deliberately *not*
         // [`Self::request_party_stats_panel_refresh`]: "the distinction is
         // load-bearing now that the latch is published, so do not merge the
@@ -1682,6 +1718,7 @@ impl PlayState {
     pub fn combat_secondary_marker(&self) -> Option<(u8, u8)> {
         self.combat_aim_marker_gate
             .then_some(self.combat_aim_marker_cell)
+            .flatten()
     }
 
     pub fn combat_field_cursor_start(&self, caster_index: usize) -> Option<(u8, u8)> {
@@ -1695,8 +1732,16 @@ impl PlayState {
         // *coordinate*, not the gate - the gate only decides whether the
         // overlay paints the marker - and the coordinate "is never cleared",
         // so this reader takes it whether or not a cursor is open.
-        let (x, y) = self.combat_aim_marker_cell;
-        if self.combat_field_cursor_cell_in_range(caster_index, x, y) {
+        //
+        // It is still only read once the cursor has written it. `§7`
+        // publishes no initial value and names the unwritten state directly
+        // ("an engine that leaves the coordinate unwritten draws no aim
+        // marker at all"), so a never-opened cursor leaves this reader on
+        // `§8.2`'s published "attacker's own cell otherwise" fallback rather
+        // than on an invented arena corner.
+        if let Some((x, y)) = self.combat_aim_marker_cell
+            && self.combat_field_cursor_cell_in_range(caster_index, x, y)
+        {
             return Some((x, y));
         }
         (usize::from(caster.x) < COMBAT_ARENA_SIDE && usize::from(caster.y) < COMBAT_ARENA_SIDE)
@@ -2687,19 +2732,28 @@ impl PlayState {
         let traits = combat_class_traits(class)?;
         // `combat.md §9`: the two immobile classes are refused "before the
         // party-side test, before the class flag, before the suppression
-        // tests", so they spend no teleport draw either.
-        let teleport_candidate = (traits.teleport_capable
-            && !enemy_magic_suppressed
-            && !combat_movement_arm_refuses_class(class))
-        .then(|| self.combat_ai_teleport_candidate(actor_slot))
-        .flatten();
-        let horizontal_axis_first = self.combat_ai_horizontal_axis_first(actor_slot);
+        // tests", and "**They never step and never teleport**", so the whole
+        // movement arm - the teleport draws *and* the ordinary step's
+        // randomised axis priority - spends nothing for them.
+        let movement_arm_refused = combat_movement_arm_refuses_class(class);
+        let teleport_candidate =
+            (traits.teleport_capable && !enemy_magic_suppressed && !movement_arm_refused)
+                .then(|| self.combat_ai_teleport_candidate(actor_slot))
+                .flatten();
+        let horizontal_axis_first =
+            !movement_arm_refused && self.combat_ai_horizontal_axis_first(actor_slot);
         // `combat.md §9` (`RETRACTIONS.md` R311): the random-cardinal
         // fallback "commits the first accepted direction", so its draws are
         // taken one at a time and stop there. Pre-rolling four would consume
         // the shared PRNG on every AI step that never reached the fallback,
         // and on every fallback that succeeded on its first attempt. `None`
         // tells the inner path to draw lazily.
+        //
+        // The attack inputs are still drawn eagerly here, ahead of the
+        // dispatch that decides between attacking and stepping. That is the
+        // pre-existing shape of this entry point and it is not part of the
+        // movement arm: an immobile class still attacks anything in reach,
+        // so its attack draws are owed either way.
         let monster_attack_inputs = self.combat_monster_attack_inputs(actor_slot);
 
         self.apply_combat_ai_turn_with_optional_cardinal_draws(
@@ -5143,7 +5197,13 @@ impl PlayState {
         // no HP change, no experience credit**." It sits with the other
         // status/effect arms of this section, ahead of the roller, and
         // "carries no sound of its own".
+        //
+        // "**and the defender is not already asleep**" is an entry gate, not
+        // a no-op: a Gazer swinging at a defender that is already asleep
+        // falls through to ordinary melee damage rather than re-applying the
+        // state and returning with no damage at all.
         if attacker.owner_target_class == COMBAT_CLASS_GAZER
+            && !self.combat_defender_is_already_asleep(target_slot)
             && let Some(sleep_effect) = self.apply_combat_sleep_effect_to_target(target_slot)
         {
             return Some(CombatMonsterAttackApplication {
@@ -7343,7 +7403,7 @@ impl PlayState {
             // §7 names the reader and not the producer.
             // `combat.md §7`: the cursor "**seeds** them when it opens", and
             // raises the gate as its first act.
-            self.combat_aim_marker_cell = cursor;
+            self.combat_aim_marker_cell = Some(cursor);
             self.combat_aim_marker_gate = true;
             self.mark_visibility_dirty();
             return CombatAttackWalkApplication {
@@ -7398,7 +7458,7 @@ impl PlayState {
                 }
                 // `combat.md §7`: the cursor "**rewrites** them on every
                 // accepted move", and a rejected move leaves them alone.
-                self.combat_aim_marker_cell = cell;
+                self.combat_aim_marker_cell = Some(cell);
                 self.mark_visibility_dirty();
                 Some(CombatAttackWalkApplication {
                     text: String::new(),
@@ -7897,7 +7957,7 @@ mod combat_death_batch_tests {
             y: 19,
             turns_remaining: 4,
         });
-        state.combat_aim_marker_cell = (7, 3);
+        state.combat_aim_marker_cell = Some((7, 3));
         state.combat_aim_marker_gate = true;
 
         state.run_combat_per_acting_slot_scratch_reset();
@@ -7918,7 +7978,7 @@ mod combat_death_batch_tests {
         );
         assert_eq!(
             state.combat_aim_marker_cell,
-            (7, 3),
+            Some((7, 3)),
             "the coordinate itself is never cleared"
         );
     }

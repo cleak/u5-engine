@@ -1742,17 +1742,92 @@
         // engine that prints the attacker's name in the miss line produces
         // a transcript that is wrong on every line it emits."
         //
+        // R353's own suggested check is "grep an implementation for any
+        // attacker-named combat line". A grep for one binding name is
+        // defeated by a rename, so the guard is behavioural instead: sweep
+        // both narrators over every resolution shape and every damage
+        // outcome and require that no line they produce mentions the
+        // attacker.
+        //
         // The one line that names the acting creature is not a result line:
         // `combat.md §11`'s food-theft branch "replaces the entire damage
         // and narration chain: no damage roll, no defence roll, no HP
         // change, **no result line**", and prints `A <monster> stole some
-        // food!` with the creature's own name (`RETRACTIONS.md` R361). It is
-        // bound as `acting_creature_name`, the spec's own wording, so this
-        // grep still catches an attacker-named *result* line.
-        assert!(
-            !std::include_str!("../input_dispatch.rs").contains("attacker_name"),
-            "R353's own suggested check: grep the narration module for any              attacker-named combat line"
-        );
+        // food!` with the creature's own name (`RETRACTIONS.md` R361). It
+        // carries no `resolution` at all, so it is outside this sweep by
+        // construction rather than by exemption.
+        let routes = [
+            CombatWeaponAttackRangeRoute::Melee,
+            CombatWeaponAttackRangeRoute::Ranged { effect_code: 0 },
+        ];
+        for raw_damage in [-1i16, 0, 3, i16::from(COMBAT_INSTANT_KILL_DAMAGE)] {
+            for route in routes {
+                for resolution in [
+                    CombatWeaponAttackResolution::Miss {
+                        route,
+                        hit_score: 7,
+                    },
+                    CombatWeaponAttackResolution::Hit { route, raw_damage },
+                    CombatWeaponAttackResolution::Special {
+                        route,
+                        shattered: true,
+                    },
+                    CombatWeaponAttackResolution::Special {
+                        route,
+                        shattered: false,
+                    },
+                    CombatWeaponAttackResolution::NoOrdinaryDamage { route },
+                    CombatWeaponAttackResolution::OutOfRange {
+                        target_range: 9,
+                        range_cap: 1,
+                    },
+                ] {
+                    // Monster attacker, party defender: the Bat swings at
+                    // the Avatar, so no line may contain "Bat".
+                    let mut state = worked_bat_arena(&[(6, 5)], 0);
+                    let damage_application =
+                        state.apply_combat_weapon_damage_to_target(None, 0, raw_damage, false);
+                    let line = crate::input_dispatch::combat_monster_attack_result_message(
+                        &state,
+                        CombatMonsterAttackApplication {
+                            attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
+                            target_slot: 0,
+                            poison_status_outcome: None,
+                            resolution: Some(resolution),
+                            damage_application,
+                            food_theft: None,
+                            sleep_effect: None,
+                        },
+                    );
+                    assert!(
+                        !line.as_deref().unwrap_or_default().contains("Bat"),
+                        "monster-side result line names the attacker: {line:?}"
+                    );
+
+                    // Party attacker, monster defender: the Avatar swings
+                    // at the Bat, so no line may contain "Avatar".
+                    let mut state = worked_bat_arena(&[(6, 5)], 0);
+                    let damage_application = state.apply_combat_weapon_damage_to_target(
+                        Some(0),
+                        COMBAT_PARTY_ACTOR_SLOTS,
+                        raw_damage,
+                        false,
+                    );
+                    let line = crate::input_dispatch::combat_weapon_attack_result_message(
+                        &state,
+                        COMBAT_PARTY_ACTOR_SLOTS,
+                        CombatWeaponAttackApplication {
+                            resolution,
+                            damage_application,
+                        },
+                    );
+                    assert!(
+                        !line.as_deref().unwrap_or_default().contains("Avatar"),
+                        "party-side result line names the attacker: {line:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

@@ -3052,18 +3052,25 @@ fn combat_field_cursor_start_prefers_valid_hint_else_caster_cell() {
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([30, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
 
+    // `combat.md §8.2`: with no cursor ever opened the coordinate is
+    // unwritten, so the seed is "the attacker's own cell otherwise". `§7`
+    // publishes no initial value, and `(0, 0)` is a real in-range arena cell
+    // - an engine that seeds the pair with it never reaches this fallback.
+    assert_eq!(state.combat_aim_marker_cell, None);
+    assert_eq!(state.combat_field_cursor_start(0), Some((5, 5)));
+
     // `combat.md §7`/`RETRACTIONS.md` R357: "the world-side Cast command
     // reads the same pair for its own field placement" - the coordinate,
     // which "is never cleared", not the gate.
-    state.combat_aim_marker_cell = (7, 5);
+    state.combat_aim_marker_cell = Some((7, 5));
     assert_eq!(state.combat_field_cursor_start(0), Some((7, 5)));
 
-    state.combat_aim_marker_cell = (99, 99);
+    state.combat_aim_marker_cell = Some((99, 99));
     assert_eq!(state.combat_field_cursor_start(0), Some((5, 5)));
 
     state.combat_actors[0].x = 0;
     state.combat_actors[0].y = 0;
-    state.combat_aim_marker_cell = (10, 10);
+    state.combat_aim_marker_cell = Some((10, 10));
     assert_eq!(state.combat_field_cursor_start(0), Some((0, 0)));
 }
 
@@ -18138,7 +18145,7 @@ fn combat_cursor_blink_tick_reports_cursor_and_secondary_marker_cells() {
     state.active_player = Some(0);
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 6]);
-    state.combat_aim_marker_cell = (3, 4);
+    state.combat_aim_marker_cell = Some((3, 4));
     state.combat_aim_marker_gate = true;
     state.active_objects.push(ActiveObject {
         type_byte: COMBAT_FIELD_KIND_FIRE,
@@ -18162,7 +18169,7 @@ fn combat_cursor_blink_tick_reports_cursor_and_secondary_marker_cells() {
     assert_eq!(state.party, party_before);
 
     state.combat_cursor_blink = false;
-    state.combat_aim_marker_cell = (99, 99);
+    state.combat_aim_marker_cell = Some((99, 99));
     state.combat_aim_marker_gate = true;
     let unclipped_report = state.apply_combat_cursor_blink_tick();
     assert_eq!(unclipped_report.cursor_draw_cell, Some((5, 6)));
@@ -18867,6 +18874,7 @@ fn dungeon_ambush_arena_synthesises_published_metadata_band() {
         COMBAT_CLASS_BAT,
         3,
         permutation,
+        None,
     );
 
     assert_eq!(record.terrain_grid(), DUNGEON_AMBUSH_ARENA_TERRAIN);
@@ -18962,6 +18970,7 @@ fn dungeon_ambush_source_rows_swap_by_facing() {
         COMBAT_CLASS_BAT,
         1,
         [0; DUNGEON_ROOM_SOURCE_COUNT],
+        None,
     );
     assert_eq!(
         untouched.dungeon_room_source_x(),

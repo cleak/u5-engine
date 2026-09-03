@@ -404,7 +404,21 @@ pub struct PlayState {
     /// [`Self::pending_driver_tile_graphics_restores`] - it records the
     /// redraw in the published order and a frontend drains it.
     pub pending_party_stats_panel_redraws: usize,
-    pub combat_aim_marker_cell: (u8, u8),
+    /// `combat.md §7`, "What owns that coordinate": the aim marker's arena
+    /// X/Y pair. The `§8.2` targeting cursor is its only writer - it
+    /// "**seeds** them when it opens", "**rewrites** them on every accepted
+    /// move", leaves them alone on a rejected move, and "**The coordinate
+    /// itself is never cleared**".
+    ///
+    /// `None` is *unwritten*, not a cell: `§7` contemplates exactly that
+    /// state ("an engine that leaves the coordinate unwritten draws no aim
+    /// marker at all") and publishes no initial value, so the engine does
+    /// not invent one. Modelling the unwritten state as the literal `(0, 0)`
+    /// would be an invented seed - `(0, 0)` is a real arena cell that passes
+    /// [`PlayState::combat_field_cursor_cell_in_range`] for every live
+    /// caster - and would make `§8.2`'s published "attacker's own cell
+    /// otherwise" fallback unreachable until a cursor had opened once.
+    pub combat_aim_marker_cell: Option<(u8, u8)>,
     /// `combat.md §7`, "What owns that coordinate": the marker's separate
     /// **gate** byte. "The cursor raises it as its first act and lowers it
     /// as its last, so the marker is on screen **if and only if an arena

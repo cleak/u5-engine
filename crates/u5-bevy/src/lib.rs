@@ -3420,7 +3420,7 @@ fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
 
     state.enter_combat_frame_with_terrain(active_objects, actors, terrain)?;
     state.combat_cursor_blink = true;
-    state.combat_aim_marker_cell = (3, 4);
+    state.combat_aim_marker_cell = Some((3, 4));
     state.combat_aim_marker_gate = true;
     state.message = "Combat marker gallery".to_string();
     validate_visual_combat_marker_gallery_state(state)?;
