@@ -3074,7 +3074,22 @@ fn combat_weapon_attack_result_message(
     let target_name = combat_actor_display_name(state, target_slot);
     match attack.resolution {
         CombatWeaponAttackResolution::Miss { .. } => Some(format!("{target_name} missed!")),
+        // `combat.md §12`: the two-stage roller's "result may be zero or
+        // negative, and both read as a miss" - against a party defender the
+        // negative "short-circuits with the miss narration", and against a
+        // monster it "falls through into the damage-and-status handler
+        // below, which clamps it and raises the same miss flag", so the two
+        // routes are "gameplay-identical - a printed miss and no HP change".
         CombatWeaponAttackResolution::Hit { .. } => match attack.damage_application {
+            Some(CombatWeaponDamageApplication::Party { damage, .. }) if damage.missed => {
+                Some(format!("{target_name} missed!"))
+            }
+            Some(CombatWeaponDamageApplication::Monster { damage, .. }) if damage.missed => {
+                let class_name = combat_class_stats(damage.class)
+                    .map(|stats| stats.name)
+                    .unwrap_or(target_name.as_str());
+                Some(format!("{class_name} missed!"))
+            }
             Some(CombatWeaponDamageApplication::Party { damage, .. }) => Some(if damage.killed {
                 format!("{target_name} killed!")
             } else {
@@ -3100,6 +3115,30 @@ fn combat_weapon_attack_result_message(
             }
             None => Some(format!("{target_name} hit!")),
         },
+        // `combat.md §12`: "The **Glass Sword** id narrates `Thy sword hath
+        // shattered!` and substitutes the instant-kill sentinel `99`."
+        CombatWeaponAttackResolution::Special {
+            shattered: true, ..
+        } => {
+            let killed = match attack.damage_application {
+                Some(CombatWeaponDamageApplication::Party { damage, .. }) => damage.killed,
+                Some(CombatWeaponDamageApplication::Monster { damage, .. }) => damage.killed,
+                None => false,
+            };
+            let name = match attack.damage_application {
+                Some(CombatWeaponDamageApplication::Monster { damage, .. }) => {
+                    combat_class_stats(damage.class)
+                        .map(|stats| stats.name.to_string())
+                        .unwrap_or_else(|| target_name.clone())
+                }
+                _ => target_name.clone(),
+            };
+            Some(if killed {
+                format!("{COMBAT_GLASS_SWORD_SHATTER_LINE}\n{name} killed!")
+            } else {
+                COMBAT_GLASS_SWORD_SHATTER_LINE.to_string()
+            })
+        }
         CombatWeaponAttackResolution::OutOfRange { .. }
         | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
         | CombatWeaponAttackResolution::Special { .. } => None,

@@ -122,6 +122,45 @@ pub const EQUIPMENT_SHORT_LABELS: [&str; EQUIPMENT_COUNT] = [
 /// which weapon compels.
 pub const EQUIPMENT_SWORD_OF_CHAOS: usize = 35;
 
+/// `combat.md §12` party stage-one override: "The **Glass Sword** id
+/// narrates `Thy sword hath shattered!` and substitutes the instant-kill
+/// sentinel `99`". Anchored to the catalog id [`EQUIPMENT_ID_GLASS_SWORD`].
+pub const EQUIPMENT_GLASS_SWORD: usize = EQUIPMENT_ID_GLASS_SWORD;
+
+/// `combat.md §12` party stage-one override: "the **Jeweled Sword** id
+/// forces the raw value to `0` whatever its table entry says".
+/// `catalogs/item-list.md`: "for the Jeweled Sword (id 40) the combat
+/// damage roller overrides this table's `1` to `0` before any roll".
+pub const EQUIPMENT_JEWELED_SWORD: usize = 40;
+
+/// `combat.md §11` "Always-hit cases": "the always-hit set is three
+/// readied equipment ids - **Sword of Chaos, Glass Sword and Jeweled
+/// Sword**". `catalogs/item-list.md` §5.1: "so an attempt with one of them
+/// skips the to-hit score entirely. Only a player-driven attack can reach
+/// them: the automatic actor driver passes a fixed neutral item id".
+pub const EQUIPMENT_ALWAYS_HIT_ITEM_IDS: [usize; 3] = [
+    EQUIPMENT_SWORD_OF_CHAOS,
+    EQUIPMENT_GLASS_SWORD,
+    EQUIPMENT_JEWELED_SWORD,
+];
+
+/// `combat.md §11`: whether a readied item id short-circuits the shared
+/// to-hit helper to an automatic hit.
+pub const fn equipment_attack_is_always_hit(item_id: usize) -> bool {
+    let mut index = 0;
+    while index < EQUIPMENT_ALWAYS_HIT_ITEM_IDS.len() {
+        if EQUIPMENT_ALWAYS_HIT_ITEM_IDS[index] == item_id {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+/// `combat.md §12`: the line the Glass Sword arm narrates before it
+/// substitutes the instant-kill sentinel.
+pub const COMBAT_GLASS_SWORD_SHATTER_LINE: &str = "Thy sword hath shattered!";
+
 /// `combat.md §6.1a` Writers #4: whether a readied weapon-hand or
 /// shield-hand equipment id takes the compulsion branch on the
 /// player-driven command path. Only the Sword of Chaos does.

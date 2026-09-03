@@ -382,7 +382,7 @@
         }];
 
         let application = state
-            .resolve_and_apply_combat_monster_attack(8, 0, 1, 0, 0, true, 0, Some(true))
+            .resolve_and_apply_combat_monster_attack(8, 0, 1, 0, true, 0, Some(true))
             .expect("an adjacent controlled attacker still resolves an attack");
 
         assert!(
@@ -402,7 +402,7 @@
         state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
         assert!(
             state
-                .resolve_and_apply_combat_monster_attack(8, 0, 1, 0, 0, false, 0, Some(true))
+                .resolve_and_apply_combat_monster_attack(8, 0, 1, 0, false, 0, Some(true))
                 .is_none(),
             "a controlled attacker requires straight-line distance exactly one"
         );
@@ -1129,3 +1129,559 @@
     // spec question (see the scope note in `enter_sleep_ambush_combat`). The
     // engine's surface-only gate is a conservative stand-in and is
     // deliberately not pinned by a test here.
+
+    // -----------------------------------------------------------------
+    // `systems/combat.md` Sections 11-13 melee resolver, published in spec
+    // commit `0170809` with `RETRACTIONS.md` R334-R337.
+    // -----------------------------------------------------------------
+
+    /// The shipped starting Avatar of the worked example in Section 11:
+    /// "Strength, Dexterity and Intelligence all 15, 60 of 60 HP, level 2,
+    /// a cached combat-defense byte of 7, and the shipped starting
+    /// loadout."
+    const WORKED_AVATAR_DEXTERITY: u8 = 15;
+    const WORKED_AVATAR_STRENGTH: u8 = 15;
+    const WORKED_AVATAR_HP: u16 = 60;
+    const WORKED_AVATAR_LEVEL: u8 = 2;
+    /// Bat is class 21.
+    const WORKED_BAT_CLASS: u8 = 21;
+
+    /// The eight equally likely speed-variation rolls a Bat placement can
+    /// draw, mapped to the combat weight each produces. Section 11: "26 to
+    /// 30 with 30 at even odds".
+    fn worked_bat_combat_weights() -> Vec<u8> {
+        (0..8u8)
+            .map(|roll| {
+                combat_placement_base_step(combat_class_stats(WORKED_BAT_CLASS).unwrap().speed_seed, roll)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn worked_bat_versus_starting_avatar_matches_the_published_percentages() {
+        // `combat.md` Section 11 "Worked example: a Bat against the shipped
+        // starting Avatar". Every number asserted here is quoted from that
+        // section; the test exists because `RETRACTIONS.md` R334, R335 and
+        // R336 each move it: the old engine gave "a Dexterity-15 party
+        // member a 29.5 % chance of being hit by a speed-30 monster where
+        // the original gives 74.6 %".
+        let bat = combat_class_stats(WORKED_BAT_CLASS).unwrap();
+        assert_eq!(bat.name, "Bat");
+        // "Bat is class 21: speed 30, attack 6, defense 0, 5 HP".
+        assert_eq!(
+            (bat.speed_seed, bat.attack_value, bat.defense, bat.max_hp),
+            (30, 6, 0, 5)
+        );
+
+        let weights = worked_bat_combat_weights();
+        // "| Bat combat weight | Chance | Score |": 26 and 27 at 1/8 each
+        // score 9, 28 and 29 at 1/8 each score 8, 30 at 4/8 scores 7.
+        assert_eq!(weights, vec![26, 27, 28, 29, 30, 30, 30, 30]);
+        let expected_scores = [9i16, 9, 8, 8, 7, 7, 7, 7];
+        for (index, weight) in weights.iter().copied().enumerate() {
+            assert_eq!(
+                combat_to_hit_score(weight, WORKED_AVATAR_DEXTERITY),
+                expected_scores[index],
+                "weight {weight}"
+            );
+        }
+
+        // "**Per-swing chance to hit: `364/488 = 0.746`.**" Counted over
+        // the eight placement rolls and the sixty-one raw draws behind the
+        // shared skewed `1..30` roll.
+        let mut swings = 0u32;
+        let mut hits = 0u32;
+        let mut hp_lost_total = 0u32;
+        let mut swings_costing_hp = 0u32;
+        let mut attempts = 0u32;
+        for weight in weights.iter().copied() {
+            for raw in 0..=COMBAT_SKEWED_ROLL_RAW_MAX {
+                swings += 1;
+                let hit = resolve_combat_hit_from_raw_roll(weight, WORKED_AVATAR_DEXTERITY, raw);
+                if hit {
+                    hits += 1;
+                }
+                // "On a hit the Bat brings its flat class attack value 6
+                // and the Avatar's defence roll subtracts an inclusive
+                // `1..7`, so the seven outcomes are equally likely".
+                for defence_roll in 0..CHARACTER_DEFENSE_FACTORY_SEED {
+                    attempts += 1;
+                    if !hit {
+                        continue;
+                    }
+                    let delivered = resolve_combat_damage_after_defence(
+                        i16::from(bat.attack_value),
+                        CHARACTER_DEFENSE_FACTORY_SEED,
+                        defence_roll,
+                    );
+                    if delivered > 0 {
+                        hp_lost_total += delivered as u32;
+                        swings_costing_hp += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!((hits, swings), (364, 488));
+        let per_swing_hit = f64::from(hits) / f64::from(swings);
+        assert!((per_swing_hit - 0.746).abs() < 0.001, "{per_swing_hit}");
+
+        // "a Bat can never take more than 5 HP in one swing and cannot
+        // one-shot a 60-HP Avatar"; "the mean cost of a landed swing is
+        // `15/7 = 2.14`".
+        let landed = hits * u32::from(CHARACTER_DEFENSE_FACTORY_SEED);
+        let mean_landed = f64::from(hp_lost_total) / f64::from(landed);
+        assert!((mean_landed - 15.0 / 7.0).abs() < 0.001, "{mean_landed}");
+        for defence_roll in 0..CHARACTER_DEFENSE_FACTORY_SEED {
+            let delivered = resolve_combat_damage_after_defence(
+                i16::from(bat.attack_value),
+                CHARACTER_DEFENSE_FACTORY_SEED,
+                defence_roll,
+            );
+            assert!(delivered <= 5, "a Bat swing may never exceed 5 HP");
+            assert!(delivered < WORKED_AVATAR_HP as i16);
+        }
+
+        // "the expected loss per *attempted* swing is `0.746 * 15/7 = 1.60`
+        // HP, and the chance that a given Bat swing costs the Avatar any HP
+        // at all is `0.746 * 5/7 = 0.533`".
+        let expected_loss_per_attempt = f64::from(hp_lost_total) / f64::from(attempts);
+        assert!(
+            (expected_loss_per_attempt - 1.60).abs() < 0.005,
+            "expected 1.60 HP per attempted swing, got {expected_loss_per_attempt}"
+        );
+        let any_hp_chance = f64::from(swings_costing_hp) / f64::from(attempts);
+        assert!(
+            (any_hp_chance - 0.533).abs() < 0.001,
+            "expected 0.533, got {any_hp_chance}"
+        );
+
+        // "An asleep defender is not a certainty either - with the defender
+        // rating floored to one the score is 2, 2, 1, 1, 0 across the same
+        // weights, giving **98.4 %**, not 100 %."
+        let asleep_scores: Vec<i16> = weights
+            .iter()
+            .take(5)
+            .map(|weight| combat_to_hit_score(*weight, 1))
+            .collect();
+        assert_eq!(asleep_scores, vec![2, 2, 1, 1, 0]);
+        let asleep_hits = weights
+            .iter()
+            .flat_map(|weight| {
+                (0..=COMBAT_SKEWED_ROLL_RAW_MAX)
+                    .map(move |raw| resolve_combat_hit_from_raw_roll(*weight, 1, raw))
+            })
+            .filter(|hit| *hit)
+            .count();
+        let asleep_chance = asleep_hits as f64 / f64::from(swings);
+        assert!((asleep_chance - 0.984).abs() < 0.001, "{asleep_chance}");
+
+        // "Two inputs the example is usually asked about turn out not to
+        // matter. The Avatar's **level** enters neither the to-hit score
+        // nor the melee damage roll. The **starting body armour** is inert
+        // in melee ... the Attack walker does not scan the body-armour slot
+        // at all."
+        assert!(!COMBAT_ARMAMENT_SCAN_SLOTS.contains(&EQUIP_SLOT_ARMOUR));
+        let _ = WORKED_AVATAR_LEVEL;
+    }
+
+    #[test]
+    fn worked_avatar_versus_bat_takes_no_defence_draw_and_hits_29_percent() {
+        // `combat.md` Section 11, "*The Avatar attacking the Bat.*": "The
+        // attacker term is Dexterity 15, since the starting weapon is not
+        // in the strength family; the defender term is the Bat's combat
+        // weight 26 to 30; the score is 20 to 22, and the per-swing chance
+        // to hit is `18/61 = 0.295`."
+        let weights = worked_bat_combat_weights();
+        let scores: Vec<i16> = weights
+            .iter()
+            .map(|weight| combat_to_hit_score(WORKED_AVATAR_DEXTERITY, *weight))
+            .collect();
+        assert_eq!(scores, vec![20, 21, 21, 22, 22, 22, 22, 22]);
+
+        let hits = weights
+            .iter()
+            .flat_map(|weight| {
+                (0..=COMBAT_SKEWED_ROLL_RAW_MAX).map(move |raw| {
+                    resolve_combat_hit_from_raw_roll(WORKED_AVATAR_DEXTERITY, *weight, raw)
+                })
+            })
+            .filter(|hit| *hit)
+            .count();
+        let per_swing = hits as f64 / (8.0 * 61.0);
+        assert!((per_swing - 18.0 / 61.0).abs() < 0.001, "{per_swing}");
+        assert!((per_swing - 0.295).abs() < 0.001, "{per_swing}");
+
+        // "the Bat's class defense byte is `0`, so **no defence roll is
+        // taken at all** and nothing is subtracted - an engine that always
+        // rolls a defence term both softens the hit and consumes a PRNG
+        // draw the original does not."
+        let bat = combat_class_stats(WORKED_BAT_CLASS).unwrap();
+        assert!(!combat_defence_draw_taken(bat.defense));
+        let mut state = combat_frame_conformance_state();
+        state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] = CombatActorDescriptor::from_row([
+            bat.max_hp,
+            30,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            WORKED_BAT_CLASS,
+            8,
+            0,
+            6,
+            5,
+        ]);
+        let prng_before = state.prng_state;
+        assert_eq!(
+            state.combat_actor_defence_rating(COMBAT_PARTY_ACTOR_SLOTS),
+            Some(0)
+        );
+        assert_eq!(state.combat_defence_roll(0), 0);
+        assert_eq!(state.prng_state, prng_before);
+
+        // "With the shipped weapon's `Attack max` of 15 against 5 HP,
+        // `11/15` of landed hits kill, so one swing kills a Bat with
+        // probability `0.216`."
+        let attack_max = 15u8;
+        let killing = (0..=255u8)
+            .filter(|roll| combat_spell_damage_roll(*roll, attack_max) >= i16::from(bat.max_hp))
+            .count();
+        let kill_fraction = killing as f64 / 256.0;
+        assert!(
+            (kill_fraction - 11.0 / 15.0).abs() < 0.02,
+            "{kill_fraction} of the 1..15 draws should be lethal"
+        );
+        assert!((per_swing * 11.0 / 15.0 - 0.216).abs() < 0.002);
+    }
+
+    #[test]
+    fn accuracy_is_not_tier_for_a_bat_but_is_for_a_gargoyle() {
+        // `combat.md` Section 11 "*Accuracy is not tier.*": "a Bat is
+        // *more* accurate against a Dexterity-15 party member (74.6 %) than
+        // a Gargoyle is (60.7 %, taken off class tier 20)".
+        let gargoyle = combat_class_stats(30).unwrap();
+        assert_eq!(gargoyle.name, "Gargoyle");
+        assert_eq!(gargoyle.tier, 20);
+        assert!(
+            combat_class_traits(30)
+                .unwrap()
+                .zero_selector_stat_row
+        );
+        // The Gargoyle's attacker term is its tier whatever its placement
+        // weight came out as.
+        for weight in 0..=30u8 {
+            assert_eq!(combat_monster_attacker_rating(30, weight), Some(20));
+        }
+        let score = combat_to_hit_score(gargoyle.tier, WORKED_AVATAR_DEXTERITY);
+        assert_eq!(score, 12);
+        let hits = (0..=COMBAT_SKEWED_ROLL_RAW_MAX)
+            .filter(|raw| {
+                resolve_combat_hit_from_raw_roll(gargoyle.tier, WORKED_AVATAR_DEXTERITY, *raw)
+            })
+            .count();
+        assert!((hits as f64 / 61.0 - 0.607).abs() < 0.001);
+        // "The Gargoyle compensates with attack 20 against 6 and defense 15
+        // against 0."
+        assert_eq!((gargoyle.attack_value, gargoyle.defense), (20, 15));
+    }
+
+    #[test]
+    fn a_bat_takes_three_attempts_per_avatar_turn_not_one() {
+        // `combat.md` Section 11 "Attempts per phase": "An actor acts once
+        // every `36 - base_step` sweeps ... A Bat, class speed 30, has a
+        // period of 6 at even odds and 7, 8, 9 or 10 at one chance in eight
+        // each; a Dexterity-15 Avatar has a period of 21. The expected
+        // number of Bat attempts per Avatar turn is therefore `21 *
+        // E[1/period] = 3.01`, **not** `21 / E[period] = 2.90`."
+        let periods: Vec<u8> = worked_bat_combat_weights()
+            .into_iter()
+            .map(|weight| resolve_combat_phase_refresh_counter(weight, COMBAT_PHASE_REFRESH_CONSTANT))
+            .collect();
+        assert_eq!(periods, vec![10, 9, 8, 7, 6, 6, 6, 6]);
+        let avatar_period = resolve_combat_phase_refresh_counter(
+            WORKED_AVATAR_DEXTERITY,
+            COMBAT_PHASE_REFRESH_CONSTANT,
+        );
+        assert_eq!(avatar_period, 21);
+
+        let reciprocal_mean: f64 = periods
+            .iter()
+            .map(|period| 1.0 / f64::from(*period))
+            .sum::<f64>()
+            / 8.0;
+        let attempts = f64::from(avatar_period) * reciprocal_mean;
+        assert!(
+            (attempts - 3.01).abs() < 0.01,
+            "expected 3.01 attempts per Avatar turn, got {attempts}"
+        );
+        let mean_period: f64 =
+            periods.iter().map(|period| f64::from(*period)).sum::<f64>() / 8.0;
+        let wrong = f64::from(avatar_period) / mean_period;
+        assert!(
+            (wrong - 2.90).abs() < 0.01 && wrong < attempts,
+            "the reciprocal expectation must be taken on the rate, not the period"
+        );
+
+        // "One attack per monster activation ... there is no multi-attack
+        // loop anywhere on it."
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let bat_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let hp_before = state.party[0].hp;
+        let application = state
+            .apply_combat_actor_slot_dispatch(bat_slot, COMBAT_PHASE_REFRESH_CONSTANT, false);
+        let _ = application;
+        assert!(
+            hp_before - state.party[0].hp <= 5,
+            "one activation resolves at most one Bat swing"
+        );
+    }
+
+    /// A `combat.md` Section 11 worked-example arena: the shipped starting
+    /// Avatar in slot 0 at the arena centre, with one Bat per requested
+    /// cell already adjacent to it.
+    fn worked_bat_arena(bat_cells: &[(u8, u8)], speed_roll_base: u8) -> PlayState {
+        let mut state = combat_frame_conformance_state();
+        state.combat_round_loop_prologue_ran = true;
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: WORKED_AVATAR_DEXTERITY,
+            mana: 0,
+            hp: WORKED_AVATAR_HP,
+            max_hp: WORKED_AVATAR_HP,
+            level: WORKED_AVATAR_LEVEL,
+        }];
+        state.party_strengths = vec![WORKED_AVATAR_STRENGTH];
+        state.party_intelligence = vec![WORKED_AVATAR_DEXTERITY];
+        state.party_experience = vec![0];
+        state.party_equipment = default_party_equipment(1);
+        state.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        state.active_objects[0] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        // `combat.md` Section 5.1: "The party actor's base step is the raw
+        // dexterity byte."
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            WORKED_AVATAR_HP as u8,
+            WORKED_AVATAR_DEXTERITY,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            COMBAT_PHASE_REFRESH_CONSTANT - WORKED_AVATAR_DEXTERITY,
+            5,
+            5,
+        ]);
+        let bat = combat_class_stats(WORKED_BAT_CLASS).unwrap();
+        for (index, (x, y)) in bat_cells.iter().copied().enumerate() {
+            let slot = COMBAT_PARTY_ACTOR_SLOTS + index;
+            let object_slot = 8 + index;
+            let base_step =
+                combat_placement_base_step(bat.speed_seed, (speed_roll_base + index as u8) % 8);
+            state.active_objects[object_slot] = ActiveObject {
+                type_byte: 0x94,
+                tile: 0x94,
+                x: usize::from(x),
+                y: usize::from(y),
+                ..ActiveObject::empty()
+            };
+            state.combat_actors[slot] = CombatActorDescriptor::from_row([
+                bat.max_hp,
+                base_step,
+                COMBAT_ACTOR_FLAG_SELECTABLE_40,
+                WORKED_BAT_CLASS,
+                object_slot as u8,
+                COMBAT_PHASE_REFRESH_CONSTANT - base_step,
+                x,
+                y,
+            ]);
+        }
+        state
+    }
+
+    #[test]
+    fn three_adjacent_bats_kill_a_sixty_hp_avatar_at_the_observed_rate() {
+        // End-to-end through the production round walker and player command
+        // path. The reference point is the original's observed 60 -> 0 over
+        // fourteen rounds with bats that were free to move; three bats held
+        // adjacent must be at least that fast, and `combat.md` Section 11
+        // fixes both ends of the band:
+        //
+        //   - "a Bat can never take more than 5 HP in one swing and cannot
+        //     one-shot a 60-HP Avatar", so no single turn can end it;
+        //   - "the expected loss per *attempted* swing is `0.746 * 15/7 =
+        //     1.60` HP" and "The expected number of Bat attempts per Avatar
+        //     turn is therefore `21 * E[1/period] = 3.01`", so three bats
+        //     cost about `3 * 3.01 * 1.60 = 14.4` HP per Avatar turn.
+        //
+        // Before R334-R336 the same fixture lost a handful of HP over the
+        // whole fourteen rounds: the score was inverted (29.5 % instead of
+        // 74.6 %) and the monster attack value was rolled instead of flat,
+        // "about 39 % of the original's melee damage".
+        let mut turns_to_death = Vec::new();
+        for seed in 0..8u16 {
+            let mut state = worked_bat_arena(&[(4, 5), (6, 5), (5, 4)], (seed % 8) as u8);
+            state.prng_state = 0x1234u16.wrapping_add(seed.wrapping_mul(0x9e37));
+            let game_dir = std::path::Path::new(".");
+            let mut turns = 0u32;
+            while state.party[0].hp > 0 && state.combat_active && turns < 64 {
+                // The pass key is the production entry point: it opens the
+                // player's turn, spends it, and drives the round walker on
+                // through every hostile activation that is due.
+                handle_play_key_input(&mut state, ' ', "", game_dir).unwrap();
+                turns += 1;
+            }
+            assert_eq!(
+                state.party[0].hp, 0,
+                "seed {seed}: three adjacent Bats must kill a 60 HP Avatar"
+            );
+            assert!(
+                turns > 1,
+                "seed {seed}: a Bat cannot one-shot a 60 HP Avatar"
+            );
+            assert!(
+                turns <= 14,
+                "seed {seed}: took {turns} turns; the original's observation is 60 -> 0 over \
+                 fourteen rounds with bats free to move, so held adjacent it must be faster"
+            );
+            turns_to_death.push(turns);
+        }
+        let mean_turns =
+            turns_to_death.iter().map(|turns| f64::from(*turns)).sum::<f64>()
+                / turns_to_death.len() as f64;
+        let hp_per_turn = f64::from(WORKED_AVATAR_HP as u32) / mean_turns;
+        assert!(
+            (3.0..=30.0).contains(&hp_per_turn),
+            "mean HP lost per Avatar turn was {hp_per_turn}; Section 11's three-Bat \
+             expectation is about 14.4"
+        );
+    }
+
+    #[test]
+    fn a_defence_soaked_swing_changes_no_hp_and_narrates_as_a_miss() {
+        // `combat.md` Section 12: "The result may be zero or negative, and
+        // both read as a miss. Against a **party** defender a negative
+        // result short-circuits with the miss narration; against a
+        // **monster** defender it falls through into the damage-and-status
+        // handler below, which clamps it and raises the same miss flag ...
+        // The two routes are therefore gameplay-identical - a printed miss
+        // and no HP change."
+        //
+        // This is the seventh row of the published Bat table: attack value 6
+        // against the shipped party defence of 7, defence roll 7.
+        let bat = combat_class_stats(WORKED_BAT_CLASS).unwrap();
+        let soaked = resolve_combat_damage_after_defence(
+            i16::from(bat.attack_value),
+            CHARACTER_DEFENSE_FACTORY_SEED,
+            CHARACTER_DEFENSE_FACTORY_SEED - 1,
+        );
+        assert_eq!(soaked, -1);
+
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let hp_before = state.party[0].hp;
+        let damage = state
+            .apply_combat_weapon_damage_to_target(None, 0, soaked, false)
+            .expect("the soaked value still reaches the damage endpoint");
+        let CombatWeaponDamageApplication::Party { damage, .. } = damage else {
+            panic!("expected a party damage application, got {damage:?}");
+        };
+        assert!(damage.missed);
+        assert_eq!(damage.applied_damage, 0);
+        assert_eq!(state.party[0].hp, hp_before);
+        assert_eq!(state.party[0].status, b'G');
+    }
+
+    #[test]
+    fn the_glass_sword_narrates_its_shatter_and_takes_no_defence_draw() {
+        // `combat.md` Section 12: "The **Glass Sword** id narrates `Thy
+        // sword hath shattered!` and substitutes the instant-kill sentinel
+        // `99` ... The sentinel short-circuits the whole roller and returns
+        // immediately - **before the defender's defence byte is read** - so
+        // an instant kill takes no defence draw."
+        //
+        // `catalogs/item-list.md` Section 5.1 adds the reach: the Glass
+        // Sword is one of the three always-hit ids, so "an attempt with one
+        // of them skips the to-hit score entirely".
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let gargoyle = combat_class_stats(30).unwrap();
+        assert_ne!(gargoyle.defense, 0, "a defender with a live defence byte");
+        let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        state.combat_actors[target_slot] = CombatActorDescriptor::from_row([
+            gargoyle.max_hp,
+            20,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            30,
+            8,
+            0,
+            6,
+            5,
+        ]);
+        state.party_experience = vec![0];
+        let prng_before = state.prng_state;
+
+        let application = state
+            .resolve_and_apply_combat_equipment_weapon_attack(
+                EQUIPMENT_GLASS_SWORD,
+                0,
+                target_slot,
+                // Ratings that would otherwise never land: the always-hit
+                // arm skips the score outright.
+                0,
+                u8::MAX,
+                0,
+                0,
+                None,
+                false,
+            )
+            .expect("the Glass Sword resolves through the sentinel path");
+
+        assert_eq!(
+            application.resolution,
+            CombatWeaponAttackResolution::Special {
+                route: CombatWeaponAttackRangeRoute::Melee,
+                shattered: true,
+            }
+        );
+        assert_eq!(
+            state.prng_state, prng_before,
+            "an instant kill takes no defence draw"
+        );
+        assert!(
+            matches!(
+                application.damage_application,
+                Some(CombatWeaponDamageApplication::Monster { damage, .. })
+                    if damage.instant_kill && damage.killed
+            ),
+            "the sentinel forces the death path: {:?}",
+            application.damage_application
+        );
+        assert_eq!(
+            COMBAT_GLASS_SWORD_SHATTER_LINE,
+            "Thy sword hath shattered!"
+        );
+        // `catalogs/item-list.md`: "the Jeweled Sword ... delivers no
+        // ordinary attack damage at all".
+        let mut untouched = worked_bat_arena(&[(6, 5)], 0);
+        let jewelled = untouched
+            .resolve_and_apply_combat_equipment_weapon_attack(
+                EQUIPMENT_JEWELED_SWORD,
+                0,
+                COMBAT_PARTY_ACTOR_SLOTS,
+                u8::MAX,
+                0,
+                0,
+                0,
+                None,
+                false,
+            )
+            .expect("the Jeweled Sword still resolves");
+        assert_eq!(
+            jewelled.resolution,
+            CombatWeaponAttackResolution::NoOrdinaryDamage {
+                route: CombatWeaponAttackRangeRoute::Melee,
+            }
+        );
+        assert!(jewelled.damage_application.is_none());
+    }

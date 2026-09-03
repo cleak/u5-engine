@@ -414,6 +414,10 @@ pub enum CombatWeaponAttackResolution {
     },
     Special {
         route: CombatWeaponAttackRangeRoute,
+        /// `combat.md §12`: set only on the Glass Sword arm, which
+        /// "narrates `Thy sword hath shattered!` and substitutes the
+        /// instant-kill sentinel `99`".
+        shattered: bool,
     },
 }
 
@@ -1512,6 +1516,10 @@ pub const fn combat_spell_damage_roll(roll: u8, max_damage: u8) -> i16 {
     }
 }
 
+/// `combat.md §12` stage one, **party** row: "the readied action item's
+/// `Attack max` value; when that value is greater than `1` and is not the
+/// instant-kill sentinel `99`, it is replaced by an inclusive `1..value`
+/// draw. Values `0` and `1` pass through unchanged".
 pub const fn resolve_combat_weapon_raw_damage(attack_max: u8, roll: u8) -> CombatWeaponDamageRoute {
     match attack_max {
         0 => CombatWeaponDamageRoute::NoOrdinaryDamage,
@@ -1521,6 +1529,109 @@ pub const fn resolve_combat_weapon_raw_damage(attack_max: u8, roll: u8) -> Comba
             raw_damage: combat_spell_damage_roll(roll, max_damage),
         },
     }
+}
+
+/// `combat.md §12` "The ordinary attack damage roll", stage one. "It runs
+/// in two stages, and the two sides are not symmetric."
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatAttackerDamageSource {
+    /// "Monster | the class's **attack byte, used flat**, with **no random
+    /// draw at all**" - `RETRACTIONS.md` R336: "A Bat brings exactly 6
+    /// every time. An engine that rolls `1..attack` for monsters delivers
+    /// about 39 % of the original's damage."
+    MonsterFlat { attack_value: u8 },
+    /// The party arm, keyed by the readied action item id so the two
+    /// per-item overrides below run before the roll.
+    PartyItem { item_id: usize },
+    /// `combat.md §12`: "bare hands are a flat `1`".
+    PartyBareHands,
+}
+
+/// `combat.md §12` stage one result, carrying the Glass Sword narration
+/// flag alongside the route.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatAttackerRawDamage {
+    pub route: CombatWeaponDamageRoute,
+    /// `combat.md §12`: "The **Glass Sword** id narrates `Thy sword hath
+    /// shattered!` and substitutes the instant-kill sentinel `99`."
+    pub shattered: bool,
+}
+
+/// `combat.md §12` stage one for either side. "Two per-item overrides run
+/// before the roll on the party side. The **Glass Sword** id narrates `Thy
+/// sword hath shattered!` and substitutes the instant-kill sentinel `99`;
+/// the **Jeweled Sword** id forces the raw value to `0` whatever its table
+/// entry says."
+pub fn resolve_combat_attacker_raw_damage(
+    source: CombatAttackerDamageSource,
+    damage_roll: u8,
+) -> Option<CombatAttackerRawDamage> {
+    let (route, shattered) = match source {
+        // `combat.md §12` stage one, monster row: the class byte is used
+        // flat and stage two's defence subtraction still runs on it. The
+        // instant-kill short-circuit belongs to the *party* arm's two
+        // per-item overrides, so a class attack byte that happens to read
+        // 99 is a very large ordinary blow, not a sentinel.
+        CombatAttackerDamageSource::MonsterFlat { attack_value } => (
+            match attack_value {
+                0 => CombatWeaponDamageRoute::NoOrdinaryDamage,
+                value => CombatWeaponDamageRoute::Damage {
+                    raw_damage: value as i16,
+                },
+            },
+            false,
+        ),
+        CombatAttackerDamageSource::PartyBareHands => {
+            (CombatWeaponDamageRoute::Damage { raw_damage: 1 }, false)
+        }
+        CombatAttackerDamageSource::PartyItem { item_id } => {
+            if item_id == EQUIPMENT_GLASS_SWORD {
+                (CombatWeaponDamageRoute::Special, true)
+            } else if item_id == EQUIPMENT_JEWELED_SWORD {
+                (CombatWeaponDamageRoute::NoOrdinaryDamage, false)
+            } else {
+                (
+                    resolve_combat_weapon_raw_damage(equipment_attack_max(item_id)?, damage_roll),
+                    false,
+                )
+            }
+        }
+    };
+    Some(CombatAttackerRawDamage { route, shattered })
+}
+
+/// `combat.md §12` stage two: "**When that rating is non-zero the roller
+/// subtracts an inclusive `1..rating` draw; when it is zero it takes no
+/// draw at all and subtracts nothing.**" Skipping the draw on a zero
+/// rating "is part of PRNG parity, not an optimisation".
+pub const fn combat_defence_draw_taken(defence_rating: u8) -> bool {
+    defence_rating != 0
+}
+
+/// `combat.md §12` stage two, the inclusive `1..rating` draw. A flat
+/// subtraction "is not a near-miss but a different game (against the
+/// shipped party defence of 7 it makes every Bat swing land for `6 - 7`,
+/// i.e. exactly zero HP, forever)".
+pub const fn combat_defence_subtraction(defence_rating: u8, defence_roll: u8) -> u8 {
+    if defence_rating == 0 {
+        0
+    } else {
+        1 + defence_roll % defence_rating
+    }
+}
+
+/// `combat.md §12`: the whole two-stage roller for one landed swing.
+/// "The result may be zero or negative, and both read as a miss." The
+/// instant-kill sentinel "short-circuits the whole roller and returns
+/// immediately - **before the defender's defence byte is read** - so an
+/// instant kill takes no defence draw", which is why `Special` never
+/// reaches this function.
+pub const fn resolve_combat_damage_after_defence(
+    raw_damage: i16,
+    defence_rating: u8,
+    defence_roll: u8,
+) -> i16 {
+    raw_damage - combat_defence_subtraction(defence_rating, defence_roll) as i16
 }
 
 pub fn resolve_combat_equipment_weapon_raw_damage(
@@ -1547,44 +1658,134 @@ pub const fn resolve_combat_weapon_attack_range_route(
     }
 }
 
-pub const fn resolve_combat_weapon_attack(
-    attack_max: u8,
-    target_range: u8,
-    range_cap: u8,
-    effect_code: u8,
-    attacker_rating: u8,
-    defender_rating: u8,
-    hit_roll: u8,
-    damage_roll: u8,
-    forced_hit: Option<bool>,
+/// `combat.md §11` / `§12` inputs for one ordinary melee or
+/// ranged/effect attempt. The two ratings feed the to-hit score, the
+/// separate `defence_rating` feeds stage two of the damage roller - §13
+/// (R337): "The **defense** byte reaches the damage roller directly and
+/// never through the selector."
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatWeaponAttackInput {
+    pub source: CombatAttackerDamageSource,
+    pub target_range: u8,
+    pub range_cap: u8,
+    pub effect_code: u8,
+    /// `combat.md §11` selector, attacker side.
+    pub attacker_rating: u8,
+    /// `combat.md §11` selector, defender side: "every ordinary melee and
+    /// ranged/effect attack, party or monster | that actor's **combat
+    /// weight**".
+    pub defender_rating: u8,
+    /// `combat.md §12` stage two: "class defense byte for a monster and
+    /// the cached character combat-defense byte for a party member".
+    pub defence_rating: u8,
+    /// The inclusive `0..=60` raw draw behind the skewed `1..30` roll.
+    pub hit_raw_roll_0_to_60: u8,
+    pub damage_roll: u8,
+    pub defence_roll: u8,
+    pub forced_hit: Option<bool>,
+}
+
+pub fn resolve_combat_weapon_attack(
+    input: CombatWeaponAttackInput,
 ) -> CombatWeaponAttackResolution {
-    let Some(route) =
-        resolve_combat_weapon_attack_range_route(target_range, range_cap, effect_code)
-    else {
+    let Some(route) = resolve_combat_weapon_attack_range_route(
+        input.target_range,
+        input.range_cap,
+        input.effect_code,
+    ) else {
         return CombatWeaponAttackResolution::OutOfRange {
-            target_range,
-            range_cap,
+            target_range: input.target_range,
+            range_cap: input.range_cap,
         };
     };
 
-    match resolve_combat_weapon_raw_damage(attack_max, damage_roll) {
+    let Some(raw) = resolve_combat_attacker_raw_damage(input.source, input.damage_roll) else {
+        return CombatWeaponAttackResolution::NoOrdinaryDamage { route };
+    };
+
+    match raw.route {
         CombatWeaponDamageRoute::NoOrdinaryDamage => {
             CombatWeaponAttackResolution::NoOrdinaryDamage { route }
         }
-        CombatWeaponDamageRoute::Special => CombatWeaponAttackResolution::Special { route },
+        CombatWeaponDamageRoute::Special => CombatWeaponAttackResolution::Special {
+            route,
+            shattered: raw.shattered,
+        },
         CombatWeaponDamageRoute::Damage { raw_damage } => {
-            let hit_score = combat_to_hit_score(attacker_rating, defender_rating);
-            let hit = match forced_hit {
+            let hit_score = combat_to_hit_score(input.attacker_rating, input.defender_rating);
+            let hit = match input.forced_hit {
                 Some(hit) => hit,
-                None => hit_score > hit_roll as i16,
+                None => combat_to_hit_accepts(
+                    hit_score,
+                    combat_skewed_roll_1_to_30(input.hit_raw_roll_0_to_60),
+                ),
             };
             if hit {
-                CombatWeaponAttackResolution::Hit { route, raw_damage }
+                CombatWeaponAttackResolution::Hit {
+                    route,
+                    raw_damage: resolve_combat_damage_after_defence(
+                        raw_damage,
+                        input.defence_rating,
+                        input.defence_roll,
+                    ),
+                }
             } else {
                 CombatWeaponAttackResolution::Miss { route, hit_score }
             }
         }
     }
+}
+
+/// `combat.md §12`: whether this attempt reaches stage two of the damage
+/// roller and therefore takes the defender's inclusive `1..rating` draw.
+/// An out-of-range attempt, a zero-damage row, a miss and the instant-kill
+/// sentinel - which "short-circuits the whole roller and returns
+/// immediately - **before the defender's defence byte is read**" - all skip
+/// it, and so does a zero rating: "when it is zero it takes no draw at all
+/// and subtracts nothing", which "is part of PRNG parity, not an
+/// optimisation".
+pub fn combat_weapon_attack_takes_defence_draw(input: CombatWeaponAttackInput) -> bool {
+    combat_defence_draw_taken(input.defence_rating)
+        && matches!(
+            resolve_combat_weapon_attack(CombatWeaponAttackInput {
+                defence_rating: 0,
+                defence_roll: 0,
+                ..input
+            }),
+            CombatWeaponAttackResolution::Hit { .. }
+        )
+}
+
+/// `combat.md §11` / `§12` inputs for one readied-item attempt, with the
+/// per-item range cap, effect code and always-hit arm resolved from
+/// `catalogs/item-list.md`.
+#[allow(clippy::too_many_arguments)]
+pub fn combat_equipment_weapon_attack_input(
+    item_id: usize,
+    target_range: u8,
+    attacker_rating: u8,
+    defender_rating: u8,
+    defence_rating: u8,
+    hit_raw_roll_0_to_60: u8,
+    damage_roll: u8,
+    defence_roll: u8,
+    forced_hit: Option<bool>,
+) -> Option<CombatWeaponAttackInput> {
+    Some(CombatWeaponAttackInput {
+        source: CombatAttackerDamageSource::PartyItem { item_id },
+        target_range,
+        range_cap: equipment_weapon_range_cap(item_id)?,
+        effect_code: equipment_weapon_effect_code(item_id)?,
+        attacker_rating,
+        defender_rating,
+        defence_rating,
+        hit_raw_roll_0_to_60,
+        damage_roll,
+        defence_roll,
+        // `combat.md §11`: the three always-hit ids "skip the to-hit score
+        // entirely"; a caller-supplied force still wins.
+        forced_hit: forced_hit.or_else(|| equipment_attack_is_always_hit(item_id).then_some(true)),
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1593,20 +1794,24 @@ pub fn resolve_combat_equipment_weapon_attack(
     target_range: u8,
     attacker_rating: u8,
     defender_rating: u8,
-    hit_roll: u8,
+    defence_rating: u8,
+    hit_raw_roll_0_to_60: u8,
     damage_roll: u8,
+    defence_roll: u8,
     forced_hit: Option<bool>,
 ) -> Option<CombatWeaponAttackResolution> {
     Some(resolve_combat_weapon_attack(
-        equipment_attack_max(item_id)?,
-        target_range,
-        equipment_weapon_range_cap(item_id)?,
-        equipment_weapon_effect_code(item_id)?,
-        attacker_rating,
-        defender_rating,
-        hit_roll,
-        damage_roll,
-        forced_hit,
+        combat_equipment_weapon_attack_input(
+            item_id,
+            target_range,
+            attacker_rating,
+            defender_rating,
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll,
+            defence_roll,
+            forced_hit,
+        )?,
     ))
 }
 
@@ -2859,6 +3064,12 @@ pub const fn resolve_combat_possess_resistance_outcome(
     }
 }
 
+/// `combat.md §11` "The draw" / `§9.1`: the inclusive upper bound of the
+/// raw draw behind the shared skewed `1..30` combat roll - "one inclusive
+/// `0..60` draw halved with truncation, with a zero result promoted to
+/// one".
+pub const COMBAT_SKEWED_ROLL_RAW_MAX: u8 = 60;
+
 /// `combat.md §9.1` shared combat roll. One inclusive `0..=60` raw
 /// draw is halved, with results zero and one both promoted to one.
 pub const fn combat_skewed_roll_1_to_30(raw_roll_0_to_60: u8) -> u8 {
@@ -3105,37 +3316,125 @@ pub fn find_combat_actor_at_field_coordinate_skipping(
         .map(|(slot, _)| slot)
 }
 
-/// `catalogs/item-list.md §5.3` shared combat to-hit score bias.
-/// The shared to-hit helper computes the score as
-/// `(attacker - defender + COMBAT_TO_HIT_BIAS) / 2` and compares it
-/// against a uniform random byte. The +30 bias balances the score
-/// so that two equal-rating actors clear the median of `0..=255`.
+/// `combat.md §11` "The score" shared combat to-hit bias:
+/// `S = truncate_toward_zero((D - A + 30) / 2)`.
 pub const COMBAT_TO_HIT_BIAS: i16 = 30;
 
+/// `combat.md §11` "The score": "With `A` the attacker's rating and `D`
+/// the defender's rating, `S = truncate_toward_zero((D - A + 30) / 2)`.
+/// **The defender's rating is the added term and the attacker's is the
+/// subtracted one** - the same way round as the shared spell-resistance
+/// predicate in Section 9". Rust's signed division truncates toward zero,
+/// which is the published rounding.
+///
+/// *(`RETRACTIONS.md` R334 withdraws the earlier `(attacker - defender +
+/// 30) / 2`: "The operands are the other way round". The neighbouring
+/// combat-weight sentence survives and is confirmed.)*
 pub const fn combat_to_hit_score(attacker_rating: u8, defender_rating: u8) -> i16 {
-    ((attacker_rating as i16 - defender_rating as i16) + COMBAT_TO_HIT_BIAS) / 2
+    ((defender_rating as i16 - attacker_rating as i16) + COMBAT_TO_HIT_BIAS) / 2
 }
 
-/// **Held pending a spec answer - do not flip this comparison alone.**
-///
-/// `combat.md §11`, restated in `RETRACTIONS.md` R232, publishes the
-/// opposite direction to the one below: the hit is accepted when the
-/// drawn value is at or above the score, so the score reads as a
-/// difficulty number. The same retraction publishes, in the same breath,
-/// that "the attacker/defender labelling of the two operands feeding the
-/// score is now suspect and was not re-derived", and that the draw's own
-/// range is unverified.
-///
-/// Adopting the published direction while keeping this engine's own
-/// unverified operand selection was tried and backed out: with the
-/// attacker's rating in the minuend it makes a *low* rating the accurate
-/// one, so Strength, armour and every monster's attack cap all work
-/// backwards. Half of R232 is a worse model than neither half, so the
-/// engine keeps its existing comparison until the operand pair is
-/// published; the play-test's under-damaging hostile melee (defect 7) is
-/// blocked on that answer, filed as `cleak/u5-spec#183`.
-pub const fn resolve_combat_hit(attacker_rating: u8, defender_rating: u8, roll: u8) -> bool {
-    combat_to_hit_score(attacker_rating, defender_rating) > roll as i16
+/// `combat.md §11` "The comparison": "**The hit is accepted when `R >=
+/// S`.** The score is a difficulty number: a larger score is a *worse*
+/// chance to hit." The two boundaries fall out of the arithmetic rather
+/// than any clamp - "a score of `1` or less always hits, and a score of
+/// `31` or more always misses" - because `R` lives in `1..=30`.
+pub const fn combat_to_hit_accepts(score: i16, roll_1_to_30: u8) -> bool {
+    roll_1_to_30 as i16 >= score
+}
+
+/// `combat.md §11` "The draw": "One standard skewed combat roll `R` in
+/// `1..30` - the same shared helper used by the drop gate (Section 6.3),
+/// the resistance predicate and the Tremor/Poison Wind gate". Callers
+/// pass the underlying inclusive `0..=60` draw so the PRNG shape stays
+/// the published one; `RETRACTIONS.md` R335 warns that "an engine that
+/// 'fixes' the draw to be uniform over `1..30` is close but not
+/// parity-exact".
+pub const fn resolve_combat_hit_from_raw_roll(
+    attacker_rating: u8,
+    defender_rating: u8,
+    hit_raw_roll_0_to_60: u8,
+) -> bool {
+    combat_to_hit_accepts(
+        combat_to_hit_score(attacker_rating, defender_rating),
+        combat_skewed_roll_1_to_30(hit_raw_roll_0_to_60),
+    )
+}
+
+/// `combat.md §11` strength arm: "Five equipment ids select Strength
+/// instead of the attacker's combat weight ... **Spiked Helm, Spiked
+/// Shield, Club, Mace and 2H Hammer** - the catalog's own names for ids
+/// 3, 6, 18, 24 and 31: the blunt/impact family."
+pub const COMBAT_TO_HIT_STRENGTH_ARM_ITEM_IDS: [usize; 5] = [3, 6, 18, 24, 31];
+
+/// `combat.md §11`: "Every other readied item, and bare hands, leaves the
+/// attacker term as Dexterity, so on the shipped starting weapon a
+/// character's Strength does not affect accuracy at all."
+pub const fn combat_to_hit_item_selects_strength(item_id: usize) -> bool {
+    let mut index = 0;
+    while index < COMBAT_TO_HIT_STRENGTH_ARM_ITEM_IDS.len() {
+        if COMBAT_TO_HIT_STRENGTH_ARM_ITEM_IDS[index] == item_id {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+/// `combat.md §11` rating selector, party attacker arm: "party member
+/// attacking with one of the five strength-arm items | the character's
+/// **Strength**"; "party member with any other readied item, or
+/// bare-handed | its own **combat weight**". A bare-handed attempt has no
+/// item id, so it takes the combat-weight arm.
+pub const fn combat_party_attacker_rating(
+    readied_item_id: Option<usize>,
+    strength: u8,
+    combat_weight: u8,
+) -> u8 {
+    match readied_item_id {
+        Some(item_id) if combat_to_hit_item_selects_strength(item_id) => strength,
+        _ => combat_weight,
+    }
+}
+
+/// `combat.md §11` rating selector, monster attacker arm: "monster whose
+/// class carries the `zero-selector stat row` trait | the class **combat
+/// tier**"; "any other monster | its own **combat weight**". §13 (R337):
+/// "an ordinary melee or ranged/effect to-hit reads **neither** of these
+/// bytes for forty-two of the forty-eight classes".
+pub fn combat_monster_attacker_rating(monster_class: u8, combat_weight: u8) -> Option<u8> {
+    let traits = combat_class_traits(monster_class)?;
+    if traits.zero_selector_stat_row {
+        Some(combat_class_stats(monster_class)?.tier)
+    } else {
+        Some(combat_weight)
+    }
+}
+
+/// `combat.md §11` "Boundary: an automatic-driver party attacker has a
+/// fixed score of 15." The neutral selector value the automatic driver
+/// passes "is normalised on the selector's monster arm ... but there is no
+/// matching normalisation on its party arm", so the helper "returns a
+/// stale value which, by the order of its two calls, is precisely the
+/// defender rating it returned a moment earlier. The score therefore
+/// collapses to `(D - D + 30) / 2 = 15`". Published as *probable* for one
+/// route only - the shipped traitor roster identity of §9 - and
+/// deliberately **not** published for the controlled/charmed actors §6.1a
+/// routes through the same driver, so this helper is keyed to that single
+/// identity rather than to the controlled bit.
+pub const COMBAT_AUTOMATIC_DRIVER_PARTY_ATTACKER_SCORE: i16 = 15;
+
+/// `combat.md §11`: the shared to-hit helper with the draw already
+/// reduced to its published `1..=30` band.
+pub const fn resolve_combat_hit(
+    attacker_rating: u8,
+    defender_rating: u8,
+    roll_1_to_30: u8,
+) -> bool {
+    combat_to_hit_accepts(
+        combat_to_hit_score(attacker_rating, defender_rating),
+        roll_1_to_30,
+    )
 }
 
 pub const fn resolve_mass_charm_target_group(normal_group: u8, threshold: u8, roll: u8) -> u8 {

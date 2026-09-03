@@ -4594,7 +4594,7 @@ fn monster_reward_unit_derivation_constants_match_spec() {
         speed_seed: 0,
         endurance: 0,
         defense: 0,
-        attack_cap: 0,
+        attack_value: 0,
         max_hp: hp,
         default_spawn_count: 0,
         default_drop_cap: 0,
@@ -6103,21 +6103,27 @@ fn weapon_range_arena_wide_cap_covers_full_arena_diagonal() {
 
 #[test]
 fn combat_to_hit_bias_matches_spec_formula() {
-    // catalogs/item-list.md §5.3: the shared combat to-hit
-    // helper computes `(attacker - defender + 30) / 2` and
-    // compares it against a uniform random byte. Promote the
-    // +30 bias so combat_to_hit_score does not bake it as a
-    // bare literal. The bias is kept separate from the
-    // JIMMY_CHEST_THRESHOLD_BIAS (also 30) because the two
+    // systems/combat.md Section 11 "The score": the shared to-hit
+    // helper computes `truncate_toward_zero((defender - attacker +
+    // 30) / 2)` and compares it with one skewed `1..30` combat
+    // roll. Promote the +30 bias so combat_to_hit_score does not
+    // bake it as a bare literal. The bias is kept separate from
+    // the JIMMY_CHEST_THRESHOLD_BIAS (also 30) because the two
     // contracts share only the magnitude, not the meaning.
+    //
+    // RETRACTIONS.md R334 withdrew this test's former formula
+    // `(attacker - defender + 30) / 2`, and R335 withdrew its
+    // "uniform random byte" draw; the `combat_to_hit_score(60, 50)
+    // == 20` assertion those two lines justified goes with them.
     assert_eq!(COMBAT_TO_HIT_BIAS, 30);
-    // Two equal-rating actors land at the bias / 2 = 15
-    // threshold; combat_hit succeeds against rolls below it.
+    // Two equal-rating actors land at the bias / 2 = 15 score,
+    // which the published table reads as a 50.8 % chance to hit.
     assert_eq!(combat_to_hit_score(50, 50), 15);
     assert_eq!(combat_to_hit_score(0, 0), 15);
-    // Higher attacker raises the score linearly; +20 difference
-    // adds 10 to the score.
-    assert_eq!(combat_to_hit_score(60, 50), 20);
+    // A tougher defender raises the score - and a higher score is
+    // a *worse* chance to hit.
+    assert_eq!(combat_to_hit_score(50, 70), 25);
+    assert_eq!(combat_to_hit_score(70, 50), 5);
 }
 
 #[test]

@@ -1830,6 +1830,16 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
     assert_eq!(&state.npcs[0].schedule[12..16], &[0, 0, 0, 0]);
 
+    // `combat.md` Section 12 (`RETRACTIONS.md` R336): a Guard brings its
+    // class attack value of 30 flat, less the party's inclusive `1..7`
+    // defence draw, so eight of them take a shipped party member apart in
+    // one walk. This regression is about the alarm, the arena and the attack
+    // transcript rather than about surviving a guard, so the seated member
+    // is given the endurance to reach the targeting cursor. (The bump has to
+    // follow combat entry, which reseats the roster.)
+    state.party[0].max_hp = u16::MAX;
+    state.party[0].hp = u16::MAX;
+
     let walk = state
         .ensure_pending_combat_player_turn()
         .expect("guard combat must advance to a player-controlled actor");
