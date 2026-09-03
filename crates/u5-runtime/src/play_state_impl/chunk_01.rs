@@ -217,7 +217,27 @@ impl PlayState {
         save[SAVE_DAY_OFFSET] = self.clock.day;
         save[SAVE_HOUR_OFFSET] = self.clock.hour;
         save[SAVE_MINUTE_OFFSET] = self.clock.minute;
-        save[SAVE_AMPM_DISPLAY_OFFSET] = self.clock.display_hour();
+        // `formats/saved-gam.md §5`: the byte at `0x02DA` is the per-turn
+        // cleanup's pre-cascade hour snapshot, "used by the time cleanup to
+        // detect hour crossings", and `time.md §2` has it "taken at the start
+        // of every cleanup pass".
+        save[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET] = self.cleanup_previous_hour;
+        // `SAVE_AMPM_DISPLAY_OFFSET` (`0x02DE`) is deliberately NOT written
+        // here. `time.md §2` has "a 12-hour display hour, recomputed whenever
+        // the hour changes", and `time.md §11` tabulates `0x02DE` as the
+        // "twelve-hour display value recomputed on hour changes" — but the same
+        // section settles what a save writer should do with it: "Only `0x02CE`,
+        // `0x02D7`, `0x02D8`, `0x02D9`, and `0x02DB` are the canonical calendar
+        // fields. The derived and adjacent bytes are still persistent engine
+        // state, so compatibility implementations should round-trip them rather
+        // than regenerating the whole span from the calendar alone." `0x02DE` is
+        // a derived byte, so it round-trips out of the save template instead of
+        // being regenerated from the live clock. The DOS build agrees: driving
+        // the original from a save whose byte is zero and saving again leaves it
+        // zero after no turns, after four turns that carried 08:59 to 09:03
+        // across an hour boundary, and after a sixteen-move session. Deriving it
+        // at save time was the only clock byte this engine changed on a
+        // no-action load-and-save.
         write_u16_at(&mut save, SAVE_FOOD_STOCK_OFFSET, self.food);
         write_u16_at(&mut save, SAVE_GOLD_STOCK_OFFSET, self.gold);
         save[SAVE_KEY_STOCK_OFFSET] = self.keys;
@@ -373,8 +393,13 @@ impl PlayState {
                 record + SAVE_CHARACTER_EXPERIENCE_OFFSET,
                 roster_record.experience,
             );
-            save[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] =
-                roster_record.stay_counter.min(INN_STAY_COUNTER_CAP);
+            // `formats/saved-gam.md` §3.1: the per-character month counter is
+            // "capped at 25" by *the time system* when it increments at the
+            // 28-day rollover. Clamping again on write mutates an inherited
+            // byte the engine only read - the shipped seed carries `0xFF`
+            // here - so the raw value round-trips and the cap stays in the
+            // ageing pass that owns it.
+            save[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = roster_record.stay_counter;
             save[record + SAVE_CHARACTER_LEVEL_OFFSET] = member.level;
             let start = record + SAVE_CHARACTER_EQUIPMENT_OFFSET;
             save[start..start + EQUIPMENT_SLOT_COUNT].copy_from_slice(&roster_record.equipment);
@@ -438,7 +463,7 @@ impl PlayState {
             x,
             y,
             z: plane.save_floor(),
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         });
@@ -590,7 +615,7 @@ impl PlayState {
             x,
             y,
             z: options.floor,
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: player_aux1,
             aux3: player_aux3,
         }];
@@ -620,6 +645,7 @@ impl PlayState {
                 }
                 tracker
             }),
+            door_tracker_closed: false,
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),
             passability,
@@ -627,6 +653,7 @@ impl PlayState {
             world_live_chunks: None,
             clock: options.clock,
             status_pass_previous_hour: options.clock.hour,
+            cleanup_previous_hour: options.cleanup_previous_hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two
@@ -908,7 +935,7 @@ impl PlayState {
             x,
             y,
             z: level as i8,
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }];
@@ -926,6 +953,7 @@ impl PlayState {
             active_objects,
             npcs: Vec::new(),
             door_tracker: None,
+            door_tracker_closed: false,
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),
             passability,
@@ -933,6 +961,7 @@ impl PlayState {
             world_live_chunks: None,
             clock: options.clock,
             status_pass_previous_hour: options.clock.hour,
+            cleanup_previous_hour: options.cleanup_previous_hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two
@@ -1205,7 +1234,7 @@ impl PlayState {
             x,
             y,
             z: plane.save_floor(),
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }];
@@ -1259,6 +1288,7 @@ impl PlayState {
             active_objects,
             npcs: Vec::new(),
             door_tracker: None,
+            door_tracker_closed: false,
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),
             passability,
@@ -1266,6 +1296,7 @@ impl PlayState {
             world_live_chunks,
             clock: options.clock,
             status_pass_previous_hour: options.clock.hour,
+            cleanup_previous_hour: options.cleanup_previous_hour,
             dungeon_loop_minute_charged: false,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two

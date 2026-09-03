@@ -2003,6 +2003,7 @@ impl PlayState {
             shrine_ruin_flags: self.shrine_ruin_flags,
             moral_standing: self.moral_standing,
             toll_progress: self.toll_progress,
+            cleanup_previous_hour: self.cleanup_previous_hour,
             // `overworld.md §9.1` (spec HEAD c00bf63): the
             // gate-presence counter survives scene changes.
             natural_moongate_counter: self.natural_moongate_counter,

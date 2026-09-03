@@ -971,6 +971,7 @@ mod tests {
     include!("tests_inline/audio_sea_and_refusal.rs");
     include!("tests_inline/recovered_chunk_17.rs");
     include!("tests_inline/npc_schedules_conformance.rs");
+    include!("tests_inline/save_fidelity.rs");
     include!("tests_inline/spec_conformance_chunk_07.rs");
     include!("tests_inline/combat_frame_conformance.rs");
 }

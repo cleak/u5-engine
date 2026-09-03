@@ -11,6 +11,7 @@ fn world_load_from_save_applies_transport_marker_to_player_slot() {
     };
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
+        cleanup_previous_hour: 0,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),
@@ -1247,6 +1248,7 @@ fn retired_location_entry_y_table_does_not_override_fixed_entry() {
     fs::write(dir.join(LOCATION_ENTRY_Y_TABLE_FILE), "CASTLE:0 7\n").unwrap();
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
+        cleanup_previous_hour: 0,
         target: PlayTarget::Town(scene),
         floor: 0,
         start: None,

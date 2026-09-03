@@ -2441,6 +2441,10 @@ impl PlayState {
         self.dungeon_loop_minute_charged = true;
         let previous_day = self.clock.day;
         let previous_hour = self.clock.hour;
+        // `time.md §2`: "A pre-cascade snapshot of the hour, taken at the
+        // start of every cleanup pass." `formats/saved-gam.md §5` persists it
+        // at `0x02DA`.
+        self.cleanup_previous_hour = previous_hour;
         self.clock.advance_minutes(effective_minutes);
         if self.clock.day != previous_day {
             self.reroll_shadowlord_hideouts();
@@ -2521,6 +2525,10 @@ impl PlayState {
         }
         let previous_day = self.clock.day;
         let previous_hour = self.clock.hour;
+        // `time.md §2`: "A pre-cascade snapshot of the hour, taken at the
+        // start of every cleanup pass." `formats/saved-gam.md §5` persists it
+        // at `0x02DA`.
+        self.cleanup_previous_hour = previous_hour;
         self.clock.advance_minutes(effective_minutes);
         if self.clock.day != previous_day {
             self.reroll_shadowlord_hideouts();

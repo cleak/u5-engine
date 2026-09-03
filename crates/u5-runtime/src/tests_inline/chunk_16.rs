@@ -44,7 +44,7 @@
                 x: 4,
                 y: 5,
                 z: WorldPlane::Underworld.save_floor(),
-                phase: STEADY_PHASE,
+                phase: PLAYER_ACTIVE_OBJECT_PHASE,
                 aux1: 0,
                 aux3: 0,
             }]

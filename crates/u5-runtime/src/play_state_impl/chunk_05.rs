@@ -483,6 +483,7 @@ impl PlayState {
 
     pub fn clear_open_town_door_state(&mut self) {
         self.door_tracker = None;
+        self.door_tracker_closed = false;
         self.opened_town_doors.clear();
         self.revealed_town_secret_doors.clear();
     }
@@ -496,6 +497,7 @@ impl PlayState {
 
     pub fn clear_town_floor_reload_door_state(&mut self) {
         self.door_tracker = None;
+        self.door_tracker_closed = false;
         let revealed = self.revealed_town_secret_doors.clone();
         self.opened_town_doors
             .retain(|entry| revealed.contains(entry));

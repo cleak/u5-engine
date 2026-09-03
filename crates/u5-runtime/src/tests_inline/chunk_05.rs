@@ -2285,7 +2285,18 @@ fn town_fire_source_tile_guard_mismatch_refuses_after_pre_search_door_tick() {
     assert_eq!(state.message, "What?");
     assert_eq!(state.turn, 0);
     assert_eq!(state.grid[32 + 3], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
-    assert_eq!(state.door_tracker, None);
+    // The auto-close fired; the original keeps the four-byte block
+    // resident afterwards rather than zeroing it.
+    assert_eq!(
+        state.door_tracker,
+        Some(DoorTracker {
+            previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
+            x: 3,
+            y: 1,
+            turns_remaining: 0,
+        })
+    );
+    assert!(state.door_tracker_closed);
     let _ = fs::remove_dir_all(dir);
 }
 

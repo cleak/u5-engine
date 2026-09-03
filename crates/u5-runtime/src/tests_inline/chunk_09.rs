@@ -680,6 +680,7 @@ fn world_load_from_save_uses_live_active_object_table() {
     fs::write(dir.join("UNDER.OOL"), under).unwrap();
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
+        cleanup_previous_hour: 0,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),
@@ -768,7 +769,7 @@ fn world_load_from_save_uses_live_active_object_table() {
                 x: 10,
                 y: 20,
                 z: -1,
-                phase: STEADY_PHASE,
+                phase: PLAYER_ACTIVE_OBJECT_PHASE,
                 aux1: 0,
                 aux3: 0,
             },
@@ -792,6 +793,7 @@ fn world_load_reports_current_wind_status_through_the_banner_not_the_message() {
     let dir = debug_game_dir();
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
+        cleanup_previous_hour: 0,
         target: PlayTarget::World(WorldPlane::Underworld),
         floor: -1,
         start: Some((10, 20)),

@@ -15,17 +15,28 @@ impl PlayState {
         if tracker.previous_tile == 0 {
             return;
         }
-        tracker.turns_remaining = tracker.turns_remaining.saturating_sub(1);
-        if tracker.turns_remaining == 0 {
+        // `doors-and-z-transitions.md §5`: "Each turn that consumes a turn
+        // decrements the countdown; when it hits zero the engine writes the
+        // previous-tile byte back to the saved cell and the door silently
+        // re-closes."
+        //
+        // Runtime observation, spec silent on what happens to the block
+        // afterwards: the DOS build does not clear it. A session that opened
+        // one door and then took fourteen turns saved `0x03A9..0x03AC` as
+        // `B8 0F 13 F6` — previous tile, X and Y all still present and the
+        // countdown at `4 - 14 = -10` — so the counter keeps running past
+        // zero and only the one crossing closes the door. Zeroing the block
+        // on close was this engine's only divergence in those four bytes.
+        tracker.turns_remaining = tracker.turns_remaining.wrapping_sub(1);
+        if tracker.turns_remaining == 0 && !self.door_tracker_closed {
             self.grid[tracker.y * 32 + tracker.x] = tracker.previous_tile;
             if let Area::Town { scene, floor } = self.area {
                 self.forget_open_town_door(scene, floor, tracker.x, tracker.y);
             }
-            self.door_tracker = None;
+            self.door_tracker_closed = true;
             self.mark_visibility_dirty();
-        } else {
-            self.door_tracker = Some(tracker);
         }
+        self.door_tracker = Some(tracker);
     }
 
     pub fn sync_player_object(&mut self) {
@@ -45,7 +56,7 @@ impl PlayState {
             x: self.player.x,
             y: self.player.y,
             z,
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1,
             aux3,
         };

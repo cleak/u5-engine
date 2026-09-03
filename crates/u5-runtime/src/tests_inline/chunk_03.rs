@@ -144,7 +144,12 @@ fn save_game_command_writes_supported_saved_gam_and_stages_saved_ool_mirrors() {
     assert_eq!(saved[SAVE_DAY_OFFSET], 28);
     assert_eq!(saved[SAVE_HOUR_OFFSET], 18);
     assert_eq!(saved[SAVE_MINUTE_OFFSET], 45);
-    assert_eq!(saved[SAVE_AMPM_DISPLAY_OFFSET], 6);
+    // Removed: this pinned the save writer deriving the twelve-hour
+    // display byte at `0x02DE` from the live clock. The DOS build never
+    // writes that byte - it stayed zero across a no-turn save and across
+    // four turns that crossed an hour - so the engine round-trips it
+    // instead. Covered by
+    // `save_round_trips_the_twelve_hour_display_byte_instead_of_deriving_it`.
     assert_eq!(u16_at(&saved, SAVE_FOOD_STOCK_OFFSET), 1234);
     assert_eq!(u16_at(&saved, SAVE_GOLD_STOCK_OFFSET), 9876);
     assert_eq!(saved[SAVE_KEY_STOCK_OFFSET], 7);
@@ -312,10 +317,10 @@ fn save_game_command_writes_supported_saved_gam_and_stages_saved_ool_mirrors() {
         u16_at(&saved, second + SAVE_CHARACTER_EXPERIENCE_OFFSET),
         750
     );
-    assert_eq!(
-        saved[second + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
-        INN_STAY_COUNTER_CAP
-    );
+    // `formats/saved-gam.md` §3.1: the 28-day rollover caps the month
+    // counter at 25, but the save writer must not re-clamp a value it only
+    // read. `party_stay_counters` was seeded with 30, so 30 round-trips.
+    assert_eq!(saved[second + SAVE_CHARACTER_STAY_COUNTER_OFFSET], 30);
     assert_eq!(saved[second + SAVE_CHARACTER_LEVEL_OFFSET], 4);
     assert_eq!(
         saved[SAVE_ACTIVE_OBJECTS_OFFSET],
@@ -443,7 +448,7 @@ fn save_game_command_persists_pending_shipwright_delivery_from_town_return_world
             x: 12,
             y: 21,
             z: WorldPlane::Britannia.save_floor(),
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }],
@@ -505,7 +510,7 @@ fn save_game_command_persists_pending_skiff_delivery_from_town_return_world() {
         x: 81,
         y: 106,
         z: WorldPlane::Britannia.save_floor(),
-        phase: STEADY_PHASE,
+        phase: PLAYER_ACTIVE_OBJECT_PHASE,
         aux1: 0,
         aux3: 0,
     }];
@@ -1192,10 +1197,11 @@ fn save_game_command_writes_inn_registry_view() {
     write_empty_ool_mirrors(&dir);
     let mut state = world_state(open_world_grid(), 10, 20);
     state.inn_registry.push(InnGuestRecord {
+        registry_slot: 1,
         scene_marker: 0x12,
         name: [0; SAVE_CHARACTER_NAME_LEN],
         member: PartyMember {
-            slot: 0,
+            slot: 1,
             class_byte: b'B',
             status: b'P',
             climb_stat: 7,
@@ -1219,10 +1225,14 @@ fn save_game_command_writes_inn_registry_view() {
     let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
     let registry = decode_inn_registry(&saved);
     assert_eq!(registry, state.inn_registry);
+    // The guest was held in registry slot 1 and must be written back there,
+    // not repacked to slot 0: registry slot N overlaps roster records N and
+    // N + 1 (`formats/saved-gam.md` §3.3), so repacking shifts the roster.
     assert_eq!(
         saved[SAVE_INN_REGISTRY_OFFSET + SAVE_CHARACTER_RECORD_LEN],
-        0
+        0x12
     );
+    assert_eq!(saved[SAVE_INN_REGISTRY_OFFSET], 0);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1269,6 +1279,148 @@ fn save_load_maps_public_wind_save_values() {
     assert_eq!(options.wind_save_byte, 3);
 }
 
+/// Stamp the sixteen-record roster of `formats/saved-gam.md` §3.1 the way the
+/// shipped `INIT.GAM` / `SAVED.GAM` images carry it: real names and stats, the
+/// `0xFF` unset sentinel in the per-character month counter at `+0x17`, the
+/// factory defense byte `7` at `+0x18`, the `0xFF` empty-equipment sentinel in
+/// all six slots, and `0xFF` in the opaque padding byte at `+0x1F`.
+///
+/// That padding byte is registry slot `N`'s leading marker in the shifted
+/// inn-guest view of §3.3, which is why the shipped layout is the case that
+/// matters for the registry codec.
+fn write_shipped_roster_layout(bytes: &mut [u8]) {
+    const SEED: [(&[u8], u8, u8, u8, u8, u8, u16, u16, u8); 8] = [
+        (b"BAFF", 0x0b, b'A', 21, 19, 18, 90, 90, 3),
+        (b"Shamino", 0x0b, b'R', 20, 18, 14, 120, 120, 4),
+        (b"Iolo", 0x0b, b'B', 17, 20, 16, 90, 90, 3),
+        (b"Mariah", 0x0c, b'M', 12, 15, 25, 60, 60, 2),
+        (b"Geoffrey", 0x0b, b'F', 25, 16, 10, 150, 150, 5),
+        (b"Jaana", 0x0c, b'D', 14, 16, 22, 90, 90, 3),
+        (b"Julia", 0x0c, b'T', 16, 22, 15, 90, 90, 3),
+        (b"Dupre", 0x0b, b'P', 23, 17, 12, 120, 120, 4),
+    ];
+
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        let (name, gender, class, strength, dexterity, intelligence, hp, max_hp, level) =
+            SEED[slot % SEED.len()];
+        let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+        bytes[record..record + SAVE_CHARACTER_RECORD_LEN].fill(0);
+        bytes[record..record + name.len()].copy_from_slice(name);
+        bytes[record + SAVE_CHARACTER_GENDER_OFFSET] = gender;
+        bytes[record + SAVE_CHARACTER_CLASS_OFFSET] = class;
+        bytes[record + SAVE_CHARACTER_STATUS_OFFSET] = b'G';
+        bytes[record + SAVE_CHARACTER_STR_OFFSET] = strength;
+        bytes[record + SAVE_CHARACTER_DEX_OFFSET] = dexterity;
+        bytes[record + SAVE_CHARACTER_INT_OFFSET] = intelligence;
+        bytes[record + SAVE_CHARACTER_MANA_OFFSET] = intelligence;
+        write_u16_at(bytes, record + SAVE_CHARACTER_HP_OFFSET, hp);
+        write_u16_at(bytes, record + SAVE_CHARACTER_MAX_HP_OFFSET, max_hp);
+        write_u16_at(bytes, record + SAVE_CHARACTER_EXPERIENCE_OFFSET, 100);
+        bytes[record + SAVE_CHARACTER_LEVEL_OFFSET] = level;
+        // `+0x17` unset sentinel, `+0x18` factory defense byte.
+        bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 0xff;
+        bytes[record + SAVE_CHARACTER_RECORD_LEN - 8] = 7;
+        bytes[record + SAVE_CHARACTER_EQUIPMENT_OFFSET
+            ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT]
+            .fill(EQUIPMENT_EMPTY);
+        // `+0x1F`: opaque padding, and registry slot `slot`'s marker byte.
+        bytes[record + SAVE_CHARACTER_RECORD_LEN - 1] = 0xff;
+    }
+    bytes[SAVE_PARTY_SIZE_OFFSET] = 1;
+}
+
+fn shipped_layout_save_dir(template: &[u8]) -> std::path::PathBuf {
+    let dir = debug_game_dir();
+    fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+    dir
+}
+
+fn assert_roster_records_unchanged(saved: &[u8], template: &[u8]) {
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+        assert_eq!(
+            &saved[record..record + SAVE_CHARACTER_RECORD_LEN],
+            &template[record..record + SAVE_CHARACTER_RECORD_LEN],
+            "roster record {slot} was rewritten by a no-action load and save",
+        );
+    }
+}
+
+/// `formats/saved-gam.md` §3.3: the inn-guest registry is "a shifted legacy
+/// view over the save image", so registry slot `N` overlaps roster records `N`
+/// and `N + 1`. A load followed immediately by a save performs no inn action
+/// and must therefore leave all sixteen roster records byte-for-byte intact.
+///
+/// The regression this pins: the decoder read the `0xFF` padding of §3.1 as an
+/// occupied guest marker and the encoder repacked those phantom guests from
+/// slot zero, which shifted every companion record up three slots and deleted
+/// three companions outright on the first save of a shipped game.
+#[test]
+fn no_action_load_and_save_preserves_every_shipped_roster_record() {
+    let mut template = saved_game_seed_bytes(0, 0, 15, 15);
+    write_shipped_roster_layout(&mut template);
+    let dir = shipped_layout_save_dir(&template);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    assert!(
+        options.inn_registry.is_empty(),
+        "the shipped padding byte must not decode as a lodged guest, got {:?}",
+        options.inn_registry,
+    );
+
+    let mut state = PlayState::load_scene(&dir, options).unwrap();
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_roster_records_unchanged(&saved, &template);
+    assert!(decode_inn_registry(&saved).is_empty());
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `systems/shops.md` §8.4: a lodged guest's slot "begins with a scene marker
+/// indicating *which* inn the guest is at", and enumeration "compares each
+/// slot's leading scene marker with the current scene". A guest parked at a
+/// real town scene must survive a load and save at the slot it occupies, and
+/// must not disturb the roster records its shifted view overlaps.
+#[test]
+fn a_lodged_inn_guest_round_trips_at_its_own_registry_slot() {
+    const GUEST_SLOT: usize = 5;
+    const INN_SCENE_MARKER: u8 = 17;
+
+    let mut template = saved_game_seed_bytes(0, 0, 15, 15);
+    write_shipped_roster_layout(&mut template);
+    let marker = SAVE_INN_REGISTRY_OFFSET + GUEST_SLOT * SAVE_CHARACTER_RECORD_LEN;
+    template[marker] = INN_SCENE_MARKER;
+    let dir = shipped_layout_save_dir(&template);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    assert_eq!(options.inn_registry.len(), 1);
+    assert_eq!(options.inn_registry[0].registry_slot, GUEST_SLOT as u8);
+    assert_eq!(options.inn_registry[0].scene_marker, INN_SCENE_MARKER);
+    assert_eq!(
+        inn_guest_indices_for_scene(&options.inn_registry, INN_SCENE_MARKER),
+        vec![0]
+    );
+
+    let mut state = PlayState::load_scene(&dir, options).unwrap();
+    let expected = state.inn_registry.clone();
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(saved[marker], INN_SCENE_MARKER);
+    assert_eq!(decode_inn_registry(&saved), expected);
+    assert_roster_records_unchanged(&saved, &template);
+    let _ = fs::remove_dir_all(dir);
+}
+
 #[test]
 fn inn_registry_decodes_nonzero_scene_markers_from_shifted_save_view() {
     let mut bytes = saved_game_seed_bytes(17, 0, 5, 5);
@@ -1313,6 +1465,7 @@ fn inn_registry_decodes_nonzero_scene_markers_from_shifted_save_view() {
 fn inn_registry_encoding_writes_known_guest_fields_and_clears_markers() {
     let mut bytes = vec![0xff; SAVED_GAM_LEN];
     let guest = InnGuestRecord {
+        registry_slot: 0,
         scene_marker: 0x11,
         name: [0; SAVE_CHARACTER_NAME_LEN],
         member: PartyMember {
@@ -1349,18 +1502,18 @@ fn inn_registry_encoding_writes_known_guest_fields_and_clears_markers() {
         1234
     );
     assert_eq!(bytes[record + SAVE_CHARACTER_LEVEL_OFFSET], 4);
-    assert_eq!(
-        bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
-        INN_STAY_COUNTER_CAP
-    );
+    assert_eq!(bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET], 30);
     assert_eq!(
         &bytes[record + SAVE_CHARACTER_EQUIPMENT_OFFSET
             ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT],
         &[6, 5, 4, 3, 2, 1]
     );
+    // Slot 1 holds no guest. Its marker byte is `0xFF`, which is the opaque
+    // roster padding of `formats/saved-gam.md` §3.1 and matches no inn scene,
+    // so the encoder leaves it exactly as loaded rather than clearing it.
     assert_eq!(
         bytes[SAVE_INN_REGISTRY_OFFSET + SAVE_CHARACTER_RECORD_LEN],
-        0
+        0xff
     );
 }
 
@@ -2509,6 +2662,7 @@ fn town_entry_applies_night_gate_substitution() {
     fs::write(dir.join("CASTLE.DAT"), grid).unwrap();
     let options = PlayOptions {
         animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
+        cleanup_previous_hour: 0,
         target: PlayTarget::Town(scene),
         floor: 0,
         start: Some((0, 0)),
@@ -2746,7 +2900,7 @@ fn movement_accepts_walkable_tiles_and_ticks_animation() {
             x: 2,
             y: 1,
             z: 0,
-            phase: STEADY_PHASE,
+            phase: PLAYER_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }
