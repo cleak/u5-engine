@@ -796,9 +796,17 @@ impl IntroDisplayBuffer {
         background: u8,
     ) {
         let bytes = text.as_bytes();
-        let inner_width = usize::from(window.inner_width());
-        let text_width = bytes.len().min(inner_width);
-        let left_pad = inner_width.saturating_sub(text_width) / 2;
+        // `text-output.md §5`: the centred start column is
+        // `(columns_in_window - characters_in_line) / 2`, and
+        // `columns_in_window` is `bottom_right_x - top_left_x + 1`.
+        // "Implementations must not drop the 'plus one' and centre against
+        // `bottom_right_x - top_left_x`: that agrees on odd-length lines but
+        // shifts every even-length line one whole cell left."
+        // (`RETRACTIONS.md` R344.) `Journey Onward` is fourteen characters -
+        // even - so the budget form put this banner one cell left.
+        let columns_in_window = usize::from(window.column_count());
+        let text_width = bytes.len().min(columns_in_window);
+        let left_pad = columns_in_window.saturating_sub(text_width) / 2;
         let start_cell_x = usize::from(window.top_left_x) + left_pad;
         for (offset, byte) in bytes.iter().take(text_width).enumerate() {
             self.draw_fixed_glyph_cell(

@@ -3135,28 +3135,34 @@ fn combat_monster_attack_result_message(
     ) {
         return Some(format!("{target_name} is poisoned!"));
     }
-    // A monster whose swing misses narrates **nothing**. Measured on the
-    // original in a controlled side-by-side run over twenty keys against
-    // the same save: the message pane shows only monster hits and kills
-    // (`playtest/orig/cbt3/r6.png` `Avatar hit!`, `r13.png`
-    // `Avatar killed!`) and never a monster-side miss line, while the
-    // engine used to narrate every one of them (`Bat missed!`).
+    // A monster-side miss narrates a line. `combat.md §12`: "Against a
+    // **party** defender a negative result short-circuits with the miss
+    // narration; against a **monster** defender it falls through into the
+    // damage-and-status handler below, which clamps it and raises the same
+    // miss flag [...] The two routes are therefore gameplay-identical - a
+    // printed miss and no HP change - and differ only in which code path
+    // reports it." §11's worked Bat-versus-Avatar table says the same of the
+    // zero-or-negative outcome: "0 (negative; narrated as a miss)". A monster
+    // swinging at a party member is the party-defender route, so every
+    // published sentence on the subject asserts that something is printed.
     //
-    // `combat.md` §12 says only that a zero-or-negative result "read[s] as
-    // a miss" and that the handler "narrate[s] the result"; it does not
-    // publish which outcomes print on which side, and the attack-outcome
-    // narration census is still open on `cleak/u5-spec#185`. The
-    // conservative reading of the measurement is that the monster side
-    // prints on damage only, so the miss arm falls through to `None`.
-    //
-    // *runtime observation, spec open* - the party-side miss line is a
-    // different path (see [`combat_weapon_attack_result_message`]) and is
-    // deliberately left alone.
+    // *Unresolved, do not suppress on observation alone.* A controlled
+    // twenty-key side-by-side run against the original showed monster hits
+    // and kills in the pane and no monster-side miss line, and an earlier
+    // revision of this function returned `None` here on the strength of that
+    // reading. It was backed out: it contradicts the two published sentences
+    // above, and the attack-outcome narration census - which of hit, miss and
+    // kill prints a line on each side, with exact strings - is explicitly
+    // still open on `cleak/u5-spec#185` ("it will land on this issue as its
+    // own comment, and I am leaving the issue open until it does"). The
+    // exact string below is the engine's own and is not published either.
+    // Settle both on that census rather than here.
     if matches!(
         attack.resolution,
         Some(CombatWeaponAttackResolution::Miss { .. })
     ) {
-        return None;
+        let attacker_name = combat_actor_display_name(state, attack.attacker_slot);
+        return Some(format!("{attacker_name} missed!"));
     }
     match attack.damage_application {
         Some(CombatWeaponDamageApplication::Party { damage, .. }) => Some(if damage.killed {

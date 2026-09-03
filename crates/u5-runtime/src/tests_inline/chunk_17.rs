@@ -3214,13 +3214,9 @@ Mixed 1 IL charge; stock is 1.");
             state.combat_actors[8].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
-        // The Daemon's own turn follows and misses. A monster miss
-        // narrates nothing, so the next actor's turn banner - which
-        // "opens with a newline" (`combat.md` 8.1) - follows this
-        // diagnostic directly.
         assert_eq!(
             state.message,
-            "Cause Fear affected 2 combat actor(s).\nAvatar, armed with bare hands:"
+            "Cause Fear affected 2 combat actor(s).\nDaemon missed!\n\nAvatar, armed with bare hands:"
         );
     }
 

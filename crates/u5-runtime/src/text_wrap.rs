@@ -9,7 +9,13 @@
 //! Break bytes (space / LF / CR / NUL) only act as wrap candidates as
 //! described in the spec. NUL stops reading. LF/CR flush immediately and pass
 //! through as a hard newline. Visible bytes append to the assembled buffer.
-//! Words longer than the window overflow per the original behaviour.
+//! Nothing is ever written past `bottom_right_x`. A chunk that fills the
+//! remaining row with no break byte to retreat to is kept whole, preceded
+//! by a line feed if the cursor is not already at the left edge, and
+//! printed from column 0; the next chunk continues on that row where it
+//! stopped, so a word too long for the *remainder* of a row lands whole on
+//! the next one while a word longer than a full row is hard-broken into
+//! successive row-filling pieces (`RETRACTIONS.md` R346, R349).
 
 /// `text-output.md §2` fixed text-window count. The system maintains
 /// exactly four window descriptors; addressing a fifth window is
@@ -429,22 +435,38 @@ impl TextWindowSystem {
         // `text-output.md §5`: the centre branch measures the columns
         // still available on the row *as the printer was entered*.
         let entry_cursor_x = window.cursor_x;
-        let lines = wrap_text(source, width, usize::from(window.cursor_x));
-        let last = lines.len().saturating_sub(1);
-        for (index, line) in lines.into_iter().enumerate() {
+        let chunks = wrap_text_chunks(source, width, usize::from(window.cursor_x));
+        let last = chunks.len().saturating_sub(1);
+        for (index, chunk) in chunks.into_iter().enumerate() {
+            // `text-output.md §6` (`RETRACTIONS.md` R346), the row-filling
+            // arm: the chunk "is kept whole, preceded by a line feed if the
+            // cursor is not already at the left edge, and printed from
+            // column 0; the next chunk continues on that row where it
+            // stopped." Nothing is ever written past `bottom_right_x`, so
+            // the truncated piece is never printed in place on the row it
+            // overflowed. R349's worked case - eight columns left of
+            // sixteen and `Underworld!` - lands whole on the next row by
+            // this mechanism rather than by moving the word down.
+            if chunk.row_filling && self.active_window().cursor_x != 0 {
+                self.emit_byte(b'\n');
+            }
             if self.active_window().centre_enabled() {
                 let start = text_window_centred_start_column_from_cursor(
                     self.active_window().inner_width(),
                     entry_cursor_x,
-                    line.len().min(u8::MAX as usize) as u8,
+                    chunk.text.len().min(u8::MAX as usize) as u8,
                 );
                 self.set_active_cursor(start, self.active_window().cursor_y);
             }
             let before_y = self.active_window().cursor_y;
-            for byte in line.bytes() {
+            for byte in chunk.text.bytes() {
                 self.emit_byte(byte);
             }
-            if index != last && self.active_window().cursor_y == before_y {
+            // A row-filling chunk does **not** end its row: "the following
+            // chunk then continues on that same row at the column where the
+            // first one stopped" (§6). Only a chunk that ended on a break
+            // byte or on a soft wrap gets the row advance.
+            if index != last && !chunk.row_filling && self.active_window().cursor_y == before_y {
                 self.emit_byte(b'\r');
                 self.emit_byte(b'\n');
             }
@@ -787,13 +809,50 @@ pub struct WrappedLine<'a> {
     pub hard_break: bool,
 }
 
+/// One chunk the wrap collector gathered, with the flag
+/// `systems/text-output.md` Section 6 needs in order to place it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WrapChunk {
+    /// The characters of the chunk, in order, without the trailing space or
+    /// hard-break byte that ended it.
+    pub text: String,
+    /// True when this chunk filled the row the collector was measuring
+    /// against and carried **no** break byte to retreat to.
+    ///
+    /// `text-output.md §6` (`RETRACTIONS.md` R346): "When the collected chunk
+    /// fills the remaining row and contains no break byte to retreat to, the
+    /// printer keeps the whole chunk, first emits a line feed if the cursor
+    /// is not already at the window's left edge, and prints the chunk from
+    /// column 0 of the fresh row; the following chunk then continues on that
+    /// same row at the column where the first one stopped."
+    pub row_filling: bool,
+}
+
 /// Wrap `source` into lines that fit `window_width`, treating
 /// `cursor_x_at_entry` as text already present on the first row. Stops at
 /// the first NUL byte. The returned lines do not include the trailing space
 /// or hard-break byte.
+///
+/// This is the text-only view of [`wrap_text_chunks`]; a caller that has to
+/// place the chunks on the screen needs the chunk form, because the
+/// row-filling arm of Section 6 does not start a new row after itself.
 pub fn wrap_text(source: &str, window_width: usize, cursor_x_at_entry: usize) -> Vec<String> {
+    wrap_text_chunks(source, window_width, cursor_x_at_entry)
+        .into_iter()
+        .map(|chunk| chunk.text)
+        .collect()
+}
+
+/// The wrap collector of `text-output.md` Section 6, returning each chunk
+/// together with whether it took the row-filling arm of `RETRACTIONS.md`
+/// R346.
+pub fn wrap_text_chunks(
+    source: &str,
+    window_width: usize,
+    cursor_x_at_entry: usize,
+) -> Vec<WrapChunk> {
     let bytes = source.as_bytes();
-    let mut lines: Vec<String> = Vec::new();
+    let mut lines: Vec<WrapChunk> = Vec::new();
     let mut buffer = String::new();
     let mut last_break: Option<usize> = None;
     let first_line_width = window_width.saturating_sub(cursor_x_at_entry);
@@ -820,7 +879,10 @@ pub fn wrap_text(source: &str, window_width: usize, cursor_x_at_entry: usize) ->
             }
             0x0a | 0x0d => {
                 let trimmed = buffer.trim_end_matches(' ').to_string();
-                lines.push(trimmed);
+                lines.push(WrapChunk {
+                    text: trimmed,
+                    row_filling: false,
+                });
                 emitted_any = true;
                 buffer.clear();
                 last_break = None;
@@ -838,17 +900,36 @@ pub fn wrap_text(source: &str, window_width: usize, cursor_x_at_entry: usize) ->
                         Some(break_at) => {
                             let surplus = buffer.split_off(break_at);
                             let trimmed = buffer.trim_end_matches(' ').to_string();
-                            lines.push(trimmed);
+                            lines.push(WrapChunk {
+                                text: trimmed,
+                                row_filling: false,
+                            });
                             emitted_any = true;
                             buffer = surplus.trim_start_matches(' ').to_string();
                             last_break = None;
                         }
                         None => {
-                            // A single word wider than the window. §6 calls
-                            // this degenerate and allows a stricter
-                            // behaviour than the original overflow: emit the
-                            // filled line as-is and restart.
-                            lines.push(buffer.clone());
+                            // The row-filling arm. `text-output.md §6`
+                            // (`RETRACTIONS.md` R346): "A word longer than
+                            // the row is **not** allowed to overflow the
+                            // right edge. The collector never gathers more
+                            // characters than the row can still hold" - so
+                            // the chunk is exactly the buffer as collected -
+                            // and the printer "keeps the whole chunk, first
+                            // emits a line feed if the cursor is not already
+                            // at the window's left edge, and prints the chunk
+                            // from column 0 of the fresh row; the following
+                            // chunk then continues on that same row at the
+                            // column where the first one stopped."
+                            //
+                            // The chunk text is the same either way; the flag
+                            // is what [`TextWindowSystem::print_wrapped_string`]
+                            // needs to place it, because this arm does *not*
+                            // start a new row after itself.
+                            lines.push(WrapChunk {
+                                text: buffer.clone(),
+                                row_filling: true,
+                            });
                             emitted_any = true;
                             buffer.clear();
                         }
@@ -864,7 +945,10 @@ pub fn wrap_text(source: &str, window_width: usize, cursor_x_at_entry: usize) ->
     }
     if !buffer.is_empty() {
         let trimmed = buffer.trim_end_matches(' ').to_string();
-        lines.push(trimmed);
+        lines.push(WrapChunk {
+            text: trimmed,
+            row_filling: false,
+        });
     }
     lines
 }

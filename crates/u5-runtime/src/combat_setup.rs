@@ -1326,19 +1326,34 @@ impl PlayState {
         // surface-only gate below is the conservative stand-in until the spec
         // settles it; it is deliberately left untested so that adopting the
         // other reading is a one-line change, not a test rewrite.
-        let permutation = matches!(self.area, Area::World { .. })
-            .then(|| self.terrain_combat_placement_slot_permutation());
+        let surface_camp_ambush = matches!(self.area, Area::World { .. });
+        let permutation =
+            surface_camp_ambush.then(|| self.terrain_combat_placement_slot_permutation());
 
         // `combat.md` §4.1: the conflict banner "is **unconditional**. The
         // test that precedes it cannot fail, so every terrain-setup entry
-        // prints it." The camp ambush is the one entry that reaches terrain
-        // setup without passing through the world-side entry step, so it
-        // "gets the conflict banner but **no** group name".
+        // prints it." The published exception list for the group name names
+        // exactly one entry that reaches terrain setup without the
+        // world-side entry step - "the **surface** camp ambush, which
+        // reaches terrain setup through its command-overlay wrapper" - and
+        // that entry "gets the conflict banner but **no** group name".
+        //
+        // Gated on the same surface test as the shuffle above, and for the
+        // same reason: §4.1 and §5 both say *surface* camp ambush, and §5
+        // puts dungeon fights on the room-combat setup helper, "a separate
+        // mechanism on a different setup target [that is] outside this
+        // contract". Nothing published says a dungeon rest interruption
+        // reaches terrain setup and prints this banner, so it is not printed
+        // there - see the open question recorded on the shuffle gate, which
+        // this shares verbatim. Left untested underground for the same
+        // reason.
         //
         // Ordered here rather than earlier because §5.3 step 3a puts the
         // camp route's fifteen shuffle draws "after seating and before the
         // banner".
-        self.emit_centered_message_line(combat_banner_line());
+        if surface_camp_ambush {
+            self.emit_centered_message_line(combat_banner_line());
+        }
 
         let requested_count =
             self.roll_terrain_combat_setup_count(stats.default_spawn_count, false);
@@ -1584,7 +1599,6 @@ impl PlayState {
             self.emit_centered_message_line(group_name);
             self.push_explicit_blank_message_entry();
         }
-        self.emit_centered_message_line(combat_banner_line());
 
         // `encounters.md §4` Shadow Lord branch, in the published order:
         //
@@ -1595,13 +1609,23 @@ impl PlayState {
         // "The order matters for a transcript: the line completes before the
         // sting starts, and the flag clears last."
         //
-        // The line is published as following "the class banner that names the
-        // opponent". `combat.md §5` step 4 groups that encounter-name print
-        // with the conflict banner and the arena-record load; this engine
-        // emits only the conflict banner of that group, so the sceptre line
-        // follows the banner it does print. Nothing between them consumes a
-        // PRNG draw (`combat.md §5.3` step 4: "None"), so the placement of
-        // this block ahead of the count roll is draw-neutral.
+        // It goes *before* the conflict banner. `combat.md §4.1`'s full entry
+        // transcript is echo / blank / group name / blank / `*** CONFLICT ***`
+        // "with `The Sceptre is reclaimed!` inserted after the group name on
+        // the Shadow Lord branch when the sceptre is held", and
+        // `encounters.md §4` puts the branch "entirely inside encounter setup,
+        // before the combat scene is entered" while the conflict banner is
+        // printed by terrain setup inside the framer. Nothing between the two
+        // consumes a PRNG draw (`combat.md §5.3` step 4: "None"), so the
+        // placement is draw-neutral.
+        //
+        // *Hedge.* Whether the group name's own trailing blank row falls above
+        // or below this line is not published: §4.1's banner-one emission
+        // table ends the group-name stage with "two line feeds ... leaves one
+        // blank row below it", which puts the blank first as written here,
+        // while §4.1's transcript table numbers the blank as its own row 4 and
+        // says only "after the group name". `encounters.md §4`'s "no leading
+        // blank line" describes the stored string, not the row above it.
         //
         // `audio.md §8.4.1`: entering this fight while carrying the sceptre
         // "is the only caller of this recipe".
@@ -1610,6 +1634,8 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::SceptreReclaimed);
             self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 0;
         }
+
+        self.emit_centered_message_line(combat_banner_line());
 
         // Step 4: choose the monster count. The identity-gap classes
         // carry all-zero stat rows; terrain setup still creates the lead

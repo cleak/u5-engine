@@ -95,18 +95,20 @@ fn the_whirlpool_banner_costs_one_leading_blank_row() {
 
 #[test]
 fn the_dungeon_exit_renders_blank_verb_plane_blank() {
-    // `doors-and-z-transitions.md §12.1`: the two prints compose to a blank
-    // row, `Exit to`, the plane name, and a trailing blank row. "The break
-    // between `Exit to` and the plane name is **not** in the data": the first
-    // string leaves the cursor at column eight, and with eight of sixteen
-    // columns left the printer "collects the eight characters that still
-    // fit, finds no break byte, keeps that chunk, emits a line feed because
-    // the cursor is not at the left edge, prints the chunk from column 0,
-    // and the **next** chunk continues on the same row at column eight."
+    // `doors-and-z-transitions.md §12.1` publishes these rendered rows: a
+    // blank row, `Exit to`, the plane name, and a trailing blank row.
     //
-    // *(The former "restarts the word at column zero" mechanism is
-    // withdrawn by `RETRACTIONS.md` R349 - identical pixels for this
-    // string, different mechanism.)*
+    // Only the rows are pinned here. In the original the break before the
+    // plane name is R349's hard-chunk boundary - the second print starts
+    // with the cursor at column eight and "the printer collects the eight
+    // characters that still fit, finds no break byte, keeps that chunk,
+    // emits a line feed because the cursor is not at the left edge, prints
+    // the chunk from column 0, and the **next** chunk continues on the same
+    // row at column eight." This engine concatenates the two prints, so its
+    // break is the interior space instead; §12.1 states the rendered rows
+    // are the same either way. The mechanism is pinned cell by cell against
+    // the printer itself - this helper is line-oriented and cannot see a
+    // column-eight continuation.
     assert_eq!(
         rendered_rows(DUNGEON_EXIT_TO_UNDERWORLD_NARRATION),
         vec![

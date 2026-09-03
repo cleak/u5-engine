@@ -1865,16 +1865,12 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
     assert_eq!(result_lines.first(), Some(&"East"));
-    // A monster whose swing misses narrates nothing (measured on the
-    // original; see `combat_monster_attack_result_message`), so the guard's
-    // turn may contribute no line at all - the former `len() > 1` floor
-    // pinned the withdrawn `Guard missed!` line.
+    assert!(result_lines.len() > 1);
     assert!(
         result_lines
             .iter()
             .skip(1)
-            .all(|line| *line == "Avatar hit!" || *line == "Avatar killed!"),
-        "unexpected combat result lines: {result_lines:?}"
+            .all(|line| *line == "Guard missed!" || *line == "Avatar hit!")
     );
     assert!(!state
         .message_entries()

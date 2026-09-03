@@ -254,15 +254,6 @@ impl PlayState {
         } else {
             camp_messages.success
         };
-        if let Some(monster) = ambush_monster {
-            let z = match self.area {
-                Area::World { plane } => plane.save_floor(),
-                Area::Dungeon { level, .. } => level as i8,
-                Area::Town { floor, .. } => floor,
-            };
-            let note = self.enter_sleep_ambush_combat(monster, z, game_dir)?;
-            self.message.push_str(&format!(" Ambushed! {note}."));
-        }
         if let Some(report) = last_world_damage {
             self.message.push_str(&format!(
                 " Underfoot world damage triggered {world_damage_ticks} tick(s); last {report}."
@@ -288,6 +279,40 @@ impl PlayState {
             let event_message = self.resolve_lord_british_camp_event(Some(game_dir))?;
             self.message.push(' ');
             self.message.push_str(&event_message);
+        }
+        if let Some(monster) = ambush_monster {
+            let z = match self.area {
+                Area::World { plane } => plane.save_floor(),
+                Area::Dungeon { level, .. } => level as i8,
+                Area::Town { floor, .. } => floor,
+            };
+            // `rest-and-camp.md §6`: "The handler prints the sleep/rest
+            // narration before the interruption test. If the interruption
+            // test fires, it picks the sleep-ambush monster row, prints the
+            // ambush message, restores the rest-local party statuses [...]
+            // and only then hands the selected row to the alternate
+            // rest/camp setup path. A clean implementation should therefore
+            // not wait for ordinary terrain-combat setup to produce the
+            // ambush message."
+            //
+            // So the rest narration and the ambush line are both complete
+            // before setup runs, and the entry's own conflict banner
+            // (`combat.md §4.1`) is the next line printed after them. The
+            // whole ambush entry therefore moved below the message
+            // assembly: the line is closed and handed to the transcript
+            // here, and the banner - which setup writes into the message
+            // slot as well - lands beneath it rather than over it. Nothing
+            // between the old and new call sites consumes a PRNG draw or
+            // reads combat state (the Lord British block above cannot run
+            // on an interrupted camp), so the move is behaviour-neutral
+            // apart from the message ordering it fixes.
+            self.message.push_str(" Ambushed!");
+            let narration = self.message.clone();
+            self.emit_message_line(narration);
+            // Setup's own return value is an engine diagnostic, not a
+            // published line; the slot is left holding the conflict banner,
+            // which is what the original's pane shows on entry.
+            let _entered = self.enter_sleep_ambush_combat(monster, z, game_dir)?;
         }
         Ok(MoveOutcome::Rested)
     }
