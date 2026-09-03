@@ -112,12 +112,24 @@ pub const fn dungeon_field_status_applies(dexterity: u8, roll: u8) -> bool {
     roll >= dexterity
 }
 
+/// `dungeon-mode.md §8` energy-field classification.
+///
+/// The three marker variants `0x88`, `0x89` and `0x8A` react exactly as their
+/// base bytes do — they are rows of the §8.1 post-action table. **`0x8B` is
+/// not.** §8 states the movement-time test "is an exact comparison against
+/// `0x83` and the post-action pass has no `0x8B` arm, so the marked electric
+/// variant is inert on both paths", and §8.1 repeats it as a normative
+/// negative: "the byte therefore triggers nothing on either path, no line and
+/// no effect. ... Do not generalise the other three marker variants'
+/// behaviour onto it." `0x8B` therefore falls into the generic `Energy` band,
+/// which is the §8.1 table's "Any other underfoot byte: nothing" row and
+/// prints and does nothing.
 pub fn dungeon_field_effect(tile: u8) -> Option<DungeonFieldEffect> {
     match tile {
         0x80 | 0x88 => Some(DungeonFieldEffect::Sleep),
         0x81 | 0x89 => Some(DungeonFieldEffect::PoisonGas),
         0x82 | 0x8a => Some(DungeonFieldEffect::Fire),
-        0x83 | 0x8b => Some(DungeonFieldEffect::Electric),
+        0x83 => Some(DungeonFieldEffect::Electric),
         0x84..=0x8f => Some(DungeonFieldEffect::Energy),
         _ => None,
     }
@@ -1576,6 +1588,20 @@ pub const fn dungeon_field_consequence_line(field: DungeonFieldEffect) -> Option
         DungeonFieldEffect::PoisonGas => Some(crate::DUNGEON_POISON_FIELD_LINE),
         DungeonFieldEffect::Fire => Some(crate::DUNGEON_FIRE_FIELD_LINE),
         DungeonFieldEffect::Electric | DungeonFieldEffect::Energy => None,
+    }
+}
+
+/// `dungeon-mode.md` Section 8, chest Search: the detection roll "prints
+/// no-trap, simple-trap, complex-trap, or generic-trap narration", and
+/// Section 8.1 gives the four literals - "**none of which carries a terminal
+/// period**". This maps the tier the chest detection path already computes
+/// onto its published line.
+pub fn dungeon_chest_search_trap_line(detail: &str) -> &'static str {
+    match detail {
+        "no trap" => crate::DUNGEON_SEARCH_NO_TRAP,
+        "simple trap" => crate::DUNGEON_SEARCH_SIMPLE_TRAP,
+        "complex trap" => crate::DUNGEON_SEARCH_COMPLEX_TRAP,
+        _ => crate::DUNGEON_SEARCH_GENERIC_TRAP,
     }
 }
 

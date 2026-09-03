@@ -189,6 +189,25 @@ fn the_published_dungeon_literals_keep_their_exact_punctuation_and_spacing() {
     ] {
         assert!(!tier.trim_end().ends_with('.'), "{tier:?} gained a period");
     }
+    // The dungeon chest Search arm selects among exactly those four by the
+    // tier its detection roll computes (`dungeon-mode.md` Section 8), so pin
+    // the mapping rather than leaving the tier words free to drift.
+    assert_eq!(
+        dungeon_chest_search_trap_line("no trap"),
+        DUNGEON_SEARCH_NO_TRAP
+    );
+    assert_eq!(
+        dungeon_chest_search_trap_line("simple trap"),
+        DUNGEON_SEARCH_SIMPLE_TRAP
+    );
+    assert_eq!(
+        dungeon_chest_search_trap_line("trap"),
+        DUNGEON_SEARCH_GENERIC_TRAP
+    );
+    assert_eq!(
+        dungeon_chest_search_trap_line("complex trap"),
+        DUNGEON_SEARCH_COMPLEX_TRAP
+    );
     // `RETRACTIONS.md` R323: both unlit refusals break after the colon.
     assert_eq!(DUNGEON_LOOK_DARKNESS_REFUSAL, "You see:\ndarkness.\n");
     assert_eq!(DUNGEON_SEARCH_DARKNESS_REFUSAL, "\nYou find:\ndarkness.\n");

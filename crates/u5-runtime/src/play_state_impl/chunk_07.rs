@@ -387,9 +387,14 @@ impl PlayState {
         MoveOutcome::ContainerOpened
     }
 
+    /// `dungeon-mode.md §8` chest Search and §8.1 "Search outcomes": the
+    /// detection roll's tier selects exactly one of the four published
+    /// trap-tier lines, "**none of which carries a terminal period**". They
+    /// are the one outcome line that follows the unconditional `You find:`
+    /// preamble, so this arm prints no narration of its own.
     pub fn search_dungeon_chest(
         &mut self,
-        scene: DungeonScene,
+        _scene: DungeonScene,
         level: u8,
         x: usize,
         y: usize,
@@ -397,10 +402,7 @@ impl PlayState {
     ) -> MoveOutcome {
         let detail = self.dungeon_chest_trap_detail(level, x, y, tile);
         self.advance_turn();
-        self.message = format!(
-            "Searched dungeon chest at ({x}, {y}) on {} level {level}; {detail}.",
-            scene.key()
-        );
+        self.message = dungeon_chest_search_trap_line(detail).to_string();
         MoveOutcome::Searched
     }
 

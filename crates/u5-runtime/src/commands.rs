@@ -896,11 +896,21 @@ pub const DUNGEON_SEARCH_HIDDEN_DOOR: &str = "A hidden door!\n";
 pub const DUNGEON_SEARCH_A_PIT: &str = "A pit!\n";
 pub const DUNGEON_SEARCH_A_BOMB_TRAP: &str = "A bomb trap!\n";
 /// The four trap-tier lines, **none of which carries a terminal period**.
+/// Selected by `dungeon_chest_search_trap_line` from the tier the dungeon
+/// chest Search detection roll computes (`dungeon-mode.md` Section 8).
 pub const DUNGEON_SEARCH_NO_TRAP: &str = "No trap\n";
 pub const DUNGEON_SEARCH_SIMPLE_TRAP: &str = "A simple trap\n";
 pub const DUNGEON_SEARCH_GENERIC_TRAP: &str = "A trap\n";
 pub const DUNGEON_SEARCH_COMPLEX_TRAP: &str = "A complex trap\n";
 
+/// **PUBLISHED, UNWIRED.** The seven literals below are transcribed from the
+/// spec and pinned by the conformance test, but no handler reads them yet:
+/// the dungeon fountain drink path still renders this engine's own diagnostic
+/// prose. They are kept as the published record of the text, deliberately and
+/// visibly ahead of the wiring - see the convention note at
+/// [`DUNGEON_KLIMB_PROMPT_BOTH`]. Nothing here may be read as a claim that
+/// the engine already prints them.
+///
 /// `dungeon-mode.md §8.1` fountain drink flow. The prompt blocks until `Y` or
 /// `N`; the accepted answer carries **two spaces** after the period.
 pub const DUNGEON_FOUNTAIN_DRINK_PROMPT: &str = "Will you drink?\n";
@@ -911,6 +921,19 @@ pub const DUNGEON_FOUNTAIN_HEALED: &str = "Healed!\n";
 pub const DUNGEON_FOUNTAIN_POISONED: &str = "Poisoned!\n";
 pub const DUNGEON_FOUNTAIN_BAD_TASTE: &str = "Bad taste.\n";
 
+/// **PUBLISHED, UNWIRED - and the convention note for that marker.** A
+/// literal carrying this marker is transcribed from the spec and pinned by
+/// the conformance test, but has no reader in any handler, because the engine
+/// does not yet reach the situation that prints it. Deleting such a literal
+/// until its handler lands would lose the transcription and invite a later
+/// re-invention of the text, so the constants stay, marked. The project's own
+/// "does anything read this?" check should treat a marked constant as a
+/// known, disclosed gap and an unmarked one with no reader as a defect.
+///
+/// Unwired here: the three prompt forms and the Space answer.
+/// `DUNGEON_KLIMB_WHAT_REFUSAL`, `DUNGEON_KLIMB_UP`, `DUNGEON_KLIMB_DOWN` and
+/// `DUNGEON_KLIMB_FAILED` below **are** wired.
+///
 /// `dungeon-mode.md §8.1` Klimb prompts. `Klimb-U/D-` blocks until up or down
 /// is chosen and Space answers `Pass\n\n`; `Klimb-` is the one-direction form;
 /// `Klimb-\nWith What?\n` is the climb-with-equipment refusal — whether it is
@@ -928,6 +951,12 @@ pub const DUNGEON_KLIMB_DOWN: &str = "Down!\n";
 /// sweep — the same recipe the spell-failure tail uses, not the falls descent.
 pub const DUNGEON_KLIMB_FAILED: &str = "Failed!\n";
 
+/// **PUBLISHED, UNWIRED.** The twelve chest literals below have no reader in
+/// any handler yet - the dungeon Jimmy/Open/Get arms still render this
+/// engine's own prose, and wiring them means also reproducing the resident
+/// dispatcher's `Jimmy-`/`Open-` prefix row. Marked per the convention note
+/// at [`DUNGEON_KLIMB_PROMPT_BOTH`].
+///
 /// `dungeon-mode.md §8.1` chest lines. The resident dispatcher's prefix and
 /// the overlay's line share a row unless the overlay's line begins with a
 /// line feed, so Jimmy's results all start with a bare `\n` and Open's last

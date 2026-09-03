@@ -171,12 +171,26 @@ fn falls_chain_fires_on_a_waterfall_south_of_the_party_and_gates_the_plane() {
     // `(54, 138)` is the *landing* cell the handler tests after its two
     // forced southward steps, and only a landing there writes the plane.
     let dir = debug_game_dir();
+    // The plane write is also an object-table swap: the underworld object
+    // records come from `UNDER.OOL`, so seed one recognisable slot there.
+    let mut under_ool = vec![0; OOL_PLANE_LEN];
+    let slot = OOL_RECORD_LEN;
+    under_ool[slot] = 168;
+    under_ool[slot + 1] = 169;
+    under_ool[slot + 2] = SURFACE_CHASM_X.wrapping_add(1);
+    under_ool[slot + 3] = SURFACE_CHASM_Y;
+    under_ool[slot + 4] = 0xff;
+    under_ool[slot + 6] = 0x22;
+    fs::write(dir.join("UNDER.OOL"), under_ool).unwrap();
+
     let brink_y = usize::from(SURFACE_CHASM_Y) - 2;
     let mut grid = open_world_grid();
     grid[world_cell_index(usize::from(SURFACE_CHASM_X), brink_y + 1)] = WATERFALL_TILE_FIRST;
     let mut state = britannia_state(grid, usize::from(SURFACE_CHASM_X), brink_y);
     state.party[0].hp = 10;
     state.party[0].climb_stat = 0;
+    state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+    state.sync_player_object();
 
     assert_eq!(
         state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
@@ -196,6 +210,25 @@ fn falls_chain_fires_on_a_waterfall_south_of_the_party_and_gates_the_plane() {
     assert_eq!(
         (state.player.x, state.player.y),
         (usize::from(SURFACE_CHASM_X), usize::from(SURFACE_CHASM_Y))
+    );
+    // The plane write carries the party marker's own floor with it and
+    // reloads the object table from `UNDER.OOL`.
+    assert_eq!(
+        state.active_objects[0].z,
+        WorldPlane::Underworld.save_floor()
+    );
+    assert_eq!(
+        state.active_objects[1],
+        ActiveObject {
+            type_byte: 168,
+            tile: 169,
+            x: usize::from(SURFACE_CHASM_X.wrapping_add(1)),
+            y: usize::from(SURFACE_CHASM_Y),
+            z: -1,
+            phase: 0x22,
+            aux1: 0,
+            aux3: 0,
+        }
     );
     // `overworld.md` Section 8.1, the whole player-visible transcript: two
     // lines, in this order, and no per-member narration.

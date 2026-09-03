@@ -1144,8 +1144,11 @@ fn dungeon_fire_and_electric_fields_damage_living_party_members() {
     // per-member damage narration.
     assert_eq!(fire.message, DUNGEON_FIRE_FIELD_LINE);
 
+    // `dungeon-mode.md §8`: the movement-time electric test "is an exact
+    // comparison against `0x83`", so the base byte - not the marker variant -
+    // is the case that reacts.
     let mut electric_grid = open_dungeon_record();
-    electric_grid[dungeon_cell_index(0, 2, 1)] = 0x8b;
+    electric_grid[dungeon_cell_index(0, 2, 1)] = 0x83;
     let mut electric = dungeon_state(electric_grid, 0, 1, 1);
     electric.party[0].hp = 10;
     electric.prng_state = 0;
@@ -1160,6 +1163,38 @@ fn dungeon_fire_and_electric_fields_damage_living_party_members() {
     // `dungeon-mode.md §8.1`: `Ouch!` then `Electric field!`, both printed
     // before the destination-class test.
     assert_eq!(electric.message, DUNGEON_ELECTRIC_FIELD_LINE);
+}
+
+/// `dungeon-mode.md §8.1`: "**Byte `0x8B` - the marked electric variant - is
+/// inert.** The movement-time test is an exact comparison against `0x83` on
+/// the raw cell byte, and the post-action pass has no `0x8B` arm; the byte
+/// therefore triggers nothing on either path, no line and no effect."
+#[test]
+fn dungeon_marked_electric_variant_is_inert_on_contact() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x8b;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.party[0].hp = 10;
+    state.party[0].status = b'G';
+    state.prng_state = 0;
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+    // No line: neither the electric pair nor any post-action field line.
+    assert_eq!(state.message, "");
+    assert!(!state
+        .message_transcript
+        .iter()
+        .any(|entry| entry.text.contains("Ouch!") || entry.text.contains("Electric field!")));
+    // No effect: no damage, no status change, no PRNG draw, and the cell
+    // byte is left exactly as it was.
+    assert_eq!(state.party[0].hp, 10);
+    assert_eq!(state.party[0].status, b'G');
+    assert_eq!(state.prng_state, 0);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x8b);
+    // No displacement reversal either - the step completes onto the cell,
+    // exactly as any other inert underfoot byte.
+    assert_eq!((state.player.x, state.player.y), (2, 1));
 }
 
 #[test]

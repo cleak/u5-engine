@@ -7745,19 +7745,29 @@ fn dungeon_field_base_byte_pairs_effect_with_published_byte() {
         Some(DUNGEON_FIELD_ELECTRIC_BASE)
     );
     assert_eq!(dungeon_field_base_byte(DungeonFieldEffect::Energy), None);
-    // The visit-marker variants round-trip through the existing
-    // classifier: base | 0x08 reclassifies to the same effect.
+    // Three of the four visit-marker variants round-trip through the
+    // existing classifier: base | 0x08 reclassifies to the same effect.
     for base in [
         DUNGEON_FIELD_SLEEP_BASE,
         DUNGEON_FIELD_POISON_GAS_BASE,
         DUNGEON_FIELD_FIRE_BASE,
-        DUNGEON_FIELD_ELECTRIC_BASE,
     ] {
         assert_eq!(
             dungeon_field_effect(base),
             dungeon_field_effect(base | DUNGEON_VISIT_MARKER_BIT)
         );
     }
+    // `dungeon-mode.md §8` / §8.1: the electric marker variant is the
+    // published exception - "`0x8B` alone triggers nothing" - so it must
+    // **not** round-trip onto `Electric`.
+    assert_ne!(
+        dungeon_field_effect(DUNGEON_FIELD_ELECTRIC_BASE),
+        dungeon_field_effect(DUNGEON_FIELD_ELECTRIC_BASE | DUNGEON_VISIT_MARKER_BIT)
+    );
+    assert_eq!(
+        dungeon_field_effect(DUNGEON_FIELD_ELECTRIC_BASE | DUNGEON_VISIT_MARKER_BIT),
+        Some(DungeonFieldEffect::Energy)
+    );
 }
 
 #[test]
@@ -17748,10 +17758,11 @@ fn dungeon_energy_field_marker_variants_keep_subtype_reaction() {
         Some(DungeonFieldEffect::PoisonGas)
     );
     assert_eq!(dungeon_field_effect(0x8a), Some(DungeonFieldEffect::Fire));
-    assert_eq!(
-        dungeon_field_effect(0x8b),
-        Some(DungeonFieldEffect::Electric)
-    );
+    // `dungeon-mode.md §8.1`: "**Byte `0x8B` - the marked electric variant -
+    // is inert.** ... the byte therefore triggers nothing on either path, no
+    // line and no effect." It collapses to the generic energy band, which is
+    // the table's "Any other underfoot byte: nothing" row.
+    assert_eq!(dungeon_field_effect(0x8b), Some(DungeonFieldEffect::Energy));
     assert_eq!(dungeon_field_effect(0x84), Some(DungeonFieldEffect::Energy));
     assert_eq!(dungeon_field_effect(0x8f), Some(DungeonFieldEffect::Energy));
     assert_eq!(dungeon_field_effect(0x90), None);

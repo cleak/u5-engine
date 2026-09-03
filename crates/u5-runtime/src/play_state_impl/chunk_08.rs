@@ -1001,6 +1001,19 @@ impl PlayState {
             // "an impassable destination then adds `Failed!` with the short
             // **rising** sweep ... the same recipe the spell-failure tail
             // uses" - not the falls-style descent.
+            //
+            // **Engine assignment, not a published pairing** - marked rather
+            // than hidden, the same way `dungeon_search_outcome_line` marks
+            // its stalactite/caved-in flavour pairing. Section 8.1 attaches
+            // `Failed!` to "an impassable **destination**", while §13.1 and
+            // `doors-and-z-transitions.md §9` state a climb "never tests the
+            // cell it lands on". No published sentence joins the line to the
+            // predicate used here, which is the *underfoot* cell not offering
+            // the requested direction - the residual case the prompt-form
+            // dispatcher (which answers `Klimb-what?` when the cell offers
+            // neither direction) does not already cover. It is kept because
+            // it is the nearest published refusal for a climb that cannot
+            // apply; it is not evidence about the original's condition.
             self.message = DUNGEON_KLIMB_FAILED.to_string();
             self.emit_sound_effect(SoundEffect::CastFailure);
             return Ok(MoveOutcome::Blocked);

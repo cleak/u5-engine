@@ -1602,7 +1602,17 @@ fn dungeon_secret_door_cell_guard_mismatch_uses_normal_cell_search() {
     assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x4c);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Searched dungeon chest at (2, 1)"));
+    // `dungeon-mode.md §8.1` "Search outcomes": the chest arm prints exactly
+    // one of the four published trap-tier lines, "**none of which carries a
+    // terminal period**", after the unconditional `You find:` preamble - it
+    // no longer narrates coordinates.
+    assert!([
+        DUNGEON_SEARCH_NO_TRAP,
+        DUNGEON_SEARCH_SIMPLE_TRAP,
+        DUNGEON_SEARCH_GENERIC_TRAP,
+        DUNGEON_SEARCH_COMPLEX_TRAP,
+    ]
+    .contains(&state.message.as_str()));
     assert!(!state.message.contains("secret door"));
     let _ = fs::remove_dir_all(dir);
 }
@@ -1626,7 +1636,17 @@ fn dungeon_search_chest_reports_trap_detail_without_consuming_chest() {
     assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x4c);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Searched dungeon chest at (2, 1)"));
+    // `dungeon-mode.md §8.1` "Search outcomes": the chest arm prints exactly
+    // one of the four published trap-tier lines, "**none of which carries a
+    // terminal period**", after the unconditional `You find:` preamble - it
+    // no longer narrates coordinates.
+    assert!([
+        DUNGEON_SEARCH_NO_TRAP,
+        DUNGEON_SEARCH_SIMPLE_TRAP,
+        DUNGEON_SEARCH_GENERIC_TRAP,
+        DUNGEON_SEARCH_COMPLEX_TRAP,
+    ]
+    .contains(&state.message.as_str()));
     assert!(state.message.contains("trap"));
     let _ = fs::remove_dir_all(dir);
 }
@@ -2167,7 +2187,17 @@ fn dungeon_search_chest_ignores_clean_sidecar_grants_and_guard() {
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x4c);
     assert_eq!(state.keys, 1);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Searched dungeon chest"));
+    // `dungeon-mode.md §8.1` "Search outcomes": the chest arm prints exactly
+    // one of the four published trap-tier lines, "**none of which carries a
+    // terminal period**", after the unconditional `You find:` preamble - it
+    // no longer narrates coordinates.
+    assert!([
+        DUNGEON_SEARCH_NO_TRAP,
+        DUNGEON_SEARCH_SIMPLE_TRAP,
+        DUNGEON_SEARCH_GENERIC_TRAP,
+        DUNGEON_SEARCH_COMPLEX_TRAP,
+    ]
+    .contains(&state.message.as_str()));
     assert!(!state.message.contains("authored chest grants"));
 
     let mut mismatch_grid = open_dungeon_record();

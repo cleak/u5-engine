@@ -89,6 +89,15 @@ impl PlayState {
                 DungeonFieldEffect::Electric,
             );
             self.advance_turn();
+            // Section 8.1: the two lines "precede any `Blocked!` the same
+            // step later produces", so the destination-class test still runs
+            // after them rather than being short-circuited. On shipped data
+            // the field class `0x8` is always walkable, so this arm is a
+            // published-ordering guard rather than a reachable path.
+            if !is_dungeon_walkable(tile) {
+                self.emit_message_line(MOVEMENT_BLOCKED_REFUSAL);
+                return Ok(MoveOutcome::Blocked);
+            }
             self.message = DUNGEON_ELECTRIC_FIELD_LINE.to_string();
             return Ok(MoveOutcome::Moved);
         }
